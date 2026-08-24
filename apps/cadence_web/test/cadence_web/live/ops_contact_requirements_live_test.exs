@@ -1087,45 +1087,160 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
   test "Plan page renders an exact manifest and separates submission from admin approval" do
     {member_conn, member_scope, org, mission, spacecraft} = signed_in_scope()
-    {requirement, requirement_version} = create_requirement(member_scope, mission, spacecraft)
-    route = route(spacecraft.spacecraft_id)
-
-    assert {:ok, planning} =
-             Planner.run(
-               member_scope,
-               mission.mission_id,
-               requirement.contact_requirement_id,
-               requirement_version.version,
-               now: fixed_now(),
-               list_routes: fn _, _, _ -> {:ok, %{routes: [route], findings: []}} end,
-               search_opportunities: fn _, _, _, _, _ ->
-                 {:ok, %{opportunities: [opportunity()]}}
-               end
-             )
-
-    [snapshot] = planning.snapshots
-
-    assert {:ok, plan, plan_version} =
-             ContactPlans.create(member_scope, mission.mission_id, %{
-               planning_run_ids: [planning.run.contact_planning_run_id],
-               selected_snapshot_ids: [snapshot.contact_opportunity_snapshot_id],
-               rationale: "Use the provider's first eligible pass"
-             })
+    fixture = plan_show_fixture(member_scope, mission, spacecraft)
+    %{plan: plan, plan_version: plan_version, snapshot: snapshot} = fixture
 
     {:ok, member_view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
 
-    assert has_element?(member_view, "#ops-contact-plan-show-page")
-    assert has_element?(member_view, "#contact-plan-content-hash", plan_version.content_sha256)
-    assert has_element?(member_view, "#plan-selections [id^=plan-selection-]")
-    assert has_element?(member_view, "#contact-plan-submit-form")
-    refute has_element?(member_view, "#contact-plan-approve-form")
+    assert has_element?(member_view, "#ops-contact-plan-show-component.contents")
+    refute has_element?(member_view, "#ops-contact-plan-show-page")
 
-    member_view
-    |> form("#contact-plan-submit-form", submission: %{reason: "Ready for admin review"})
-    |> render_submit()
+    member_vue = contact_plan_show_vue(member_view)
+    page = member_vue.props["page"]
 
-    assert has_element?(member_view, "#contact-plan-admin-required")
+    assert member_vue.component == "OpsContactPlanShow"
+    assert member_vue.class == "contents"
+    assert member_vue.ssr == false
+
+    assert member_vue.handlers == %{
+             "approve-plan" => Phoenix.LiveView.JS.push("approve-plan"),
+             "execute-plan" => Phoenix.LiveView.JS.push("execute-plan"),
+             "reject-plan" => Phoenix.LiveView.JS.push("reject-plan"),
+             "submit-plan" => Phoenix.LiveView.JS.push("submit-plan")
+           }
+
+    assert Enum.sort(Map.keys(member_vue.props)) == [
+             "admin_controls",
+             "page",
+             "submission_form"
+           ]
+
+    assert page["id"] == "ops-contact-plan-show-page"
+
+    assert page["back_action"] == %{
+             "label" => "Requirement",
+             "href" =>
+               "/missions/#{mission.mission_id}/ops/requirements/#{fixture.requirement.contact_requirement_id}"
+           }
+
+    assert page["header"] == %{
+             "state" => %{
+               "label" => "draft",
+               "class" =>
+                 "border border-base-300 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-base-content/60"
+             },
+             "version_label" => "Plan v1",
+             "heading" => "Contact commitment manifest",
+             "description" =>
+               "Exact Requirement, opportunity, provider route, policy, and expiry evidence for this commitment.",
+             "execute_action" => nil
+           }
+
+    assert page["summary"] == %{
+             "id" => "plan-commitment-summary",
+             "coverage" => %{
+               "label" => "Satisfied",
+               "class" => "mt-1 text-sm font-semibold text-success"
+             },
+             "selected_count" => 1,
+             "approval_identity" => "Not approved",
+             "content_hash" => %{
+               "id" => "contact-plan-content-hash",
+               "value" => plan_version.content_sha256
+             }
+           }
+
+    assert [policy_selection] = page["policy"]["selections"]
+
+    assert Enum.sort(Map.keys(policy_selection)) == [
+             "contact_opportunity_snapshot_id",
+             "policy_summary",
+             "route_display_name"
+           ]
+
+    assert policy_selection["contact_opportunity_snapshot_id"] ==
+             snapshot.contact_opportunity_snapshot_id
+
+    assert policy_selection["route_display_name"] == "Simulator route"
+
+    assert policy_selection["policy_summary"] ==
+             "Effective policy: approval required · automatic revision allowed"
+
+    assert member_vue.props["submission_form"] == %{
+             "id" => "contact-plan-submit-form",
+             "field" => %{
+               "id" => "contact-plan-submit-reason",
+               "name" => "submission[reason]",
+               "type" => "textarea",
+               "label" => "Review note",
+               "required" => true,
+               "value" => "Ready for commitment review"
+             },
+             "action" => %{
+               "id" => "submit-contact-plan",
+               "label" => "Submit exact v1"
+             }
+           }
+
+    assert member_vue.props["admin_controls"] == nil
+
+    expected_selection = %{
+      "__dom_id" => "plan-selection-#{snapshot.contact_opportunity_snapshot_id}",
+      "contact_opportunity_snapshot_id" => snapshot.contact_opportunity_snapshot_id,
+      "provider_display_name" => "Ground Network Simulator",
+      "ground_station_ref" => "station-live",
+      "starts_at" => Calendar.strftime(snapshot.starts_at, "%d %b %Y %H:%MZ"),
+      "duration" => "900 sec",
+      "expiry" => %{
+        "value" => Calendar.strftime(snapshot.expires_at, "%d %b %Y %H:%MZ"),
+        "class" => "mt-1 font-mono text-xs text-base-content/65"
+      }
+    }
+
+    assert contact_plan_stream_rows(member_vue, "selected_opportunities") == [
+             expected_selection
+           ]
+
+    assert contact_plan_stream_mutations(member_vue, "selected_opportunities") == [
+             ["replace", "/selected_opportunities", []],
+             ["upsert", "/selected_opportunities/-", expected_selection]
+           ]
+
+    assert contact_plan_stream_mutations(member_vue, "execution_items") == [
+             ["replace", "/execution_items", []]
+           ]
+
+    assert contact_plan_stream_mutations(member_vue, "approvals") == [
+             ["replace", "/approvals", []]
+           ]
+
+    assert_contact_plan_json_safe(member_vue)
+    refute_contact_plan_sensitive_data(member_vue, member_scope.user)
+
+    render_hook(member_view, "submit-plan", %{
+      "submission" => %{"reason" => "Ready for admin review"}
+    })
+
+    assert {:ok, submitted_plan, ^plan_version} =
+             ContactPlans.fetch(org.organization_id, mission.mission_id, plan.contact_plan_id)
+
+    assert submitted_plan.lifecycle_state == :pending_approval
+    assert submitted_plan.lifecycle_reason == "Ready for admin review"
+
+    submitted_vue = contact_plan_show_vue(member_view)
+    assert submitted_vue.props["submission_form"] == nil
+    assert submitted_vue.props["admin_controls"] == nil
+
+    assert submitted_vue.props["page"]["decision"] == %{
+             "heading" => "Administrator decision",
+             "description" =>
+               "Approval rechecks Requirement versions, expiry, route/grant readiness, and policy narrowing.",
+             "admin_required" => %{
+               "id" => "contact-plan-admin-required",
+               "message" => "Organization administrator approval required."
+             }
+           }
 
     admin = TestFixtures.persist_user!()
     admin_membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
@@ -1136,9 +1251,395 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     {:ok, admin_view, _html} =
       live(admin_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
 
-    assert has_element?(admin_view, "#contact-plan-approve-form")
-    assert has_element?(admin_view, "#contact-plan-rejection-disclosure")
-    assert has_element?(admin_view, "#plan-execution-items-empty")
+    admin_vue = contact_plan_show_vue(admin_view)
+    admin_controls = admin_vue.props["admin_controls"]
+
+    assert admin_vue.props["submission_form"] == nil
+    assert admin_vue.props["page"]["decision"]["admin_required"] == nil
+    assert admin_controls["approve_form"]["id"] == "contact-plan-approve-form"
+    assert admin_controls["approve_form"]["field"]["name"] == "decision[reason]"
+    assert admin_controls["approve_form"]["field"]["value"] == ""
+    assert admin_controls["rejection"]["id"] == "contact-plan-rejection-disclosure"
+    assert admin_controls["rejection"]["form"]["id"] == "contact-plan-reject-form"
+    assert admin_controls["rejection"]["form"]["field"]["name"] == "decision[reason]"
+    assert admin_controls["rejection"]["form"]["field"]["value"] == ""
+    assert contact_plan_stream_rows(admin_vue, "execution_items") == []
+    assert_contact_plan_json_safe(admin_vue)
+  end
+
+  test "Plan handlers enforce member authorization and keep admin-only controls out of member DTOs" do
+    {member_conn, member_scope, org, mission, spacecraft} = signed_in_scope()
+    %{plan: plan} = plan_show_fixture(member_scope, mission, spacecraft)
+
+    {:ok, member_view, _html} =
+      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
+
+    render_hook(member_view, "submit-plan", %{
+      "submission" => %{"reason" => "Review this exact commitment"}
+    })
+
+    render_hook(member_view, "approve-plan", %{
+      "decision" => %{"reason" => "Member must not approve"}
+    })
+
+    render_hook(member_view, "reject-plan", %{
+      "decision" => %{"reason" => "Member must not reject"}
+    })
+
+    assert {:ok, still_pending, _version} =
+             ContactPlans.fetch(org.organization_id, mission.mission_id, plan.contact_plan_id)
+
+    assert still_pending.lifecycle_state == :pending_approval
+
+    assert Cadence.Management.Contacts.list_approvals(
+             org.organization_id,
+             mission.mission_id,
+             plan.contact_plan_id
+           ) == []
+
+    member_vue = contact_plan_show_vue(member_view)
+    assert member_vue.props["admin_controls"] == nil
+    assert member_vue.props["page"]["decision"]["admin_required"]["id"] ==
+             "contact-plan-admin-required"
+
+    refute_contact_plan_sensitive_data(member_vue, member_scope.user)
+  end
+
+  test "Plan approval and rejection handlers persist exact reasons and refresh stream DTOs" do
+    {approve_conn, approve_scope, approve_org, approve_mission, approve_spacecraft} =
+      signed_in_scope()
+
+    %{plan: approve_plan} =
+      plan_show_fixture(approve_scope, approve_mission, approve_spacecraft)
+
+    {:ok, approve_member_view, _html} =
+      live(
+        approve_conn,
+        ~p"/missions/#{approve_mission.mission_id}/ops/plans/#{approve_plan.contact_plan_id}"
+      )
+
+    render_hook(approve_member_view, "submit-plan", %{
+      "submission" => %{"reason" => "Ready to approve"}
+    })
+
+    {approve_admin_conn, approve_admin} = plan_admin_conn(approve_org)
+
+    {:ok, approve_admin_view, _html} =
+      live(
+        approve_admin_conn,
+        ~p"/missions/#{approve_mission.mission_id}/ops/plans/#{approve_plan.contact_plan_id}"
+      )
+
+    render_hook(approve_admin_view, "approve-plan", %{
+      "decision" => %{"reason" => "Provider, policy, and expiry reviewed"}
+    })
+
+    assert {:ok, approved_plan, approved_version} =
+             ContactPlans.fetch(
+               approve_org.organization_id,
+               approve_mission.mission_id,
+               approve_plan.contact_plan_id
+             )
+
+    assert approved_plan.lifecycle_state == :approved
+    assert approved_plan.approved_by == approve_admin.user_id
+
+    assert [approval] =
+             Cadence.Management.Contacts.list_approvals(
+               approve_org.organization_id,
+               approve_mission.mission_id,
+               approve_plan.contact_plan_id
+             )
+
+    assert approval.decision == :approved
+    assert approval.reason == "Provider, policy, and expiry reviewed"
+
+    approved_vue = contact_plan_show_vue(approve_admin_view)
+    assert approved_vue.props["admin_controls"] == nil
+    assert approved_vue.props["submission_form"] == nil
+    assert approved_vue.props["page"]["decision"] == nil
+
+    assert approved_vue.props["page"]["header"]["execute_action"] == %{
+             "id" => "execute-contact-plan",
+             "event" => "execute-plan",
+             "payload" => %{},
+             "label" => "Execute approved Plan",
+             "disabled" => false
+           }
+
+    assert [approval_row] = contact_plan_stream_rows(approved_vue, "approvals")
+
+    assert approval_row == %{
+             "__dom_id" => "plan-approval-#{approval.contact_plan_approval_id}",
+             "contact_plan_approval_id" => approval.contact_plan_approval_id,
+             "decision" => %{
+               "label" => "approved",
+               "class" => "text-sm font-semibold text-success"
+             },
+             "version_label" => "v#{approval.contact_plan_version}",
+             "reason" => "Provider, policy, and expiry reviewed",
+             "actor_summary" =>
+               "#{approve_admin.display_name} · #{Calendar.strftime(approval.decided_at, "%d %b %Y %H:%MZ")}"
+           }
+
+    assert contact_plan_stream_mutations(approved_vue, "approvals") == [
+             ["replace", "/approvals", []],
+             ["upsert", "/approvals/-", approval_row]
+           ]
+
+    assert [execution_item] =
+             Cadence.Control.Contacts.list_plan_execution(
+               approve_org.organization_id,
+               approve_mission.mission_id,
+               approve_plan.contact_plan_id,
+               approved_version.version
+             )
+
+    execution_row = %{
+      "__dom_id" => "plan-execution-item-#{execution_item.contact_plan_execution_item_id}",
+      "contact_plan_execution_item_id" => execution_item.contact_plan_execution_item_id,
+      "contact_opportunity_snapshot_id" => execution_item.contact_opportunity_snapshot_id,
+      "attempt_count" => 0,
+      "state" => %{
+        "label" => "pending",
+        "class" => "font-mono text-[0.65rem] uppercase text-primary"
+      },
+      "contact_link" => nil
+    }
+
+    assert contact_plan_stream_rows(approved_vue, "execution_items") == [execution_row]
+
+    assert contact_plan_stream_mutations(approved_vue, "execution_items") == [
+             ["replace", "/execution_items", []],
+             ["upsert", "/execution_items/-", execution_row]
+           ]
+
+    assert_contact_plan_json_safe(approved_vue)
+
+    {reject_conn, reject_scope, reject_org, reject_mission, reject_spacecraft} =
+      signed_in_scope()
+
+    %{plan: reject_plan} = plan_show_fixture(reject_scope, reject_mission, reject_spacecraft)
+
+    {:ok, reject_member_view, _html} =
+      live(
+        reject_conn,
+        ~p"/missions/#{reject_mission.mission_id}/ops/plans/#{reject_plan.contact_plan_id}"
+      )
+
+    render_hook(reject_member_view, "submit-plan", %{
+      "submission" => %{"reason" => "Ready for a decision"}
+    })
+
+    {reject_admin_conn, _reject_admin} = plan_admin_conn(reject_org)
+
+    {:ok, reject_admin_view, _html} =
+      live(
+        reject_admin_conn,
+        ~p"/missions/#{reject_mission.mission_id}/ops/plans/#{reject_plan.contact_plan_id}"
+      )
+
+    render_hook(reject_admin_view, "reject-plan", %{
+      "decision" => %{"reason" => "Use the later station window"}
+    })
+
+    assert {:ok, rejected_plan, _version} =
+             ContactPlans.fetch(
+               reject_org.organization_id,
+               reject_mission.mission_id,
+               reject_plan.contact_plan_id
+             )
+
+    assert rejected_plan.lifecycle_state == :draft
+
+    assert [rejection] =
+             Cadence.Management.Contacts.list_approvals(
+               reject_org.organization_id,
+               reject_mission.mission_id,
+               reject_plan.contact_plan_id
+             )
+
+    assert rejection.decision == :rejected
+    assert rejection.reason == "Use the later station window"
+
+    rejected_vue = contact_plan_show_vue(reject_admin_view)
+    assert rejected_vue.props["admin_controls"] == nil
+    assert rejected_vue.props["submission_form"] == nil
+    assert rejected_vue.props["page"]["submission"] == nil
+    assert rejected_vue.props["page"]["decision"] == nil
+
+    assert [rejection_row] = contact_plan_stream_rows(rejected_vue, "approvals")
+    assert rejection_row["decision"]["label"] == "rejected"
+    assert rejection_row["decision"]["class"] == "text-sm font-semibold text-error"
+    assert rejection_row["reason"] == "Use the later station window"
+    assert contact_plan_stream_rows(rejected_vue, "execution_items") == []
+    assert_contact_plan_json_safe(rejected_vue)
+  end
+
+  test "Plan execution action publishes disabled progress state and refreshes the execution ledger" do
+    {member_conn, member_scope, org, mission, spacecraft} = signed_in_scope()
+    %{plan: plan} = plan_show_fixture(member_scope, mission, spacecraft)
+
+    {:ok, member_view, _html} =
+      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
+
+    render_hook(member_view, "submit-plan", %{
+      "submission" => %{"reason" => "Ready to execute after approval"}
+    })
+
+    {admin_conn, _admin} = plan_admin_conn(org)
+
+    {:ok, admin_view, _html} =
+      live(admin_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
+
+    render_hook(admin_view, "approve-plan", %{
+      "decision" => %{"reason" => "Exact commitment approved"}
+    })
+
+    track_async_view(admin_view)
+    executing_html = render_hook(admin_view, "execute-plan", %{})
+    executing_vue = contact_plan_show_vue(executing_html)
+
+    assert executing_vue.props["page"]["header"]["execute_action"] == %{
+             "id" => "execute-contact-plan",
+             "event" => "execute-plan",
+             "payload" => %{},
+             "label" => "Executing",
+             "disabled" => true
+           }
+
+    render_async(admin_view)
+
+    completed_vue = contact_plan_show_vue(admin_view)
+    completed_action = completed_vue.props["page"]["header"]["execute_action"]
+
+    assert completed_action["label"] == "Execute approved Plan"
+    assert completed_action["disabled"] == false
+
+    assert [completed_item] = contact_plan_stream_rows(completed_vue, "execution_items")
+    assert completed_item["attempt_count"] == 1
+    assert completed_item["state"]["label"] == "failed"
+    assert completed_item["state"]["class"] ==
+             "font-mono text-[0.65rem] uppercase text-warning"
+
+    assert_contact_plan_json_safe(completed_vue)
+  end
+
+  defp contact_plan_show_vue(view_or_html) do
+    LiveVue.Test.get_vue(view_or_html, id: "ops-contact-plan-show-component")
+  end
+
+  defp contact_plan_stream_mutations(vue, stream_name) do
+    stream_path = "/#{stream_name}"
+
+    Enum.filter(vue.streams_diff, fn
+      ["replace", ^stream_path, _items] -> true
+      ["upsert", path, _item] -> String.starts_with?(path, stream_path <> "/")
+      ["remove", path] -> String.starts_with?(path, stream_path <> "/")
+      _operation -> false
+    end)
+  end
+
+  defp contact_plan_stream_rows(vue, stream_name) do
+    vue
+    |> contact_plan_stream_mutations(stream_name)
+    |> Enum.flat_map(fn
+      ["upsert", _path, row] -> [row]
+      _operation -> []
+    end)
+  end
+
+  defp assert_contact_plan_json_safe(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp refute_contact_plan_sensitive_data(vue, user) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    encoded = Jason.encode!(contract)
+    keys = plan_contract_keys(Jason.decode!(encoded))
+
+    refute encoded =~ user.email
+
+    assert MapSet.disjoint?(
+             keys,
+             MapSet.new(~w(current_scope current_user user users capabilities token tokens secrets))
+           )
+  end
+
+  defp plan_contract_keys(value) when is_map(value) do
+    Enum.reduce(value, MapSet.new(), fn {key, nested}, keys ->
+      keys
+      |> MapSet.put(to_string(key))
+      |> MapSet.union(plan_contract_keys(nested))
+    end)
+  end
+
+  defp plan_contract_keys(value) when is_list(value) do
+    Enum.reduce(value, MapSet.new(), fn nested, keys ->
+      MapSet.union(keys, plan_contract_keys(nested))
+    end)
+  end
+
+  defp plan_contract_keys(_value), do: MapSet.new()
+
+  defp plan_show_fixture(scope, mission, spacecraft) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {requirement, requirement_version} =
+      create_requirement_with(scope, mission, spacecraft, %{
+        earliest_start: DateTime.add(now, 3_600, :second),
+        latest_end: DateTime.add(now, 28_800, :second)
+      })
+
+    available_opportunity =
+      opportunity()
+      |> Map.put("starts_at", now |> DateTime.add(3_600, :second) |> DateTime.to_iso8601())
+      |> Map.put("ends_at", now |> DateTime.add(4_500, :second) |> DateTime.to_iso8601())
+      |> Map.put("expires_at", now |> DateTime.add(18_000, :second) |> DateTime.to_iso8601())
+
+    assert {:ok, planning} =
+             Planner.run(
+               scope,
+               mission.mission_id,
+               requirement.contact_requirement_id,
+               requirement_version.version,
+               now: now,
+               list_routes: fn _, _, _ ->
+                 {:ok, %{routes: [route(spacecraft.spacecraft_id)], findings: []}}
+               end,
+               search_opportunities: fn _, _, _, _, _ ->
+                 {:ok, %{opportunities: [available_opportunity]}}
+               end
+             )
+
+    [snapshot] = planning.snapshots
+
+    assert {:ok, plan, plan_version} =
+             ContactPlans.create(
+               scope,
+               mission.mission_id,
+               %{
+                 planning_run_ids: [planning.run.contact_planning_run_id],
+                 selected_snapshot_ids: [snapshot.contact_opportunity_snapshot_id],
+                 rationale: "Use the provider's first eligible pass"
+               },
+               now: now
+             )
+
+    %{
+      requirement: requirement,
+      plan: plan,
+      plan_version: plan_version,
+      snapshot: snapshot
+    }
+  end
+
+  defp plan_admin_conn(org) do
+    admin = TestFixtures.persist_user!()
+    membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    assert membership.role == :organization_admin
+    {TestFixtures.member_conn(admin), admin}
   end
 
   defp signed_in_scope do
