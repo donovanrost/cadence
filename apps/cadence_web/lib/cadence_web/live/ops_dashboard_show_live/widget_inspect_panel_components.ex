@@ -67,17 +67,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponents do
 
   defp download_button(assigns) do
     ~H"""
-    <button
-      id="dashboard-widget-inspect-download"
-      type="button"
-      phx-hook="CsvDownload"
-      data-csv={@inspect.csv}
-      data-filename={csv_filename(@inspect)}
+    <.vue
+      id="dashboard-widget-inspect-download-component"
+      v-component="CsvDownloadButton"
+      csv={@inspect.csv}
+      filename={csv_filename(@inspect)}
       disabled={@inspect.row_count_total == 0}
-      class="btn btn-sm btn-outline justify-start"
-    >
-      <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Download CSV
-    </button>
+      v-ssr={false}
+    />
     """
   end
 

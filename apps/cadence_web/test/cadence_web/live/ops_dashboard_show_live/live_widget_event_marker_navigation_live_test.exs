@@ -468,13 +468,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       assert table =~ "14"
       assert table =~ "15"
 
-      assert [csv] =
-               document
-               |> LazyHTML.query("#dashboard-widget-inspect-download")
-               |> LazyHTML.attribute("data-csv")
+      download =
+        LiveVue.Test.get_vue(view, id: "dashboard-widget-inspect-download-component")
 
-      assert csv =~ "time_utc"
-      assert csv =~ "14"
+      assert download.component == "CsvDownloadButton"
+      assert download.props["csv"] =~ "time_utc"
+      assert download.props["csv"] =~ "14"
+      assert download.props["filename"] == "counter-trend-inspect.csv"
 
       view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
       refute has_element?(view, "#dashboard-widget-inspector")
