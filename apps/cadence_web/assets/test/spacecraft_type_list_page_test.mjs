@@ -331,8 +331,10 @@ const helperSource = sourceSlice(
   "Spacecraft Profile list test helper",
 )
 
+assert.match(liveViewTestSource, /^  alias LiveVue\.Test$/m)
+
 for (const contract of [
-  'LiveVue.Test.get_vue(view, id: "spacecraft-type-list-page-component")',
+  'Test.get_vue(view, id: "spacecraft-type-list-page-component")',
   'vue.component == "SpacecraftTypeListPage"',
   'vue.class == "contents"',
   "vue.ssr == false",

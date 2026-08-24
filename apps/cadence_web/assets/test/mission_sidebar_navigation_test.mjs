@@ -63,7 +63,11 @@ const moduleAttribute = (name) =>
 const classTokens = (className) => className.trim().split(/\s+/).sort()
 
 const assertSameClassTokens = (actual, expected, label) =>
-  assert.deepEqual(classTokens(actual), classTokens(expected), `${label} class tokens match sidebar.ex`)
+  assert.deepEqual(
+    classTokens(actual),
+    classTokens(expected),
+    `${label} class tokens match the retired sidebar primitive contract`,
+  )
 
 const script = componentSource.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = componentSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -205,23 +209,11 @@ for (const label of [
   assert.ok(layoutsSource.includes(`"${label}"`), `${label} remains Phoenix-owned presentation`)
 }
 
-assert.match(sidebarPrimitives, /def nav_item\(assigns\) do/)
-assert.match(sidebarPrimitives, /def nav_section\(assigns\) do/)
+assert.doesNotMatch(sidebarPrimitives, /def nav_item\(assigns\) do/)
+assert.doesNotMatch(sidebarPrimitives, /def nav_section\(assigns\) do/)
 assert.match(sidebarPrimitives, /def section_active\?\(:ops_dashboards, :ops\), do: true/)
 assert.match(sidebarPrimitives, /def section_active\?\(:comms_providers, :comms\), do: true/)
 
-const primitiveNavItem = sourceSlice(
-  sidebarPrimitives,
-  "  def nav_item(assigns) do",
-  "  defp item_classes(true)",
-  "nav_item primitive",
-)
-const primitiveNavSection = sourceSlice(
-  sidebarPrimitives,
-  "  def nav_section(assigns) do",
-  "  defp child_classes(true)",
-  "nav_section primitive",
-)
 const presentationNavItem = sourceSlice(
   layoutsSource,
   "  defp nav_link(key, label, href, icon, active?) do",
@@ -241,104 +233,36 @@ const presentationNavChild = sourceSlice(
   "nav child presentation",
 )
 
-const primitiveItemActive = capture(
-  sidebarPrimitives,
-  /defp item_classes\(true\),\s+do: "([^"]+)"/,
-  "active item classes",
-)
-const primitiveItemInactive = capture(
-  sidebarPrimitives,
-  /defp item_classes\(false\),\s+do:\s+"([^"]+)"/,
-  "inactive item classes",
-)
-const primitiveChildActive = capture(
-  sidebarPrimitives,
-  /defp child_classes\(true\), do: "([^"]+)"/,
-  "active child classes",
-)
-const primitiveChildInactive = capture(
-  sidebarPrimitives,
-  /defp child_classes\(false\), do: "([^"]+)"/,
-  "inactive child classes",
-)
-const primitiveDotActive = capture(
-  sidebarPrimitives,
-  /defp child_dot_classes\(true\), do: "([^"]+)"/,
-  "active child dot classes",
-)
-const primitiveDotInactive = capture(
-  sidebarPrimitives,
-  /defp child_dot_classes\(false\), do: "([^"]+)"/,
-  "inactive child dot classes",
-)
-const primitiveNavBase = capture(
-  primitiveNavItem,
-  /class=\{\["([^"]+)", item_classes/,
-  "nav item base classes",
-)
-const primitiveSummaryBase = capture(
-  primitiveNavSection,
-  /<summary class=\{\["([^"]+)", item_classes/,
-  "nav section summary base classes",
-)
-const primitiveIconBase = capture(
-  primitiveNavItem,
-  /class=\{\[@icon, "([^"]+)"\]\}/,
-  "nav item icon classes",
-)
-const primitiveChildBase = capture(
-  primitiveNavSection,
-  /<\.link navigate=\{item\.navigate\} class=\{\["([^"]+)", child_classes/,
-  "nav child base classes",
-)
-const primitiveDotBase = capture(
-  primitiveNavSection,
-  /class=\{\["([^"]+)", child_dot_classes/,
-  "nav child dot base classes",
-)
+const retiredNavBase =
+  "flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all"
+const retiredItemActive =
+  "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+const retiredItemInactive =
+  "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+const retiredSummaryBase = `list-none cursor-pointer ${retiredNavBase}`
+const retiredChildBase =
+  "flex items-center gap-2 px-3 py-1.5 text-xs tracking-wide uppercase border-l-2 border-transparent transition-all"
+const retiredDotBase = "h-1.5 w-1.5 rounded-full transition-colors"
 
 const canonicalClassContract = {
-  "nav item active": `${primitiveNavBase} ${primitiveItemActive}`,
-  "nav item inactive": `${primitiveNavBase} ${primitiveItemInactive}`,
-  "nav item icon": primitiveIconBase,
-  "nav item label": capture(primitiveNavItem, /<span class="([^"]+)">\{@label\}/, "nav item label"),
-  "nav section details": capture(primitiveNavSection, /<details class="([^"]+)"/, "nav section details"),
-  "nav section summary active": `${primitiveSummaryBase} ${primitiveItemActive}`,
-  "nav section summary inactive": `${primitiveSummaryBase} ${primitiveItemInactive}`,
-  "nav section icon": capture(
-    primitiveNavSection,
-    /class=\{\[@icon, "([^"]+)"\]\}/,
-    "nav section icon",
-  ),
-  "nav section label": capture(
-    primitiveNavSection,
-    /<span class="([^"]*flex-1[^"]*)">\{@label\}/,
-    "nav section label",
-  ),
-  "nav section chevron": capture(
-    primitiveNavSection,
-    /<span class="([^"]*group-open:rotate-90[^"]*)"><\/span>/,
-    "nav section chevron",
-  ),
-  "nav section child list": capture(
-    primitiveNavSection,
-    /<ul class="([^"]+)"/,
-    "nav section child list",
-  ),
-  "nav child active": `${primitiveChildBase} ${primitiveChildActive}`,
-  "nav child inactive": `${primitiveChildBase} ${primitiveChildInactive}`,
-  "nav child icon container": capture(
-    primitiveNavSection,
-    /<span class="([^"]*items-center justify-center[^"]*)">/,
-    "nav child icon container",
-  ),
-  "nav child dot active": `${primitiveDotBase} ${primitiveDotActive}`,
-  "nav child dot inactive": `${primitiveDotBase} ${primitiveDotInactive}`,
-  "nav child label": capture(
-    primitiveNavSection,
-    /<span class="([^"]+)">\{render_slot\(item\)\}/,
-    "nav child label",
-  ),
+  "nav item active": `${retiredNavBase} ${retiredItemActive}`,
+  "nav item inactive": `${retiredNavBase} ${retiredItemInactive}`,
+  "nav item icon": "h-4 w-4 opacity-80 flex-shrink-0",
+  "nav item label": "sidebar-label",
+  "nav section details": "group",
+  "nav section summary active": `${retiredSummaryBase} ${retiredItemActive}`,
+  "nav section summary inactive": `${retiredSummaryBase} ${retiredItemInactive}`,
+  "nav section icon": "h-4 w-4 opacity-80 flex-shrink-0",
+  "nav section label": "sidebar-label flex-1",
+  "nav section chevron":
+    "hero-chevron-right h-3 w-3 opacity-60 transition-transform group-open:rotate-90 sidebar-label",
+  "nav section child list": "mt-0.5 space-y-0.5",
+  "nav child active": `${retiredChildBase} text-primary`,
+  "nav child inactive": `${retiredChildBase} text-base-content/60 hover:text-base-content`,
+  "nav child icon container": "h-4 w-4 flex items-center justify-center flex-shrink-0",
+  "nav child dot active": `${retiredDotBase} bg-primary`,
+  "nav child dot inactive": `${retiredDotBase} bg-base-content/30`,
+  "nav child label": "sidebar-label",
 }
 
 const presentationNavBase = moduleAttribute("nav_item_base_class")
@@ -444,7 +368,7 @@ assert.equal(
   expectedSummaryBase,
   "summary preserves the exact canonical class order, including its leading tokens",
 )
-assert.equal(primitiveSummaryBase, expectedSummaryBase, "sidebar.ex retains the frozen summary base")
+assert.equal(retiredSummaryBase, expectedSummaryBase, "the retired primitive summary base stays frozen")
 assert.equal(
   presentationClassContract["nav section summary active"],
   expectedActiveSummary,

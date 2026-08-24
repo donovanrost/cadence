@@ -15,7 +15,7 @@ const scenarioLedger = [
   "the sign-out form preserves POST tunneling, DELETE intent, CSRF, and submit attrs",
   "raw attrs preserve HEEx omission, valueless true, string, and number semantics",
   "collapse starts expanded and toggles only Vue-local reactive state",
-  "legacy drawer classes, Sidebar.nav_item classes, DaisyUI topology, CSS, and router ownership stay pinned",
+  "legacy drawer classes, the retired Sidebar.nav_item class contract, DaisyUI topology, CSS, and router ownership stay pinned",
 ]
 
 assert.equal(process.versions.node, "24.16.0", "global sidebar contracts use pinned Node 24.16.0")
@@ -324,12 +324,6 @@ assert.match(
   /"collapsed_class" =>[\s\S]*?"sidebar-collapsible sidebar-collapsed min-h-full bg-base-200 flex flex-col border-r border-primary\/20 hud-grid relative"/,
 )
 
-const primitiveNavItem = sourceSlice(
-  sidebarPrimitives,
-  "  def nav_item(assigns) do",
-  "  defp item_classes(true)",
-  "nav_item primitive",
-)
 const globalNavItem = sourceSlice(
   layoutsSource,
   "  defp global_nav_link(",
@@ -337,42 +331,39 @@ const globalNavItem = sourceSlice(
   "global nav item presentation",
 )
 
-const primitiveBase = capture(
-  primitiveNavItem,
-  /class=\{\["([^"]+)", item_classes/,
-  "primitive nav item base",
-)
-const primitiveActive = capture(
-  sidebarPrimitives,
-  /defp item_classes\(true\),\s+do: "([^"]+)"/,
-  "primitive active classes",
-)
-const primitiveInactive = capture(
-  sidebarPrimitives,
-  /defp item_classes\(false\),\s+do:\s+"([^"]+)"/,
-  "primitive inactive classes",
-)
-const primitiveIconSuffix = capture(
-  primitiveNavItem,
-  /class=\{\[@icon, "([^"]+)"\]\}/,
-  "primitive icon classes",
-)
-const primitiveLabel = capture(
-  primitiveNavItem,
-  /<span class="([^"]+)">\{@label\}/,
-  "primitive label classes",
-)
+const retiredNavItemClassContract = {
+  base: "flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all",
+  active:
+    "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]",
+  inactive:
+    "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30",
+  icon: "h-4 w-4 opacity-80 flex-shrink-0",
+  label: "sidebar-label",
+}
 
-assertSameClassTokens(moduleAttribute("nav_item_base_class"), primitiveBase, "nav item base")
-assertSameClassTokens(moduleAttribute("nav_item_active_class"), primitiveActive, "active nav item")
-assertSameClassTokens(moduleAttribute("nav_item_inactive_class"), primitiveInactive, "inactive nav item")
+assert.doesNotMatch(sidebarPrimitives, /def nav_item\(assigns\) do/)
+assertSameClassTokens(
+  moduleAttribute("nav_item_base_class"),
+  retiredNavItemClassContract.base,
+  "nav item base",
+)
+assertSameClassTokens(
+  moduleAttribute("nav_item_active_class"),
+  retiredNavItemClassContract.active,
+  "active nav item",
+)
+assertSameClassTokens(
+  moduleAttribute("nav_item_inactive_class"),
+  retiredNavItemClassContract.inactive,
+  "inactive nav item",
+)
 assert.equal(
   capture(globalNavItem, /"icon_class" => "#\{icon\} ([^"]+)"/, "global nav icon classes"),
-  primitiveIconSuffix,
+  retiredNavItemClassContract.icon,
 )
 assert.equal(
   capture(globalNavItem, /"label_class" => "([^"]+)"/, "global nav label classes"),
-  primitiveLabel,
+  retiredNavItemClassContract.label,
 )
 assert.match(globalNavItem, /"class" => nav_item_class\(active\?\)/)
 
