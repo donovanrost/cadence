@@ -480,8 +480,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
         "id" => "command-rows-empty",
         "icon" => "hero-command-line",
         "heading" => "No matching commands",
-        "copy" =>
-          "Empty and unavailable projections are reported separately by the context rail."
+        "copy" => "Empty and unavailable projections are reported separately by the context rail."
       }
     }
   end
