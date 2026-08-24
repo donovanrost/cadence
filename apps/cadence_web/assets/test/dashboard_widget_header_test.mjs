@@ -5,7 +5,7 @@ import {fileURLToPath} from "node:url"
 import vm from "node:vm"
 
 const nodeScenarioLedger = [
-  "direct presenter composition and single host preserve the global Overlay registration",
+  "direct presenter composition and single host close the global hook while retaining local overlay lifecycle",
   "mount toggle viewport positioning and panel clicks preserve popover state",
   "outside click and Escape preserve dismissal and focus behavior",
   "global overlay coordination closes the widget details popover without stealing focus",
@@ -23,14 +23,12 @@ const componentsPath = resolve(
   "../../lib/cadence_web/live/ops_dashboard_show_live/components.ex",
 )
 const appPath = resolve(__dirname, "../js/app.js")
-const overlayHookPath = resolve(__dirname, "../js/hooks/overlay.js")
 
-const [source, parentSource, componentsSource, appSource, overlayHookSource] = await Promise.all([
+const [source, parentSource, componentsSource, appSource] = await Promise.all([
   readFile(componentPath, "utf8"),
   readFile(parentComponentPath, "utf8"),
   readFile(componentsPath, "utf8"),
   readFile(appPath, "utf8"),
-  readFile(overlayHookPath, "utf8"),
 ])
 
 const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -70,10 +68,15 @@ assert.match(widgetHostSource, /class="contents"/)
 assert.equal(widgetHostSource.match(/<\.vue/g)?.length, 1)
 assert.doesNotMatch(widgetHostSource, /DashboardWidgetHeader|WidgetPoint|WidgetRows|phx-hook="Overlay"/)
 
-assert.match(appSource, /import Overlay from "\.\/hooks\/overlay"/)
-assert.match(appSource, /Overlay,/)
-assert.match(overlayHookSource, /const Overlay = \{/)
-assert.match(overlayHookSource, /cadence:overlay-opened/)
+assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
+assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
+assert.match(source, /onMounted\(/)
+assert.match(source, /onBeforeUpdate\(/)
+assert.match(source, /onUpdated\(/)
+assert.match(source, /onBeforeUnmount\(/)
+assert.match(source, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
+assert.match(source, /windowObject\.addEventListener\("cadence:overlay-opened"/)
+assert.match(source, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
 
 const controllerSource = source.slice(start + controllerStart.length, end)
 assert.doesNotMatch(controllerSource, /setTimeout|setInterval/)

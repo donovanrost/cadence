@@ -69,7 +69,6 @@
       <li class="do"><span class="mark">&#10003;</span> Right-align numeric columns (<code>align={:right}</code>); use <code>mono</code> for identifiers, versions, counts.</li>
       <li class="do"><span class="mark">&#10003;</span> Sortable columns: per-col <code>sort</code> + table-level <code>sort_by</code>/<code>sort_dir</code>/<code>on_sort</code> — headers become buttons with <code>aria-sort</code>; round-trip the sort through the URL (see List controls).</li>
       <li class="do"><span class="mark">&#10003;</span> Large collections: pass a LiveStream as <code>rows</code> — DOM ids derive automatically (override with <code>row_id</code>/<code>body_id</code>); an <code>:empty</code> slot renders the zero-row body.</li>
-      <li class="do"><span class="mark">&#10003;</span> Keep <code>&lt;.action_menu&gt;</code> only when a row has real secondary actions beyond View.</li>
       <li class="dont"><span class="mark">&#10007;</span> Never use whole-row <code>phx-click</code>, and never put multiple action buttons directly in a cell.</li>
       <li class="dont"><span class="mark">&#10007;</span> Tables needing checkboxes, expanders, or nesting stay hand-rolled — don't force them into <code>&lt;.table&gt;</code>.</li>
     </ul>

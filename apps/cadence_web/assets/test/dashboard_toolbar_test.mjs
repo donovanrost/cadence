@@ -46,7 +46,7 @@ const scenarioLedger = Object.freeze([
   "outside-click close without focus theft",
   "popover listener cleanup",
   "menu focus and keyboard semantics",
-  "global Overlay hook retained",
+  "global hooks absent with both Vue overlay lifecycles and their coordination protocol retained",
 ])
 const coveredScenarios = []
 const cover = (name, callback) => {
@@ -356,9 +356,19 @@ cover("menu focus and keyboard semantics", () => {
   menu.destroyed()
 })
 
-cover("global Overlay hook retained", () => {
-  assert.match(appSource, /import Overlay from "\.\/hooks\/overlay"/)
-  assert.match(appSource, /\bOverlay,/)
+cover("global hooks absent with both Vue overlay lifecycles and their coordination protocol retained", () => {
+  assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
+  assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
+
+  for (const localSource of [source, menuSource]) {
+    assert.match(localSource, /onMounted\(/)
+    assert.match(localSource, /onBeforeUpdate\(/)
+    assert.match(localSource, /onUpdated\(/)
+    assert.match(localSource, /onBeforeUnmount\(/)
+    assert.match(localSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
+    assert.match(localSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
+    assert.match(localSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
+  }
 })
 
 assert.deepEqual(coveredScenarios, scenarioLedger)

@@ -356,26 +356,9 @@ defmodule CadenceWeb.ComponentsTest do
     end
   end
 
-  describe "action_menu/1" do
-    test "renders an accessible trigger and menu" do
-      html =
-        render_component(&CadenceWeb.CoreComponents.action_menu/1,
-          id: "row-1-actions",
-          action: [
-            %{
-              inner_block: fn _changed, _arg -> item_text("View") end,
-              __slot__: :action
-            }
-          ]
-        )
-
-      assert html =~ ~s(phx-hook="Overlay")
-      assert html =~ ~s(<button)
-      assert html =~ ~s(aria-haspopup="menu")
-      assert html =~ ~s(aria-expanded="false")
-      assert html =~ ~s(aria-controls="row-1-actions-menu")
-      assert html =~ ~s(role="menu")
-      assert html =~ ~s(role="none")
+  describe "action_menu/1 closure" do
+    test "retired API is absent after its final caller is removed" do
+      refute function_exported?(CadenceWeb.CoreComponents, :action_menu, 1)
     end
   end
 

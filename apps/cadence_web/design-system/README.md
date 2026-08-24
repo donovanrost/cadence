@@ -87,7 +87,6 @@ claude.ai/design.
 - `components/list-controls.html` — `<.toolbar>` + `<.pagination>` and the URL-as-source-of-truth list-state contract.
 - `components/form-helpers.html` — `<.form_section>` numbered headings + the `<.form_actions>` submit/cancel footer.
 - `components/empty-state.html` — `<.empty_state>` no-rows placeholder, incl. the compact variant.
-- `components/action-menu.html` — `<.action_menu>` row-actions dropdown with its keyboard/ARIA contract.
 - `components/callout.html` — `<.callout>` inline contextual message (replaced raw daisyUI alerts).
 
 Every component card carries a **Usage** do/don't panel lifted from the rules in

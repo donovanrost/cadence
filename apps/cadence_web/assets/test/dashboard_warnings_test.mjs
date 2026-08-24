@@ -9,7 +9,7 @@ const nodeScenarioLedger = [
   "the established warning strip root label fallback and HUD classes stay presentation-driven",
   "warning order and stable child host ids pass through without client normalization",
   "WidgetWarning receives the original overlay evidence and data-link event attributes",
-  "shared app hooks remain registered because none is solely owned by the warning strip",
+  "the global hook is absent while WidgetWarning retains its local overlay lifecycle and protocol",
 ]
 
 assert.equal(process.versions.node, "24.16.0", "dashboard warning contracts use pinned Node 24.16.0")
@@ -92,8 +92,15 @@ assert.match(hostSource, /"dashboard-engine-warning-#\{index\}"/)
 assert.match(widgetWarningSource, /v-bind="presentation\.overlay\.attrs"/)
 assert.match(widgetWarningSource, /v-bind="presentation\.body\.evidence_button\.attrs"/)
 assert.match(widgetWarningSource, /v-bind="row\.attrs"/)
-assert.match(appSource, /import Overlay from "\.\/hooks\/overlay"/)
-assert.match(appSource, /\n  Overlay,\n/)
+assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
+assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
+assert.match(widgetWarningSource, /onMounted\(/)
+assert.match(widgetWarningSource, /onBeforeUpdate\(/)
+assert.match(widgetWarningSource, /onUpdated\(/)
+assert.match(widgetWarningSource, /onBeforeUnmount\(/)
+assert.match(widgetWarningSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
+assert.match(widgetWarningSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
+assert.match(widgetWarningSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
 assert.doesNotMatch(appSource, /DashboardWarnings|WidgetWarning/)
 assert.match(viewportSmokeSource, /document\.querySelectorAll\("\[data-engine-warning\]"\)/)
 assert.match(

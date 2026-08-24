@@ -11,13 +11,14 @@ const scenarioLedger = [
   "regular and lifecycle notices retain text structure classes state and actionable dispatches",
   "point row and chart component identities remain stable without nested Phoenix Vue hosts",
   "the parent composition selects exactly one point or row child and preserves empty bodies",
-  "the shared Overlay hook stays registered because widget-local behavior is already colocated",
+  "global hooks are absent while the child header retains its local overlay lifecycle and protocol",
 ]
 
 assert.equal(scenarioLedger.length, 7)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/DashboardWidget.vue")
+const headerPath = resolve(__dirname, "../vue/DashboardWidgetHeader.vue")
 const pointPath = resolve(__dirname, "../vue/WidgetPoint.vue")
 const rowsPath = resolve(__dirname, "../vue/WidgetRows.vue")
 const componentsPath = resolve(
@@ -34,9 +35,10 @@ const rowComponentsPath = resolve(
 )
 const appPath = resolve(__dirname, "../js/app.js")
 
-const [source, pointSource, rowsSource, componentsSource, pointPhoenix, rowPhoenix, appSource] =
+const [source, headerSource, pointSource, rowsSource, componentsSource, pointPhoenix, rowPhoenix, appSource] =
   await Promise.all([
     readFile(componentPath, "utf8"),
+    readFile(headerPath, "utf8"),
     readFile(pointPath, "utf8"),
     readFile(rowsPath, "utf8"),
     readFile(componentsPath, "utf8"),
@@ -151,8 +153,15 @@ assert.deepEqual(JSON.parse(JSON.stringify(rowComposition)), {header, point: nul
 const emptyComposition = compose(presentation(null))
 assert.deepEqual(JSON.parse(JSON.stringify(emptyComposition)), {header, point: null, rows: null})
 
-assert.match(appSource, /import Overlay from "\.\/hooks\/overlay"/)
-assert.match(appSource, /Overlay,/)
+assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
+assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
 assert.doesNotMatch(appSource, /DashboardWidget/)
+assert.match(headerSource, /onMounted\(/)
+assert.match(headerSource, /onBeforeUpdate\(/)
+assert.match(headerSource, /onUpdated\(/)
+assert.match(headerSource, /onBeforeUnmount\(/)
+assert.match(headerSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
+assert.match(headerSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
+assert.match(headerSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
 
 console.log("dashboard_widget_test passed")

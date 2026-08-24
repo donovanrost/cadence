@@ -4,13 +4,9 @@ import {LiveSocket} from "phoenix_live_view"
 import {getHooks} from "live_vue"
 import liveVueApp from "../vue"
 import {createLiveToastHook} from "../../deps/live_toast"
-import Overlay from "./hooks/overlay"
-import ResizablePanel from "./hooks/resizable_panel"
 
 const Hooks = {
-  LiveToast: createLiveToastHook(),
-  Overlay,
-  ResizablePanel
+  LiveToast: createLiveToastHook()
 }
 
 const csrfToken = document
