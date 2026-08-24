@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.Management
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -14,7 +15,8 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
      |> assign(:page_title, "Dashboard Playlists")
      |> assign(:ops_nav_item, :dashboards)
      |> assign(:active_dashboard_id, nil)
-     |> assign(:playlist_form, playlist_form())
+     |> assign(:playlist_page, playlist_page_dto())
+     |> assign(:playlist_form, playlist_form_dto(0))
      |> assign(:dashboard_options, dashboard_options(socket))
      |> stream(:dashboard_playlists, [])
      |> reload_playlists()}
@@ -38,7 +40,10 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
       {:ok, _playlist} ->
         {:noreply,
          socket
-         |> assign(:playlist_form, playlist_form())
+         |> assign(
+           :playlist_form,
+           playlist_form_dto(socket.assigns.playlist_form.reset_revision + 1)
+         )
          |> reload_playlists()
          |> put_flash(:info, "Playlist created with dashboard references.")}
 
@@ -51,43 +56,17 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-playlists-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-6 py-5 hud-grid">
-          <div class="mx-auto max-w-6xl">
-            <p class="hud-label">Dashboards / Playlists</p>
-            <h1 class="mt-1 text-2xl font-semibold">Operations display rotation</h1>
-            <p class="mt-2 text-sm text-base-content/60">
-              Playlists keep ordered dashboard references; the canonical documents and live health remain independent.
-            </p>
-          </div>
-        </header>
-        <div class="mx-auto grid max-w-6xl gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div id="dashboard-playlist-list" phx-update="stream" class="space-y-3">
-            <div id="dashboard-playlist-empty" class="hidden only:block border border-dashed border-base-300 p-8 text-center text-sm text-base-content/50">No playlists yet.</div>
-            <article :for={{id, playlist} <- @streams.dashboard_playlists} id={id} class="border border-base-300 bg-base-200/20 p-4">
-              <div class="flex items-start justify-between gap-4">
-                <div><h2 class="font-semibold">{playlist.name}</h2><p class="mt-1 text-xs text-base-content/55">{playlist.description}</p></div>
-                <span class="badge badge-outline">{length(playlist.dashboard_ids)} dashboards</span>
-              </div>
-              <p class="mt-3 font-mono text-xs text-base-content/50">{playlist.dwell_seconds}s dwell · {if playlist.wallboard_mode, do: "wallboard", else: "presentation"}</p>
-              <.link id={"dashboard-playlist-present-#{playlist.dashboard_playlist_id}"} navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"} class="btn btn-outline btn-sm mt-3">
-                <.icon name="hero-play" class="h-4 w-4" /> Present
-              </.link>
-            </article>
-          </div>
-          <aside>
-            <.form for={@playlist_form} id="dashboard-playlist-form" phx-submit="create_playlist" class="space-y-3 border border-primary/30 bg-primary/5 p-4">
-              <p class="hud-label">New playlist</p>
-              <.input field={@playlist_form[:name]} type="text" label="Name" required />
-              <.input field={@playlist_form[:description]} type="textarea" label="Description" />
-              <.input field={@playlist_form[:dashboard_ids]} name={@playlist_form[:dashboard_ids].name <> "[]"} type="select" multiple label="Dashboards in order" options={@dashboard_options} />
-              <.input field={@playlist_form[:dwell_seconds]} type="number" min="5" max="900" label="Dwell seconds" />
-              <.input field={@playlist_form[:wallboard_mode]} type="checkbox" label="Wallboard mode" />
-              <.button id="dashboard-playlist-create" type="submit">Create playlist</.button>
-            </.form>
-          </aside>
-        </div>
-      </section>
+      <.vue
+        id="dashboard-playlists-component"
+        v-component="OpsDashboardPlaylists"
+        page={@playlist_page}
+        form={@playlist_form}
+        options={@dashboard_options}
+        dashboard_playlists={@streams.dashboard_playlists}
+        v-on:create-playlist={JS.push("create_playlist")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
@@ -95,12 +74,12 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
   defp reload_playlists(socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
 
-    stream(
-      socket,
-      :dashboard_playlists,
-      Management.list_playlists(scope.organization_id, mission.mission_id),
-      reset: true
-    )
+    playlists =
+      scope.organization_id
+      |> Management.list_playlists(mission.mission_id)
+      |> Enum.map(&playlist_dto(mission.mission_id, &1))
+
+    stream(socket, :dashboard_playlists, playlists, reset: true)
   end
 
   defp dashboard_options(socket) do
@@ -108,20 +87,92 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
 
     scope.organization_id
     |> Cadence.Dashboards.list_dashboard_summaries(mission.mission_id)
-    |> Enum.map(&{&1.name, &1.dashboard_id})
+    |> Enum.map(&%{label: &1.name, value: &1.dashboard_id})
   end
 
-  defp playlist_form do
-    to_form(
-      %{
-        "name" => "",
-        "description" => "",
-        "dashboard_ids" => [],
-        "dwell_seconds" => "30",
-        "wallboard_mode" => "false"
+  defp playlist_page_dto do
+    %{
+      id: "dashboard-playlists-page",
+      eyebrow: "Dashboards / Playlists",
+      heading: "Operations display rotation",
+      copy:
+        "Playlists keep ordered dashboard references; the canonical documents and live health remain independent.",
+      list: %{
+        id: "dashboard-playlist-list",
+        empty: %{id: "dashboard-playlist-empty", copy: "No playlists yet."}
       },
-      as: :playlist
-    )
+      form_eyebrow: "New playlist",
+      present_action: %{label: "Present", icon: "hero-play"}
+    }
+  end
+
+  defp playlist_form_dto(reset_revision) do
+    %{
+      id: "dashboard-playlist-form",
+      reset_revision: reset_revision,
+      name: %{
+        id: "playlist_name",
+        name: "playlist[name]",
+        type: "text",
+        label: "Name",
+        value: "",
+        required: true
+      },
+      description: %{
+        id: "playlist_description",
+        name: "playlist[description]",
+        type: "textarea",
+        label: "Description",
+        value: "",
+        required: false
+      },
+      dashboard_ids: %{
+        id: "playlist_dashboard_ids",
+        name: "playlist[dashboard_ids][]",
+        type: "select",
+        label: "Dashboards in order",
+        value: [],
+        required: false,
+        multiple: true
+      },
+      dwell_seconds: %{
+        id: "playlist_dwell_seconds",
+        name: "playlist[dwell_seconds]",
+        type: "number",
+        label: "Dwell seconds",
+        value: "30",
+        required: false,
+        min: 5,
+        max: 900
+      },
+      wallboard_mode: %{
+        id: "playlist_wallboard_mode",
+        name: "playlist[wallboard_mode]",
+        type: "checkbox",
+        label: "Wallboard mode",
+        value: false,
+        required: false
+      },
+      submit: %{id: "dashboard-playlist-create", label: "Create playlist"}
+    }
+  end
+
+  defp playlist_dto(mission_id, playlist) do
+    %{
+      dashboard_playlist_id: playlist.dashboard_playlist_id,
+      name: playlist.name,
+      description: playlist.description,
+      dashboard_ids: playlist.dashboard_ids,
+      dashboard_count: length(playlist.dashboard_ids),
+      dwell_seconds: playlist.dwell_seconds,
+      wallboard_mode: playlist.wallboard_mode,
+      mode_label: if(playlist.wallboard_mode, do: "wallboard", else: "presentation"),
+      present: %{
+        id: "dashboard-playlist-present-#{playlist.dashboard_playlist_id}",
+        href:
+          ~p"/missions/#{mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
+      }
+    }
   end
 
   defp truthy?(value), do: value in [true, "true", "on", "1"]
