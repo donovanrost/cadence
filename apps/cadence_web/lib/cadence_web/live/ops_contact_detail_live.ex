@@ -18,6 +18,8 @@ defmodule CadenceWeb.OpsContactDetailLive do
     ProviderAudit
   }
 
+  alias Phoenix.LiveView.JS
+
   @decision_states [:pending_approval, :acknowledgment_required]
 
   @impl true
@@ -50,375 +52,308 @@ defmodule CadenceWeb.OpsContactDetailLive do
   end
 
   @impl true
-  def handle_event("approve-provider-change", %{"approval" => params}, socket) do
-    decide(socket, :approve, params)
+  def handle_event(
+        "approve-provider-change",
+        %{"approval" => %{"proposal_hash" => proposal_hash, "reason" => reason}},
+        socket
+      )
+      when is_binary(proposal_hash) and is_binary(reason) do
+    decide(socket, :approve, %{"proposal_hash" => proposal_hash, "reason" => reason})
   end
 
-  def handle_event("reject-provider-change", %{"rejection" => params}, socket) do
-    decide(socket, :reject, params)
+  def handle_event(
+        "reject-provider-change",
+        %{"rejection" => %{"proposal_hash" => proposal_hash, "reason" => reason}},
+        socket
+      )
+      when is_binary(proposal_hash) and is_binary(reason) do
+    decide(socket, :reject, %{"proposal_hash" => proposal_hash, "reason" => reason})
   end
 
-  def handle_event("acknowledge-provider-change", %{"acknowledgment" => params}, socket) do
-    decide(socket, :acknowledge, params)
+  def handle_event(
+        "acknowledge-provider-change",
+        %{"acknowledgment" => %{"proposal_hash" => proposal_hash, "reason" => reason}},
+        socket
+      )
+      when is_binary(proposal_hash) and is_binary(reason) do
+    decide(socket, :acknowledge, %{"proposal_hash" => proposal_hash, "reason" => reason})
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <section id="ops-contact-detail" class="h-full overflow-y-auto bg-base-100">
-      <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-        <div class="mx-auto flex max-w-[96rem] flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div class="min-w-0">
-            <.link
-              id="back-to-contact-schedule"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/contacts"}
-              class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
-            >
-              <.icon name="hero-arrow-left" class="h-3 w-3" /> Contact ledger
-            </.link>
-            <div class="mt-3 flex flex-wrap items-center gap-3">
-              <h1 class="text-2xl font-bold tracking-tight text-base-content">Provider reservation</h1>
-              <.state_badge state={@reservation.lifecycle_state} />
-            </div>
-            <p class="mt-2 truncate font-mono text-xs text-base-content/50">
-              {@reservation.provider_reservation_id}
-            </p>
-          </div>
-
-          <div class="grid grid-cols-3 gap-px border border-primary/20 bg-primary/20 font-mono text-xs">
-            <.header_fact label="Provider rev" value={@reservation.provider_revision} />
-            <.header_fact label="Schedule rev" value={schedule_revision(@scheduled_contact)} />
-            <.header_fact label="Decision work" value={decision_label(@current_change)} />
-          </div>
-        </div>
-      </header>
-
-      <div class="mx-auto grid max-w-[96rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,0.62fr)] lg:p-7">
-        <main class="min-w-0 space-y-5">
-          <section id="contact-values-matrix" class="border border-base-300 bg-base-200/20">
-            <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
-              <div>
-                <p class="hud-label">Truth ledger</p>
-                <h2 class="mt-1 text-base font-semibold">Four values, one operational record</h2>
-                <p class="mt-1 text-xs text-base-content/55">
-                  Provider truth does not silently become Cadence execution truth.
-                </p>
-              </div>
-              <.icon name="hero-table-cells" class="h-5 w-5 text-primary/60" />
-            </div>
-
-            <div class="overflow-x-auto">
-              <table class="w-full min-w-[48rem] table-fixed border-collapse text-left text-xs">
-                <thead class="font-mono uppercase tracking-[0.12em] text-base-content/40">
-                  <tr>
-                    <th class="w-32 border-b border-r border-base-300 px-3 py-2">Field</th>
-                    <th class="border-b border-r border-base-300 px-3 py-2">Requested</th>
-                    <th class="border-b border-r border-base-300 px-3 py-2">Provider confirmed</th>
-                    <th class="border-b border-r border-base-300 px-3 py-2">Cadence accepted</th>
-                    <th class="border-b border-base-300 px-3 py-2">Actual / projected</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={row <- @value_rows} id={"contact-value-#{row.id}"}>
-                    <th class="border-r border-t border-base-300 bg-base-200/60 px-3 py-2 font-mono text-base-content/50">
-                      {row.label}
-                    </th>
-                    <.value_cell value={row.requested} />
-                    <.value_cell value={row.confirmed} />
-                    <.value_cell value={row.accepted} />
-                    <td class="border-t border-base-300 px-3 py-2 font-mono text-base-content/75">
-                      {row.actual}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section id="contact-change-control" class="border border-base-300 bg-base-200/20">
-            <div class="border-b border-base-300 px-4 py-3">
-              <p class="hud-label">Provider revision control</p>
-              <h2 class="mt-1 text-base font-semibold">Changes and decisions</h2>
-            </div>
-
-            <div id="contact-change-timeline" phx-update="stream">
-              <div id="contact-change-timeline-empty" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
-                No provider revisions beyond the accepted baseline.
-              </div>
-              <article
-                :for={{dom_id, change} <- @streams.provider_changes}
-                id={dom_id}
-                class="grid gap-4 border-b border-base-300/70 px-4 py-4 lg:grid-cols-[8rem_minmax(0,1fr)]"
-              >
-                <div>
-                  <p class="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-base-content/40">
-                    Provider revision
-                  </p>
-                  <p class="mt-1 font-mono text-lg font-bold text-primary">
-                    {change.from_provider_revision} → {change.provider_revision}
-                  </p>
-                  <.change_state state={change.lifecycle_state} />
-                </div>
-
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-sm font-semibold">{classification_title(change.classification)}</p>
-                    <span class="font-mono text-[0.64rem] text-base-content/40">
-                      Policy v{change.policy_version}
-                    </span>
-                  </div>
-                  <p class="mt-2 text-xs leading-relaxed text-base-content/60">
-                    {change_explanation(change)}
-                  </p>
-                  <div class="mt-3 flex flex-wrap gap-1.5">
-                    <span
-                      :for={field <- changed_field_names(change)}
-                      class="border border-base-300 bg-base-200 px-2 py-1 font-mono text-[0.62rem] text-base-content/55"
-                    >
-                      {field}
-                    </span>
-                  </div>
-
-                  <div :if={change.deadline_at} class="mt-3 border-l-2 border-warning/60 pl-3 text-xs text-warning">
-                    Provider decision deadline: {format_time(change.deadline_at)}
-                  </div>
-
-                  <div
-                    :if={change.lifecycle_state == :configuration_failure}
-                    id={"configuration-remediation-#{change.provider_reservation_change_id}"}
-                    class="mt-4 border-l-2 border-error bg-error/5 px-3 py-2"
-                  >
-                    <p class="text-xs font-semibold text-error">Never approvable from Contact data</p>
-                    <p class="mt-1 text-xs text-base-content/60">
-                      Reconcile the Mission Provider, Transport, credential, and delivery-profile configuration before retrying. Cadence has not rewritten execution.
-                    </p>
-                  </div>
-
-                  <div
-                    :if={@admin? and active_change?(change, @current_change, :pending_approval)}
-                    class="mt-4 grid gap-3 border-t border-base-300 pt-4 lg:grid-cols-2"
-                  >
-                    <.form
-                      for={@approval_form}
-                      id={"provider-change-approval-form-#{change.provider_reservation_change_id}"}
-                      phx-submit="approve-provider-change"
-                      class="space-y-3 border border-success/30 bg-success/5 p-3"
-                    >
-                      <.input field={@approval_form[:proposal_hash]} type="hidden" />
-                      <.input field={@approval_form[:reason]} type="textarea" label="Approval reason" required />
-                      <button id={"approve-provider-change-#{change.provider_reservation_change_id}"} class="btn btn-success btn-sm w-full font-mono text-xs uppercase tracking-wider">
-                        Approve current revision
-                      </button>
-                    </.form>
-
-                    <.form
-                      :if={change.actionable}
-                      for={@rejection_form}
-                      id={"provider-change-rejection-form-#{change.provider_reservation_change_id}"}
-                      phx-submit="reject-provider-change"
-                      class="space-y-3 border border-error/30 bg-error/5 p-3"
-                    >
-                      <.input field={@rejection_form[:proposal_hash]} type="hidden" />
-                      <.input field={@rejection_form[:reason]} type="textarea" label="Rejection reason" required />
-                      <button id={"reject-provider-change-#{change.provider_reservation_change_id}"} class="btn btn-error btn-outline btn-sm w-full font-mono text-xs uppercase tracking-wider">
-                        Reject provider proposal
-                      </button>
-                    </.form>
-                  </div>
-
-                  <.form
-                    :if={@admin? and active_change?(change, @current_change, :acknowledgment_required)}
-                    for={@acknowledgment_form}
-                    id={"provider-change-acknowledgment-form-#{change.provider_reservation_change_id}"}
-                    phx-submit="acknowledge-provider-change"
-                    class="mt-4 space-y-3 border border-warning/35 bg-warning/5 p-3"
-                  >
-                    <p class="text-xs font-semibold text-warning">Provider fact is already effective</p>
-                    <p class="text-xs text-base-content/60">
-                      Acknowledge the fact and record the contingency response. Approval or fictional rejection is unavailable.
-                    </p>
-                    <.input field={@acknowledgment_form[:proposal_hash]} type="hidden" />
-                    <.input field={@acknowledgment_form[:reason]} type="textarea" label="Contingency note" required />
-                    <button id={"acknowledge-provider-change-#{change.provider_reservation_change_id}"} class="btn btn-warning btn-sm font-mono text-xs uppercase tracking-wider">
-                      Acknowledge provider fact
-                    </button>
-                  </.form>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="border border-base-300 bg-base-200/20">
-            <div class="border-b border-base-300 px-4 py-3">
-              <p class="hud-label">Evidence timeline</p>
-              <h2 class="mt-1 text-base font-semibold">Provider audit</h2>
-            </div>
-            <ol id="contact-audit-timeline" phx-update="stream">
-              <li id="contact-audit-timeline-empty" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
-                No provider audit entries recorded yet.
-              </li>
-              <li
-                :for={{dom_id, entry} <- @streams.provider_audit_entries}
-                id={dom_id}
-                class="grid gap-3 border-b border-base-300/70 px-4 py-4 sm:grid-cols-[9rem_minmax(0,1fr)]"
-              >
-                <time class="font-mono text-[0.65rem] text-base-content/40">
-                  {format_time(entry.recorded_at)}
-                </time>
-                <div>
-                  <p class="font-mono text-xs font-semibold text-base-content/75">{entry.action}</p>
-                  <p class="mt-1 text-xs text-base-content/55">Outcome: {entry.outcome}</p>
-                  <div :if={entry.evidence_references != []} class="mt-2 space-y-1">
-                    <p :for={reference <- entry.evidence_references} class="font-mono text-[0.62rem] text-primary/70">
-                      Evidence {reference["provider_evidence_id"]} · sha256 {short_hash(reference["content_sha256"])}
-                    </p>
-                  </div>
-                </div>
-              </li>
-            </ol>
-          </section>
-        </main>
-
-        <aside class="min-w-0 space-y-5 xl:sticky xl:top-0 xl:self-start">
-          <section id="contact-binding-chain" class="border border-base-300 bg-base-200/25">
-            <div class="border-b border-base-300 px-4 py-3">
-              <p class="hud-label">Immutable binding chain</p>
-              <h2 class="mt-1 text-sm font-semibold">Execution ownership</h2>
-            </div>
-            <dl class="divide-y divide-base-300/70 text-xs">
-              <.binding_row label="Provider Account" value={account_label(@provider_account_version, @reservation)} />
-              <.binding_row label="Mission grant" value={grant_label(@provider_grant, @reservation)} />
-              <.binding_row label="Mission Provider" value={versioned(@reservation.provider_id, @reservation.provider_version)} />
-              <.binding_row label="Delivery policy" value={"v#{@delivery_policy_version}"} />
-              <.binding_row label="Transport" value={versioned(@reservation.transport_id, @reservation.transport_version)} />
-              <.binding_row label="Service Profile" value={profile_label(@reservation.service_profile_ref)} />
-              <.binding_row label="Delivery Profile" value={profile_label(@reservation.delivery_profile_ref)} />
-            </dl>
-          </section>
-
-          <section class="border border-base-300 bg-base-200/25">
-            <div class="border-b border-base-300 px-4 py-3">
-              <p class="hud-label">Independent lifecycle</p>
-              <h2 class="mt-1 text-sm font-semibold">Operational state</h2>
-            </div>
-            <div class="grid grid-cols-2 gap-px bg-base-300/70">
-              <.lifecycle_cell label="Provider Contact" value={@reservation.provider_status || @reservation.lifecycle_state} />
-              <.lifecycle_cell label="Provider pass" value={@reservation.pass_phase} />
-              <.lifecycle_cell label="Delivery" value={@reservation.delivery_state} />
-              <.lifecycle_cell label="Cadence schedule" value={contact_lifecycle(@scheduled_contact)} />
-              <.lifecycle_cell label="Actual contact" value={realized_lifecycle(@realized_contact)} />
-              <.lifecycle_cell label="Reservation" value={@reservation.lifecycle_state} />
-            </div>
-          </section>
-
-          <details
-            :if={@admin?}
-            id="contact-admin-diagnostics"
-            class="border border-base-300 bg-base-200/25"
-          >
-            <summary class="cursor-pointer border-b border-base-300 px-4 py-3 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-base-content/55 hover:text-primary">
-              Administrator diagnostics
-            </summary>
-            <dl class="space-y-3 p-4 font-mono text-[0.65rem] text-base-content/60">
-              <.diagnostic_row label="Protocol" value={descriptor_value(@reservation, "protocol")} />
-              <.diagnostic_row label="Endpoint" value={descriptor_value(@reservation, "endpoint_ref")} />
-              <.diagnostic_row label="Framing" value={framing_label(@reservation)} />
-              <.diagnostic_row label="Credential ref" value={credential_label(@provider_account_version)} />
-              <.diagnostic_row label="Provider contact" value={@reservation.provider_contact_ref || "not assigned"} />
-              <.diagnostic_row label="Provider opportunity" value={@reservation.provider_opportunity_ref} />
-              <.diagnostic_row label="Client reference" value={@reservation.idempotency_key} />
-            </dl>
-            <.link
-              :if={@reservation.provider_account_id}
-              id="contact-provider-ingestion-link"
-              navigate={~p"/provider-accounts/#{@reservation.provider_account_id}"}
-              class="mx-4 mb-4 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-            >
-              Cursor and quarantine diagnostics <.icon name="hero-arrow-up-right" class="h-3 w-3" />
-            </.link>
-          </details>
-        </aside>
-      </div>
-    </section>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="ops-contact-detail-component"
+        v-component="OpsContactDetail"
+        page={@contact_detail_page}
+        provider_changes={@streams.provider_changes}
+        provider_audit_entries={@streams.provider_audit_entries}
+        v-on:approve-provider-change={JS.push("approve-provider-change")}
+        v-on:reject-provider-change={JS.push("reject-provider-change")}
+        v-on:acknowledge-provider-change={JS.push("acknowledge-provider-change")}
+        v-ssr={false}
+        class="contents"
+      />
+    </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
-
-  defp header_fact(assigns) do
-    ~H"""
-    <div class="min-w-24 bg-base-200/90 px-3 py-2">
-      <p class="text-[0.58rem] uppercase tracking-[0.14em] text-base-content/35">{@label}</p>
-      <p class="mt-1 font-semibold text-primary">{@value}</p>
-    </div>
-    """
+  defp assign_page_dto(socket) do
+    assign(socket, :contact_detail_page, page_dto(socket.assigns))
   end
 
-  attr :value, :any, required: true
+  defp page_dto(assigns) do
+    reservation = assigns.reservation
 
-  defp value_cell(assigns) do
-    ~H"""
-    <td class="border-r border-t border-base-300 px-3 py-2 font-mono text-base-content/65 last:border-r-0">
-      {@value}
-    </td>
-    """
+    %{
+      id: "ops-contact-detail",
+      navigation: %{
+        id: "back-to-contact-schedule",
+        label: "Contact ledger",
+        href: ~p"/missions/#{assigns.current_mission.mission_id}/ops/contacts"
+      },
+      header: %{
+        heading: "Provider reservation",
+        reservation_id: reservation.provider_reservation_id,
+        state: %{
+          label: display_value(reservation.lifecycle_state),
+          class: state_class(reservation.lifecycle_state)
+        },
+        facts: [
+          %{label: "Provider rev", value: display_value(reservation.provider_revision)},
+          %{label: "Schedule rev", value: display_value(schedule_revision(assigns.scheduled_contact))},
+          %{label: "Decision work", value: display_value(decision_label(assigns.current_change))}
+        ]
+      },
+      values: %{
+        id: "contact-values-matrix",
+        eyebrow: "Truth ledger",
+        heading: "Four values, one operational record",
+        copy: "Provider truth does not silently become Cadence execution truth.",
+        columns: [
+          "Field",
+          "Requested",
+          "Provider confirmed",
+          "Cadence accepted",
+          "Actual / projected"
+        ],
+        rows: assigns.value_rows
+      },
+      changes: %{
+        id: "contact-change-control",
+        eyebrow: "Provider revision control",
+        heading: "Changes and decisions",
+        timeline_id: "contact-change-timeline",
+        empty: %{
+          id: "contact-change-timeline-empty",
+          copy: "No provider revisions beyond the accepted baseline."
+        }
+      },
+      audit: %{
+        eyebrow: "Evidence timeline",
+        heading: "Provider audit",
+        timeline_id: "contact-audit-timeline",
+        empty: %{
+          id: "contact-audit-timeline-empty",
+          copy: "No provider audit entries recorded yet."
+        }
+      },
+      binding_chain: %{
+        id: "contact-binding-chain",
+        eyebrow: "Immutable binding chain",
+        heading: "Execution ownership",
+        rows: [
+          %{label: "Provider Account", value: account_label(assigns.provider_account_version, reservation)},
+          %{label: "Mission grant", value: grant_label(assigns.provider_grant, reservation)},
+          %{label: "Mission Provider", value: versioned(reservation.provider_id, reservation.provider_version)},
+          %{label: "Delivery policy", value: "v#{assigns.delivery_policy_version}"},
+          %{label: "Transport", value: versioned(reservation.transport_id, reservation.transport_version)},
+          %{label: "Service Profile", value: profile_label(reservation.service_profile_ref)},
+          %{label: "Delivery Profile", value: profile_label(reservation.delivery_profile_ref)}
+        ]
+      },
+      lifecycle: %{
+        eyebrow: "Independent lifecycle",
+        heading: "Operational state",
+        rows: [
+          lifecycle_dto("Provider Contact", reservation.provider_status || reservation.lifecycle_state),
+          lifecycle_dto("Provider pass", reservation.pass_phase),
+          lifecycle_dto("Delivery", reservation.delivery_state),
+          lifecycle_dto("Cadence schedule", contact_lifecycle(assigns.scheduled_contact)),
+          lifecycle_dto("Actual contact", realized_lifecycle(assigns.realized_contact)),
+          lifecycle_dto("Reservation", reservation.lifecycle_state)
+        ]
+      }
+    }
+    |> maybe_put_admin_diagnostics(assigns)
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
+  defp lifecycle_dto(label, value), do: %{label: label, value: display_value(value)}
 
-  defp binding_row(assigns) do
-    ~H"""
-    <div class="px-4 py-3">
-      <dt class="hud-label">{@label}</dt>
-      <dd class="mt-1 break-all font-mono text-[0.68rem] text-base-content/70">{@value}</dd>
-    </div>
-    """
+  defp maybe_put_admin_diagnostics(page, %{admin?: false}), do: page
+
+  defp maybe_put_admin_diagnostics(page, assigns) do
+    reservation = assigns.reservation
+
+    Map.put(page, :admin_diagnostics, %{
+      id: "contact-admin-diagnostics",
+      label: "Administrator diagnostics",
+      rows: [
+        %{label: "Protocol", value: descriptor_value(reservation, "protocol")},
+        %{label: "Endpoint", value: descriptor_value(reservation, "endpoint_ref")},
+        %{label: "Framing", value: framing_label(reservation)},
+        %{label: "Credential ref", value: credential_label(assigns.provider_account_version)},
+        %{
+          label: "Provider contact",
+          value: reservation.provider_contact_ref || "not assigned"
+        },
+        %{label: "Provider opportunity", value: reservation.provider_opportunity_ref},
+        %{label: "Client reference", value: reservation.idempotency_key}
+      ],
+      link: provider_diagnostics_link(reservation.provider_account_id)
+    })
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
+  defp provider_diagnostics_link(nil), do: nil
 
-  defp lifecycle_cell(assigns) do
-    ~H"""
-    <div class="bg-base-200/80 px-3 py-3">
-      <p class="hud-label">{@label}</p>
-      <p class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70">{@value}</p>
-    </div>
-    """
+  defp provider_diagnostics_link(provider_account_id) do
+    %{
+      id: "contact-provider-ingestion-link",
+      label: "Cursor and quarantine diagnostics",
+      href: ~p"/provider-accounts/#{provider_account_id}"
+    }
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
-
-  defp diagnostic_row(assigns) do
-    ~H"""
-    <div>
-      <dt class="text-base-content/35">{@label}</dt>
-      <dd class="mt-0.5 break-all">{@value}</dd>
-    </div>
-    """
+  defp provider_change_rows(changes, assigns) do
+    Enum.map(changes, &provider_change_row_dto(&1, assigns))
   end
 
-  attr :state, :atom, required: true
-
-  defp state_badge(assigns) do
-    ~H"""
-    <span class={["border px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-wider", state_class(@state)]}>
-      {@state}
-    </span>
-    """
+  defp provider_change_row_dto(change, assigns) do
+    %{
+      provider_reservation_change_id: change.provider_reservation_change_id,
+      from_provider_revision: display_value(change.from_provider_revision),
+      provider_revision: display_value(change.provider_revision),
+      lifecycle_state: display_value(change.lifecycle_state),
+      classification: classification_title(change.classification),
+      policy_version: display_value(change.policy_version),
+      explanation: change_explanation(change),
+      changed_fields: changed_field_names(change),
+      deadline: deadline_dto(change.deadline_at),
+      remediation: remediation_dto(change)
+    }
+    |> maybe_put_decision_forms(change, assigns)
   end
 
-  attr :state, :atom, required: true
+  defp deadline_dto(nil), do: nil
 
-  defp change_state(assigns) do
-    ~H"""
-    <p class="mt-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-base-content/55">
-      {@state}
-    </p>
-    """
+  defp deadline_dto(deadline_at) do
+    %{label: "Provider decision deadline", value: format_time(deadline_at)}
+  end
+
+  defp remediation_dto(%{lifecycle_state: :configuration_failure} = change) do
+    %{
+      id: "configuration-remediation-#{change.provider_reservation_change_id}",
+      heading: "Never approvable from Contact data",
+      copy:
+        "Reconcile the Mission Provider, Transport, credential, and delivery-profile configuration before retrying. Cadence has not rewritten execution."
+    }
+  end
+
+  defp remediation_dto(_change), do: nil
+
+  defp maybe_put_decision_forms(row, _change, %{admin?: false}), do: row
+
+  defp maybe_put_decision_forms(row, change, assigns) do
+    cond do
+      active_change?(change, assigns.current_change, :pending_approval) ->
+        Map.put(row, :decision_forms, %{
+          approval:
+            decision_form_dto(
+              assigns.approval_form,
+              :approval,
+              change.provider_reservation_change_id
+            ),
+          rejection:
+            if(change.actionable,
+              do:
+                decision_form_dto(
+                  assigns.rejection_form,
+                  :rejection,
+                  change.provider_reservation_change_id
+                ),
+              else: nil
+            ),
+          acknowledgment: nil
+        })
+
+      active_change?(change, assigns.current_change, :acknowledgment_required) ->
+        Map.put(row, :decision_forms, %{
+          approval: nil,
+          rejection: nil,
+          acknowledgment:
+            decision_form_dto(
+              assigns.acknowledgment_form,
+              :acknowledgment,
+              change.provider_reservation_change_id
+            )
+        })
+
+      true ->
+        row
+    end
+  end
+
+  defp decision_form_dto(form, kind, change_id) do
+    form_name = Atom.to_string(kind)
+
+    %{
+      id: "provider-change-#{form_name}-form-#{change_id}",
+      proposal_hash: %{
+        id: "#{form_name}_proposal_hash",
+        name: "#{form_name}[proposal_hash]",
+        value: Phoenix.HTML.Form.input_value(form, :proposal_hash)
+      },
+      reason: %{
+        id: "#{form_name}_reason",
+        name: "#{form_name}[reason]",
+        label: decision_reason_label(kind),
+        value: Phoenix.HTML.Form.input_value(form, :reason),
+        required: true
+      },
+      submit: %{
+        id: "#{decision_event_prefix(kind)}-provider-change-#{change_id}",
+        label: decision_submit_label(kind)
+      }
+    }
+  end
+
+  defp decision_reason_label(:approval), do: "Approval reason"
+  defp decision_reason_label(:rejection), do: "Rejection reason"
+  defp decision_reason_label(:acknowledgment), do: "Contingency note"
+
+  defp decision_event_prefix(:approval), do: "approve"
+  defp decision_event_prefix(:rejection), do: "reject"
+  defp decision_event_prefix(:acknowledgment), do: "acknowledge"
+
+  defp decision_submit_label(:approval), do: "Approve current revision"
+  defp decision_submit_label(:rejection), do: "Reject provider proposal"
+  defp decision_submit_label(:acknowledgment), do: "Acknowledge provider fact"
+
+  defp provider_audit_row_dto(entry) do
+    %{
+      provider_audit_entry_id: entry.provider_audit_entry_id,
+      recorded_at: format_time(entry.recorded_at),
+      action: display_value(entry.action),
+      outcome: display_value(entry.outcome),
+      evidence_references:
+        Enum.map(entry.evidence_references, fn reference ->
+          %{
+            provider_evidence_id: reference["provider_evidence_id"],
+            content_sha256: short_hash(reference["content_sha256"])
+          }
+        end)
+    }
   end
 
   defp decide(socket, action, params) do
@@ -487,21 +422,29 @@ defmodule CadenceWeb.OpsContactDetailLive do
     provider_account_version = fetch_provider_account_version(reservation)
     provider_grant = fetch_provider_grant(reservation)
 
+    socket =
+      socket
+      |> assign(:reservation, reservation)
+      |> assign(:scheduled_contact, scheduled_contact)
+      |> assign(:realized_contact, realized_contact)
+      |> assign(:scheduled_contact_revisions, scheduled_revisions(reservation))
+      |> assign(:provider, provider)
+      |> assign(:provider_account_version, provider_account_version)
+      |> assign(:provider_grant, provider_grant)
+      |> assign(:delivery_policy_version, delivery_policy_version(provider, current_change))
+      |> assign(:admin?, organization_admin?(scope))
+      |> assign(:current_change, current_change)
+      |> assign_decision_forms(current_change)
+      |> assign(:value_rows, value_rows(reservation, scheduled_contact, realized_contact))
+      |> assign_page_dto()
+
     socket
-    |> assign(:reservation, reservation)
-    |> assign(:scheduled_contact, scheduled_contact)
-    |> assign(:realized_contact, realized_contact)
-    |> assign(:scheduled_contact_revisions, scheduled_revisions(reservation))
-    |> assign(:provider, provider)
-    |> assign(:provider_account_version, provider_account_version)
-    |> assign(:provider_grant, provider_grant)
-    |> assign(:delivery_policy_version, delivery_policy_version(provider, current_change))
-    |> assign(:admin?, organization_admin?(scope))
-    |> assign(:current_change, current_change)
-    |> assign_decision_forms(current_change)
-    |> assign(:value_rows, value_rows(reservation, scheduled_contact, realized_contact))
-    |> stream(:provider_changes, changes, reset: true)
-    |> stream(:provider_audit_entries, audit_entries, reset: true)
+    |> stream(:provider_changes, provider_change_rows(changes, socket.assigns), reset: true)
+    |> stream(
+      :provider_audit_entries,
+      Enum.map(audit_entries, &provider_audit_row_dto/1),
+      reset: true
+    )
   end
 
   defp assign_decision_forms(socket, nil) do
