@@ -3,582 +3,523 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
   use CadenceWeb, :html
 
   alias Cadence.Telemetry.SelectionPolicy
+  alias Phoenix.LiveView.JS
+
+  @filter_fields ~w(
+    point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id
+    order limit selection_view validity_state realm logical_source data_source_id
+    source_binding_id source_dashboard_id sample_id selected_time question limit_mode
+  )a
 
   def page(assigns) do
+    assigns = assign(assigns, :telemetry_explore_props, presentation_props(assigns))
+
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-    <div
-      id="ops-telemetry-explore-page"
-      class="flex flex-1 min-h-0"
-      data-explore-source-state={@source_context.state}
-      data-explore-data-source={@source_context.data_source_id || ""}
-      data-explore-source-binding={@source_context.source_binding_id || ""}
-      data-explore-logical-source={@source_context.logical_source || ""}
-      data-explore-realm={@source_context.realm || ""}
-      data-explore-selected-sample-state={@selected_sample_state}
-      data-explore-selected-sample-id={@explore_context.sample_id || ""}
-    >
-      <div class="flex-1 min-w-0 overflow-y-auto">
-        <div class="mx-auto max-w-7xl px-6 py-8">
-        <div class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-lg font-semibold text-base-content">Telemetry Explore</h1>
-              <span :if={@explore_context.realm} class="badge badge-xs badge-outline">
-                {@explore_context.realm}
-              </span>
-              <span :if={@explore_context.time_mode} class="badge badge-xs">
-                {@explore_context.time_mode}
-              </span>
-            </div>
-            <p class="mt-1 font-mono text-xs text-base-content/60">
-              {@explore_context.point_id || "No point selected"}
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <.vue
-              id="telemetry-explore-copy-link-component"
-              v-component="ClipboardButton"
-              button_id="telemetry-explore-copy-link"
-              clipboard_text={@investigation_path}
-              button_class="btn btn-ghost btn-sm"
-              icon="hero-link"
-              icon_class="h-4 w-4"
-              label="Copy link"
-              v-ssr={false}
-              class="contents"
-            />
-            <.link
-              :if={@explore_context.source_dashboard_id}
-              id="telemetry-explore-back-to-dashboard"
-              navigate={dashboard_path(@current_mission.mission_id, @explore_context.source_dashboard_id, @explore_context)}
-              class="btn btn-ghost btn-sm"
-            >
-              <.icon name="hero-arrow-left" class="h-4 w-4" /> Dashboard
-            </.link>
-          </div>
-        </div>
-
-        <section id="telemetry-explore-questions" class="mt-5 border border-primary/20 bg-primary/[0.035] p-4">
-          <div class="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p class="hud-label">Start with an operational question</p>
-              <p class="mt-1 text-sm text-base-content/60">
-                Presets establish typed time, revision, source, and follow-on context. Refine the exact point below.
-              </p>
-            </div>
-            <span :if={@explore_context.question} class="badge badge-sm badge-primary badge-outline">
-              {question_label(@explore_context.question)}
-            </span>
-          </div>
-          <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <button
-              :for={question <- investigation_questions()}
-              id={"telemetry-explore-question-#{question.id}"}
-              type="button"
-              phx-click="apply_question"
-              phx-value-question={question.id}
-              class={[
-                "group border p-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/5",
-                @explore_context.question == question.id && "border-primary/60 bg-primary/10",
-                @explore_context.question != question.id && "border-base-300 bg-base-100/45"
-              ]}
-            >
-              <span class="flex items-center gap-2 text-sm font-semibold">
-                <.icon name={question.icon} class="h-4 w-4 text-primary" /> {question.label}
-              </span>
-              <span class="mt-1 block text-xs leading-relaxed text-base-content/55">{question.description}</span>
-            </button>
-          </div>
-          <div
-            :if={question_briefing(@explore_context.question)}
-            id="telemetry-explore-question-briefing"
-            class="mt-3 flex flex-col gap-3 border-t border-primary/15 pt-3 text-xs lg:flex-row lg:items-center"
-            data-explore-question={@explore_context.question}
-          >
-            <p class="min-w-0 flex-1 text-base-content/65">{question_briefing(@explore_context.question)}</p>
-            <div class="flex flex-wrap gap-2">
-              <.link
-                id="telemetry-explore-question-timeline"
-                navigate={timeline_path(@current_mission.mission_id, @explore_context)}
-                class="btn btn-xs btn-outline"
-              >
-                <.icon name="hero-clock" class="h-3.5 w-3.5" /> Timeline
-              </.link>
-              <.link
-                :if={@explore_context.question == "link_degradation"}
-                id="telemetry-explore-question-contacts"
-                navigate={~p"/missions/#{@current_mission.mission_id}/ops/contacts"}
-                class="btn btn-xs btn-outline"
-              >
-                <.icon name="hero-signal" class="h-3.5 w-3.5" /> Contacts
-              </.link>
-              <.link
-                :if={@explore_context.question == "missing_history"}
-                id="telemetry-explore-question-data-operations"
-                navigate={data_operations_path(@current_mission.mission_id, @explore_context)}
-                class="btn btn-xs btn-outline"
-              >
-                <.icon name="hero-circle-stack" class="h-3.5 w-3.5" /> Data Operations
-              </.link>
-            </div>
-          </div>
-        </section>
-
-        <.form
-          for={@filter_form}
-          id="telemetry-explore-filter-form"
-          phx-submit="apply_filters"
-          class="mt-5 border border-base-300/70 bg-base-100/40 p-4"
-        >
-          <input type="hidden" name="explore[source_dashboard_id]" value={@explore_context.source_dashboard_id || ""} />
-          <input type="hidden" name="explore[sample_id]" value={@explore_context.sample_id || ""} />
-          <input type="hidden" name="explore[selected_time]" value={@explore_context.selected_time || ""} />
-          <input type="hidden" name="explore[question]" value={@explore_context.question || ""} />
-          <input type="hidden" name="explore[scope_kind]" value={@explore_context.scope_kind || ""} />
-          <input type="hidden" name="explore[scope_id]" value={@explore_context.scope_id || ""} />
-          <input type="hidden" name="explore[time_axis]" value={@explore_context.time_axis || ""} />
-          <input type="hidden" name="explore[replay_run_id]" value={@explore_context.replay_run_id || ""} />
-          <input type="hidden" name="explore[limit_mode]" value={@explore_context.limit_mode || ""} />
-
-          <div class="grid gap-3 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,1fr)_9rem_10rem_10rem_8rem_auto] lg:items-end">
-            <.input
-              field={@filter_form[:point_id]}
-              type="select"
-              label="Point"
-              options={point_options(@points, @explore_context.point_id)}
-              compact
-            />
-            <.input
-              field={@filter_form[:spacecraft_id]}
-              type="select"
-              label="Spacecraft"
-              options={spacecraft_options(@spacecraft)}
-              compact
-            />
-            <.input
-              field={@filter_form[:time_mode]}
-              type="select"
-              label="Window"
-              options={time_mode_options()}
-              compact
-            />
-            <.input field={@filter_form[:from]} type="text" label="From" compact />
-            <.input field={@filter_form[:to]} type="text" label="To" compact />
-            <.input
-              field={@filter_form[:order]}
-              type="select"
-              label="Order"
-              options={order_options()}
-              compact
-            />
-            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <.input field={@filter_form[:limit]} type="number" label="Limit" compact min="1" max="1000" />
-              <.button id="telemetry-explore-apply-filters" type="submit" size={:sm}>
-                <.icon name="hero-arrow-path" class="h-4 w-4" /> Load
-              </.button>
-            </div>
-          </div>
-          <div class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <.input
-              field={@filter_form[:realm]}
-              type="select"
-              label="Realm"
-              options={realm_options(@data_realms, @data_bindings, @explore_context.realm)}
-              compact
-            />
-            <.input
-              field={@filter_form[:logical_source]}
-              type="select"
-              label="Logical Source"
-              options={logical_source_options()}
-              compact
-            />
-            <.input
-              field={@filter_form[:data_source_id]}
-              type="select"
-              label="Data Source"
-              options={data_source_options(@data_sources, @data_bindings, @explore_context)}
-              compact
-            />
-            <.input
-              field={@filter_form[:source_binding_id]}
-              type="select"
-              label="Source Binding"
-              options={source_binding_options(@data_bindings, @explore_context)}
-              compact
-            />
-            <.input
-              field={@filter_form[:selection_view]}
-              type="select"
-              label="Selection View"
-              options={selection_view_options()}
-              compact
-            />
-            <.input
-              field={@filter_form[:validity_state]}
-              type="select"
-              label="Validity"
-              options={validity_state_options()}
-              compact
-            />
-          </div>
-        </.form>
-
-        <div
-          id="telemetry-explore-investigation-summary"
-          class="mt-3 flex flex-wrap items-center gap-2 text-xs text-base-content/60"
-          data-investigation-path={@investigation_path}
-          data-investigation-fingerprint={@investigation_fingerprint}
-        >
-          <span class="hud-label">Investigation</span>
-          <span class="font-mono text-base-content/70">{@investigation_fingerprint}</span>
-          <span class="font-mono break-all">{@investigation_path}</span>
-        </div>
-
-        <div
-          :if={@selected_sample_state == "missing"}
-          id="telemetry-explore-selected-sample-status"
-          class="mt-3 flex items-start gap-3 border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
-          data-explore-selected-sample-state={@selected_sample_state}
-          data-explore-selected-sample-id={@explore_context.sample_id || ""}
-        >
-          <.icon name="hero-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0" />
-          <div class="min-w-0">
-            <p class="font-semibold">Selected sample is outside the current result set</p>
-            <p class="mt-1 break-all font-mono text-xs text-base-content/60">
-              {@explore_context.sample_id}
-            </p>
-          </div>
-        </div>
-
-        <div class="mt-6 grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
-          <aside class="space-y-4">
-            <section
-              id="telemetry-explore-point-card"
-              class="border border-base-300/70 bg-base-100/40 p-4"
-            >
-              <h2 class="hud-label">Point</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <dt class="text-base-content/60">Point</dt>
-                <dd class="font-mono text-base-content break-all" data-explore-point-field="Point">
-                  {@explore_context.point_id || "none"}
-                </dd>
-                <dt :if={@point} class="text-base-content/60">Packet</dt>
-                <dd
-                  :if={@point}
-                  class="font-mono text-base-content break-all"
-                  data-explore-point-field="Packet"
-                >
-                  {@point.packet_name}
-                </dd>
-                <dt :if={@point} class="text-base-content/60">Field</dt>
-                <dd
-                  :if={@point}
-                  class="font-mono text-base-content break-all"
-                  data-explore-point-field="Field"
-                >
-                  {@point.field_name}
-                </dd>
-                <dt :if={@point && @point.unit} class="text-base-content/60">Unit</dt>
-                <dd
-                  :if={@point && @point.unit}
-                  class="font-mono text-base-content break-all"
-                  data-explore-point-field="Unit"
-                >
-                  {@point.unit}
-                </dd>
-                <dt :if={@point && @point.description} class="text-base-content/60">
-                  Description
-                </dt>
-                <dd
-                  :if={@point && @point.description}
-                  class="text-base-content break-words"
-                  data-explore-point-field="Description"
-                >
-                  {@point.description}
-                </dd>
-              </dl>
-              <p :if={!@point && @explore_context.point_id} class="mt-3 text-sm text-warning">
-                Point is not present in the active operator point catalog.
-              </p>
-
-              <.form
-                :if={@point && @dashboard_author?}
-                for={@add_to_dashboard_form}
-                id="telemetry-explore-add-to-dashboard-form"
-                phx-submit="add_to_dashboard"
-                class="mt-4 space-y-3 border-t border-base-300/70 pt-4"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="hud-label">Stage in dashboard</h3>
-                  <span class="font-mono text-[0.65rem] text-base-content/45">no direct write</span>
-                </div>
-                <.input
-                  field={@add_to_dashboard_form[:dashboard_id]}
-                  type="select"
-                  label="Dashboard"
-                  options={dashboard_options(@ops_dashboards, @explore_context.source_dashboard_id)}
-                  compact
-                />
-                <.input
-                  field={@add_to_dashboard_form[:widget_type]}
-                  type="select"
-                  label="Visualization"
-                  options={[{"Time series", "time_series"}, {"Value tile", "value_tile"}]}
-                  compact
-                />
-                <.input
-                  field={@add_to_dashboard_form[:title]}
-                  type="text"
-                  label="Title"
-                  placeholder={default_widget_title(@explore_context.point_id)}
-                  compact
-                />
-                <.button id="telemetry-explore-add-to-dashboard" type="submit" size={:sm} class="w-full">
-                  <.icon name="hero-plus" class="h-4 w-4" /> Open staged candidate
-                </.button>
-              </.form>
-            </section>
-
-            <section
-              :if={@selected_sample}
-              id="telemetry-explore-selected-sample-card"
-              class="border border-primary/30 bg-base-100/50 p-4"
-              data-explore-selected-sample-card={@selected_sample.sample_id}
-            >
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="hud-label">Selected Sample</h2>
-                <div class="flex items-center gap-2">
-                  <span class="badge badge-xs badge-outline">
-                    {validity_state_label(@selected_sample)}
-                  </span>
-                  <button
-                    id="telemetry-explore-clear-selected-sample"
-                    type="button"
-                    phx-click="clear_selected_sample"
-                    class="btn btn-ghost btn-xs"
-                  >
-                    <.icon name="hero-x-mark" class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <%= for row <- sample_provenance_rows(@selected_sample) do %>
-                  <dt class="text-base-content/60">{row.label}</dt>
-                  <dd
-                    class="font-mono text-base-content break-all"
-                    data-explore-selected-provenance={row.label}
-                  >
-                    {row.value}
-                  </dd>
-                <% end %>
-              </dl>
-              <div :if={dashboard_sample_href(@current_mission.mission_id, @explore_context, @selected_sample)} class="mt-3">
-                <.link
-                  id="telemetry-explore-open-selected-in-dashboard"
-                  navigate={dashboard_sample_href(@current_mission.mission_id, @explore_context, @selected_sample)}
-                  class="btn btn-xs btn-outline w-full justify-start"
-                >
-                  <.icon name="hero-arrow-top-right-on-square" class="h-3.5 w-3.5" /> Open in dashboard
-                </.link>
-              </div>
-            </section>
-
-            <section
-              id="telemetry-explore-source-card"
-              class={[
-                "border bg-base-100/40 p-4",
-                @source_context.state == "matched" && "border-primary/30",
-                @source_context.state == "missing" && "border-warning/30",
-                @source_context.state == "none" && "border-base-300/70"
-              ]}
-              data-explore-source-state={@source_context.state}
-              data-explore-data-source={@source_context.data_source_id || ""}
-              data-explore-source-binding={@source_context.source_binding_id || ""}
-              data-explore-logical-source={@source_context.logical_source || ""}
-              data-explore-realm={@source_context.realm || ""}
-              data-explore-matched-data-source={@source_context.matched_data_source_id || ""}
-              data-explore-matched-source-binding={@source_context.matched_source_binding_id || ""}
-            >
-              <h2 class="hud-label">Source Context</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <%= for row <- source_context_rows(@source_context, @samples) do %>
-                  <dt class="text-base-content/60">{row.label}</dt>
-                  <dd
-                    class="font-mono text-base-content break-all"
-                    data-explore-source={row.label}
-                  >
-                    {row.value}
-                  </dd>
-                <% end %>
-              </dl>
-              <div class="mt-3 grid gap-2">
-                <.link
-                  :if={source_detail_path(@current_mission.mission_id, @source_context)}
-                  id="telemetry-explore-open-source"
-                  navigate={source_detail_path(@current_mission.mission_id, @source_context)}
-                  class="btn btn-xs btn-outline justify-start"
-                >
-                  <.icon name="hero-circle-stack" class="h-3.5 w-3.5" /> Open source posture
-                </.link>
-                <.link
-                  :if={@explore_context.source_dashboard_id}
-                  id="telemetry-explore-open-dashboard-diagnostics"
-                  navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@explore_context.source_dashboard_id}/diagnostics"}
-                  class="btn btn-xs btn-outline justify-start"
-                >
-                  <.icon name="hero-wrench-screwdriver" class="h-3.5 w-3.5" /> Dashboard diagnostics
-                </.link>
-              </div>
-            </section>
-
-            <section
-              id="telemetry-explore-context-card"
-              class="border border-base-300/70 bg-base-100/40 p-4"
-            >
-              <h2 class="hud-label">Context</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <%= for row <- context_rows(@explore_context) do %>
-                  <dt class="text-base-content/60">{row.label}</dt>
-                  <dd
-                    class="font-mono text-base-content break-all"
-                    data-explore-context={row.label}
-                  >
-                    {row.value}
-                  </dd>
-                <% end %>
-              </dl>
-            </section>
-
-            <section
-              id="telemetry-explore-diagnostics-card"
-              class="border border-base-300/70 bg-base-100/40 p-4"
-            >
-              <h2 class="hud-label">Read Diagnostics</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <%= for row <- diagnostics_rows(@history_diagnostics) do %>
-                  <dt class="text-base-content/60">{row.label}</dt>
-                  <dd class="font-mono text-base-content break-all" data-explore-diagnostics={row.label}>
-                    {row.value}
-                  </dd>
-                <% end %>
-              </dl>
-            </section>
-          </aside>
-
-          <section class="min-w-0 border border-base-300/70 bg-base-100/40">
-            <header class="flex items-center justify-between gap-3 border-b border-base-300/70 px-4 py-3">
-              <div>
-                <h2 class="hud-label">Samples</h2>
-                <p class="mt-1 text-xs text-base-content/60">
-                  {length(@samples)} rows, {order_label(@explore_context.order)}
-                </p>
-              </div>
-              <span
-                :if={@explore_context.sample_id}
-                class="badge badge-xs badge-outline font-mono"
-                data-explore-selected-sample={@explore_context.sample_id}
-                data-explore-selected-sample-state={@selected_sample_state}
-              >
-                {@explore_context.sample_id}
-              </span>
-            </header>
-
-            <div class="overflow-x-auto">
-              <table id="telemetry-explore-samples" class="table table-xs">
-                <thead>
-                  <tr>
-                    <th>Receipt</th>
-                    <th>Generation</th>
-                    <th>Spacecraft</th>
-                    <th>Engineering</th>
-                    <th>Raw</th>
-                    <th>Quality</th>
-                    <th>Validity</th>
-                    <th>Source</th>
-                    <th>Evidence</th>
-                    <th>Packet</th>
-                    <th>Definition</th>
-                    <th>Sample</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :if={@samples == []}>
-                    <td colspan="13" class="py-6 text-center text-sm text-base-content/60">
-                      {empty_samples_message(@history_diagnostics)}
-                    </td>
-                  </tr>
-                  <%= for sample <- @samples do %>
-                    <tr
-                      id={"telemetry-explore-sample-#{sample.sample_id}"}
-                      class={[
-                        sample.sample_id == @explore_context.sample_id &&
-                          "bg-primary/10 outline outline-1 outline-primary/40"
-                      ]}
-                      data-explore-sample-id={sample.sample_id}
-                      data-explore-selected={sample.sample_id == @explore_context.sample_id}
-                    >
-                      <td class="font-mono">{format_datetime(sample.receipt_time)}</td>
-                      <td class="font-mono">{format_datetime(sample.generation_time)}</td>
-                      <td class="font-mono">{sample.spacecraft_id || "mission"}</td>
-                      <td class="font-mono">{format_value(sample.engineering_value)}</td>
-                      <td class="font-mono">{format_value(sample.raw_value)}</td>
-                      <td>{sample.quality_state}</td>
-                      <td>
-                        <span class="badge badge-xs badge-outline">
-                          {validity_state_label(sample)}
-                        </span>
-                      </td>
-                      <td
-                        class="font-mono break-all"
-                        data-explore-sample-source={sample_source_ref(sample)}
-                      >
-                        {sample_source_ref(sample)}
-                      </td>
-                      <td
-                        class="font-mono break-all"
-                        data-explore-sample-evidence={sample.evidence_id || ""}
-                      >
-                        {sample.evidence_id || "none"}
-                      </td>
-                      <td
-                        class="font-mono break-all"
-                        data-explore-sample-packet={sample.packet_id || ""}
-                      >
-                        {sample.packet_id || "none"}
-                      </td>
-                      <td
-                        class="font-mono break-all"
-                        data-explore-sample-definition={sample.packet_definition_id || ""}
-                      >
-                        {packet_definition_ref(sample)}
-                      </td>
-                      <td class="font-mono break-all">{sample.sample_id}</td>
-                      <td class="text-right">
-                        <.link
-                          :if={dashboard_sample_href(@current_mission.mission_id, @explore_context, sample)}
-                          navigate={dashboard_sample_href(@current_mission.mission_id, @explore_context, sample)}
-                          class="btn btn-ghost btn-xs"
-                          title="Open in dashboard"
-                          data-explore-open-sample={sample.sample_id}
-                        >
-                          <.icon name="hero-arrow-top-right-on-square" class="h-3.5 w-3.5" />
-                        </.link>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-        </div>
-      </div>
-    </div>
+      <.vue
+        id="ops-telemetry-explore-component"
+        v-component="OpsTelemetryExplore"
+        {@telemetry_explore_props}
+        v-on:apply_filters={JS.push("apply_filters")}
+        v-on:apply_question={JS.push("apply_question")}
+        v-on:add_to_dashboard={JS.push("add_to_dashboard")}
+        v-on:clear_selected_sample={JS.push("clear_selected_sample")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_props(assigns) do
+    mission_id = assigns.current_mission.mission_id
+    context = assigns.explore_context
+
+    %{
+      page:
+        page_dto(
+          context,
+          assigns.source_context,
+          assigns.selected_sample_state,
+          assigns.history_diagnostics,
+          assigns.samples
+        ),
+      clipboard: clipboard_dto(assigns.investigation_path),
+      investigation:
+        investigation_dto(assigns.investigation_path, assigns.investigation_fingerprint),
+      navigation: navigation_dto(mission_id, context),
+      questions: questions_dto(context),
+      question_briefing: question_briefing_dto(mission_id, context),
+      filter_form:
+        filter_form_dto(
+          assigns.filter_form,
+          assigns.points,
+          assigns.spacecraft,
+          assigns.data_sources,
+          assigns.data_bindings,
+          assigns.data_realms,
+          context
+        ),
+      point: point_dto(assigns.point, context.point_id),
+      selected_sample: selected_sample_dto(assigns.selected_sample, mission_id, context),
+      source_context:
+        source_context_dto(assigns.source_context, assigns.samples, mission_id, context),
+      context_rows: context_rows(context),
+      diagnostics: diagnostics_dto(assigns.history_diagnostics),
+      samples: Enum.map(assigns.samples, &sample_dto(&1, mission_id, context))
+    }
+    |> maybe_put_authoring(assigns, context)
+  end
+
+  defp page_dto(context, source_context, selected_sample_state, diagnostics, samples) do
+    %{
+      id: "ops-telemetry-explore-page",
+      heading: "Telemetry Explore",
+      point_label: context.point_id || "No point selected",
+      realm: context.realm,
+      time_mode: context.time_mode,
+      source_state: source_context.state,
+      data_source_id: source_context.data_source_id || "",
+      source_binding_id: source_context.source_binding_id || "",
+      logical_source: source_context.logical_source || "",
+      source_realm: source_context.realm || "",
+      selected_sample_state: selected_sample_state,
+      selected_sample_id: context.sample_id || "",
+      selected_sample_status:
+        selected_sample_status_dto(selected_sample_state, context.sample_id),
+      samples_summary: "#{length(samples)} rows, #{order_label(context.order)}",
+      empty_samples_message: empty_samples_message(diagnostics)
+    }
+  end
+
+  defp selected_sample_status_dto("missing", sample_id) do
+    %{
+      id: "telemetry-explore-selected-sample-status",
+      state: "missing",
+      sample_id: sample_id || "",
+      icon: "hero-exclamation-triangle",
+      heading: "Selected sample is outside the current result set"
+    }
+  end
+
+  defp selected_sample_status_dto(_state, _sample_id), do: nil
+
+  defp clipboard_dto(investigation_path) do
+    %{
+      button_id: "telemetry-explore-copy-link",
+      text: investigation_path,
+      class: "btn btn-ghost btn-sm",
+      icon: "hero-link",
+      icon_class: "h-4 w-4",
+      label: "Copy link",
+      copied_message: "Copied to clipboard",
+      failed_message: "Copy failed"
+    }
+  end
+
+  defp investigation_dto(path, fingerprint) do
+    %{
+      id: "telemetry-explore-investigation-summary",
+      label: "Investigation",
+      path: path,
+      fingerprint: fingerprint
+    }
+  end
+
+  defp navigation_dto(mission_id, context) do
+    %{
+      back_to_dashboard:
+        if(context.source_dashboard_id,
+          do: %{
+            id: "telemetry-explore-back-to-dashboard",
+            href: dashboard_path(mission_id, context.source_dashboard_id, context),
+            label: "Dashboard",
+            icon: "hero-arrow-left",
+            class: "btn btn-ghost btn-sm"
+          },
+          else: nil
+        )
+    }
+  end
+
+  defp questions_dto(context) do
+    Enum.map(investigation_questions(), fn question ->
+      %{
+        id: question.id,
+        dom_id: "telemetry-explore-question-#{question.id}",
+        label: question.label,
+        description: question.description,
+        icon: question.icon,
+        active: context.question == question.id
+      }
+    end)
+  end
+
+  defp question_briefing_dto(mission_id, context) do
+    case question_briefing(context.question) do
+      nil ->
+        nil
+
+      briefing ->
+        %{
+          id: "telemetry-explore-question-briefing",
+          question: context.question,
+          label: question_label(context.question),
+          text: briefing,
+          actions: question_actions_dto(mission_id, context)
+        }
+    end
+  end
+
+  defp question_actions_dto(mission_id, context) do
+    [
+      %{
+        id: "telemetry-explore-question-timeline",
+        href: timeline_path(mission_id, context),
+        label: "Timeline",
+        icon: "hero-clock"
+      },
+      question_contacts_action(mission_id, context.question),
+      question_data_operations_action(mission_id, context)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp question_contacts_action(mission_id, "link_degradation") do
+    %{
+      id: "telemetry-explore-question-contacts",
+      href: ~p"/missions/#{mission_id}/ops/contacts",
+      label: "Contacts",
+      icon: "hero-signal"
+    }
+  end
+
+  defp question_contacts_action(_mission_id, _question), do: nil
+
+  defp question_data_operations_action(mission_id, %{question: "missing_history"} = context) do
+    %{
+      id: "telemetry-explore-question-data-operations",
+      href: data_operations_path(mission_id, context),
+      label: "Data Operations",
+      icon: "hero-circle-stack"
+    }
+  end
+
+  defp question_data_operations_action(_mission_id, _context), do: nil
+
+  defp filter_form_dto(
+         form,
+         points,
+         spacecraft,
+         data_sources,
+         data_bindings,
+         data_realms,
+         context
+       ) do
+    %{
+      id: "telemetry-explore-filter-form",
+      values: filter_values_dto(form),
+      fields: %{
+        point_id:
+          select_field_dto(
+            "explore_point_id",
+            "explore[point_id]",
+            "Point",
+            point_options(points, context.point_id)
+          ),
+        spacecraft_id:
+          select_field_dto(
+            "explore_spacecraft_id",
+            "explore[spacecraft_id]",
+            "Spacecraft",
+            spacecraft_options(spacecraft)
+          ),
+        time_mode:
+          select_field_dto(
+            "explore_time_mode",
+            "explore[time_mode]",
+            "Window",
+            time_mode_options()
+          ),
+        from: text_field_dto("explore_from", "explore[from]", "From"),
+        to: text_field_dto("explore_to", "explore[to]", "To"),
+        order:
+          select_field_dto(
+            "explore_order",
+            "explore[order]",
+            "Order",
+            order_options()
+          ),
+        limit: %{
+          id: "explore_limit",
+          name: "explore[limit]",
+          type: "number",
+          label: "Limit",
+          min: "1",
+          max: "1000"
+        },
+        realm:
+          select_field_dto(
+            "explore_realm",
+            "explore[realm]",
+            "Realm",
+            realm_options(data_realms, data_bindings, context.realm)
+          ),
+        logical_source:
+          select_field_dto(
+            "explore_logical_source",
+            "explore[logical_source]",
+            "Logical Source",
+            logical_source_options()
+          ),
+        data_source_id:
+          select_field_dto(
+            "explore_data_source_id",
+            "explore[data_source_id]",
+            "Data Source",
+            data_source_options(data_sources, data_bindings, context)
+          ),
+        source_binding_id:
+          select_field_dto(
+            "explore_source_binding_id",
+            "explore[source_binding_id]",
+            "Source Binding",
+            source_binding_options(data_bindings, context)
+          ),
+        selection_view:
+          select_field_dto(
+            "explore_selection_view",
+            "explore[selection_view]",
+            "Selection View",
+            selection_view_options()
+          ),
+        validity_state:
+          select_field_dto(
+            "explore_validity_state",
+            "explore[validity_state]",
+            "Validity",
+            validity_state_options()
+          )
+      },
+      submit: %{
+        id: "telemetry-explore-apply-filters",
+        label: "Load",
+        icon: "hero-arrow-path"
+      }
+    }
+  end
+
+  defp filter_values_dto(form) do
+    Map.new(@filter_fields, fn field ->
+      {Atom.to_string(field), form_string_value(form, field)}
+    end)
+  end
+
+  defp form_string_value(form, field) do
+    form
+    |> Phoenix.HTML.Form.input_value(field)
+    |> string_value()
+  end
+
+  defp text_field_dto(id, name, label) do
+    %{id: id, name: name, type: "text", label: label}
+  end
+
+  defp select_field_dto(id, name, label, options) do
+    %{
+      id: id,
+      name: name,
+      type: "select",
+      label: label,
+      options:
+        Enum.map(options, fn {option_label, value} ->
+          %{label: option_label, value: value}
+        end)
+    }
+  end
+
+  defp point_dto(nil, requested_point_id) do
+    %{
+      id: "telemetry-explore-point-card",
+      requested_point_id: requested_point_id || "",
+      rows: [row("Point", requested_point_id || "none")],
+      missing: not is_nil(requested_point_id)
+    }
+  end
+
+  defp point_dto(point, requested_point_id) do
+    %{
+      id: "telemetry-explore-point-card",
+      requested_point_id: requested_point_id || "",
+      rows:
+        [
+          row("Point", requested_point_id || "none"),
+          row("Packet", point.packet_name),
+          row("Field", point.field_name),
+          row("Unit", point.unit),
+          row("Description", point.description)
+        ]
+        |> Enum.reject(&is_nil/1),
+      missing: false
+    }
+  end
+
+  defp maybe_put_authoring(props, assigns, context) do
+    if Map.get(assigns, :dashboard_author?, false) and not is_nil(assigns.point) do
+      Map.put(props, :authoring, %{
+        form:
+          add_to_dashboard_form_dto(
+            assigns.add_to_dashboard_form,
+            assigns.ops_dashboards,
+            context
+          )
+      })
+    else
+      props
+    end
+  end
+
+  defp add_to_dashboard_form_dto(form, dashboards, context) do
+    %{
+      id: "telemetry-explore-add-to-dashboard-form",
+      note: "no direct write",
+      values: %{
+        "dashboard_id" => form_string_value(form, :dashboard_id),
+        "widget_type" => form_string_value(form, :widget_type),
+        "title" => form_string_value(form, :title)
+      },
+      fields: %{
+        dashboard_id:
+          select_field_dto(
+            "add_to_dashboard_dashboard_id",
+            "add_to_dashboard[dashboard_id]",
+            "Dashboard",
+            dashboard_options(dashboards, context.source_dashboard_id)
+          ),
+        widget_type:
+          select_field_dto(
+            "add_to_dashboard_widget_type",
+            "add_to_dashboard[widget_type]",
+            "Visualization",
+            [{"Time series", "time_series"}, {"Value tile", "value_tile"}]
+          ),
+        title: %{
+          id: "add_to_dashboard_title",
+          name: "add_to_dashboard[title]",
+          type: "text",
+          label: "Title",
+          placeholder: default_widget_title(context.point_id)
+        }
+      },
+      submit: %{
+        id: "telemetry-explore-add-to-dashboard",
+        label: "Open staged candidate",
+        icon: "hero-plus"
+      }
+    }
+  end
+
+  defp selected_sample_dto(nil, _mission_id, _context), do: nil
+
+  defp selected_sample_dto(sample, mission_id, context) do
+    %{
+      id: "telemetry-explore-selected-sample-card",
+      sample_id: sample.sample_id,
+      validity_state: validity_state_label(sample),
+      rows: sample_provenance_rows(sample),
+      clear: %{
+        id: "telemetry-explore-clear-selected-sample",
+        icon: "hero-x-mark",
+        label: "Clear selected sample"
+      },
+      dashboard_link:
+        case dashboard_sample_href(mission_id, context, sample) do
+          nil ->
+            nil
+
+          href ->
+            %{
+              id: "telemetry-explore-open-selected-in-dashboard",
+              href: href,
+              label: "Open in dashboard",
+              icon: "hero-arrow-top-right-on-square"
+            }
+        end
+    }
+  end
+
+  defp source_context_dto(source_context, samples, mission_id, context) do
+    %{
+      id: "telemetry-explore-source-card",
+      state: source_context.state,
+      data_source_id: source_context.data_source_id || "",
+      source_binding_id: source_context.source_binding_id || "",
+      logical_source: source_context.logical_source || "",
+      realm: source_context.realm || "",
+      matched_data_source_id: source_context.matched_data_source_id || "",
+      matched_source_binding_id: source_context.matched_source_binding_id || "",
+      rows: source_context_rows(source_context, samples),
+      actions: source_actions_dto(source_context, mission_id, context)
+    }
+  end
+
+  defp source_actions_dto(source_context, mission_id, context) do
+    [
+      case source_detail_path(mission_id, source_context) do
+        nil ->
+          nil
+
+        href ->
+          %{
+            id: "telemetry-explore-open-source",
+            href: href,
+            label: "Open source posture",
+            icon: "hero-circle-stack"
+          }
+      end,
+      if(context.source_dashboard_id,
+        do: %{
+          id: "telemetry-explore-open-dashboard-diagnostics",
+          href:
+            ~p"/missions/#{mission_id}/ops/dashboards/#{context.source_dashboard_id}/diagnostics",
+          label: "Dashboard diagnostics",
+          icon: "hero-wrench-screwdriver"
+        },
+        else: nil
+      )
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp diagnostics_dto(diagnostics) do
+    %{
+      id: "telemetry-explore-diagnostics-card",
+      rows: diagnostics_rows(diagnostics)
+    }
+  end
+
+  defp sample_dto(sample, mission_id, context) do
+    %{
+      id: "telemetry-explore-sample-#{sample.sample_id}",
+      sample_id: sample.sample_id,
+      selected: sample.sample_id == context.sample_id,
+      receipt_time: format_datetime(sample.receipt_time),
+      generation_time: format_datetime(sample.generation_time),
+      spacecraft_id: sample.spacecraft_id || "mission",
+      engineering_value: format_value(sample.engineering_value),
+      raw_value: format_value(sample.raw_value),
+      quality_state: string_value(sample.quality_state),
+      validity_state: validity_state_label(sample),
+      source_ref: sample_source_ref(sample),
+      evidence_id: sample.evidence_id || "",
+      evidence_display: sample.evidence_id || "none",
+      packet_id: sample.packet_id || "",
+      packet_display: sample.packet_id || "none",
+      packet_definition_id: sample.packet_definition_id || "",
+      packet_definition_ref: packet_definition_ref(sample),
+      dashboard_href: dashboard_sample_href(mission_id, context, sample)
+    }
   end
 
   defp context_rows(context) do
@@ -665,7 +606,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
 
   defp row(_label, nil), do: nil
   defp row(_label, ""), do: nil
-  defp row(label, value), do: %{label: label, value: value}
+  defp row(label, value), do: %{label: label, value: format_value(value)}
 
   defp dashboard_path(mission_id, dashboard_id, context) do
     query =
@@ -710,6 +651,11 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
   defp format_value(value) when is_integer(value), do: Integer.to_string(value)
   defp format_value(value) when is_float(value), do: :erlang.float_to_binary(value, decimals: 3)
   defp format_value(value), do: inspect(value)
+
+  defp string_value(nil), do: ""
+  defp string_value(value) when is_binary(value), do: value
+  defp string_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp string_value(value), do: to_string(value)
 
   defp packet_definition_ref(sample) do
     case {sample.packet_definition_id, sample.packet_definition_version} do
@@ -837,6 +783,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
     realms =
       (data_realms ++ Enum.map(data_bindings, &to_string(&1.realm)) ++ List.wrap(current_realm))
       |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.map(&to_string/1)
       |> Enum.uniq()
       |> Enum.sort()
 

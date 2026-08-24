@@ -18,6 +18,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   alias Cadence.Management.DataSources
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.TestSupport.TelemetryPersistencePolicies
+  alias CadenceWeb.OpsTelemetryExploreComponents
   alias CadenceWeb.TestFixtures
 
   defp signed_in_user_org_and_mission do
@@ -132,7 +133,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   end
 
   test "telemetry explore route renders point context and matching samples" do
-    {conn, org, mission} = signed_in_org_and_mission()
+    {conn, user, org, mission} = signed_in_user_org_and_mission()
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Alpha")
     binding_set = persist_binding_set!(org, mission)
 
@@ -196,110 +197,98 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, sample_id: older_sample.sample_id, selected_time: DateTime.to_iso8601(older_sample.receipt_time), realm: "rehearsal", data_source_id: source_context.data_source_id, source_binding_id: source_context.binding_id, source_dashboard_id: dashboard.dashboard_id}}"
       )
 
-    assert has_element?(view, "#ops-telemetry-explore-page")
+    assert has_element?(view, "#ops-telemetry-explore-component.contents")
+    refute has_element?(view, "#ops-telemetry-explore-page")
 
-    assert has_element?(
-             view,
-             ~s(#ops-telemetry-explore-page[data-explore-source-state="matched"][data-explore-selected-sample-state="matched"][data-explore-data-source="#{source_context.data_source_id}"][data-explore-source-binding="#{source_context.binding_id}"])
-           )
+    vue = telemetry_explore_vue(view)
+    sample = sample_props(vue, older_sample.sample_id)
+    selected_sample = vue.props["selected_sample"]
+    source = vue.props["source_context"]
+    clipboard = vue.props["clipboard"]
+    investigation = vue.props["investigation"]
 
-    assert has_element?(view, ~s([data-explore-point-field="Point"]), "HK.counter")
-    assert has_element?(view, ~s([data-explore-context="Spacecraft"]), spacecraft.spacecraft_id)
+    assert vue.component == "OpsTelemetryExplore"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert vue.slots == %{}
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-sample-#{older_sample.sample_id}[data-explore-selected])
-           )
+    assert vue.handlers == %{
+             "add_to_dashboard" => Phoenix.LiveView.JS.push("add_to_dashboard"),
+             "apply_filters" => Phoenix.LiveView.JS.push("apply_filters"),
+             "apply_question" => Phoenix.LiveView.JS.push("apply_question"),
+             "clear_selected_sample" => Phoenix.LiveView.JS.push("clear_selected_sample")
+           }
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-card[data-explore-selected-sample-card="#{older_sample.sample_id}"])
-           )
+    assert vue.props["page"]["source_state"] == "matched"
+    assert vue.props["page"]["selected_sample_state"] == "matched"
+    assert vue.props["page"]["data_source_id"] == source_context.data_source_id
+    assert vue.props["page"]["source_binding_id"] == source_context.binding_id
+    assert row_value(vue.props["point"]["rows"], "Point") == "HK.counter"
+    assert row_value(vue.props["context_rows"], "Spacecraft") == spacecraft.spacecraft_id
+    assert sample["selected"]
+    assert sample["id"] == "telemetry-explore-sample-#{older_sample.sample_id}"
+    assert selected_sample["id"] == "telemetry-explore-selected-sample-card"
+    assert selected_sample["sample_id"] == older_sample.sample_id
+    assert row_value(selected_sample["rows"], "Evidence") == older_sample.evidence_id
+    assert row_value(selected_sample["rows"], "Packet") == older_sample.packet_id
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-card [data-explore-selected-provenance="Evidence"]),
-             older_sample.evidence_id
-           )
-
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-card [data-explore-selected-provenance="Packet"]),
-             older_sample.packet_id
-           )
-
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-card [data-explore-selected-provenance="Definition"]),
+    assert row_value(selected_sample["rows"], "Definition") ==
              "#{older_sample.packet_definition_id}@#{older_sample.packet_definition_version}"
-           )
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-card [data-explore-selected-provenance="Validity"]),
-             "canonical"
-           )
+    assert row_value(selected_sample["rows"], "Validity") == "canonical"
+    assert sample["evidence_id"] == older_sample.evidence_id
+    assert sample["dashboard_href"] =~ "selected_id=#{older_sample.sample_id}"
+    assert row_value(vue.props["diagnostics"]["rows"], "Requested") == "100"
+    assert row_value(vue.props["diagnostics"]["rows"], "Returned") == "2"
+    assert row_value(vue.props["diagnostics"]["rows"], "Physical exists") == "true"
+    assert row_value(source["rows"], "State") == "matched"
+    assert row_value(source["rows"], "Logical source") == "telemetry"
+    assert source["state"] == "matched"
+    assert source["matched_data_source_id"] == source_context.data_source_id
+    assert source["matched_source_binding_id"] == source_context.binding_id
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-sample-#{older_sample.sample_id} [data-explore-sample-evidence="#{older_sample.evidence_id}"])
-           )
+    assert clipboard["button_id"] == "telemetry-explore-copy-link"
+    assert clipboard["text"] =~ "/ops/explore"
+    assert clipboard["text"] =~ "point_id=HK.counter"
+    assert clipboard["text"] =~ "sample_id=#{older_sample.sample_id}"
+    assert clipboard["text"] =~ "data_source_id=#{source_context.data_source_id}"
+    assert clipboard["text"] =~ "source_binding_id=#{source_context.binding_id}"
+    assert clipboard["class"] == "btn btn-ghost btn-sm"
+    assert clipboard["icon"] == "hero-link"
+    assert clipboard["icon_class"] == "h-4 w-4"
+    assert clipboard["label"] == "Copy link"
+    assert clipboard["copied_message"] == "Copied to clipboard"
+    assert clipboard["failed_message"] == "Copy failed"
 
-    assert has_element?(
-             view,
-             ~s([data-explore-open-sample="#{older_sample.sample_id}"])
-           )
+    assert investigation["path"] =~ "point_id=HK.counter"
+    assert investigation["fingerprint"] =~ ~r/^[a-f0-9]{12}$/
+    assert vue.props["navigation"]["back_to_dashboard"]["id"] ==
+             "telemetry-explore-back-to-dashboard"
 
-    assert has_element?(view, ~s([data-explore-diagnostics="Requested"]), "100")
-    assert has_element?(view, ~s([data-explore-diagnostics="Returned"]), "2")
-    assert has_element?(view, ~s([data-explore-diagnostics="Physical exists"]), "true")
-    assert has_element?(view, ~s([data-explore-source="State"]), "matched")
-    assert has_element?(view, ~s([data-explore-source="Logical source"]), "telemetry")
+    assert_filter_form_contract(vue.props["filter_form"])
+    assert_json_safe_vue(vue)
+    encoded_props = Jason.encode!(vue.props)
+    refute encoded_props =~ user.email
+    refute encoded_props =~ "range_scan?"
+    refute encoded_props =~ "latest?"
+    refute_sensitive_keys(vue.props)
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-source-card[data-explore-source-state="matched"][data-explore-matched-data-source="#{source_context.data_source_id}"][data-explore-matched-source-binding="#{source_context.binding_id}"])
-           )
-
-    copy = LiveVue.Test.get_vue(view, id: "telemetry-explore-copy-link-component")
-
-    assert copy.component == "ClipboardButton"
-    assert copy.props["button_id"] == "telemetry-explore-copy-link"
-    assert copy.props["clipboard_text"] =~ "/ops/explore"
-    assert copy.props["clipboard_text"] =~ "point_id=HK.counter"
-    assert copy.props["clipboard_text"] =~ "sample_id=#{older_sample.sample_id}"
-    assert copy.props["clipboard_text"] =~ "data_source_id=#{source_context.data_source_id}"
-    assert copy.props["clipboard_text"] =~ "source_binding_id=#{source_context.binding_id}"
-    assert copy.props["button_class"] == "btn btn-ghost btn-sm"
-    assert copy.props["icon"] == "hero-link"
-    assert copy.props["icon_class"] == "h-4 w-4"
-    assert copy.props["label"] == "Copy link"
-    assert copy.class == "contents"
-    refute copy.ssr
-
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-investigation-summary[data-investigation-path*="point_id=HK.counter"][data-investigation-fingerprint])
-           )
-
-    assert has_element?(view, "#telemetry-explore-back-to-dashboard")
-
-    view |> element("#telemetry-explore-clear-selected-sample") |> render_click()
+    render_hook(view, "clear_selected_sample", %{})
     cleared_path = assert_patch(view)
     assert cleared_path =~ "point_id=HK.counter"
     assert cleared_path =~ "spacecraft_id=#{URI.encode_www_form(spacecraft.spacecraft_id)}"
     refute cleared_path =~ "sample_id="
     refute cleared_path =~ "selected_time="
     refute cleared_path =~ "source_dashboard_id="
-    refute has_element?(view, "#telemetry-explore-selected-sample-card")
+    render_patch(view, cleared_path)
+    assert telemetry_explore_vue(view).props["selected_sample"] == nil
 
     from = "2023-11-14T22:14:45Z"
     to = "2023-11-14T22:15:00Z"
 
-    view
-    |> element("#telemetry-explore-filter-form")
-    |> render_submit(%{
-      "explore" => %{
+    archive_filters =
+      telemetry_explore_vue(view).props["filter_form"]["values"]
+      |> Map.merge(%{
         "point_id" => "HK.counter",
         "spacecraft_id" => spacecraft.spacecraft_id,
         "time_mode" => "archive",
@@ -314,8 +303,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
         "source_dashboard_id" => dashboard.dashboard_id,
         "sample_id" => older_sample.sample_id,
         "selected_time" => DateTime.to_iso8601(older_sample.receipt_time)
-      }
-    })
+      })
+
+    assert Enum.all?(archive_filters, fn {key, value} ->
+             is_binary(key) and is_binary(value)
+           end)
+
+    render_hook(view, "apply_filters", %{"explore" => archive_filters})
 
     patched_path = assert_patch(view)
     assert patched_path =~ "point_id=HK.counter"
@@ -328,25 +322,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert patched_path =~ "data_source_id=#{source_context.data_source_id}"
     assert patched_path =~ "source_binding_id=#{source_context.binding_id}"
     refute patched_path =~ "logical_source=telemetry"
+    render_patch(view, patched_path)
 
-    assert has_element?(view, ~s([data-explore-source="Requested realm"]), "rehearsal")
+    archive_vue = telemetry_explore_vue(view)
+    assert row_value(archive_vue.props["source_context"]["rows"], "Requested realm") ==
+             "rehearsal"
 
-    assert has_element?(
-             view,
-             ~s([data-explore-source="Requested source"]),
+    assert row_value(archive_vue.props["source_context"]["rows"], "Requested source") ==
              source_context.data_source_id
-           )
 
-    assert has_element?(
-             view,
-             ~s([data-explore-source="Requested binding"]),
+    assert row_value(archive_vue.props["source_context"]["rows"], "Requested binding") ==
              source_context.binding_id
-           )
 
-    view
-    |> element("#telemetry-explore-filter-form")
-    |> render_submit(%{
-      "explore" => %{
+    selection_filters =
+      archive_vue.props["filter_form"]["values"]
+      |> Map.merge(%{
         "point_id" => "HK.counter",
         "spacecraft_id" => spacecraft.spacecraft_id,
         "time_mode" => "latest",
@@ -360,8 +350,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
         "source_dashboard_id" => dashboard.dashboard_id,
         "sample_id" => older_sample.sample_id,
         "selected_time" => DateTime.to_iso8601(older_sample.receipt_time)
-      }
-    })
+      })
+
+    render_hook(view, "apply_filters", %{"explore" => selection_filters})
 
     filtered_path = assert_patch(view)
     assert filtered_path =~ "selection_view=all_revisions"
@@ -372,22 +363,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     refute filtered_path =~ "time_mode=latest"
     refute filtered_path =~ "order=desc"
     refute filtered_path =~ "limit=100"
+    render_patch(view, filtered_path)
 
-    assert render(view) =~
+    filtered_vue = telemetry_explore_vue(view)
+
+    assert filtered_vue.props["page"]["empty_samples_message"] ==
              "Physical samples exist, but none matched the current selection view or validity filter."
 
-    assert has_element?(view, ~s([data-explore-diagnostics="Returned"]), "0")
-    assert has_element?(view, ~s([data-explore-diagnostics="Physical exists"]), "true")
+    assert row_value(filtered_vue.props["diagnostics"]["rows"], "Returned") == "0"
+    assert row_value(filtered_vue.props["diagnostics"]["rows"], "Physical exists") == "true"
+    assert filtered_vue.props["page"]["source_state"] == "matched"
+    assert filtered_vue.props["page"]["selected_sample_state"] == "missing"
+    assert filtered_vue.props["selected_sample"] == nil
 
-    assert has_element?(
-             view,
-             ~s(#ops-telemetry-explore-page[data-explore-source-state="matched"][data-explore-selected-sample-state="missing"])
-           )
+    assert filtered_vue.props["page"]["selected_sample_status"] == %{
+             "heading" => "Selected sample is outside the current result set",
+             "icon" => "hero-exclamation-triangle",
+             "id" => "telemetry-explore-selected-sample-status",
+             "sample_id" => older_sample.sample_id,
+             "state" => "missing"
+           }
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-selected-sample-status[data-explore-selected-sample-state="missing"][data-explore-selected-sample-id="#{older_sample.sample_id}"])
-           )
+    assert_json_safe_vue(filtered_vue)
   end
 
   test "telemetry explore route marks stale source evidence targets as missing" do
@@ -403,18 +400,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/explore?#{%{point_id: "HK.counter", spacecraft_id: spacecraft.spacecraft_id, realm: "rehearsal", data_source_id: "retired-rehearsal-tsdb", source_binding_id: "retired-rehearsal-binding"}}"
       )
 
-    assert has_element?(
-             view,
-             ~s(#ops-telemetry-explore-page[data-explore-source-state="missing"][data-explore-data-source="retired-rehearsal-tsdb"][data-explore-source-binding="retired-rehearsal-binding"][data-explore-selected-sample-state="none"])
-           )
+    vue = telemetry_explore_vue(view)
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-source-card[data-explore-source-state="missing"][data-explore-data-source="retired-rehearsal-tsdb"][data-explore-source-binding="retired-rehearsal-binding"])
-           )
-
-    assert has_element?(view, ~s([data-explore-source="State"]), "missing")
-    assert has_element?(view, ~s([data-explore-diagnostics="Returned"]), "0")
+    assert vue.props["page"]["source_state"] == "missing"
+    assert vue.props["page"]["data_source_id"] == "retired-rehearsal-tsdb"
+    assert vue.props["page"]["source_binding_id"] == "retired-rehearsal-binding"
+    assert vue.props["page"]["selected_sample_state"] == "none"
+    assert vue.props["source_context"]["state"] == "missing"
+    assert vue.props["source_context"]["data_source_id"] == "retired-rehearsal-tsdb"
+    assert vue.props["source_context"]["source_binding_id"] == "retired-rehearsal-binding"
+    assert row_value(vue.props["source_context"]["rows"], "State") == "missing"
+    assert row_value(vue.props["diagnostics"]["rows"], "Returned") == "0"
+    assert_json_safe_vue(vue)
   end
 
   test "question-led Explore stages a dashboard candidate without writing until Save" do
@@ -435,34 +432,53 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     {:ok, explore, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore")
 
     assert has_element?(explore, "#ops-context-rail")
-    assert has_element?(explore, "#telemetry-explore-questions")
+    assert has_element?(explore, "#ops-telemetry-explore-component.contents")
+    refute has_element?(explore, "#telemetry-explore-questions")
 
-    explore
-    |> element("#telemetry-explore-question-what_changed")
-    |> render_click()
+    initial_vue = telemetry_explore_vue(explore)
+    what_changed = Enum.find(initial_vue.props["questions"], &(&1["id"] == "what_changed"))
+    assert what_changed["dom_id"] == "telemetry-explore-question-what_changed"
+
+    render_hook(explore, "apply_question", %{"question" => what_changed["id"]})
 
     preset_path = assert_patch(explore)
     assert preset_path =~ "question=what_changed"
     assert preset_path =~ "time_mode=last_1h"
     assert preset_path =~ "selection_view=all_revisions"
+    render_patch(explore, preset_path)
 
-    assert has_element?(
-             explore,
-             ~s(#telemetry-explore-question-briefing[data-explore-question="what_changed"])
+    preset_vue = telemetry_explore_vue(explore)
+    briefing = preset_vue.props["question_briefing"]
+    authoring = preset_vue.props["authoring"]
+
+    assert briefing["id"] == "telemetry-explore-question-briefing"
+    assert briefing["question"] == "what_changed"
+    assert Enum.any?(briefing["actions"], &(&1["id"] == "telemetry-explore-question-timeline"))
+    assert authoring["form"]["id"] == "telemetry-explore-add-to-dashboard-form"
+    assert authoring["form"]["values"] == %{
+             "dashboard_id" => "",
+             "title" => "",
+             "widget_type" => "time_series"
+           }
+
+    assert Enum.any?(
+             authoring["form"]["fields"]["dashboard_id"]["options"],
+             &(&1 == %{"label" => "Investigation Board", "value" => dashboard.dashboard_id})
            )
 
-    assert has_element?(explore, "#telemetry-explore-question-timeline")
-    assert has_element?(explore, "#telemetry-explore-add-to-dashboard-form")
-
-    explore
-    |> form("#telemetry-explore-add-to-dashboard-form",
-      add_to_dashboard: %{
-        dashboard_id: dashboard.dashboard_id,
-        widget_type: "time_series",
-        title: "Counter investigation"
+    add_payload = %{
+      "add_to_dashboard" => %{
+        "dashboard_id" => dashboard.dashboard_id,
+        "widget_type" => "time_series",
+        "title" => "Counter investigation"
       }
-    )
-    |> render_submit()
+    }
+
+    assert Enum.all?(add_payload["add_to_dashboard"], fn {key, value} ->
+             is_binary(key) and is_binary(value)
+           end)
+
+    render_hook(explore, "add_to_dashboard", add_payload)
 
     {editor_path, _flash} = assert_redirect(explore)
     assert editor_path =~ "/ops/dashboards/#{dashboard.dashboard_id}/edit"
@@ -492,6 +508,197 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert placement.widget_def.binding.observables == ["HK.counter"]
 
     stop_dashboard_view(editor)
+  end
+
+  test "presentation contract omits dashboard targets across the non-author boundary" do
+    viewer_props =
+      false
+      |> presentation_assigns()
+      |> OpsTelemetryExploreComponents.presentation_props()
+
+    author_props =
+      true
+      |> presentation_assigns()
+      |> OpsTelemetryExploreComponents.presentation_props()
+
+    refute Map.has_key?(viewer_props, :authoring)
+    assert get_in(author_props, [:authoring, :form, :id]) ==
+             "telemetry-explore-add-to-dashboard-form"
+
+    assert get_in(author_props, [
+             :authoring,
+             :form,
+             :fields,
+             :dashboard_id,
+             :options
+           ]) == [
+             %{label: "Choose a dashboard", value: ""},
+             %{label: "Author Board", value: "dashboard-author"}
+           ]
+
+    viewer_json = Jason.encode!(viewer_props)
+    author_json = Jason.encode!(author_props)
+
+    refute viewer_json =~ "dashboard-author"
+    refute viewer_json =~ "Author Board"
+    assert author_json =~ "dashboard-author"
+    assert author_json =~ "Author Board"
+    refute_sensitive_keys(viewer_props)
+    refute_sensitive_keys(author_props)
+  end
+
+  defp telemetry_explore_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-telemetry-explore-component")
+  end
+
+  defp sample_props(vue, sample_id) do
+    assert sample = Enum.find(vue.props["samples"], &(&1["sample_id"] == sample_id))
+    sample
+  end
+
+  defp row_value(rows, label) do
+    assert row = Enum.find(rows, &(&1["label"] == label))
+    row["value"]
+  end
+
+  defp assert_filter_form_contract(filter_form) do
+    assert filter_form["id"] == "telemetry-explore-filter-form"
+
+    assert Map.keys(filter_form["values"]) |> Enum.sort() ==
+             ~w(
+               data_source_id from limit limit_mode logical_source order point_id question realm
+               replay_run_id sample_id scope_id scope_kind selected_time selection_view
+               source_binding_id source_dashboard_id spacecraft_id time_axis time_mode to
+               validity_state
+             )
+
+    assert Enum.all?(filter_form["values"], fn {key, value} ->
+             is_binary(key) and is_binary(value)
+           end)
+
+    assert filter_form["fields"]["point_id"]["id"] == "explore_point_id"
+    assert filter_form["fields"]["point_id"]["name"] == "explore[point_id]"
+    assert filter_form["fields"]["limit"]["min"] == "1"
+    assert filter_form["fields"]["limit"]["max"] == "1000"
+    assert filter_form["submit"] == %{
+             "icon" => "hero-arrow-path",
+             "id" => "telemetry-explore-apply-filters",
+             "label" => "Load"
+           }
+  end
+
+  defp assert_json_safe_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp refute_sensitive_keys(value) when is_map(value) do
+    sensitive_keys =
+      ~w(
+        capabilities credentials credentials_ref current_scope current_user metadata password
+        provenance scope secret secrets token user
+      )
+
+    Enum.each(value, fn {key, nested} ->
+      refute to_string(key) in sensitive_keys
+      refute_sensitive_keys(nested)
+    end)
+  end
+
+  defp refute_sensitive_keys(value) when is_list(value),
+    do: Enum.each(value, &refute_sensitive_keys/1)
+
+  defp refute_sensitive_keys(_value), do: :ok
+
+  defp presentation_assigns(dashboard_author?) do
+    context = %{
+      point_id: "HK.counter",
+      sample_id: nil,
+      spacecraft_id: nil,
+      scope_kind: nil,
+      scope_id: nil,
+      time_mode: "latest",
+      time_axis: nil,
+      from: nil,
+      to: nil,
+      from_text: nil,
+      to_text: nil,
+      realm: nil,
+      logical_source: :telemetry,
+      logical_source_text: "telemetry",
+      data_source_id: nil,
+      source_binding_id: nil,
+      source_dashboard_id: nil,
+      selected_time: nil,
+      replay_run_id: nil,
+      question: nil,
+      limit_mode: nil,
+      limit: 100,
+      limit_text: "100",
+      order: :desc,
+      order_text: "desc",
+      selection_view: :canonical,
+      selection_view_text: "canonical",
+      validity_state: nil,
+      validity_state_text: ""
+    }
+
+    %{
+      current_mission: %{mission_id: "mission-author-boundary"},
+      explore_context: context,
+      filter_form: Phoenix.Component.to_form(%{}, as: :explore),
+      add_to_dashboard_form:
+        Phoenix.Component.to_form(
+          %{"dashboard_id" => "", "widget_type" => "time_series", "title" => ""},
+          as: :add_to_dashboard
+        ),
+      points: [%{point_id: "HK.counter"}],
+      spacecraft: [],
+      data_sources: [],
+      data_bindings: [],
+      data_realms: [],
+      point: %{
+        point_id: "HK.counter",
+        packet_name: "HK",
+        field_name: "counter",
+        unit: nil,
+        description: nil
+      },
+      samples: [],
+      selected_sample: nil,
+      selected_sample_state: "none",
+      source_context: %{
+        state: "none",
+        data_source_id: nil,
+        source_binding_id: nil,
+        logical_source: "telemetry",
+        realm: nil,
+        matched_data_source_id: nil,
+        matched_source_binding_id: nil
+      },
+      history_diagnostics: %{
+        requested_logical_limit: 100,
+        logical_selected_count: 0,
+        physical_candidate_count: 0,
+        physical_candidate_limit: nil,
+        effective_selection?: true,
+        candidate_window_exhausted?: false,
+        physical_samples_exist?: false,
+        selection_view: "canonical",
+        validity_state: "",
+        error: nil
+      },
+      investigation_path: "/missions/mission-author-boundary/ops/explore?point_id=HK.counter",
+      investigation_fingerprint: "0123456789ab",
+      dashboard_author?: dashboard_author?,
+      ops_dashboards: [
+        %{
+          dashboard_id: "dashboard-author",
+          name: "Author Board",
+          lifecycle_state: "active"
+        }
+      ]
+    }
   end
 
   defp version_count(org, mission, dashboard) do
