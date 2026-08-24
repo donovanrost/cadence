@@ -20,19 +20,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    context = context_selector_presentation(html)
+    mission = context_node_by_attr(context, "phx-value-scope-kind", "mission")
+    input = context_node_by_attr(context, "id", "context-search")
 
-    assert ["mission"] =
-             document
-             |> LazyHTML.query(~s(button[phx-value-scope-kind="mission"]))
-             |> LazyHTML.attribute("phx-value-scope-kind")
+    assert mission["attrs"]["phx-value-scope-kind"] == "mission"
+    assert mission["attrs"]["phx-value-scope-id"] == "mission-1"
+    assert List.first(mission["children"]) == "Lunar Demo"
 
-    assert ["mission-1"] =
-             document
-             |> LazyHTML.query(~s(button[phx-value-scope-kind="mission"]))
-             |> LazyHTML.attribute("phx-value-scope-id")
-
-    assert html =~ "Lunar Demo"
-    assert html =~ "Find mission, spacecraft, contact, source, transport, ground, or link"
+    assert input["attrs"]["placeholder"] ==
+             "Find mission, spacecraft, contact, source, transport, ground, or link"
 
     assert ["#"] =
              document
@@ -65,35 +62,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    context = context_selector_presentation(html)
+    selected = context_node_by_attr(context, "id", "dashboard-selected-context")
 
-    assert html =~ "realized / contact-realized-1 / gs-alpha"
+    scheduled =
+      context_node_by_attr(
+        context,
+        "data-dashboard-context-contact-id",
+        "contact-scheduled-1"
+      )
 
-    assert ["contact"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
-             )
-             |> LazyHTML.attribute("phx-value-scope-kind")
+    realized =
+      context_node_by_attr(context, "data-dashboard-context-contact-kind", "realized")
 
-    assert ["contact-scheduled-1"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
-             )
-             |> LazyHTML.attribute("phx-value-scope-id")
-
-    assert ["scheduled"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-dashboard-context-contact-id="contact-scheduled-1"])
-             )
-             |> LazyHTML.attribute("data-dashboard-context-contact-kind")
-
-    assert ["contact-realized-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-dashboard-context-contact-kind="realized"]))
-             |> LazyHTML.attribute("phx-value-scope-id")
+    assert selected["children"] == ["realized / contact-realized-1 / gs-alpha"]
+    assert scheduled["attrs"]["phx-value-scope-kind"] == "contact"
+    assert scheduled["attrs"]["phx-value-scope-id"] == "contact-scheduled-1"
+    assert scheduled["attrs"]["data-dashboard-context-contact-kind"] == "scheduled"
+    assert realized["attrs"]["phx-value-scope-id"] == "contact-realized-1"
   end
 
   test "dashboard_toolbar exposes unsupported limit mode fallback" do
@@ -407,8 +393,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              "tag" => "span",
              "attrs" => %{
                "id" => "dashboard-editor-save-state",
-               "class" =>
-                 "font-mono text-[0.65rem] uppercase tracking-wider text-success",
+               "class" => "font-mono text-[0.65rem] uppercase tracking-wider text-success",
                "data-editor-dirty" => "false"
              },
              "text" => "Saved",
@@ -911,6 +896,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
     Map.fetch!(vue.props, "presentation")
   end
+
+  defp context_selector_presentation(html) do
+    assert ["dashboard-runtime-context-selector-component"] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-runtime-context-selector-component")
+             |> LazyHTML.attribute("id")
+
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-runtime-context-selector-component")
+
+    assert vue.component == "DashboardRuntimeContextSelector"
+    assert vue.id == "dashboard-runtime-context-selector-component"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp context_node_by_attr(%{"attrs" => attrs} = node, attribute, value) do
+    if attrs[attribute] == value do
+      node
+    else
+      Enum.find_value(node["children"], fn
+        child when is_map(child) -> context_node_by_attr(child, attribute, value)
+        _text -> nil
+      end)
+    end
+  end
+
+  defp context_node_by_attr(_node, _attribute, _value), do: nil
 
   defp editor_action(presentation, id) do
     assert action = Enum.find(presentation["elements"], &(&1["attrs"]["id"] == id))

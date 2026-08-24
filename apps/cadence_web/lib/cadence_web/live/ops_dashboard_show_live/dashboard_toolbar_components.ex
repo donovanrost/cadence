@@ -25,57 +25,57 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
     :watermark_unknown
   ]
 
-  attr :dashboard_document, :any, required: true
-  attr :dashboard_lifecycle_status, :any, required: true
-  attr :dashboard_lifecycle_events, :list, default: []
-  attr :dashboard_comparison_review_queue, :map, default: nil
-  attr :dashboard_publish_readiness, :map, default: nil
-  attr :edit_mode?, :boolean, required: true
-  attr :editor_route?, :boolean, default: false
-  attr :editor_dirty?, :boolean, default: false
-  attr :editor_conflict, :map, default: nil
-  attr :dashboard_author?, :boolean, default: false
-  attr :show_context?, :boolean, required: true
-  attr :current_mission, :any, default: nil
-  attr :spacecraft, :list, required: true
-  attr :source_endpoints, :list, default: []
-  attr :transports, :list, default: []
-  attr :ground_stations, :list, default: []
-  attr :link_assignments, :list, default: []
-  attr :scheduled_contacts, :list, default: []
-  attr :realized_contacts, :list, default: []
-  attr :context_spacecraft_id, :string, required: true
-  attr :context_scope_kind, :string, default: nil
-  attr :context_scope_id, :string, default: nil
-  attr :context_scope_ids, :list, default: []
-  attr :time_mode, :string, required: true
-  attr :time_axis, :string, default: "generation_time"
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :time_validation, :string, default: "ok"
-  attr :data_realm, :string, required: true
-  attr :data_realms, :list, required: true
-  attr :data_view, :string, required: true
-  attr :compare_data_view, :string, default: nil
-  attr :data_source_id, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :data_bindings, :list, required: true
-  attr :replay_runs, :list, default: []
-  attr :selected_replay_run, :any, default: nil
-  attr :limit_mode, :string, required: true
-  attr :limit_mode_fallback, :map, default: nil
-  attr :hidden_marker_categories, :list, default: []
-  attr :selected_data_ref, :any, default: nil
-  attr :time_quick_query, :string, default: ""
-  attr :time_recent_ranges, :list, default: []
-  attr :query, :string, required: true
-  attr :dashboard_warnings, :list, default: []
-  attr :dashboard_degraded?, :boolean, default: false
-  attr :dashboard_health, :map, default: %{}
-  attr :comparison_available?, :boolean, default: false
-  attr :comparison_open?, :boolean, default: false
-  attr :comparison_open_count, :integer, default: 0
+  attr(:dashboard_document, :any, required: true)
+  attr(:dashboard_lifecycle_status, :any, required: true)
+  attr(:dashboard_lifecycle_events, :list, default: [])
+  attr(:dashboard_comparison_review_queue, :map, default: nil)
+  attr(:dashboard_publish_readiness, :map, default: nil)
+  attr(:edit_mode?, :boolean, required: true)
+  attr(:editor_route?, :boolean, default: false)
+  attr(:editor_dirty?, :boolean, default: false)
+  attr(:editor_conflict, :map, default: nil)
+  attr(:dashboard_author?, :boolean, default: false)
+  attr(:show_context?, :boolean, required: true)
+  attr(:current_mission, :any, default: nil)
+  attr(:spacecraft, :list, required: true)
+  attr(:source_endpoints, :list, default: [])
+  attr(:transports, :list, default: [])
+  attr(:ground_stations, :list, default: [])
+  attr(:link_assignments, :list, default: [])
+  attr(:scheduled_contacts, :list, default: [])
+  attr(:realized_contacts, :list, default: [])
+  attr(:context_spacecraft_id, :string, required: true)
+  attr(:context_scope_kind, :string, default: nil)
+  attr(:context_scope_id, :string, default: nil)
+  attr(:context_scope_ids, :list, default: [])
+  attr(:time_mode, :string, required: true)
+  attr(:time_axis, :string, default: "generation_time")
+  attr(:time_from, :string, default: nil)
+  attr(:time_to, :string, default: nil)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:time_validation, :string, default: "ok")
+  attr(:data_realm, :string, required: true)
+  attr(:data_realms, :list, required: true)
+  attr(:data_view, :string, required: true)
+  attr(:compare_data_view, :string, default: nil)
+  attr(:data_source_id, :string, default: nil)
+  attr(:source_binding_id, :string, default: nil)
+  attr(:data_bindings, :list, required: true)
+  attr(:replay_runs, :list, default: [])
+  attr(:selected_replay_run, :any, default: nil)
+  attr(:limit_mode, :string, required: true)
+  attr(:limit_mode_fallback, :map, default: nil)
+  attr(:hidden_marker_categories, :list, default: [])
+  attr(:selected_data_ref, :any, default: nil)
+  attr(:time_quick_query, :string, default: "")
+  attr(:time_recent_ranges, :list, default: [])
+  attr(:query, :string, required: true)
+  attr(:dashboard_warnings, :list, default: [])
+  attr(:dashboard_degraded?, :boolean, default: false)
+  attr(:dashboard_health, :map, default: %{})
+  attr(:comparison_available?, :boolean, default: false)
+  attr(:comparison_open?, :boolean, default: false)
+  attr(:comparison_open_count, :integer, default: 0)
 
   def dashboard_toolbar(assigns) do
     assigns =
