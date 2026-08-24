@@ -152,7 +152,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     editor |> element("#dashboard-editor-reload") |> render_click()
 
     refute has_element?(editor, "#dashboard-editor-conflict")
-    assert [] = dashboard_section_list(editor)
+    refute has_element?(editor, "[data-dashboard-section]")
   end
 
   defp add_section(view, title) do
