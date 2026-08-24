@@ -13,6 +13,8 @@ defmodule CadenceWeb.CommsProviderShowLive do
     ServiceProfile
   }
 
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(%{"provider_id" => provider_id}, _session, socket) do
     socket = assign(socket, :provider_action_opts, provider_action_opts())
@@ -134,209 +136,224 @@ defmodule CadenceWeb.CommsProviderShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-provider-show-page" class="space-y-6">
-      <.page_header
-        title={@provider.display_name}
-        subtitle={@provider.provider_id}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Providers", ~p"/missions/#{@current_mission.mission_id}/comms/providers"},
-          {@provider.display_name, nil}
-        ]}
-      >
-        <:title_suffix>
-          <span
-            id="simulated-provider-badge"
-            class="inline-flex rounded-full bg-info/20 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-info"
-          >
-            Simulated
-          </span>
-          <span class="ml-2 font-mono text-xs text-base-content/60">v{@provider.version}</span>
-        </:title_suffix>
-        <:actions>
-          <.button
-            id="validate-provider-button"
-            variant={:secondary}
-            phx-click="validate-provider"
-            disabled={!is_nil(@provider_action)}
-          >
-            <.icon name="hero-shield-check" class="h-4 w-4" />
-            {if(@provider_action == :validate, do: "Validating…", else: "Validate")}
-          </.button>
-          <.button
-            id="sync-provider-button"
-            phx-click="sync-provider"
-            disabled={!is_nil(@provider_action)}
-          >
-            <.icon name="hero-arrow-path" class="h-4 w-4" />
-            {if(@provider_action == :sync, do: "Syncing…", else: "Sync Inventory")}
-          </.button>
-          <.button
-            id="archive-provider-button"
-            variant={:danger}
-            phx-click="archive-provider"
-            data-confirm="Archive this ground network provider?"
-            disabled={!is_nil(@provider_action)}
-          >
-            Archive
-          </.button>
-        </:actions>
-      </.page_header>
-
-      <div class="grid gap-3 md:grid-cols-4">
-        <.stat_tile
-          id="provider-control-plane-health"
-          label="Control Plane"
-          value={control_plane_label(@provider)}
-        />
-        <.stat_tile id="provider-last-sync" label="Last Sync" value={timestamp_label(@provider.last_synced_at)} />
-        <.stat_tile id="provider-service-profile-count" label="Service Profiles" value={@service_profile_count} />
-        <.stat_tile id="provider-delivery-profile-count" label="Delivery Profiles" value={@delivery_profile_count} />
-      </div>
-
-      <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="space-y-4">
-          <.card
-            id="provider-service-profiles"
-            heading="Service Profiles"
-            subtitle="Provider-owned service definitions available to contact scheduling."
-            padding={:none}
-          >
-            <div :if={@service_profiles_empty?} class="p-6 text-sm text-base-content/60">
-              Sync provider inventory to discover service profiles.
-            </div>
-            <.table :if={!@service_profiles_empty?} id="service-profiles-table" rows={@streams.service_profiles}>
-              <:col :let={profile} label="Service">{profile.display_name}</:col>
-              <:col :let={profile} label="Kind" mono>{profile.service_kind}</:col>
-              <:col :let={profile} label="Direction" mono>{profile.direction}</:col>
-              <:col :let={profile} label="Data Families" mono>
-                {Enum.join(profile.data_families, ", ")}
-              </:col>
-              <:col :let={profile} label="State">
-                <.status_badge
-                  status={profile_status(profile.state)}
-                  label={humanize(profile.state)}
-                />
-              </:col>
-            </.table>
-          </.card>
-
-          <.card
-            id="provider-delivery-profiles"
-            heading="Delivery Profiles"
-            subtitle="Provider delivery options; Cadence transports are resolved from these profiles later."
-            padding={:none}
-          >
-            <div :if={@delivery_profiles_empty?} class="p-6 text-sm text-base-content/60">
-              Sync provider inventory to discover delivery profiles.
-            </div>
-            <.table :if={!@delivery_profiles_empty?} id="delivery-profiles-table" rows={@streams.delivery_profiles}>
-              <:col :let={profile} label="Delivery">
-                <div>{profile.display_name}</div>
-                <div class="mt-1 text-xs text-base-content/60">
-                  {profile.operator_summary}
-                </div>
-              </:col>
-              <:col :let={profile} label="Kind" mono>{profile.delivery_kind}</:col>
-              <:col :let={profile} label="Direction" mono>{profile.direction}</:col>
-              <:col :let={profile} label="Provider State">
-                <.status_badge
-                  status={profile_status(profile.state)}
-                  label={humanize(profile.state)}
-                />
-              </:col>
-            </.table>
-          </.card>
-        </div>
-
-        <aside class="space-y-4">
-          <.card id="provider-configuration" title="Configuration">
-            <div class="mt-3 divide-y divide-base-300">
-              <.detail_row label="Provider type" value={humanize(@provider.provider_type)} />
-              <.detail_row
-                label="Provider Account"
-                value={binding_label(@provider.provider_account_id, @provider.provider_account_version)}
-                mono
-              />
-              <.detail_row
-                label="Mission Grant"
-                value={binding_label(@provider.provider_account_grant_id, @provider.provider_account_grant_version)}
-                mono
-              />
-              <.detail_row label="Validated" value={timestamp_label(@provider.last_validated_at)} />
-            </div>
-          </.card>
-
-          <.card id="provider-delivery-policy" title="Delivery Change Policy">
-            <div class="mt-3 divide-y divide-base-300">
-              <.detail_row
-                label="Mode"
-                value={humanize(Map.get(@provider.delivery_policy_document, "mode", "approval_required"))}
-              />
-              <.detail_row
-                label="Deadline behavior"
-                value={humanize(Map.get(@provider.delivery_policy_document, "deadline_behavior", "retain_last_accepted"))}
-              />
-              <.detail_row
-                label="Permitted resources"
-                value={resource_summary(@provider.permitted_resource_refs)}
-              />
-            </div>
-          </.card>
-
-          <.card id="provider-capabilities" title="Capabilities">
-            <div class="mt-3 space-y-2">
-              <div
-                :if={capability_items(@provider) == []}
-                class="text-sm text-base-content/60"
-              >
-                Validate the provider to load its declared capabilities.
-              </div>
-              <div
-                :for={{capability, supported?} <- capability_items(@provider)}
-                class="flex items-center justify-between gap-3 text-sm"
-              >
-                <span>{humanize(capability)}</span>
-                <.status_badge
-                  status={if(supported?, do: :ready, else: :blocked)}
-                  label={if(supported?, do: "Supported", else: "Unavailable")}
-                />
-              </div>
-            </div>
-          </.card>
-
-          <.card id="provider-version-history" title="Version History">
-            <div id="provider-versions" phx-update="stream" class="mt-3 divide-y divide-base-300">
-              <div :for={{dom_id, version} <- @streams.provider_versions} id={dom_id}>
-                <.detail_row
-                  label={"v#{version.version}"}
-                  value={version.lifecycle_state |> Atom.to_string() |> String.upcase()}
-                />
-              </div>
-            </div>
-          </.card>
-        </aside>
-      </div>
-
-      <details
-        id="provider-admin-diagnostics"
-        class="rounded border border-base-300 bg-base-200/60 p-4 text-sm"
-      >
-        <summary class="cursor-pointer hud-label hover:text-primary">Admin Diagnostics</summary>
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-          <div class="divide-y divide-base-300">
-            <.detail_row label="Account ID" value={@provider.provider_account_id || "Legacy setup"} mono />
-            <.detail_row label="Account version" value={version_label(@provider.provider_account_version)} mono />
-            <.detail_row label="Grant ID" value={@provider.provider_account_grant_id || "Not granted"} mono />
-            <.detail_row label="Grant version" value={version_label(@provider.provider_account_grant_version)} mono />
-          </div>
-          <pre id="provider-admin-diagnostics-json" class="max-h-80 overflow-auto border border-base-300 bg-base-100/50 p-3 font-mono text-xs text-base-content/70">{diagnostics_json(@provider)}</pre>
-        </div>
-      </details>
-    </div>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="comms-provider-show-component"
+        v-component="CommsProviderShow"
+        navigation={navigation_dto(@current_mission, @provider)}
+        provider={provider_dto(@provider, @service_profile_count, @delivery_profile_count)}
+        actions={actions_dto(@provider_action)}
+        profiles={profiles_dto(@service_profiles_empty?, @delivery_profiles_empty?)}
+        details={details_dto(@provider)}
+        diagnostics={diagnostics_dto(@provider)}
+        service_profiles={@streams.service_profiles}
+        delivery_profiles={@streams.delivery_profiles}
+        provider_versions={@streams.provider_versions}
+        v-on:validate-provider={JS.push("validate-provider")}
+        v-on:sync-provider={JS.push("sync-provider")}
+        v-on:archive-provider={JS.push("archive-provider")}
+        v-ssr={false}
+        class="contents"
+      />
+    </Layouts.app>
     """
   end
+
+  defp navigation_dto(mission, provider) do
+    %{
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{
+          label: "Providers",
+          href: ~p"/missions/#{mission.mission_id}/comms/providers"
+        },
+        %{label: provider.display_name, href: nil}
+      ]
+    }
+  end
+
+  defp provider_dto(provider, service_profile_count, delivery_profile_count) do
+    %{
+      page_id: "comms-provider-show-page",
+      display_name: provider.display_name,
+      provider_id: provider.provider_id,
+      simulated_badge: %{id: "simulated-provider-badge", label: "Simulated"},
+      version: "v#{provider.version}",
+      summary_tiles: [
+        summary_tile(
+          "provider-control-plane-health",
+          "Control Plane",
+          control_plane_label(provider)
+        ),
+        summary_tile("provider-last-sync", "Last Sync", timestamp_label(provider.last_synced_at)),
+        summary_tile(
+          "provider-service-profile-count",
+          "Service Profiles",
+          service_profile_count
+        ),
+        summary_tile(
+          "provider-delivery-profile-count",
+          "Delivery Profiles",
+          delivery_profile_count
+        )
+      ]
+    }
+  end
+
+  defp summary_tile(id, label, value), do: %{id: id, label: label, value: value}
+
+  defp actions_dto(provider_action) do
+    disabled? = not is_nil(provider_action)
+
+    %{
+      validate: %{
+        id: "validate-provider-button",
+        label: if(provider_action == :validate, do: "Validating…", else: "Validate"),
+        disabled: disabled?
+      },
+      sync: %{
+        id: "sync-provider-button",
+        label: if(provider_action == :sync, do: "Syncing…", else: "Sync Inventory"),
+        disabled: disabled?
+      },
+      archive: %{
+        id: "archive-provider-button",
+        label: "Archive",
+        confirm: "Archive this ground network provider?",
+        disabled: disabled?
+      }
+    }
+  end
+
+  defp profiles_dto(service_profiles_empty?, delivery_profiles_empty?) do
+    %{
+      service: %{
+        id: "provider-service-profiles",
+        heading: "Service Profiles",
+        subtitle: "Provider-owned service definitions available to contact scheduling.",
+        empty: service_profiles_empty?,
+        empty_copy: "Sync provider inventory to discover service profiles.",
+        table_id: "service-profiles-table",
+        table_body_id: "service-profiles-table-body",
+        columns: ["Service", "Kind", "Direction", "Data Families", "State"]
+      },
+      delivery: %{
+        id: "provider-delivery-profiles",
+        heading: "Delivery Profiles",
+        subtitle:
+          "Provider delivery options; Cadence transports are resolved from these profiles later.",
+        empty: delivery_profiles_empty?,
+        empty_copy: "Sync provider inventory to discover delivery profiles.",
+        table_id: "delivery-profiles-table",
+        table_body_id: "delivery-profiles-table-body",
+        columns: ["Delivery", "Kind", "Direction", "Provider State"]
+      }
+    }
+  end
+
+  defp details_dto(provider) do
+    %{
+      configuration: %{
+        id: "provider-configuration",
+        title: "Configuration",
+        rows: [
+          detail_dto("Provider type", humanize(provider.provider_type)),
+          detail_dto(
+            "Provider Account",
+            binding_label(provider.provider_account_id, provider.provider_account_version),
+            true
+          ),
+          detail_dto(
+            "Mission Grant",
+            binding_label(
+              provider.provider_account_grant_id,
+              provider.provider_account_grant_version
+            ),
+            true
+          ),
+          detail_dto("Validated", timestamp_label(provider.last_validated_at))
+        ]
+      },
+      delivery_policy: %{
+        id: "provider-delivery-policy",
+        title: "Delivery Change Policy",
+        rows: [
+          detail_dto(
+            "Mode",
+            humanize(Map.get(provider.delivery_policy_document, "mode", "approval_required"))
+          ),
+          detail_dto(
+            "Deadline behavior",
+            humanize(
+              Map.get(
+                provider.delivery_policy_document,
+                "deadline_behavior",
+                "retain_last_accepted"
+              )
+            )
+          ),
+          detail_dto(
+            "Permitted resources",
+            resource_summary(provider.permitted_resource_refs)
+          )
+        ]
+      },
+      capabilities: capabilities_dto(provider),
+      version_history: %{
+        id: "provider-version-history",
+        title: "Version History",
+        stream_id: "provider-versions"
+      }
+    }
+  end
+
+  defp capabilities_dto(provider) do
+    items =
+      Enum.map(capability_items(provider), fn {capability, supported?} ->
+        %{
+          label: humanize(capability),
+          status: %{
+            tone: if(supported?, do: "ready", else: "blocked"),
+            label: if(supported?, do: "Supported", else: "Unavailable")
+          }
+        }
+      end)
+
+    %{
+      id: "provider-capabilities",
+      title: "Capabilities",
+      empty: items == [],
+      empty_copy: "Validate the provider to load its declared capabilities.",
+      items: items
+    }
+  end
+
+  defp diagnostics_dto(provider) do
+    %{
+      id: "provider-admin-diagnostics",
+      label: "Admin Diagnostics",
+      json_id: "provider-admin-diagnostics-json",
+      rows: [
+        detail_dto("Account ID", provider.provider_account_id || "Legacy setup", true),
+        detail_dto(
+          "Account version",
+          version_label(provider.provider_account_version),
+          true
+        ),
+        detail_dto("Grant ID", provider.provider_account_grant_id || "Not granted", true),
+        detail_dto(
+          "Grant version",
+          version_label(provider.provider_account_grant_version),
+          true
+        )
+      ],
+      json: diagnostics_json(provider)
+    }
+  end
+
+  defp detail_dto(label, value, mono? \\ false),
+    do: %{label: label, value: value, mono: mono?}
 
   defp refresh_provider(socket) do
     %{current_scope: scope, current_mission: mission, provider: current} = socket.assigns
@@ -370,9 +387,17 @@ defmodule CadenceWeb.CommsProviderShowLive do
     reset? = Keyword.get(opts, :reset, false)
 
     socket
-    |> stream(:service_profiles, profile_items(provider, "service_profiles"), reset: reset?)
-    |> stream(:delivery_profiles, profile_items(provider, "delivery_profiles"), reset: reset?)
-    |> stream(:provider_versions, versions, reset: reset?)
+    |> stream(
+      :service_profiles,
+      provider |> profile_items("service_profiles") |> Enum.map(&service_profile_dto/1),
+      reset: reset?
+    )
+    |> stream(
+      :delivery_profiles,
+      provider |> profile_items("delivery_profiles") |> Enum.map(&delivery_profile_dto/1),
+      reset: reset?
+    )
+    |> stream(:provider_versions, Enum.map(versions, &provider_version_dto/1), reset: reset?)
   end
 
   defp assign_profile_counts(socket, provider) do
@@ -394,6 +419,41 @@ defmodule CadenceWeb.CommsProviderShowLive do
   end
 
   defp profile_dom_id(kind, profile), do: "#{kind}-profile-#{profile.id}"
+
+  defp service_profile_dto(profile) do
+    %{
+      id: profile.id,
+      display_name: profile.display_name,
+      service_kind: profile.service_kind,
+      direction: Atom.to_string(profile.direction),
+      data_families: Enum.join(profile.data_families, ", "),
+      status: %{
+        tone: profile.state |> profile_status() |> Atom.to_string(),
+        label: humanize(profile.state)
+      }
+    }
+  end
+
+  defp delivery_profile_dto(profile) do
+    %{
+      id: profile.id,
+      display_name: profile.display_name,
+      operator_summary: profile.operator_summary,
+      delivery_kind: profile.delivery_kind,
+      direction: Atom.to_string(profile.direction),
+      status: %{
+        tone: profile.state |> profile_status() |> Atom.to_string(),
+        label: humanize(profile.state)
+      }
+    }
+  end
+
+  defp provider_version_dto(version) do
+    %{
+      version: version.version,
+      lifecycle_state: version.lifecycle_state |> Atom.to_string() |> String.upcase()
+    }
+  end
 
   defp provider_action_opts do
     Application.get_env(:cadence_web, :ground_network_provider_live_opts, [])
