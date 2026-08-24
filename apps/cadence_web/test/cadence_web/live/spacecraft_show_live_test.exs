@@ -174,7 +174,9 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
         live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
 
       props = spacecraft_show_props(view)
-      identity_href = "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
+
+      identity_href =
+        "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
 
       assert props["profile_binding"] == %{
                "id" => "spacecraft-profile-binding",
@@ -290,7 +292,8 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
     test "renders the pinned profile and drift badge against the latest profile version" do
       {conn, _user, org, mission} = signed_in_org_and_mission()
 
-      profile_v1 =
+      %Cadence.SpacecraftType{} =
+        profile_v1 =
         TestFixtures.persist_spacecraft_profile!(mission,
           display_name: "Aurora Bus",
           downlink_protocol: :aos,
@@ -400,7 +403,7 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
       }
 
       assert {:ok, _persisted_unbound} =
-               Cadence.SpacecraftStore.persist_spacecraft(
+               Cadence.SpacecraftStore.update_spacecraft(
                  org.organization_id,
                  unbound_spacecraft
                )
