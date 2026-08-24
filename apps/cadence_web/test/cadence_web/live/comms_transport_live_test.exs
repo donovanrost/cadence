@@ -322,8 +322,7 @@ defmodule CadenceWeb.CommsTransportLiveTest do
              end) == [
                {"transport-capability-section", "transport-capability-section-fields", "04",
                 "TCP Capability"},
-               {"transport-framing-section", "transport-framing-section-fields", "05",
-                "Framing"},
+               {"transport-framing-section", "transport-framing-section-fields", "05", "Framing"},
                {"transport-reliability-section", "transport-reliability-section-fields", "05B",
                 "Reliability"}
              ]
@@ -367,12 +366,14 @@ defmodule CadenceWeb.CommsTransportLiveTest do
         |> Map.new(&{&1["key"], &1})
 
       assert progressive_fields["frame_size"]["visible"]
+
       assert progressive_fields["frame_size"]["visible_when"] == %{
                "field" => "framing_mode",
                "equals" => "fixed_size"
              }
 
       assert progressive_fields["reconnect_policy"]["visible"]
+
       assert progressive_fields["reconnect_policy"]["visible_when"] == %{
                "field" => "tcp_mode",
                "equals" => "connect"
@@ -546,6 +547,7 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert form["selected_origin"] == "provider_managed"
       assert form["provider"]["active"]
       refute form["direct_configuration"]["active"]
+
       assert form["fields"]["transport_kind"]["provider_managed_id"] ==
                "transport-kind-provider-managed"
 
@@ -821,6 +823,7 @@ defmodule CadenceWeb.CommsTransportLiveTest do
              }
 
       refute form["can_submit"]
+
       assert form["actions"]["submit"] == %{
                "id" => "create-transport-button",
                "label" => "Create Transport"

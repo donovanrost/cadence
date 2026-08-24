@@ -318,8 +318,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
       title: "Provider-Derived Runtime",
       description:
         "Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only.",
-      configuration:
-        derived_configuration_dto(assigns.derived_configuration, assigns.kind_entry)
+      configuration: derived_configuration_dto(assigns.derived_configuration, assigns.kind_entry)
     }
   end
 
