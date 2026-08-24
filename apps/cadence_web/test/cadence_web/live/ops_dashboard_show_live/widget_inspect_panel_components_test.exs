@@ -9,7 +9,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponentsTest do
   @t0 1_700_000_000_000
 
   defp model(points_count \\ 2) do
-    points = for offset <- 0..(points_count - 1), do: [@t0 + offset * 1_000, offset * 1.5]
+    points =
+      if points_count == 0 do
+        []
+      else
+        for offset <- 0..(points_count - 1), do: [@t0 + offset * 1_000, offset * 1.5]
+      end
 
     WidgetInspectModel.from_series("placement-1", "Bus Voltage", [
       %{id: "volts", label: "volts", unit: "V", points: points}
@@ -17,10 +22,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponentsTest do
   end
 
   test "renders header badges, stats, table rows, and the download payload" do
-    document =
-      LazyHTML.from_fragment(
-        render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model())
-      )
+    html = render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model())
+    document = LazyHTML.from_fragment(html)
 
     assert ["ready"] =
              document
@@ -45,17 +48,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponentsTest do
     assert table =~ "2023-11-14T22:13:20.000Z"
     assert table =~ "volts (V)"
 
-    assert [csv] =
-             document
-             |> LazyHTML.query("#dashboard-widget-inspect-download")
-             |> LazyHTML.attribute("data-csv")
+    download = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspect-download-component")
 
-    assert csv =~ "time_utc,volts (V)"
+    assert download.component == "CsvDownloadButton"
+    assert download.props["csv"] =~ "time_utc,volts (V)"
+    assert download.props["filename"] == "bus-voltage-inspect.csv"
+    refute download.props["disabled"]
+    refute download.ssr
+  end
 
-    assert ["bus-voltage-inspect.csv"] =
-             document
-             |> LazyHTML.query("#dashboard-widget-inspect-download")
-             |> LazyHTML.attribute("data-filename")
+  test "disables the download component when there are no rows" do
+    html = render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model(0))
+
+    download = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspect-download-component")
+
+    assert download.props["disabled"]
   end
 
   test "shows the cap notice when rows exceed the display limit" do

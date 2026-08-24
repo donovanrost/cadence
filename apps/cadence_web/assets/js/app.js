@@ -5,7 +5,6 @@ import {getHooks} from "live_vue"
 import liveVueApp from "../vue"
 import {createLiveToastHook} from "../../deps/live_toast"
 import ClipboardButton from "./hooks/clipboard_button"
-import CsvDownload from "./hooks/csv_download"
 import DashboardGrid from "./hooks/dashboard_grid"
 import DashboardEditorGuard from "./hooks/dashboard_editor_guard"
 import DropdownMenu from "./hooks/dropdown_menu"
@@ -17,7 +16,6 @@ import TimeRangeRecents from "./hooks/time_range_recents"
 
 const Hooks = {
   ClipboardButton,
-  CsvDownload,
   DashboardGrid,
   DashboardEditorGuard,
   DropdownMenu,
