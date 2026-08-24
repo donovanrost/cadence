@@ -65,9 +65,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents do
         Map.get(@diagnostics, :source_dependency_degraded_count)
       }
     >
-      <.diagnostics_section title="Engine" rows={@diagnostics.engine_rows} />
+      <.diagnostics_section
+        id="dashboard-diagnostics-engine-section-component"
+        title="Engine"
+        rows={@diagnostics.engine_rows}
+      />
       <RuntimeCacheSummaryComponents.cache_summary summary={@diagnostics.cache_summary} />
-      <.diagnostics_section title="Runtime" rows={@diagnostics.runtime_rows} />
+      <.diagnostics_section
+        id="dashboard-diagnostics-runtime-section-component"
+        title="Runtime"
+        rows={@diagnostics.runtime_rows}
+      />
       <RuntimeDegradedSourceComponents.degraded_source_summary summary={
         @diagnostics.source_execution_degraded_summary
       } />
@@ -83,7 +91,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents do
       <RuntimeNoRefreshSummaryComponents.no_refresh_summary summary={
         @diagnostics.no_refresh_summary
       } />
-      <.diagnostics_section title="Invalidation" rows={@diagnostics.invalidation_rows} />
+      <.diagnostics_section
+        id="dashboard-diagnostics-invalidation-section-component"
+        title="Invalidation"
+        rows={@diagnostics.invalidation_rows}
+      />
       <RuntimeRecentInvalidationsComponents.recent_invalidations
         invalidations={@diagnostics.recent_invalidations}
         dashboard_lifecycle_events={@dashboard_lifecycle_events}
@@ -93,22 +105,61 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents do
     """
   end
 
+  attr :id, :string, required: true
   attr :title, :string, required: true
   attr :rows, :list, required: true
 
   defp diagnostics_section(assigns) do
+    assigns =
+      assign(assigns, :presentation, diagnostics_section_dto(assigns.title, assigns.rows))
+
     ~H"""
-    <section class="space-y-2" data-diagnostics-section={@title}>
-      <h3 class="hud-label">{@title}</h3>
-      <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-        <%= for row <- @rows do %>
-          <dt class="text-base-content/60">{row.label}</dt>
-          <dd class="font-mono text-base-content break-all" data-diagnostics-field={row.label}>
-            {row.value}
-          </dd>
-        <% end %>
-      </dl>
-    </section>
+    <.vue
+      id={@id}
+      v-component="RuntimeDiagnosticsSection"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
+
+  defp diagnostics_section_dto(title, rows) do
+    %{
+      root: %{
+        tag: "section",
+        class: "space-y-2",
+        attrs: %{"data-diagnostics-section" => title}
+      },
+      title: %{tag: "h3", class: "hud-label", attrs: %{}, body: title},
+      rows: %{
+        tag: "dl",
+        class: "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs",
+        attrs: %{},
+        items:
+          rows
+          |> Enum.with_index()
+          |> Enum.map(fn {row, index} -> diagnostics_row_dto(row, index) end)
+      }
+    }
+  end
+
+  defp diagnostics_row_dto(row, index) do
+    label = rendered_string(row.label)
+
+    %{
+      key: index,
+      label: %{tag: "dt", class: "text-base-content/60", attrs: %{}, body: label},
+      value: %{
+        tag: "dd",
+        class: "font-mono text-base-content break-all",
+        attrs: %{"data-diagnostics-field" => label},
+        body: rendered_string(row.value)
+      }
+    }
+  end
+
+  defp rendered_string(nil), do: ""
+  defp rendered_string(value) when is_binary(value), do: value
+  defp rendered_string(value), do: to_string(value)
 end

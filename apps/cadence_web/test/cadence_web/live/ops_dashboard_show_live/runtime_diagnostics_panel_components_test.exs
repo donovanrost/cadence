@@ -58,40 +58,114 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
              |> LazyHTML.query("#dashboard-diagnostics-panel")
              |> LazyHTML.attribute("data-runtime-source-capability-postures")
 
-    assert "context_change" =
-             document
-             |> LazyHTML.query(
-               ~s([data-diagnostics-section="Engine"] [data-diagnostics-field="Resolve"])
-             )
-             |> selected_text()
+    engine =
+      diagnostics_section_presentation(html, "dashboard-diagnostics-engine-section-component")
 
-    assert "accept_result" =
-             document
-             |> LazyHTML.query(
-               ~s([data-diagnostics-section="Runtime"] [data-diagnostics-field="Visible action"])
-             )
-             |> selected_text()
+    runtime =
+      diagnostics_section_presentation(html, "dashboard-diagnostics-runtime-section-component")
 
-    assert "live_tick:tick:1" =
-             document
-             |> LazyHTML.query(
-               ~s([data-diagnostics-section="Runtime"] [data-diagnostics-field="Refresh coalesced"])
-             )
-             |> selected_text()
+    invalidation =
+      diagnostics_section_presentation(html, "dashboard-diagnostics-invalidation-section-component")
 
-    assert "resolve_failed:1" =
-             document
-             |> LazyHTML.query(
-               ~s([data-diagnostics-section="Runtime"] [data-diagnostics-field="Refresh failures"])
-             )
-             |> selected_text()
+    assert "context_change" = diagnostics_row_body(engine, "Resolve")
 
-    assert "source:2" =
+    assert "accept_result" = diagnostics_row_body(runtime, "Visible action")
+
+    assert "live_tick:tick:1" = diagnostics_row_body(runtime, "Refresh coalesced")
+
+    assert "resolve_failed:1" = diagnostics_row_body(runtime, "Refresh failures")
+
+    assert "source:2" = diagnostics_row_body(invalidation, "Boundaries")
+  end
+
+  test "diagnostics sections expose exact non-SSR LiveVue host and presentation contracts" do
+    html =
+      render_component(&RuntimeDiagnosticsPanelComponents.diagnostics_panel/1,
+        diagnostics: diagnostics()
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    host_ids = [
+      "dashboard-diagnostics-engine-section-component",
+      "dashboard-diagnostics-runtime-section-component",
+      "dashboard-diagnostics-invalidation-section-component"
+    ]
+
+    vues = Enum.map(host_ids, &LiveVue.Test.get_vue(html, id: &1))
+
+    assert host_ids ==
              document
              |> LazyHTML.query(
-               ~s([data-diagnostics-section="Invalidation"] [data-diagnostics-field="Boundaries"])
+               ~s([id^="dashboard-diagnostics-"][id$="-section-component"])
              )
-             |> selected_text()
+             |> LazyHTML.attribute("id")
+
+    assert Enum.map(vues, & &1.id) == host_ids
+    assert Enum.uniq(Enum.map(vues, & &1.id)) == host_ids
+    assert Enum.map(vues, & &1.component) == List.duplicate("RuntimeDiagnosticsSection", 3)
+    assert Enum.map(vues, & &1.ssr) == [false, false, false]
+    assert Enum.map(vues, & &1.class) == ["contents", "contents", "contents"]
+    assert Enum.map(vues, & &1.handlers) == [%{}, %{}, %{}]
+    assert Enum.map(vues, & &1.slots) == [%{}, %{}, %{}]
+    assert Enum.all?(vues, &(Map.keys(&1.props) == ["presentation"]))
+    assert Enum.all?(vues, &(&1.props == Jason.decode!(Jason.encode!(&1.props))))
+
+    [engine, runtime, invalidation] = Enum.map(vues, & &1.props["presentation"])
+
+    assert engine ==
+             expected_section("Engine", [
+               {"Resolve", "context_change"},
+               {"Source requests", "3"}
+             ])
+
+    assert runtime ==
+             expected_section("Runtime", [
+               {"Visible action", "accept_result"},
+               {"Refresh coalesced", "live_tick:tick:1"},
+               {"Refresh failures", "resolve_failed:1"},
+               {"Source runtime actions", "refresh_source_result:2"}
+             ])
+
+    assert invalidation ==
+             expected_section("Invalidation", [
+               {"Boundaries", "source:2"},
+               {"Context matches", "2"}
+             ])
+
+    assert LiveVue.Test.get_vue(html, id: "dashboard-recent-invalidations-component").component ==
+             "RuntimeRecentInvalidations"
+  end
+
+  test "diagnostics section DTO preserves scalar HEEx body semantics and remains JSON-total" do
+    html =
+      render_component(&RuntimeDiagnosticsPanelComponents.diagnostics_panel/1,
+        diagnostics:
+          diagnostics(%{
+            engine_rows: [
+              %{label: "Nil", value: nil},
+              %{label: "True", value: true},
+              %{label: "False", value: false},
+              %{label: "Integer", value: 42},
+              %{label: "Atom", value: :settled}
+            ]
+          })
+      )
+
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-engine-section-component")
+    presentation = vue.props["presentation"]
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert Enum.map(presentation["rows"]["items"], fn row ->
+             {row["label"]["body"], row["value"]["body"]}
+           end) == [
+             {"Nil", ""},
+             {"True", "true"},
+             {"False", "false"},
+             {"Integer", "42"},
+             {"Atom", "settled"}
+           ]
   end
 
   defp diagnostics(overrides \\ %{}) do
@@ -156,9 +230,58 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
     )
   end
 
-  defp selected_text(document) do
-    document
-    |> LazyHTML.text()
-    |> String.trim()
+  defp diagnostics_section_presentation(html, id) do
+    html
+    |> LiveVue.Test.get_vue(id: id)
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp diagnostics_row_body(presentation, label) do
+    presentation["rows"]["items"]
+    |> Enum.find(&(&1["label"]["body"] == label))
+    |> Map.fetch!("value")
+    |> Map.fetch!("body")
+  end
+
+  defp expected_section(title, rows) do
+    %{
+      "root" => %{
+        "tag" => "section",
+        "class" => "space-y-2",
+        "attrs" => %{"data-diagnostics-section" => title}
+      },
+      "title" => %{
+        "tag" => "h3",
+        "class" => "hud-label",
+        "attrs" => %{},
+        "body" => title
+      },
+      "rows" => %{
+        "tag" => "dl",
+        "class" => "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs",
+        "attrs" => %{},
+        "items" =>
+          rows
+          |> Enum.with_index()
+          |> Enum.map(fn {{label, value}, index} ->
+            %{
+              "key" => index,
+              "label" => %{
+                "tag" => "dt",
+                "class" => "text-base-content/60",
+                "attrs" => %{},
+                "body" => label
+              },
+              "value" => %{
+                "tag" => "dd",
+                "class" => "font-mono text-base-content break-all",
+                "attrs" => %{"data-diagnostics-field" => label},
+                "body" => value
+              }
+            }
+          end)
+      }
+    }
   end
 end
