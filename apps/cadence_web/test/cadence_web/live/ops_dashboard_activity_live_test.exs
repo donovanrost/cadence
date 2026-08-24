@@ -65,7 +65,6 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
 
     assert stream_mutations(versions_vue) ==
              [
-               ["replace", "/dashboard_versions", []],
                ["replace", "/dashboard_versions", []]
              ] ++
                Enum.map(expected_versions, fn version ->
@@ -87,7 +86,6 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     assert events_vue.props == %{"page" => initial_page, "surface" => "activity"}
 
     assert stream_mutations(events_vue) == [
-             ["replace", "/dashboard_activity", []],
              ["replace", "/dashboard_activity", []]
            ]
 
