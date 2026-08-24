@@ -192,10 +192,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              |> LazyHTML.query("[data-dashboard-selected-activity-title]")
              |> selected_text()
 
-    assert ["health-snapshot-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-health-snapshot-event]")
-             |> LazyHTML.attribute("data-dashboard-health-snapshot-id")
+    health_snapshot =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-health-snapshot-event-dashboard-lifecycle-event-health-component"
+      )
+
+    assert health_snapshot.component == "HealthSnapshotActivity"
+
+    assert health_snapshot.props["presentation"]["root"]["attrs"][
+             "data-dashboard-health-snapshot-id"
+           ] == "health-snapshot-1"
+
+    refute health_snapshot.ssr
 
     assert ["select_activity_event"] =
              document
