@@ -3,6 +3,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Spacecraft
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -17,13 +18,28 @@ defmodule CadenceWeb.SpacecraftEditLive do
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Identity")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:available_types, available_types)
-     |> assign(:form, form_from_spacecraft(spacecraft))}
+     |> assign(
+       :spacecraft_page,
+       spacecraft_page_dto(socket.assigns.current_mission, spacecraft)
+     )
+     |> assign(
+       :spacecraft_form,
+       spacecraft_form_dto(spacecraft_values(spacecraft), mission_id, spacecraft.spacecraft_id)
+     )
+     |> assign(:profile_options, profile_options_dto(available_types))}
   end
 
   @impl true
   def handle_event("validate", %{"spacecraft" => params}, socket) do
-    {:noreply, assign(socket, :form, form_from_params(params))}
+    mission_id = socket.assigns.current_mission.mission_id
+    spacecraft_id = socket.assigns.current_spacecraft.spacecraft_id
+
+    {:noreply,
+     assign(
+       socket,
+       :spacecraft_form,
+       spacecraft_form_dto(params, mission_id, spacecraft_id)
+     )}
   end
 
   @impl true
@@ -32,6 +48,12 @@ defmodule CadenceWeb.SpacecraftEditLive do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
     display_name = normalize(params["display_name"])
+    socket =
+      assign(
+        socket,
+        :spacecraft_form,
+        spacecraft_form_dto(params, mission.mission_id, current_spacecraft.spacecraft_id)
+      )
 
     with true <- not is_nil(display_name),
          {:ok, scid} <- parse_optional_scid(params["scid"]),
@@ -82,50 +104,119 @@ defmodule CadenceWeb.SpacecraftEditLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-xl">
-      <.page_header
-        title="Spacecraft Identity"
-        subtitle="SCID identifies this spacecraft. The optional profile pins its byte-interpretation contract."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {@current_spacecraft.display_name,
-           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-          {"Identity", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="spacecraft-edit-component"
+        v-component="SpacecraftEdit"
+        page={@spacecraft_page}
+        form={@spacecraft_form}
+        profile_options={@profile_options}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
       />
-
-      <.form
-        for={@form}
-        id="spacecraft-edit-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section number="01" title="Identity">
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-          <.input field={@form[:scid]} type="text" label="SCID" />
-        </.form_section>
-
-        <.form_section number="02" title="Profile">
-          <.input
-            field={@form[:spacecraft_type_id]}
-            type="select"
-            label="Spacecraft Profile"
-            options={type_options(@available_types)}
-          />
-        </.form_section>
-
-        <.form_actions
-          submit="Save Identity"
-          cancel_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
-          }
-        />
-      </.form>
-    </div>
+    </Layouts.app>
     """
   end
+
+  defp spacecraft_page_dto(mission, spacecraft) do
+    %{
+      id: "spacecraft-edit-page",
+      heading: "Spacecraft Identity",
+      subtitle:
+        "SCID identifies this spacecraft. The optional profile pins its byte-interpretation contract.",
+      breadcrumbs: [
+        %{
+          id: "spacecraft-edit-mission-link",
+          label: mission.display_name,
+          href: ~p"/missions/#{mission.mission_id}"
+        },
+        %{
+          id: "spacecraft-edit-list-link",
+          label: "Spacecraft",
+          href: ~p"/missions/#{mission.mission_id}/spacecraft"
+        },
+        %{
+          id: "spacecraft-edit-show-link",
+          label: spacecraft.display_name,
+          href: ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+        },
+        %{id: "spacecraft-edit-current-breadcrumb", label: "Identity", href: nil}
+      ]
+    }
+  end
+
+  defp spacecraft_form_dto(params, mission_id, spacecraft_id) do
+    %{
+      id: "spacecraft-edit-form",
+      sections: %{
+        identity: %{id: "spacecraft-edit-identity-section", number: "01", title: "Identity"},
+        profile: %{id: "spacecraft-edit-profile-section", number: "02", title: "Profile"}
+      },
+      fields: %{
+        display_name: %{
+          id: "spacecraft_display_name",
+          name: "spacecraft[display_name]",
+          type: "text",
+          label: "Display Name",
+          required: true,
+          value: string_param(params, "display_name")
+        },
+        scid: %{
+          id: "spacecraft_scid",
+          name: "spacecraft[scid]",
+          type: "text",
+          label: "SCID",
+          required: false,
+          value: string_param(params, "scid")
+        },
+        spacecraft_type_id: %{
+          id: "spacecraft_spacecraft_type_id",
+          name: "spacecraft[spacecraft_type_id]",
+          type: "select",
+          label: "Spacecraft Profile",
+          required: false,
+          value: string_param(params, "spacecraft_type_id")
+        }
+      },
+      actions: %{
+        submit: %{id: "save-spacecraft-identity-button", label: "Save Identity"},
+        cancel: %{
+          id: "cancel-spacecraft-identity-link",
+          label: "Cancel",
+          href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}"
+        }
+      }
+    }
+  end
+
+  defp profile_options_dto(available_types) do
+    %{
+      options: [
+        %{label: "None", value: ""}
+        | Enum.map(available_types, fn type ->
+            %{label: "#{type.display_name} (v#{type.version})", value: type.spacecraft_type_id}
+          end)
+      ]
+    }
+  end
+
+  defp spacecraft_values(spacecraft) do
+    %{
+      "display_name" => spacecraft.display_name,
+      "scid" => format_scid_value(spacecraft.scid),
+      "spacecraft_type_id" => spacecraft.spacecraft_type_id || ""
+    }
+  end
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
+  end
+
+  defp string_param(_params, _key), do: ""
 
   defp after_spacecraft_update(socket, organization_id, spacecraft) do
     case maybe_sync_managed_source_endpoint(organization_id, spacecraft) do
@@ -175,13 +266,6 @@ defmodule CadenceWeb.SpacecraftEditLive do
     end
   end
 
-  defp type_options(available_types) do
-    [
-      {"None", ""}
-      | Enum.map(available_types, &{"#{&1.display_name} (v#{&1.version})", &1.spacecraft_type_id})
-    ]
-  end
-
   defp resolve_type_binding(_socket, value) when value in [nil, ""],
     do: {:ok, %{spacecraft_type_id: nil, spacecraft_type_version: nil}}
 
@@ -200,28 +284,6 @@ defmodule CadenceWeb.SpacecraftEditLive do
       {:error, _reason} ->
         {:error, "Selected spacecraft profile is not available."}
     end
-  end
-
-  defp form_from_spacecraft(spacecraft) do
-    to_form(
-      %{
-        "display_name" => spacecraft.display_name,
-        "scid" => format_scid_value(spacecraft.scid),
-        "spacecraft_type_id" => spacecraft.spacecraft_type_id || ""
-      },
-      as: :spacecraft
-    )
-  end
-
-  defp form_from_params(params) do
-    to_form(
-      %{
-        "display_name" => Map.get(params, "display_name", ""),
-        "scid" => Map.get(params, "scid", ""),
-        "spacecraft_type_id" => Map.get(params, "spacecraft_type_id", "")
-      },
-      as: :spacecraft
-    )
   end
 
   defp format_scid_value(nil), do: ""
