@@ -158,6 +158,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
   end
 
   defp chart_dom_id(html, widget_id) do
+    html
+    |> LiveVue.Test.get_vue(id: chart_component_id(html, widget_id))
+    |> Map.fetch!(:props)
+    |> Map.fetch!("chart_id")
+  end
+
+  defp chart_attribute(html, widget_id, attribute) do
+    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
+
+    html
+    |> LiveVue.Test.get_vue(id: chart_component_id(html, widget_id))
+    |> Map.fetch!(:props)
+    |> Map.fetch!(prop)
+  end
+
+  defp chart_component_id(html, widget_id) do
     [id] =
       html
       |> LazyHTML.from_fragment()
@@ -165,15 +181,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
       |> LazyHTML.attribute("id")
 
     id
-  end
-
-  defp chart_attribute(html, widget_id, attribute) do
-    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
-
-    html
-    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
-    |> Map.fetch!(:props)
-    |> Map.fetch!(prop)
   end
 
   describe "runtime invalidation event and limit surfaces" do

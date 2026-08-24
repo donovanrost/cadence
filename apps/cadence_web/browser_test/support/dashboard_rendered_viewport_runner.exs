@@ -279,7 +279,8 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
       padding: 10px;
     }
 
-    [phx-hook="TelemetryChart"] {
+    [data-name="TelemetryChart"],
+    [data-telemetry-chart] {
       display: block;
       flex: 1 1 auto;
       min-height: 132px;

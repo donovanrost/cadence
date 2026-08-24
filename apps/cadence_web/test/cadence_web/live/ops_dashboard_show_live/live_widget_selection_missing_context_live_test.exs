@@ -39,14 +39,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
   end
 
   defp chart_optional_attribute(html, widget_id, attribute) do
-    [id] =
+    ids =
       html
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
       |> LazyHTML.attribute("id")
 
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
-    html |> LiveVue.Test.get_vue(id: id) |> Map.fetch!(:props) |> Map.get(prop)
+
+    case ids do
+      [id] -> html |> LiveVue.Test.get_vue(id: id) |> Map.fetch!(:props) |> Map.get(prop)
+      [] -> nil
+    end
   end
 
   describe "live widget missing selection contexts" do

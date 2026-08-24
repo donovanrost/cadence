@@ -369,7 +369,7 @@ function viewportProfile(name) {
         "#dashboard-edit-link",
         ".grid-stack",
         ".grid-stack-item",
-        "[data-telemetry-chart]",
+        "[data-name='TelemetryChart']",
         "#dashboard-panel",
         "#dashboard-data-link-inspector",
         "#dashboard-data-link-copy-link",
@@ -377,9 +377,9 @@ function viewportProfile(name) {
         "#dashboard-evidence-copy-link",
       ].join(", "),
       gridItemSelector: ".grid-stack-item",
-      chartSelector: "[data-telemetry-chart]",
+      chartSelector: "[data-name='TelemetryChart']",
       panelSelector: "#dashboard-panel, #dashboard-data-link-inspector, #dashboard-evidence-inspector",
-      copySelector: "[data-clipboard-button]",
+      copySelector: "[data-name='ClipboardButton']",
       allowedOverlapSelector: "#dashboard-panel",
       textSelector: [
         "#ops-dashboard-show-page h1",
@@ -1235,12 +1235,44 @@ async function evaluateViewport(client, viewport, profile) {
         await new Promise((resolve) => setTimeout(resolve, 50))
       }
 
+      const decodeLiveVueProps = (component) => {
+        const encoded = component?.dataset.props || ""
+        if (!encoded) return {}
+
+        let json = ""
+        for (let index = 0; index < encoded.length; index += 1) {
+          const character = encoded[index]
+          const next = encoded[index + 1]
+
+          if (character === "~" && (next === "~" || next === "^")) {
+            json += next
+            index += 1
+          } else if (character === "^") {
+            json += '"'
+          } else {
+            json += character
+          }
+        }
+
+        try {
+          return JSON.parse(json)
+        } catch (_error) {
+          return {}
+        }
+      }
+
       const clipboardPayload = (selector) => {
         const el = document.querySelector(selector)
+        const componentId = selector.startsWith("#") ? selector.slice(1) + "-component" : ""
+        const component =
+          el?.closest("[data-name='ClipboardButton']") ||
+          (componentId ? document.getElementById(componentId) : null)
+        const props = decodeLiveVueProps(component)
+
         return {
-          present: Boolean(el),
-          component: el?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
-          raw: el?.dataset.clipboardText || "",
+          present: Boolean(el || component),
+          component: component?.dataset.name || "",
+          raw: el?.dataset.clipboardText || props.clipboard_text || "",
           copied: el?.dataset.clipboardCopied || ""
         }
       }

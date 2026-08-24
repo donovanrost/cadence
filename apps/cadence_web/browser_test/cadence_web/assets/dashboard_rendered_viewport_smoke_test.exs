@@ -138,9 +138,13 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
 
     assert has_element?(view, "#ops-dashboard-show-page")
     assert has_element?(view, ~s([phx-hook="DashboardGrid"]))
-    assert has_element?(view, ~s([phx-hook="TelemetryChart"]))
+    assert has_element?(view, ~s([data-name="TelemetryChart"]))
     assert has_element?(view, "#dashboard-panel")
-    assert has_element?(view, "#dashboard-data-link-copy-link")
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-link-copy-link-component[data-name="ClipboardButton"])
+           )
 
     app_root = Path.expand("../../..", __DIR__)
     ensure_assets_built!(app_root)
