@@ -30,6 +30,16 @@ defmodule CadenceWeb.CommsTransportLiveTest do
   end
 
   describe "transport routes" do
+    test "renders the empty state when the mission has no transports" do
+      {conn, _organization, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
+
+      assert has_element?(view, "#comms-transports-page", "No transports")
+      assert has_element?(view, "#new-transport-link")
+      refute has_element?(view, "#transports-list-component")
+    end
+
     test "lists transports with origin, operator summary, and readiness" do
       {conn, organization, mission} = signed_in_org_and_mission()
       transport = persist_transport!(organization.organization_id, mission.mission_id, "Lab TCP")
@@ -38,14 +48,46 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       assert has_element?(view, "#comms-transports-page")
       assert has_element?(view, "#new-transport-link")
-      assert has_element?(view, "#transports[phx-update='stream']")
-      assert has_element?(view, "td", transport.display_name)
-      assert has_element?(view, "#transport-origin-#{transport.transport_id}", "Direct")
-      assert has_element?(view, "#transport-provider-#{transport.transport_id}", "Cadence")
-      assert has_element?(view, "#transport-readiness-#{transport.transport_id}", "Configured")
+      assert has_element?(view, "#transports-list-component")
       assert has_element?(view, "details[open] a", "Transports")
       refute has_element?(view, "#comms-transports-page", "Link Assignment")
       refute has_element?(view, "#comms-transports-page", "Link Template")
+
+      vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+
+      assert vue.component == "CommsTransportList"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "rows" => [
+                 %{
+                   "id" => "transport-#{transport.transport_id}",
+                   "transport_id" => transport.transport_id,
+                   "display_name" => transport.display_name,
+                   "origin" => "Direct",
+                   "origin_id" => "transport-origin-#{transport.transport_id}",
+                   "provider" => "Cadence",
+                   "provider_dom_id" => "transport-provider-#{transport.transport_id}",
+                   "operator_summary" => "Direct TCP SOCKET",
+                   "operator_summary_id" =>
+                     "transport-operator-summary-#{transport.transport_id}",
+                   "endpoint" => "0.0.0.0:5000",
+                   "readiness_status" => "info",
+                   "readiness_label" => "Configured",
+                   "readiness_id" => "transport-readiness-#{transport.transport_id}",
+                   "version" => "v1",
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/transports/#{transport.transport_id}"
+                 }
+               ],
+               "search" => nil,
+               "sort" => "display_name",
+               "sort_dir" => "asc",
+               "page" => 1,
+               "page_size" => 50,
+               "total_count" => 1
+             }
     end
 
     test "search narrows the transport list" do
@@ -57,22 +99,103 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      view
-      |> element("#transports-toolbar form")
-      |> render_change(%{"q" => "ground"})
+      initial_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
 
-      assert has_element?(view, "td", "Ground Uplink")
-      refute has_element?(view, "td", "Lab TCP")
+      assert Enum.map(initial_vue.props["rows"], & &1["display_name"]) == [
+               "Ground Uplink",
+               "Lab TCP"
+             ]
 
-      view
-      |> element("#transports-toolbar form")
-      |> render_change(%{"q" => "no-such-transport"})
+      render_hook(view, "search", %{"q" => "ground"})
 
-      assert has_element?(
-               view,
-               "#comms-transports-page",
-               "No transports match the current search."
-             )
+      search_path = "/missions/#{mission.mission_id}/comms/transports?q=ground"
+
+      assert_patch(view, search_path)
+      render_patch(view, search_path)
+
+      searched_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+
+      assert searched_vue.props["search"] == "ground"
+      assert searched_vue.props["total_count"] == 1
+      assert Enum.map(searched_vue.props["rows"], & &1["display_name"]) == ["Ground Uplink"]
+
+      render_hook(view, "search", %{"q" => "no-such-transport"})
+
+      no_match_path =
+        "/missions/#{mission.mission_id}/comms/transports?q=no-such-transport"
+
+      assert_patch(view, no_match_path)
+      render_patch(view, no_match_path)
+
+      no_matches_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      assert no_matches_vue.props["search"] == "no-such-transport"
+      assert no_matches_vue.props["total_count"] == 0
+      assert no_matches_vue.props["rows"] == []
+    end
+
+    test "sorts through the LiveView-owned list event" do
+      {conn, organization, mission} = signed_in_org_and_mission()
+      alpha = persist_transport!(organization.organization_id, mission.mission_id, "Alpha TCP")
+      zulu = persist_transport!(organization.organization_id, mission.mission_id, "Zulu TCP")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
+
+      initial_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+
+      assert Enum.map(initial_vue.props["rows"], & &1["transport_id"]) == [
+               alpha.transport_id,
+               zulu.transport_id
+             ]
+
+      render_hook(view, "sort", %{"sort" => "display_name"})
+
+      sort_path =
+        "/missions/#{mission.mission_id}/comms/transports?sort=display_name&dir=desc"
+
+      assert_patch(view, sort_path)
+      render_patch(view, sort_path)
+
+      sorted_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      assert sorted_vue.props["sort"] == "display_name"
+      assert sorted_vue.props["sort_dir"] == "desc"
+
+      assert Enum.map(sorted_vue.props["rows"], & &1["transport_id"]) == [
+               zulu.transport_id,
+               alpha.transport_id
+             ]
+    end
+
+    test "paginates through the LiveView event and keeps visible rows in props" do
+      {conn, organization, mission} = signed_in_org_and_mission()
+
+      for transport_number <- 1..51 do
+        suffix = transport_number |> Integer.to_string() |> String.pad_leading(2, "0")
+
+        persist_transport!(
+          organization.organization_id,
+          mission.mission_id,
+          "Transport #{suffix}"
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
+
+      first_page_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      assert first_page_vue.props["page"] == 1
+      assert first_page_vue.props["total_count"] == 51
+      assert length(first_page_vue.props["rows"]) == 50
+
+      render_hook(view, "paginate", %{"page" => "2"})
+
+      second_page_path = "/missions/#{mission.mission_id}/comms/transports?page=2"
+
+      assert_patch(view, second_page_path)
+      render_patch(view, second_page_path)
+
+      second_page_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      assert second_page_vue.props["page"] == 2
+      assert second_page_vue.props["total_count"] == 51
+      assert Enum.map(second_page_vue.props["rows"], & &1["display_name"]) == ["Transport 51"]
     end
 
     test "progressively configures and shows a direct TCP transport" do
@@ -210,25 +333,25 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, list_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      assert has_element?(
-               list_view,
-               "#transport-origin-#{transport.transport_id}",
-               "Provider managed"
-             )
+      list_vue = LiveVue.Test.get_vue(list_view, id: "transports-list-component")
+      assert [transport_row] = list_vue.props["rows"]
+      assert transport_row["id"] == "transport-#{transport.transport_id}"
+      assert transport_row["origin"] == "Provider managed"
+      assert transport_row["origin_id"] == "transport-origin-#{transport.transport_id}"
+      assert transport_row["provider"] == provider.display_name
 
-      assert has_element?(
-               list_view,
-               "#transport-provider-#{transport.transport_id}",
-               provider.display_name
-             )
+      assert transport_row["provider_dom_id"] ==
+               "transport-provider-#{transport.transport_id}"
 
-      assert has_element?(
-               list_view,
-               "#transport-operator-summary-#{transport.transport_id}",
-               "Streaming to Cadence"
-             )
+      assert transport_row["operator_summary"] == "Streaming to Cadence"
 
-      assert has_element?(list_view, "#transport-readiness-#{transport.transport_id}", "Ready")
+      assert transport_row["operator_summary_id"] ==
+               "transport-operator-summary-#{transport.transport_id}"
+
+      assert transport_row["endpoint"] == "127.0.0.1:5100"
+      assert transport_row["readiness_status"] == "ready"
+      assert transport_row["readiness_label"] == "Ready"
+      assert transport_row["readiness_id"] == "transport-readiness-#{transport.transport_id}"
 
       {:ok, show_view, _show_html} = live(conn, target)
       assert has_element?(show_view, "#transport-origin-summary", "Provider managed")
