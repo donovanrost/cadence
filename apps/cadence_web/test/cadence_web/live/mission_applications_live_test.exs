@@ -200,7 +200,7 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
 
     assert [row] = rows
     assert row["__dom_id"] =~ "application-surface-row-"
-    assert row["values"]["point_id"] == "DERIVED.bus_power"
+    assert row["values"]["point"] == "DERIVED.bus_power"
 
     {:ok, remounted_view, _html} = live(context.conn, application_path)
 
@@ -211,7 +211,7 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
           String.starts_with?(path, "/application_surface_rows/"),
           do: row
 
-    assert Enum.any?(remounted_rows, &(&1["values"]["point_id"] == "DERIVED.bus_power"))
+    assert Enum.any?(remounted_rows, &(&1["values"]["point"] == "DERIVED.bus_power"))
 
     contract = %{"props" => refreshed_vue.props, "streams_diff" => refreshed_vue.streams_diff}
     assert contract == Jason.decode!(Jason.encode!(contract))
@@ -255,8 +255,8 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
           String.starts_with?(path, "/application_surface_rows/"),
           do: row
 
-    assert Enum.any?(page_one_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_001"))
-    refute Enum.any?(page_one_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
+    assert Enum.any?(page_one_rows, &(&1["values"]["point"] == "DERIVED.live_paged_001"))
+    refute Enum.any?(page_one_rows, &(&1["values"]["point"] == "DERIVED.live_paged_021"))
 
     render_hook(view, "application_table_page", %{"page" => "2"})
 
@@ -276,8 +276,8 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
           String.starts_with?(path, "/application_surface_rows/"),
           do: row
 
-    assert Enum.any?(page_two_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
-    refute Enum.any?(page_two_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_001"))
+    assert Enum.any?(page_two_rows, &(&1["values"]["point"] == "DERIVED.live_paged_021"))
+    refute Enum.any?(page_two_rows, &(&1["values"]["point"] == "DERIVED.live_paged_001"))
 
     {:ok, deep_linked_view, _html} = live(context.conn, page_two_path)
 
@@ -289,7 +289,7 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
           do: row
 
     assert deep_linked_vue.props["declarative_surface"]["table"]["pagination"]["page"] == 2
-    assert Enum.any?(deep_linked_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
+    assert Enum.any?(deep_linked_rows, &(&1["values"]["point"] == "DERIVED.live_paged_021"))
   end
 
   test "disables, uninstalls, and reinstalls a mission application", context do
