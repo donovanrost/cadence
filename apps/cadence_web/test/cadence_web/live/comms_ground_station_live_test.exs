@@ -12,6 +12,7 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
   alias Cadence.Comms.GroundStation
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -82,18 +83,74 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert searched_vue.props["search"] == "goldstone"
       assert searched_vue.props["rows"] == vue.props["rows"]
 
-      {:ok, show_view, show_html} =
+      {:ok, show_view, _show_html} =
         live(
           conn,
           ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
         )
 
       assert has_element?(show_view, "#comms-ground-station-show-page")
-      assert has_element?(show_view, "#edit-ground-station-link")
-      assert has_element?(show_view, "#archive-ground-station-button")
-      assert show_html =~ "Ground Station"
-      assert show_html =~ "DSN"
-      assert show_html =~ "Runtime contact and RF state are observed separately."
+      assert has_element?(show_view, "#comms-ground-station-show-component")
+
+      show_vue =
+        LiveVue.Test.get_vue(show_view, id: "comms-ground-station-show-component")
+
+      assert show_vue.component == "CommsGroundStationShow"
+      assert show_vue.ssr == false
+      assert is_binary(Jason.encode!(show_vue.props))
+
+      assert show_vue.props == %{
+               "actions" => %{
+                 "archive" => %{
+                   "confirm" => "Archive #{ground_station.display_name}?",
+                   "id" => "archive-ground-station-button",
+                   "label" => "Archive"
+                 },
+                 "edit" => %{
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}/edit",
+                   "id" => "edit-ground-station-link",
+                   "label" => "Edit"
+                 }
+               },
+               "ground_station" => %{
+                 "description" =>
+                   "Stable setup identity for an antenna or ground-station site. Runtime contact and RF state are observed separately.",
+                 "details_title" => "Ground Station",
+                 "details" => [
+                   %{"label" => "Provider", "value" => "DSN"},
+                   %{"label" => "Region", "value" => "goldstone"},
+                   %{
+                     "label" => "Station ID",
+                     "value" => ground_station.ground_station_id
+                   }
+                 ],
+                 "display_name" => ground_station.display_name,
+                 "ground_station_id" => ground_station.ground_station_id,
+                 "lifecycle_state" => "ACTIVE",
+                 "metadata_title" => "Metadata",
+                 "metadata_json" => "{\n  \"antenna_diameter_m\": 70\n}"
+               },
+               "navigation" => %{
+                 "breadcrumbs" => [
+                   %{
+                     "href" => "/missions/#{mission.mission_id}",
+                     "label" => mission.display_name
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms",
+                     "label" => "Comms"
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms/ground-stations",
+                     "label" => "Ground Stations"
+                   },
+                   %{"href" => nil, "label" => ground_station.display_name}
+                 ]
+               }
+             }
+
+      assert show_vue.handlers == %{"archive" => JS.push("archive")}
     end
 
     test "searches and sorts through LiveView-owned list events" do
@@ -271,9 +328,7 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       {:ok, show_view, _show_html} = live(conn, show_path)
 
       assert {:error, {:live_redirect, %{to: list_path}}} =
-               show_view
-               |> element("#archive-ground-station-button")
-               |> render_click()
+               render_click(show_view, "archive")
 
       assert list_path == "/missions/#{mission.mission_id}/comms/ground-stations"
 
