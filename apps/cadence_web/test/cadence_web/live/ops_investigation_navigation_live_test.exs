@@ -116,10 +116,14 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     track_dashboard_view(timeline)
     assert has_element?(timeline, "#ops-context-rail-component")
 
-    assert has_element?(
-             timeline,
-             ~s(#timeline-return-to-origin[href*="/ops/explore"][href*="replay_run_id=replay-investigation"][href*="selection_view=all_revisions"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
-           )
+    timeline_vue = LiveVue.Test.get_vue(timeline, id: "ops-timeline-page-component")
+    return_link = timeline_vue.props["presentation"]["header"]["return_link"]["attrs"]
+
+    assert return_link["id"] == "timeline-return-to-origin"
+    assert return_link["href"] =~ "/ops/explore"
+    assert return_link["href"] =~ "replay_run_id=replay-investigation"
+    assert return_link["href"] =~ "selection_view=all_revisions"
+    assert return_link["href"] =~ "source_dashboard_id=#{dashboard.dashboard_id}"
 
     {:ok, source_view, _html} =
       live(conn, source_path)
