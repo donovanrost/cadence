@@ -269,18 +269,27 @@ defmodule CadenceWeb.AdminLiveTest do
       # Should redirect back to org detail
       assert_redirect(view, ~p"/admin/organizations/#{org.organization_id}")
 
-      # Verify the member appears on the org detail page
+      assert [invitation] = Cadence.Accounts.list_pending_invitations(org.organization_id)
+
+      # Verify the pending invitation appears on the org detail page
       {:ok, detail_view, _html} =
         live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
 
       vue = LiveVue.Test.get_vue(detail_view, id: "admin-organization-show-component")
 
-      assert [member_prop] = vue.props["members"]
-      assert member_prop["display_name"] == "Durable User"
-      assert member_prop["email"] == "existing@example.com"
-      assert member_prop["role"] == "member"
-      assert member_prop["role_label"] == "Member"
-      assert String.starts_with?(member_prop["id"], "organization-member-")
+      assert vue.props["members"] == []
+
+      assert vue.props["invitations"] == [
+               %{
+                 "email" => "existing@example.com",
+                 "expires_on" => Calendar.strftime(invitation.expires_at, "%Y-%m-%d"),
+                 "grant_platform_admin" => false,
+                 "id" => "organization-invitation-#{invitation.organization_invitation_id}",
+                 "invitation_id" => invitation.organization_invitation_id,
+                 "role" => "member",
+                 "role_label" => "Member"
+               }
+             ]
     end
   end
 
