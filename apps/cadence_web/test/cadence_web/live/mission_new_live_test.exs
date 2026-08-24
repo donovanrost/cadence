@@ -188,7 +188,7 @@ defmodule CadenceWeb.MissionNewLiveTest do
       assert has_element?(
                view,
                "#flash-error[role='alert']",
-               "Slug has already been taken"
+               "has already been taken"
              )
     end
   end
