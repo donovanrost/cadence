@@ -10,21 +10,22 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
     profiles =
       Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission.mission_id)
 
+    spacecraft_profile_rows =
+      Enum.map(profiles, &spacecraft_profile_row_dto(&1, mission.mission_id))
+
     {:ok,
      socket
      |> assign(:page_title, "Spacecraft Profiles")
      |> assign(:nav_item, :spacecraft)
      |> assign(:spacecraft_profile_count, length(profiles))
      |> assign(:spacecraft_profiles_empty?, profiles == [])
-     |> stream(:spacecraft_profiles, profiles,
-       dom_id: &"spacecraft-profile-#{&1.spacecraft_type_id}"
-     )}
+     |> assign(:spacecraft_profile_rows, spacecraft_profile_rows)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <div id="spacecraft-profiles-page" class="space-y-6">
       <.page_header
         title="Spacecraft Profiles"
         subtitle="Reusable byte-interpretation contracts for spacecraft that share bus protocols, frame parameters, and platform applications."
@@ -37,6 +38,7 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
         <:title_suffix>{@spacecraft_profile_count} defined</:title_suffix>
         <:actions>
           <.button
+            id="new-spacecraft-profile-link"
             navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
             class="gap-1"
           >
@@ -54,39 +56,37 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
         />
       <% else %>
         <.card padding={:none}>
-          <.table
-            id="spacecraft-profiles-table"
-            body_id="spacecraft-profiles"
-            rows={@streams.spacecraft_profiles}
-          >
-            <:col :let={profile} label="Name" class="font-medium">
-              <.link
-                navigate={
-                  ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-                }
-                class="text-primary hover:underline"
-              >
-                {profile.display_name}
-              </.link>
-            </:col>
-            <:col :let={profile} label="Version" mono class="text-base-content/70">
-              v{profile.version}
-            </:col>
-            <:col :let={profile} label="Downlink" mono class="uppercase text-primary/80">
-              {profile.downlink_protocol}
-            </:col>
-            <:col :let={profile} label="Uplink" mono class="uppercase text-primary/80">
-              {profile.uplink_protocol}
-            </:col>
-            <:col :let={profile} label="Applications" class="text-sm text-base-content/70">
-              {applications_summary(profile.applications)}
-            </:col>
-          </.table>
+          <.vue
+            id="spacecraft-profiles-list-component"
+            v-component="SpacecraftTypeList"
+            rows={@spacecraft_profile_rows}
+            v-ssr={false}
+          />
         </.card>
       <% end %>
     </div>
     """
   end
+
+  defp spacecraft_profile_row_dto(profile, mission_id) do
+    %{
+      id: "spacecraft-profile-#{profile.spacecraft_type_id}",
+      display_name: profile.display_name,
+      version: "v#{profile.version}",
+      downlink_protocol: protocol_label(profile.downlink_protocol),
+      uplink_protocol: protocol_label(profile.uplink_protocol),
+      applications: applications_summary(profile.applications),
+      href: ~p"/missions/#{mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+    }
+  end
+
+  defp protocol_label(protocol) when is_atom(protocol) do
+    protocol
+    |> Atom.to_string()
+    |> String.upcase()
+  end
+
+  defp protocol_label(protocol) when is_binary(protocol), do: String.upcase(protocol)
 
   defp applications_summary(applications)
        when is_map(applications) and map_size(applications) > 0 do
