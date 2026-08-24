@@ -4,35 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents do
   the shell-owned Ops context rail beside this inspector.
   """
 
-  use CadenceWeb, :html
-
   alias CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents
-
-  attr(:open?, :boolean, required: true)
-  attr(:rollup, :map, required: true)
-  attr(:preset, :map, default: nil)
-  attr(:open_review_summary, :map, default: %{})
-  attr(:saved_presets, :list, default: [])
-
-  def comparison_inspector(%{open?: true, rollup: rollup, saved_presets: saved_presets} = assigns) do
-    if available?(rollup, saved_presets) do
-      assigns = assign(assigns, :inspector, comparison_inspector_dto())
-
-      ~H"""
-      <ComparisonRollupComponents.comparison_rollup_strip
-        inspector={@inspector}
-        rollup={@rollup}
-        preset={@preset}
-        open_review_summary={@open_review_summary}
-        saved_presets={@saved_presets}
-      />
-      """
-    else
-      ~H""
-    end
-  end
-
-  def comparison_inspector(assigns), do: ~H""
 
   def presentation(true, rollup, preset, open_review_summary, saved_presets) do
     if available?(rollup, saved_presets) do
