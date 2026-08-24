@@ -15,7 +15,21 @@ defmodule CadenceWeb.UserSessionLiveTest do
     test "renders the sign-in form with title and brand", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sign-in")
 
-      assert has_element?(view, "a[href='/']", "Cadence")
+      brand_vue = auth_layout_brand_vue(view)
+
+      assert brand_vue.props["presentation"] == %{
+               "link" => %{
+                 "attrs" => %{"href" => "/"},
+                 "class" =>
+                   "inline-block font-mono text-sm tracking-[0.28em] uppercase text-primary",
+                 "label" => "Cadence"
+               },
+               "tagline" => %{
+                 "class" => "mt-1 text-xs text-base-content/50",
+                 "text" => "Ground data control plane"
+               }
+             }
+
       refute has_element?(view, "#user-session-component a[href='/']")
 
       vue = user_session_vue(view)
@@ -118,6 +132,18 @@ defmodule CadenceWeb.UserSessionLiveTest do
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
     assert vue.props |> Map.keys() |> Enum.sort() == ["form", "page"]
     assert vue.handlers == %{"validate" => JS.push("validate")}
+
+    vue
+  end
+
+  defp auth_layout_brand_vue(view) do
+    vue = Test.get_vue(view, id: "auth-layout-brand")
+
+    assert vue.component == "AuthLayoutBrand"
+    assert vue.class == "text-center"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert Map.keys(vue.props) == ["presentation"]
 
     vue
   end
