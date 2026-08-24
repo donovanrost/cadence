@@ -2,142 +2,36 @@ defmodule CadenceWeb.MissionShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [readiness_card: 1]
-
   alias CadenceWeb.SpacecraftCommsReadiness
 
   @impl true
   def mount(_params, _session, socket) do
     summary = load_summary(socket.assigns)
+    overview = mission_overview_dto(socket.assigns.current_mission, summary)
 
     {:ok,
      socket
      |> assign(:page_title, socket.assigns.current_mission.display_name)
      |> assign(:nav_item, :mission_overview)
-     |> assign(Map.drop(summary, [:spacecraft_readiness]))
-     |> stream(:spacecraft_readiness, summary.spacecraft_readiness)}
+     |> assign(:mission_overview, Map.drop(overview, [:spacecraft_readiness]))
+     |> stream(:spacecraft_readiness, overview.spacecraft_readiness)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="mission-overview-page" class="space-y-6">
-      <.page_header
-        eyebrow="Mission"
-        title={@current_mission.display_name}
-        subtitle={@current_mission.slug}
-      />
-
-      <div class="grid gap-4 md:grid-cols-3">
-        <.readiness_card
-          title="Ready Spacecraft"
-          value={@ready_spacecraft_count}
-          status={if @ready_spacecraft_count == 0, do: :attention, else: :ready}
-          description="Spacecraft with SCID and identity configured."
-        />
-        <.readiness_card
-          title="Need SCID"
-          value={@missing_scid_count}
-          status={if @missing_scid_count == 0, do: :ready, else: :blocked}
-          description="Spacecraft that cannot be resolved from incoming frames yet."
-        />
-        <.readiness_card
-          title="Need Link"
-          value={@missing_path_count}
-          status={if @missing_path_count == 0, do: :ready, else: :attention}
-          description="Spacecraft with identity configured but no provider link."
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="mission-overview-page" class="space-y-6">
+        <.vue
+          id="mission-overview-component"
+          v-component="MissionOverview"
+          overview={@mission_overview}
+          spacecraft_readiness={@streams.spacecraft_readiness}
+          v-ssr={false}
+          class="space-y-6"
         />
       </div>
-
-      <.readiness_panel
-        setup_issue_count={@setup_issue_count}
-        empty?={@spacecraft_readiness_empty?}
-        mission_id={@current_mission.mission_id}
-        rows={@streams.spacecraft_readiness}
-      />
-    </div>
-    """
-  end
-
-  attr :setup_issue_count, :integer, required: true
-  attr :empty?, :boolean, required: true
-  attr :mission_id, :string, required: true
-  attr :rows, :any, required: true
-
-  defp readiness_panel(assigns) do
-    ~H"""
-    <.card>
-      <.section_header
-        eyebrow="Spacecraft Readiness"
-        title="Configure spacecraft identity and select a spacecraft profile"
-        description="Each row shows whether a spacecraft can be identified from incoming frames and has a profile that defines its byte-interpretation contract."
-      >
-        <:actions>
-          <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
-        </:actions>
-      </.section_header>
-
-      <div id="spacecraft-readiness-section" class="mt-6 overflow-x-auto">
-        <div :if={@empty?} id="spacecraft-readiness-empty">
-          <.empty_state
-            title="No spacecraft have been registered for this mission yet."
-            action_label="Add the first spacecraft"
-            action_navigate={~p"/missions/#{@mission_id}/spacecraft/new"}
-          />
-        </div>
-
-        <.readiness_table :if={not @empty?} mission_id={@mission_id} rows={@rows} />
-      </div>
-    </.card>
-    """
-  end
-
-  attr :mission_id, :string, required: true
-  attr :rows, :any, required: true
-
-  defp readiness_table(assigns) do
-    ~H"""
-    <.table id="mission-spacecraft-readiness" body_id="spacecraft-readiness-table" rows={@rows}>
-      <:col :let={row} label="Spacecraft">
-        <div class="font-medium">{row.spacecraft.display_name}</div>
-        <div class="font-mono text-xs text-base-content/60">
-          {row.spacecraft.spacecraft_id}
-        </div>
-      </:col>
-      <:col :let={row} label="SCID" mono class="text-primary/80">
-        {format_scid(row.scid)}
-      </:col>
-      <:col :let={row} label="Runtime Identity">
-        <div class="text-sm">{row.endpoint_label}</div>
-        <div class="font-mono text-xs text-base-content/60">
-          {row.endpoint_ref || "Not created"}
-        </div>
-      </:col>
-      <:col :let={row} label="Downlink Link">
-        <div class="text-sm">{row.path_label}</div>
-        <div class="text-xs text-base-content/60">{row.path_detail}</div>
-      </:col>
-      <:col :let={row} label="Status">
-        <.status_badge status={row.status} label={row.status_label} />
-        <p class="mt-1 max-w-xs text-xs text-base-content/70">{row.issue}</p>
-      </:col>
-      <:col :let={row} label="Actions" align={:right}>
-        <.action_menu id={"#{row.spacecraft.spacecraft_id}-readiness-actions"}>
-          <:action>
-            <.link navigate={spacecraft_readiness_path(@mission_id, row.spacecraft)}>
-              {row.primary_action}
-            </.link>
-          </:action>
-          <:action>
-            <.link navigate={
-              ~p"/missions/#{@mission_id}/spacecraft/#{row.spacecraft.spacecraft_id}"
-            }>
-              View spacecraft
-            </.link>
-          </:action>
-        </.action_menu>
-      </:col>
-    </.table>
+    </Layouts.app>
     """
   end
 
@@ -172,6 +66,91 @@ defmodule CadenceWeb.MissionShowLive do
       setup_issue_count: Enum.count(spacecraft_readiness, &(&1.status != :ready))
     }
   end
+
+  defp mission_overview_dto(mission, summary) do
+    %{
+      mission: %{
+        eyebrow: "Mission",
+        display_name: mission.display_name,
+        slug: mission.slug
+      },
+      readiness_cards: [
+        readiness_card_dto(
+          "Ready Spacecraft",
+          summary.ready_spacecraft_count,
+          if(summary.ready_spacecraft_count == 0, do: :attention, else: :ready),
+          "Spacecraft with SCID and identity configured."
+        ),
+        readiness_card_dto(
+          "Need SCID",
+          summary.missing_scid_count,
+          if(summary.missing_scid_count == 0, do: :ready, else: :blocked),
+          "Spacecraft that cannot be resolved from incoming frames yet."
+        ),
+        readiness_card_dto(
+          "Need Link",
+          summary.missing_path_count,
+          if(summary.missing_path_count == 0, do: :ready, else: :attention),
+          "Spacecraft with identity configured but no provider link."
+        )
+      ],
+      setup: %{
+        eyebrow: "Spacecraft Readiness",
+        title: "Configure spacecraft identity and select a spacecraft profile",
+        description:
+          "Each row shows whether a spacecraft can be identified from incoming frames and has a profile that defines its byte-interpretation contract.",
+        issue_count: summary.setup_issue_count,
+        status: status_dto(if(summary.setup_issue_count == 0, do: :ready, else: :attention)),
+        empty: summary.spacecraft_readiness_empty?,
+        empty_state: %{
+          title: "No spacecraft have been registered for this mission yet.",
+          action_label: "Add the first spacecraft",
+          action_href: ~p"/missions/#{mission.mission_id}/spacecraft/new"
+        }
+      },
+      spacecraft_readiness:
+        Enum.map(summary.spacecraft_readiness, &readiness_row_dto(mission.mission_id, &1))
+    }
+  end
+
+  defp readiness_card_dto(title, value, status, description) do
+    %{
+      title: title,
+      value: value,
+      status: status_dto(status),
+      description: description
+    }
+  end
+
+  defp readiness_row_dto(mission_id, row) do
+    spacecraft = row.spacecraft
+
+    %{
+      id: spacecraft.spacecraft_id,
+      actions_id: "#{spacecraft.spacecraft_id}-readiness-actions",
+      spacecraft_display_name: spacecraft.display_name,
+      spacecraft_id: spacecraft.spacecraft_id,
+      scid_label: format_scid(row.scid),
+      endpoint_label: row.endpoint_label,
+      endpoint_ref_label: row.endpoint_ref || "Not created",
+      path_label: row.path_label,
+      path_detail: row.path_detail,
+      status: Atom.to_string(row.status),
+      status_label: row.status_label,
+      issue: row.issue,
+      primary_action: row.primary_action,
+      primary_action_href: spacecraft_readiness_path(mission_id, spacecraft),
+      view_spacecraft_href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+    }
+  end
+
+  defp status_dto(status) do
+    %{tone: Atom.to_string(status), label: status_label(status)}
+  end
+
+  defp status_label(:ready), do: "Ready"
+  defp status_label(:attention), do: "Needs Work"
+  defp status_label(:blocked), do: "Missing"
 
   defp format_scid(nil), do: "Not set"
   defp format_scid(scid), do: Integer.to_string(scid)
