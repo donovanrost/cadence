@@ -28,6 +28,10 @@ const layoutTemplatePath = resolve(
   "../../lib/cadence_web/components/layouts/sidebar.html.heex",
 )
 const layoutsPath = resolve(__dirname, "../../lib/cadence_web/components/layouts.ex")
+const layoutsTestPath = resolve(
+  __dirname,
+  "../../test/cadence_web/components/layouts_test.exs",
+)
 const sidebarPrimitivesPath = resolve(
   __dirname,
   "../../lib/cadence_web/components/sidebar.ex",
@@ -41,6 +45,7 @@ const [
   componentSource,
   layoutTemplate,
   layoutsSource,
+  layoutsTestSource,
   sidebarPrimitives,
   legacyDrawer,
   sidebarCss,
@@ -50,6 +55,7 @@ const [
   readFile(componentPath, "utf8"),
   readFile(layoutTemplatePath, "utf8"),
   readFile(layoutsPath, "utf8"),
+  readFile(layoutsTestPath, "utf8"),
   readFile(sidebarPrimitivesPath, "utf8"),
   readFile(legacyDrawerPath, "utf8"),
   readFile(sidebarCssPath, "utf8"),
@@ -142,6 +148,19 @@ assert.match(drawerHostSource, /class="drawer-side"/)
 assert.doesNotMatch(drawerHostSource, /<label|<nav|<\.nav_item|<\.form|onclick=/)
 assert.doesNotMatch(drawerHostSource, /for=|aria-label=|href=|data-sidebar|title=/)
 assert.doesNotMatch(layoutTemplate, /document\.querySelectorAll|classList\.toggle|phx-hook=/)
+
+const renderGlobalSidebarTestHelper = sourceSlice(
+  layoutsTestSource,
+  "  defp render_global_sidebar",
+  "\n  end\nend",
+  "global sidebar LiveVue.Test helper",
+)
+
+assert.match(
+  renderGlobalSidebarTestHelper,
+  /then\(fn merged_assigns -> render_component\(&Layouts\.sidebar\/1, merged_assigns\) end\)/,
+)
+assert.doesNotMatch(renderGlobalSidebarTestHelper, /then\(&render_component/)
 
 assert.match(daisyUi, /"> \.drawer-overlay": \{/)
 assert.match(daisyUi, /"> \*:not\(\.drawer-overlay\)": \{/)

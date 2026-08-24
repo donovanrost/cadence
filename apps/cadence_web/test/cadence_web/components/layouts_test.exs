@@ -473,7 +473,7 @@ defmodule CadenceWeb.LayoutsTest do
       nav_item: nil
     ]
     |> Keyword.merge(assigns)
-    |> then(&render_component(&Layouts.sidebar/1, &1))
+    |> then(fn merged_assigns -> render_component(&Layouts.sidebar/1, merged_assigns) end)
     |> LiveVue.Test.get_vue(id: "global-sidebar-navigation")
   end
 end
