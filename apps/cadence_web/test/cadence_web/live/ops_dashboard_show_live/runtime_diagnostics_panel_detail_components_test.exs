@@ -124,10 +124,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
              |> LazyHTML.query("#dashboard-cache-summary")
              |> LazyHTML.attribute("data-cache-classification")
 
-    assert ["suppressed"] =
-             document
-             |> LazyHTML.query("#dashboard-no-refresh-summary")
-             |> LazyHTML.attribute("data-no-refresh-status")
+    no_refresh_vue =
+      LiveVue.Test.get_vue(html, id: "dashboard-no-refresh-summary-component")
+
+    assert no_refresh_vue.component == "RuntimeNoRefreshSummary"
+
+    assert no_refresh_vue.props["summary"]["section"]["attributes"][
+             "data-no-refresh-status"
+           ] == "suppressed"
 
     assert "source" =
              invalidation["data_attrs"]["data-runtime-invalidation-boundary"]
