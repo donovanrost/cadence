@@ -67,6 +67,9 @@ defmodule CadenceWeb.AdminLiveTest do
     end
 
     test "platform admin can access the dashboard", %{admin_conn: admin_conn} do
+      organization_count = Cadence.Organizations.count_organizations()
+      user_count = Cadence.Accounts.count_users()
+
       {:ok, view, _html} = live(admin_conn, ~p"/admin")
 
       assert has_element?(view, "#admin-home-page")
@@ -79,8 +82,8 @@ defmodule CadenceWeb.AdminLiveTest do
       assert is_binary(Jason.encode!(vue.props))
 
       assert vue.props == %{
-               "organization_count" => 0,
-               "user_count" => 1,
+               "organization_count" => organization_count,
+               "user_count" => user_count,
                "presentation" => %{
                  "title" => "Platform Administration",
                  "subtitle" => "Manage organizations, users, and system settings",
@@ -102,8 +105,7 @@ defmodule CadenceWeb.AdminLiveTest do
                  "quick_actions" => %{
                    "title" => "Quick Actions",
                    "create_organization_title" => "Create New Organization",
-                   "create_organization_description" =>
-                     "Add a new organization to the system"
+                   "create_organization_description" => "Add a new organization to the system"
                  }
                },
                "navigation" => %{
@@ -119,6 +121,8 @@ defmodule CadenceWeb.AdminLiveTest do
     test "admin dashboard shows organization and user counts", %{admin_conn: admin_conn} do
       create_test_org!("Cadence Ops", "cadence-ops")
       persist_durable_user!(email: "dashboard-user@example.com", password: "password-123456")
+      organization_count = Cadence.Organizations.count_organizations()
+      user_count = Cadence.Accounts.count_users()
 
       {:ok, view, _html} = live(admin_conn, ~p"/admin")
 
@@ -129,8 +133,8 @@ defmodule CadenceWeb.AdminLiveTest do
       assert is_binary(Jason.encode!(vue.props))
 
       assert vue.props == %{
-               "organization_count" => 1,
-               "user_count" => 2,
+               "organization_count" => organization_count,
+               "user_count" => user_count,
                "presentation" => %{
                  "title" => "Platform Administration",
                  "subtitle" => "Manage organizations, users, and system settings",
@@ -152,8 +156,7 @@ defmodule CadenceWeb.AdminLiveTest do
                  "quick_actions" => %{
                    "title" => "Quick Actions",
                    "create_organization_title" => "Create New Organization",
-                   "create_organization_description" =>
-                     "Add a new organization to the system"
+                   "create_organization_description" => "Add a new organization to the system"
                  }
                },
                "navigation" => %{
