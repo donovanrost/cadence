@@ -227,12 +227,256 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
 
-    assert has_element?(view, "#fleet-policy-empty")
-    assert has_element?(view, "#fleet-policy-form")
+    initial_vue = fleet_policy_vue(view)
 
-    view
-    |> form("#fleet-policy-form",
-      policy: %{
+    assert initial_vue.component == "OpsFleetPlanningPolicy"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
+    assert initial_vue.slots == %{}
+
+    assert initial_vue.handlers == %{
+             "approve-policy" => Phoenix.LiveView.JS.push("approve-policy"),
+             "issue-grant" => Phoenix.LiveView.JS.push("issue-grant"),
+             "revoke-grant" => Phoenix.LiveView.JS.push("revoke-grant"),
+             "save-policy" => Phoenix.LiveView.JS.push("save-policy"),
+             "validate-grant" => Phoenix.LiveView.JS.push("validate-grant"),
+             "validate-policy" => Phoenix.LiveView.JS.push("validate-policy")
+           }
+
+    assert initial_vue.props["page"] == %{
+             "back" => %{
+               "href" => "/missions/#{mission.mission_id}/ops/planning",
+               "icon" => "hero-arrow-left",
+               "label" => "Fleet planning"
+             },
+             "header" => %{
+               "copy" =>
+                 "Operators declare mission needs. Organization administrators approve the bounded horizon, capacity, cost, repair, and unattended authority Cadence may use.",
+               "eyebrow" => "Administrative boundary",
+               "title" => "Fleet Policy & Automation"
+             },
+             "manifest" => %{
+               "content_sha256" => nil,
+               "empty" => %{
+                 "copy" =>
+                   "Fleet runs and automation remain stopped until an administrator creates and approves a policy.",
+                 "icon" => "hero-adjustments-horizontal",
+                 "id" => "fleet-policy-empty",
+                 "title" => "No scheduling boundary exists"
+               },
+               "id" => "fleet-policy-manifest",
+               "sections" => [],
+               "version_label" => "not configured"
+             },
+             "state" => %{
+               "class" =>
+                 "border border-warning/40 bg-warning/10 px-2 py-1 font-mono text-xs uppercase text-warning",
+               "id" => "fleet-policy-state",
+               "label" => "stopped"
+             }
+           }
+
+    assert Map.take(initial_vue.props["policy_form"], [
+             "id",
+             "open",
+             "panel_id",
+             "redundancy",
+             "submit",
+             "summary"
+           ]) == %{
+             "id" => "fleet-policy-form",
+             "open" => true,
+             "panel_id" => "fleet-policy-editor",
+             "redundancy" => %{
+               "id" => "fleet-policy-redundancy-details",
+               "summary" => "Redundancy constraints"
+             },
+             "submit" => %{
+               "id" => "save-fleet-policy",
+               "label" => "Create draft policy"
+             },
+             "summary" => "Create the initial policy"
+           }
+
+    assert initial_vue.props["authorization"] == %{
+             "admin_required" => nil,
+             "organization_admin" => true
+           }
+
+    assert initial_vue.props["grant_ledger"] == %{
+             "active_count" => 0,
+             "active_label" => "0 active",
+             "empty" => %{
+               "copy" => "No automation authority issued.",
+               "id" => "automation-grants-empty"
+             },
+             "id" => "automation-grant-ledger",
+             "list_id" => "automation-grants"
+           }
+
+    assert initial_vue.props["approval_form"] == nil
+    assert initial_vue.props["grant_form"] == nil
+    assert initial_vue.props["revocation_form"] == nil
+
+    assert policy_form_field_contract(initial_vue.props["policy_form"]) ==
+             initial_policy_form_field_contract()
+
+    assert fleet_policy_stream_mutations(initial_vue) == [
+             ["replace", "/automation_grants", []]
+           ]
+
+    assert_json_safe_fleet_policy_vue(initial_vue)
+
+    policy_params = %{
+      "max_horizon_hours" => "24",
+      "requirement_concurrency" => "8",
+      "provider_search_concurrency" => "4",
+      "reuse_freshness_seconds" => "300",
+      "max_contacts" => "300",
+      "max_estimated_cost_micros" => "",
+      "currency" => "",
+      "critical_contact_reserve" => "5",
+      "automation_mode" => "advisory",
+      "execution_concurrency" => "4",
+      "max_repair_attempts" => "3",
+      "repair_horizon_hours" => "12",
+      "distinct_provider_required" => "false",
+      "distinct_station_required" => "false",
+      "distinct_service_pool_required" => "false"
+    }
+
+    render_hook(view, "validate-policy", %{"policy" => policy_params})
+
+    validated_vue = fleet_policy_vue(view)
+
+    assert Map.new(validated_vue.props["policy_form"]["fields"], fn {field, contract} ->
+             {field, contract["value"]}
+           end) ==
+             Map.merge(policy_params, %{
+               "automatic_submission" => false,
+               "distinct_provider_required" => false,
+               "distinct_service_pool_required" => false,
+               "distinct_station_required" => false
+             })
+
+    render_hook(view, "save-policy", %{"policy" => policy_params})
+
+    draft_vue = fleet_policy_vue(view)
+
+    assert draft_vue.props["approval_form"]["id"] == "fleet-policy-approval-form"
+    assert draft_vue.props["approval_form"]["reason"]["value"] == ""
+    assert draft_vue.props["approval_form"]["submit"]["label"] == "Approve exact v1"
+    assert draft_vue.props["page"]["state"]["label"] == "draft"
+    assert draft_vue.props["page"]["state"]["id"] == "fleet-policy-state"
+    assert draft_vue.props["page"]["manifest"]["version_label"] == "v1"
+    assert draft_vue.props["page"]["manifest"]["content_sha256"] =~ ~r/\A[0-9a-f]{64}\z/
+
+    assert draft_vue.props["page"]["manifest"]["sections"] == [
+             %{
+               "facts" => [
+                 %{"term" => "Maximum horizon", "value" => "24.0 h"},
+                 %{"term" => "Requirement workers", "value" => "8"},
+                 %{"term" => "Provider workers", "value" => "4"},
+                 %{"term" => "Evidence reuse", "value" => "300 sec"}
+               ],
+               "title" => "Horizon & search"
+             },
+             %{
+               "facts" => [
+                 %{"term" => "Contact ceiling", "value" => "300"},
+                 %{"term" => "Cost ceiling", "value" => "none"},
+                 %{"term" => "Critical reserve", "value" => "5"},
+                 %{"term" => "Default capacity", "value" => "1"}
+               ],
+               "title" => "Quota & budget"
+             },
+             %{
+               "facts" => [
+                 %{"term" => "Mode", "value" => "advisory"},
+                 %{"term" => "Automatic submission", "value" => "no"},
+                 %{"term" => "Execution workers", "value" => "4"},
+                 %{"term" => "Repair attempts", "value" => "3"}
+               ],
+               "title" => "Automation"
+             },
+             %{
+               "facts" => [
+                 %{"term" => "Distinct provider", "value" => "no"},
+                 %{"term" => "Distinct station", "value" => "no"},
+                 %{"term" => "Distinct pool", "value" => "no"},
+                 %{"term" => "Repair horizon", "value" => "12.0 h"}
+               ],
+               "title" => "Redundancy"
+             }
+           ]
+
+    draft_content_sha256 = draft_vue.props["page"]["manifest"]["content_sha256"]
+    assert has_element?(view, "#flash-info", "Draft policy created.")
+
+    render_hook(view, "approve-policy", %{
+      "decision" => %{"reason" => "Bound mission-scale provider demand"}
+    })
+
+    active_vue = fleet_policy_vue(view)
+
+    assert active_vue.props["page"]["state"]["label"] == "active"
+    assert active_vue.props["approval_form"] == nil
+
+    assert has_element?(
+             view,
+             "#flash-info",
+             "Exact policy version approved and activated."
+           )
+
+    assert {:ok, policy, version} =
+             FleetPlanningPolicies.fetch_active(
+               org.organization_id,
+               mission.mission_id
+             )
+
+    assert policy.active_version == version.version
+    assert version.budget_quota_document["max_contacts"] == 300
+    assert version.budget_quota_document["critical_contact_reserve"] == 5
+    assert version.content_sha256 == draft_content_sha256
+
+    assert [approval] =
+             FleetPlanningPolicies.list_approvals(
+               org.organization_id,
+               mission.mission_id,
+               policy.fleet_planning_policy_id
+             )
+
+    assert approval.fleet_planning_policy_version == version.version
+    assert approval.content_sha256 == version.content_sha256
+    assert approval.reason == "Bound mission-scale provider demand"
+  end
+
+  test "fleet policy LiveVue keeps non-admin presentation read-only and server actions closed" do
+    {conn, _scope, org, mission, _spacecraft} = signed_in_scope(:member)
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
+
+    assert has_element?(view, "#ops-fleet-planning-policy-page")
+    assert has_element?(view, "#fleet-policy-admin-required")
+
+    vue = fleet_policy_vue(view)
+
+    assert vue.props["authorization"] == %{
+             "admin_required" => %{
+               "copy" =>
+                 "Organization administrator authority is required to change policy or grants."
+             },
+             "organization_admin" => false
+           }
+
+    assert vue.props["policy_form"] == nil
+    assert vue.props["approval_form"] == nil
+    assert vue.props["grant_form"] == nil
+    assert vue.props["revocation_form"] == nil
+
+    render_hook(view, "save-policy", %{
+      "policy" => %{
         "max_horizon_hours" => "24",
         "requirement_concurrency" => "8",
         "provider_search_concurrency" => "4",
@@ -246,30 +490,150 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
         "max_repair_attempts" => "3",
         "repair_horizon_hours" => "12"
       }
-    )
-    |> render_submit()
+    })
 
-    assert has_element?(view, "#fleet-policy-approval-form")
-    assert has_element?(view, "#fleet-policy-state", "draft")
+    assert has_element?(
+             view,
+             "#flash-error",
+             "Organization administrator authority is required."
+           )
 
-    view
-    |> form("#fleet-policy-approval-form",
-      decision: %{reason: "Bound mission-scale provider demand"}
-    )
-    |> render_submit()
+    assert {:error, :fleet_planning_policy_not_found} =
+             FleetPlanningPolicies.fetch(org.organization_id, mission.mission_id)
 
-    assert has_element?(view, "#fleet-policy-state", "active")
-    refute has_element?(view, "#fleet-policy-approval-form")
+    assert_json_safe_fleet_policy_vue(fleet_policy_vue(view))
+  end
 
-    assert {:ok, policy, version} =
-             FleetPlanningPolicies.fetch_active(
-               org.organization_id,
-               mission.mission_id
+  test "fleet policy LiveVue validates, issues, streams, and exactly revokes automation grants" do
+    {conn, scope, _org, mission, _spacecraft} = signed_in_scope(:organization_admin)
+    activate_policy!(scope, mission)
+
+    service_identity =
+      Cadence.Auth.ServiceIdentity.new(%{
+        service_identity_id: "svc-fleet-policy",
+        organization_id: scope.organization_id,
+        mission_id: mission.mission_id,
+        display_name: "Fleet policy automation",
+        capabilities: [:mission_admin]
+      })
+
+    assert {:ok,
+            %{service_identity: %{service_identity_id: "svc-fleet-policy"}}} =
+             Cadence.Auth.issue_service_identity(service_identity)
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
+
+    initial_vue = fleet_policy_vue(view)
+    grant_form = initial_vue.props["grant_form"]
+
+    assert grant_form["id"] == "automation-grant-form"
+
+    assert grant_form["fields"]["service_identity_id"]["options"] == [
+             %{"label" => "Fleet policy automation", "value" => "svc-fleet-policy"}
+           ]
+
+    assert Map.new(grant_form["fields"], fn {field, contract} ->
+             {field, contract["value"]}
+           end) == %{
+             "approval_reason" => "",
+             "maximum_contacts" => "100",
+             "maximum_execution_concurrency" => "2",
+             "maximum_horizon_hours" => "24",
+             "service_identity_id" => "svc-fleet-policy",
+             "valid_days" => "30"
+           }
+
+    grant_params = %{
+      "service_identity_id" => "svc-fleet-policy",
+      "maximum_horizon_hours" => "12",
+      "maximum_contacts" => "40",
+      "maximum_execution_concurrency" => "2",
+      "valid_days" => "30",
+      "approval_reason" => "Bound unattended fleet search"
+    }
+
+    render_hook(view, "validate-grant", %{"grant" => grant_params})
+
+    validated_vue = fleet_policy_vue(view)
+
+    assert Map.new(validated_vue.props["grant_form"]["fields"], fn {field, contract} ->
+             {field, contract["value"]}
+           end) == grant_params
+
+    render_hook(view, "issue-grant", %{"grant" => grant_params})
+
+    assert has_element?(view, "#flash-info", "Exact service automation grant issued.")
+
+    [grant] =
+      Cadence.ContactPlanning.AutomationGrants.list(
+        scope.organization_id,
+        mission.mission_id
+      )
+
+    issued_vue = fleet_policy_vue(view)
+
+    assert issued_vue.props["grant_ledger"]["active_count"] == 1
+    assert issued_vue.props["grant_ledger"]["active_label"] == "1 active"
+
+    assert [row] = fleet_policy_grant_upserts(issued_vue)
+
+    assert row == %{
+             "__dom_id" => "automation-grant-#{grant.automation_grant_id}",
+             "automation_grant_id" => grant.automation_grant_id,
+             "boundary" => "≤ 40 contacts · ≤ 12.0 h",
+             "expiry" => "expires #{Calendar.strftime(grant.valid_until, "%d %b %Y %H:%MZ")}",
+             "lifecycle_state" => "active",
+             "lifecycle_state_class" =>
+               "font-mono text-[0.58rem] uppercase text-success",
+             "policy_evidence" => "policy v1 · plan, repair",
+             "service_identity_id" => "svc-fleet-policy"
+           }
+
+    assert [
+             ["replace", "/automation_grants", []],
+             ["upsert", "/automation_grants/-", ^row]
+           ] = fleet_policy_stream_mutations(issued_vue)
+
+    assert issued_vue.props["revocation_form"]["fields"]["automation_grant_id"][
+             "options"
+           ] == [
+             %{
+               "label" => "svc-fleet-policy",
+               "value" => grant.automation_grant_id
+             }
+           ]
+
+    render_hook(view, "revoke-grant", %{
+      "revocation" => %{
+        "automation_grant_id" => grant.automation_grant_id,
+        "reason" => "Return scheduling to attended operations"
+      }
+    })
+
+    assert has_element?(view, "#flash-info", "Automation grant revoked immediately.")
+
+    revoked_vue = fleet_policy_vue(view)
+    assert revoked_vue.props["grant_ledger"]["active_count"] == 0
+    assert revoked_vue.props["revocation_form"] == nil
+
+    assert [revoked_row] = fleet_policy_grant_upserts(revoked_vue)
+    assert revoked_row["automation_grant_id"] == grant.automation_grant_id
+    assert revoked_row["lifecycle_state"] == "revoked"
+
+    assert revoked_row["lifecycle_state_class"] ==
+             "font-mono text-[0.58rem] uppercase text-base-content/45"
+
+    assert {:ok, revoked} =
+             Cadence.ContactPlanning.AutomationGrants.fetch(
+               scope.organization_id,
+               mission.mission_id,
+               grant.automation_grant_id
              )
 
-    assert policy.active_version == version.version
-    assert version.budget_quota_document["max_contacts"] == 300
-    assert version.budget_quota_document["critical_contact_reserve"] == 5
+    assert revoked.lifecycle_state == :revoked
+    assert revoked.revocation_reason == "Return scheduling to attended operations"
+    assert_json_safe_fleet_policy_vue(revoked_vue)
   end
 
   test "administrator creates and pauses a progressively rendered recurring Requirement Template" do
@@ -496,6 +860,104 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              )
 
     assert finished.phase == :finished
+  end
+
+  defp fleet_policy_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-policy-component")
+  end
+
+  defp policy_form_field_contract(form) do
+    Map.new(form["fields"], fn {field, contract} ->
+      {field,
+       {
+         contract["id"],
+         contract["name"],
+         contract["type"],
+         contract["label"],
+         contract["required"],
+         contract["min"],
+         contract["options"],
+         contract["value"],
+         contract["errors"]
+       }}
+    end)
+  end
+
+  defp initial_policy_form_field_contract do
+    %{
+      "automatic_submission" =>
+        {"policy-automatic-submission", "policy[automatic_submission]", "checkbox",
+         "Allow exact candidate Plans to be submitted automatically", nil, nil, nil, false, []},
+      "automation_mode" =>
+        {"policy-automation-mode", "policy[automation_mode]", "select", "Mode", false, nil,
+         [
+           %{"label" => "Advisory", "value" => "advisory"},
+           %{"label" => "Approval required", "value" => "approval_required"},
+           %{"label" => "Bounded automatic", "value" => "bounded_automatic"}
+         ], "advisory", []},
+      "critical_contact_reserve" =>
+        {"policy-critical-reserve", "policy[critical_contact_reserve]", "number",
+         "Critical reserve", true, 0, [], "0", []},
+      "currency" =>
+        {"policy-currency", "policy[currency]", "text", "Currency", false, nil, [], "", []},
+      "distinct_provider_required" =>
+        {"policy-distinct-provider", "policy[distinct_provider_required]", "checkbox",
+         "Distinct providers", nil, nil, nil, false, []},
+      "distinct_service_pool_required" =>
+        {"policy-distinct-pool", "policy[distinct_service_pool_required]", "checkbox",
+         "Distinct service pools", nil, nil, nil, false, []},
+      "distinct_station_required" =>
+        {"policy-distinct-station", "policy[distinct_station_required]", "checkbox",
+         "Distinct stations", nil, nil, nil, false, []},
+      "execution_concurrency" =>
+        {"policy-execution-concurrency", "policy[execution_concurrency]", "number",
+         "Execution workers", true, 1, [], "4", []},
+      "max_contacts" =>
+        {"policy-max-contacts", "policy[max_contacts]", "number", "Contact ceiling", true, 1,
+         [], "500", []},
+      "max_estimated_cost_micros" =>
+        {"policy-max-cost", "policy[max_estimated_cost_micros]", "number",
+         "Cost micros (optional)", false, 0, [], "", []},
+      "max_horizon_hours" =>
+        {"policy-max-horizon-hours", "policy[max_horizon_hours]", "number", "Maximum hours",
+         true, 1, [], "24", []},
+      "max_repair_attempts" =>
+        {"policy-repair-attempts", "policy[max_repair_attempts]", "number",
+         "Repair attempts", true, 0, [], "3", []},
+      "provider_search_concurrency" =>
+        {"policy-provider-concurrency", "policy[provider_search_concurrency]", "number",
+         "Provider workers", true, 1, [], "4", []},
+      "repair_horizon_hours" =>
+        {"policy-repair-horizon-hours", "policy[repair_horizon_hours]", "number",
+         "Repair hours", true, 1, [], "24", []},
+      "requirement_concurrency" =>
+        {"policy-requirement-concurrency", "policy[requirement_concurrency]", "number",
+         "Requirement workers", true, 1, [], "8", []},
+      "reuse_freshness_seconds" =>
+        {"policy-reuse-seconds", "policy[reuse_freshness_seconds]", "number", "Reuse seconds",
+         true, 0, [], "300", []}
+    }
+  end
+
+  defp fleet_policy_grant_upserts(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/automation_grants/" <> _index, _grant] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, grant] -> grant end)
+  end
+
+  defp fleet_policy_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe_fleet_policy_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
   defp fleet_planning_vue(view) do
