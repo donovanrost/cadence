@@ -1,15 +1,12 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecoveryTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.{DataLink, Document}
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel explains failed lifecycle events that require correction" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -60,7 +57,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     workflow = presentation["workflow_explanation"]
 
     assert workflow["attrs"]["data-workflow-explanation-state"] ==
@@ -90,8 +87,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
   end
 
   test "data_link_panel groups lifecycle recovery related links" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -170,7 +167,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     navigation_entries = presentation["navigation"]["entries"]
     navigation_attrs = Enum.map(navigation_entries, & &1["attrs"])
 

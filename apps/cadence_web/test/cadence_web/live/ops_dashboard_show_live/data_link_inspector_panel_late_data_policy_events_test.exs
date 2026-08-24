@@ -1,15 +1,12 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEventsTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.Document
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel marks late-data policy decisions event-only without source sample identity" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -39,8 +36,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
       )
 
     policy =
-      html
-      |> ViewTestSupport.data_link_inspector_presentation()
+      panel
+      |> Map.fetch!("presentation")
       |> Map.fetch!("late_data_policy")
 
     assert policy["attrs"]["data-late-data-policy-execution-mode"] == "event_only"
@@ -48,8 +45,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
   end
 
   test "data_link_panel does not render late-data policy controls for policy events" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -86,7 +83,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     workflow = presentation["workflow_explanation"]
 
     assert workflow["attrs"]["data-workflow-explanation-state"] == "late_data_accepted"

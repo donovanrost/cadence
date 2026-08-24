@@ -1,16 +1,13 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecisionTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.Document
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.RevisionDecisionActionOutcome
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders revision decision controls for revision decision events" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         data_link_action_outcome:
           RevisionDecisionActionOutcome.new(
             status: :ok,
@@ -55,7 +52,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     revision = presentation["revision_decision"]
     revision_outcome_attrs = revision["action_outcome"]["attrs"]
     action_attrs = presentation["action_outcome"]["attrs"]
@@ -143,8 +140,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
   end
 
   test "data_link_panel renders revision decision controls for comparison findings with identity context" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :context_only,
           status_text: "context_only",
@@ -183,7 +180,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     revision = presentation["revision_decision"]
 
     assert revision["attrs"]["data-revision-decision-observation-identity"] ==

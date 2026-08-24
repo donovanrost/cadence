@@ -5,21 +5,42 @@ import {fileURLToPath} from "node:url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const vuePath = resolve(__dirname, "../vue/DataLinkInspectorPanel.vue")
-const componentPath = resolve(
+const dashboardPanelPath = resolve(__dirname, "../vue/DashboardPanel.vue")
+const formComponentsPath = resolve(
   __dirname,
-  "../../lib/cadence_web/live/ops_dashboard_show_live/data_link_inspector_panel_components.ex"
+  "../../lib/cadence_web/live/ops_dashboard_show_live/form_components.ex"
 )
 const presentationPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/ops_dashboard_show_live/data_link_inspector_panel_presentation.ex"
 )
+const controllerPath = resolve(
+  __dirname,
+  "../../lib/cadence_web/live/ops_dashboard_show_live.ex"
+)
+const viewerPath = resolve(__dirname, "../../lib/cadence_web/live/ops_dashboard_viewer_live.ex")
+const routerPath = resolve(__dirname, "../../lib/cadence_web/router.ex")
 const clipboardTestSupportPath = resolve(__dirname, "../../test/support/live_vue_clipboard_test_support.ex")
 const viewportSmokePath = resolve(__dirname, "./dashboard_viewport_smoke.mjs")
 
-const [vueSource, componentSource, presentationSource, clipboardTestSupportSource, viewportSmokeSource] = await Promise.all([
+const [
+  vueSource,
+  dashboardPanelSource,
+  formComponentsSource,
+  presentationSource,
+  controllerSource,
+  viewerSource,
+  routerSource,
+  clipboardTestSupportSource,
+  viewportSmokeSource
+] = await Promise.all([
   readFile(vuePath, "utf8"),
-  readFile(componentPath, "utf8"),
+  readFile(dashboardPanelPath, "utf8"),
+  readFile(formComponentsPath, "utf8"),
   readFile(presentationPath, "utf8"),
+  readFile(controllerPath, "utf8"),
+  readFile(viewerPath, "utf8"),
+  readFile(routerPath, "utf8"),
   readFile(clipboardTestSupportPath, "utf8"),
   readFile(viewportSmokePath, "utf8")
 ])
@@ -78,17 +99,37 @@ for (const [file, scenario] of scenarioLedger) {
   )
 }
 
-assert.equal(
-  componentSource.match(/<\.vue\b/g)?.length,
-  1,
-  "the complete parent region must have one LiveVue host"
+assert.match(
+  routerSource,
+  /live "\/missions\/:mission_id\/ops\/dashboards\/:dashboard_id",\s+OpsDashboardViewerLive,\s+:show/
 )
-assert.match(componentSource, /id="dashboard-data-link-inspector"/)
-assert.match(componentSource, /id="dashboard-data-link-inspector-component"/)
-assert.match(componentSource, /data-data-link-target=\{@presentation\.root\.attrs\["data-data-link-target"\]\}/)
-assert.match(componentSource, /v-component="DataLinkInspectorPanel"/)
-assert.match(componentSource, /presentation=\{@presentation\}/)
-assert.doesNotMatch(componentSource, /v-component="ClipboardButton"/)
+assert.match(viewerSource, /alias CadenceWeb\.OpsDashboardShowLive\.Controller/)
+assert.match(viewerSource, /defdelegate render\(assigns\), to: Controller/)
+assert.match(controllerSource, /<FormComponents\.widget_panel/)
+assert.match(formComponentsSource, /def dashboard_panel_presentation\(assigns\)/)
+assert.match(formComponentsSource, /defp child_presentation\(%\{panel: \{:data_link, inspector\}\} = assigns\)/)
+assert.match(formComponentsSource, /DataLinkInspectorPanelPresentation\.for_vue\(/)
+assert.match(formComponentsSource, /"data_link_inspector_panel"/)
+assert.match(formComponentsSource, /"dashboard-data-link-inspector-component"/)
+assert.match(formComponentsSource, /presentation\.root\.attrs/)
+assert.equal(
+  formComponentsSource.match(/<\.vue\b/g)?.length,
+  1,
+  "the routed panel region must have one LiveVue host"
+)
+assert.match(formComponentsSource, /id="dashboard-panel-component"/)
+assert.match(formComponentsSource, /v-component="DashboardPanel"/)
+assert.match(formComponentsSource, /presentation=\{@presentation\}/)
+assert.doesNotMatch(formComponentsSource, /v-component="DataLinkInspectorPanel"/)
+assert.match(dashboardPanelSource, /import DataLinkInspectorPanel from "\.\/DataLinkInspectorPanel\.vue"/)
+assert.match(dashboardPanelSource, /presentation\.child\.kind === 'data_link_inspector_panel'/)
+assert.match(dashboardPanelSource, /v-bind="presentation\.child\.outer_wrapper\?\.attrs"/)
+assert.match(dashboardPanelSource, /v-bind="presentation\.child\.wrapper\.attrs"/)
+assert.match(
+  dashboardPanelSource,
+  /<DataLinkInspectorPanel :presentation="presentation\.child\.presentation" \/>/
+)
+assert.match(presentationSource, /:id => "dashboard-data-link-inspector"/)
 
 assert.match(vueSource, /import ClipboardButton from "\.\/ClipboardButton\.vue"/)
 assert.equal(

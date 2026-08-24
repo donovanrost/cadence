@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   import Phoenix.LiveViewTest, only: [has_element?: 2, render: 1]
 
   alias CadenceWeb.AsyncLiveViewTestSupport
+  alias CadenceWeb.OpsDashboardShowLive.FormComponents
   alias Phoenix.LiveView.JS
 
   @default_timeout 5_000
@@ -104,6 +105,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   def dashboard_panel_child(view_or_html, kind) do
     child = view_or_html |> dashboard_panel_presentation() |> Map.fetch!("child")
     assert child["kind"] == kind
+    child
+  end
+
+  def data_link_inspector_boundary(attrs) do
+    assigns = Map.new(attrs)
+    inspector = Map.fetch!(assigns, :inspector)
+
+    child =
+      assigns
+      |> Map.put_new(:data_link_action_outcome, nil)
+      |> Map.put(:panel, {:data_link, inspector})
+      |> FormComponents.dashboard_panel_presentation()
+      |> Jason.encode!()
+      |> Jason.decode!()
+      |> Map.fetch!("child")
+
+    assert child["kind"] == "data_link_inspector_panel"
+
+    assert child["wrapper"]["attrs"] == %{
+             "class" => "space-y-4",
+             "id" => "dashboard-data-link-inspector-component"
+           }
+
+    assert child["outer_wrapper"]["attrs"] == child["presentation"]["root"]["attrs"]
     child
   end
 

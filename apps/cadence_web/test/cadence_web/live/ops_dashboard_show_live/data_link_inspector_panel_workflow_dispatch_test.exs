@@ -1,16 +1,13 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatchTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.Document
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcome
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel presents degraded workflow dispatch with retry controls" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -99,7 +96,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
           )
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     workflow = presentation["workflow_explanation"]
     action_attrs = presentation["action_outcome"]["attrs"]
 

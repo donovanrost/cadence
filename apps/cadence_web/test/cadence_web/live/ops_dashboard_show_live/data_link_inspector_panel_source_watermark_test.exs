@@ -1,15 +1,12 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelSourceWatermarkTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.Document
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders source watermark event inspector rows" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :resolved,
           status_text: "resolved",
@@ -48,23 +45,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelSourceWatermarkT
           "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link&selected_target=source_watermark_event"
       )
 
-    document = LazyHTML.from_fragment(html)
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    root_attrs = panel["outer_wrapper"]["attrs"]
+    presentation = panel["presentation"]
 
-    assert ["source_watermark_event"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-target")
+    assert ["source_watermark_event"] = [root_attrs["data-data-link-target"]]
 
-    assert ["watermark-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-target-id")
+    assert ["watermark-event-1"] = [root_attrs["data-data-link-target-id"]]
 
     assert ["source_watermark_event:watermark-event-1:events-request-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-link")
+             [root_attrs["data-data-link-selected-link"]]
 
     assert "source watermark event" =
              presentation

@@ -1,17 +1,14 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.{DashboardAction, DataLink, Document}
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders inspector identity, rows, related links, and actions" do
     related_link = data_link(:telemetry_sample, "sample-1", "Telemetry sample")
 
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         inspector: %{
           status: :context_only,
           status_text: "context_only",
@@ -44,53 +41,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    root_attrs = panel["outer_wrapper"]["attrs"]
+    presentation = panel["presentation"]
 
-    assert ["telemetry_point"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-target")
+    assert ["telemetry_point"] = [root_attrs["data-data-link-target"]]
 
-    assert ["HK.counter"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-target-id")
+    assert ["HK.counter"] = [root_attrs["data-data-link-target-id"]]
 
     assert ["telemetry_point:HK.counter:request-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-link")
+             [root_attrs["data-data-link-selected-link"]]
 
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-data-view")
+    assert ["all_revisions"] = [root_attrs["data-data-link-selected-data-view"]]
 
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-data-source-id")
+    assert ["questdb-flight"] = [root_attrs["data-data-link-selected-data-source-id"]]
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-source-binding-id")
+    assert ["binding-flight"] = [root_attrs["data-data-link-selected-source-binding-id"]]
 
-    assert ["replay_run"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-time-mode")
+    assert ["replay_run"] = [root_attrs["data-data-link-selected-time-mode"]]
 
-    assert ["generation_time"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-time-axis")
+    assert ["generation_time"] = [root_attrs["data-data-link-selected-time-axis"]]
 
-    assert ["replay-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-inspector")
-             |> LazyHTML.attribute("data-data-link-selected-replay-run-id")
+    assert ["replay-run-1"] = [root_attrs["data-data-link-selected-replay-run-id"]]
 
     assert presentation["clipboard"]["button_id"] == "dashboard-data-link-copy-link"
 

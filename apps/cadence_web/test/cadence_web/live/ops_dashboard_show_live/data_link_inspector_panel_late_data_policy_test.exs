@@ -1,16 +1,13 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyTest do
   use ExUnit.Case, async: true
 
-  import Phoenix.LiveViewTest, only: [render_component: 2]
-
   alias Cadence.Dashboards.Document
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyActionOutcome
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders late-data policy controls for lifecycle events" do
-    html =
-      render_component(&DataLinkInspectorPanelComponents.data_link_panel/1,
+    panel =
+      ViewTestSupport.data_link_inspector_boundary(
         data_link_action_outcome:
           LateDataPolicyActionOutcome.new(
             status: :ok,
@@ -70,7 +67,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyTe
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    presentation = panel["presentation"]
     workflow = presentation["workflow_explanation"]
     policy = presentation["late_data_policy"]
     action = presentation["action_outcome"]
