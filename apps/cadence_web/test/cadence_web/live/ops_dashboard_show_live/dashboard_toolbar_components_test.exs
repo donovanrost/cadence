@@ -252,36 +252,118 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = comparison_toggle_presentation(html)
 
-    assert ["toggle_comparison_inspector"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-toggle")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-toggle")
-             |> LazyHTML.attribute("aria-expanded")
-
-    assert ["2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-open-count]")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-count")
+    assert presentation == %{
+             "root" => %{
+               "tag" => "button",
+               "class" =>
+                 "btn btn-ghost btn-xs h-7 gap-1.5 border px-2 font-normal border-info/45 bg-info/10 text-info",
+               "attrs" => %{
+                 "id" => "dashboard-comparison-toggle",
+                 "type" => "button",
+                 "phx-click" => "toggle_comparison_inspector",
+                 "aria-expanded" => "true",
+                 "aria-controls" => "dashboard-comparison-inspector",
+                 "data-dashboard-comparison-toggle" => ""
+               }
+             },
+             "children" => [
+               %{
+                 "key" => "icon",
+                 "tag" => "span",
+                 "class" => "hero-scale h-3.5 w-3.5",
+                 "attrs" => %{},
+                 "text" => ""
+               },
+               %{
+                 "key" => "label",
+                 "tag" => "span",
+                 "class" => "hidden sm:inline",
+                 "attrs" => %{},
+                 "text" => "Compare"
+               },
+               %{
+                 "key" => "open-count",
+                 "tag" => "span",
+                 "class" => "badge badge-warning badge-xs",
+                 "attrs" => %{"data-dashboard-comparison-open-count" => "2"},
+                 "text" => "2"
+               }
+             ]
+           }
   end
 
-  test "dashboard_toolbar hides an available but inactive comparison" do
-    document =
+  test "dashboard_toolbar preserves the closed comparison toggle and zero-count badge semantics" do
+    html =
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
-        toolbar_assigns(comparison_available?: true)
+        toolbar_assigns(
+          comparison_available?: true,
+          compare_data_view: "all_revisions",
+          comparison_open?: false,
+          comparison_open_count: 0
+        )
       )
-      |> LazyHTML.from_fragment()
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-toggle")
-             |> LazyHTML.attribute("id")
+    presentation = comparison_toggle_presentation(html)
+
+    assert presentation == %{
+             "root" => %{
+               "tag" => "button",
+               "class" =>
+                 "btn btn-ghost btn-xs h-7 gap-1.5 border px-2 font-normal border-base-300/70 bg-base-100/50",
+               "attrs" => %{
+                 "id" => "dashboard-comparison-toggle",
+                 "type" => "button",
+                 "phx-click" => "toggle_comparison_inspector",
+                 "aria-expanded" => "false",
+                 "aria-controls" => "dashboard-comparison-inspector",
+                 "data-dashboard-comparison-toggle" => ""
+               }
+             },
+             "children" => [
+               %{
+                 "key" => "icon",
+                 "tag" => "span",
+                 "class" => "hero-scale h-3.5 w-3.5",
+                 "attrs" => %{},
+                 "text" => ""
+               },
+               %{
+                 "key" => "label",
+                 "tag" => "span",
+                 "class" => "hidden sm:inline",
+                 "attrs" => %{},
+                 "text" => "Compare"
+               }
+             ]
+           }
+  end
+
+  test "dashboard_toolbar omits the island whenever the original comparison toggle is hidden" do
+    for overrides <- [
+          [comparison_available?: true],
+          [
+            comparison_available?: false,
+            comparison_open?: true,
+            comparison_open_count: 2,
+            compare_data_view: "all_revisions"
+          ],
+          [edit_mode?: true, comparison_available?: true, comparison_open?: true]
+        ] do
+      document =
+        render_component(
+          &DashboardToolbarComponents.dashboard_toolbar/1,
+          toolbar_assigns(overrides)
+        )
+        |> LazyHTML.from_fragment()
+
+      assert [] =
+               document
+               |> LazyHTML.query("#dashboard-comparison-toggle-component")
+               |> LazyHTML.attribute("id")
+    end
   end
 
   test "healthy viewer keeps only scope and time as primary controls" do
@@ -543,6 +625,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       ],
       overrides
     )
+  end
+
+  defp comparison_toggle_presentation(html) do
+    assert ["dashboard-comparison-toggle-component"] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-comparison-toggle-component")
+             |> LazyHTML.attribute("id")
+
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-toggle-component")
+
+    assert vue.component == "DashboardComparisonToggle"
+    assert vue.id == "dashboard-comparison-toggle-component"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    Map.fetch!(vue.props, "presentation")
   end
 
   defp data_binding do

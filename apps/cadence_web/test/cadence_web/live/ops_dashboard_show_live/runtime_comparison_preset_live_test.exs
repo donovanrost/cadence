@@ -37,9 +37,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
 
     render_dashboard_async(view)
 
-    view
-    |> element("#dashboard-comparison-toggle")
-    |> render_click()
+    assert ["dashboard-comparison-toggle-component"] =
+             view
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-comparison-toggle-component")
+             |> LazyHTML.attribute("id")
+
+    comparison_toggle =
+      LiveVue.Test.get_vue(view, id: "dashboard-comparison-toggle-component")
+
+    assert comparison_toggle.props["presentation"]["root"]["attrs"]["id"] ==
+             "dashboard-comparison-toggle"
+
+    render_click(
+      view,
+      comparison_toggle.props["presentation"]["root"]["attrs"]["phx-click"]
+    )
 
     assert has_element?(view, "#dashboard-comparison-inspector")
     assert has_element?(view, "#dashboard-comparison-preset-form")

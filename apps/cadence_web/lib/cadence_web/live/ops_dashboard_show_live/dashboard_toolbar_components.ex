@@ -92,7 +92,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       |> assign(:dashboard_share_path, dashboard_share_path(assigns))
       |> assign(:data_query_label, data_query_label(assigns))
       |> assign(:data_query_overrides?, data_query_overrides?(assigns))
-      |> assign(:comparison_toolbar_visible?, comparison_toolbar_visible?(assigns))
+      |> assign(:comparison_toggle, dashboard_comparison_toggle_dto(assigns))
       |> then(&assign(&1, :data_issue_action, data_issue_action(&1)))
 
     ~H"""
@@ -238,32 +238,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         />
       </div>
 
-      <button
-        :if={not @edit_mode? and @comparison_toolbar_visible?}
-        id="dashboard-comparison-toggle"
-        type="button"
-        phx-click="toggle_comparison_inspector"
-        aria-expanded={to_string(@comparison_open?)}
-        aria-controls="dashboard-comparison-inspector"
-        data-dashboard-comparison-toggle
-        class={[
-          "btn btn-ghost btn-xs h-7 gap-1.5 border px-2 font-normal",
-          if(@comparison_open?,
-            do: "border-info/45 bg-info/10 text-info",
-            else: "border-base-300/70 bg-base-100/50"
-          )
-        ]}
-      >
-        <.icon name="hero-scale" class="h-3.5 w-3.5" />
-        <span class="hidden sm:inline">Compare</span>
-        <span
-          :if={@comparison_open_count > 0}
-          class="badge badge-warning badge-xs"
-          data-dashboard-comparison-open-count={@comparison_open_count}
-        >
-          {@comparison_open_count}
-        </span>
-      </button>
+      <.vue
+        :if={@comparison_toggle}
+        id="dashboard-comparison-toggle-component"
+        v-component="DashboardComparisonToggle"
+        presentation={@comparison_toggle}
+        v-ssr={false}
+        class="contents"
+      />
 
       <.popover
         :if={@data_issue_count > 0}
@@ -572,6 +554,68 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       (assigns.comparison_open? or assigns.comparison_open_count > 0 or
          present_text?(assigns.compare_data_view))
   end
+
+  defp dashboard_comparison_toggle_dto(assigns) do
+    if not assigns.edit_mode? and comparison_toolbar_visible?(assigns) do
+      %{
+        root: %{
+          tag: "button",
+          class:
+            Enum.join(
+              [
+                "btn btn-ghost btn-xs h-7 gap-1.5 border px-2 font-normal",
+                if(assigns.comparison_open?,
+                  do: "border-info/45 bg-info/10 text-info",
+                  else: "border-base-300/70 bg-base-100/50"
+                )
+              ],
+              " "
+            ),
+          attrs: %{
+            "id" => "dashboard-comparison-toggle",
+            "type" => "button",
+            "phx-click" => "toggle_comparison_inspector",
+            "aria-expanded" => to_string(assigns.comparison_open?),
+            "aria-controls" => "dashboard-comparison-inspector",
+            "data-dashboard-comparison-toggle" => ""
+          }
+        },
+        children:
+          [
+            %{
+              key: "icon",
+              tag: "span",
+              class: "hero-scale h-3.5 w-3.5",
+              attrs: %{},
+              text: ""
+            },
+            %{
+              key: "label",
+              tag: "span",
+              class: "hidden sm:inline",
+              attrs: %{},
+              text: "Compare"
+            }
+          ] ++ dashboard_comparison_toggle_badge_dto(assigns.comparison_open_count)
+      }
+    end
+  end
+
+  defp dashboard_comparison_toggle_badge_dto(count) when count > 0 do
+    count_text = Integer.to_string(count)
+
+    [
+      %{
+        key: "open-count",
+        tag: "span",
+        class: "badge badge-warning badge-xs",
+        attrs: %{"data-dashboard-comparison-open-count" => count_text},
+        text: count_text
+      }
+    ]
+  end
+
+  defp dashboard_comparison_toggle_badge_dto(_count), do: []
 
   defp query_value_label(value) when is_binary(value) do
     value
