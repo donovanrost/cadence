@@ -272,11 +272,97 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, show_view, _show_html} = live(conn, target)
       assert has_element?(show_view, "#comms-transport-show-page")
-      assert has_element?(show_view, "#transport-origin-summary", "Direct")
-      assert has_element?(show_view, "#transport-provider-summary", "Cadence")
-      assert has_element?(show_view, "#transport-readiness-summary", "Configured")
-      assert has_element?(show_view, "#transport-admin-diagnostics-json")
-      assert has_element?(show_view, "#transport-versions[phx-update='stream']")
+      assert has_element?(show_view, "#comms-transport-show-component")
+
+      vue = transport_show_vue(show_view)
+
+      assert vue.component == "CommsTransportShow"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "navigation" => %{
+                 "breadcrumbs" => [
+                   %{
+                     "href" => "/missions/#{mission.mission_id}",
+                     "label" => mission.display_name
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms",
+                     "label" => "Comms"
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms/transports",
+                     "label" => "Transports"
+                   },
+                   %{"href" => nil, "label" => transport.display_name}
+                 ]
+               },
+               "transport" => %{
+                 "capability" => %{
+                   "description" =>
+                     "Durable transport setup. Runtime Links and Contacts are realized later under execution context.",
+                   "details" => [
+                     detail_props("Origin", "Direct"),
+                     detail_props("Direction Capability", "INBOUND"),
+                     detail_props("Mode", "CONNECT"),
+                     detail_props("Framing", "FIXED SIZE"),
+                     detail_props("TLS", "Disabled"),
+                     detail_props("Readiness", "Configured")
+                   ],
+                   "diagnostics" => %{
+                     "id" => "transport-admin-diagnostics",
+                     "json" => diagnostics_json(transport),
+                     "json_id" => "transport-admin-diagnostics-json",
+                     "label" => "Administrator Diagnostics"
+                   },
+                   "endpoint" => "lab.example:5001",
+                   "eyebrow" => "Byte-Moving Capability",
+                   "kind" => "TCP SOCKET"
+                 },
+                 "display_name" => transport.display_name,
+                 "origin_badge" => %{
+                   "id" => "transport-origin-badge",
+                   "label" => "Direct"
+                 },
+                 "summary_tiles" => [
+                   %{
+                     "id" => "transport-origin-summary",
+                     "label" => "Origin",
+                     "value" => "Direct"
+                   },
+                   %{
+                     "id" => "transport-provider-summary",
+                     "label" => "Provider",
+                     "value" => "Cadence"
+                   },
+                   %{
+                     "id" => "transport-operator-summary",
+                     "label" => "Delivery",
+                     "value" => "Direct TCP SOCKET"
+                   },
+                   %{
+                     "id" => "transport-readiness-summary",
+                     "label" => "Readiness",
+                     "value" => "Configured"
+                   }
+                 ],
+                 "transport_id" => transport.transport_id,
+                 "version" => "v1"
+               },
+               "version_history" => %{
+                 "id" => "transport-versions",
+                 "rows" => [
+                   %{
+                     "id" => "transport-version-1",
+                     "label" => "v1",
+                     "lifecycle_state" => "ACTIVE"
+                   }
+                 ],
+                 "title" => "Version History"
+               }
+             }
+
       refute has_element?(show_view, "#comms-transport-show-page", "Link Template")
     end
 
@@ -354,15 +440,113 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert transport_row["readiness_id"] == "transport-readiness-#{transport.transport_id}"
 
       {:ok, show_view, _show_html} = live(conn, target)
-      assert has_element?(show_view, "#transport-origin-summary", "Provider managed")
-      assert has_element?(show_view, "#transport-provider-summary", provider.display_name)
-      assert has_element?(show_view, "#transport-operator-summary", "Streaming to Cadence")
-      assert has_element?(show_view, "#transport-readiness-summary", "Ready")
+      vue = transport_show_vue(show_view)
 
-      assert has_element?(
-               show_view,
-               ~s|a[href="/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"]|
-             )
+      assert vue.component == "CommsTransportShow"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props["transport"]["origin_badge"] == %{
+               "id" => "transport-origin-badge",
+               "label" => "Provider managed"
+             }
+
+      assert vue.props["transport"]["summary_tiles"] == [
+               %{
+                 "id" => "transport-origin-summary",
+                 "label" => "Origin",
+                 "value" => "Provider managed"
+               },
+               %{
+                 "id" => "transport-provider-summary",
+                 "label" => "Provider",
+                 "value" => provider.display_name
+               },
+               %{
+                 "id" => "transport-operator-summary",
+                 "label" => "Delivery",
+                 "value" => "Streaming to Cadence"
+               },
+               %{
+                 "id" => "transport-readiness-summary",
+                 "label" => "Readiness",
+                 "value" => "Ready"
+               }
+             ]
+
+      assert vue.props["transport"]["capability"]["details"] == [
+               detail_props("Origin", "Provider managed"),
+               detail_props(
+                 "Mission Provider",
+                 "#{provider.display_name} · v#{provider.version}",
+                 href: "/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"
+               ),
+               detail_props("Service Profile", "service-downlink · v3", mono: true),
+               detail_props("Delivery Profile", "delivery-cadence · v7", mono: true),
+               detail_props("Direction Capability", "INBOUND"),
+               detail_props("Mode", "LISTEN"),
+               detail_props("Framing", "FIXED SIZE"),
+               detail_props("TLS", "Disabled"),
+               detail_props("Readiness", "Ready")
+             ]
+    end
+
+    test "missing transport redirects to the current mission transport list" do
+      {conn, _organization, mission} = signed_in_org_and_mission()
+
+      assert {:error,
+              {:live_redirect,
+               %{
+                 to: to,
+                 flash: %{"error" => "Transport not found."}
+               }}} =
+               live(conn, ~p"/missions/#{mission.mission_id}/comms/transports/missing")
+
+      assert to == ~p"/missions/#{mission.mission_id}/comms/transports"
+    end
+
+    test "does not expose transports outside the current organization or mission scope" do
+      {conn, organization, mission} = signed_in_org_and_mission()
+
+      other_mission =
+        TestFixtures.persist_mission!(organization,
+          slug: "secondary",
+          display_name: "Secondary Mission"
+        )
+
+      other_mission_transport =
+        persist_transport!(
+          organization.organization_id,
+          other_mission.mission_id,
+          "Sibling TCP"
+        )
+
+      other_organization =
+        TestFixtures.persist_org!(display_name: "Remote Org", slug: "remote-org")
+
+      remote_mission = TestFixtures.persist_mission!(other_organization, slug: "remote")
+
+      other_organization_transport =
+        persist_transport!(
+          other_organization.organization_id,
+          remote_mission.mission_id,
+          "Remote TCP"
+        )
+
+      for foreign_transport <- [other_mission_transport, other_organization_transport] do
+        assert {:error,
+                {:live_redirect,
+                 %{
+                   to: to,
+                   flash: %{"error" => "Transport not found."}
+                 }}} =
+                 live(
+                   conn,
+                   ~p"/missions/#{mission.mission_id}/comms/transports/#{foreign_transport.transport_id}"
+                 )
+
+        assert to == ~p"/missions/#{mission.mission_id}/comms/transports"
+      end
     end
 
     test "keeps unvalidated providers out of the selectable provider flow" do
@@ -419,6 +603,31 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                mission.mission_id
              ) == []
     end
+  end
+
+  defp transport_show_vue(view) do
+    LiveVue.Test.get_vue(view, id: "comms-transport-show-component")
+  end
+
+  defp detail_props(label, value, opts \\ []) do
+    %{
+      "href" => Keyword.get(opts, :href),
+      "label" => label,
+      "mono" => Keyword.get(opts, :mono, false),
+      "value" => value
+    }
+  end
+
+  defp diagnostics_json(transport) do
+    Jason.encode!(
+      %{
+        "origin" => Atom.to_string(transport.origin),
+        "configuration" => transport.configuration,
+        "provider_configuration_snapshot" => transport.provider_configuration_snapshot,
+        "compatibility_provider_profile_id" => transport.materialized_provider_profile_id
+      },
+      pretty: true
+    )
   end
 
   defp direct_transport_params do
