@@ -105,7 +105,9 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
     assert row == expected_library_row(mission.mission_id, item_v2, versions, usage)
 
     assert library_stream_mutations(initial_vue) == [
-             ["upsert", "/library_items/0", row]
+             ["replace", "/library_items", []],
+             ["replace", "/library_items", []],
+             ["upsert", "/library_items/-", row]
            ]
 
     assert_json_safe(initial_vue)
@@ -194,7 +196,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
 
     invalid_vue = library_vue(library)
     assert invalid_vue.props == initial_vue.props
-    assert_test_only_stream_patch(invalid_vue)
+    assert_no_library_stream_mutations(invalid_vue)
     assert_json_safe(invalid_vue)
 
     definition = widget_definition("Created in Vue")
@@ -281,7 +283,12 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
 
     assert has_element?(library, "#flash-error", "Choose a library item.")
     selection_error_vue = library_vue(library)
-    assert_test_only_stream_patch(selection_error_vue)
+    assert_no_library_stream_mutations(selection_error_vue)
+
+    {:ok, library, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/library")
+
+    track_dashboard_view(library)
 
     render_hook(library, "add_library_version", %{
       "library_version" => %{
@@ -298,7 +305,12 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
            )
 
     json_error_vue = library_vue(library)
-    assert_test_only_stream_patch(json_error_vue)
+    assert_no_library_stream_mutations(json_error_vue)
+
+    {:ok, library, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/library")
+
+    track_dashboard_view(library)
 
     definition_v2 = Map.put(definition_v1, :title, "Pinned immutable trend v2")
 
@@ -407,7 +419,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
            )
 
     invalid_vue = library_vue(library)
-    assert_test_only_stream_patch(invalid_vue)
+    assert_no_library_stream_mutations(invalid_vue)
 
     render_hook(library, "stage_library_item", %{
       "library_add" => %{
@@ -655,8 +667,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
               "update_available" => consumer.update_available?,
               "id" => "dashboard-library-consumer-#{consumer.placement_id}",
               "action_id" => "dashboard-library-consumer-open-#{consumer.placement_id}",
-              "path" =>
-                "/missions/#{mission_id}/ops/dashboards/#{consumer.dashboard_id}"
+              "path" => "/missions/#{mission_id}/ops/dashboards/#{consumer.dashboard_id}"
             }
           end)
       },
@@ -691,9 +702,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
     end)
   end
 
-  defp assert_test_only_stream_patch(vue) do
-    assert vue.streams_diff != []
-
+  defp assert_no_library_stream_mutations(vue) do
     assert Enum.all?(vue.streams_diff, fn
              ["test", "", _value] -> true
              _operation -> false
@@ -703,7 +712,9 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
   end
 
   defp assert_reset_replace(vue, rows) do
-    assert library_stream_mutations(vue) == [["replace", "/library_items", rows]]
+    assert library_stream_mutations(vue) ==
+             [["replace", "/library_items", []]] ++
+               Enum.map(rows, &["upsert", "/library_items/-", &1])
   end
 
   defp assert_json_safe(vue) do

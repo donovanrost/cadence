@@ -303,10 +303,8 @@ defmodule CadenceWeb.OpsDashboardLibraryLive do
       },
       fields: %{
         name: text_field(form, :library_item, "name", "Name", "text", required: true),
-        description:
-          text_field(form, :library_item, "description", "Description", "textarea"),
-        change_summary:
-          text_field(form, :library_item, "change_summary", "Version note", "text"),
+        description: text_field(form, :library_item, "description", "Description", "textarea"),
+        change_summary: text_field(form, :library_item, "change_summary", "Version note", "text"),
         widget_json:
           text_field(
             form,
@@ -336,8 +334,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLive do
         open: false
       },
       fields: %{
-        item_id:
-          select_field(form, :library_version, "item_id", "Library item", "Choose item"),
+        item_id: select_field(form, :library_version, "item_id", "Library item", "Choose item"),
         change_summary:
           text_field(form, :library_version, "change_summary", "Change summary", "text"),
         widget_json:
