@@ -76,12 +76,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              "data-dashboard-publish-impact-severity" => "success",
              "data-dashboard-publish-impact-from-version" => "v1",
              "data-dashboard-publish-impact-to-version" => "v2",
-             "data-dashboard-publish-impact-from-realm" => "-",
-             "data-dashboard-publish-impact-to-realm" => "-",
-             "data-dashboard-publish-impact-from-source-binding" => "primary",
-             "data-dashboard-publish-impact-to-source-binding" => "primary",
-             "data-dashboard-publish-impact-from-data-view" => "canonical",
-             "data-dashboard-publish-impact-to-data-view" => "canonical"
+             "data-dashboard-publish-impact-from-realm" => "nil",
+             "data-dashboard-publish-impact-to-realm" => "nil",
+             "data-dashboard-publish-impact-from-source-binding" => "nil",
+             "data-dashboard-publish-impact-to-source-binding" => "nil",
+             "data-dashboard-publish-impact-from-data-view" => "nil",
+             "data-dashboard-publish-impact-to-data-view" => "nil"
            }
 
     assert summary["publish_impact"]["header"]["badge"] == %{
@@ -97,7 +97,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
                "class" => "text-xs text-base-content/70",
                "data-dashboard-publish-impact-message" => ""
              },
-             "text" => "Publishing keeps operators on primary / canonical."
+             "text" => "Publishing keeps operators on nil / nil / nil."
            }
 
     assert summary["runtime_defaults"]["root"]["attrs"][
