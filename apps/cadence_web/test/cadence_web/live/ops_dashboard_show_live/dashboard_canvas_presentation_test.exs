@@ -59,6 +59,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentationTest do
            }
 
     assert [widget] = group["grid"]["widgets"]
+    assert widget["key"] == "placement-1"
 
     assert widget["shell"]["attrs"] == %{
              "class" => "grid-stack-item",
@@ -228,7 +229,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentationTest do
   defp widget_item do
     %{
       shell_attrs: %{
-        "gs-id" => "placement-1",
+        :"gs-id" => "placement-1",
         "gs-x" => 2,
         "data-nil" => nil,
         "data-false" => false,

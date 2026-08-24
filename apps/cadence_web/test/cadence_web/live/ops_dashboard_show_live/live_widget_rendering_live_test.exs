@@ -257,10 +257,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       html = render_dashboard_async(view)
 
-      # Status bar reflects the limit projection.
-      assert widget_header_presentation(view, trend_placement.placement_id)["status_indicators"][
-               "limit"
-             ]["text"] == "violating"
+      # The shared Ops context rail reflects the limit projection.
+      context_rail = LiveVue.Test.get_vue(view, id: "ops-context-rail-component")
+      fleet_health = Enum.find(context_rail.props["sections"], &(&1["key"] == "fleet_health"))
+      assert fleet_health["content"]["violating_points_label"] == "1 violating points"
 
       # Grid items carry GridStack placement attributes.
       assert dashboard_widget_shell_attrs(view, context_item.placement_id)["gs-auto-position"] ==

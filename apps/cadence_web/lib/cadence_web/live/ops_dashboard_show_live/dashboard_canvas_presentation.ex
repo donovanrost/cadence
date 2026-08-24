@@ -179,10 +179,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentation do
       widgets:
         Enum.map(group.widget_items, fn widget_item ->
           presentation = widget_presentation.(widget_item.component_props)
+          shell_attrs = raw_attributes(widget_item.shell_attrs)
 
           %{
-            key: widget_key(widget_item, presentation),
-            shell: %{attrs: raw_attributes(widget_item.shell_attrs)},
+            key: Map.get(shell_attrs, "gs-id") || presentation.component_id,
+            shell: %{attrs: shell_attrs},
             content: %{attrs: raw_attributes(%{"class" => widget_item.content_class})},
             host: %{
               attrs:
@@ -288,10 +289,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentation do
         text: "Open Dashboard Editor"
       }
     end
-  end
-
-  defp widget_key(widget_item, presentation) do
-    Map.get(widget_item.shell_attrs, "gs-id") || presentation.component_id
   end
 
   defp widget_count_text(1), do: "1 widget"
