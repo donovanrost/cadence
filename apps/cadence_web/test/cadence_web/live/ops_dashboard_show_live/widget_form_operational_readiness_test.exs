@@ -29,31 +29,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
         dashboard_scope_context: %{primary: %{kind: "spacecraft", mode: "one", ids: ["sc-1"]}}
       )
 
-    document = LazyHTML.from_fragment(html)
+    options = html |> operational_picker() |> observable_options_by_id()
+    contact_attrs = options["contacts.phase"]["attrs"]
+    ground_attrs = options["ground.station.connection_state"]["attrs"]
 
-    assert [] =
-             document
-             |> LazyHTML.query(~s([data-operational-observable="contacts.phase"]))
-             |> LazyHTML.attribute("disabled")
-
-    assert ["true"] =
-             document
-             |> LazyHTML.query(~s([data-operational-observable="contacts.phase"]))
-             |> LazyHTML.attribute("data-operational-observable-scope-supported")
-
-    assert [""] =
-             document
-             |> LazyHTML.query(
-               ~s([data-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("disabled")
-
-    assert ["false"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("data-operational-observable-scope-supported")
+    refute Map.has_key?(contact_attrs, "disabled")
+    assert contact_attrs["data-operational-observable-scope-supported"] == "true"
+    assert ground_attrs["disabled"] == ""
+    assert ground_attrs["data-operational-observable-scope-supported"] == "false"
   end
 
   test "keeps selected unsupported operational observables removable" do
@@ -77,31 +60,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
         dashboard_scope_context: %{primary: %{kind: "spacecraft", mode: "one", ids: ["sc-1"]}}
       )
 
-    document = LazyHTML.from_fragment(html)
+    picker = operational_picker(html)
+    options = observable_options_by_id(picker)
+    selected = selected_observables_by_id(picker)
 
-    assert [] =
-             document
-             |> LazyHTML.query(
-               ~s([data-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("disabled")
+    refute Map.has_key?(options["ground.station.connection_state"]["attrs"], "disabled")
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-selected-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("data-selected-operational-observable-scope-supported")
+    assert selected["ground.station.connection_state"]["attrs"][
+             "data-selected-operational-observable-scope-supported"
+           ] == "false"
 
-    assert ["ground.station.connection_state"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-scope-warning]")
-             |> LazyHTML.attribute("data-operational-observable-scope-warning-ids")
+    assert picker["scope_warning"]["attrs"][
+             "data-operational-observable-scope-warning-ids"
+           ] == "ground.station.connection_state"
 
-    assert "Current context does not support ground.station.connection_state." =
-             document
-             |> LazyHTML.query("[data-operational-observable-scope-warning]")
-             |> selected_text()
+    assert picker["scope_warning"]["text"] ==
+             "Current context does not support ground.station.connection_state."
   end
 
   test "marks readiness-focused operational observables in the editor" do
@@ -128,26 +102,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
         }
       )
 
-    document = LazyHTML.from_fragment(html)
+    picker = operational_picker(html)
+    selected = selected_observables_by_id(picker)
+    options = observable_options_by_id(picker)
 
-    assert ["ground.station.connection_state"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-picker]")
-             |> LazyHTML.attribute("data-operational-observable-readiness-focus-ids")
+    assert picker["attrs"]["data-operational-observable-readiness-focus-ids"] ==
+             "ground.station.connection_state"
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-selected-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("data-selected-operational-observable-readiness-focus")
+    assert selected["ground.station.connection_state"]["attrs"][
+             "data-selected-operational-observable-readiness-focus"
+           ] == "true"
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-operational-observable="ground.station.connection_state"])
-             )
-             |> LazyHTML.attribute("data-operational-observable-readiness-focus")
+    assert options["ground.station.connection_state"]["attrs"][
+             "data-operational-observable-readiness-focus"
+           ] == "true"
   end
 
   test "renders operational source capability guidance in the picker" do
@@ -177,38 +145,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
         }
       )
 
-    document = LazyHTML.from_fragment(html)
+    picker = operational_picker(html)
+    warning = picker["capability_warning"]
+    options = observable_options_by_id(picker)
 
-    assert ["unsupported_source_capability"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-picker]")
-             |> LazyHTML.attribute("data-operational-observable-readiness-source-empty-reason")
+    assert picker["attrs"]["data-operational-observable-readiness-source-empty-reason"] ==
+             "unsupported_source_capability"
 
-    assert ["raw_series"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-picker]")
-             |> LazyHTML.attribute("data-operational-observable-readiness-requested-sampling")
+    assert picker["attrs"]["data-operational-observable-readiness-requested-sampling"] ==
+             "raw_series"
 
-    assert ["link_rf_metric_history"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-picker]")
-             |> LazyHTML.attribute("data-operational-observable-readiness-requested-products")
+    assert picker["attrs"]["data-operational-observable-readiness-requested-products"] ==
+             "link_rf_metric_history"
 
-    assert ["link_rf_metric_history"] =
-             document
-             |> LazyHTML.query("[data-operational-observable-capability-warning]")
-             |> LazyHTML.attribute("data-operational-observable-capability-warning-products")
+    assert warning["attrs"]["data-operational-observable-capability-warning-products"] ==
+             "link_rf_metric_history"
 
     assert "Selected source cannot satisfy raw_series for link_rf_metric_history." <>
-             _rest =
-             document
-             |> LazyHTML.query("[data-operational-observable-capability-warning]")
-             |> selected_text()
+             _rest = warning["text"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query(~s([data-operational-observable="link.snr_db"]))
-             |> LazyHTML.attribute("data-operational-observable-readiness-focus")
+    assert options["link.snr_db"]["attrs"][
+             "data-operational-observable-readiness-focus"
+           ] == "true"
   end
 
   test "renders operational latest source capability guidance without history wording" do
@@ -238,11 +196,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
         }
       )
 
-    warning_text =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("[data-operational-observable-capability-warning]")
-      |> selected_text()
+    warning_text = html |> operational_picker() |> get_in(["capability_warning", "text"])
 
     assert warning_text =~
              "Selected source cannot satisfy latest for link_rf_metric."
@@ -277,9 +231,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormOperationalReadinessTest do
     %{observable_id: observable_id, unit: unit, name: name, description: name}
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp operational_picker(html) do
+    html
+    |> widget_form_presentation()
+    |> get_in(["point_widget", "operational_observable_picker"])
+  end
+
+  defp widget_form_presentation(html) do
+    assert ["widget-form-component"] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#widget-form-component")
+             |> LazyHTML.attribute("id")
+
+    vue = LiveVue.Test.get_vue(html, id: "widget-form-component")
+
+    assert vue.component == "WidgetForm"
+    assert vue.id == "widget-form-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp observable_options_by_id(picker) do
+    picker["list"]["groups"]
+    |> Enum.flat_map(& &1["options"])
+    |> Map.new(&{&1["observable_id"], &1})
+  end
+
+  defp selected_observables_by_id(picker) do
+    Map.new(picker["selected"]["buttons"], &{&1["text"], &1})
   end
 end

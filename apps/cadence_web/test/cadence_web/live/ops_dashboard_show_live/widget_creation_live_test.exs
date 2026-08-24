@@ -149,11 +149,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       click_editor_action(view, "add-widget-button")
       assert has_element?(view, "#dashboard-panel")
 
-      view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
+      click_widget_point(view, "HK.counter")
 
-      view
-      |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
-      |> render_submit()
+      submit_widget_form(view, %{type: "value_tile", title: "Counter", mode: "context"})
 
       await_dashboard_resolved(view)
 
@@ -185,9 +183,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       click_editor_action(view, "add-widget-button")
 
-      view
-      |> form("#widget-form", widget: %{type: "event_timeline", title: "Mission Events"})
-      |> render_submit()
+      submit_widget_form(view, %{type: "event_timeline", title: "Mission Events"})
 
       await_dashboard_resolved(view)
 
@@ -231,13 +227,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       await_dashboard_resolved(view)
 
       click_editor_action(view, "add-widget-button")
-      view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
+      click_widget_point(view, "HK.counter")
 
-      view
-      |> form("#widget-form",
-        widget: %{type: "state_timeline", title: "Counter State", mode: "context"}
-      )
-      |> render_submit()
+      submit_widget_form(view, %{
+        type: "state_timeline",
+        title: "Counter State",
+        mode: "context"
+      })
 
       await_dashboard_resolved(view)
 
@@ -282,33 +278,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       click_editor_action(view, "add-widget-button")
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "status_matrix",
-          title: "HK Matrix",
-          mode: "context",
-          precision: "0"
-        }
-      )
-      |> render_change()
+      change_widget_form(view, %{
+        type: "status_matrix",
+        title: "HK Matrix",
+        mode: "context",
+        precision: "0"
+      })
 
-      view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
-      view |> element(~s(button[phx-value-point-id="HK.voltage"])) |> render_click()
+      click_widget_point(view, "HK.counter")
+      click_widget_point(view, "HK.voltage")
 
-      assert has_element?(view, ~s([data-selected-point="HK.counter"]))
-      assert has_element?(view, ~s([data-selected-point="HK.voltage"]))
+      assert "HK.counter" in selected_widget_point_ids(view)
+      assert "HK.voltage" in selected_widget_point_ids(view)
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "status_matrix",
-          title: "HK Matrix",
-          mode: "context",
-          precision: "0"
-        }
-      )
-      |> render_submit()
+      submit_widget_form(view, %{
+        type: "status_matrix",
+        title: "HK Matrix",
+        mode: "context",
+        precision: "0"
+      })
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
@@ -337,33 +325,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       click_editor_action(view, "add-widget-button")
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "data_table",
-          title: "HK Table",
-          mode: "context",
-          precision: "1"
-        }
-      )
-      |> render_change()
+      change_widget_form(view, %{
+        type: "data_table",
+        title: "HK Table",
+        mode: "context",
+        precision: "1"
+      })
 
-      view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
-      view |> element(~s(button[phx-value-point-id="HK.voltage"])) |> render_click()
+      click_widget_point(view, "HK.counter")
+      click_widget_point(view, "HK.voltage")
 
-      assert has_element?(view, ~s([data-selected-point="HK.counter"]))
-      assert has_element?(view, ~s([data-selected-point="HK.voltage"]))
+      assert "HK.counter" in selected_widget_point_ids(view)
+      assert "HK.voltage" in selected_widget_point_ids(view)
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "data_table",
-          title: "HK Table",
-          mode: "context",
-          precision: "1"
-        }
-      )
-      |> render_submit()
+      submit_widget_form(view, %{
+        type: "data_table",
+        title: "HK Table",
+        mode: "context",
+        precision: "1"
+      })
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
@@ -397,5 +377,63 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
         {_attribute, _value}, params -> params
       end)
     )
+  end
+
+  defp change_widget_form(view, overrides) do
+    {root, params} = widget_form_event_contract(view, overrides)
+    render_change(view, root["attrs"]["phx-change"], %{root["param"] => params})
+  end
+
+  defp submit_widget_form(view, overrides) do
+    {root, params} = widget_form_event_contract(view, overrides)
+    render_submit(view, root["attrs"]["phx-submit"], %{root["param"] => params})
+  end
+
+  defp widget_form_event_contract(view, overrides) do
+    presentation = widget_form_presentation(view)
+    root = presentation["root"]
+
+    assert root["id"] == "widget-form"
+    assert root["attrs"]["phx-change"] == "validate_widget"
+    assert root["attrs"]["phx-submit"] == "save_widget"
+    assert root["param"] == "widget"
+
+    params = Map.merge(root["params"], stringify_keys(overrides))
+    assert params == Jason.decode!(Jason.encode!(params))
+    {root, params}
+  end
+
+  defp click_widget_point(view, point_id) do
+    presentation = widget_form_presentation(view)
+    picker = presentation["point_widget"]["point_picker"]
+    option = Enum.find(picker["list"]["options"], &(&1["point_id"] == point_id))
+
+    assert option["attrs"]["phx-click"] == "pick_point"
+    assert option["attrs"]["phx-value-point-id"] == point_id
+    render_click(view, option["attrs"]["phx-click"], %{"point-id" => point_id})
+  end
+
+  defp selected_widget_point_ids(view) do
+    view
+    |> widget_form_presentation()
+    |> get_in(["point_widget", "point_picker", "selected_points", "buttons"])
+    |> Enum.map(& &1["attrs"]["data-selected-point"])
+  end
+
+  defp widget_form_presentation(view) do
+    assert has_element?(view, "#widget-form-component")
+    vue = LiveVue.Test.get_vue(view, id: "widget-form-component")
+    assert vue.component == "WidgetForm"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp stringify_keys(params) do
+    Map.new(params, fn {key, value} -> {to_string(key), value} end)
   end
 end

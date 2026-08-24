@@ -22,65 +22,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
 
       click_editor_action(view, "add-widget-button")
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "status_matrix",
-          title: "Contact Phase",
-          mode: "context",
-          precision: "0"
-        }
-      )
-      |> render_change()
+      change_widget_form(view, %{
+        type: "status_matrix",
+        title: "Contact Phase",
+        mode: "context",
+        precision: "0"
+      })
 
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "status_matrix",
-          title: "Contact Phase",
-          binding_source: "operational_observables",
-          precision: "0"
-        }
-      )
-      |> render_change()
+      change_widget_form(view, %{
+        type: "status_matrix",
+        title: "Contact Phase",
+        binding_source: "operational_observables",
+        precision: "0"
+      })
 
-      assert has_element?(
-               view,
-               ~s([data-operational-observable="contacts.phase"])
-             )
+      option_ids = operational_observable_option_ids(view)
+      assert "contacts.phase" in option_ids
+      assert "comms.transport.connection_state" in option_ids
+      assert "ground.station.connection_state" in option_ids
+      assert "comms.transport.downlink_bitrate" in option_ids
 
-      assert has_element?(
-               view,
-               ~s([data-operational-observable="comms.transport.connection_state"])
-             )
+      click_widget_point(view, "contacts.phase")
 
-      assert has_element?(
-               view,
-               ~s([data-operational-observable="ground.station.connection_state"])
-             )
+      assert "contacts.phase" in selected_operational_observable_ids(view)
 
-      assert has_element?(
-               view,
-               ~s([data-operational-observable="comms.transport.downlink_bitrate"])
-             )
-
-      view |> element(~s(button[phx-value-point-id="contacts.phase"])) |> render_click()
-
-      assert has_element?(
-               view,
-               ~s([data-selected-operational-observable="contacts.phase"])
-             )
-
-      view
-      |> form("#widget-form",
-        widget: %{
-          type: "status_matrix",
-          title: "Contact Phase",
-          binding_source: "operational_observables",
-          precision: "0"
-        }
-      )
-      |> render_submit()
+      submit_widget_form(view, %{
+        type: "status_matrix",
+        title: "Contact Phase",
+        binding_source: "operational_observables",
+        precision: "0"
+      })
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
@@ -125,6 +96,74 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
         {_attribute, _value}, params -> params
       end)
     )
+  end
+
+  defp change_widget_form(view, overrides) do
+    {root, params} = widget_form_event_contract(view, overrides)
+    render_change(view, root["attrs"]["phx-change"], %{root["param"] => params})
+  end
+
+  defp submit_widget_form(view, overrides) do
+    {root, params} = widget_form_event_contract(view, overrides)
+    render_submit(view, root["attrs"]["phx-submit"], %{root["param"] => params})
+  end
+
+  defp widget_form_event_contract(view, overrides) do
+    presentation = widget_form_presentation(view)
+    root = presentation["root"]
+    assert root["id"] == "widget-form"
+    assert root["attrs"]["phx-change"] == "validate_widget"
+    assert root["attrs"]["phx-submit"] == "save_widget"
+    assert root["param"] == "widget"
+    params = Map.merge(root["params"], stringify_keys(overrides))
+    assert params == Jason.decode!(Jason.encode!(params))
+    {root, params}
+  end
+
+  defp click_widget_point(view, point_id) do
+    option =
+      view
+      |> operational_observable_options()
+      |> Enum.find(&(&1["observable_id"] == point_id))
+
+    assert option["attrs"]["phx-click"] == "pick_point"
+    assert option["attrs"]["phx-value-point-id"] == point_id
+    render_click(view, option["attrs"]["phx-click"], %{"point-id" => point_id})
+  end
+
+  defp operational_observable_option_ids(view) do
+    view |> operational_observable_options() |> Enum.map(& &1["observable_id"])
+  end
+
+  defp operational_observable_options(view) do
+    view
+    |> widget_form_presentation()
+    |> get_in(["point_widget", "operational_observable_picker", "list", "groups"])
+    |> Enum.flat_map(& &1["options"])
+  end
+
+  defp selected_operational_observable_ids(view) do
+    view
+    |> widget_form_presentation()
+    |> get_in(["point_widget", "operational_observable_picker", "selected", "buttons"])
+    |> Enum.map(& &1["attrs"]["data-selected-operational-observable"])
+  end
+
+  defp widget_form_presentation(view) do
+    assert has_element?(view, "#widget-form-component")
+    vue = LiveVue.Test.get_vue(view, id: "widget-form-component")
+    assert vue.component == "WidgetForm"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp stringify_keys(params) do
+    Map.new(params, fn {key, value} -> {to_string(key), value} end)
   end
 
   defp signed_in_user_org_and_mission do

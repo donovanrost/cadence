@@ -171,11 +171,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
                )
 
       click_editor_action(view, "add-widget-button")
-      view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
+      click_widget_point(view, "HK.counter")
 
-      view
-      |> form("#widget-form", widget: %{type: "value_tile", title: "Counter", mode: "context"})
-      |> render_submit()
+      submit_widget_form(view, %{type: "value_tile", title: "Counter", mode: "context"})
 
       await_dashboard_resolved(view)
 
@@ -304,13 +302,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       )
       |> render_click()
 
-      assert has_element?(view, ~s(#widget-form input[name="widget[title]"][value="Counter"]))
+      assert widget_form_field(view, "title")["control"]["attrs"] == %{
+               "id" => "widget_title",
+               "name" => "widget[title]",
+               "required" => "",
+               "type" => "text",
+               "value" => "Counter"
+             }
 
-      view
-      |> form("#widget-form",
-        widget: %{type: "value_tile", title: "Renamed Tile", mode: "context"}
-      )
-      |> render_submit()
+      submit_widget_form(view, %{
+        type: "value_tile",
+        title: "Renamed Tile",
+        mode: "context"
+      })
 
       await_dashboard_resolved(view)
 
@@ -359,5 +363,53 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
     assert vue.component == "DashboardEditorActions"
     assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
     action
+  end
+
+  defp submit_widget_form(view, overrides) do
+    presentation = widget_form_presentation(view)
+    root = presentation["root"]
+    assert root["id"] == "widget-form"
+    assert root["attrs"]["phx-change"] == "validate_widget"
+    assert root["attrs"]["phx-submit"] == "save_widget"
+    assert root["param"] == "widget"
+    params = Map.merge(root["params"], stringify_keys(overrides))
+    assert params == Jason.decode!(Jason.encode!(params))
+    render_submit(view, root["attrs"]["phx-submit"], %{root["param"] => params})
+  end
+
+  defp click_widget_point(view, point_id) do
+    option =
+      view
+      |> widget_form_presentation()
+      |> get_in(["point_widget", "point_picker", "list", "options"])
+      |> Enum.find(&(&1["point_id"] == point_id))
+
+    assert option["attrs"]["phx-click"] == "pick_point"
+    assert option["attrs"]["phx-value-point-id"] == point_id
+    render_click(view, option["attrs"]["phx-click"], %{"point-id" => point_id})
+  end
+
+  defp widget_form_field(view, key) do
+    view
+    |> widget_form_presentation()
+    |> Map.fetch!("fields")
+    |> Enum.find(&(&1["key"] == key))
+  end
+
+  defp widget_form_presentation(view) do
+    assert has_element?(view, "#widget-form-component")
+    vue = LiveVue.Test.get_vue(view, id: "widget-form-component")
+    assert vue.component == "WidgetForm"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp stringify_keys(params) do
+    Map.new(params, fn {key, value} -> {to_string(key), value} end)
   end
 end
