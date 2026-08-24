@@ -211,8 +211,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     %{
       id: "spacecraft-telemetry-decom-page",
       title: "Telemetry Decom",
-      subtitle:
-        "Application packet inputs and publication state for #{spacecraft.display_name}.",
+      subtitle: "Application packet inputs and publication state for #{spacecraft.display_name}.",
       breadcrumbs: breadcrumb_dtos(mission, spacecraft)
     }
   end

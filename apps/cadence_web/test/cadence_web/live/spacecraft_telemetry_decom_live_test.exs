@@ -512,9 +512,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     disabled_vue = telemetry_decom_vue(view)
     assert disabled_vue.props["status"]["label"] == "Disabled"
     assert disabled_vue.props["lifecycle_actions"]["disable"] == nil
-    assert disabled_vue.props["lifecycle_actions"]["enable"] == enable_action_props(false)
-    assert disabled_vue.props["preflight"]["state"] == "attention"
-    assert disabled_vue.props["preflight"]["activation_ready"]
+    assert disabled_vue.props["lifecycle_actions"]["enable"] == enable_action_props(true)
+    assert disabled_vue.props["preflight"]["state"] == "blocked"
+    refute disabled_vue.props["preflight"]["activation_ready"]
 
     assert has_element?(
              view,
@@ -899,8 +899,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         %{
           "id" => "telemetry-decom-spacecraft-breadcrumb",
           "label" => spacecraft.display_name,
-          "href" =>
-            "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+          "href" => "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
         },
         %{
           "id" => "telemetry-decom-applications-breadcrumb",
@@ -922,8 +921,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       "state" => "not_configured",
       "tone" => "blocked",
       "label" => "Not configured",
-      "description" =>
-        "Choose a catalog revision and packet inputs, then apply mission changes.",
+      "description" => "Choose a catalog revision and packet inputs, then apply mission changes.",
       "saved_label" => nil
     }
   end
