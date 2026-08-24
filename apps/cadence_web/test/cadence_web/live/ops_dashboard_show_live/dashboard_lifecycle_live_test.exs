@@ -94,9 +94,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
 
     {:ok, new_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 
-    new_view
-    |> form("#dashboard-form", dashboard: %{name: "Lifecycle Console", description: "Ops"})
-    |> render_submit()
+    render_hook(new_view, "save", %{
+      "dashboard" => %{"name" => "Lifecycle Console", "description" => "Ops"}
+    })
 
     assert [%Cadence.Dashboards.DashboardSummary{} = created_summary] =
              Cadence.Dashboards.list_dashboard_summaries(
