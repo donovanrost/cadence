@@ -350,9 +350,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
       assert ["evidence-ref:operational_event:" <> _] =
                LazyHTML.attribute(ground_station_operational_event_evidence, "phx-value-link-id")
 
-      view
-      |> element(ground_station_event_selector)
-      |> render_click(%{
+      click_evidence_inspector_element(view, ground_station_event_selector, %{
         "link-id" => "evidence-ref:operational_event:#{ground_station_operational_event_id}",
         "target" => "operational_event",
         "target-id" => ground_station_operational_event_id,

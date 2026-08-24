@@ -438,9 +438,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       assert ["evidence-ref:operational_event:" <> _] =
                LazyHTML.attribute(connection_operational_event_evidence, "phx-value-link-id")
 
-      view
-      |> element(connection_event_selector)
-      |> render_click(%{
+      click_evidence_inspector_element(view, connection_event_selector, %{
         "link-id" => "evidence-ref:operational_event:#{connection_operational_event_id}",
         "target" => "operational_event",
         "target-id" => connection_operational_event_id,
@@ -797,9 +795,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
       assert ["evidence-ref:operational_event:" <> _] =
                LazyHTML.attribute(antenna_pointing_event_evidence, "phx-value-link-id")
 
-      view
-      |> element(antenna_pointing_event_selector)
-      |> render_click(%{
+      click_evidence_inspector_element(view, antenna_pointing_event_selector, %{
         "link-id" => "evidence-ref:operational_event:#{antenna_pointing_event_id}",
         "target" => "operational_event",
         "target-id" => antenna_pointing_event_id,

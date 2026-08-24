@@ -171,9 +171,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
     command_queue_entry_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command queue entry"][data-evidence-ref-id="#{queue_entry.command_queue_entry_id}"][data-evidence-ref-link-target="command_queue_entry"])
 
-    view
-    |> element(command_queue_entry_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, command_queue_entry_selector, %{
       "link-id" => "evidence-ref:command_queue_entry:#{queue_entry.command_queue_entry_id}",
       "target" => "command_queue_entry",
       "target-id" => queue_entry.command_queue_entry_id,

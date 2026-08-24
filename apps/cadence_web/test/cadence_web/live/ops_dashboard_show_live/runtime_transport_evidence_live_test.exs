@@ -187,9 +187,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(record_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(record_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, record_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{record_event_id}",
       "target" => "operational_event",
       "target-id" => record_event_id,
@@ -410,9 +408,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(action_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(action_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, action_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{action_event_id}",
       "target" => "operational_event",
       "target-id" => action_event_id,
@@ -607,9 +603,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(timer_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(timer_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, timer_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{timer_event_id}",
       "target" => "operational_event",
       "target-id" => timer_event_id,
@@ -859,9 +853,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeTransportEvidenceLiveTest do
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(record_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(record_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, record_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{record_event_id}",
       "target" => "operational_event",
       "target-id" => record_event_id,

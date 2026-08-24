@@ -168,9 +168,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
              command_request_queue_entry_related_selector
            )
 
-    reopened_command_request_view
-    |> element(command_request_queue_entry_related_selector)
-    |> render_click()
+    click_data_link_inspector_element(
+      reopened_command_request_view,
+      command_request_queue_entry_related_selector
+    )
 
     command_request_queue_entry_path = assert_patch(reopened_command_request_view)
     assert command_request_queue_entry_path =~ "panel=data_link"
@@ -582,9 +583,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
     command_queue_entry_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="command queue entry"][data-evidence-ref-id="#{queue_entry.command_queue_entry_id}"][data-evidence-ref-link-target="command_queue_entry"])
 
-    view
-    |> element(command_queue_entry_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, command_queue_entry_selector, %{
       "link-id" => "evidence-ref:command_queue_entry:#{queue_entry.command_queue_entry_id}",
       "target" => "command_queue_entry",
       "target-id" => queue_entry.command_queue_entry_id,

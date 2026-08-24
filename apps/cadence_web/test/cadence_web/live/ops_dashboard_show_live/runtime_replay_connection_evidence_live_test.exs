@@ -77,9 +77,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(connection_operational_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(connection_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, connection_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{connection_operational_event_id}",
       "target" => "operational_event",
       "target-id" => connection_operational_event_id,
@@ -246,9 +244,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(source_health_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, source_health_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{source_health_operational_event_id}",
       "target" => "operational_event",
       "target-id" => source_health_operational_event_id,
@@ -548,9 +544,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     source_health_interval_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="source health interval"][data-evidence-ref-id="#{source_health_interval.interval_id}"][data-evidence-ref-link-target="source_health_interval"])
 
-    view
-    |> element(source_health_interval_selector)
-    |> render_click()
+    click_evidence_inspector_element(view, source_health_interval_selector)
 
     source_health_interval_route_id = URI.encode_www_form(source_health_interval.interval_id)
     source_health_interval_path = assert_patch(view)
@@ -714,9 +708,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
 
     assert evidence_inspector_has_element?(view, interval_selector)
 
-    view
-    |> element(interval_selector)
-    |> render_click()
+    click_evidence_inspector_element(view, interval_selector)
 
     interval_route_id = URI.encode_www_form(source_health_interval.interval_id)
 
@@ -909,9 +901,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayConnectionEvidenceLiveTes
     antenna_pointing_event_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{antenna_pointing_event_id}"][data-evidence-ref-link-target="operational_event"])
 
-    view
-    |> element(antenna_pointing_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, antenna_pointing_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{antenna_pointing_event_id}",
       "target" => "operational_event",
       "target-id" => antenna_pointing_event_id,

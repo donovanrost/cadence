@@ -834,9 +834,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     rf_event_selector =
       ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{rf_operational_event_id}"][data-evidence-ref-link-target="operational_event"])
 
-    view
-    |> element(rf_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, rf_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{rf_operational_event_id}",
       "target" => "operational_event",
       "target-id" => rf_operational_event_id,

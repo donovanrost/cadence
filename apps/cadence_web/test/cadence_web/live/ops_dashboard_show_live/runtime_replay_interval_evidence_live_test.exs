@@ -344,9 +344,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
     assert ["evidence-ref:operational_event:" <> _] =
              LazyHTML.attribute(ground_station_operational_event_evidence, "phx-value-link-id")
 
-    view
-    |> element(ground_station_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, ground_station_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{ground_station_operational_event_id}",
       "target" => "operational_event",
       "target-id" => ground_station_operational_event_id,
@@ -651,9 +649,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
                "phx-value-link-id"
              )
 
-    view
-    |> element(transport_execution_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, transport_execution_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{transport_execution_operational_event_id}",
       "target" => "operational_event",
       "target-id" => transport_execution_operational_event_id,

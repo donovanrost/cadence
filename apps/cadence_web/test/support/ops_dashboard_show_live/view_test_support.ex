@@ -8,6 +8,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   @default_timeout 5_000
   @resolved_runtime_selector ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-resolved="true"])
+  @presentation_attribute_pattern ~r/\[(?<name>[A-Za-z][A-Za-z0-9_-]*)(?:(?<operator>\*=|=)\"(?<value>[^\"]*)\")?\]/
+  @presentation_id_pattern ~r/#(?<id>[A-Za-z][A-Za-z0-9_-]*)/
 
   defmacro __using__(opts) do
     if Keyword.get(opts, :data_link_selectors_only, false) do
@@ -421,6 +423,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     Phoenix.LiveViewTest.render_hook(view, event, params)
   end
 
+  def click_evidence_inspector_element(view, selector, params \\ %{}) do
+    item =
+      view
+      |> evidence_inspector_presentation()
+      |> get_in(["evidence", "items"])
+      |> Enum.find(fn item ->
+        item
+        |> Map.fetch!("attrs")
+        |> evidence_item_matches_selector?(selector)
+      end)
+
+    assert item
+
+    attrs = Map.fetch!(item, "attrs")
+    event = Map.fetch!(attrs, "phx-click")
+
+    presentation_params =
+      attrs
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    Phoenix.LiveViewTest.render_hook(view, event, Map.merge(presentation_params, params))
+  end
+
   def data_link_inspector_element_attribute(view_or_html, selector, attribute) do
     node =
       view_or_html
@@ -566,6 +595,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     Enum.all?(expected_attrs, fn {name, value} -> attrs[name] == value end)
   end
 
+  defp evidence_item_matches_selector?(attrs, selector) do
+    @presentation_attribute_pattern
+    |> Regex.scan(selector)
+    |> Enum.all?(fn [match | _captures] ->
+      captures = Regex.named_captures(@presentation_attribute_pattern, match)
+
+      presentation_attribute_match?(
+        attrs,
+        {captures["name"], captures["operator"], captures["value"]}
+      )
+    end)
+  end
+
   @migrated_data_link_ids [
     "dashboard-data-link-action-outcome",
     "dashboard-data-link-explore",
@@ -573,9 +615,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     "dashboard-revision-decision-",
     "dashboard-workflow-"
   ]
-
-  @presentation_attribute_pattern ~r/\[(?<name>[A-Za-z][A-Za-z0-9_-]*)(?:(?<operator>\*=|=)\"(?<value>[^\"]*)\")?\]/
-  @presentation_id_pattern ~r/#(?<id>[A-Za-z][A-Za-z0-9_-]*)/
 
   defp migrated_data_link_selector?(selector) when is_binary(selector) do
     String.starts_with?(selector, "#dashboard-data-link-inspector ") or

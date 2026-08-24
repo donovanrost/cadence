@@ -149,9 +149,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.snr_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
     )
 
-    view
-    |> element(metric_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, metric_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
       "target" => "operational_event",
       "target-id" => metric_event_id,
@@ -389,9 +387,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.eb_n0_db")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
     )
 
-    view
-    |> element(metric_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, metric_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
       "target" => "operational_event",
       "target-id" => metric_event_id,
@@ -666,9 +662,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.doppler_hz")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
     )
 
-    view
-    |> element(metric_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, metric_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
       "target" => "operational_event",
       "target-id" => metric_event_id,
@@ -943,9 +937,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
       ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("link.symbol_rate_sps")}"][data-clipboard-text*="selected_data_source=#{replay_sources.operational_data_source_id}"][data-clipboard-text*="selected_source_binding=#{replay_sources.operational_binding_id}"][data-clipboard-text*="replay_run_id=#{replay_run_id}"])
     )
 
-    view
-    |> element(metric_event_selector)
-    |> render_click(%{
+    click_evidence_inspector_element(view, metric_event_selector, %{
       "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
       "target" => "operational_event",
       "target-id" => metric_event_id,

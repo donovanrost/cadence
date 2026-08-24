@@ -369,9 +369,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
       assert ["evidence-ref:operational_event:" <> _] =
                LazyHTML.attribute(metric_operational_event_evidence, "phx-value-link-id")
 
-      view
-      |> element(metric_event_selector)
-      |> render_click(%{
+      click_evidence_inspector_element(view, metric_event_selector, %{
         "link-id" => "evidence-ref:operational_event:#{metric_event_id}",
         "target" => "operational_event",
         "target-id" => metric_event_id,

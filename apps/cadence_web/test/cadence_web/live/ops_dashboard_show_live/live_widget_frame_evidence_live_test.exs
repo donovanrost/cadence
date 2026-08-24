@@ -375,9 +375,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       assert ["evidence-ref:operational_event:" <> _] =
                LazyHTML.attribute(source_health_operational_event_evidence, "phx-value-link-id")
 
-      view
-      |> element(source_health_event_selector)
-      |> render_click(%{
+      click_evidence_inspector_element(view, source_health_event_selector, %{
         "link-id" => "evidence-ref:operational_event:#{source_health_operational_event_id}",
         "target" => "operational_event",
         "target-id" => source_health_operational_event_id,
