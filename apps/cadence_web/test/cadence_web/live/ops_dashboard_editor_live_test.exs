@@ -11,6 +11,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "viewer route rejects editor-only events" do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
@@ -155,6 +156,8 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {:ok, editor, _html} =
       await_live_result(live(conn, edit_path(mission, dashboard)))
 
+    refute has_element?(editor, "#dashboard-editor-conflict-component")
+
     add_section(editor, "Unsaved Candidate")
 
     assert {:ok, %Document{} = external} =
@@ -171,19 +174,54 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
     click_editor_action(editor, "dashboard-editor-save")
 
-    assert has_element?(
-             editor,
-             ~s(#dashboard-editor-conflict[data-editor-starting-version="1"][data-editor-current-version="2"])
-           )
+    conflict = LiveVue.Test.get_vue(editor, id: "dashboard-editor-conflict-component")
+
+    assert conflict.component == "DashboardEditorConflict"
+    assert conflict.id == "dashboard-editor-conflict-component"
+    assert conflict.ssr == false
+    assert conflict.class == "contents"
+    assert conflict.handlers == %{"reload_editor" => JS.push("reload_editor")}
+    assert Map.keys(conflict.props) == ["presentation"]
+    assert conflict.props == Jason.decode!(Jason.encode!(conflict.props))
+
+    assert conflict.props["presentation"] == %{
+             "root" => %{
+               "attrs" => %{
+                 "id" => "dashboard-editor-conflict",
+                 "class" =>
+                   "flex shrink-0 items-center gap-3 border-b border-error/40 bg-error/10 px-3 py-2 text-sm",
+                 "data-editor-starting-version" => "1",
+                 "data-editor-current-version" => "2"
+               }
+             },
+             "icon" => %{
+               "attrs" => %{
+                 "class" => "hero-exclamation-triangle h-4 w-4 shrink-0 text-error"
+               }
+             },
+             "message" => %{
+               "class" => "min-w-0 flex-1",
+               "text" =>
+                 "Version 2 was saved elsewhere. Your staged candidate is intact; reload before continuing to avoid an accidental overwrite."
+             },
+             "reload" => %{
+               "attrs" => %{
+                 "id" => "dashboard-editor-reload",
+                 "type" => "button",
+                 "class" => "btn btn-ghost btn-xs"
+               },
+               "text" => "Reload latest"
+             }
+           }
 
     assert [_section] = dashboard_section_list(editor)
 
     assert {:ok, %Document{name: "External Change", sections: []}} =
              fetch_document(org, mission, dashboard)
 
-    editor |> element("#dashboard-editor-reload") |> render_click()
+    render_hook(editor, "reload_editor", %{})
 
-    refute has_element?(editor, "#dashboard-editor-conflict")
+    refute has_element?(editor, "#dashboard-editor-conflict-component")
     refute Enum.any?(dashboard_canvas_groups(editor), & &1["section"])
   end
 

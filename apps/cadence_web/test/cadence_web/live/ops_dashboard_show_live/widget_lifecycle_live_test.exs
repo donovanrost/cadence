@@ -179,10 +179,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       click_editor_action(view, "dashboard-editor-save")
       await_dashboard_resolved(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-editor-conflict[data-editor-starting-version="1"][data-editor-current-version="2"])
-             )
+      conflict = LiveVue.Test.get_vue(view, id: "dashboard-editor-conflict-component")
+
+      assert conflict.props["presentation"]["root"]["attrs"] == %{
+               "id" => "dashboard-editor-conflict",
+               "class" =>
+                 "flex shrink-0 items-center gap-3 border-b border-error/40 bg-error/10 px-3 py-2 text-sm",
+               "data-editor-starting-version" => "1",
+               "data-editor-current-version" => "2"
+             }
 
       assert Enum.any?(
                dashboard_widget_shells(view),
