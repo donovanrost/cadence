@@ -223,12 +223,12 @@ defmodule CadenceWeb.UI do
         "text" => display_label(user)
       },
       "email" =>
-        unless(user.display_name in [nil, ""],
-          do: %{
+        if(user.display_name in [nil, ""],
+          do: nil,
+          else: %{
             "class" => "text-xs text-base-content/60 truncate",
             "text" => user.email
-          },
-          else: nil
+          }
         )
     }
   end
