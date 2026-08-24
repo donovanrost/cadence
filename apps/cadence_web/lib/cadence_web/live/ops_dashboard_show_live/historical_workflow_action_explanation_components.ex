@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionExplanationCom
       assign(
         assigns,
         :presentation,
-        action_explanations_dto(assigns.blocked_action_explanations)
+        presentation(assigns.blocked_action_explanations)
       )
 
     ~H"""
@@ -26,6 +26,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionExplanationCom
   end
 
   def action_explanations(assigns), do: ~H""
+
+  def presentation([_explanation | _rest] = explanations) do
+    action_explanations_dto(explanations)
+  end
+
+  def presentation(_explanations), do: nil
 
   defp action_explanations_dto(explanations) do
     %{

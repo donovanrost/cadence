@@ -14,31 +14,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
       do: ~H""
 
   def latest_action(assigns) do
-    latest_action_handoffs =
-      HistoricalWorkflowStatusNavigationPresentation.latest_action_handoffs(
-        assigns.latest_action_outcome,
-        assigns.dashboard_current_path
-      )
-
-    latest_action_attrs =
-      HistoricalWorkflowActionOutcomePresentation.stable_attrs(
-        assigns.latest_action_outcome,
-        "data-workflow-latest-action",
-        handoff_count: length(latest_action_handoffs),
-        primary_result_event_id:
-          HistoricalWorkflowStatusNavigationPresentation.primary_handoff_event_id(
-            latest_action_handoffs
-          )
-      )
-
     assigns =
       assign(
         assigns,
         :presentation,
-        latest_action_dto(
+        presentation(
           assigns.latest_action_outcome,
-          latest_action_handoffs,
-          latest_action_attrs
+          assigns.dashboard_current_path
         )
       )
 
@@ -51,6 +33,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
       class="contents"
     />
     """
+  end
+
+  def presentation(latest_action_outcome, _dashboard_current_path)
+      when latest_action_outcome in [nil, false],
+      do: nil
+
+  def presentation(latest_action_outcome, dashboard_current_path) do
+    latest_action_handoffs =
+      HistoricalWorkflowStatusNavigationPresentation.latest_action_handoffs(
+        latest_action_outcome,
+        dashboard_current_path
+      )
+
+    latest_action_attrs =
+      HistoricalWorkflowActionOutcomePresentation.stable_attrs(
+        latest_action_outcome,
+        "data-workflow-latest-action",
+        handoff_count: length(latest_action_handoffs),
+        primary_result_event_id:
+          HistoricalWorkflowStatusNavigationPresentation.primary_handoff_event_id(
+            latest_action_handoffs
+          )
+      )
+
+    latest_action_dto(latest_action_outcome, latest_action_handoffs, latest_action_attrs)
   end
 
   defp latest_action_dto(latest_action_outcome, latest_action_handoffs, latest_action_attrs) do

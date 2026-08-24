@@ -13,7 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
       assign(
         assigns,
         :presentation,
-        stage_transition_form_dto(
+        presentation(
           assigns.form,
           assigns.workflow_context,
           assigns.workflow_controls
@@ -29,6 +29,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
       class="contents"
     />
     """
+  end
+
+  def presentation(form, workflow_context, workflow_controls) do
+    stage_transition_form_dto(form, workflow_context, workflow_controls)
   end
 
   defp stage_transition_form_dto(form, workflow_context, workflow_controls) do

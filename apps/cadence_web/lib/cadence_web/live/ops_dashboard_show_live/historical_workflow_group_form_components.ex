@@ -83,27 +83,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponents 
   attr(:workflow_controls, :map, required: true)
 
   def group_transition_form(assigns) do
-    group_start =
-      HistoricalWorkflowGroupStartPresentation.build(
-        assigns.workflow_context,
-        assigns.workflow_controls
-      )
-
-    presentation =
-      if assigns.workflow_controls.group_actions do
-        group_transition_form_dto(
-          assigns.form,
-          assigns.workflow_context,
-          assigns.workflow_controls,
-          group_start
-        )
-      end
-
+    presentation = presentation(assigns.form, assigns.workflow_context, assigns.workflow_controls)
     assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
     <.vue
-      :if={@workflow_controls.group_actions}
+      :if={@presentation}
       id="historical-workflow-group-form-component"
       v-component="HistoricalWorkflowGroupForm"
       presentation={@presentation}
@@ -111,6 +96,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupFormComponents 
       class="contents"
     />
     """
+  end
+
+  def presentation(form, workflow_context, workflow_controls) do
+    group_start =
+      HistoricalWorkflowGroupStartPresentation.build(
+        workflow_context,
+        workflow_controls
+      )
+
+    if workflow_controls.group_actions do
+      group_transition_form_dto(
+        form,
+        workflow_context,
+        workflow_controls,
+        group_start
+      )
+    end
   end
 
   defp group_transition_form_dto(form, workflow_context, workflow_controls, group_start) do

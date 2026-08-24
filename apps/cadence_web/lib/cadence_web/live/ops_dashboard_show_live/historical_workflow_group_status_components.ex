@@ -18,47 +18,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
       do: ~H""
 
   def group_status(assigns) do
-    comparison_review_links =
-      HistoricalWorkflowStatusNavigationPresentation.comparison_review_links(
-        assigns.workflow_context,
-        assigns.dashboard_current_path
-      )
-
-    failed_item_handoffs =
-      HistoricalWorkflowStatusNavigationPresentation.group_failed_item_handoffs(
-        assigns.workflow_context,
-        assigns.dashboard_current_path
-      )
-
-    replacement_recovery =
-      HistoricalWorkflowReplacementRecovery.build(
-        assigns.workflow_context,
-        assigns.workflow_controls
-      )
-
-    closure_readiness = replacement_recovery.closure_readiness
-
-    group_recovery_forms =
-      HistoricalWorkflowGroupRecoveryFormPresentation.build(
-        assigns.workflow_context,
-        replacement_recovery
-      )
-
-    group_recovery =
-      HistoricalWorkflowGroupRecoveryPresentation.build(assigns.workflow_context)
-
     assigns =
       assign(
         assigns,
         :presentation,
-        group_status_presentation(
+        presentation(
           assigns.workflow_context,
-          comparison_review_links,
-          failed_item_handoffs,
-          replacement_recovery,
-          closure_readiness,
-          group_recovery_forms,
-          group_recovery
+          assigns.workflow_controls,
+          assigns.dashboard_current_path
         )
       )
 
@@ -71,6 +38,51 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
       class="contents"
     />
     """
+  end
+
+  def presentation(_workflow_context, %{group_summary: group_summary}, _dashboard_current_path)
+      when group_summary in [nil, false],
+      do: nil
+
+  def presentation(workflow_context, workflow_controls, dashboard_current_path) do
+    comparison_review_links =
+      HistoricalWorkflowStatusNavigationPresentation.comparison_review_links(
+        workflow_context,
+        dashboard_current_path
+      )
+
+    failed_item_handoffs =
+      HistoricalWorkflowStatusNavigationPresentation.group_failed_item_handoffs(
+        workflow_context,
+        dashboard_current_path
+      )
+
+    replacement_recovery =
+      HistoricalWorkflowReplacementRecovery.build(
+        workflow_context,
+        workflow_controls
+      )
+
+    closure_readiness = replacement_recovery.closure_readiness
+
+    group_recovery_forms =
+      HistoricalWorkflowGroupRecoveryFormPresentation.build(
+        workflow_context,
+        replacement_recovery
+      )
+
+    group_recovery =
+      HistoricalWorkflowGroupRecoveryPresentation.build(workflow_context)
+
+    group_status_presentation(
+      workflow_context,
+      comparison_review_links,
+      failed_item_handoffs,
+      replacement_recovery,
+      closure_readiness,
+      group_recovery_forms,
+      group_recovery
+    )
   end
 
   defp group_status_presentation(

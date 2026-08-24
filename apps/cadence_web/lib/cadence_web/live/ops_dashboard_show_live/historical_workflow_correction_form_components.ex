@@ -21,19 +21,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
   attr :workflow_controls, :map, required: true
 
   def corrected_request_form(assigns) do
-    job_recovery =
-      HistoricalWorkflowJobRecoveryPresentation.build(
-        assigns.workflow_context,
-        assigns.workflow_controls
-      )
+    presentation = presentation(assigns.form, assigns.workflow_context, assigns.workflow_controls)
 
-    if job_recovery.correction_form.present do
-      assigns =
-        assign(
-          assigns,
-          :presentation,
-          corrected_request_form_dto(assigns.form, assigns.workflow_context, job_recovery)
-        )
+    if presentation do
+      assigns = assign(assigns, :presentation, presentation)
 
       ~H"""
       <.vue
@@ -46,6 +37,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
       """
     else
       ~H""
+    end
+  end
+
+  def presentation(form, workflow_context, workflow_controls) do
+    job_recovery =
+      HistoricalWorkflowJobRecoveryPresentation.build(
+        workflow_context,
+        workflow_controls
+      )
+
+    if job_recovery.correction_form.present do
+      corrected_request_form_dto(form, workflow_context, job_recovery)
     end
   end
 

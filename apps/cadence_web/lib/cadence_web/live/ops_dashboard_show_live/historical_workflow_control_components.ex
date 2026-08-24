@@ -21,88 +21,132 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlComponents do
   def historical_workflow_controls(assigns) do
     context = HistoricalWorkflowContext.build(assigns.inspector)
     controls = HistoricalWorkflowControlsPresentation.build(context, assigns.action_outcome)
+    workflow_form = to_form(controls.form_params, as: :historical_workflow)
+    workflow_group_form = to_form(controls.form_params, as: :historical_workflow_group)
+
+    workflow_correction_form =
+      to_form(
+        controls.correction_form_params,
+        as: :historical_workflow_correction
+      )
 
     assigns =
-      assigns
-      |> assign(:workflow_context, context)
-      |> assign(:workflow_controls, controls)
-      |> assign(
-        :action_outcome_presentation,
-        DataLinkActionOutcomePresentation.build(assigns.action_outcome)
-      )
-      |> assign(
-        :workflow_action_outcome_attrs,
-        HistoricalWorkflowActionOutcomePresentation.stable_attrs(
+      assign(
+        assigns,
+        :presentation,
+        historical_workflow_controls_presentation(
+          context,
+          controls,
           assigns.action_outcome,
-          "data-workflow-action"
-        )
-      )
-      |> assign(
-        :workflow_form,
-        to_form(controls.form_params, as: :historical_workflow)
-      )
-      |> assign(
-        :workflow_group_form,
-        to_form(controls.form_params, as: :historical_workflow_group)
-      )
-      |> assign(
-        :workflow_correction_form,
-        to_form(
-          controls.correction_form_params,
-          as: :historical_workflow_correction
+          assigns.dashboard_current_path,
+          workflow_form,
+          workflow_group_form,
+          workflow_correction_form
         )
       )
 
     ~H"""
-    <section
-      id="dashboard-historical-workflow-controls"
-      class="space-y-2"
-      data-historical-workflow={@workflow_context.workflow}
-      data-historical-workflow-stage={@workflow_context.stage || ""}
-      data-historical-workflow-run-id={@workflow_context.run_id}
-    >
-      <h3 class="hud-label">Workflow Actions</h3>
-      <div
-        :if={@action_outcome_presentation}
-        id="dashboard-historical-workflow-action-outcome"
-        class="hidden"
-        {@workflow_action_outcome_attrs}
-      >
-        {@action_outcome_presentation.message}
-      </div>
-      <HistoricalWorkflowLatestActionComponents.latest_action
-        latest_action_outcome={@workflow_controls.latest_action_outcome}
-        dashboard_current_path={@dashboard_current_path}
-      />
-      <HistoricalWorkflowActionExplanationComponents.action_explanations
-        blocked_action_explanations={@workflow_controls.blocked_action_explanations}
-      />
-      <HistoricalWorkflowGroupStatusComponents.group_status
-        workflow_context={@workflow_context}
-        workflow_controls={@workflow_controls}
-        dashboard_current_path={@dashboard_current_path}
-      />
-      <HistoricalWorkflowJobStatusComponents.job_status
-        workflow_context={@workflow_context}
-        workflow_controls={@workflow_controls}
-        dashboard_current_path={@dashboard_current_path}
-      />
-      <HistoricalWorkflowCorrectionFormComponents.corrected_request_form
-        form={@workflow_correction_form}
-        workflow_context={@workflow_context}
-        workflow_controls={@workflow_controls}
-      />
-      <HistoricalWorkflowStageFormComponents.stage_transition_form
-        form={@workflow_form}
-        workflow_context={@workflow_context}
-        workflow_controls={@workflow_controls}
-      />
-      <HistoricalWorkflowGroupFormComponents.group_transition_form
-        form={@workflow_group_form}
-        workflow_context={@workflow_context}
-        workflow_controls={@workflow_controls}
-      />
-    </section>
+    <.vue
+      id="dashboard-historical-workflow-controls-component"
+      v-component="HistoricalWorkflowControls"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp historical_workflow_controls_presentation(
+         context,
+         controls,
+         action_outcome,
+         dashboard_current_path,
+         workflow_form,
+         workflow_group_form,
+         workflow_correction_form
+       ) do
+    %{
+      root: %{
+        id: "dashboard-historical-workflow-controls",
+        class: "space-y-2",
+        attrs:
+          raw_attrs(%{
+            "data-historical-workflow" => context.workflow,
+            "data-historical-workflow-stage" => context.stage || "",
+            "data-historical-workflow-run-id" => context.run_id
+          })
+      },
+      heading: %{class: "hud-label", text: "Workflow Actions"},
+      action_outcome: action_outcome_presentation(action_outcome),
+      latest_action:
+        HistoricalWorkflowLatestActionComponents.presentation(
+          controls.latest_action_outcome,
+          dashboard_current_path
+        ),
+      action_explanations:
+        HistoricalWorkflowActionExplanationComponents.presentation(
+          controls.blocked_action_explanations
+        ),
+      group_status:
+        HistoricalWorkflowGroupStatusComponents.presentation(
+          context,
+          controls,
+          dashboard_current_path
+        ),
+      job_status:
+        HistoricalWorkflowJobStatusComponents.presentation(
+          context,
+          controls,
+          dashboard_current_path
+        ),
+      correction_form:
+        HistoricalWorkflowCorrectionFormComponents.presentation(
+          workflow_correction_form,
+          context,
+          controls
+        ),
+      stage_form:
+        HistoricalWorkflowStageFormComponents.presentation(workflow_form, context, controls),
+      group_form:
+        HistoricalWorkflowGroupFormComponents.presentation(
+          workflow_group_form,
+          context,
+          controls
+        )
+    }
+  end
+
+  defp action_outcome_presentation(action_outcome) do
+    case DataLinkActionOutcomePresentation.build(action_outcome) do
+      nil ->
+        nil
+
+      presentation ->
+        %{
+          root: %{
+            id: "dashboard-historical-workflow-action-outcome",
+            class: "hidden",
+            attrs:
+              HistoricalWorkflowActionOutcomePresentation.stable_attrs(
+                action_outcome,
+                "data-workflow-action"
+              )
+          },
+          message: presentation.message
+        }
+    end
+  end
+
+  defp raw_attrs(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
   end
 end

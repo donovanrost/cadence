@@ -15,27 +15,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobStatusComponents 
       do: ~H""
 
   def job_status(assigns) do
-    comparison_review_links =
-      HistoricalWorkflowStatusNavigationPresentation.comparison_review_links(
-        assigns.workflow_context,
-        assigns.dashboard_current_path
-      )
-
-    job_recovery =
-      HistoricalWorkflowJobRecoveryPresentation.build(
-        assigns.workflow_context,
-        assigns.workflow_controls
-      )
-
     assigns =
       assign(
         assigns,
         :presentation,
-        job_status_dto(
+        presentation(
           assigns.workflow_context,
           assigns.workflow_controls,
-          comparison_review_links,
-          job_recovery
+          assigns.dashboard_current_path
         )
       )
 
@@ -48,6 +35,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobStatusComponents 
       class="contents"
     />
     """
+  end
+
+  def presentation(_workflow_context, %{job_status: job_status}, _dashboard_current_path)
+      when job_status in [nil, false],
+      do: nil
+
+  def presentation(workflow_context, workflow_controls, dashboard_current_path) do
+    comparison_review_links =
+      HistoricalWorkflowStatusNavigationPresentation.comparison_review_links(
+        workflow_context,
+        dashboard_current_path
+      )
+
+    job_recovery =
+      HistoricalWorkflowJobRecoveryPresentation.build(
+        workflow_context,
+        workflow_controls
+      )
+
+    job_status_dto(
+      workflow_context,
+      workflow_controls,
+      comparison_review_links,
+      job_recovery
+    )
   end
 
   defp job_status_dto(
