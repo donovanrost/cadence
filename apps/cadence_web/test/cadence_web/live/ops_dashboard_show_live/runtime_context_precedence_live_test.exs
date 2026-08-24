@@ -113,18 +113,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextPrecedenceLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="mission"][data-dashboard-scope-id="#{mission.mission_id}"][data-dashboard-time-mode="replay_run"][data-dashboard-time-axis="receipt_time"][data-dashboard-replay-run-id="replay-precedence-1"][data-dashboard-data-realm="replay"][data-dashboard-data-view="as_recorded"][data-dashboard-compare-data-view="canonical"][data-dashboard-source-binding-id="#{replay_source.binding_id}"][data-dashboard-limit-mode="current"][data-engine-time-mode="replay_run"][data-engine-time-axis="receipt_time"][data-engine-replay-run-id="replay-precedence-1"][data-engine-data-realm="replay"][data-engine-data-view="as_recorded"][data-engine-source-binding-id="#{replay_source.binding_id}"][data-engine-limit-mode="current"])
            )
 
-    view
-    |> element("#runtime-context-form")
-    |> render_change(%{
-      "time_mode" => "live",
-      "time_axis" => "generation_time",
-      "from" => "",
-      "to" => "",
-      "realm" => "rehearsal",
-      "source_binding_id" => rehearsal_source.binding_id,
-      "data_view" => "canonical",
-      "compare_data_view" => "",
-      "limit_mode" => "observed"
+    runtime_controls = dashboard_runtime_controls(view)
+
+    render_dashboard_runtime_change(view, runtime_controls, %{
+      "dashboard-time-mode" => "live",
+      "dashboard-time-axis" => "generation_time",
+      "dashboard-data-form-from" => "",
+      "dashboard-data-form-to" => "",
+      "dashboard-data-realm" => "rehearsal",
+      "dashboard-source-binding" => rehearsal_source.binding_id,
+      "dashboard-data-view" => "canonical",
+      "dashboard-compare-data-view" => "",
+      "dashboard-limit-mode" => "observed"
     })
 
     patched_path = assert_patch(view)

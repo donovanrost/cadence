@@ -60,4 +60,84 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   def stop_dashboard_view(view, timeout \\ @default_timeout) do
     AsyncLiveViewTestSupport.stop_async_view(view, timeout)
   end
+
+  def dashboard_runtime_controls(view_or_html) do
+    view_or_html
+    |> LiveVue.Test.get_vue(id: "dashboard-runtime-controls-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("runtime_controls")
+  end
+
+  def dashboard_runtime_control(runtime_controls, id) do
+    form = Map.fetch!(runtime_controls, "form")
+
+    fields =
+      form["hidden_fields"] ++
+        form["source"]["fields"] ++
+        form["representation"]["fields"] ++
+        form["semantics"]["fields"] ++ form["markers"]["toggles"]["fields"]
+
+    Enum.find(fields, fn field -> dashboard_runtime_control_attrs(field)["id"] == id end)
+  end
+
+  def dashboard_runtime_control_attrs(%{"attrs" => attrs}), do: attrs
+  def dashboard_runtime_control_attrs(%{"input_attrs" => attrs}), do: attrs
+
+  def dashboard_runtime_option(runtime_controls, id, value) do
+    runtime_controls
+    |> dashboard_runtime_control(id)
+    |> Map.fetch!("options")
+    |> Enum.find(&(&1["value"] == value))
+  end
+
+  def dashboard_runtime_change_params(runtime_controls, values_by_id) do
+    Enum.reduce(values_by_id, %{}, fn {id, value}, params ->
+      field = dashboard_runtime_control(runtime_controls, id)
+
+      if field do
+        validate_dashboard_runtime_value!(field, value)
+
+        put_dashboard_runtime_param(
+          params,
+          dashboard_runtime_control_attrs(field)["name"],
+          value
+        )
+      else
+        raise ArgumentError, "unknown dashboard runtime control #{inspect(id)}"
+      end
+    end)
+  end
+
+  def render_dashboard_runtime_change(view, runtime_controls, values_by_id) do
+    event = runtime_controls["form"]["attrs"]["phx-change"]
+    params = dashboard_runtime_change_params(runtime_controls, values_by_id)
+    Phoenix.LiveViewTest.render_change(view, event, params)
+  end
+
+  defp validate_dashboard_runtime_value!(%{"options" => options}, value) do
+    if Enum.any?(options, &(&1["value"] == value and not &1["disabled"])) do
+      :ok
+    else
+      raise ArgumentError, "unavailable dashboard runtime option #{inspect(value)}"
+    end
+  end
+
+  defp validate_dashboard_runtime_value!(
+         %{"input_attrs" => %{"type" => "checkbox"}},
+         value
+       )
+       when value in ["true", "false"],
+       do: :ok
+
+  defp validate_dashboard_runtime_value!(_field, _value), do: :ok
+
+  defp put_dashboard_runtime_param(params, name, value) do
+    case Regex.run(~r/^([^\[]+)\[([^\]]+)\]$/, name) do
+      [_match, parent, child] ->
+        Map.update(params, parent, %{child => value}, &Map.put(&1, child, value))
+
+      nil ->
+        Map.put(params, name, value)
+    end
+  end
 end

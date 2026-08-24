@@ -381,11 +381,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       assert "mission_event" in marker_types
 
       chart_id_before = chart_dom_id(html, trend_widget_id)
-      refute has_element?(view, "#dashboard-marker-contacts")
+      runtime_controls = dashboard_runtime_controls(view)
+      refute dashboard_runtime_control(runtime_controls, "dashboard-marker-contacts")
 
-      view
-      |> form("#runtime-context-form", %{"markers" => %{"mission_events" => "false"}})
-      |> render_change()
+      render_dashboard_runtime_change(view, runtime_controls, %{
+        "dashboard-marker-mission_events" => "false"
+      })
 
       toggled_path = assert_patch(view)
       assert toggled_path =~ "hidden_markers=mission_events"
@@ -401,12 +402,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       # Presentation-only change: chart remounted (new epoch id)...
       assert chart_dom_id(html, trend_widget_id) != chart_id_before
       # ...and the checkbox now renders unchecked with the hidden-count hint.
-      refute has_element?(view, ~s(#dashboard-marker-mission_events[checked]))
-      assert has_element?(view, "#dashboard-markers-hidden-count")
+      runtime_controls = dashboard_runtime_controls(view)
 
-      view
-      |> form("#runtime-context-form", %{"markers" => %{"mission_events" => "true"}})
-      |> render_change()
+      refute runtime_controls
+             |> dashboard_runtime_control("dashboard-marker-mission_events")
+             |> dashboard_runtime_control_attrs()
+             |> Map.fetch!("checked")
+
+      assert runtime_controls["form"]["markers"]["heading"]["hidden_count"]
+
+      render_dashboard_runtime_change(view, runtime_controls, %{
+        "dashboard-marker-mission_events" => "true"
+      })
 
       restored_path = assert_patch(view)
       refute restored_path =~ "hidden_markers"

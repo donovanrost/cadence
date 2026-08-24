@@ -294,7 +294,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextDefaultsLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-data-realm="flight"])
              )
 
-      assert has_element?(override_view, "#dashboard-active-source", "Primary source")
+      assert dashboard_runtime_controls(override_view)["header"]["active_source"]["text"] ==
+               "Primary source"
 
       save_runtime_defaults(settings_view, dashboard, %{
         "data" => %{"realm" => "rehearsal", "source_contexts" => %{}}

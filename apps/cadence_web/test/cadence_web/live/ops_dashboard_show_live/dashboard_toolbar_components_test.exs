@@ -7,6 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
   alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "dashboard_toolbar exposes mission scope alongside spacecraft context search" do
     html =
@@ -100,27 +101,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    runtime_controls = ViewTestSupport.dashboard_runtime_controls(html)
+    fallback = runtime_controls["form"]["semantics"]["badge"]
 
-    assert ["projected"] =
-             document
-             |> LazyHTML.query("#dashboard-limit-mode-fallback")
-             |> LazyHTML.attribute("data-requested-limit-mode")
+    assert fallback["attrs"]["data-requested-limit-mode"] == "projected"
 
-    assert ["observed"] =
-             document
-             |> LazyHTML.query("#dashboard-limit-mode-fallback")
-             |> LazyHTML.attribute("data-applied-limit-mode")
+    assert fallback["attrs"]["data-applied-limit-mode"] == "observed"
 
-    assert ["unsupported_limit_semantics_mode"] =
-             document
-             |> LazyHTML.query("#dashboard-limit-mode-fallback")
-             |> LazyHTML.attribute("data-limit-mode-fallback-reason")
+    assert fallback["attrs"]["data-limit-mode-fallback-reason"] ==
+             "unsupported_limit_semantics_mode"
 
-    assert ["Requested projected limit semantics; using observed."] =
-             document
-             |> LazyHTML.query("#dashboard-limit-mode-fallback")
-             |> LazyHTML.attribute("title")
+    assert fallback["attrs"]["title"] ==
+             "Requested projected limit semantics; using observed."
   end
 
   test "dashboard_toolbar routes lifecycle and data operations out of the viewer" do

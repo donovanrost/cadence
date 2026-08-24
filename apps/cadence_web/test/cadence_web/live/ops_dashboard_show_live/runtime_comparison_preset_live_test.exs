@@ -81,16 +81,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
              ~s([data-dashboard-comparison-saved-preset="#{preset.dashboard_investigation_preset_id}"])
            )
 
-    view
-    |> element("#runtime-context-form")
-    |> render_change(%{
-      "time_mode" => "live",
-      "from" => "",
-      "to" => "",
-      "realm" => "flight",
-      "data_view" => "canonical",
-      "compare_data_view" => "",
-      "limit_mode" => "observed"
+    runtime_controls = dashboard_runtime_controls(view)
+
+    render_dashboard_runtime_change(view, runtime_controls, %{
+      "dashboard-time-mode" => "live",
+      "dashboard-data-form-from" => "",
+      "dashboard-data-form-to" => "",
+      "dashboard-data-realm" => "flight",
+      "dashboard-data-view" => "canonical",
+      "dashboard-compare-data-view" => "",
+      "dashboard-limit-mode" => "observed"
     })
 
     assert_patch(view, show_path(mission, dashboard))

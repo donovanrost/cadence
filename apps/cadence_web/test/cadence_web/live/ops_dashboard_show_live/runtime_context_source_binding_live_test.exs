@@ -207,7 +207,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextSourceBindingLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard) <> "?realm=rehearsal")
       render_dashboard_async(view)
 
-      assert has_element?(view, ~s(#dashboard-data-realm option[value="rehearsal"]))
+      runtime_controls = dashboard_runtime_controls(view)
+
+      assert dashboard_runtime_option(
+               runtime_controls,
+               "dashboard-data-realm",
+               "rehearsal"
+             )
 
       assert has_element?(
                view,
@@ -268,21 +274,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextSourceBindingLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard) <> "?realm=rehearsal")
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-source-binding option[value="#{source_context.binding_id}"])
+      runtime_controls = dashboard_runtime_controls(view)
+
+      assert dashboard_runtime_option(
+               runtime_controls,
+               "dashboard-source-binding",
+               source_context.binding_id
              )
 
-      view
-      |> element("#runtime-context-form")
-      |> render_change(%{
-        "time_mode" => "live",
-        "from" => "",
-        "to" => "",
-        "realm" => "rehearsal",
-        "source_binding_id" => source_context.binding_id,
-        "data_view" => "all_revisions",
-        "limit_mode" => "observed"
+      render_dashboard_runtime_change(view, runtime_controls, %{
+        "dashboard-time-mode" => "live",
+        "dashboard-data-form-from" => "",
+        "dashboard-data-form-to" => "",
+        "dashboard-data-realm" => "rehearsal",
+        "dashboard-source-binding" => source_context.binding_id,
+        "dashboard-data-view" => "all_revisions",
+        "dashboard-limit-mode" => "observed"
       })
 
       patched_path = assert_patch(view)
@@ -293,11 +300,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextSourceBindingLiveTest do
 
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-active-source[data-dashboard-active-data-source="#{source_context.data_source_id}"][data-dashboard-active-source-binding="#{source_context.binding_id}"]),
+      active_source = dashboard_runtime_controls(view)["header"]["active_source"]
+
+      assert active_source["attrs"]["data-dashboard-active-data-source"] ==
+               source_context.data_source_id
+
+      assert active_source["attrs"]["data-dashboard-active-source-binding"] ==
                source_context.binding_id
-             )
+
+      assert active_source["text"] == source_context.binding_id
 
       assert has_element?(
                view,

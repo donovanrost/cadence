@@ -27,161 +27,280 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
   attr :section, :atom, values: [:all, :data], default: :all
 
   def runtime_context_controls(assigns) do
-    assigns = assign(assigns, :data_form, to_form(runtime_form_params(assigns)))
+    data_form = to_form(runtime_form_params(assigns))
+    assigns = assign(assigns, :runtime_controls, runtime_controls_dto(assigns, data_form))
 
     ~H"""
-    <div
-      id={runtime_controls_id(@section)}
-      data-dashboard-query-control-section={@section}
-      class="min-w-0"
-    >
-      <div data-dashboard-data-query-controls>
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="text-xs font-semibold text-base-content/85">Active telemetry source</p>
-            <p class="mt-0.5 text-[0.68rem] text-base-content/50">
-              Defaults follow the dashboard definition. Overrides stay in the URL.
-            </p>
-          </div>
-          <span
-            id="dashboard-active-source"
-            data-dashboard-active-data-source={@data_source_id}
-            data-dashboard-active-source-binding={@source_binding_id}
-            class="badge badge-primary badge-outline badge-xs max-w-64 truncate font-mono"
-            title={source_context_label(@data_source_id, @source_binding_id)}
-          >
-            {source_context_label(@data_source_id, @source_binding_id)}
-          </span>
-        </div>
-
-        <.form
-          for={@data_form}
-          id="runtime-context-form"
-          phx-change="set_runtime_context"
-          class="mt-3"
-        >
-          <.input field={@data_form[:time_mode]} id="dashboard-time-mode" type="hidden" compact />
-          <.input field={@data_form[:from]} id="dashboard-data-form-from" type="hidden" compact />
-          <.input field={@data_form[:to]} id="dashboard-data-form-to" type="hidden" compact />
-          <.input field={@data_form[:replay_run_id]} id="dashboard-replay-run-id" type="hidden" compact />
-
-          <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-source-query-heading">
-            <p id="dashboard-source-query-heading" class="mb-2 text-xs font-semibold text-base-content/85">
-              Source
-            </p>
-            <div class="grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]">
-              <.input
-                field={@data_form[:realm]}
-                id="dashboard-data-realm"
-                type="select"
-                label="Realm"
-                options={realm_options(@data_realms)}
-                compact
-                class="select-xs"
-              />
-              <.input
-                field={@data_form[:source_binding_id]}
-                id="dashboard-source-binding"
-                type="select"
-                label="Source binding"
-                options={source_binding_options(@data_bindings, @data_realm)}
-                compact
-                class="select-xs font-mono"
-              />
-            </div>
-          </section>
-
-          <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-representation-query-heading">
-            <p id="dashboard-representation-query-heading" class="mb-2 text-xs font-semibold text-base-content/85">
-              Representation
-            </p>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <.input
-                field={@data_form[:data_view]}
-                id="dashboard-data-view"
-                type="select"
-                label="Data view"
-                options={data_view_options()}
-                compact
-                class="select-xs"
-              />
-              <.input
-                field={@data_form[:compare_data_view]}
-                id="dashboard-compare-data-view"
-                type="select"
-                label="Compare against"
-                options={compare_data_view_options(@data_view)}
-                compact
-                class="select-xs"
-              />
-            </div>
-          </section>
-
-          <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-semantics-query-heading">
-            <p id="dashboard-semantics-query-heading" class="mb-2 text-xs font-semibold text-base-content/85">
-              Operational semantics
-            </p>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <.input
-                field={@data_form[:time_axis]}
-                id="dashboard-time-axis"
-                type="select"
-                label="Time basis"
-                options={time_axis_options()}
-                compact
-                class="select-xs"
-              />
-              <.input
-                field={@data_form[:limit_mode]}
-                id="dashboard-limit-mode"
-                type="select"
-                label="Limit semantics"
-                options={limit_mode_options()}
-                compact
-                class="select-xs"
-              />
-            </div>
-            <span
-              :if={limit_mode_fallback?(@limit_mode_fallback)}
-              id="dashboard-limit-mode-fallback"
-              data-requested-limit-mode={limit_mode_fallback_value(@limit_mode_fallback, "requested_mode")}
-              data-applied-limit-mode={limit_mode_fallback_value(@limit_mode_fallback, "applied_mode")}
-              data-limit-mode-fallback-reason={limit_mode_fallback_value(@limit_mode_fallback, "reason")}
-              class="badge badge-warning badge-xs mt-2 gap-1"
-              title={limit_mode_fallback_title(@limit_mode_fallback)}
-            >
-              <.icon name="hero-exclamation-triangle" class="h-3 w-3" /> Observed only
-            </span>
-          </section>
-
-          <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-markers-query-heading">
-            <p id="dashboard-markers-query-heading" class="mb-2 text-xs font-semibold text-base-content/85">
-              Chart markers
-              <span
-                :if={@hidden_marker_categories != []}
-                id="dashboard-markers-hidden-count"
-                class="badge badge-warning badge-xs ml-1"
-              >
-                {length(@hidden_marker_categories)} hidden
-              </span>
-            </p>
-            <div id="dashboard-marker-toggles" class="grid gap-1 sm:grid-cols-2">
-              <.input
-                :for={{label, key} <- MarkerCategories.category_options()}
-                type="checkbox"
-                id={"dashboard-marker-#{key}"}
-                name={"markers[#{key}]"}
-                value={to_string(not MarkerCategories.hidden?(@hidden_marker_categories, key))}
-                label={label}
-                compact
-                class="checkbox-xs"
-              />
-            </div>
-          </section>
-        </.form>
-      </div>
-    </div>
+    <.vue
+      id="dashboard-runtime-controls-component"
+      v-component="DashboardRuntimeControls"
+      runtime_controls={@runtime_controls}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp runtime_controls_dto(assigns, data_form) do
+    %{
+      root: %{
+        attrs: %{
+          id: runtime_controls_id(assigns.section),
+          "data-dashboard-query-control-section": to_string(assigns.section),
+          class: "min-w-0"
+        }
+      },
+      header: %{
+        class: "flex items-start justify-between gap-3",
+        copy: %{
+          heading: %{
+            class: "text-xs font-semibold text-base-content/85",
+            text: "Active telemetry source"
+          },
+          description: %{
+            class: "mt-0.5 text-[0.68rem] text-base-content/50",
+            text: "Defaults follow the dashboard definition. Overrides stay in the URL."
+          }
+        },
+        active_source: active_source_dto(assigns.data_source_id, assigns.source_binding_id)
+      },
+      form: %{
+        attrs: %{
+          id: "runtime-context-form",
+          "phx-change": "set_runtime_context",
+          class: "mt-3"
+        },
+        hidden_fields: [
+          hidden_field_dto(data_form[:time_mode], "dashboard-time-mode"),
+          hidden_field_dto(data_form[:from], "dashboard-data-form-from"),
+          hidden_field_dto(data_form[:to], "dashboard-data-form-to"),
+          hidden_field_dto(data_form[:replay_run_id], "dashboard-replay-run-id")
+        ],
+        source: section_dto(
+          "dashboard-source-query-heading",
+          "Source",
+          "grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
+          [
+            select_field_dto(
+              data_form[:realm],
+              "dashboard-data-realm",
+              "Realm",
+              realm_options(assigns.data_realms),
+              "select-xs"
+            ),
+            select_field_dto(
+              data_form[:source_binding_id],
+              "dashboard-source-binding",
+              "Source binding",
+              source_binding_options(assigns.data_bindings, assigns.data_realm),
+              "select-xs font-mono"
+            )
+          ]
+        ),
+        representation: section_dto(
+          "dashboard-representation-query-heading",
+          "Representation",
+          "grid gap-2 sm:grid-cols-2",
+          [
+            select_field_dto(
+              data_form[:data_view],
+              "dashboard-data-view",
+              "Data view",
+              data_view_options(),
+              "select-xs"
+            ),
+            select_field_dto(
+              data_form[:compare_data_view],
+              "dashboard-compare-data-view",
+              "Compare against",
+              compare_data_view_options(assigns.data_view),
+              "select-xs"
+            )
+          ]
+        ),
+        semantics: section_dto(
+          "dashboard-semantics-query-heading",
+          "Operational semantics",
+          "grid gap-2 sm:grid-cols-2",
+          [
+            select_field_dto(
+              data_form[:time_axis],
+              "dashboard-time-axis",
+              "Time basis",
+              time_axis_options(),
+              "select-xs"
+            ),
+            select_field_dto(
+              data_form[:limit_mode],
+              "dashboard-limit-mode",
+              "Limit semantics",
+              limit_mode_options(),
+              "select-xs"
+            )
+          ],
+          limit_mode_fallback_dto(assigns.limit_mode_fallback)
+        ),
+        markers: marker_section_dto(assigns.hidden_marker_categories)
+      }
+    }
+  end
+
+  defp active_source_dto(data_source_id, source_binding_id) do
+    label = source_context_label(data_source_id, source_binding_id)
+
+    %{
+      attrs: %{
+        id: "dashboard-active-source",
+        "data-dashboard-active-data-source": data_source_id,
+        "data-dashboard-active-source-binding": source_binding_id,
+        class: "badge badge-primary badge-outline badge-xs max-w-64 truncate font-mono",
+        title: label
+      },
+      text: label
+    }
+  end
+
+  defp hidden_field_dto(field, id) do
+    %{
+      wrapper_class: "fieldset",
+      attrs: %{
+        id: id,
+        name: field.name,
+        type: "hidden",
+        value: field.value,
+        required: false,
+        disabled: false,
+        class: "w-full input"
+      }
+    }
+  end
+
+  defp select_field_dto(field, id, label, options, class) do
+    %{
+      wrapper_class: "fieldset",
+      label: %{class: "hud-label block mb-1.5", text: label},
+      attrs: %{
+        id: id,
+        name: field.name,
+        required: false,
+        multiple: false,
+        disabled: false,
+        class: "w-full select #{class}"
+      },
+      options: Enum.map(options, &select_option_dto(&1, field.value))
+    }
+  end
+
+  defp select_option_dto({label, value}, selected_value) do
+    %{
+      label: label,
+      value: to_string(value),
+      selected: to_string(selected_value) == to_string(value),
+      disabled: false,
+      title: nil
+    }
+  end
+
+  defp section_dto(heading_id, heading, fields_class, fields, badge \\ nil) do
+    %{
+      attrs: %{
+        class: "cadence-dashboard-query-section",
+        "aria-labelledby": heading_id
+      },
+      heading: %{
+        attrs: %{
+          id: heading_id,
+          class: "mb-2 text-xs font-semibold text-base-content/85"
+        },
+        text: heading
+      },
+      fields_class: fields_class,
+      fields: fields,
+      badge: badge
+    }
+  end
+
+  defp limit_mode_fallback_dto(fallback) do
+    if limit_mode_fallback?(fallback) do
+      %{
+        attrs: %{
+          id: "dashboard-limit-mode-fallback",
+          "data-requested-limit-mode": limit_mode_fallback_value(fallback, "requested_mode"),
+          "data-applied-limit-mode": limit_mode_fallback_value(fallback, "applied_mode"),
+          "data-limit-mode-fallback-reason": limit_mode_fallback_value(fallback, "reason"),
+          class: "badge badge-warning badge-xs mt-2 gap-1",
+          title: limit_mode_fallback_title(fallback)
+        },
+        icon_class: "hero-exclamation-triangle h-3 w-3",
+        text: "Observed only"
+      }
+    end
+  end
+
+  defp marker_section_dto(hidden_marker_categories) do
+    hidden_count = length(hidden_marker_categories)
+
+    %{
+      attrs: %{
+        class: "cadence-dashboard-query-section",
+        "aria-labelledby": "dashboard-markers-query-heading"
+      },
+      heading: %{
+        attrs: %{
+          id: "dashboard-markers-query-heading",
+          class: "mb-2 text-xs font-semibold text-base-content/85"
+        },
+        text: "Chart markers",
+        hidden_count:
+          if(hidden_count > 0,
+            do: %{
+              attrs: %{
+                id: "dashboard-markers-hidden-count",
+                class: "badge badge-warning badge-xs ml-1"
+              },
+              text: "#{hidden_count} hidden"
+            }
+          )
+      },
+      toggles: %{
+        attrs: %{
+          id: "dashboard-marker-toggles",
+          class: "grid gap-1 sm:grid-cols-2"
+        },
+        fields:
+          Enum.map(MarkerCategories.category_options(), fn {label, key} ->
+            marker_field_dto(label, key, hidden_marker_categories)
+          end)
+      }
+    }
+  end
+
+  defp marker_field_dto(label, key, hidden_marker_categories) do
+    name = "markers[#{key}]"
+
+    %{
+      wrapper_class: "fieldset",
+      label_class: "flex cursor-pointer items-start gap-3",
+      false_input_attrs: %{
+        type: "hidden",
+        name: name,
+        value: "false"
+      },
+      input_attrs: %{
+        type: "checkbox",
+        id: "dashboard-marker-#{key}",
+        name: name,
+        value: "true",
+        checked: not MarkerCategories.hidden?(hidden_marker_categories, key),
+        required: false,
+        disabled: false,
+        class: "checkbox checkbox-sm mt-0.5 checkbox-xs"
+      },
+      label: %{
+        class: "block text-sm font-medium",
+        text: label
+      }
+    }
   end
 
   defp runtime_controls_id(:all), do: "runtime-context-controls"

@@ -47,10 +47,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="archive"][data-dashboard-time-axis="generation_time"][data-engine-time-mode="archive"][data-engine-time-axis="generation_time"][data-dashboard-data-view="all_revisions"][data-dashboard-compare-data-view="canonical"][data-engine-data-view="all_revisions"][data-compare-engine-data-view="canonical"][data-dashboard-limit-mode="current"][data-engine-limit-mode="current"])
            )
 
-    assert has_element?(view, ~s|#dashboard-time-axis option[value="generation_time"]|)
-    assert has_element?(view, ~s|#dashboard-time-axis option[value="receipt_time"]|)
-    assert has_element?(view, ~s|#dashboard-data-view option[value="all_revisions"]|)
-    assert has_element?(view, ~s|#dashboard-compare-data-view option[value="canonical"]|)
+    runtime_controls = dashboard_runtime_controls(view)
+
+    assert dashboard_runtime_option(runtime_controls, "dashboard-time-axis", "generation_time")
+    assert dashboard_runtime_option(runtime_controls, "dashboard-time-axis", "receipt_time")
+    assert dashboard_runtime_option(runtime_controls, "dashboard-data-view", "all_revisions")
+
+    assert dashboard_runtime_option(
+             runtime_controls,
+             "dashboard-compare-data-view",
+             "canonical"
+           )
 
     warning_component_id =
       "widget-#{runtime_item.widget.widget_id}-engine-warning-0-component"
@@ -74,24 +81,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
              ~s(#widget-#{runtime_item.widget.widget_id} [data-data-management-badges*="all_revisions"])
            )
 
-    assert has_element?(
-             view,
-             ~s|#dashboard-limit-mode option[value="observed"]:not([disabled])|
-           )
+    refute dashboard_runtime_option(runtime_controls, "dashboard-limit-mode", "observed")[
+             "disabled"
+           ]
 
-    assert has_element?(view, ~s|#dashboard-limit-mode option[value="current"]:not([disabled])|)
+    refute dashboard_runtime_option(runtime_controls, "dashboard-limit-mode", "current")[
+             "disabled"
+           ]
 
-    assert has_element?(
-             view,
-             ~s|#dashboard-limit-mode option[value="recomputed"]:not([disabled])|
-           )
+    refute dashboard_runtime_option(runtime_controls, "dashboard-limit-mode", "recomputed")[
+             "disabled"
+           ]
 
-    assert has_element?(view, ~s|#dashboard-limit-mode option[value="compare"]:not([disabled])|)
+    refute dashboard_runtime_option(runtime_controls, "dashboard-limit-mode", "compare")[
+             "disabled"
+           ]
 
-    refute has_element?(
-             view,
-             ~s(#dashboard-limit-mode-fallback[data-requested-limit-mode="current"])
-           )
+    refute runtime_controls["form"]["semantics"]["badge"]
 
     send(view.pid, :tick)
     render(view)
@@ -106,16 +112,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
              ~s(#ops-dashboard-show-page[data-runtime-refresh-status="suppressed"][data-runtime-refresh-reason="not_live_time_mode"][data-runtime-visible-refresh-action="noop"][data-runtime-refresh-noops="live_tick:not_live_time_mode:1"][data-runtime-canceled-resolves="0"][data-runtime-failed-resolves="0"])
            )
 
-    view
-    |> element("#runtime-context-form")
-    |> render_change(%{
-      "time_mode" => "live",
-      "from" => "2026-06-17T12:00:00Z",
-      "to" => "2026-06-17T12:05:00Z",
-      "realm" => "flight",
-      "data_view" => "canonical",
-      "compare_data_view" => "",
-      "limit_mode" => "observed"
+    render_dashboard_runtime_change(view, runtime_controls, %{
+      "dashboard-time-mode" => "live",
+      "dashboard-data-form-from" => "2026-06-17T12:00:00Z",
+      "dashboard-data-form-to" => "2026-06-17T12:05:00Z",
+      "dashboard-data-realm" => "flight",
+      "dashboard-data-view" => "canonical",
+      "dashboard-compare-data-view" => "",
+      "dashboard-limit-mode" => "observed"
     })
 
     assert_patch(view, show_path(mission, dashboard))

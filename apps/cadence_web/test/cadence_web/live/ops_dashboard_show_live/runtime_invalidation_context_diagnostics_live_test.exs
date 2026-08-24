@@ -149,27 +149,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationContextDiagnosticsL
 
       refute has_element?(view, "#dashboard-source-health-component")
 
-      view
-      |> element("#runtime-context-form")
-      |> render_change(%{
-        "time_mode" => "live",
-        "from" => from,
-        "to" => to,
-        "realm" => "flight",
-        "limit_mode" => "observed"
+      runtime_controls = dashboard_runtime_controls(view)
+
+      render_dashboard_runtime_change(view, runtime_controls, %{
+        "dashboard-time-mode" => "live",
+        "dashboard-data-form-from" => from,
+        "dashboard-data-form-to" => to,
+        "dashboard-data-realm" => "flight",
+        "dashboard-limit-mode" => "observed"
       })
 
       assert_patch(view, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view
-      |> element("#runtime-context-form")
-      |> render_change(%{
-        "time_mode" => "archive",
-        "from" => from,
-        "to" => to,
-        "realm" => "flight",
-        "limit_mode" => "current"
+      runtime_controls = dashboard_runtime_controls(view)
+
+      render_dashboard_runtime_change(view, runtime_controls, %{
+        "dashboard-time-mode" => "archive",
+        "dashboard-data-form-from" => from,
+        "dashboard-data-form-to" => to,
+        "dashboard-data-realm" => "flight",
+        "dashboard-limit-mode" => "current"
       })
 
       patched_path = assert_patch(view)
