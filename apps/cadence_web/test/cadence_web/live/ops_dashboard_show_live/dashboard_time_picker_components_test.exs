@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents
+  alias Phoenix.LiveView.JS
 
   defp render_cluster(overrides) do
     attrs =
@@ -147,22 +148,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   end
 
   test "renders recently used ranges with an empty state fallback" do
-    empty = LazyHTML.from_fragment(render_cluster([]))
+    empty = LiveVue.Test.get_vue(render_cluster([]), id: "dashboard-time-recents")
 
-    assert empty |> LazyHTML.query("#dashboard-time-recents") |> LazyHTML.text() =~
-             "Apply an absolute range"
+    assert empty.component == "TimeRangeRecents"
+    assert empty.id == "dashboard-time-recents"
+    assert empty.ssr == false
+    assert empty.class == "mt-3 border-t border-base-300/60 pt-2"
+    assert empty.props["ranges"] == []
+    assert empty.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert empty.handlers["select-range"] == JS.push("set_chart_time_range")
 
-    document =
-      LazyHTML.from_fragment(
+    populated =
+      LiveVue.Test.get_vue(
         render_cluster(
-          recent_ranges: [%{from: "2026-06-17T12:00:00Z", to: "2026-06-17T12:05:00Z"}]
-        )
+          recent_ranges: [
+            %{from: "2026-06-17T12:00:00Z", to: "2026-06-17T12:05:00Z"}
+          ]
+        ),
+        id: "dashboard-time-recents"
       )
 
-    assert ["2026-06-17T12:00:00Z"] =
-             document
-             |> LazyHTML.query("#dashboard-time-recents button[data-dashboard-time-recent-range]")
-             |> LazyHTML.attribute("phx-value-from")
+    assert populated.props["ranges"] == [
+             %{
+               "from" => "2026-06-17T12:00:00Z",
+               "to" => "2026-06-17T12:05:00Z",
+               "label" => "2026-06-17 12:00:00 to 2026-06-17 12:05:00 UTC"
+             }
+           ]
   end
 
   test "renders replay selector, progress clock, and scrub command" do

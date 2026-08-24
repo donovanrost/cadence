@@ -12,6 +12,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
 
   alias Cadence.Dashboards.TimeRange
   alias CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents
+  alias Phoenix.LiveView.JS
 
   attr :time_mode, :string, required: true
   attr :time_axis, :string, default: "generation_time"
@@ -245,28 +246,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   attr :recent_ranges, :list, default: []
 
   defp recent_ranges_section(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :recent_range_props,
+        Enum.map(assigns.recent_ranges, fn range ->
+          %{
+            from: range.from,
+            to: range.to,
+            label: TimeRange.label(range.from, range.to) || "#{range.from} to #{range.to}"
+          }
+        end)
+      )
+
     ~H"""
-    <div id="dashboard-time-recents" phx-hook="TimeRangeRecents" class="mt-3 border-t border-base-300/60 pt-2">
-      <p class="text-xs font-semibold text-base-content/85">Recently used absolute ranges</p>
-      <p :if={@recent_ranges == []} class="mt-1 text-[0.68rem] text-base-content/60">
-        Apply an absolute range and it will appear here for quick reuse.
-      </p>
-      <ul :if={@recent_ranges != []} class="mt-1" role="presentation">
-        <li :for={range <- @recent_ranges}>
-          <button
-            type="button"
-            phx-click="set_chart_time_range"
-            phx-value-from={range.from}
-            phx-value-to={range.to}
-            data-dashboard-time-recent-range
-            class="w-full truncate px-1 py-0.5 text-left font-mono text-[0.68rem] text-base-content/70 hover:bg-base-300/40 hover:text-base-content"
-            title={"Apply #{range.from} to #{range.to}"}
-          >
-            {TimeRange.label(range.from, range.to) || "#{range.from} to #{range.to}"}
-          </button>
-        </li>
-      </ul>
-    </div>
+    <.vue
+      id="dashboard-time-recents"
+      v-component="TimeRangeRecents"
+      ranges={@recent_range_props}
+      v-on:recents-loaded={JS.push("time_recents_loaded")}
+      v-on:select-range={JS.push("set_chart_time_range")}
+      v-ssr={false}
+      class="mt-3 border-t border-base-300/60 pt-2"
+    />
     """
   end
 

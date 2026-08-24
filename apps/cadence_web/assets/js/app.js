@@ -11,7 +11,6 @@ import NavRail from "./hooks/nav_rail"
 import Overlay from "./hooks/overlay"
 import ResizablePanel from "./hooks/resizable_panel"
 import TelemetryChart from "./hooks/telemetry_chart"
-import TimeRangeRecents from "./hooks/time_range_recents"
 
 const Hooks = {
   DashboardGrid,
@@ -21,8 +20,7 @@ const Hooks = {
   NavRail,
   Overlay,
   ResizablePanel,
-  TelemetryChart,
-  TimeRangeRecents
+  TelemetryChart
 }
 
 const csrfToken = document
