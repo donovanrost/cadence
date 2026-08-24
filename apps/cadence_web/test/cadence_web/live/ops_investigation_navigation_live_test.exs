@@ -122,7 +122,12 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     track_dashboard_view(source_view)
     assert has_element?(source_view, "#ops-context-rail")
-    assert has_element?(source_view, "#ops-data-sources-page")
+
+    source_vue = LiveVue.Test.get_vue(source_view, id: "ops-data-sources-component")
+    assert source_vue.component == "OpsDataSources"
+    assert source_vue.props["page"]["id"] == "ops-data-sources-page"
+    assert source_vue.props["page"]["mode"] == "reader"
+    assert source_vue.props["page"]["focus"]["data_source_id"] == "investigation-source"
 
     {:ok, data_operations, _html} =
       live(conn, data_operations_path)

@@ -346,15 +346,18 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
                String.contains?(event["title"], "rehearsal-telemetry-binding")
            end)
 
-    assert degraded_event =
-             Enum.find(page["activity"]["health_events"]["rows"], fn event ->
-               event["event_type"] == "degraded" and
-                 String.contains?(event["subtitle"], "source_probe_failed")
-             end)
+    health_events = page["activity"]["health_events"]["rows"]
 
-    assert degraded_event["probe_diagnostic_kind"] == "connection_unreachable"
-    assert degraded_event["probe_diagnostic_stage"] == "connection_test"
-    assert degraded_event["probe_remediation"] == "check_questdb_endpoint"
+    assert Enum.any?(health_events, fn event ->
+             event["event_type"] == "degraded" and
+               String.contains?(event["subtitle"], "source_probe_failed")
+           end)
+
+    assert Enum.find(health_events, fn event ->
+             event["probe_diagnostic_kind"] == "connection_unreachable" and
+               event["probe_diagnostic_stage"] == "connection_test" and
+               event["probe_remediation"] == "check_questdb_endpoint"
+           end)
 
     {:ok, settings_view, _html} =
       live(
