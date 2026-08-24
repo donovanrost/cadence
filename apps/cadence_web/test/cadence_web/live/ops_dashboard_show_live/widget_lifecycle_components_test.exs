@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport, only: [assert_widget_row: 4]
 
   alias Cadence.Dashboards.RenderWidget
   alias CadenceWeb.OpsDashboardShowLive.Components
@@ -235,10 +236,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
              |> LazyHTML.query("[data-widget-lifecycle-indicator]")
              |> LazyHTML.attribute("data-widget-lifecycle-indicator")
 
-    assert ["tlm.hk.battery_voltage"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-row")
+    assert_widget_row(html, "data_table", "placement-1", %{
+      "data-data-table-row" => "tlm.hk.battery_voltage"
+    })
 
     assert html =~ "This widget is showing partial data"
   end

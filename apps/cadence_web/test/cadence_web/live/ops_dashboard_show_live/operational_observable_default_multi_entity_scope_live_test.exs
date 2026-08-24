@@ -242,34 +242,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableDefaultMultiEntit
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{alpha_endpoint.source_endpoint_id}"])
              )
 
-      alpha_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-alpha"])
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "connection_state",
+        "data-status-matrix-resource-id" => "dashboard-transport-alpha",
+        "data-status-matrix-scope-kind" => "transport",
+        "data-status-matrix-source-endpoint-id" => alpha_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-14"
+      })
 
-      beta_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-beta"])
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-beta",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "connection_state",
+        "data-status-matrix-resource-id" => "dashboard-transport-beta",
+        "data-status-matrix-scope-kind" => "transport",
+        "data-status-matrix-source-endpoint-id" => beta_endpoint.source_endpoint_id,
+        "data-status-matrix-ground-station-id" => "dss-63"
+      })
 
-      gamma_row_selector =
-        ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="comms.transport.connection_state:dashboard-transport-gamma"])
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-data-source-id" => "managed_operational_observables",
+        "data-status-matrix-source-binding-id" => "default_flight_operational_observables",
+        "data-status-matrix-supported-capability" => "connection_state"
+      })
 
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dashboard-transport-alpha"][data-status-matrix-scope-kind="transport"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
-             )
-
-      assert has_element?(
-               view,
-               beta_row_selector <>
-                 ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dashboard-transport-beta"][data-status-matrix-scope-kind="transport"][data-status-matrix-source-endpoint-id="#{beta_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-63"])
-             )
-
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s([data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"][data-status-matrix-supported-capability="connection_state"])
-             )
-
-      refute has_element?(view, gamma_row_selector)
+      refute_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" => "comms.transport.connection_state:dashboard-transport-gamma"
+      })
 
       stop_dashboard_view(view)
     end
