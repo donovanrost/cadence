@@ -27,19 +27,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
       )
 
-    recovery =
+    vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-recovery-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      )
 
-    assert "hidden" =
-             recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
+    assert Map.take(vue, [:component, :id, :ssr, :class, :handlers]) == %{
+             component: "SelectedActivityEventSummary",
+             id: "dashboard-selected-activity-event-component",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
 
-    assert "This event exists but is hidden by the current activity filter." =
-             recovery["message"]["text"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    href = recovery["action"]["href"]
-    assert is_binary(href)
+    assert %{
+             "root" => %{
+               "attrs" => %{"data-dashboard-selected-activity-recovery" => "hidden"}
+             },
+             "message" => %{
+               "text" => "This event exists but is hidden by the current activity filter."
+             },
+             "action" => %{"href" => href}
+           } = vue.props["presentation"]["recovery"]
 
     assert URI.decode_query(URI.parse(href).query) == %{
              "scope_kind" => "mission",
@@ -92,45 +103,50 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
         readiness_return_intent: "source_return"
       )
 
-    document = LazyHTML.from_fragment(html)
-
-    readiness_return =
+    vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-readiness-return-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      )
 
-    remediation =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-remediation-component"
-      ).props["presentation"]
+    assert Map.take(vue, [:component, :id, :ssr, :class, :handlers]) == %{
+             component: "SelectedActivityEventSummary",
+             id: "dashboard-selected-activity-event-component",
+             ssr: false,
+             class: "contents",
+             handlers: %{}
+           }
 
-    assert ["refresh_publish_readiness"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-refresh-readiness")
-             |> LazyHTML.attribute("phx-click")
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    presentation = vue.props["presentation"]
+    readiness_return = presentation["readiness_return"]
+    remediation = presentation["remediation"]
+
+    assert "refresh_publish_readiness" =
+             presentation["header"]["refresh"]["attrs"]["phx-click"]
 
     assert "source_return" =
              readiness_return["root"]["attrs"][
                "data-dashboard-selected-activity-readiness-return"
              ]
 
-    assert ["Fix source connection"] =
-             Enum.map(
-               remediation["rows"],
-               & &1["attrs"]["data-dashboard-selected-activity-remediation"]
-             )
-
-    assert ["data_sources"] =
-             Enum.map(
-               remediation["rows"],
-               & &1["attrs"]["data-dashboard-selected-activity-remediation-target"]
-             )
+    assert {["Fix source connection"], ["data_sources"]} =
+             {
+               Enum.map(
+                 remediation["rows"],
+                 & &1["attrs"]["data-dashboard-selected-activity-remediation"]
+               ),
+               Enum.map(
+                 remediation["rows"],
+                 & &1["attrs"]["data-dashboard-selected-activity-remediation-target"]
+               )
+             }
 
     [row] = remediation["rows"]
     href = row["action"]["href"]
-    assert row["action"]["attrs"]["data-dashboard-selected-activity-remediation-href"] == href
 
-    assert String.starts_with?(href, "/missions/mission-1/ops/data-sources?")
+    assert row["action"]["attrs"]["data-dashboard-selected-activity-remediation-href"] == href and
+             String.starts_with?(href, "/missions/mission-1/ops/data-sources?")
 
     assert URI.decode_query(URI.parse(href).query) == %{
              "data_source_id" => "rehearsal-source",

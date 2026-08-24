@@ -86,20 +86,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
 
     document = LazyHTML.from_fragment(html)
 
-    remediation =
+    selected_activity =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-remediation-component"
+        id: "dashboard-selected-activity-event-component"
       ).props["presentation"]
 
-    source_actions =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-source-actions-component"
-      ).props["presentation"]
-
-    readiness_return =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-readiness-return-component"
-      ).props["presentation"]
+    remediation = selected_activity["remediation"]
+    source_actions = selected_activity["source_actions"]
+    readiness_return = selected_activity["readiness_return"]
 
     assert [
              "Use a compatible source",
@@ -121,20 +115,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
              &(&1["message"]["text"] == "Open Data Sources and choose a compatible source.")
            )
 
-    assert ["improved"] =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-readiness-trend]")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-readiness-trend")
+    assert "improved" =
+             selected_activity["header"]["readiness_comparison"]["attrs"][
+               "data-dashboard-selected-activity-readiness-trend"
+             ]
 
-    assert ["dashboard-lifecycle-event-readiness-previous"] =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-readiness-trend]")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-readiness-previous")
+    assert "dashboard-lifecycle-event-readiness-previous" =
+             selected_activity["header"]["readiness_comparison"]["attrs"][
+               "data-dashboard-selected-activity-readiness-previous"
+             ]
 
     assert "Readiness improved: 3 issues -> 1 issue." =
-             document
-             |> LazyHTML.query(~s([data-dashboard-selected-activity-field="Readiness trend"]))
-             |> selected_text()
+             selected_activity["fields"]
+             |> Enum.find(&(&1["label"] == "Readiness trend"))
+             |> Map.fetch!("value")
 
     assert "1" =
              source_actions["root"]["attrs"]["data-dashboard-selected-activity-source-actions"]
@@ -201,10 +195,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
              )
              |> LazyHTML.attribute("data-dashboard-activity-remediation-target")
 
-    assert ["refresh_publish_readiness"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-refresh-readiness")
-             |> LazyHTML.attribute("phx-click")
+    assert "refresh_publish_readiness" =
+             selected_activity["header"]["refresh"]["attrs"]["phx-click"]
 
     assert "source_return" =
              readiness_return["root"]["attrs"][
@@ -224,15 +216,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
     assert "refresh_publish_readiness" =
              readiness_return["action"]["attrs"]["phx-click"]
 
-    assert ["dashboard-lifecycle-event-readiness"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-refresh-readiness")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-refresh-readiness")
+    assert "dashboard-lifecycle-event-readiness" =
+             selected_activity["header"]["refresh"]["attrs"][
+               "data-dashboard-selected-activity-refresh-readiness"
+             ]
 
-    assert ["improved"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-refresh-readiness")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-refresh-readiness-state")
+    assert "improved" =
+             selected_activity["header"]["refresh"]["attrs"][
+               "data-dashboard-selected-activity-refresh-readiness-state"
+             ]
 
     assert [explicit_href, source_evidence_href] =
              Enum.map(remediation["rows"], & &1["action"]["href"])
@@ -323,8 +315,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
 
     remediation =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-remediation-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]["remediation"]
 
     assert ["Fix source connection"] =
              Enum.map(
@@ -400,8 +392,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
 
     remediation =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-remediation-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]["remediation"]
 
     [row] = remediation["rows"]
 

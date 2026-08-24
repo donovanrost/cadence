@@ -128,6 +128,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     document = LazyHTML.from_fragment(html)
     controls = activity_controls_presentation(html)
 
+    selected_activity =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]
+
     filter_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "active-filter-badge"))
 
@@ -170,25 +175,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-health")
              |> LazyHTML.attribute("data-dashboard-activity-selected")
 
-    assert ["dashboard-lifecycle-event-health"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-event")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-event")
+    assert "dashboard-lifecycle-event-health" =
+             selected_activity["root"]["attrs"]["data-dashboard-selected-activity-event"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-event")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-event-visible")
+    assert "true" =
+             selected_activity["root"]["attrs"][
+               "data-dashboard-selected-activity-event-visible"
+             ]
 
-    assert ["health_snapshot_captured"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-event")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-event-type")
+    assert "health_snapshot_captured" =
+             selected_activity["root"]["attrs"][
+               "data-dashboard-selected-activity-event-type"
+             ]
 
     assert "Health snapshot captured" =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-title]")
-             |> selected_text()
+             selected_activity["header"]["title"]["text"]
 
     health_snapshot =
       LiveVue.Test.get_vue(html,
@@ -275,6 +276,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    selected_activity =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]
+
     assert ["refresh_allowed"] =
              document
              |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-published")
@@ -292,15 +298,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              )
              |> selected_text()
 
-    assert ["refresh_allowed"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-event")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-runtime-impact-state")
+    assert "refresh_allowed" =
+             selected_activity["root"]["attrs"][
+               "data-dashboard-selected-activity-runtime-impact-state"
+             ]
 
     assert "Runtime refresh allowed: refresh_plan" =
-             document
-             |> LazyHTML.query(~s([data-dashboard-selected-activity-field="Runtime"]))
-             |> selected_text()
+             selected_activity["fields"]
+             |> Enum.find(&(&1["label"] == "Runtime"))
+             |> Map.fetch!("value")
   end
 
   defp dashboard_document do

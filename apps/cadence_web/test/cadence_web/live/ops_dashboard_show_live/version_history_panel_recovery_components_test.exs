@@ -26,8 +26,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
 
     recovery =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-recovery-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]["recovery"]
 
     assert "hidden" =
              recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
@@ -68,17 +68,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1&activity_event=dashboard-lifecycle-event-missing"
       )
 
-    document = LazyHTML.from_fragment(html)
-
-    recovery =
+    presentation =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-recovery-component"
+        id: "dashboard-selected-activity-event-component"
       ).props["presentation"]
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-event")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-event-found")
+    recovery = presentation["recovery"]
+
+    assert "false" =
+             presentation["root"]["attrs"]["data-dashboard-selected-activity-event-found"]
 
     assert "missing" =
              recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]

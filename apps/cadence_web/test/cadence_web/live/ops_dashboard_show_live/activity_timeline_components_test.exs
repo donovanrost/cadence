@@ -87,8 +87,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
 
     recovery =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-recovery-component"
-      ).props["presentation"]
+        id: "dashboard-selected-activity-event-component"
+      ).props["presentation"]["recovery"]
 
     assert "hidden" =
              recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]

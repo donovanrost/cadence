@@ -4,109 +4,165 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents
 
-  attr :summary, :map, required: true
-  attr :dashboard_document, :any, required: true
-  attr :dashboard_current_path, :string, required: true
-  attr :readiness_return_intent, :string, default: nil
+  attr(:summary, :map, required: true)
+  attr(:dashboard_document, :any, required: true)
+  attr(:dashboard_current_path, :string, required: true)
+  attr(:readiness_return_intent, :string, default: nil)
 
   def selected_activity_event_summary(assigns) do
+    presentation =
+      if assigns.summary.render? do
+        selected_activity_event_summary_presentation(assigns)
+      end
+
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <section
-      :if={@summary.render?}
-      id="dashboard-selected-activity-event"
-      class={[
-        "border border-info/40 bg-info/10 px-2 py-2 text-xs",
-        @summary.visibility_class
-      ]}
-      data-dashboard-selected-activity-event={@summary.event_id}
-      data-dashboard-selected-activity-event-found={@summary.found_text}
-      data-dashboard-selected-activity-event-visible={@summary.visible_text}
-      data-dashboard-selected-activity-event-filter={@summary.filter_value}
-      data-dashboard-selected-activity-event-type={@summary.event_type_text}
-      data-dashboard-selected-activity-runtime-impact-state={@summary.runtime_impact.state}
-      data-dashboard-selected-activity-runtime-impact-invalidation={
-        @summary.runtime_impact.invalidation_id
-      }
-      data-dashboard-selected-activity-runtime-impact-context={@summary.runtime_impact.context_match}
-      data-dashboard-selected-activity-runtime-impact-refresh={
-        @summary.runtime_impact.refresh_allowed
-      }
-    >
-      <div class="flex flex-wrap items-center gap-1.5">
-        <span class="font-semibold" data-dashboard-selected-activity-title>
-          {@summary.title}
-        </span>
-        <span
-          :if={@summary.found?}
-          class="badge badge-xs badge-outline"
-          data-dashboard-selected-activity-version
-        >
-          {@summary.version_text}
-        </span>
-        <span
-          :if={@summary.filter_state == :hidden}
-          class="badge badge-warning badge-xs"
-          data-dashboard-selected-activity-filter-state="hidden"
-        >
-          Hidden by filter
-        </span>
-        <span
-          :if={@summary.filter_state == :missing}
-          class="badge badge-error badge-xs"
-          data-dashboard-selected-activity-filter-state="missing"
-        >
-          Event unavailable
-        </span>
-        <span
-          :if={@summary.readiness_comparison}
-          class={["badge badge-xs", readiness_comparison_badge_class(@summary.readiness_comparison)]}
-          data-dashboard-selected-activity-readiness-trend={@summary.readiness_comparison.state}
-          data-dashboard-selected-activity-readiness-previous={
-            @summary.readiness_comparison.previous_event_id
-          }
-        >
-          {@summary.readiness_comparison.label}
-        </span>
-        <button
-          :if={selected_activity_readiness_check?(@summary)}
-          id="dashboard-selected-activity-refresh-readiness"
-          type="button"
-          phx-click="refresh_publish_readiness"
-          class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-focus"
-          data-dashboard-selected-activity-refresh-readiness={@summary.event_id}
-          data-dashboard-selected-activity-refresh-readiness-state={
-            @summary.readiness_comparison && @summary.readiness_comparison.state
-          }
-        >
-          <.icon name="hero-arrow-path" class="h-3 w-3" /> Re-check
-        </button>
-      </div>
-
-      <SelectedActivityActionComponents.readiness_return_prompt
-        summary={@summary}
-        readiness_return_intent={@readiness_return_intent}
-      />
-      <SelectedActivityActionComponents.source_actions summary={@summary} />
-      <SelectedActivityActionComponents.recovery_banner
-        summary={@summary}
-        dashboard_current_path={@dashboard_current_path}
-      />
-
-      <dl :if={@summary.fields != []} class="mt-2 grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1">
-        <%= for field <- @summary.fields do %>
-          <dt class="hud-label">{field.label}</dt>
-          <dd data-dashboard-selected-activity-field={field.label} class={field.class}>
-            {field.value}
-          </dd>
-        <% end %>
-      </dl>
-
-      <SelectedActivityActionComponents.remediation_actions
-        summary={@summary}
-        dashboard_document={@dashboard_document}
-      />
-    </section>
+    <.vue
+      :if={@presentation}
+      id="dashboard-selected-activity-event-component"
+      v-component="SelectedActivityEventSummary"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp selected_activity_event_summary_presentation(assigns) do
+    summary = assigns.summary
+
+    %{
+      root: %{
+        id: "dashboard-selected-activity-event",
+        class: [
+          "border border-info/40 bg-info/10 px-2 py-2 text-xs",
+          summary.visibility_class
+        ],
+        attrs: %{
+          "data-dashboard-selected-activity-event" => dom_attr_value(summary.event_id),
+          "data-dashboard-selected-activity-event-found" => dom_attr_value(summary.found_text),
+          "data-dashboard-selected-activity-event-visible" =>
+            dom_attr_value(summary.visible_text),
+          "data-dashboard-selected-activity-event-filter" => dom_attr_value(summary.filter_value),
+          "data-dashboard-selected-activity-event-type" =>
+            dom_attr_value(summary.event_type_text),
+          "data-dashboard-selected-activity-runtime-impact-state" =>
+            dom_attr_value(summary.runtime_impact.state),
+          "data-dashboard-selected-activity-runtime-impact-invalidation" =>
+            dom_attr_value(summary.runtime_impact.invalidation_id),
+          "data-dashboard-selected-activity-runtime-impact-context" =>
+            dom_attr_value(summary.runtime_impact.context_match),
+          "data-dashboard-selected-activity-runtime-impact-refresh" =>
+            dom_attr_value(summary.runtime_impact.refresh_allowed)
+        }
+      },
+      header: %{
+        class: "flex flex-wrap items-center gap-1.5",
+        title: %{
+          class: "font-semibold",
+          text: dom_text(summary.title),
+          attrs: %{"data-dashboard-selected-activity-title" => ""}
+        },
+        version: selected_activity_version_presentation(summary),
+        filter_state: selected_activity_filter_state_presentation(summary),
+        readiness_comparison: readiness_comparison_presentation(summary.readiness_comparison),
+        refresh: selected_activity_refresh_presentation(summary)
+      },
+      readiness_return:
+        SelectedActivityActionComponents.readiness_return_presentation(
+          summary,
+          assigns.readiness_return_intent
+        ),
+      source_actions: SelectedActivityActionComponents.source_actions_presentation(summary),
+      recovery:
+        SelectedActivityActionComponents.recovery_presentation(
+          summary,
+          assigns.dashboard_current_path
+        ),
+      fields:
+        summary.fields
+        |> Enum.with_index()
+        |> Enum.map(fn {field, index} ->
+          %{
+            key: "selected-activity-field-#{index}",
+            label: dom_text(field.label),
+            value: dom_text(field.value),
+            label_class: "hud-label",
+            value_class: field.class,
+            attrs: %{"data-dashboard-selected-activity-field" => dom_attr_value(field.label)}
+          }
+        end),
+      fields_class: "mt-2 grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1",
+      remediation:
+        SelectedActivityActionComponents.remediation_presentation(
+          summary,
+          assigns.dashboard_document
+        )
+    }
+  end
+
+  defp selected_activity_version_presentation(summary) do
+    %{
+      visible: summary.found?,
+      class: "badge badge-xs badge-outline",
+      text: dom_text(summary.version_text),
+      attrs: %{"data-dashboard-selected-activity-version" => ""}
+    }
+  end
+
+  defp selected_activity_filter_state_presentation(%{filter_state: :hidden}) do
+    %{
+      visible: true,
+      class: "badge badge-warning badge-xs",
+      text: "Hidden by filter",
+      attrs: %{"data-dashboard-selected-activity-filter-state" => "hidden"}
+    }
+  end
+
+  defp selected_activity_filter_state_presentation(%{filter_state: :missing}) do
+    %{
+      visible: true,
+      class: "badge badge-error badge-xs",
+      text: "Event unavailable",
+      attrs: %{"data-dashboard-selected-activity-filter-state" => "missing"}
+    }
+  end
+
+  defp selected_activity_filter_state_presentation(_summary), do: nil
+
+  defp readiness_comparison_presentation(nil), do: nil
+
+  defp readiness_comparison_presentation(comparison) do
+    %{
+      class: ["badge badge-xs", readiness_comparison_badge_class(comparison)],
+      text: dom_text(comparison.label),
+      attrs: %{
+        "data-dashboard-selected-activity-readiness-trend" => dom_attr_value(comparison.state),
+        "data-dashboard-selected-activity-readiness-previous" =>
+          dom_attr_value(comparison.previous_event_id)
+      }
+    }
+  end
+
+  defp selected_activity_refresh_presentation(summary) do
+    if selected_activity_readiness_check?(summary) do
+      %{
+        id: "dashboard-selected-activity-refresh-readiness",
+        type: "button",
+        class:
+          "inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-focus",
+        text: "Re-check",
+        icon: %{name: "hero-arrow-path", class: "h-3 w-3"},
+        attrs: %{
+          "phx-click" => "refresh_publish_readiness",
+          "data-dashboard-selected-activity-refresh-readiness" =>
+            dom_attr_value(summary.event_id),
+          "data-dashboard-selected-activity-refresh-readiness-state" =>
+            dom_attr_value(summary.readiness_comparison && summary.readiness_comparison.state)
+        }
+      }
+    end
   end
 
   defp selected_activity_readiness_check?(%{
@@ -122,4 +178,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
   defp readiness_comparison_badge_class(%{state: "unchanged"}), do: "badge-warning"
   defp readiness_comparison_badge_class(%{state: "first_check"}), do: "badge-outline"
   defp readiness_comparison_badge_class(_comparison), do: "badge-outline"
+
+  defp dom_attr_value(nil), do: nil
+  defp dom_attr_value(value), do: dom_text(value)
+
+  defp dom_text(nil), do: ""
+  defp dom_text(value) when is_binary(value), do: value
+  defp dom_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp dom_text(value), do: to_string(value)
 end

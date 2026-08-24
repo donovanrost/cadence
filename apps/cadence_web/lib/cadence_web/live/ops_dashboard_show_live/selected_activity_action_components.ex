@@ -5,17 +5,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
   alias CadenceWeb.OpsDashboardShowLive.ActivityNavigation
   alias CadenceWeb.OpsDashboardShowLive.VersionActionNavigation
 
-  attr :summary, :map, required: true
-  attr :readiness_return_intent, :string, default: nil
+  attr(:summary, :map, required: true)
+  attr(:readiness_return_intent, :string, default: nil)
 
   def readiness_return_prompt(assigns) do
     presentation =
-      if selected_activity_readiness_return?(
-           assigns.summary,
-           assigns.readiness_return_intent
-         ) do
-        readiness_return_presentation(assigns.summary, assigns.readiness_return_intent)
-      end
+      readiness_return_presentation(assigns.summary, assigns.readiness_return_intent)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -31,13 +26,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     """
   end
 
-  attr :summary, :map, required: true
+  attr(:summary, :map, required: true)
 
   def source_actions(assigns) do
-    presentation =
-      if selected_activity_source_actions?(assigns.summary) do
-        source_actions_presentation(assigns.summary)
-      end
+    presentation = source_actions_presentation(assigns.summary)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -53,17 +45,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     """
   end
 
-  attr :summary, :map, required: true
-  attr :dashboard_current_path, :string, required: true
+  attr(:summary, :map, required: true)
+  attr(:dashboard_current_path, :string, required: true)
 
   def recovery_banner(assigns) do
-    recovery_href =
-      selected_activity_recovery_href(assigns.summary, assigns.dashboard_current_path)
-
-    presentation =
-      if recovery_href do
-        recovery_presentation(assigns.summary, recovery_href)
-      end
+    presentation = recovery_presentation(assigns.summary, assigns.dashboard_current_path)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -79,14 +65,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     """
   end
 
-  attr :summary, :map, required: true
-  attr :dashboard_document, :any, required: true
+  attr(:summary, :map, required: true)
+  attr(:dashboard_document, :any, required: true)
 
   def remediation_actions(assigns) do
-    presentation =
-      if assigns.summary.remediation_actions != [] do
-        remediation_presentation(assigns.summary, assigns.dashboard_document)
-      end
+    presentation = remediation_presentation(assigns.summary, assigns.dashboard_document)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -102,7 +85,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     """
   end
 
-  defp readiness_return_presentation(summary, readiness_return_intent) do
+  def readiness_return_presentation(summary, readiness_return_intent) do
+    if selected_activity_readiness_return?(summary, readiness_return_intent) do
+      build_readiness_return_presentation(summary, readiness_return_intent)
+    end
+  end
+
+  def source_actions_presentation(summary) do
+    if selected_activity_source_actions?(summary) do
+      build_source_actions_presentation(summary)
+    end
+  end
+
+  def recovery_presentation(summary, dashboard_current_path) do
+    case selected_activity_recovery_href(summary, dashboard_current_path) do
+      nil -> nil
+      recovery_href -> build_recovery_presentation(summary, recovery_href)
+    end
+  end
+
+  def remediation_presentation(summary, dashboard_document) do
+    if summary.remediation_actions != [] do
+      build_remediation_presentation(summary, dashboard_document)
+    end
+  end
+
+  defp build_readiness_return_presentation(summary, readiness_return_intent) do
     %{
       kind: "readiness_return",
       visible: true,
@@ -137,7 +145,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     }
   end
 
-  defp source_actions_presentation(summary) do
+  defp build_source_actions_presentation(summary) do
     %{
       kind: "source_actions",
       visible: true,
@@ -190,7 +198,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     }
   end
 
-  defp recovery_presentation(summary, recovery_href) do
+  defp build_recovery_presentation(summary, recovery_href) do
     %{
       kind: "recovery",
       visible: true,
@@ -224,7 +232,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityActionComponents do
     }
   end
 
-  defp remediation_presentation(summary, dashboard_document) do
+  defp build_remediation_presentation(summary, dashboard_document) do
     %{
       kind: "remediation",
       visible: true,
