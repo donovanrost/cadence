@@ -39,8 +39,126 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert provider_accounts["attrs"]["id"] == "provider-accounts-nav-link"
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts")
-    assert has_element?(view, "#provider-accounts-page")
-    assert has_element?(view, "#new-provider-account-link")
+
+    assert has_element?(view, "#provider-account-list-page-component.contents")
+    refute has_element?(view, "#provider-accounts-page")
+    refute has_element?(view, "#new-provider-account-link")
+
+    vue = LiveVue.Test.get_vue(view, id: "provider-account-list-page-component")
+
+    assert vue.component == "ProviderAccountListPage"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+    assert vue.streams_diff == [["replace", "/provider_accounts", []]]
+
+    presentation = vue.props["presentation"]
+
+    assert presentation["root"]["attrs"] == %{
+             "id" => "provider-accounts-page",
+             "class" => "space-y-6"
+           }
+
+    assert presentation["header"]["title"]["text"] == "Provider Accounts"
+    assert presentation["header"]["title"]["suffix"]["text"] == "0 registered"
+
+    assert presentation["header"]["actions"]["new_account"] == %{
+             "attrs" => %{
+               "id" => "new-provider-account-link",
+               "class" => "btn btn-primary btn-sm gap-1",
+               "href" => "/provider-accounts/new",
+               "data-phx-link" => "redirect",
+               "data-phx-link-state" => "push"
+             },
+             "icon" => %{"attrs" => %{"class" => "hero-plus h-4 w-4"}},
+             "text" => "New Account"
+           }
+
+    assert presentation["empty_state"]["title"]["text"] == "No provider accounts"
+
+    assert presentation["empty_state"]["action"]["attrs"] == %{
+             "class" => "btn btn-primary btn-sm",
+             "href" => "/provider-accounts/new",
+             "data-phx-link" => "redirect",
+             "data-phx-link-state" => "push"
+           }
+
+    assert presentation["stream"] == %{
+             "attrs" => %{
+               "id" => "provider-accounts",
+               "phx-update" => "stream",
+               "class" => "grid gap-4 xl:grid-cols-2"
+             },
+             "empty_marker" => %{
+               "attrs" => %{
+                 "id" => "provider-accounts-empty",
+                 "class" => "hidden only:block"
+               }
+             }
+           }
+  end
+
+  test "streams safe Provider Account card presentation with historical identities" do
+    {conn, _user, organization} = signed_in_organization_admin()
+    {account, _version, credential} = persist_account!(organization)
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts")
+    vue = LiveVue.Test.get_vue(view, id: "provider-account-list-page-component")
+
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props["presentation"]["header"]["title"]["suffix"]["text"] == "1 registered"
+    assert vue.props["presentation"]["empty_state"] == nil
+
+    dom_id = "provider-account-provider-account-#{account.provider_account_id}"
+
+    card = %{
+      "__dom_id" => dom_id,
+      "id" => "provider-account-#{account.provider_account_id}",
+      "display_name" => "Ground Network Simulator",
+      "provider_account_id" => account.provider_account_id,
+      "status" => "info",
+      "status_label" => "Not validated",
+      "provider" => "Ground Network Simulator",
+      "config" => "v1",
+      "credential" => "Active · v1",
+      "events" => "Polling",
+      "endpoint" => "127.0.0.1 · local",
+      "href" => "/provider-accounts/#{account.provider_account_id}"
+    }
+
+    assert vue.streams_diff == [
+             ["replace", "/provider_accounts", []],
+             ["upsert", "/provider_accounts/-", card]
+           ]
+
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+
+    encoded = Jason.encode!(contract)
+    refute encoded =~ credential.provider_credential_ref
+    refute encoded =~ credential.backend_key
+    refute encoded =~ "ephemeral-provider-account-test-secret"
+    assert_provider_account_value_has_no_secret_fields(contract)
+  end
+
+  test "Provider Account list raw attrs preserve HEEx coercion semantics" do
+    assert CadenceWeb.ProviderAccountListLive.presentation_attrs(%{
+             "nil" => nil,
+             "false" => false,
+             "true" => true,
+             "empty" => "",
+             "string" => "value",
+             "number" => 7
+           }) == %{
+             "true" => "",
+             "empty" => "",
+             "string" => "value",
+             "number" => "7"
+           }
   end
 
   test "ordinary members are redirected away from Provider Account administration" do
