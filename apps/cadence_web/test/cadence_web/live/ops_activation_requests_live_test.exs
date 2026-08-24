@@ -56,7 +56,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
              "page" => page_props(),
              "selected" => nil,
              "form" => decision_form_props("")
-    }
+           }
 
     assert activation_request_rows(initial_vue) == [request_row]
     assert_json_safe(initial_vue)
@@ -79,7 +79,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
            }
 
     assert reviewed_vue.props["form"]["id"] == "activation-decision-form"
-    assert activation_request_rows(reviewed_vue) == [request_row]
+    assert activation_request_stream_mutations(reviewed_vue) == []
     assert_json_safe(reviewed_vue)
 
     render_hook(view, "decide", %{
@@ -98,7 +98,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
 
     error_vue = activation_requests_vue(view)
     assert error_vue.props == reviewed_vue.props
-    assert activation_request_rows(error_vue) == [request_row]
+    assert activation_request_stream_mutations(error_vue) == []
 
     render_hook(view, "decide", %{
       "activation_decision" => %{
@@ -118,11 +118,10 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
              "form" => decision_form_props("")
            }
 
-    refute Enum.any?(activation_request_rows(approved_vue), fn row ->
-             row["review"]["id"] == String.trim_leading(review_selector, "#")
-           end)
+    assert activation_request_stream_mutations(approved_vue) == [
+             ["replace", "/activation_requests", []]
+           ]
 
-    assert activation_request_rows(approved_vue) == []
     assert_json_safe(approved_vue)
 
     assert {:ok, %{generation: 1}} =
@@ -174,7 +173,11 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     rejected_vue = activation_requests_vue(view)
     assert rejected_vue.props["selected"] == nil
     assert rejected_vue.props["form"] == decision_form_props("")
-    assert activation_request_rows(rejected_vue) == []
+
+    assert activation_request_stream_mutations(rejected_vue) == [
+             ["replace", "/activation_requests", []]
+           ]
+
     assert_json_safe(rejected_vue)
   end
 
@@ -263,8 +266,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     %{
       "id" => "activation-approval-inbox",
       "heading" => "Activation approvals",
-      "subtitle" =>
-        "Review governed mission changes before Control applies them to runtime.",
+      "subtitle" => "Review governed mission changes before Control applies them to runtime.",
       "list" => %{
         "card_id" => "activation-approval-list",
         "id" => "activation-requests",
@@ -337,6 +339,13 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
       _operation -> false
     end)
     |> Enum.map(fn ["upsert", _path, request] -> request end)
+  end
+
+  defp activation_request_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
   end
 
   defp assert_json_safe(vue) do
