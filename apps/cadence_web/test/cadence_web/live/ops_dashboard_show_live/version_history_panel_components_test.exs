@@ -117,8 +117,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
 
     document = LazyHTML.from_fragment(html)
     controls = activity_controls_presentation(html)
+
     filter_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "active-filter-badge"))
+
     filters = controls["controls"]["filters"]
 
     assert ["health_snapshots"] =

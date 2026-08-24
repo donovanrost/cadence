@@ -31,6 +31,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
 
     document = LazyHTML.from_fragment(html)
     controls = activity_controls_presentation(html)
+
     open_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "open-review-badge"))
 
@@ -188,6 +189,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
 
     document = LazyHTML.from_fragment(html)
     controls = activity_controls_presentation(html)
+
     open_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "open-review-badge"))
 

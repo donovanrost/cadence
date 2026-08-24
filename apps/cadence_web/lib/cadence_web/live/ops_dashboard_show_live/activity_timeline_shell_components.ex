@@ -6,16 +6,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
   alias CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentation
   alias CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents
 
-  attr :activity, :map, required: true
-  attr :activity_rows, :list, required: true
-  attr :selected_activity_event, :map, required: true
-  attr :dashboard_document, :any, required: true
-  attr :dashboard_lifecycle_events, :list, required: true
-  attr :dashboard_activity_event_id, :string, default: nil
-  attr :dashboard_review_placement_id, :string, default: nil
-  attr :dashboard_readiness_return_intent, :string, default: nil
-  attr :dashboard_comparison_review_action_outcome, :map, default: nil
-  attr :dashboard_current_path, :string, required: true
+  attr(:activity, :map, required: true)
+  attr(:activity_rows, :list, required: true)
+  attr(:selected_activity_event, :map, required: true)
+  attr(:dashboard_document, :any, required: true)
+  attr(:dashboard_lifecycle_events, :list, required: true)
+  attr(:dashboard_activity_event_id, :string, default: nil)
+  attr(:dashboard_review_placement_id, :string, default: nil)
+  attr(:dashboard_readiness_return_intent, :string, default: nil)
+  attr(:dashboard_comparison_review_action_outcome, :map, default: nil)
+  attr(:dashboard_current_path, :string, required: true)
 
   def activity_timeline_shell(assigns) do
     action_outcome =
@@ -171,8 +171,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
             id: nil,
             type: nil,
             class: "hud-label",
-            attrs:
-              raw_attributes(%{"data-dashboard-activity-title" => activity.mode}),
+            attrs: raw_attributes(%{"data-dashboard-activity-title" => activity.mode}),
             text: rendered_body(activity.title)
           },
           %{
