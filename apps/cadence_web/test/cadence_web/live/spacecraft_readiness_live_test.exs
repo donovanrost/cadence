@@ -48,6 +48,7 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
 
       assert Enum.any?(props["panels"], &(&1["id"] == "spacecraft-readiness-routing"))
       assert props["page"]["subtitle"] =~ "Identity, profile, and application setup"
+
       assert readiness_panel(props, "spacecraft-readiness-identity")["status"]["label"] ==
                "Missing SCID"
 
@@ -240,7 +241,8 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
     test "keeps a spacecraft pinned when a newer profile version exists" do
       {conn, org, mission} = signed_in_org_and_mission()
 
-      profile_v1 =
+      %Cadence.SpacecraftType{} =
+        profile_v1 =
         TestFixtures.persist_spacecraft_profile!(mission,
           display_name: "Aurora Bus",
           applications: %{}
@@ -406,8 +408,7 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
           "id" => "spacecraft-readiness-applications",
           "title" => "Applications",
           "status" => %{"tone" => "blocked", "label" => "Profile required"},
-          "description" =>
-            "Select a spacecraft profile before installing product applications.",
+          "description" => "Select a spacecraft profile before installing product applications.",
           "details" => [],
           "action" => %{
             "label" => "Review applications",
@@ -425,8 +426,7 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
           "id" => "spacecraft-readiness-routing",
           "title" => "Routing",
           "status" => %{"tone" => "info", "label" => "Tracked in Comms"},
-          "description" =>
-            "Routing Rules describe durable spacecraft use of mission transports.",
+          "description" => "Routing Rules describe durable spacecraft use of mission transports.",
           "details" => [%{"label" => "Setup Area", "value" => "Routing Rules"}],
           "action" => %{"label" => "Review Routing", "href" => spacecraft_base <> "/routing"},
           "application_list" => nil
