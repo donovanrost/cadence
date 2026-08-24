@@ -92,18 +92,46 @@ assert.match(
   /v-if="presentation\.posture\.kind === 'critical' \|\| presentation\.posture\.kind === 'warning'"[\s\S]*?<span :class="presentation\.posture\.dot_class"><\/span>[\s\S]*?<span :class="presentation\.posture\.count\.class">\{\{ presentation\.posture\.count\.text \}\}<\/span>[\s\S]*?<span :class="presentation\.posture\.label\.class">\{\{ presentation\.posture\.label\.text \}\}<\/span>/,
   "critical and warning branches must retain dot, count, and label span topology",
 )
-assert.match(template, /v-bind="presentation\.connection\.ok\.attrs"/)
-assert.match(template, /v-bind="presentation\.connection\.lost\.attrs"/)
-assert.match(template, /<template v-if="presentation\.account">/)
-assert.match(template, /:id="presentation\.account\.notifications_bell\.id"/)
-assert.match(template, /:class="presentation\.account\.notifications_bell\.class"/)
 assert.match(
   template,
-  /<NotificationsBell :presentation="presentation\.account\.notifications_bell\.presentation" \/>/,
+  /<span\s+:id="presentation\.connection\.ok\.id"\s+:class="presentation\.connection\.ok\.class"\s+:title="presentation\.connection\.ok\.title"\s+v-bind="presentation\.connection\.ok\.attrs"\s*><\/span>/,
+  "the connected indicator must render every stable DOM contract from its server DTO",
 )
-assert.match(template, /:id="presentation\.account\.user_menu\.id"/)
-assert.match(template, /:class="presentation\.account\.user_menu\.class"/)
-assert.match(template, /<UserMenu :presentation="presentation\.account\.user_menu\.presentation" \/>/)
+assert.match(
+  template,
+  /<span\s+:id="presentation\.connection\.lost\.id"\s+:class="presentation\.connection\.lost\.class"\s+:title="presentation\.connection\.lost\.title"\s+v-bind="presentation\.connection\.lost\.attrs"\s*><\/span>/,
+  "the disconnected indicator must render every stable DOM contract from its server DTO",
+)
+assert.match(
+  template,
+  /<div\s+v-if="presentation\.account\?\.notifications_bell"\s+:id="presentation\.account\.notifications_bell\.id"\s+:class="presentation\.account\.notifications_bell\.class"\s*>\s*<NotificationsBell :presentation="presentation\.account\.notifications_bell\.presentation" \/>\s*<\/div>/,
+  "the notification wrapper must independently render its server-owned host and child DTO",
+)
+assert.match(
+  template,
+  /<div\s+v-if="presentation\.account\?\.user_menu"\s+:id="presentation\.account\.user_menu\.id"\s+:class="presentation\.account\.user_menu\.class"\s*>\s*<UserMenu :presentation="presentation\.account\.user_menu\.presentation" \/>\s*<\/div>/,
+  "the user-menu wrapper must independently render its server-owned host and child DTO",
+)
+assert.doesNotMatch(template, /<template v-if="presentation\.account">/)
+
+for (const clientOwnedDomLiteral of [
+  'id="ops-utc-clock"',
+  'id="ops-conn-ok"',
+  'id="ops-conn-lost"',
+  'id="notifications-bell-ops"',
+  'id="user-menu-ops"',
+  'title="Connected"',
+  'title="Connection lost"',
+  'class="contents"',
+  'class="font-mono text-xs text-base-content/70 tabular-nums"',
+  'class="h-2 w-2 rounded-full bg-success"',
+  'class="hidden h-2 w-2 rounded-full bg-error motion-safe:animate-pulse"',
+]) {
+  assert.ok(
+    !template.includes(clientOwnedDomLiteral),
+    `the parent SFC must not own server presentation literal: ${clientOwnedDomLiteral}`,
+  )
+}
 
 for (const token of [
   'id="ops-status-bar-component"',

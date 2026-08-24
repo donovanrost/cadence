@@ -76,8 +76,8 @@ type Presentation = {
   clock: {component: "UtcClock"; id: string; class: string}
   connection: {ok: ConnectionIndicator; lost: ConnectionIndicator}
   account: null | {
-    notifications_bell: NotificationsBellComposition
-    user_menu: UserMenuComposition
+    notifications_bell: NotificationsBellComposition | null
+    user_menu: UserMenuComposition | null
   }
 }
 
@@ -129,19 +129,19 @@ defineProps<{presentation: Presentation}>()
       v-bind="presentation.connection.lost.attrs"
     ></span>
 
-    <template v-if="presentation.account">
-      <div
-        :id="presentation.account.notifications_bell.id"
-        :class="presentation.account.notifications_bell.class"
-      >
-        <NotificationsBell :presentation="presentation.account.notifications_bell.presentation" />
-      </div>
-      <div
-        :id="presentation.account.user_menu.id"
-        :class="presentation.account.user_menu.class"
-      >
-        <UserMenu :presentation="presentation.account.user_menu.presentation" />
-      </div>
-    </template>
+    <div
+      v-if="presentation.account?.notifications_bell"
+      :id="presentation.account.notifications_bell.id"
+      :class="presentation.account.notifications_bell.class"
+    >
+      <NotificationsBell :presentation="presentation.account.notifications_bell.presentation" />
+    </div>
+    <div
+      v-if="presentation.account?.user_menu"
+      :id="presentation.account.user_menu.id"
+      :class="presentation.account.user_menu.class"
+    >
+      <UserMenu :presentation="presentation.account.user_menu.presentation" />
+    </div>
   </header>
 </template>
