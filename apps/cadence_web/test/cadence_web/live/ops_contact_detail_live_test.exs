@@ -193,6 +193,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
 
     assert forms["approval"] == nil
     assert forms["rejection"] == nil
+
     assert forms["acknowledgment"] ==
              expected_decision_form(change, :acknowledgment)
 
@@ -313,6 +314,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     assert page["values"]["id"] == "contact-values-matrix"
     assert page["values"]["eyebrow"] == "Truth ledger"
     assert page["values"]["heading"] == "Four values, one operational record"
+
     assert page["values"]["copy"] ==
              "Provider truth does not silently become Cadence execution truth."
 
@@ -341,6 +343,7 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
            }
 
     assert page["binding_chain"]["id"] == "contact-binding-chain"
+
     assert Enum.map(page["binding_chain"]["rows"], & &1["label"]) == [
              "Provider Account",
              "Mission grant",
@@ -434,7 +437,8 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
         "required" => true
       },
       "submit" => %{
-        "id" => "#{decision_prefix(kind)}-provider-change-#{change.provider_reservation_change_id}",
+        "id" =>
+          "#{decision_prefix(kind)}-provider-change-#{change.provider_reservation_change_id}",
         "label" => decision_submit_label(kind)
       }
     }

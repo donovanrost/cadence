@@ -122,7 +122,10 @@ defmodule CadenceWeb.OpsContactDetailLive do
         },
         facts: [
           %{label: "Provider rev", value: display_value(reservation.provider_revision)},
-          %{label: "Schedule rev", value: display_value(schedule_revision(assigns.scheduled_contact))},
+          %{
+            label: "Schedule rev",
+            value: display_value(schedule_revision(assigns.scheduled_contact))
+          },
           %{label: "Decision work", value: display_value(decision_label(assigns.current_change))}
         ]
       },
@@ -164,11 +167,20 @@ defmodule CadenceWeb.OpsContactDetailLive do
         eyebrow: "Immutable binding chain",
         heading: "Execution ownership",
         rows: [
-          %{label: "Provider Account", value: account_label(assigns.provider_account_version, reservation)},
+          %{
+            label: "Provider Account",
+            value: account_label(assigns.provider_account_version, reservation)
+          },
           %{label: "Mission grant", value: grant_label(assigns.provider_grant, reservation)},
-          %{label: "Mission Provider", value: versioned(reservation.provider_id, reservation.provider_version)},
+          %{
+            label: "Mission Provider",
+            value: versioned(reservation.provider_id, reservation.provider_version)
+          },
           %{label: "Delivery policy", value: "v#{assigns.delivery_policy_version}"},
-          %{label: "Transport", value: versioned(reservation.transport_id, reservation.transport_version)},
+          %{
+            label: "Transport",
+            value: versioned(reservation.transport_id, reservation.transport_version)
+          },
           %{label: "Service Profile", value: profile_label(reservation.service_profile_ref)},
           %{label: "Delivery Profile", value: profile_label(reservation.delivery_profile_ref)}
         ]
@@ -177,7 +189,10 @@ defmodule CadenceWeb.OpsContactDetailLive do
         eyebrow: "Independent lifecycle",
         heading: "Operational state",
         rows: [
-          lifecycle_dto("Provider Contact", reservation.provider_status || reservation.lifecycle_state),
+          lifecycle_dto(
+            "Provider Contact",
+            reservation.provider_status || reservation.lifecycle_state
+          ),
           lifecycle_dto("Provider pass", reservation.pass_phase),
           lifecycle_dto("Delivery", reservation.delivery_state),
           lifecycle_dto("Cadence schedule", contact_lifecycle(assigns.scheduled_contact)),
