@@ -76,70 +76,73 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
           hidden_field_dto(data_form[:to], "dashboard-data-form-to"),
           hidden_field_dto(data_form[:replay_run_id], "dashboard-replay-run-id")
         ],
-        source: section_dto(
-          "dashboard-source-query-heading",
-          "Source",
-          "grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
-          [
-            select_field_dto(
-              data_form[:realm],
-              "dashboard-data-realm",
-              "Realm",
-              realm_options(assigns.data_realms),
-              "select-xs"
-            ),
-            select_field_dto(
-              data_form[:source_binding_id],
-              "dashboard-source-binding",
-              "Source binding",
-              source_binding_options(assigns.data_bindings, assigns.data_realm),
-              "select-xs font-mono"
-            )
-          ]
-        ),
-        representation: section_dto(
-          "dashboard-representation-query-heading",
-          "Representation",
-          "grid gap-2 sm:grid-cols-2",
-          [
-            select_field_dto(
-              data_form[:data_view],
-              "dashboard-data-view",
-              "Data view",
-              data_view_options(),
-              "select-xs"
-            ),
-            select_field_dto(
-              data_form[:compare_data_view],
-              "dashboard-compare-data-view",
-              "Compare against",
-              compare_data_view_options(assigns.data_view),
-              "select-xs"
-            )
-          ]
-        ),
-        semantics: section_dto(
-          "dashboard-semantics-query-heading",
-          "Operational semantics",
-          "grid gap-2 sm:grid-cols-2",
-          [
-            select_field_dto(
-              data_form[:time_axis],
-              "dashboard-time-axis",
-              "Time basis",
-              time_axis_options(),
-              "select-xs"
-            ),
-            select_field_dto(
-              data_form[:limit_mode],
-              "dashboard-limit-mode",
-              "Limit semantics",
-              limit_mode_options(),
-              "select-xs"
-            )
-          ],
-          limit_mode_fallback_dto(assigns.limit_mode_fallback)
-        ),
+        source:
+          section_dto(
+            "dashboard-source-query-heading",
+            "Source",
+            "grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]",
+            [
+              select_field_dto(
+                data_form[:realm],
+                "dashboard-data-realm",
+                "Realm",
+                realm_options(assigns.data_realms),
+                "select-xs"
+              ),
+              select_field_dto(
+                data_form[:source_binding_id],
+                "dashboard-source-binding",
+                "Source binding",
+                source_binding_options(assigns.data_bindings, assigns.data_realm),
+                "select-xs font-mono"
+              )
+            ]
+          ),
+        representation:
+          section_dto(
+            "dashboard-representation-query-heading",
+            "Representation",
+            "grid gap-2 sm:grid-cols-2",
+            [
+              select_field_dto(
+                data_form[:data_view],
+                "dashboard-data-view",
+                "Data view",
+                data_view_options(),
+                "select-xs"
+              ),
+              select_field_dto(
+                data_form[:compare_data_view],
+                "dashboard-compare-data-view",
+                "Compare against",
+                compare_data_view_options(assigns.data_view),
+                "select-xs"
+              )
+            ]
+          ),
+        semantics:
+          section_dto(
+            "dashboard-semantics-query-heading",
+            "Operational semantics",
+            "grid gap-2 sm:grid-cols-2",
+            [
+              select_field_dto(
+                data_form[:time_axis],
+                "dashboard-time-axis",
+                "Time basis",
+                time_axis_options(),
+                "select-xs"
+              ),
+              select_field_dto(
+                data_form[:limit_mode],
+                "dashboard-limit-mode",
+                "Limit semantics",
+                limit_mode_options(),
+                "select-xs"
+              )
+            ],
+            limit_mode_fallback_dto(assigns.limit_mode_fallback)
+          ),
         markers: marker_section_dto(assigns.hidden_marker_categories)
       }
     }

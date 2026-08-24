@@ -95,7 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
       field = dashboard_runtime_control(runtime_controls, id)
 
       if field do
-        validate_dashboard_runtime_value!(field, value)
+        validate_dashboard_runtime_value!(id, field, value, values_by_id)
 
         put_dashboard_runtime_param(
           params,
@@ -114,7 +114,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     Phoenix.LiveViewTest.render_change(view, event, params)
   end
 
-  defp validate_dashboard_runtime_value!(%{"options" => options}, value) do
+  defp validate_dashboard_runtime_value!(
+         "dashboard-source-binding",
+         _field,
+         _value,
+         values_by_id
+       )
+       when is_map_key(values_by_id, "dashboard-data-realm"),
+       do: :ok
+
+  defp validate_dashboard_runtime_value!(
+         "dashboard-compare-data-view",
+         _field,
+         _value,
+         values_by_id
+       )
+       when is_map_key(values_by_id, "dashboard-data-view"),
+       do: :ok
+
+  defp validate_dashboard_runtime_value!(_id, %{"options" => options}, value, _values_by_id) do
     if Enum.any?(options, &(&1["value"] == value and not &1["disabled"])) do
       :ok
     else
@@ -123,13 +141,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   defp validate_dashboard_runtime_value!(
+         _id,
          %{"input_attrs" => %{"type" => "checkbox"}},
-         value
+         value,
+         _values_by_id
        )
        when value in ["true", "false"],
        do: :ok
 
-  defp validate_dashboard_runtime_value!(_field, _value), do: :ok
+  defp validate_dashboard_runtime_value!(_id, _field, _value, _values_by_id), do: :ok
 
   defp put_dashboard_runtime_param(params, name, value) do
     case Regex.run(~r/^([^\[]+)\[([^\]]+)\]$/, name) do

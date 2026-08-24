@@ -61,8 +61,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponentsTest
                },
                "description" => %{
                  "class" => "mt-0.5 text-[0.68rem] text-base-content/50",
-                 "text" =>
-                   "Defaults follow the dashboard definition. Overrides stay in the URL."
+                 "text" => "Defaults follow the dashboard definition. Overrides stay in the URL."
                }
              },
              "active_source" => %{
@@ -191,8 +190,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponentsTest
                    "id" => "dashboard-limit-mode-fallback",
                    "data-requested-limit-mode" => "projected",
                    "data-applied-limit-mode" => "observed",
-                   "data-limit-mode-fallback-reason" =>
-                     "unsupported_limit_semantics_mode",
+                   "data-limit-mode-fallback-reason" => "unsupported_limit_semantics_mode",
                    "class" => "badge badge-warning badge-xs mt-2 gap-1",
                    "title" => "Requested projected limit semantics; using observed."
                  },
