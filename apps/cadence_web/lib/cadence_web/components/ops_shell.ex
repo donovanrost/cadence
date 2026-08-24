@@ -55,13 +55,12 @@ defmodule CadenceWeb.Components.OpsShell do
         <% end %>
       </div>
 
-      <span
+      <.vue
         id="ops-utc-clock"
-        phx-hook="UtcClock"
-        phx-update="ignore"
+        v-component="UtcClock"
+        v-ssr={false}
         class="font-mono text-xs text-base-content/70 tabular-nums"
-      >
-      </span>
+      />
       <span
         id="ops-conn-ok"
         class="h-2 w-2 rounded-full bg-success"

@@ -14,7 +14,6 @@ import Overlay from "./hooks/overlay"
 import ResizablePanel from "./hooks/resizable_panel"
 import TelemetryChart from "./hooks/telemetry_chart"
 import TimeRangeRecents from "./hooks/time_range_recents"
-import UtcClock from "./hooks/utc_clock"
 
 const Hooks = {
   ClipboardButton,
@@ -27,8 +26,7 @@ const Hooks = {
   Overlay,
   ResizablePanel,
   TelemetryChart,
-  TimeRangeRecents,
-  UtcClock
+  TimeRangeRecents
 }
 
 const csrfToken = document

@@ -86,6 +86,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
       assert html =~ "Thermal"
       assert html =~ "0 widgets"
       assert has_element?(view, "#ops-utc-clock")
+
+      utc_clock = LiveVue.Test.get_vue(view, id: "ops-utc-clock")
+
+      assert utc_clock.component == "UtcClock"
+      assert utc_clock.class == "font-mono text-xs text-base-content/70 tabular-nums"
+      refute utc_clock.ssr
     end
 
     test "the shared Ops shell renders exactly one context rail across representative routes" do
