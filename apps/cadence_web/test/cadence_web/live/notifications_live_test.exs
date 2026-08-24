@@ -11,7 +11,7 @@ defmodule CadenceWeb.NotificationsLiveTest do
   alias Cadence.Accounts
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{NotificationsLive, TestFixtures}
   alias Phoenix.LiveView.JS
 
   defp user_and_conn do
@@ -56,9 +56,30 @@ defmodule CadenceWeb.NotificationsLiveTest do
   end
 
   defp notification_prop(vue, notification_id) do
-    Enum.find(vue.props["notifications"], fn notification ->
+    Enum.find(vue.props["presentation"]["panel"]["notifications"], fn notification ->
       notification["notification_id"] == notification_id
     end)
+  end
+
+  defp notifications_page(view) do
+    vue = LiveVue.Test.get_vue(view, id: "notifications-page-component")
+    {vue, vue.props["presentation"]}
+  end
+
+  defp render_page_event(view, emitted_event, payload) do
+    vue = LiveVue.Test.get_vue(view, id: "notifications-page-component")
+
+    phoenix_event =
+      case emitted_event do
+        "accept-invitation" -> "accept_invitation"
+        "mark-read" -> "mark_read"
+      end
+
+    assert vue.handlers[emitted_event] == JS.push(phoenix_event)
+
+    view
+    |> element("#notifications-page-component")
+    |> render_hook(phoenix_event, payload)
   end
 
   describe "render" do
@@ -66,11 +87,12 @@ defmodule CadenceWeb.NotificationsLiveTest do
       {_user, conn} = user_and_conn()
 
       {:ok, view, _html} = live(conn, ~p"/notifications")
+      {_vue, presentation} = notifications_page(view)
 
-      assert has_element?(view, "#notifications-page")
-      assert has_element?(view, "#notifications-empty-state", "No notifications")
-      assert has_element?(view, "#notifications-empty-state", "All caught up")
-      refute has_element?(view, "#notifications-panel-component")
+      assert presentation["root"]["attrs"]["id"] == "notifications-page"
+      assert presentation["empty_state"]["title"]["text"] == "No notifications"
+      assert presentation["empty_state"]["description"]["text"] == "All caught up."
+      refute presentation["panel"]
     end
 
     test "renders invitation data and existing actions through LiveVue" do
@@ -78,14 +100,14 @@ defmodule CadenceWeb.NotificationsLiveTest do
       {_org, _invitation, notification} = create_invitation_and_notification(user)
 
       {:ok, view, _html} = live(conn, ~p"/notifications")
+      {vue, presentation} = notifications_page(view)
 
-      assert has_element?(view, "#notifications-panel-component")
-      refute has_element?(view, "#notifications-empty-state")
+      assert presentation["panel"]["attrs"]["id"] == "notifications-panel-component"
+      refute presentation["empty_state"]
 
-      vue = LiveVue.Test.get_vue(view, id: "notifications-panel-component")
       notification_prop = notification_prop(vue, notification.notification_id)
 
-      assert vue.component == "NotificationsPanel"
+      assert vue.component == "NotificationsPage"
       assert vue.ssr == false
       assert is_binary(Jason.encode!(vue.props))
 
@@ -106,6 +128,40 @@ defmodule CadenceWeb.NotificationsLiveTest do
                "mark-read" => JS.push("mark_read")
              }
     end
+
+    test "uses one always-present non-SSR parent host with one JSON-safe presentation prop" do
+      {_user, conn} = user_and_conn()
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+      {vue, presentation} = notifications_page(view)
+
+      assert has_element?(view, "#notifications-page-component.contents")
+      assert vue.component == "NotificationsPage"
+      assert vue.ssr == false
+      assert Map.keys(vue.props) == ["presentation"]
+      assert Jason.decode!(Jason.encode!(presentation)) == presentation
+
+      assert vue.handlers == %{
+               "accept-invitation" => JS.push("accept_invitation"),
+               "mark-read" => JS.push("mark_read")
+             }
+    end
+
+    test "preserves HEEx raw attribute omission and coercion semantics" do
+      assert NotificationsLive.presentation_attrs(%{
+               "nil" => nil,
+               "false" => false,
+               "true" => true,
+               "empty" => "",
+               "string" => "retained",
+               "number" => 7
+             }) == %{
+               "true" => "",
+               "empty" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
+    end
   end
 
   describe "accept_invitation event" do
@@ -117,7 +173,7 @@ defmodule CadenceWeb.NotificationsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/notifications")
 
-      render_click(view, "accept_invitation", %{
+      render_page_event(view, "accept-invitation", %{
         "notification_id" => notification.notification_id
       })
 
@@ -142,14 +198,14 @@ defmodule CadenceWeb.NotificationsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/notifications")
 
       # Send the event directly — the notification is already read so no button is rendered.
-      vue = LiveVue.Test.get_vue(view, id: "notifications-panel-component")
+      {vue, _presentation} = notifications_page(view)
       notification_prop = notification_prop(vue, notification.notification_id)
 
       assert notification_prop["unread"] == false
       assert notification_prop["action"] == nil
       assert notification_prop["state_label"] == "Accepted"
 
-      render_click(view, "accept_invitation", %{
+      render_page_event(view, "accept-invitation", %{
         "notification_id" => notification.notification_id
       })
 
@@ -174,19 +230,19 @@ defmodule CadenceWeb.NotificationsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/notifications")
 
-      initial_vue = LiveVue.Test.get_vue(view, id: "notifications-panel-component")
+      {initial_vue, _initial_presentation} = notifications_page(view)
       initial_prop = notification_prop(initial_vue, notification.notification_id)
 
       assert initial_prop["unread"] == true
       assert initial_prop["action"] == "mark_read"
       assert initial_prop["action_label"] == "Mark read"
 
-      render_click(view, "mark_read", %{"notification_id" => notification.notification_id})
+      render_page_event(view, "mark-read", %{"notification_id" => notification.notification_id})
 
       assert {:ok, updated} = Notifications.fetch_notification(notification.notification_id)
       refute is_nil(updated.read_at)
 
-      updated_vue = LiveVue.Test.get_vue(view, id: "notifications-panel-component")
+      {updated_vue, _updated_presentation} = notifications_page(view)
       updated_prop = notification_prop(updated_vue, notification.notification_id)
 
       assert updated_prop["unread"] == false
@@ -200,7 +256,10 @@ defmodule CadenceWeb.NotificationsLiveTest do
       {user, conn} = user_and_conn()
 
       {:ok, view, _html} = live(conn, ~p"/notifications")
-      assert has_element?(view, "#notifications-empty-state")
+      {_initial_vue, initial_presentation} = notifications_page(view)
+
+      assert initial_presentation["empty_state"]["wrapper"]["attrs"]["id"] ==
+               "notifications-empty-state"
 
       n =
         persist_notification!(user, %{
@@ -211,10 +270,10 @@ defmodule CadenceWeb.NotificationsLiveTest do
       # Wait for the PubSub message to propagate.
       _ = render(view)
 
-      assert has_element?(view, "#notifications-panel-component")
-      refute has_element?(view, "#notifications-empty-state")
+      {vue, presentation} = notifications_page(view)
+      assert presentation["panel"]["attrs"]["id"] == "notifications-panel-component"
+      refute presentation["empty_state"]
 
-      vue = LiveVue.Test.get_vue(view, id: "notifications-panel-component")
       notification_prop = notification_prop(vue, n.notification_id)
 
       assert notification_prop["title"] == "Granted access"

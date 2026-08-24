@@ -76,28 +76,31 @@ defmodule CadenceWeb.NotificationsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="notifications-page" class="space-y-4 max-w-2xl mx-auto">
-        <.page_header
-          title="Notifications"
-          subtitle="Invitations, access grants, and system notices."
-        />
-
-        <div :if={@notifications_empty?} id="notifications-empty-state">
-          <.empty_state icon="hero-bell" title="No notifications" description="All caught up." />
-        </div>
-
-        <.vue
-          :if={!@notifications_empty?}
-          id="notifications-panel-component"
-          v-component="NotificationsPanel"
-          notifications={@notification_rows}
-          v-on:accept-invitation={JS.push("accept_invitation")}
-          v-on:mark-read={JS.push("mark_read")}
-          v-ssr={false}
-        />
-      </div>
+      <.vue
+        id="notifications-page-component"
+        v-component="NotificationsPage"
+        presentation={@notifications_page_presentation}
+        v-on:accept-invitation={JS.push("accept_invitation")}
+        v-on:mark-read={JS.push("mark_read")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
   end
 
   defp mark_notification_read(socket, id) do
@@ -117,11 +120,90 @@ defmodule CadenceWeb.NotificationsLive do
   end
 
   defp assign_notifications(socket, notifications) do
+    notification_rows = Enum.map(notifications, &notification_row/1)
+
     socket
     |> assign(:notifications, notifications)
-    |> assign(:notification_rows, Enum.map(notifications, &notification_row/1))
-    |> assign(:notifications_empty?, notifications == [])
+    |> assign(:notifications_page_presentation, page_presentation(notification_rows))
   end
+
+  defp page_presentation(notification_rows) do
+    notifications_empty? = notification_rows == []
+
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "notifications-page",
+            "class" => "space-y-4 max-w-2xl mx-auto"
+          })
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{"attrs" => presentation_attrs(%{"class" => false})},
+        "content" => %{"attrs" => presentation_attrs(%{})},
+        "title" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+            }),
+          "text" => "Notifications"
+        },
+        "subtitle" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+            }),
+          "text" => "Invitations, access grants, and system notices."
+        }
+      },
+      "empty_state" => empty_state_presentation(notifications_empty?),
+      "panel" => panel_presentation(notifications_empty?, notification_rows)
+    }
+  end
+
+  defp empty_state_presentation(true) do
+    %{
+      "wrapper" => %{
+        "attrs" => presentation_attrs(%{"id" => "notifications-empty-state"})
+      },
+      "body" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" =>
+              "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+          })
+      },
+      "icon" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "hero-bell mx-auto h-10 w-10 text-base-content/30 block"
+          })
+      },
+      "title" => %{
+        "attrs" => presentation_attrs(%{"class" => "hud-label mt-3"}),
+        "text" => "No notifications"
+      },
+      "description" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+          }),
+        "text" => "All caught up."
+      }
+    }
+  end
+
+  defp empty_state_presentation(false), do: nil
+
+  defp panel_presentation(false, notification_rows) do
+    %{
+      "attrs" => presentation_attrs(%{"id" => "notifications-panel-component"}),
+      "notifications" => notification_rows
+    }
+  end
+
+  defp panel_presentation(true, _notification_rows), do: nil
 
   defp notification_row(%Notification{} = notification) do
     notification_id = notification.notification_id
