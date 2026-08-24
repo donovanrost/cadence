@@ -109,8 +109,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
           })
       )
 
-    document = LazyHTML.from_fragment(html)
-
     invalidation =
       html
       |> LiveVue.Test.get_vue(id: "dashboard-recent-invalidations-component")
@@ -119,10 +117,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
       |> Map.fetch!("events")
       |> List.first()
 
-    assert ["reused"] =
-             document
-             |> LazyHTML.query("#dashboard-cache-summary")
-             |> LazyHTML.attribute("data-cache-classification")
+    cache_vue = LiveVue.Test.get_vue(html, id: "dashboard-cache-summary-component")
+
+    assert "reused" =
+             cache_vue.props["presentation"]["section"]["attributes"][
+               "data-cache-classification"
+             ]
 
     no_refresh_vue =
       LiveVue.Test.get_vue(html, id: "dashboard-no-refresh-summary-component")
