@@ -494,11 +494,18 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
 
-      assert has_element?(
-               view,
-               "nav a[href='#{list_url}'][class*='bg-primary/10'][class*='border-primary']",
-               "Spacecraft"
-             )
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      spacecraft_nav =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "spacecraft")
+        )
+
+      assert spacecraft_nav["attrs"]["href"] == list_url
+      assert spacecraft_nav["label"] == "Spacecraft"
+      assert spacecraft_nav["class"] =~ "bg-primary/10"
+      assert spacecraft_nav["class"] =~ "border-primary"
     end
   end
 end

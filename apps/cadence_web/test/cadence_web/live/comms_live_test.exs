@@ -57,7 +57,12 @@ defmodule CadenceWeb.CommsLiveTest do
                  ])
              }
 
-      refute has_element?(view, "details[open] a", "Providers")
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(sidebar.props["presentation"]["navigation"]["items"], &(&1["key"] == "comms"))
+
+      refute Enum.any?(comms["children"], &(&1["label"] == "Providers"))
     end
 
     test "inlined validation surface includes spacecraft setup findings" do
@@ -129,24 +134,22 @@ defmodule CadenceWeb.CommsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
-      assert has_element?(view, "details[open] summary", "Comms")
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
 
-      assert has_element?(
-               view,
-               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"].text-primary|,
-               "Overview"
-             )
+      comms =
+        Enum.find(sidebar.props["presentation"]["navigation"]["items"], &(&1["key"] == "comms"))
 
-      assert has_element?(
-               view,
-               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"] span.bg-primary|
-             )
+      overview = Enum.find(comms["children"], &(&1["key"] == "comms-overview"))
+      validation = Enum.find(comms["children"], &(&1["key"] == "comms-validation"))
 
-      assert has_element?(
-               view,
-               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms/validation"]|,
-               "Validation"
-             )
+      assert comms["expanded"]
+      assert comms["label"] == "Comms"
+      assert overview["attrs"]["href"] == "/missions/#{mission.mission_id}/comms"
+      assert overview["class"] =~ "text-primary"
+      assert overview["icon_class"] =~ "bg-primary"
+      assert overview["label"] == "Overview"
+      assert validation["attrs"]["href"] == "/missions/#{mission.mission_id}/comms/validation"
+      assert validation["label"] == "Validation"
     end
 
     test "renders dedicated validation page grouped by setup owner" do
@@ -170,11 +173,17 @@ defmodule CadenceWeb.CommsLiveTest do
 
       refute has_element?(view, "#comms-validation-page")
 
-      assert has_element?(
-               view,
-               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms/validation"].text-primary|,
-               "Validation"
-             )
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(sidebar.props["presentation"]["navigation"]["items"], &(&1["key"] == "comms"))
+
+      validation = Enum.find(comms["children"], &(&1["key"] == "comms-validation"))
+
+      assert comms["expanded"]
+      assert validation["attrs"]["href"] == "/missions/#{mission.mission_id}/comms/validation"
+      assert validation["class"] =~ "text-primary"
+      assert validation["label"] == "Validation"
 
       refute inspect(vue.props) =~ "Link Template"
       refute inspect(vue.props) =~ "Link Assignments"
@@ -302,8 +311,13 @@ defmodule CadenceWeb.CommsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
 
-      assert has_element?(view, "details:not([open]) summary", "Comms")
-      refute has_element?(view, "details[open] summary", "Comms")
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(sidebar.props["presentation"]["navigation"]["items"], &(&1["key"] == "comms"))
+
+      assert comms["label"] == "Comms"
+      refute comms["expanded"]
     end
   end
 

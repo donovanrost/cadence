@@ -43,8 +43,21 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert has_element?(view, "#comms-routing-page")
       assert has_element?(view, "#new-routing-rule-link")
       assert has_element?(view, "#routing-rules-list-component")
-      assert has_element?(view, "details[open] a", "Routing")
       assert has_element?(view, "#comms-routing-page", "Durable rules")
+
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "comms")
+        )
+
+      routing = Enum.find(comms["children"], &(&1["key"] == "comms-routing"))
+
+      assert comms["expanded"]
+      assert routing["active"]
+      assert routing["label"] == "Routing"
 
       vue = LiveVue.Test.get_vue(view, id: "routing-rules-list-component")
 
@@ -85,9 +98,16 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert has_element?(view, "#comms-routing-new-component")
       refute has_element?(view, "#comms-routing-new-page")
       refute has_element?(view, "#routing-rule-form")
-      assert has_element?(view, "details[open] a", "Routing")
-      assert has_element?(view, ".drawer-side", org.display_name)
-      assert has_element?(view, ".drawer-side", mission.display_name)
+
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+      presentation = sidebar.props["presentation"]
+      comms = Enum.find(presentation["navigation"]["items"], &(&1["key"] == "comms"))
+      routing = Enum.find(comms["children"], &(&1["key"] == "comms-routing"))
+
+      assert comms["expanded"]
+      assert routing["active"]
+      assert presentation["organization"]["link"]["label"] == org.display_name
+      assert presentation["mission"]["display_name"] == mission.display_name
 
       vue = comms_routing_new_vue(view)
 

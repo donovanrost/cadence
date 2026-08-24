@@ -125,17 +125,25 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      refute has_element?(
-               view,
-               "nav a[href='/missions/#{mission.mission_id}/spacecraft/profiles']",
-               "Spacecraft Profiles"
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+      navigation = sidebar.props["presentation"]["navigation"]["items"]
+
+      links =
+        Enum.flat_map(navigation, fn
+          %{"kind" => "link"} = item -> [item]
+          %{"kind" => "section", "children" => children} -> children
+        end)
+
+      refute Enum.any?(
+               links,
+               &(&1["attrs"]["href"] ==
+                   "/missions/#{mission.mission_id}/spacecraft/profiles")
              )
 
-      assert has_element?(
-               view,
-               "nav a[href='/missions/#{mission.mission_id}/spacecraft']",
-               "Spacecraft"
-             )
+      assert Enum.any?(links, fn link ->
+               link["attrs"]["href"] == "/missions/#{mission.mission_id}/spacecraft" and
+                 link["label"] == "Spacecraft"
+             end)
     end
 
     test "renders the server-owned empty state when no profiles are defined" do

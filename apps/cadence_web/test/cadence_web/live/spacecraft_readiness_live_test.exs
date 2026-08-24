@@ -308,13 +308,23 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
       refute has_element?(view, "#spacecraft-readiness-applications-empty")
 
       assert has_element?(view, "#sidebar-drawer")
-      assert has_element?(view, "[data-sidebar-collapsible]")
 
-      assert has_element?(
-               view,
-               "nav a[href='/missions/#{mission.mission_id}/spacecraft'][class~='border-primary'][class~='text-primary']",
-               "Spacecraft"
-             )
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      spacecraft_nav =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "spacecraft")
+        )
+
+      assert sidebar.props["presentation"]["root"]["attrs"] == %{
+               "data-sidebar-collapsible" => ""
+             }
+
+      assert spacecraft_nav["attrs"]["href"] == "/missions/#{mission.mission_id}/spacecraft"
+      assert spacecraft_nav["label"] == "Spacecraft"
+      assert spacecraft_nav["class"] =~ "border-primary"
+      assert spacecraft_nav["class"] =~ "text-primary"
     end
 
     test "does not load missing or out-of-scope spacecraft" do

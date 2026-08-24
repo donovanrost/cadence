@@ -44,8 +44,22 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert has_element?(view, "#comms-ground-stations-page")
       assert has_element?(view, "#new-ground-station-link")
       assert has_element?(view, "#ground-stations-list-component")
-      assert has_element?(view, "details[open] a", "Ground Stations")
       assert has_element?(view, "#comms-ground-stations-page", "Mission-owned antenna")
+
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "comms")
+        )
+
+      ground_stations =
+        Enum.find(comms["children"], &(&1["key"] == "comms-ground-stations"))
+
+      assert comms["expanded"]
+      assert ground_stations["active"]
+      assert ground_stations["label"] == "Ground Stations"
 
       vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
 

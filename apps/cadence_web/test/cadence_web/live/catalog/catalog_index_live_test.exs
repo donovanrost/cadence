@@ -79,10 +79,21 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
     test "marks Catalog as the active nav item" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
 
-      assert html =~ "hero-circle-stack"
-      assert html =~ "bg-primary/10"
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      catalog =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "catalog")
+        )
+
+      assert catalog["icon_class"] ==
+               "hero-circle-stack h-4 w-4 opacity-80 flex-shrink-0"
+
+      assert catalog["active"]
+      assert catalog["class"] =~ "bg-primary/10"
     end
   end
 

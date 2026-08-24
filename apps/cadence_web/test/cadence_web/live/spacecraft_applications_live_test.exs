@@ -92,11 +92,19 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "Readiness"
            )
 
-    assert has_element?(
-             view,
-             "nav ul a[href='/missions/#{context.mission.mission_id}/spacecraft'][class*='bg-primary/10']",
-             "Spacecraft"
-           )
+    sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+    spacecraft_nav =
+      Enum.find(
+        sidebar.props["presentation"]["navigation"]["items"],
+        &(&1["key"] == "spacecraft")
+      )
+
+    assert spacecraft_nav["attrs"]["href"] ==
+             "/missions/#{context.mission.mission_id}/spacecraft"
+
+    assert spacecraft_nav["label"] == "Spacecraft"
+    assert spacecraft_nav["class"] =~ "bg-primary/10"
 
     assert has_element?(view, "#user-menu-desktop")
 

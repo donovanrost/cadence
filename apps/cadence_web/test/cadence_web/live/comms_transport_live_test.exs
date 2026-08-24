@@ -49,9 +49,22 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert has_element?(view, "#comms-transports-page")
       assert has_element?(view, "#new-transport-link")
       assert has_element?(view, "#transports-list-component")
-      assert has_element?(view, "details[open] a", "Transports")
       refute has_element?(view, "#comms-transports-page", "Link Assignment")
       refute has_element?(view, "#comms-transports-page", "Link Template")
+
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+
+      comms =
+        Enum.find(
+          sidebar.props["presentation"]["navigation"]["items"],
+          &(&1["key"] == "comms")
+        )
+
+      transports = Enum.find(comms["children"], &(&1["key"] == "comms-transports"))
+
+      assert comms["expanded"]
+      assert transports["active"]
+      assert transports["label"] == "Transports"
 
       vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
 

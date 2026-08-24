@@ -180,13 +180,15 @@ defmodule CadenceWeb.MissionShowLiveTest do
                "slug" => "alpha"
              }
 
-      assert has_element?(
-               view,
-               ~s|nav a[href="/missions/#{mission.mission_id}"].border-primary|,
-               "Overview"
-             )
+      sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
+      presentation = sidebar.props["presentation"]
+      overview_nav = hd(presentation["navigation"]["items"])
 
-      assert has_element?(view, ~s|.drawer-side a[href="/"]|, "Cadence Ops")
+      assert overview_nav["attrs"]["href"] == "/missions/#{mission.mission_id}"
+      assert overview_nav["label"] == "Overview"
+      assert overview_nav["class"] =~ "border-primary"
+      assert presentation["organization"]["link"]["attrs"]["href"] == "/"
+      assert presentation["organization"]["link"]["label"] == "Cadence Ops"
     end
 
     test "renders the spacecraft readiness empty state and setup status" do
