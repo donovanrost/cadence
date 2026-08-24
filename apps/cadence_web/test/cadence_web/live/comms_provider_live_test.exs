@@ -479,7 +479,10 @@ defmodule CadenceWeb.CommsProviderLiveTest do
              "provider-admin-diagnostics-json"
 
     assert provider_stream_mutations(initial_vue) == [
-             ["upsert", "/provider_versions/0", provider_version_row(provider)]
+             ["replace", "/service_profiles", []],
+             ["replace", "/delivery_profiles", []],
+             ["replace", "/provider_versions", []],
+             ["upsert", "/provider_versions/-", provider_version_row(provider)]
            ]
 
     assert_json_safe_show(initial_vue)
@@ -520,11 +523,20 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert provider_stream_mutations(validated_vue) == [
              ["replace", "/service_profiles", []],
              ["replace", "/delivery_profiles", []],
-             ["replace", "/provider_versions", [provider_version_row(validated_provider)]]
+             ["replace", "/provider_versions", []],
+             ["upsert", "/provider_versions/-", provider_version_row(validated_provider)]
            ]
 
     assert_json_safe_show(validated_vue)
     refute_show_secrets(validated_vue, validated_provider)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"
+      )
+
+    track_async_view(view)
 
     render_hook(view, "sync-provider", %{})
     assert_receive {:sync_provider_started, sync_provider_pid}, @async_timeout
@@ -561,9 +573,12 @@ defmodule CadenceWeb.CommsProviderLiveTest do
              )
 
     assert provider_stream_mutations(synced_vue) == [
-             ["replace", "/service_profiles", [service_profile]],
-             ["replace", "/delivery_profiles", [delivery_profile]],
-             ["replace", "/provider_versions", [provider_version_row(synced_provider)]]
+             ["replace", "/service_profiles", []],
+             ["upsert", "/service_profiles/-", service_profile],
+             ["replace", "/delivery_profiles", []],
+             ["upsert", "/delivery_profiles/-", delivery_profile],
+             ["replace", "/provider_versions", []],
+             ["upsert", "/provider_versions/-", provider_version_row(synced_provider)]
            ]
 
     assert service_profile["__dom_id"] ==
