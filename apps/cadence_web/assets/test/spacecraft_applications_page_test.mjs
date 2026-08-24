@@ -368,7 +368,7 @@ for (const decisionContract of [
   'id: "spacecraft-applications-profile"',
   'tone: if(drift?, do: "attention", else: "ready")',
   'label: if(drift?, do: "Profile drift", else: "Current")',
-  "ApplicationInventoryCard.dom_id",
+  "ApplicationInventory.dom_id",
   "application.installable?",
   "application.manageable?",
   "application.uninstallable?",

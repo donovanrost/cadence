@@ -289,7 +289,7 @@ for (const decision of [
   "ApplicationInventory.catalog(scope, host_context)",
   "assign_applications_presentation(socket)",
   "Enum.map(applications, &application_row_dto(&1, host_context, mission_id))",
-  "ApplicationInventoryCard.dom_id(host_context, application.application_key)",
+  "ApplicationInventory.dom_id(host_context, application.application_key)",
   'manage_path: ~p"/missions/#{mission_id}/applications/#{application.application_key}"',
   "status: status_dto(application.status)",
   'install_action: install_action_dto(application, card_id)',
