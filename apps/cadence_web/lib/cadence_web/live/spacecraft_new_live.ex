@@ -7,6 +7,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Spacecraft
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -21,12 +22,18 @@ defmodule CadenceWeb.SpacecraftNewLive do
      |> assign(:page_title, "New Spacecraft")
      |> assign(:nav_item, :spacecraft)
      |> assign(:available_types, available_types)
-     |> assign(:form, empty_form())}
+     |> assign(:spacecraft_page, spacecraft_page_dto(socket.assigns.current_mission))
+     |> assign(:spacecraft_form, spacecraft_form_dto(%{}, mission_id))
+     |> assign(
+       :profile_options,
+       profile_options_dto(available_types, mission_id)
+     )}
   end
 
   @impl true
   def handle_event("validate", %{"spacecraft" => params}, socket) do
-    {:noreply, assign(socket, :form, form_from_params(params))}
+    mission_id = socket.assigns.current_mission.mission_id
+    {:noreply, assign(socket, :spacecraft_form, spacecraft_form_dto(params, mission_id))}
   end
 
   @impl true
@@ -34,6 +41,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
     display_name = normalize(params["display_name"])
+    socket = assign(socket, :spacecraft_form, spacecraft_form_dto(params, mission.mission_id))
 
     with true <- not is_nil(display_name),
          {:ok, scid} <- parse_optional_scid(params["scid"]),
@@ -86,81 +94,108 @@ defmodule CadenceWeb.SpacecraftNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="spacecraft-new-page" class="space-y-6 max-w-xl">
-      <.page_header
-        title="New Spacecraft"
-        subtitle="Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {"New Spacecraft", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="spacecraft-new-component"
+        v-component="SpacecraftNew"
+        page={@spacecraft_page}
+        form={@spacecraft_form}
+        profile_options={@profile_options}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
       />
-
-      <.form
-        for={@form}
-        id="spacecraft-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section number="01" title="Identity">
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-          <.input field={@form[:scid]} type="text" label="SCID" />
-        </.form_section>
-
-        <.form_section number="02" title="Profile">
-          <.input
-            field={@form[:spacecraft_type_id]}
-            type="select"
-            label="Spacecraft Profile"
-            options={type_options(@available_types)}
-          />
-          <p :if={@available_types == []} class="text-xs text-base-content/70">
-            No spacecraft profiles defined yet.
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
-              class="text-primary hover:underline"
-            >
-              Create one
-            </.link>
-            to give this spacecraft a reusable interpretation profile.
-          </p>
-        </.form_section>
-
-        <.form_actions
-          submit="Create Spacecraft"
-          cancel_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-        />
-      </.form>
-    </div>
+    </Layouts.app>
     """
   end
 
-  defp empty_form do
-    to_form(
-      %{"display_name" => "", "scid" => "", "spacecraft_type_id" => ""},
-      as: :spacecraft
-    )
+  defp spacecraft_page_dto(mission) do
+    %{
+      id: "spacecraft-new-page",
+      heading: "New Spacecraft",
+      subtitle:
+        "Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Spacecraft", href: ~p"/missions/#{mission.mission_id}/spacecraft"},
+        %{label: "New Spacecraft", href: nil}
+      ]
+    }
   end
 
-  defp form_from_params(params) do
-    to_form(
-      %{
-        "display_name" => Map.get(params, "display_name", ""),
-        "scid" => Map.get(params, "scid", ""),
-        "spacecraft_type_id" => Map.get(params, "spacecraft_type_id", "")
+  defp spacecraft_form_dto(params, mission_id) do
+    %{
+      id: "spacecraft-form",
+      sections: %{
+        identity: %{id: "spacecraft-identity-section", number: "01", title: "Identity"},
+        profile: %{id: "spacecraft-profile-section", number: "02", title: "Profile"}
       },
-      as: :spacecraft
-    )
+      fields: %{
+        display_name: %{
+          id: "spacecraft_display_name",
+          name: "spacecraft[display_name]",
+          type: "text",
+          label: "Display Name",
+          required: true,
+          value: string_param(params, "display_name")
+        },
+        scid: %{
+          id: "spacecraft_scid",
+          name: "spacecraft[scid]",
+          type: "text",
+          label: "SCID",
+          required: false,
+          value: string_param(params, "scid")
+        },
+        spacecraft_type_id: %{
+          id: "spacecraft_spacecraft_type_id",
+          name: "spacecraft[spacecraft_type_id]",
+          type: "select",
+          label: "Spacecraft Profile",
+          required: false,
+          value: string_param(params, "spacecraft_type_id")
+        }
+      },
+      actions: %{
+        submit: %{id: "create-spacecraft-button", label: "Create Spacecraft"},
+        cancel: %{
+          id: "cancel-spacecraft-link",
+          label: "Cancel",
+          href: ~p"/missions/#{mission_id}/spacecraft"
+        }
+      }
+    }
   end
 
-  defp type_options(available_types) do
-    [
-      {"None", ""}
-      | Enum.map(available_types, &{"#{&1.display_name} (v#{&1.version})", &1.spacecraft_type_id})
-    ]
+  defp profile_options_dto(available_types, mission_id) do
+    %{
+      options: [
+        %{label: "None", value: ""}
+        | Enum.map(available_types, fn type ->
+            %{label: "#{type.display_name} (v#{type.version})", value: type.spacecraft_type_id}
+          end)
+      ],
+      empty: available_types == [],
+      empty_state: %{
+        message: "No spacecraft profiles defined yet.",
+        action: %{
+          id: "create-spacecraft-profile-link",
+          label: "Create one",
+          href: ~p"/missions/#{mission_id}/spacecraft/profiles/new"
+        },
+        suffix: "to give this spacecraft a reusable interpretation profile."
+      }
+    }
   end
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
+  end
+
+  defp string_param(_params, _key), do: ""
 
   defp resolve_type_binding(_socket, value) when value in [nil, ""], do: {:ok, %{}}
 
