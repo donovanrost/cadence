@@ -129,7 +129,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-editor-dirty="false"])
            )
 
-    editor |> element("#add-widget-button") |> render_click()
+    click_editor_action(editor, "add-widget-button")
     editor |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
 
     editor
@@ -139,7 +139,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
     await_dashboard_resolved(editor)
 
     assert Document.version(fetch_dashboard_document!(org, mission, created_summary)) == 1
-    editor |> element("#dashboard-editor-save") |> render_click()
+    click_editor_action(editor, "dashboard-editor-save")
 
     edited = fetch_dashboard_document!(org, mission, created_summary)
     assert Document.version(edited) == 2
@@ -241,6 +241,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleLiveTest do
            )
            |> List.last()
            |> Map.fetch!(:actor_id) == user.user_id
+  end
+
+  defp click_editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    attrs = action["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
   end
 
   defp activity_event_types(view) do

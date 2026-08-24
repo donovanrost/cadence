@@ -52,8 +52,10 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     assert guard.handlers == %{}
     assert guard.ssr == false
 
-    assert has_element?(editor, "#edit-paused-note")
-    assert has_element?(editor, "#dashboard-editor-save[disabled]")
+    assert editor_action(editor, "edit-paused-note")["text"] ==
+             "Live updates paused while editing"
+
+    assert editor_action(editor, "dashboard-editor-save")["attrs"]["disabled"] == ""
 
     add_section(editor, "Power")
     add_section(editor, "Thermal")
@@ -70,7 +72,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     assert 1 == version_count(org, mission, dashboard)
     assert {:ok, %Document{sections: []}} = fetch_document(org, mission, dashboard)
 
-    editor |> element("#dashboard-editor-save") |> render_click()
+    click_editor_action(editor, "dashboard-editor-save")
 
     assert has_element?(
              editor,
@@ -106,7 +108,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
     add_section(editor, "Candidate only")
 
-    editor |> element("#dashboard-editor-discard") |> render_click()
+    click_editor_action(editor, "dashboard-editor-discard")
     assert_redirect(editor, viewer_path(mission, dashboard))
 
     assert 1 == version_count(org, mission, dashboard)
@@ -137,7 +139,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
     assert Document.version(external) == 2
 
-    editor |> element("#dashboard-editor-save") |> render_click()
+    click_editor_action(editor, "dashboard-editor-save")
 
     assert has_element?(
              editor,
@@ -156,7 +158,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   end
 
   defp add_section(view, title) do
-    view |> element("#manage-dashboard-sections") |> render_click()
+    click_editor_action(view, "manage-dashboard-sections")
 
     view
     |> form("#dashboard-section-form",
@@ -171,6 +173,27 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     |> Map.fetch!(:props)
     |> Map.fetch!("presentation")
     |> Map.fetch!("sections")
+  end
+
+  defp click_editor_action(view, id) do
+    attrs = editor_action(view, id)["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
+  end
+
+  defp editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    action
   end
 
   defp version_count(org, mission, dashboard) do

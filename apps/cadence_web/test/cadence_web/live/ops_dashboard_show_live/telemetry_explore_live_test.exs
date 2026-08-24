@@ -497,7 +497,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert version_count(org, mission, dashboard) == 1
     assert {:ok, %Document{placements: []}} = fetch_document(org, mission, dashboard)
 
-    editor |> element("#dashboard-editor-save") |> render_click()
+    click_editor_action(editor, "dashboard-editor-save")
     render_dashboard_async(editor)
 
     assert version_count(org, mission, dashboard) == 2
@@ -545,6 +545,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert author_json =~ "Author Board"
     refute_sensitive_keys(viewer_props)
     refute_sensitive_keys(author_props)
+  end
+
+  defp click_editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    attrs = action["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
   end
 
   defp telemetry_explore_vue(view) do

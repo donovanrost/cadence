@@ -146,7 +146,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
       assert has_element?(view, "#dashboard-panel")
 
       view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
@@ -160,7 +160,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
 
       stop_dashboard_view(view)
 
@@ -183,7 +183,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
 
       view
       |> form("#widget-form", widget: %{type: "event_timeline", title: "Mission Events"})
@@ -194,7 +194,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-event-timeline]))
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
 
       stop_dashboard_view(view)
 
@@ -230,7 +230,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
       view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
 
       view
@@ -244,7 +244,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       refute has_element?(view, "#dashboard-panel")
       assert has_element?(view, ~s([data-state-timeline]))
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
 
       stop_dashboard_view(view)
 
@@ -280,7 +280,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
 
       view
       |> form("#widget-form",
@@ -312,7 +312,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)
@@ -335,7 +335,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
 
       view
       |> form("#widget-form",
@@ -367,7 +367,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)
@@ -380,5 +380,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       assert version.change_summary == "Added widget"
       assert version.created_by == user.user_id
     end
+  end
+
+  defp click_editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    attrs = action["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
   end
 end

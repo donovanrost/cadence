@@ -170,7 +170,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
                  expected_version: Document.version(dashboard)
                )
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
       view |> element(~s(button[phx-value-point-id="HK.counter"])) |> render_click()
 
       view
@@ -179,7 +179,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       await_dashboard_resolved(view)
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
       await_dashboard_resolved(view)
 
       assert has_element?(
@@ -216,7 +216,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       await_dashboard_resolved(view)
       assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
 
-      assert has_element?(view, "#edit-paused-note")
+      assert editor_action(view, "edit-paused-note")["text"] ==
+               "Live updates paused while editing"
 
       # Layout changes remain local until the staged Editor transaction is saved.
       grid_controller =
@@ -238,7 +239,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       assert has_element?(view, ~s(.grid-stack-item[gs-x="2"][gs-y="1"][gs-w="6"][gs-h="3"]))
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
 
       document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -325,7 +326,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       await_dashboard_resolved(view)
 
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
       document = fetch_dashboard_document!(org, mission, dashboard)
       widget_id = tile.placement_id
 
@@ -337,5 +338,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       stop_dashboard_view(view)
     end
+  end
+
+  defp click_editor_action(view, id) do
+    attrs = editor_action(view, id)["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
+  end
+
+  defp editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    action
   end
 end

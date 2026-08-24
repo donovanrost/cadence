@@ -93,6 +93,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       |> assign(:data_query_label, data_query_label(assigns))
       |> assign(:data_query_overrides?, data_query_overrides?(assigns))
       |> assign(:comparison_toggle, dashboard_comparison_toggle_dto(assigns))
+      |> assign(:editor_actions, dashboard_editor_actions_dto(assigns))
       |> then(&assign(&1, :data_issue_action, data_issue_action(&1)))
 
     ~H"""
@@ -314,101 +315,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         </div>
       </.popover>
 
-      <button
-        :if={@edit_mode? and @dashboard_publish_readiness}
-        id="dashboard-publish-readiness-summary"
-        type="button"
-        phx-click="open_versions"
-        class={[
-          "inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] font-medium",
-          publish_readiness_class(@dashboard_publish_readiness.status)
-        ]}
-        data-dashboard-publish-readiness-status={@dashboard_publish_readiness.status}
-        data-dashboard-publish-readiness-issue-count={
-          publish_readiness_issue_count(@dashboard_publish_readiness)
-        }
-      >
-        <.icon name={publish_readiness_icon(@dashboard_publish_readiness.status)} class="h-3 w-3" />
-        <span>{publish_readiness_label(@dashboard_publish_readiness.status)}</span>
-        <span
-          :if={publish_readiness_issue_count(@dashboard_publish_readiness) != "0"}
-          class="font-mono opacity-80"
-        >
-          {publish_readiness_issue_count(@dashboard_publish_readiness)}
-        </span>
-      </button>
-      <span :if={@edit_mode?} class="text-xs text-warning" id="edit-paused-note">
-        Live updates paused while editing
-      </span>
-      <.button
-        :if={@edit_mode? and not @editor_route?}
-        id="edit-layout-toggle"
-        variant={:primary}
-        size={:xs}
-        phx-click="toggle_edit"
-      >
-        <.icon name="hero-arrows-pointing-out" class="h-3.5 w-3.5" />
-        Done
-      </.button>
-      <span
-        :if={@editor_route?}
-        id="dashboard-editor-save-state"
-        class={[
-          "font-mono text-[0.65rem] uppercase tracking-wider",
-          if(@editor_dirty?, do: "text-warning", else: "text-success")
-        ]}
-        data-editor-dirty={to_string(@editor_dirty?)}
-      >
-        {if @editor_dirty?, do: "Unsaved changes", else: "Saved"}
-      </span>
-      <.button
-        :if={@editor_route?}
-        id="dashboard-editor-discard"
-        variant={:ghost}
-        size={:xs}
-        phx-click="discard_editor"
-        data-editor-discard
-      >
-        Discard
-      </.button>
-      <.button
-        :if={@editor_route?}
-        id="dashboard-editor-save"
-        variant={:primary}
-        size={:xs}
-        phx-click="save_editor"
-        disabled={not @editor_dirty? or not is_nil(@editor_conflict)}
-      >
-        <.icon name="hero-check" class="h-3.5 w-3.5" /> Save
-      </.button>
-      <.button
-        :if={@editor_route?}
-        id="dashboard-editor-review"
-        variant={:ghost}
-        size={:xs}
-        phx-click="review_editor"
-        disabled={not is_nil(@editor_conflict)}
-      >
-        Review & Publish
-      </.button>
-      <.button
-        :if={@edit_mode?}
-        id="add-widget-button"
-        variant={:ghost}
-        size={:xs}
-        phx-click="open_add_widget"
-      >
-        <.icon name="hero-plus" class="h-3.5 w-3.5" /> Widget
-      </.button>
-      <.button
-        :if={@edit_mode?}
-        id="manage-dashboard-sections"
-        variant={:ghost}
-        size={:xs}
-        phx-click="open_dashboard_sections"
-      >
-        <.icon name="hero-rectangle-group" class="h-3.5 w-3.5" /> Sections
-      </.button>
+      <.vue
+        :if={@editor_actions}
+        id="dashboard-editor-actions-component"
+        v-component="DashboardEditorActions"
+        presentation={@editor_actions}
+        v-ssr={false}
+        class="contents"
+      />
       <.action_menu id="dashboard-menu">
         <:action :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}>
           <.link id="dashboard-investigate-telemetry" navigate={telemetry_explore_path(assigns)}>
@@ -616,6 +530,225 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   end
 
   defp dashboard_comparison_toggle_badge_dto(_count), do: []
+
+  defp dashboard_editor_actions_dto(assigns) do
+    if assigns.edit_mode? or assigns.editor_route? do
+      %{
+        elements:
+          [
+            dashboard_publish_readiness_dto(assigns),
+            if(assigns.edit_mode?, do: edit_paused_note_dto()),
+            if(assigns.edit_mode? and not assigns.editor_route?, do: edit_layout_toggle_dto()),
+            if(assigns.editor_route?, do: editor_save_state_dto(assigns.editor_dirty?)),
+            if(assigns.editor_route?, do: editor_discard_dto()),
+            if(assigns.editor_route?, do: editor_save_dto(assigns)),
+            if(assigns.editor_route?, do: editor_review_dto(assigns.editor_conflict)),
+            if(assigns.edit_mode?, do: add_widget_dto()),
+            if(assigns.edit_mode?, do: manage_dashboard_sections_dto())
+          ]
+          |> Enum.reject(&is_nil/1)
+      }
+    end
+  end
+
+  defp dashboard_publish_readiness_dto(%{
+         edit_mode?: true,
+         dashboard_publish_readiness: readiness
+       })
+       when is_map(readiness) do
+    status = readiness.status
+    issue_count = publish_readiness_issue_count(readiness)
+
+    editor_element(
+      "dashboard-publish-readiness-summary",
+      "button",
+      %{
+        "id" => "dashboard-publish-readiness-summary",
+        "type" => "button",
+        "phx-click" => "open_versions",
+        "class" =>
+          editor_class_list([
+            "inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] font-medium",
+            publish_readiness_class(status)
+          ]),
+        "data-dashboard-publish-readiness-status" => status,
+        "data-dashboard-publish-readiness-issue-count" => issue_count
+      },
+      "",
+      [
+        editor_child(
+          "icon",
+          "span",
+          %{"class" => editor_class_list([publish_readiness_icon(status), "h-3 w-3"])},
+          ""
+        ),
+        editor_child("label", "span", %{}, publish_readiness_label(status)),
+        if(issue_count != "0",
+          do:
+            editor_child(
+              "issue-count",
+              "span",
+              %{"class" => "font-mono opacity-80"},
+              issue_count
+            )
+        )
+      ]
+      |> Enum.reject(&is_nil/1)
+    )
+  end
+
+  defp dashboard_publish_readiness_dto(_assigns), do: nil
+
+  defp edit_paused_note_dto do
+    editor_element(
+      "edit-paused-note",
+      "span",
+      %{"id" => "edit-paused-note", "class" => "text-xs text-warning"},
+      "Live updates paused while editing"
+    )
+  end
+
+  defp edit_layout_toggle_dto do
+    editor_button(
+      "edit-layout-toggle",
+      "toggle_edit",
+      "btn-primary",
+      "Done",
+      "hero-arrows-pointing-out"
+    )
+  end
+
+  defp editor_save_state_dto(editor_dirty?) do
+    editor_element(
+      "dashboard-editor-save-state",
+      "span",
+      %{
+        "id" => "dashboard-editor-save-state",
+        "class" =>
+          editor_class_list([
+            "font-mono text-[0.65rem] uppercase tracking-wider",
+            if(editor_dirty?, do: "text-warning", else: "text-success")
+          ]),
+        "data-editor-dirty" => to_string(editor_dirty?)
+      },
+      if(editor_dirty?, do: "Unsaved changes", else: "Saved")
+    )
+  end
+
+  defp editor_discard_dto do
+    editor_button(
+      "dashboard-editor-discard",
+      "discard_editor",
+      "btn-ghost",
+      "Discard",
+      nil,
+      %{"data-editor-discard" => true}
+    )
+  end
+
+  defp editor_save_dto(assigns) do
+    editor_button(
+      "dashboard-editor-save",
+      "save_editor",
+      "btn-primary",
+      "Save",
+      "hero-check",
+      %{"disabled" => not assigns.editor_dirty? or not is_nil(assigns.editor_conflict)}
+    )
+  end
+
+  defp editor_review_dto(editor_conflict) do
+    editor_button(
+      "dashboard-editor-review",
+      "review_editor",
+      "btn-ghost",
+      "Review & Publish",
+      nil,
+      %{"disabled" => not is_nil(editor_conflict)}
+    )
+  end
+
+  defp add_widget_dto do
+    editor_button(
+      "add-widget-button",
+      "open_add_widget",
+      "btn-ghost",
+      "Widget",
+      "hero-plus"
+    )
+  end
+
+  defp manage_dashboard_sections_dto do
+    editor_button(
+      "manage-dashboard-sections",
+      "open_dashboard_sections",
+      "btn-ghost",
+      "Sections",
+      "hero-rectangle-group"
+    )
+  end
+
+  defp editor_button(id, event, variant_class, text, icon, extra_attrs \\ %{}) do
+    editor_element(
+      id,
+      "button",
+      Map.merge(
+        %{
+          "id" => id,
+          "type" => "button",
+          "class" => editor_class_list(["btn", variant_class, "btn-xs"]),
+          "phx-click" => event
+        },
+        extra_attrs
+      ),
+      text,
+      if(icon,
+        do: [
+          editor_child(
+            "icon",
+            "span",
+            %{"class" => editor_class_list([icon, "h-3.5 w-3.5"])},
+            ""
+          )
+        ],
+        else: []
+      )
+    )
+  end
+
+  defp editor_element(key, tag, attrs, text, children \\ []) do
+    %{
+      key: key,
+      tag: tag,
+      attrs: editor_raw_attributes(attrs),
+      text: text,
+      children: children
+    }
+  end
+
+  defp editor_child(key, tag, attrs, text) do
+    %{key: key, tag: tag, attrs: editor_raw_attributes(attrs), text: text}
+  end
+
+  defp editor_raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), to_string(value))
+    end)
+  end
+
+  defp editor_class_list(classes) do
+    classes
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.map(&to_string/1)
+    |> Enum.join(" ")
+  end
 
   defp query_value_label(value) when is_binary(value) do
     value

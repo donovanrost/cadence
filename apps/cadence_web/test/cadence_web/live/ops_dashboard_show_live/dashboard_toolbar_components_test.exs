@@ -148,9 +148,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    presentation = editor_actions_presentation(html)
 
-    assert html =~ "Live updates paused while editing"
-    assert html =~ "Done"
+    assert editor_action(presentation, "edit-paused-note")["text"] ==
+             "Live updates paused while editing"
+
+    assert editor_action(presentation, "edit-layout-toggle")["text"] == "Done"
 
     assert [] =
              document
@@ -197,24 +200,50 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = editor_actions_presentation(html)
 
-    assert ["blocked"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-readiness-summary")
-             |> LazyHTML.attribute("data-dashboard-publish-readiness-status")
+    assert Enum.map(presentation["elements"], & &1["key"]) == [
+             "dashboard-publish-readiness-summary",
+             "edit-paused-note",
+             "edit-layout-toggle",
+             "add-widget-button",
+             "manage-dashboard-sections"
+           ]
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-readiness-summary")
-             |> LazyHTML.attribute("data-dashboard-publish-readiness-issue-count")
-
-    assert ["open_versions"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-readiness-summary")
-             |> LazyHTML.attribute("phx-click")
-
-    assert html =~ "Publish blocked"
+    assert editor_action(presentation, "dashboard-publish-readiness-summary") == %{
+             "key" => "dashboard-publish-readiness-summary",
+             "tag" => "button",
+             "attrs" => %{
+               "id" => "dashboard-publish-readiness-summary",
+               "type" => "button",
+               "phx-click" => "open_versions",
+               "class" =>
+                 "inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] font-medium border-error/40 bg-error/10 text-error",
+               "data-dashboard-publish-readiness-status" => "blocked",
+               "data-dashboard-publish-readiness-issue-count" => "2"
+             },
+             "text" => "",
+             "children" => [
+               %{
+                 "key" => "icon",
+                 "tag" => "span",
+                 "attrs" => %{"class" => "hero-exclamation-triangle h-3 w-3"},
+                 "text" => ""
+               },
+               %{
+                 "key" => "label",
+                 "tag" => "span",
+                 "attrs" => %{},
+                 "text" => "Publish blocked"
+               },
+               %{
+                 "key" => "issue-count",
+                 "tag" => "span",
+                 "attrs" => %{"class" => "font-mono opacity-80"},
+                 "text" => "2"
+               }
+             ]
+           }
   end
 
   test "dashboard_toolbar renders stale publish readiness summary" do
@@ -231,14 +260,250 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    summary =
+      html
+      |> editor_actions_presentation()
+      |> editor_action("dashboard-publish-readiness-summary")
 
-    assert ["stale"] =
-             document
-             |> LazyHTML.query("#dashboard-publish-readiness-summary")
-             |> LazyHTML.attribute("data-dashboard-publish-readiness-status")
+    assert summary["attrs"]["data-dashboard-publish-readiness-status"] == "stale"
+    assert summary["attrs"]["data-dashboard-publish-readiness-issue-count"] == "0"
+    assert Enum.map(summary["children"], & &1["key"]) == ["icon", "label"]
+    assert Enum.at(summary["children"], 0)["attrs"]["class"] == "hero-arrow-path h-3 w-3"
+    assert Enum.at(summary["children"], 1)["text"] == "Re-check publish"
+  end
 
-    assert html =~ "Re-check publish"
+  test "dashboard_toolbar preserves every remaining publish readiness variant" do
+    for {status, label, icon, class} <- [
+          {"warnings", "Publish warnings", "hero-exclamation-circle",
+           "border-warning/40 bg-warning/10 text-warning"},
+          {"clean", "Publish ready", "hero-check-circle",
+           "border-success/40 bg-success/10 text-success"},
+          {"unknown", "Publish status", "hero-information-circle",
+           "border-base-300 bg-base-100 text-base-content/70"}
+        ] do
+      summary =
+        render_component(
+          &DashboardToolbarComponents.dashboard_toolbar/1,
+          toolbar_assigns(
+            edit_mode?: true,
+            dashboard_publish_readiness: %{status: status, issues: [%{severity: :warning}]}
+          )
+        )
+        |> editor_actions_presentation()
+        |> editor_action("dashboard-publish-readiness-summary")
+
+      assert summary["attrs"] == %{
+               "id" => "dashboard-publish-readiness-summary",
+               "type" => "button",
+               "phx-click" => "open_versions",
+               "class" =>
+                 "inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] font-medium #{class}",
+               "data-dashboard-publish-readiness-status" => status,
+               "data-dashboard-publish-readiness-issue-count" => "1"
+             }
+
+      assert Enum.at(summary["children"], 0)["attrs"]["class"] == "#{icon} h-3 w-3"
+      assert Enum.at(summary["children"], 1)["text"] == label
+      assert Enum.at(summary["children"], 2)["text"] == "1"
+    end
+  end
+
+  test "dashboard_toolbar preserves the edit-mode action fragment contract" do
+    presentation =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(edit_mode?: true)
+      )
+      |> editor_actions_presentation()
+
+    assert presentation["elements"] == [
+             %{
+               "key" => "edit-paused-note",
+               "tag" => "span",
+               "attrs" => %{
+                 "id" => "edit-paused-note",
+                 "class" => "text-xs text-warning"
+               },
+               "text" => "Live updates paused while editing",
+               "children" => []
+             },
+             %{
+               "key" => "edit-layout-toggle",
+               "tag" => "button",
+               "attrs" => %{
+                 "id" => "edit-layout-toggle",
+                 "type" => "button",
+                 "class" => "btn btn-primary btn-xs",
+                 "phx-click" => "toggle_edit"
+               },
+               "text" => "Done",
+               "children" => [
+                 %{
+                   "key" => "icon",
+                   "tag" => "span",
+                   "attrs" => %{"class" => "hero-arrows-pointing-out h-3.5 w-3.5"},
+                   "text" => ""
+                 }
+               ]
+             },
+             %{
+               "key" => "add-widget-button",
+               "tag" => "button",
+               "attrs" => %{
+                 "id" => "add-widget-button",
+                 "type" => "button",
+                 "class" => "btn btn-ghost btn-xs",
+                 "phx-click" => "open_add_widget"
+               },
+               "text" => "Widget",
+               "children" => [
+                 %{
+                   "key" => "icon",
+                   "tag" => "span",
+                   "attrs" => %{"class" => "hero-plus h-3.5 w-3.5"},
+                   "text" => ""
+                 }
+               ]
+             },
+             %{
+               "key" => "manage-dashboard-sections",
+               "tag" => "button",
+               "attrs" => %{
+                 "id" => "manage-dashboard-sections",
+                 "type" => "button",
+                 "class" => "btn btn-ghost btn-xs",
+                 "phx-click" => "open_dashboard_sections"
+               },
+               "text" => "Sections",
+               "children" => [
+                 %{
+                   "key" => "icon",
+                   "tag" => "span",
+                   "attrs" => %{"class" => "hero-rectangle-group h-3.5 w-3.5"},
+                   "text" => ""
+                 }
+               ]
+             }
+           ]
+  end
+
+  test "dashboard_toolbar preserves editor-route state actions and conflict decisions" do
+    saved =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(editor_route?: true)
+      )
+      |> editor_actions_presentation()
+
+    assert Enum.map(saved["elements"], & &1["key"]) == [
+             "dashboard-editor-save-state",
+             "dashboard-editor-discard",
+             "dashboard-editor-save",
+             "dashboard-editor-review"
+           ]
+
+    assert editor_action(saved, "dashboard-editor-save-state") == %{
+             "key" => "dashboard-editor-save-state",
+             "tag" => "span",
+             "attrs" => %{
+               "id" => "dashboard-editor-save-state",
+               "class" =>
+                 "font-mono text-[0.65rem] uppercase tracking-wider text-success",
+               "data-editor-dirty" => "false"
+             },
+             "text" => "Saved",
+             "children" => []
+           }
+
+    assert editor_action(saved, "dashboard-editor-discard") == %{
+             "key" => "dashboard-editor-discard",
+             "tag" => "button",
+             "attrs" => %{
+               "id" => "dashboard-editor-discard",
+               "type" => "button",
+               "class" => "btn btn-ghost btn-xs",
+               "phx-click" => "discard_editor",
+               "data-editor-discard" => ""
+             },
+             "text" => "Discard",
+             "children" => []
+           }
+
+    assert editor_action(saved, "dashboard-editor-save") == %{
+             "key" => "dashboard-editor-save",
+             "tag" => "button",
+             "attrs" => %{
+               "id" => "dashboard-editor-save",
+               "type" => "button",
+               "class" => "btn btn-primary btn-xs",
+               "phx-click" => "save_editor",
+               "disabled" => ""
+             },
+             "text" => "Save",
+             "children" => [
+               %{
+                 "key" => "icon",
+                 "tag" => "span",
+                 "attrs" => %{"class" => "hero-check h-3.5 w-3.5"},
+                 "text" => ""
+               }
+             ]
+           }
+
+    assert editor_action(saved, "dashboard-editor-review") == %{
+             "key" => "dashboard-editor-review",
+             "tag" => "button",
+             "attrs" => %{
+               "id" => "dashboard-editor-review",
+               "type" => "button",
+               "class" => "btn btn-ghost btn-xs",
+               "phx-click" => "review_editor"
+             },
+             "text" => "Review & Publish",
+             "children" => []
+           }
+
+    dirty =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(edit_mode?: true, editor_route?: true, editor_dirty?: true)
+      )
+      |> editor_actions_presentation()
+
+    assert Enum.map(dirty["elements"], & &1["key"]) == [
+             "edit-paused-note",
+             "dashboard-editor-save-state",
+             "dashboard-editor-discard",
+             "dashboard-editor-save",
+             "dashboard-editor-review",
+             "add-widget-button",
+             "manage-dashboard-sections"
+           ]
+
+    assert editor_action(dirty, "dashboard-editor-save-state")["attrs"] == %{
+             "id" => "dashboard-editor-save-state",
+             "class" => "font-mono text-[0.65rem] uppercase tracking-wider text-warning",
+             "data-editor-dirty" => "true"
+           }
+
+    assert editor_action(dirty, "dashboard-editor-save-state")["text"] == "Unsaved changes"
+    refute Map.has_key?(editor_action(dirty, "dashboard-editor-save")["attrs"], "disabled")
+    refute Map.has_key?(editor_action(dirty, "dashboard-editor-review")["attrs"], "disabled")
+
+    conflicted =
+      render_component(
+        &DashboardToolbarComponents.dashboard_toolbar/1,
+        toolbar_assigns(
+          edit_mode?: true,
+          editor_route?: true,
+          editor_dirty?: true,
+          editor_conflict: %{current_version: 2}
+        )
+      )
+      |> editor_actions_presentation()
+
+    assert editor_action(conflicted, "dashboard-editor-save")["attrs"]["disabled"] == ""
+    assert editor_action(conflicted, "dashboard-editor-review")["attrs"]["disabled"] == ""
   end
 
   test "dashboard_toolbar exposes the page-local Compare inspector" do
@@ -528,11 +793,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
-
     assert [] =
-             document
-             |> LazyHTML.query("#dashboard-publish-readiness-summary")
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-editor-actions-component")
              |> LazyHTML.attribute("id")
   end
 
@@ -625,6 +889,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       ],
       overrides
     )
+  end
+
+  defp editor_actions_presentation(html) do
+    assert ["dashboard-editor-actions-component"] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-editor-actions-component")
+             |> LazyHTML.attribute("id")
+
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-editor-actions-component")
+
+    assert vue.component == "DashboardEditorActions"
+    assert vue.id == "dashboard-editor-actions-component"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    Map.fetch!(vue.props, "presentation")
+  end
+
+  defp editor_action(presentation, id) do
+    assert action = Enum.find(presentation["elements"], &(&1["attrs"]["id"] == id))
+    action
   end
 
   defp comparison_toggle_presentation(html) do

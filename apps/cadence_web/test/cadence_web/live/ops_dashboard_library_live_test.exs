@@ -148,7 +148,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
                dashboard.dashboard_id
              )
 
-    editor |> element("#dashboard-editor-save") |> render_click()
+    click_editor_action(editor, "dashboard-editor-save")
 
     assert {:ok, persisted} =
              Cadence.Dashboards.fetch_document(
@@ -680,6 +680,23 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
         "consumers_empty_id" => "dashboard-library-consumers-empty-#{item_id}"
       }
     }
+  end
+
+  defp click_editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    attrs = action["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
   end
 
   defp library_vue(view) do

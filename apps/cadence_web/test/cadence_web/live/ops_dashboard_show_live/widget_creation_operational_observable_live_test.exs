@@ -20,7 +20,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
 
-      view |> element("#add-widget-button") |> render_click()
+      click_editor_action(view, "add-widget-button")
 
       view
       |> form("#widget-form",
@@ -84,7 +84,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
 
       await_dashboard_resolved(view)
       refute has_element?(view, "#dashboard-panel")
-      view |> element("#dashboard-editor-save") |> render_click()
+      click_editor_action(view, "dashboard-editor-save")
       stop_dashboard_view(view)
 
       document = fetch_dashboard_document!(org, mission, dashboard)
@@ -108,6 +108,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationOperationalObservableLiv
 
       assert point_ids == ["contacts.phase"]
     end
+  end
+
+  defp click_editor_action(view, id) do
+    assert has_element?(view, "#dashboard-editor-actions-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
+    assert vue.component == "DashboardEditorActions"
+    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    attrs = action["attrs"]
+
+    render_click(
+      view,
+      Map.fetch!(attrs, "phx-click"),
+      Enum.reduce(attrs, %{}, fn
+        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+        {_attribute, _value}, params -> params
+      end)
+    )
   end
 
   defp signed_in_user_org_and_mission do
