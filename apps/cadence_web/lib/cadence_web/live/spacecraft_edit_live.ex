@@ -48,6 +48,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
     display_name = normalize(params["display_name"])
+
     socket =
       assign(
         socket,

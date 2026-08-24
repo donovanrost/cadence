@@ -295,6 +295,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
     test "resolves a selected in-scope profile to its latest version at save time" do
       {conn, org, mission} = signed_in_org_and_mission()
       profile_v1 = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
+      %Cadence.SpacecraftType{} = profile_v1
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
 
       {:ok, view, _html} =
