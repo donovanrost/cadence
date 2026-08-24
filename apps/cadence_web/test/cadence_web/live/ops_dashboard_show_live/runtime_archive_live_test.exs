@@ -182,16 +182,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
 
   defp quick_range_item(view, id) do
     view
-    |> LiveVue.Test.get_vue(id: "dashboard-time-quick-ranges-component")
+    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
     |> Map.fetch!(:props)
-    |> get_in(["presentation", "presets", "items"])
+    |> get_in(["presentation", "time_picker", "quick_ranges", "presets", "items"])
     |> Enum.find(&(&1["attrs"]["id"] == id))
   end
 
   defp absolute_range_props(view) do
     view
-    |> LiveVue.Test.get_vue(id: "dashboard-time-absolute-range-component")
+    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
     |> Map.fetch!(:props)
+    |> get_in(["presentation", "time_picker", "absolute_range"])
   end
 
   test "quick ranges slide live, absolute bounds snapshot archive, and live resumes" do

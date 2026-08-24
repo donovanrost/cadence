@@ -33,15 +33,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     render_component(&DashboardTimePickerComponents.time_toolbar_cluster/1, attrs)
   end
 
-  defp replay_vue(html) do
-    LiveVue.Test.get_vue(html, id: "dashboard-time-replay-component")
+  defp time_picker_vue(html) do
+    LiveVue.Test.get_vue(html, id: "dashboard-time-picker-component")
+  end
+
+  defp time_picker_presentation(html) do
+    html
+    |> time_picker_vue()
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
   end
 
   defp replay_presentation(html) do
     html
-    |> replay_vue()
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    |> time_picker_presentation()
+    |> Map.fetch!("replay")
   end
 
   defp replay_control(presentation, id) do
@@ -60,15 +66,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     |> Enum.find(&(&1["value"] == value))
   end
 
-  defp selected_datum_vue(html) do
-    LiveVue.Test.get_vue(html, id: "dashboard-selected-datum-actions-component")
-  end
-
   defp selected_datum_presentation(html) do
     html
-    |> selected_datum_vue()
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    |> time_picker_presentation()
+    |> Map.fetch!("selected_datum")
   end
 
   defp selected_datum_action(html, id) do
@@ -77,15 +78,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     |> find_selected_datum_node("id", id)
   end
 
-  defp quick_ranges_vue(html) do
-    LiveVue.Test.get_vue(html, id: "dashboard-time-quick-ranges-component")
-  end
-
   defp quick_ranges_presentation(html) do
     html
-    |> quick_ranges_vue()
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    |> time_picker_presentation()
+    |> get_in(["time_picker", "quick_ranges"])
   end
 
   defp quick_range_item(html, id) do
@@ -95,14 +91,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     |> Enum.find(&(&1["attrs"]["id"] == id))
   end
 
-  defp absolute_range_vue(html) do
-    LiveVue.Test.get_vue(html, id: "dashboard-time-absolute-range-component")
-  end
-
   defp absolute_range_props(html) do
     html
-    |> absolute_range_vue()
-    |> Map.fetch!(:props)
+    |> time_picker_presentation()
+    |> get_in(["time_picker", "absolute_range"])
   end
 
   defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
@@ -139,28 +131,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   test "selected datum action island preserves server-owned action presentation" do
     unselected_live_html = render_cluster([])
     document = LazyHTML.from_fragment(unselected_live_html)
-    vue = selected_datum_vue(unselected_live_html)
+    vue = time_picker_vue(unselected_live_html)
 
     assert document
-           |> LazyHTML.query("#dashboard-selected-datum-actions-component")
+           |> LazyHTML.query("#dashboard-time-picker-component")
            |> Enum.count() == 1
 
     assert document
-           |> LazyHTML.query(
-             "#dashboard-selected-datum-actions-component .cadence-dashboard-query-section"
-           )
+           |> LazyHTML.query("#dashboard-time-picker-component .cadence-dashboard-query-section")
            |> Enum.empty?()
 
-    assert vue.id == "dashboard-selected-datum-actions-component"
-    assert vue.component == "DashboardSelectedDatumActions"
+    assert vue.id == "dashboard-time-picker-component"
+    assert vue.component == "DashboardTimePicker"
     assert vue.ssr == false
     assert vue.class == "contents"
-    assert vue.handlers == %{}
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
     assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    presentation = vue.props["presentation"]
+    presentation = vue.props["presentation"]["selected_datum"]
     assert normalized_selected_datum_node?(presentation)
     assert presentation["key"] == "selected-datum-root"
     assert presentation["tag"] == "section"
@@ -346,47 +337,122 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
 
   test "plain live mode renders Live without inactive time navigation" do
     html = render_cluster([])
-    document = LazyHTML.from_fragment(html)
+    presentation = time_picker_presentation(html)
+    overlay = presentation["overlay"]
 
-    assert ["live"] =
-             document
-             |> LazyHTML.query("#dashboard-active-time-range")
-             |> LazyHTML.attribute("data-dashboard-time-mode")
+    assert overlay["root"]["attrs"] == %{
+             "id" => "dashboard-time-controls",
+             "data-overlay-kind" => "popover",
+             "data-overlay-placement" => "bottom-end",
+             "class" => "cadence-overlay",
+             "data-query-state" => "live",
+             "data-dashboard-primary-control" => "time"
+           }
 
-    assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~ "Live"
+    assert overlay["trigger"]["attrs"] == %{
+             "id" => "dashboard-time-controls-toggle",
+             "type" => "button",
+             "data-overlay-trigger" => "",
+             "aria-haspopup" => "dialog",
+             "aria-expanded" => "false",
+             "aria-controls" => "dashboard-time-controls-panel",
+             "aria-label" => "Dashboard time range",
+             "class" => "cadence-overlay-trigger cadence-dashboard-query-trigger"
+           }
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-live-follow-indicator")
-             |> LazyHTML.attribute("data-dashboard-live-follow")
+    assert overlay["trigger"]["live_indicator"]["attrs"] == %{
+             "id" => "dashboard-live-follow-indicator",
+             "class" => "cadence-dashboard-query-dot",
+             "data-dashboard-live-follow" => "true",
+             "aria-hidden" => "true"
+           }
 
-    for id <- [
-          "dashboard-time-shift-back",
-          "dashboard-time-shift-forward",
-          "dashboard-time-zoom-out"
-        ] do
-      assert [] = document |> LazyHTML.query("##{id}") |> LazyHTML.attribute("id")
-    end
+    assert overlay["trigger"]["active_range"]["attrs"] == %{
+             "id" => "dashboard-active-time-range",
+             "class" => "cadence-dashboard-query-trigger-value max-w-48",
+             "data-dashboard-time-mode" => "live",
+             "data-dashboard-time-summary" => "live"
+           }
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-refresh-interval")
-             |> LazyHTML.attribute("id")
+    assert overlay["trigger"]["active_range"]["text"] == "Live"
 
-    assert ["time"] =
-             document
-             |> LazyHTML.query("#dashboard-time-controls")
-             |> LazyHTML.attribute("data-dashboard-primary-control")
+    assert overlay["trigger"]["icon_class"] ==
+             "hero-chevron-down h-3 w-3 shrink-0 text-base-content/40"
+
+    assert overlay["panel"]["attrs"] == %{
+             "id" => "dashboard-time-controls-panel",
+             "data-overlay-panel" => "",
+             "data-overlay-width" => "lg",
+             "aria-label" => "Dashboard time range",
+             "class" => "cadence-overlay-panel cadence-popover-panel",
+             "hidden" => true
+           }
+
+    assert overlay["panel"]["header"] == %{
+             "class" => "cadence-dashboard-query-panel-header",
+             "icon_class" => "hero-clock mt-0.5 h-4 w-4 text-primary",
+             "title" => %{
+               "class" => "text-xs font-semibold text-base-content/85",
+               "text" => "Dashboard time"
+             },
+             "description" => %{
+               "class" => "mt-0.5 text-[0.68rem] text-base-content/50",
+               "text" => "Follow live telemetry, inspect history, or select a replay run."
+             }
+           }
+
+    assert overlay["panel"]["body"] == %{
+             "class" => "cadence-dashboard-query-panel-body",
+             "controls" => %{
+               "attrs" => %{
+                 "id" => "dashboard-time-query-controls",
+                 "data-dashboard-query-control-section" => "time",
+                 "class" => "min-w-0"
+               }
+             }
+           }
+
+    assert presentation["shift_back"] == false
+    assert presentation["shift_forward"] == false
+    assert presentation["zoom_out"] == false
+
+    assert presentation["time_picker"]["absolute_range_host"] == %{
+             "attrs" => %{
+               "id" => "dashboard-time-absolute-range-component",
+               "class" => "contents"
+             }
+           }
+
+    assert presentation["time_picker"]["quick_ranges_host"] == %{
+             "attrs" => %{
+               "id" => "dashboard-time-quick-ranges-component",
+               "class" => "contents"
+             }
+           }
+
+    assert presentation["replay_host"] == %{
+             "attrs" => %{"id" => "dashboard-time-replay-component", "class" => "contents"}
+           }
+
+    assert presentation["selected_datum_host"] == %{
+             "attrs" => %{
+               "id" => "dashboard-selected-datum-actions-component",
+               "class" => "contents"
+             }
+           }
+
+    refute Map.has_key?(presentation, "refresh_interval")
+
+    refute Map.has_key?(overlay["root"]["attrs"], "phx-hook")
 
     assert quick_range_item(html, "dashboard-time-preset-live")["attrs"]["disabled"]
   end
 
   test "sliding window labels the trigger and highlights the quick range" do
     html = render_cluster(time_from: "now-6h", time_to: "now")
-    document = LazyHTML.from_fragment(html)
+    presentation = time_picker_presentation(html)
 
-    assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~
-             "Last 6 hours"
+    assert presentation["overlay"]["trigger"]["active_range"]["text"] == "Last 6 hours"
 
     last_6h = quick_range_item(html, "dashboard-time-preset-last-6h")
     last_5m = quick_range_item(html, "dashboard-time-preset-last-5m")
@@ -401,13 +467,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     assert last_5m["attrs"]["class"] ==
              "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs text-base-content/80 hover:bg-base-300/40 hover:text-base-content"
 
-    for id <- [
-          "dashboard-time-shift-back",
-          "dashboard-time-shift-forward",
-          "dashboard-time-zoom-out"
-        ] do
-      assert [] = document |> LazyHTML.query("##{id}") |> LazyHTML.attribute("disabled")
-    end
+    assert presentation["shift_back"]["attrs"]["id"] == "dashboard-time-shift-back"
+    assert presentation["shift_back"]["attrs"]["phx-click"] == "shift_time_range"
+    assert presentation["shift_back"]["attrs"]["phx-value-direction"] == "back"
+    assert presentation["shift_back"]["attrs"]["class"] == "btn btn-ghost btn-xs"
+
+    assert presentation["shift_back"]["attrs"]["aria-label"] ==
+             "Move time range backwards"
+
+    assert presentation["shift_back"]["icon_class"] == "hero-chevron-left h-3.5 w-3.5"
+    assert presentation["shift_forward"]["attrs"]["id"] == "dashboard-time-shift-forward"
+    assert presentation["shift_forward"]["attrs"]["phx-value-direction"] == "forward"
+
+    assert presentation["shift_forward"]["attrs"]["aria-label"] ==
+             "Move time range forwards"
+
+    assert presentation["shift_forward"]["icon_class"] == "hero-chevron-right h-3.5 w-3.5"
+    assert presentation["zoom_out"]["attrs"]["id"] == "dashboard-time-zoom-out"
+    assert presentation["zoom_out"]["attrs"]["phx-click"] == "zoom_out_time_range"
+    assert presentation["zoom_out"]["attrs"]["aria-label"] == "Zoom out time range"
+
+    assert presentation["zoom_out"]["icon_class"] ==
+             "hero-magnifying-glass-minus h-3.5 w-3.5"
 
     refute quick_range_item(html, "dashboard-time-preset-live")["attrs"]["disabled"]
   end
@@ -415,26 +496,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   test "renders every quick range and filters by search query" do
     html = render_cluster([])
     document = LazyHTML.from_fragment(html)
-    vue = quick_ranges_vue(html)
+    vue = time_picker_vue(html)
 
     assert document
-           |> LazyHTML.query("#dashboard-time-quick-ranges-component")
+           |> LazyHTML.query("#dashboard-time-picker-component")
            |> Enum.count() == 1
 
     assert document
-           |> LazyHTML.query("#dashboard-time-quick-ranges-component #dashboard-time-presets")
+           |> LazyHTML.query("#dashboard-time-picker-component #dashboard-time-presets")
            |> Enum.empty?()
 
-    assert vue.id == "dashboard-time-quick-ranges-component"
-    assert vue.component == "DashboardQuickRangeList"
+    assert vue.id == "dashboard-time-picker-component"
+    assert vue.component == "DashboardTimePicker"
     assert vue.ssr == false
     assert vue.class == "contents"
-    assert vue.handlers == %{}
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
     assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    presentation = vue.props["presentation"]
+    presentation = vue.props["presentation"]["time_picker"]["quick_ranges"]
     assert Map.keys(presentation) |> Enum.sort() == ["presets", "root", "search"]
 
     assert presentation["root"] == %{
@@ -596,21 +678,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
-    vue = absolute_range_vue(html)
-    props = vue.props
+    vue = time_picker_vue(html)
+    presentation = vue.props["presentation"]
+    props = presentation["time_picker"]["absolute_range"]
 
     assert document
-           |> LazyHTML.query("#dashboard-time-absolute-range-component")
+           |> LazyHTML.query("#dashboard-time-picker-component")
            |> Enum.count() == 1
 
     assert document
-           |> LazyHTML.query(
-             "#dashboard-time-absolute-range-component #dashboard-custom-range-form"
-           )
+           |> LazyHTML.query("#dashboard-time-picker-component #dashboard-custom-range-form")
            |> Enum.empty?()
 
-    assert vue.id == "dashboard-time-absolute-range-component"
-    assert vue.component == "DashboardAbsoluteRangePane"
+    assert vue.id == "dashboard-time-picker-component"
+    assert vue.component == "DashboardTimePicker"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
@@ -693,22 +774,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
              "text" => "Time reset"
            }
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-live-follow-indicator")
-             |> LazyHTML.attribute("data-dashboard-live-follow")
+    assert presentation["overlay"]["trigger"]["live_indicator"]["attrs"][
+             "data-dashboard-live-follow"
+           ] == "false"
   end
 
   test "renders recently used ranges with an empty state fallback" do
-    empty = absolute_range_vue(render_cluster([]))
+    html = render_cluster([])
+    vue = time_picker_vue(html)
+    empty = absolute_range_props(html)
 
-    assert empty.component == "DashboardAbsoluteRangePane"
-    assert empty.id == "dashboard-time-absolute-range-component"
-    assert empty.ssr == false
-    assert empty.class == "contents"
-    assert empty.props["validation"] == nil
+    assert vue.component == "DashboardTimePicker"
+    assert vue.id == "dashboard-time-picker-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert empty["validation"] == nil
 
-    assert empty.props["recents"] == %{
+    assert empty["recents"] == %{
              "attrs" => %{
                "id" => "dashboard-time-recents",
                "class" => "mt-3 border-t border-base-300/60 pt-2"
@@ -716,8 +798,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
              "ranges" => []
            }
 
-    assert empty.handlers["recents-loaded"] == JS.push("time_recents_loaded")
-    assert empty.handlers["select-range"] == JS.push("set_chart_time_range")
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
 
     populated =
       absolute_range_props(
@@ -779,26 +861,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
-    vue = replay_vue(html)
+    vue = time_picker_vue(html)
 
     assert document
-           |> LazyHTML.query("#dashboard-time-replay-component")
+           |> LazyHTML.query("#dashboard-time-picker-component")
            |> Enum.count() == 1
 
     assert document
-           |> LazyHTML.query("#dashboard-time-replay-component .cadence-dashboard-query-section")
+           |> LazyHTML.query("#dashboard-time-picker-component .cadence-dashboard-query-section")
            |> Enum.empty?()
 
-    assert vue.id == "dashboard-time-replay-component"
-    assert vue.component == "DashboardTimeReplay"
+    assert vue.id == "dashboard-time-picker-component"
+    assert vue.component == "DashboardTimePicker"
     assert vue.ssr == false
     assert vue.class == "contents"
-    assert vue.handlers == %{}
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
     assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    presentation = vue.props["presentation"]
+    time_picker_presentation = vue.props["presentation"]
+    presentation = time_picker_presentation["replay"]
 
     assert presentation["root"] == %{
              "attrs" => %{
@@ -1005,13 +1089,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
 
     assert presentation["warning"] == nil
 
-    assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~
+    assert time_picker_presentation["overlay"]["trigger"]["active_range"]["text"] ==
              "Replay · replay-run-1"
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-time-shift-back")
-             |> LazyHTML.attribute("id")
+    assert time_picker_presentation["shift_back"] == false
   end
 
   test "keeps inactive replay presentation disabled without runtime-only badges" do

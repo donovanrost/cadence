@@ -9,6 +9,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
+  defp time_picker_presentation(html) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
   test "dashboard_toolbar exposes mission scope alongside spacecraft context search" do
     html =
       render_component(
@@ -686,15 +693,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    time_picker = time_picker_presentation(html)
+
     assert ["dashboard-telemetry-toolbar"] =
              document
              |> LazyHTML.query("#dashboard-telemetry-toolbar")
              |> LazyHTML.attribute("id")
 
-    assert ["live"] =
-             document
-             |> LazyHTML.query("[data-dashboard-time-summary]")
-             |> LazyHTML.attribute("data-dashboard-time-summary")
+    assert time_picker["overlay"]["trigger"]["active_range"]["attrs"][
+             "data-dashboard-time-summary"
+           ] == "live"
 
     assert ["3"] =
              document
@@ -730,10 +738,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.query("#dashboard-query-options-panel")
              |> LazyHTML.attribute("id")
 
-    assert ["dashboard-time-controls-panel"] =
-             document
-             |> LazyHTML.query("#dashboard-time-controls-panel")
-             |> LazyHTML.attribute("id")
+    assert time_picker["overlay"]["panel"]["attrs"]["id"] ==
+             "dashboard-time-controls-panel"
 
     assert ["Dashboard operational scope"] =
              document
@@ -745,10 +751,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
              |> LazyHTML.query("#dashboard-query-options-toggle")
              |> LazyHTML.attribute("aria-label")
 
-    assert ["Dashboard time range"] =
-             document
-             |> LazyHTML.query("#dashboard-time-controls-toggle")
-             |> LazyHTML.attribute("aria-label")
+    assert time_picker["overlay"]["trigger"]["attrs"]["aria-label"] ==
+             "Dashboard time range"
 
     assert ["dashboard-menu-menu"] =
              document
@@ -797,18 +801,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    time_picker = time_picker_presentation(html)
 
     live_preset =
-      html
-      |> LiveVue.Test.get_vue(id: "dashboard-time-quick-ranges-component")
-      |> Map.fetch!(:props)
-      |> get_in(["presentation", "presets", "items"])
+      time_picker
+      |> get_in(["time_picker", "quick_ranges", "presets", "items"])
       |> Enum.find(&(&1["attrs"]["id"] == "dashboard-time-preset-live"))
 
-    assert ["archive"] =
-             document
-             |> LazyHTML.query("#dashboard-active-time-range")
-             |> LazyHTML.attribute("data-dashboard-time-mode")
+    assert time_picker["overlay"]["trigger"]["active_range"]["attrs"][
+             "data-dashboard-time-mode"
+           ] == "archive"
 
     assert live_preset["attrs"]["phx-click"] == "set_time_preset"
     assert live_preset["attrs"]["phx-value-preset"] == "live"

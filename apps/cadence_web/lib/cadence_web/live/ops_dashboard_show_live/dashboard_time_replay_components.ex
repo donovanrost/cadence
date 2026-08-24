@@ -1,65 +1,23 @@
 defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
   @moduledoc false
-  use CadenceWeb, :html
+  import Phoenix.Component, only: [to_form: 1]
 
   alias CadenceWeb.OpsDashboardShowLive.SelectedDataRef
 
-  attr(:time_mode, :string, required: true)
-  attr(:time_axis, :string, default: "generation_time")
-  attr(:time_from, :string, default: nil)
-  attr(:time_to, :string, default: nil)
-  attr(:replay_run_id, :string, default: nil)
-  attr(:data_realm, :string, required: true)
-  attr(:data_view, :string, required: true)
-  attr(:compare_data_view, :string, default: nil)
-  attr(:source_binding_id, :string, default: nil)
-  attr(:limit_mode, :string, required: true)
-  attr(:replay_runs, :list, default: [])
-  attr(:selected_replay_run, :any, default: nil)
-
-  def replay_section(assigns) do
+  def replay_presentation(assigns) do
     replay_form = to_form(replay_form_params(assigns))
-    assigns = assign(assigns, :replay_presentation, replay_presentation(assigns, replay_form))
-
-    ~H"""
-    <.vue
-      id="dashboard-time-replay-component"
-      v-component="DashboardTimeReplay"
-      presentation={@replay_presentation}
-      v-ssr={false}
-      class="contents"
-    />
-    """
+    build_replay_presentation(assigns, replay_form)
   end
 
-  attr(:time_mode, :string, required: true)
-  attr(:replay_run_id, :string, default: nil)
-  attr(:selected_data_ref, :any, default: nil)
-
-  def selected_datum_section(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :selected_datum_presentation,
-        selected_datum_presentation(
-          assigns.time_mode,
-          assigns.replay_run_id,
-          assigns.selected_data_ref
-        )
-      )
-
-    ~H"""
-    <.vue
-      id="dashboard-selected-datum-actions-component"
-      v-component="DashboardSelectedDatumActions"
-      presentation={@selected_datum_presentation}
-      v-ssr={false}
-      class="contents"
-    />
-    """
+  def selected_datum_presentation(assigns) do
+    build_selected_datum_presentation(
+      assigns.time_mode,
+      assigns.replay_run_id,
+      assigns.selected_data_ref
+    )
   end
 
-  defp selected_datum_presentation(time_mode, replay_run_id, selected_data_ref) do
+  defp build_selected_datum_presentation(time_mode, replay_run_id, selected_data_ref) do
     selected_datum_node(
       "selected-datum-root",
       "section",
@@ -193,7 +151,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
   defp selected_datum_body(nil), do: ""
   defp selected_datum_body(value), do: to_string(value)
 
-  defp replay_presentation(assigns, replay_form) do
+  defp build_replay_presentation(assigns, replay_form) do
     %{
       root: %{
         attrs: %{

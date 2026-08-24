@@ -141,16 +141,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="replay_run"][data-dashboard-replay-run-id="replay_run_001"][data-dashboard-data-realm="replay"][data-engine-time-mode="replay_run"][data-engine-replay-run-id="replay_run_001"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-active-time-range[data-dashboard-time-mode="replay_run"])
-           )
+    time_picker_vue = LiveVue.Test.get_vue(view, id: "dashboard-time-picker-component")
+    assert time_picker_vue.component == "DashboardTimePicker"
+    assert time_picker_vue.ssr == false
+    assert time_picker_vue.props == Jason.decode!(Jason.encode!(time_picker_vue.props))
+    time_picker_presentation = time_picker_vue.props["presentation"]
 
-    replay_vue = LiveVue.Test.get_vue(view, id: "dashboard-time-replay-component")
-    assert replay_vue.component == "DashboardTimeReplay"
-    assert replay_vue.ssr == false
-    assert replay_vue.props == Jason.decode!(Jason.encode!(replay_vue.props))
-    replay_presentation = replay_vue.props["presentation"]
+    assert time_picker_presentation["overlay"]["trigger"]["active_range"]["attrs"][
+             "data-dashboard-time-mode"
+           ] == "replay_run"
+
+    replay_presentation = time_picker_presentation["replay"]
     replay_selector = replay_presentation["body"]["form"]["replay_run"]
 
     selected_replay_option =

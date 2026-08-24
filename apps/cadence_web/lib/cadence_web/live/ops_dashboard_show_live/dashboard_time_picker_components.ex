@@ -14,213 +14,187 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   alias CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents
   alias Phoenix.LiveView.JS
 
-  attr :time_mode, :string, required: true
-  attr :time_axis, :string, default: "generation_time"
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :time_validation, :string, default: "ok"
-  attr :data_realm, :string, required: true
-  attr :data_view, :string, required: true
-  attr :compare_data_view, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :limit_mode, :string, required: true
-  attr :replay_runs, :list, default: []
-  attr :selected_replay_run, :any, default: nil
-  attr :selected_data_ref, :any, default: nil
-  attr :quick_query, :string, default: ""
-  attr :recent_ranges, :list, default: []
+  attr(:time_mode, :string, required: true)
+  attr(:time_axis, :string, default: "generation_time")
+  attr(:time_from, :string, default: nil)
+  attr(:time_to, :string, default: nil)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:time_validation, :string, default: "ok")
+  attr(:data_realm, :string, required: true)
+  attr(:data_view, :string, required: true)
+  attr(:compare_data_view, :string, default: nil)
+  attr(:source_binding_id, :string, default: nil)
+  attr(:limit_mode, :string, required: true)
+  attr(:replay_runs, :list, default: [])
+  attr(:selected_replay_run, :any, default: nil)
+  attr(:selected_data_ref, :any, default: nil)
+  attr(:quick_query, :string, default: "")
+  attr(:recent_ranges, :list, default: [])
 
   def time_toolbar_cluster(assigns) do
-    assigns =
-      assigns
-      |> assign(:time_query_label, time_query_label(assigns))
-      |> assign(:range_bounded?, range_bounded?(assigns))
-
-    ~H"""
-    <.shift_button
-      :if={@range_bounded?}
-      id="dashboard-time-shift-back"
-      direction="back"
-    />
-    <.popover
-      id="dashboard-time-controls"
-      trigger_id="dashboard-time-controls-toggle"
-      panel_id="dashboard-time-controls-panel"
-      label="Dashboard time range"
-      placement={:bottom_end}
-      width={:lg}
-      trigger_class="cadence-dashboard-query-trigger"
-      data-query-state={@time_mode}
-      data-dashboard-primary-control="time"
-    >
-      <:trigger>
-        <span
-          id="dashboard-live-follow-indicator"
-          class="cadence-dashboard-query-dot"
-          data-dashboard-live-follow={to_string(@time_mode == "live")}
-          aria-hidden="true"
-        >
-        </span>
-        <span
-          id="dashboard-active-time-range"
-          class="cadence-dashboard-query-trigger-value max-w-48"
-          data-dashboard-time-mode={@time_mode}
-          data-dashboard-time-summary={@time_mode}
-        >
-          {@time_query_label}
-        </span>
-        <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
-      </:trigger>
-      <div class="cadence-dashboard-query-panel-header">
-        <.icon name="hero-clock" class="mt-0.5 h-4 w-4 text-primary" />
-        <div>
-          <p class="text-xs font-semibold text-base-content/85">Dashboard time</p>
-          <p class="mt-0.5 text-[0.68rem] text-base-content/50">
-            Follow live telemetry, inspect history, or select a replay run.
-          </p>
-        </div>
-      </div>
-      <div class="cadence-dashboard-query-panel-body">
-        <div id="dashboard-time-query-controls" data-dashboard-query-control-section="time" class="min-w-0">
-          <.time_picker_panel
-            time_mode={@time_mode}
-            time_from={@time_from}
-            time_to={@time_to}
-            time_validation={@time_validation}
-            quick_query={@quick_query}
-            recent_ranges={@recent_ranges}
-          />
-          <DashboardTimeReplayComponents.replay_section
-            time_mode={@time_mode}
-            time_axis={@time_axis}
-            time_from={@time_from}
-            time_to={@time_to}
-            replay_run_id={@replay_run_id}
-            data_realm={@data_realm}
-            data_view={@data_view}
-            compare_data_view={@compare_data_view}
-            source_binding_id={@source_binding_id}
-            limit_mode={@limit_mode}
-            replay_runs={@replay_runs}
-            selected_replay_run={@selected_replay_run}
-          />
-          <DashboardTimeReplayComponents.selected_datum_section
-            time_mode={@time_mode}
-            replay_run_id={@replay_run_id}
-            selected_data_ref={@selected_data_ref}
-          />
-        </div>
-      </div>
-    </.popover>
-    <.shift_button
-      :if={@range_bounded?}
-      id="dashboard-time-shift-forward"
-      direction="forward"
-    />
-    <.button
-      :if={@range_bounded?}
-      id="dashboard-time-zoom-out"
-      variant={:ghost}
-      size={:xs}
-      phx-click="zoom_out_time_range"
-      aria-label="Zoom out time range"
-      title="Zoom out time range"
-    >
-      <.icon name="hero-magnifying-glass-minus" class="h-3.5 w-3.5" />
-    </.button>
-    """
-  end
-
-  attr :id, :string, required: true
-  attr :direction, :string, required: true
-
-  defp shift_button(assigns) do
-    assigns = assign(assigns, :label, "Move time range #{assigns.direction}wards")
-
-    ~H"""
-    <.button
-      id={@id}
-      variant={:ghost}
-      size={:xs}
-      phx-click="shift_time_range"
-      phx-value-direction={@direction}
-      aria-label={@label}
-      title={@label}
-    >
-      <.icon
-        name={if @direction == "back", do: "hero-chevron-left", else: "hero-chevron-right"}
-        class="h-3.5 w-3.5"
-      />
-    </.button>
-    """
-  end
-
-  attr :time_mode, :string, required: true
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :time_validation, :string, default: "ok"
-  attr :quick_query, :string, default: ""
-  attr :recent_ranges, :list, default: []
-
-  defp time_picker_panel(assigns) do
-    ~H"""
-    <div class="flex gap-3">
-      <.absolute_range_pane
-        time_from={@time_from}
-        time_to={@time_to}
-        time_validation={@time_validation}
-        recent_ranges={@recent_ranges}
-      />
-      <.quick_range_list
-        time_mode={@time_mode}
-        time_from={@time_from}
-        time_to={@time_to}
-        quick_query={@quick_query}
-      />
-    </div>
-    """
-  end
-
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :time_validation, :string, default: "ok"
-  attr :recent_ranges, :list, default: []
-
-  defp absolute_range_pane(assigns) do
-    range_form =
-      to_form(%{"from" => assigns.time_from || "", "to" => assigns.time_to || ""})
-
-    assigns =
-      assign(assigns,
-        absolute_range_root: %{attrs: %{class: "min-w-0 flex-1"}},
-        absolute_range_heading: %{
-          attrs: %{
-            id: "dashboard-range-heading",
-            class: "text-xs font-semibold text-base-content/85"
-          },
-          text: "Absolute time range"
-        },
-        absolute_range_form: absolute_range_form_dto(range_form),
-        absolute_range_validation: time_validation_dto(assigns.time_validation),
-        absolute_range_recents: recent_ranges_dto(assigns.recent_ranges)
-      )
+    assigns = assign(assigns, :presentation, time_toolbar_presentation(assigns))
 
     ~H"""
     <.vue
-      id="dashboard-time-absolute-range-component"
-      v-component="DashboardAbsoluteRangePane"
-      root={@absolute_range_root}
-      heading={@absolute_range_heading}
-      form={@absolute_range_form}
-      validation={@absolute_range_validation}
-      recents={@absolute_range_recents}
+      id="dashboard-time-picker-component"
+      v-component="DashboardTimePicker"
+      presentation={@presentation}
       v-on:recents-loaded={JS.push("time_recents_loaded")}
       v-on:select-range={JS.push("set_chart_time_range")}
       v-ssr={false}
       class="contents"
     />
     """
+  end
+
+  def time_toolbar_presentation(assigns) do
+    bounded? = range_bounded?(assigns)
+
+    %{
+      shift_back: bounded? && shift_button_presentation("dashboard-time-shift-back", "back"),
+      overlay: overlay_presentation(assigns),
+      time_picker: %{
+        class: "flex gap-3",
+        absolute_range_host: component_host("dashboard-time-absolute-range-component"),
+        absolute_range: absolute_range_presentation(assigns),
+        quick_ranges_host: component_host("dashboard-time-quick-ranges-component"),
+        quick_ranges: quick_range_presentation(assigns)
+      },
+      replay_host: component_host("dashboard-time-replay-component"),
+      replay: DashboardTimeReplayComponents.replay_presentation(assigns),
+      selected_datum_host: component_host("dashboard-selected-datum-actions-component"),
+      selected_datum: DashboardTimeReplayComponents.selected_datum_presentation(assigns),
+      shift_forward:
+        bounded? && shift_button_presentation("dashboard-time-shift-forward", "forward"),
+      zoom_out: bounded? && zoom_out_presentation()
+    }
+  end
+
+  defp component_host(id), do: %{attrs: %{id: id, class: "contents"}}
+
+  defp overlay_presentation(assigns) do
+    %{
+      root: %{
+        attrs: %{
+          id: "dashboard-time-controls",
+          "data-overlay-kind": "popover",
+          "data-overlay-placement": "bottom-end",
+          class: "cadence-overlay",
+          "data-query-state": assigns.time_mode,
+          "data-dashboard-primary-control": "time"
+        }
+      },
+      trigger: %{
+        attrs: %{
+          id: "dashboard-time-controls-toggle",
+          type: "button",
+          "data-overlay-trigger": "",
+          "aria-haspopup": "dialog",
+          "aria-expanded": "false",
+          "aria-controls": "dashboard-time-controls-panel",
+          "aria-label": "Dashboard time range",
+          class: "cadence-overlay-trigger cadence-dashboard-query-trigger"
+        },
+        live_indicator: %{
+          attrs: %{
+            id: "dashboard-live-follow-indicator",
+            class: "cadence-dashboard-query-dot",
+            "data-dashboard-live-follow": to_string(assigns.time_mode == "live"),
+            "aria-hidden": "true"
+          }
+        },
+        active_range: %{
+          attrs: %{
+            id: "dashboard-active-time-range",
+            class: "cadence-dashboard-query-trigger-value max-w-48",
+            "data-dashboard-time-mode": assigns.time_mode,
+            "data-dashboard-time-summary": assigns.time_mode
+          },
+          text: time_query_label(assigns)
+        },
+        icon_class: "hero-chevron-down h-3 w-3 shrink-0 text-base-content/40"
+      },
+      panel: %{
+        attrs: %{
+          id: "dashboard-time-controls-panel",
+          "data-overlay-panel": "",
+          "data-overlay-width": "lg",
+          "aria-label": "Dashboard time range",
+          class: "cadence-overlay-panel cadence-popover-panel",
+          hidden: true
+        },
+        header: %{
+          class: "cadence-dashboard-query-panel-header",
+          icon_class: "hero-clock mt-0.5 h-4 w-4 text-primary",
+          title: %{class: "text-xs font-semibold text-base-content/85", text: "Dashboard time"},
+          description: %{
+            class: "mt-0.5 text-[0.68rem] text-base-content/50",
+            text: "Follow live telemetry, inspect history, or select a replay run."
+          }
+        },
+        body: %{
+          class: "cadence-dashboard-query-panel-body",
+          controls: %{
+            attrs: %{
+              id: "dashboard-time-query-controls",
+              "data-dashboard-query-control-section": "time",
+              class: "min-w-0"
+            }
+          }
+        }
+      }
+    }
+  end
+
+  defp shift_button_presentation(id, direction) do
+    label = "Move time range #{direction}wards"
+
+    %{
+      attrs: %{
+        id: id,
+        type: "button",
+        class: "btn btn-ghost btn-xs",
+        "phx-click": "shift_time_range",
+        "phx-value-direction": direction,
+        "aria-label": label,
+        title: label
+      },
+      icon_class:
+        "#{if(direction == "back", do: "hero-chevron-left", else: "hero-chevron-right")} h-3.5 w-3.5"
+    }
+  end
+
+  defp zoom_out_presentation do
+    %{
+      attrs: %{
+        id: "dashboard-time-zoom-out",
+        type: "button",
+        class: "btn btn-ghost btn-xs",
+        "phx-click": "zoom_out_time_range",
+        "aria-label": "Zoom out time range",
+        title: "Zoom out time range"
+      },
+      icon_class: "hero-magnifying-glass-minus h-3.5 w-3.5"
+    }
+  end
+
+  defp absolute_range_presentation(assigns) do
+    range_form =
+      to_form(%{"from" => assigns.time_from || "", "to" => assigns.time_to || ""})
+
+    %{
+      root: %{attrs: %{class: "min-w-0 flex-1"}},
+      heading: %{
+        attrs: %{
+          id: "dashboard-range-heading",
+          class: "text-xs font-semibold text-base-content/85"
+        },
+        text: "Absolute time range"
+      },
+      form: absolute_range_form_dto(range_form),
+      validation: time_validation_dto(assigns.time_validation),
+      recents: recent_ranges_dto(assigns.recent_ranges)
+    }
   end
 
   defp absolute_range_form_dto(range_form) do
@@ -297,25 +271,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
           }
         end)
     }
-  end
-
-  attr :time_mode, :string, required: true
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :quick_query, :string, default: ""
-
-  defp quick_range_list(assigns) do
-    assigns = assign(assigns, :quick_range_presentation, quick_range_presentation(assigns))
-
-    ~H"""
-    <.vue
-      id="dashboard-time-quick-ranges-component"
-      v-component="DashboardQuickRangeList"
-      presentation={@quick_range_presentation}
-      v-ssr={false}
-      class="contents"
-    />
-    """
   end
 
   defp quick_range_presentation(assigns) do
