@@ -304,16 +304,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
   end
 
   defp activity_timeline_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-version-history-panel-component")
 
     assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
-             component: "ActivityTimeline",
+             component: "VersionHistoryPanel",
              ssr: false,
              class: "contents",
              handlers: %{}
            }
 
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]
+    vue.props["presentation"]["activity_timeline"]["presentation"]
   end
 end

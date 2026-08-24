@@ -177,17 +177,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRuntimeDefaultsComp
   defp version_history_summary_presentation(rendered) do
     vue =
       LiveVue.Test.get_vue(rendered,
-        id: "dashboard-version-history-summary-component"
+        id: "dashboard-version-history-panel-component"
       )
 
-    assert vue.component == "VersionHistorySummary"
-    assert vue.id == "dashboard-version-history-summary-component"
+    assert vue.component == "VersionHistoryPanel"
+    assert vue.id == "dashboard-version-history-panel-component"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
     assert vue.slots == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    vue.props["presentation"]
+    vue.props["presentation"]["version_history_summary"]["presentation"]
   end
 end

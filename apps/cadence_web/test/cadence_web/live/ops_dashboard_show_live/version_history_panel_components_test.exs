@@ -347,14 +347,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
   end
 
   defp activity_timeline_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+    panel = version_history_panel_presentation(rendered)
 
-    assert vue.component == "ActivityTimeline"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert panel["activity_timeline"]["root"]["attrs"] == %{
+             "id" => "dashboard-activity-timeline-component",
+             "class" => "contents"
+           }
 
-    vue.props["presentation"]
+    panel["activity_timeline"]["presentation"]
   end
 
   defp activity_row_presentation(rendered, event_id) do
@@ -373,18 +373,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
   end
 
   defp version_history_summary_presentation(rendered) do
-    vue =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-version-history-summary-component"
-      )
+    panel = version_history_panel_presentation(rendered)
 
-    assert vue.component == "VersionHistorySummary"
-    assert vue.id == "dashboard-version-history-summary-component"
+    assert panel["version_history_summary"]["root"]["attrs"] == %{
+             "id" => "dashboard-version-history-summary-component",
+             "class" => "contents"
+           }
+
+    panel["version_history_summary"]["presentation"]
+  end
+
+  defp version_history_panel_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-version-history-panel-component")
+
+    assert vue.component == "VersionHistoryPanel"
+    assert vue.id == "dashboard-version-history-panel-component"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
     assert vue.slots == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert vue.props["presentation"]["root"]["attrs"] == %{
+             "id" => "dashboard-versions-panel",
+             "class" => "space-y-5"
+           }
 
     vue.props["presentation"]
   end

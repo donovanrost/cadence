@@ -21,6 +21,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponents do
   attr(:dashboard_current_path, :string, required: true)
 
   def activity_timeline(assigns) do
+    assigns
+    |> timeline_assigns()
+    |> ActivityTimelineShellComponents.activity_timeline_shell()
+  end
+
+  def presentation(assigns) do
+    assigns
+    |> timeline_assigns()
+    |> ActivityTimelineShellComponents.presentation()
+  end
+
+  defp timeline_assigns(assigns) do
     activity =
       dashboard_activity_view_model(
         assigns.dashboard_lifecycle_events,
@@ -50,7 +62,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponents do
     |> assign(:activity, activity)
     |> assign(:activity_rows, activity_rows)
     |> assign(:selected_activity_event, selected_activity_event)
-    |> ActivityTimelineShellComponents.activity_timeline_shell()
   end
 
   defp dashboard_activity_view_model(events, open_summary, filter, selected_placement_id)

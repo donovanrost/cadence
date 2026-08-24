@@ -310,16 +310,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessComponen
   defp publish_validation_presentation(html) do
     vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-version-history-summary-component"
+        id: "dashboard-version-history-panel-component"
       )
 
-    assert vue.component == "VersionHistorySummary"
-    assert vue.id == "dashboard-version-history-summary-component"
+    assert vue.component == "VersionHistoryPanel"
+    assert vue.id == "dashboard-version-history-panel-component"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}
     assert vue.slots == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["publish_validation"]
+
+    vue.props["presentation"]["version_history_summary"]["presentation"][
+      "publish_validation"
+    ]
   end
 end

@@ -7,57 +7,66 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponents do
   alias CadenceWeb.OpsDashboardShowLive.VersionHistoryPresentation
   alias CadenceWeb.OpsDashboardShowLive.VersionListComponents
 
-  attr :dashboard_document, :any, required: true
-  attr :dashboard_summary, :any, required: true
-  attr :dashboard_versions, :list, required: true
-  attr :dashboard_lifecycle_events, :list, required: true
-  attr :dashboard_comparison_review_queue, :map, default: nil
-  attr :dashboard_source_action_events, :list, default: []
-  attr :dashboard_recent_invalidations, :list, default: []
-  attr :dashboard_activity_filter, :atom, default: nil
-  attr :dashboard_activity_event_id, :string, default: nil
-  attr :dashboard_review_placement_id, :string, default: nil
-  attr :dashboard_readiness_return_intent, :string, default: nil
-  attr :dashboard_selected_publish_issue_id, :string, default: nil
-  attr :dashboard_comparison_review_action_outcome, :map, default: nil
-  attr :dashboard_publish_readiness, :map, default: nil
-  attr :dashboard_current_path, :string, required: true
+  attr(:dashboard_document, :any, required: true)
+  attr(:dashboard_summary, :any, required: true)
+  attr(:dashboard_versions, :list, required: true)
+  attr(:dashboard_lifecycle_events, :list, required: true)
+  attr(:dashboard_comparison_review_queue, :map, default: nil)
+  attr(:dashboard_source_action_events, :list, default: [])
+  attr(:dashboard_recent_invalidations, :list, default: [])
+  attr(:dashboard_activity_filter, :atom, default: nil)
+  attr(:dashboard_activity_event_id, :string, default: nil)
+  attr(:dashboard_review_placement_id, :string, default: nil)
+  attr(:dashboard_readiness_return_intent, :string, default: nil)
+  attr(:dashboard_selected_publish_issue_id, :string, default: nil)
+  attr(:dashboard_comparison_review_action_outcome, :map, default: nil)
+  attr(:dashboard_publish_readiness, :map, default: nil)
+  attr(:dashboard_current_path, :string, required: true)
 
   def versions_panel(assigns) do
+    assigns = assign(assigns, :presentation, presentation(assigns))
+
+    ~H"""
+    <.vue
+      id="dashboard-version-history-panel-component"
+      v-component="VersionHistoryPanel"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
+    """
+  end
+
+  def presentation(assigns) do
     version_history =
       VersionHistoryPresentation.build(assigns.dashboard_summary, assigns.dashboard_versions)
 
-    assigns =
-      assign(
-        assigns,
-        :version_history_summary_presentation,
-        version_history_summary_presentation(assigns, version_history)
-      )
-
-    ~H"""
-    <div id="dashboard-versions-panel" class="space-y-5">
-      <.vue
-        id="dashboard-version-history-summary-component"
-        v-component="VersionHistorySummary"
-        presentation={@version_history_summary_presentation}
-        v-ssr={false}
-        class="contents"
-      />
-    <ActivityTimelineComponents.activity_timeline
-    dashboard_document={@dashboard_document}
-    dashboard_lifecycle_events={@dashboard_lifecycle_events}
-    dashboard_comparison_review_queue={@dashboard_comparison_review_queue}
-    dashboard_source_action_events={@dashboard_source_action_events}
-    dashboard_recent_invalidations={@dashboard_recent_invalidations}
-    dashboard_activity_filter={@dashboard_activity_filter}
-    dashboard_activity_event_id={@dashboard_activity_event_id}
-    dashboard_review_placement_id={@dashboard_review_placement_id}
-    dashboard_readiness_return_intent={@dashboard_readiness_return_intent}
-    dashboard_comparison_review_action_outcome={@dashboard_comparison_review_action_outcome}
-    dashboard_current_path={@dashboard_current_path}
-    />
-    </div>
-    """
+    %{
+      root: %{
+        attrs: %{
+          "id" => "dashboard-versions-panel",
+          "class" => "space-y-5"
+        }
+      },
+      version_history_summary: %{
+        root: %{
+          attrs: %{
+            "id" => "dashboard-version-history-summary-component",
+            "class" => "contents"
+          }
+        },
+        presentation: version_history_summary_presentation(assigns, version_history)
+      },
+      activity_timeline: %{
+        root: %{
+          attrs: %{
+            "id" => "dashboard-activity-timeline-component",
+            "class" => "contents"
+          }
+        },
+        presentation: ActivityTimelineComponents.presentation(assigns)
+      }
+    }
   end
 
   defp version_history_summary_presentation(assigns, version_history) do

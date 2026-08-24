@@ -112,14 +112,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
   end
 
   defp activity_timeline_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-version-history-panel-component")
 
-    assert vue.component == "ActivityTimeline"
+    assert vue.component == "VersionHistoryPanel"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    vue.props["presentation"]
+    vue.props["presentation"]["activity_timeline"]["presentation"]
   end
 
   defp comparison_request_presentation(rendered, event) do
