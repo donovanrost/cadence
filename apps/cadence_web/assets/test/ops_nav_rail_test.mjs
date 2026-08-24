@@ -3,6 +3,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import vm from "node:vm"
+import {createNavRailController} from "../vue/nav_rail_controller.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/OpsNavRail.vue")
@@ -12,6 +13,7 @@ const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
 assert.ok(script, "OpsNavRail.vue must have a script setup block")
 assert.ok(template, "OpsNavRail.vue must have a template block")
+assert.match(script, /import \{createNavRailController\} from "\.\/nav_rail_controller\.js"/)
 assert.match(template, /^  <nav\n/)
 assert.match(template, /\n  <\/nav>$/)
 assert.match(template, /id="ops-nav-rail"/)
@@ -141,6 +143,14 @@ const props = {
   new_dashboard: null
 }
 const context = {
+  createNavRailController(options) {
+    return createNavRailController({
+      windowObject: lifecycleEnvironment.windowObject,
+      documentObject: lifecycleEnvironment.documentObject,
+      storage: lifecycleEnvironment.storage,
+      ...options
+    })
+  },
   defineProps(definition) {
     assert.equal(definition.groups.required, true)
     assert.equal(definition.dashboard_groups.required, true)
@@ -165,10 +175,15 @@ const context = {
 }
 
 const testableScript =
-  script.replace(
-    'import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"',
-    "const {onBeforeUnmount, onMounted, onUpdated, ref} = globalThis.Vue"
-  ) +
+  script
+    .replace(
+      'import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"',
+      "const {onBeforeUnmount, onMounted, onUpdated, ref} = globalThis.Vue"
+    )
+    .replace(
+      'import {createNavRailController} from "./nav_rail_controller.js"',
+      "const createNavRailController = globalThis.createNavRailController"
+    ) +
   "\nglobalThis.opsNavRail = {createNavRailController, rail, getController: () => controller}"
 
 vm.createContext(context)

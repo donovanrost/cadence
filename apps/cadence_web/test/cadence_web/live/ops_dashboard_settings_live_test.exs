@@ -54,7 +54,7 @@ defmodule CadenceWeb.OpsDashboardSettingsLiveTest do
 
     {:ok, view, _html} = live(conn, settings_path(mission, dashboard))
 
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     assert has_element?(view, "#ops-dashboard-settings-component.contents")
     refute has_element?(view, "#dashboard-settings-page")
     refute has_element?(view, "#dashboard-settings-form")

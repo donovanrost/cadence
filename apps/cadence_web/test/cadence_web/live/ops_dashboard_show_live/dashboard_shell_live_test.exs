@@ -178,22 +178,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
 
       for path <- paths do
         {:ok, view, _html} = live(conn, path)
-        document = view |> render() |> LazyHTML.from_fragment()
+        vue = LiveVue.Test.get_vue(view, id: "ops-context-rail-component")
 
-        assert ["ops-context-rail"] =
-                 document
-                 |> LazyHTML.query("#ops-context-rail")
-                 |> LazyHTML.attribute("id")
+        assert vue.props["rail"]["id"] == "ops-context-rail"
 
-        assert ["cadence-ops-context-rail"] =
-                 document
-                 |> LazyHTML.query("#ops-context-rail")
-                 |> LazyHTML.attribute("data-storage-key")
+        assert vue.props["rail"]["storage_key"] == "cadence-ops-context-rail"
 
-        assert ["alarms", "commands", "fleet_health"] =
-                 document
-                 |> LazyHTML.query("[data-ops-context-collapsed-section]")
-                 |> LazyHTML.attribute("data-ops-context-collapsed-section")
+        assert Enum.map(vue.props["sections"], & &1["key"]) == [
+                 "alarms",
+                 "commands",
+                 "fleet_health"
+               ]
       end
     end
   end

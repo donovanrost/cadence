@@ -34,7 +34,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     {:ok, view, _html} = live(conn, path)
 
     assert has_element?(view, "#ops-data-operations-component")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
 
     initial_vue = data_operations_vue(view)
     request_form = initial_vue.props["request_form"]

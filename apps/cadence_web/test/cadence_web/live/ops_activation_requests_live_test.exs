@@ -37,7 +37,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
       )
 
     assert has_element?(view, "#activation-requests-component.contents")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     refute has_element?(view, "#activation-approval-inbox")
 
     initial_vue = activation_requests_vue(view)

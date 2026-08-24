@@ -430,7 +430,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
 
     {:ok, explore, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore")
 
-    assert has_element?(explore, "#ops-context-rail")
+    assert has_element?(explore, "#ops-context-rail-component")
     assert has_element?(explore, "#ops-telemetry-explore-component.contents")
     refute has_element?(explore, "#telemetry-explore-questions")
 

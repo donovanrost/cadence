@@ -57,7 +57,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     {:ok, dashboard_view, _html} = await_live_result(live(conn, dashboard_path))
 
-    assert has_element?(dashboard_view, "#ops-context-rail")
+    assert has_element?(dashboard_view, "#ops-context-rail-component")
 
     explore_path = link_href(dashboard_view, "#dashboard-investigate-telemetry")
     assert explore_path =~ "source_dashboard_id=#{dashboard.dashboard_id}"
@@ -78,7 +78,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     {:ok, explore, _html} = live(conn, explore_path)
     track_dashboard_view(explore)
 
-    assert has_element?(explore, "#ops-context-rail")
+    assert has_element?(explore, "#ops-context-rail-component")
     explore_vue = LiveVue.Test.get_vue(explore, id: "ops-telemetry-explore-component")
     assert explore_vue.component == "OpsTelemetryExplore"
     assert explore_vue.ssr == false
@@ -110,7 +110,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     {:ok, timeline, _html} = live(conn, timeline_path)
     track_dashboard_view(timeline)
-    assert has_element?(timeline, "#ops-context-rail")
+    assert has_element?(timeline, "#ops-context-rail-component")
 
     assert has_element?(
              timeline,
@@ -121,7 +121,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
       live(conn, source_path)
 
     track_dashboard_view(source_view)
-    assert has_element?(source_view, "#ops-context-rail")
+    assert has_element?(source_view, "#ops-context-rail-component")
 
     source_vue = LiveVue.Test.get_vue(source_view, id: "ops-data-sources-component")
     assert source_vue.component == "OpsDataSources"
@@ -133,7 +133,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
       live(conn, data_operations_path)
 
     track_dashboard_view(data_operations)
-    assert has_element?(data_operations, "#ops-context-rail")
+    assert has_element?(data_operations, "#ops-context-rail-component")
 
     data_operations_vue =
       LiveVue.Test.get_vue(data_operations, id: "ops-data-operations-component")
@@ -159,7 +159,7 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
       live(conn, diagnostics_path)
 
     track_dashboard_view(diagnostics)
-    assert has_element?(diagnostics, "#ops-context-rail")
+    assert has_element?(diagnostics, "#ops-context-rail-component")
     assert has_element?(diagnostics, "#dashboard-diagnostics-page")
   end
 

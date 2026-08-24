@@ -111,7 +111,7 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
       )
 
     assert has_element?(view, "#ops-timeline-page")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     assert has_element?(view, "#mission-event-mission_event-operational-event-source-health-1")
 
     assert has_element?(

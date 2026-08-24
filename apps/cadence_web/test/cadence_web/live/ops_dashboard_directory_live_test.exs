@@ -19,7 +19,7 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     track_dashboard_view(view)
 
     assert has_element?(view, "#ops-dashboard-directory-component.contents")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     refute has_element?(view, "#ops-dashboards-page")
 
     vue = dashboard_directory_vue(view)

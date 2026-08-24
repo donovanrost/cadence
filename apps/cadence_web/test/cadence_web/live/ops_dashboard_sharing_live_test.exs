@@ -44,7 +44,7 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboard-shares/#{share.dashboard_share_id}"
       )
 
-    assert has_element?(share_view, "#ops-context-rail")
+    assert has_element?(share_view, "#ops-context-rail-component")
     assert has_element?(share_view, "#ops-dashboard-share-component")
 
     share_vue = dashboard_share_vue(share_view)
@@ -108,7 +108,7 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboard-snapshots/#{snapshot.dashboard_snapshot_id}"
       )
 
-    assert has_element?(snapshot_view, "#ops-context-rail")
+    assert has_element?(snapshot_view, "#ops-context-rail-component")
     assert has_element?(snapshot_view, "#ops-dashboard-snapshot-component")
 
     snapshot_vue = dashboard_snapshot_vue(snapshot_view)

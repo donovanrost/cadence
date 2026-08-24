@@ -37,7 +37,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
 
     {:ok, present, _html} = live(conn, present_path)
 
-    assert has_element?(present, "#ops-context-rail")
+    assert has_element?(present, "#ops-context-rail-component")
     assert has_element?(present, "#dashboard-playlist-present-component.contents")
 
     initial_vue = LiveVue.Test.get_vue(present, id: "dashboard-playlist-present-component")
@@ -233,7 +233,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists")
 
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     assert has_element?(view, "#dashboard-playlists-component.contents")
 
     initial_vue = LiveVue.Test.get_vue(view, id: "dashboard-playlists-component")

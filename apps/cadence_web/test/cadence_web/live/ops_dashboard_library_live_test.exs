@@ -70,7 +70,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLiveTest do
 
     track_dashboard_view(library)
 
-    assert has_element?(library, "#ops-context-rail")
+    assert has_element?(library, "#ops-context-rail-component")
     assert has_element?(library, "#dashboard-library-component.contents")
     refute has_element?(library, "#dashboard-library-page")
 

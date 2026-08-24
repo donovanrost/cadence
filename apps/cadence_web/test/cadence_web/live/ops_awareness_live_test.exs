@@ -27,7 +27,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/alarms")
 
     assert has_element?(view, "#ops-alarms-component.contents")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     refute has_element?(view, "#ops-alarms-page")
 
     initial_vue = ops_alarms_vue(view)
@@ -276,7 +276,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/commands")
 
     assert has_element?(view, "#ops-commands-component.contents")
-    assert has_element?(view, "#ops-context-rail")
+    assert has_element?(view, "#ops-context-rail-component")
     refute has_element?(view, "#ops-commands-page")
 
     initial_vue = ops_commands_vue(view)
@@ -377,10 +377,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
 
     assert_json_safe_command_vue(focused_vue)
 
-    assert has_element?(
-             view,
-             ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
-           )
+    assert ops_context_followed_command(view)["command_request_id"] == "command-1"
 
     assert ops_nav_item(ops_nav_vue(view), "planning")["href"] ==
              "/missions/#{mission.mission_id}/ops/planning?focus_command_id=command-1"
@@ -391,10 +388,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/planning?#{%{focus_command_id: "command-1"}}"
       )
 
-    assert has_element?(
-             planning_view,
-             ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
-           )
+    assert ops_context_followed_command(planning_view)["command_request_id"] == "command-1"
 
     assert ops_nav_item(ops_nav_vue(planning_view), "commands")["href"] ==
              "/missions/#{mission.mission_id}/ops/commands?focus_command_id=command-1"
@@ -439,6 +433,15 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
 
   defp ops_commands_vue(view) do
     LiveVue.Test.get_vue(view, id: "ops-commands-component")
+  end
+
+  defp ops_context_followed_command(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "ops-context-rail-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("sections")
+    |> Enum.find(&(&1["key"] == "commands"))
+    |> get_in(["content", "followed_command"])
   end
 
   defp command_upserts(vue) do
