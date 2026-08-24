@@ -39,6 +39,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
         :dashboard_comparison_review_action_rows,
         comparison_review_action_rows(action_outcome)
       )
+      |> assign(:dashboard_activity_controls, activity_controls_dto(assigns.activity))
 
     ~H"""
     <section
@@ -55,58 +56,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
       data-dashboard-comparison-review-work-queue-count={length(@activity.open_review_queue)}
       data-dashboard-comparison-review-queue-state={@activity.queue_state_value}
     >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <h3 class="hud-label" data-dashboard-activity-title={@activity.mode}>
-            {@activity.title}
-          </h3>
-          <span
-            :if={@activity.open_summary.count != 0}
-            class="badge badge-warning badge-xs"
-            data-dashboard-comparison-review-open-badge
-          >
-            {@activity.open_summary.count_text} open reviews
-          </span>
-          <span
-            :if={@activity.mode != :all}
-            class="badge badge-info badge-outline badge-xs"
-            data-dashboard-activity-filter-badge={@activity.filter_value}
-          >
-            {@activity.filter_label}
-          </span>
-          <button
-            :if={@activity.mode != :all}
-            id="dashboard-activity-clear-filter"
-            type="button"
-            class="btn btn-ghost btn-xs"
-            phx-click="open_versions"
-            data-dashboard-activity-clear-filter={@activity.filter_value}
-          >
-            Show all
-          </button>
-        </div>
-        <span class="font-mono text-xs text-base-content/50">
-          {length(@activity.visible_events)} / {@activity.total_count}
-        </span>
-      </div>
-      <div
-        id="dashboard-activity-filter-controls"
-        class="flex flex-wrap gap-1"
-        data-dashboard-activity-filter-controls
-      >
-        <button
-          :for={filter <- activity_filter_options(@activity.mode)}
-          id={"dashboard-activity-filter-#{filter.id}"}
-          type="button"
-          class={activity_filter_button_class(filter.selected?)}
-          phx-click="set_activity_filter"
-          phx-value-filter={filter.value}
-          data-dashboard-activity-filter-option={filter.value}
-          data-dashboard-activity-filter-selected={activity_filter_selected_text(filter.selected?)}
-        >
-          {filter.label}
-        </button>
-      </div>
+      <.vue
+        id="dashboard-activity-controls-component"
+        v-component="DashboardActivityControls"
+        presentation={@dashboard_activity_controls}
+        v-ssr={false}
+        class="contents"
+      />
       <SelectedActivityComponents.selected_activity_event_summary
         summary={@selected_activity_event}
         dashboard_document={@dashboard_document}
@@ -198,6 +154,119 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
     </section>
     """
   end
+
+  defp activity_controls_dto(activity) do
+    filtered? = activity.mode != :all
+
+    %{
+      header: %{
+        class: "flex items-center justify-between",
+        leading_class: "flex items-center gap-2",
+        items: [
+          %{
+            key: "title",
+            order: 0,
+            tag: "h3",
+            visible: true,
+            id: nil,
+            type: nil,
+            class: "hud-label",
+            attrs:
+              raw_attributes(%{"data-dashboard-activity-title" => activity.mode}),
+            text: rendered_body(activity.title)
+          },
+          %{
+            key: "open-review-badge",
+            order: 1,
+            tag: "span",
+            visible: activity.open_summary.count != 0,
+            id: nil,
+            type: nil,
+            class: "badge badge-warning badge-xs",
+            attrs: raw_attributes(%{"data-dashboard-comparison-review-open-badge" => true}),
+            text: "#{rendered_body(activity.open_summary.count_text)} open reviews"
+          },
+          %{
+            key: "active-filter-badge",
+            order: 2,
+            tag: "span",
+            visible: filtered?,
+            id: nil,
+            type: nil,
+            class: "badge badge-info badge-outline badge-xs",
+            attrs:
+              raw_attributes(%{
+                "data-dashboard-activity-filter-badge" => activity.filter_value
+              }),
+            text: rendered_body(activity.filter_label)
+          },
+          %{
+            key: "clear-filter",
+            order: 3,
+            tag: "button",
+            visible: filtered?,
+            id: "dashboard-activity-clear-filter",
+            type: "button",
+            class: "btn btn-ghost btn-xs",
+            attrs:
+              raw_attributes(%{
+                "phx-click" => "open_versions",
+                "data-dashboard-activity-clear-filter" => activity.filter_value
+              }),
+            text: "Show all"
+          }
+        ],
+        count: %{
+          class: "font-mono text-xs text-base-content/50",
+          text: "#{length(activity.visible_events)} / #{activity.total_count}"
+        }
+      },
+      controls: %{
+        id: "dashboard-activity-filter-controls",
+        class: "flex flex-wrap gap-1",
+        attrs: raw_attributes(%{"data-dashboard-activity-filter-controls" => true}),
+        filters:
+          activity.mode
+          |> activity_filter_options()
+          |> Enum.with_index()
+          |> Enum.map(fn {filter, order} ->
+            %{
+              key: filter.id,
+              order: order,
+              tag: "button",
+              id: "dashboard-activity-filter-#{filter.id}",
+              type: "button",
+              class: activity_filter_button_class(filter.selected?),
+              attrs:
+                raw_attributes(%{
+                  "phx-click" => "set_activity_filter",
+                  "phx-value-filter" => filter.value,
+                  "data-dashboard-activity-filter-option" => filter.value,
+                  "data-dashboard-activity-filter-selected" =>
+                    activity_filter_selected_text(filter.selected?)
+                }),
+              text: rendered_body(filter.label)
+            }
+          end)
+      }
+    }
+  end
+
+  defp raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), rendered_body(value))
+    end)
+  end
+
+  defp rendered_body(nil), do: ""
+  defp rendered_body(value), do: to_string(value)
 
   defp activity_filter_options(selected_mode) do
     [

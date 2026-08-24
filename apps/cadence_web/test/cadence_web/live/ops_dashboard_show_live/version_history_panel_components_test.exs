@@ -116,6 +116,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    controls = activity_controls_presentation(html)
+    filter_badge =
+      Enum.find(controls["header"]["items"], &(&1["key"] == "active-filter-badge"))
+    filters = controls["controls"]["filters"]
 
     assert ["health_snapshots"] =
              document
@@ -127,10 +131,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-activity-mode")
 
-    assert ["health_snapshots"] =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-filter-badge]")
-             |> LazyHTML.attribute("data-dashboard-activity-filter-badge")
+    assert "health_snapshots" =
+             filter_badge["attrs"]["data-dashboard-activity-filter-badge"]
 
     assert [
              "",
@@ -140,14 +142,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              "health_snapshots",
              "publish_readiness"
            ] =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-filter-option]")
-             |> LazyHTML.attribute("data-dashboard-activity-filter-option")
+             Enum.map(filters, & &1["attrs"]["data-dashboard-activity-filter-option"])
 
     assert ["false", "false", "false", "false", "true", "false"] =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-filter-option]")
-             |> LazyHTML.attribute("data-dashboard-activity-filter-selected")
+             Enum.map(filters, & &1["attrs"]["data-dashboard-activity-filter-selected"])
 
     assert ["dashboard-lifecycle-event-health"] =
              document
@@ -321,6 +319,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
 
   defp previous_version(version) when is_integer(version) and version > 1, do: version - 1
   defp previous_version(_version), do: nil
+
+  defp activity_controls_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+
+    assert vue.component == "DashboardActivityControls"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    vue.props["presentation"]
+  end
 
   defp selected_text(lazy_html) do
     lazy_html

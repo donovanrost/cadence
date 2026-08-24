@@ -51,6 +51,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
       )
 
     document = LazyHTML.from_fragment(html)
+    controls = activity_controls_presentation(html)
+    header_items = controls["header"]["items"]
 
     assert ["open_comparison_reviews"] =
              document
@@ -78,19 +80,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
              |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
 
     assert "Open reviews" =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-filter-badge]")
-             |> selected_text()
+             header_items
+             |> Enum.find(&(&1["key"] == "active-filter-badge"))
+             |> Map.fetch!("text")
 
-    assert ["open_versions"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-clear-filter")
-             |> LazyHTML.attribute("phx-click")
+    clear_filter = Enum.find(header_items, &(&1["id"] == "dashboard-activity-clear-filter"))
+    assert "open_versions" = clear_filter["attrs"]["phx-click"]
 
-    assert ["open_comparison_reviews"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-clear-filter")
-             |> LazyHTML.attribute("data-dashboard-activity-clear-filter")
+    assert "open_comparison_reviews" =
+             clear_filter["attrs"]["data-dashboard-activity-clear-filter"]
 
     assert ["dashboard-lifecycle-event-open"] =
              document
@@ -98,9 +96,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
              |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
 
     assert "Review Queue" =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-title]")
-             |> selected_text()
+             header_items
+             |> Enum.find(&(&1["key"] == "title"))
+             |> Map.fetch!("text")
 
     assert ["true"] =
              document
@@ -165,9 +163,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
     }
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp activity_controls_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+
+    assert vue.component == "DashboardActivityControls"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    vue.props["presentation"]
   end
 end

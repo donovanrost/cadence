@@ -179,9 +179,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
                ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-status="open"])
              )
 
-      view
-      |> element("#dashboard-activity-filter-open-reviews")
-      |> render_click()
+      activity_controls =
+        view
+        |> LiveVue.Test.get_vue(id: "dashboard-activity-controls-component")
+        |> then(& &1.props["presentation"])
+
+      open_reviews_filter =
+        Enum.find(
+          activity_controls["controls"]["filters"],
+          &(&1["id"] == "dashboard-activity-filter-open-reviews")
+        )
+
+      filter_attrs = Map.fetch!(open_reviews_filter, "attrs")
+
+      render_click(
+        view,
+        Map.fetch!(filter_attrs, "phx-click"),
+        %{"filter" => Map.fetch!(filter_attrs, "phx-value-filter")}
+      )
 
       patched_path = assert_patch(view)
       assert patched_path =~ "activity_filter=open_comparison_reviews"

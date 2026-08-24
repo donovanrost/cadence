@@ -48,6 +48,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    controls = activity_controls_presentation(html)
 
     assert ["open_comparison_reviews"] =
              document
@@ -65,9 +66,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
              |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
 
     assert "Review Queue" =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-title]")
-             |> selected_text()
+             controls["header"]["items"]
+             |> Enum.find(&(&1["key"] == "title"))
+             |> Map.fetch!("text")
   end
 
   test "activity_timeline offers recovery when selected activity is hidden by filter" do
@@ -115,9 +116,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
     }
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp activity_controls_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+
+    assert vue.component == "DashboardActivityControls"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    vue.props["presentation"]
   end
 end

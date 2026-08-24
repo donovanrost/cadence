@@ -30,6 +30,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
       )
 
     document = LazyHTML.from_fragment(html)
+    controls = activity_controls_presentation(html)
+    open_badge =
+      Enum.find(controls["header"]["items"], &(&1["key"] == "open-review-badge"))
 
     assert ["comparison_review_requested"] =
              document
@@ -61,10 +64,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
 
-    assert "1 open reviews" =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-badge]")
-             |> selected_text()
+    assert %{"text" => "1 open reviews", "visible" => true} = open_badge
 
     assert "Comparison review requested" =
              document
@@ -187,6 +187,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
       )
 
     document = LazyHTML.from_fragment(html)
+    controls = activity_controls_presentation(html)
+    open_badge =
+      Enum.find(controls["header"]["items"], &(&1["key"] == "open-review-badge"))
 
     assert ["resolved"] =
              document
@@ -203,10 +206,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-badge]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-badge")
+    assert open_badge["visible"] == false
 
     assert ["dashboard-lifecycle-event-2"] =
              document
@@ -280,6 +280,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
       mission_id: "mission-1",
       name: "Dashboard"
     }
+  end
+
+  defp activity_controls_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+
+    assert vue.component == "DashboardActivityControls"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    vue.props["presentation"]
   end
 
   defp selected_text(lazy_html) do

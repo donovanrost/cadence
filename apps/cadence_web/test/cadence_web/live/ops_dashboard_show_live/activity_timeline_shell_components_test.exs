@@ -62,6 +62,159 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
         dashboard_review_placement_id: "placement-open"
       )
 
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-activity-controls-component")
+
+    assert vue.component == "DashboardActivityControls"
+    assert vue.id == "dashboard-activity-controls-component"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    presentation = vue.props["presentation"]
+    assert Map.keys(presentation) |> Enum.sort() == ["controls", "header"]
+
+    header = presentation["header"]
+    assert header["class"] == "flex items-center justify-between"
+    assert header["leading_class"] == "flex items-center gap-2"
+
+    [title, open_badge, filter_badge, clear_filter] = header["items"]
+
+    assert title == %{
+             "attrs" => %{"data-dashboard-activity-title" => "open_comparison_reviews"},
+             "class" => "hud-label",
+             "id" => nil,
+             "key" => "title",
+             "order" => 0,
+             "tag" => "h3",
+             "text" => "Review Queue",
+             "type" => nil,
+             "visible" => true
+           }
+
+    assert open_badge == %{
+             "attrs" => %{"data-dashboard-comparison-review-open-badge" => ""},
+             "class" => "badge badge-warning badge-xs",
+             "id" => nil,
+             "key" => "open-review-badge",
+             "order" => 1,
+             "tag" => "span",
+             "text" => "1 open reviews",
+             "type" => nil,
+             "visible" => true
+           }
+
+    assert filter_badge == %{
+             "attrs" => %{
+               "data-dashboard-activity-filter-badge" => "open_comparison_reviews"
+             },
+             "class" => "badge badge-info badge-outline badge-xs",
+             "id" => nil,
+             "key" => "active-filter-badge",
+             "order" => 2,
+             "tag" => "span",
+             "text" => "Open reviews",
+             "type" => nil,
+             "visible" => true
+           }
+
+    assert clear_filter == %{
+             "attrs" => %{
+               "data-dashboard-activity-clear-filter" => "open_comparison_reviews",
+               "phx-click" => "open_versions"
+             },
+             "class" => "btn btn-ghost btn-xs",
+             "id" => "dashboard-activity-clear-filter",
+             "key" => "clear-filter",
+             "order" => 3,
+             "tag" => "button",
+             "text" => "Show all",
+             "type" => "button",
+             "visible" => true
+           }
+
+    assert header["count"] == %{
+             "class" => "font-mono text-xs text-base-content/50",
+             "text" => "1 / 3"
+           }
+
+    controls = presentation["controls"]
+    assert controls["id"] == "dashboard-activity-filter-controls"
+    assert controls["class"] == "flex flex-wrap gap-1"
+    assert controls["attrs"] == %{"data-dashboard-activity-filter-controls" => ""}
+
+    filters = controls["filters"]
+
+    assert Enum.map(filters, & &1["key"]) ==
+             ~w(all version-changes reviews open-reviews health-snapshots publish-readiness)
+
+    assert Enum.map(filters, & &1["order"]) == [0, 1, 2, 3, 4, 5]
+    assert Enum.map(filters, & &1["tag"]) == List.duplicate("button", 6)
+
+    assert Enum.map(filters, & &1["id"]) == [
+             "dashboard-activity-filter-all",
+             "dashboard-activity-filter-version-changes",
+             "dashboard-activity-filter-reviews",
+             "dashboard-activity-filter-open-reviews",
+             "dashboard-activity-filter-health-snapshots",
+             "dashboard-activity-filter-publish-readiness"
+           ]
+
+    assert Enum.map(filters, & &1["type"]) == List.duplicate("button", 6)
+
+    assert Enum.map(filters, & &1["class"]) == [
+             "btn btn-ghost btn-xs",
+             "btn btn-ghost btn-xs",
+             "btn btn-ghost btn-xs",
+             "btn btn-primary btn-xs",
+             "btn btn-ghost btn-xs",
+             "btn btn-ghost btn-xs"
+           ]
+
+    assert Enum.map(filters, & &1["text"]) ==
+             ["All", "Versions", "Reviews", "Open reviews", "Health", "Readiness"]
+
+    assert Enum.map(filters, & &1["attrs"]) == [
+             %{
+               "data-dashboard-activity-filter-option" => "",
+               "data-dashboard-activity-filter-selected" => "false",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => ""
+             },
+             %{
+               "data-dashboard-activity-filter-option" => "version_changes",
+               "data-dashboard-activity-filter-selected" => "false",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => "version_changes"
+             },
+             %{
+               "data-dashboard-activity-filter-option" => "comparison_reviews",
+               "data-dashboard-activity-filter-selected" => "false",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => "comparison_reviews"
+             },
+             %{
+               "data-dashboard-activity-filter-option" => "open_comparison_reviews",
+               "data-dashboard-activity-filter-selected" => "true",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => "open_comparison_reviews"
+             },
+             %{
+               "data-dashboard-activity-filter-option" => "health_snapshots",
+               "data-dashboard-activity-filter-selected" => "false",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => "health_snapshots"
+             },
+             %{
+               "data-dashboard-activity-filter-option" => "publish_readiness",
+               "data-dashboard-activity-filter-selected" => "false",
+               "phx-click" => "set_activity_filter",
+               "phx-value-filter" => "publish_readiness"
+             }
+           ]
+
     document = LazyHTML.from_fragment(html)
 
     assert ["open_comparison_reviews"] =
@@ -79,20 +232,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-count")
 
-    assert ["open_versions"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-clear-filter")
-             |> LazyHTML.attribute("phx-click")
+    assert "open_versions" = clear_filter["attrs"]["phx-click"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-filter-open-reviews")
-             |> LazyHTML.attribute("data-dashboard-activity-filter-selected")
+    open_reviews = Enum.find(filters, &(&1["id"] == "dashboard-activity-filter-open-reviews"))
+    assert "true" = open_reviews["attrs"]["data-dashboard-activity-filter-selected"]
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-filter-reviews")
-             |> LazyHTML.attribute("data-dashboard-activity-filter-selected")
+    reviews = Enum.find(filters, &(&1["id"] == "dashboard-activity-filter-reviews"))
+    assert "false" = reviews["attrs"]["data-dashboard-activity-filter-selected"]
 
     assert ["dashboard-lifecycle-event-open"] =
              document
@@ -111,6 +257,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
         selected_activity_event: ActivityEventSummary.build([], nil, [], activity, [], []),
         dashboard_lifecycle_events: []
       )
+
+    presentation =
+      html
+      |> LiveVue.Test.get_vue(id: "dashboard-activity-controls-component")
+      |> then(& &1.props["presentation"])
+
+    assert Enum.map(presentation["header"]["items"], & &1["visible"]) ==
+             [true, false, false, false]
+
+    assert Enum.map(
+             presentation["controls"]["filters"],
+             & &1["attrs"]["data-dashboard-activity-filter-selected"]
+           ) == ["true", "false", "false", "false", "false", "false"]
 
     document = LazyHTML.from_fragment(html)
 
