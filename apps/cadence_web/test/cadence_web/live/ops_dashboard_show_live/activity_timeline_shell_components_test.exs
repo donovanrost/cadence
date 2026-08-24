@@ -240,10 +240,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     reviews = Enum.find(filters, &(&1["id"] == "dashboard-activity-filter-reviews"))
     assert "false" = reviews["attrs"]["data-dashboard-activity-filter-selected"]
 
-    assert ["dashboard-lifecycle-event-open"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-list > li")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
+    row =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-activity-row-dashboard-lifecycle-event-open-component"
+      )
+
+    assert row.component == "ActivityTimelineRow"
+
+    assert row.props["presentation"]["root"]["attrs"][
+             "data-dashboard-comparison-review-work-queue-item"
+           ] == "dashboard-lifecycle-event-open"
   end
 
   test "activity_timeline_shell renders the no lifecycle activity empty state" do

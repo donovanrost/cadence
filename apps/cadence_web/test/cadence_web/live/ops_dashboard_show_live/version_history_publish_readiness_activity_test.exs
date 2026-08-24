@@ -84,7 +84,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity_row = activity_row_presentation(html, readiness_event.dashboard_lifecycle_event_id)
 
     selected_activity =
       LiveVue.Test.get_vue(html,
@@ -157,43 +157,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
 
     assert source_actions["latest"]["text"] =~ "Source probed after this check"
 
-    assert ["improved"] =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-readiness [data-dashboard-activity-readiness-trend])
-             )
-             |> LazyHTML.attribute("data-dashboard-activity-readiness-trend")
+    assert activity_row["header"]["readiness_badge"]["attrs"][
+             "data-dashboard-activity-readiness-trend"
+           ] == "improved"
 
-    assert ["dashboard-lifecycle-event-readiness-previous"] =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-readiness [data-dashboard-activity-readiness-trend])
-             )
-             |> LazyHTML.attribute("data-dashboard-activity-readiness-previous")
+    assert activity_row["header"]["readiness_badge"]["attrs"][
+             "data-dashboard-activity-readiness-previous"
+           ] == "dashboard-lifecycle-event-readiness-previous"
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-readiness [data-dashboard-activity-remediation-count])
-             )
-             |> LazyHTML.attribute("data-dashboard-activity-remediation-count")
+    assert activity_row["header"]["remediation_badge"]["attrs"][
+             "data-dashboard-activity-remediation-count"
+           ] == "2"
 
     assert [
              "Use a compatible source",
              "Inspect telemetry: rehearsal-binding -> rehearsal-source (replay replay-run-7, request request-telemetry-latest)"
            ] =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-readiness [data-dashboard-activity-remediation-action])
+             Enum.map(
+               activity_row["header"]["remediation_actions"],
+               & &1["attrs"]["data-dashboard-activity-remediation-action"]
              )
-             |> LazyHTML.attribute("data-dashboard-activity-remediation-action")
 
     assert ["data_sources", "data_sources"] =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-readiness [data-dashboard-activity-remediation-action])
+             Enum.map(
+               activity_row["header"]["remediation_actions"],
+               & &1["attrs"]["data-dashboard-activity-remediation-target"]
              )
-             |> LazyHTML.attribute("data-dashboard-activity-remediation-target")
 
     assert "refresh_publish_readiness" =
              selected_activity["header"]["refresh"]["attrs"]["phx-click"]
@@ -427,5 +416,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
       mission_id: "mission-1",
       name: "Dashboard"
     }
+  end
+
+  defp activity_row_presentation(rendered, event_id) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-activity-row-#{event_id}-component"
+      )
+
+    assert vue.component == "ActivityTimelineRow"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 end

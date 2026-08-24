@@ -170,6 +170,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
       Enum.find(controls["header"]["items"], &(&1["key"] == "active-filter-badge"))
 
     filters = controls["controls"]["filters"]
+    activity_row = activity_row_presentation(html, "dashboard-lifecycle-event-health")
 
     assert ["health_snapshots"] =
              document
@@ -197,16 +198,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     assert ["false", "false", "false", "false", "true", "false"] =
              Enum.map(filters, & &1["attrs"]["data-dashboard-activity-filter-selected"])
 
-    assert ["dashboard-lifecycle-event-health"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-list > li")
-             |> LazyHTML.attribute("id")
-             |> Enum.map(&String.replace_prefix(&1, "dashboard-activity-", ""))
+    assert activity_row["root"]["id"] ==
+             "dashboard-activity-dashboard-lifecycle-event-health"
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-health")
-             |> LazyHTML.attribute("data-dashboard-activity-selected")
+    assert activity_row["root"]["attrs"]["data-dashboard-activity-selected"] == "true"
 
     assert "dashboard-lifecycle-event-health" =
              selected_activity["root"]["attrs"]["data-dashboard-selected-activity-event"]
@@ -224,39 +219,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     assert "Health snapshot captured" =
              selected_activity["header"]["title"]["text"]
 
-    health_snapshot =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-health-snapshot-event-dashboard-lifecycle-event-health-component"
-      )
+    health_snapshot = activity_row["health_snapshot"]
 
-    assert health_snapshot.component == "HealthSnapshotActivity"
+    assert health_snapshot["attrs"]["data-name"] == "HealthSnapshotActivity"
 
-    assert health_snapshot.props["presentation"]["root"]["attrs"][
+    assert health_snapshot["presentation"]["root"]["attrs"][
              "data-dashboard-health-snapshot-id"
            ] == "health-snapshot-1"
 
-    refute health_snapshot.ssr
+    refute Map.has_key?(health_snapshot, "ssr")
 
-    assert ["select_activity_event"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-select-dashboard-lifecycle-event-health")
-             |> LazyHTML.attribute("phx-click")
+    assert activity_row["actions"]["select"]["attrs"]["phx-click"] ==
+             "select_activity_event"
 
-    copy =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-activity-link-copy-dashboard-lifecycle-event-health-component"
-      )
+    copy_host = activity_row["actions"]["copy_host"]
+    copy = activity_row["actions"]["copy_props"]
 
-    assert copy.component == "ClipboardButton"
+    assert copy_host["attrs"]["data-name"] == "ClipboardButton"
+    refute Map.has_key?(copy_host, "ssr")
 
-    assert copy.props["button_id"] ==
+    assert copy["button_id"] ==
              "dashboard-activity-link-copy-dashboard-lifecycle-event-health"
 
-    assert copy.props["data_attrs"] == %{
+    assert copy["data_attrs"] == %{
              "data-dashboard-activity-link-copy" => "dashboard-lifecycle-event-health"
            }
 
-    activity_link = copy.props["clipboard_text"]
+    activity_link = copy["clipboard_text"]
 
     uri = URI.parse(activity_link)
 
@@ -269,8 +258,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              "activity_filter" => "health_snapshots",
              "activity_event" => "dashboard-lifecycle-event-health"
            }
-
-    refute copy.ssr
   end
 
   test "versions_panel correlates selected version activity with runtime invalidation impact" do
@@ -307,29 +294,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity_row = activity_row_presentation(html, "dashboard-lifecycle-event-published")
 
     selected_activity =
       LiveVue.Test.get_vue(html,
         id: "dashboard-selected-activity-event-component"
       ).props["presentation"]
 
-    assert ["refresh_allowed"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-published")
-             |> LazyHTML.attribute("data-dashboard-activity-runtime-impact-state")
+    assert activity_row["root"]["attrs"]["data-dashboard-activity-runtime-impact-state"] ==
+             "refresh_allowed"
 
-    assert ["invalidation-published"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-published")
-             |> LazyHTML.attribute("data-dashboard-activity-runtime-impact-invalidation")
+    assert activity_row["root"]["attrs"][
+             "data-dashboard-activity-runtime-impact-invalidation"
+           ] == "invalidation-published"
 
     assert "Runtime refresh allowed: refresh_plan" =
-             document
-             |> LazyHTML.query(
-               ~s(#dashboard-activity-dashboard-lifecycle-event-published [data-activity-field="Runtime"])
-             )
-             |> selected_text()
+             activity_row["fields"]["rows"]
+             |> Enum.find(&(&1["value"]["attrs"]["data-activity-field"] == "Runtime"))
+             |> get_in(["value", "text"])
 
     assert "refresh_allowed" =
              selected_activity["root"]["attrs"][
@@ -381,6 +363,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     vue.props["presentation"]
   end
 
+  defp activity_row_presentation(rendered, event_id) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-activity-row-#{event_id}-component"
+      )
+
+    assert vue.component == "ActivityTimelineRow"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
+  end
+
   defp version_history_summary_presentation(rendered) do
     vue =
       LiveVue.Test.get_vue(rendered,
@@ -398,9 +394,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     vue.props["presentation"]
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
-  end
 end

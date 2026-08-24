@@ -25770,7 +25770,11 @@ async function inspectSelectedActivityRecovery(client) {
   const selectedResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const rows = Array.from(document.querySelectorAll("#dashboard-activity-list > li"))
+        const rows = Array.from(
+          document.querySelectorAll(
+            "#dashboard-activity-list li[data-lifecycle-event-type]",
+          ),
+        )
         const candidate = rows.find((row) => row.dataset.lifecycleEventType !== "health_snapshot_captured")
         const eventId = candidate?.id?.replace("dashboard-activity-", "") || ""
         candidate?.querySelector("[data-dashboard-activity-select]")?.click()

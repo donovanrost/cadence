@@ -130,17 +130,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
   end
 
   defp comparison_request_presentation(rendered, event) do
-    vue =
+    row =
       LiveVue.Test.get_vue(rendered,
-        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
       )
 
-    assert vue.component == "ComparisonReviewActivityDetails"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]
+    assert row.component == "ActivityTimelineRow"
+    assert row.class == "contents"
+    assert row.ssr == false
+    assert row.props == Jason.decode!(Jason.encode!(row.props))
+
+    child = row.props["presentation"]["comparison_review"]["request"]
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    child["presentation"]
   end
 
   defp placement_links(presentation) do

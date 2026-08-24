@@ -56,6 +56,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
       actions: request_actions_presentation(row),
       findings: findings_presentation(row.findings)
     }
+    |> normalize_attribute_maps()
   end
 
   def request_presentation(_row), do: nil
@@ -142,6 +143,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
         rows: resolution_detail_rows(row)
       }
     }
+    |> normalize_attribute_maps()
   end
 
   def resolution_presentation(_row), do: nil
@@ -602,11 +604,40 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
 
   defp icon_presentation(name), do: %{name: name, class: "h-3.5 w-3.5"}
 
-  defp component_id(kind, %{render?: true, event_id: event_id}) do
+  def component_id(kind, %{render?: true, event_id: event_id})
+      when kind in ["request", "resolution"] do
     "dashboard-comparison-review-#{kind}-#{event_id}-component"
   end
 
-  defp component_id(_kind, _row), do: nil
+  def component_id(_kind, _row), do: nil
+
+  defp normalize_attribute_maps(%{} = presentation) do
+    Map.new(presentation, fn
+      {:attrs, attributes} when is_map(attributes) ->
+        {:attrs, raw_attributes(attributes)}
+
+      {key, value} ->
+        {key, normalize_attribute_maps(value)}
+    end)
+  end
+
+  defp normalize_attribute_maps(values) when is_list(values),
+    do: Enum.map(values, &normalize_attribute_maps/1)
+
+  defp normalize_attribute_maps(value), do: value
+
+  defp raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), dom_text(value))
+    end)
+  end
 
   defp dom_attr_value(nil), do: nil
   defp dom_attr_value(value), do: dom_text(value)

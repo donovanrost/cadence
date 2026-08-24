@@ -90,10 +90,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
     assert "open_comparison_reviews" =
              clear_filter["attrs"]["data-dashboard-activity-clear-filter"]
 
-    assert ["dashboard-lifecycle-event-open"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-list > li")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
+    assert "dashboard-lifecycle-event-open" =
+             activity_row_presentation(html, open_request_event)["root"]["attrs"][
+               "data-dashboard-comparison-review-work-queue-item"
+             ]
 
     assert "Review Queue" =
              header_items
@@ -145,10 +145,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-activity-mode")
 
-    assert ["dashboard-lifecycle-event-queued"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-list > li")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
+    assert "dashboard-lifecycle-event-queued" =
+             activity_row_presentation(html, queue_request)["root"]["attrs"][
+               "data-dashboard-comparison-review-work-queue-item"
+             ]
 
     assert ["dashboard-lifecycle-event-queued"] =
              document
@@ -176,15 +176,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
   end
 
   defp comparison_request_presentation(rendered, event) do
+    child = activity_row_presentation(rendered, event)["comparison_review"]["request"]
+
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["class"] == "contents"
+    child["presentation"]
+  end
+
+  defp activity_row_presentation(rendered, event) do
     vue =
       LiveVue.Test.get_vue(rendered,
-        id: "dashboard-comparison-review-request-#{event.dashboard_lifecycle_event_id}-component"
+        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
       )
 
-    assert vue.component == "ComparisonReviewActivityDetails"
+    assert vue.component == "ActivityTimelineRow"
     assert vue.class == "contents"
     assert vue.ssr == false
-    assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
     vue.props["presentation"]
   end

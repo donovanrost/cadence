@@ -537,21 +537,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
   end
 
   defp comparison_presentation(rendered, kind, event_id) do
-    vue =
+    row =
       LiveVue.Test.get_vue(rendered,
-        id: "dashboard-comparison-review-#{kind}-#{event_id}-component"
+        id: "dashboard-activity-row-#{event_id}-component"
       )
 
-    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
-             component: "ComparisonReviewActivityDetails",
+    assert Map.take(row, [:component, :ssr, :class, :handlers]) == %{
+             component: "ActivityTimelineRow",
              ssr: false,
              class: "contents",
              handlers: %{}
            }
 
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["kind"] == kind
-    vue.props["presentation"]
+    assert row.props == Jason.decode!(Jason.encode!(row.props))
+
+    child = row.props["presentation"]["comparison_review"][kind]
+    assert child["id"] == "dashboard-comparison-review-#{kind}-#{event_id}-component"
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["presentation"]["kind"] == kind
+    child["presentation"]
   end
 
   defp form_payload(form, overrides) do

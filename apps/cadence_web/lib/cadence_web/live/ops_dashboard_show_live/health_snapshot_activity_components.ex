@@ -9,18 +9,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HealthSnapshotActivityComponents do
   attr :event, LifecycleEvent, required: true
 
   def event_details(assigns) do
-    health_snapshot = HealthSnapshotActivity.build(assigns.event)
+    presentation = presentation(assigns.event)
 
-    if health_snapshot.present? do
-      event_id = assigns.event.dashboard_lifecycle_event_id
-
+    if presentation do
       assigns =
         assigns
-        |> assign(
-          :island_id,
-          "dashboard-health-snapshot-event-#{rendered_body(event_id)}-component"
-        )
-        |> assign(:presentation, health_snapshot_activity_dto(event_id, health_snapshot))
+        |> assign(:island_id, component_id(assigns.event))
+        |> assign(:presentation, presentation)
 
       ~H"""
       <.vue
@@ -34,6 +29,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.HealthSnapshotActivityComponents do
     else
       ~H""
     end
+  end
+
+  def presentation(%LifecycleEvent{} = event) do
+    health_snapshot = HealthSnapshotActivity.build(event)
+
+    if health_snapshot.present? do
+      health_snapshot_activity_dto(event.dashboard_lifecycle_event_id, health_snapshot)
+    end
+  end
+
+  def component_id(%LifecycleEvent{dashboard_lifecycle_event_id: event_id}) do
+    "dashboard-health-snapshot-event-#{rendered_body(event_id)}-component"
   end
 
   defp health_snapshot_activity_dto(event_id, health_snapshot) do

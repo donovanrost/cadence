@@ -60,10 +60,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
              |> LazyHTML.query("#dashboard-activity-section")
              |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue")
 
-    assert ["dashboard-lifecycle-event-open"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-list > li")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-item")
+    row =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-activity-row-dashboard-lifecycle-event-open-component"
+      )
+
+    assert "dashboard-lifecycle-event-open" =
+             row.props["presentation"]["root"]["attrs"][
+               "data-dashboard-comparison-review-work-queue-item"
+             ]
 
     assert "Review Queue" =
              controls["header"]["items"]

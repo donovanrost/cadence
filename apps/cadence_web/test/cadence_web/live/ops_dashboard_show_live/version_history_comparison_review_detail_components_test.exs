@@ -35,10 +35,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
     open_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "open-review-badge"))
 
-    assert ["comparison_review_requested"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-1")
-             |> LazyHTML.attribute("data-lifecycle-event-type")
+    activity_row = activity_row_presentation(html, event.dashboard_lifecycle_event_id)
+
+    assert activity_row["root"]["attrs"]["data-lifecycle-event-type"] ==
+             "comparison_review_requested"
 
     assert ["1"] =
              document
@@ -67,10 +67,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
 
     assert %{"text" => "1 open reviews", "visible" => true} = open_badge
 
-    assert "Comparison review requested" =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-1 .font-semibold")
-             |> selected_text()
+    assert activity_row["header"]["title"]["text"] == "Comparison review requested"
 
     presentation = comparison_presentation(html, "request", event.dashboard_lifecycle_event_id)
     root_attrs = presentation["root"]["attrs"]
@@ -238,10 +235,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
     assert "bulk_correction_authority_review / 1" =
              detail_value(resolution_presentation, "workflow")
 
-    assert "Comparison review resolved" =
-             document
-             |> LazyHTML.query("#dashboard-activity-dashboard-lifecycle-event-2 .font-semibold")
-             |> selected_text()
+    assert activity_row_presentation(html, resolution_event.dashboard_lifecycle_event_id)[
+             "header"
+           ]["title"]["text"] == "Comparison review resolved"
   end
 
   defp dashboard_document do
@@ -264,20 +260,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
   end
 
   defp comparison_presentation(rendered, kind, event_id) do
+    child = activity_row_presentation(rendered, event_id)["comparison_review"][kind]
+
+    assert child["id"] == "dashboard-comparison-review-#{kind}-#{event_id}-component"
+    assert child["class"] == "contents"
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["presentation"]["kind"] == kind
+    child["presentation"]
+  end
+
+  defp activity_row_presentation(rendered, event_id) do
     vue =
       LiveVue.Test.get_vue(rendered,
-        id: "dashboard-comparison-review-#{kind}-#{event_id}-component"
+        id: "dashboard-activity-row-#{event_id}-component"
       )
 
-    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
-             component: "ComparisonReviewActivityDetails",
-             ssr: false,
-             class: "contents",
-             handlers: %{}
-           }
-
+    assert vue.component == "ActivityTimelineRow"
+    assert vue.class == "contents"
+    assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["kind"] == kind
     vue.props["presentation"]
   end
 
@@ -293,9 +294,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
     |> get_in(["attrs", "value"])
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
-  end
 end
