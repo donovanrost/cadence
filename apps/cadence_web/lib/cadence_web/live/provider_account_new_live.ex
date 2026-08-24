@@ -131,13 +131,8 @@ defmodule CadenceWeb.ProviderAccountNewLive do
       },
       fields: %{
         provider_account_id:
-          form_field_dto(:provider_account_id, "hidden", nil, params,
-            required: false
-          ),
-        credential_ref:
-          form_field_dto(:credential_ref, "hidden", nil, params,
-            required: false
-          ),
+          form_field_dto(:provider_account_id, "hidden", nil, params, required: false),
+        credential_ref: form_field_dto(:credential_ref, "hidden", nil, params, required: false),
         display_name:
           form_field_dto(:display_name, "text", "Display Name", params, required: true),
         provider_type:
@@ -168,8 +163,7 @@ defmodule CadenceWeb.ProviderAccountNewLive do
           form_field_dto(:allowed_stations, "text", "Allowed Stations", params,
             placeholder: "station-alpha, station-beta"
           ),
-        max_quota:
-          form_field_dto(:max_quota, "number", "Maximum Quota", params, min: 0)
+        max_quota: form_field_dto(:max_quota, "number", "Maximum Quota", params, min: 0)
       },
       connector: %{
         options: provider_connector_options_dto(),
@@ -467,7 +461,9 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     connector
   end
 
-  defp string_param(params, key, default \\ "") when is_map(params) do
+  defp string_param(params, key, default \\ "")
+
+  defp string_param(params, key, default) when is_map(params) do
     case Map.get(params, key, default) do
       value when is_binary(value) -> value
       _other -> default

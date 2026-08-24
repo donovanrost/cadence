@@ -177,6 +177,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert has_element?(view, "#flash-error[role='alert']", "Could not register provider account")
     assert ProviderAccounts.list_for_system(organization.organization_id) == []
 
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/new")
+
     invalid_backend_params =
       provider_account_params(provider_account_new_vue(view), %{
         "provider_type" => "simulator",
@@ -186,6 +188,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     render_hook(view, "save", %{"provider_account" => invalid_backend_params})
     assert has_element?(view, "#flash-error[role='alert']", "Select a supported secret backend")
     assert ProviderAccounts.list_for_system(organization.organization_id) == []
+
+    {:ok, view, _html} = live(conn, ~p"/provider-accounts/new")
 
     valid_params =
       provider_account_params(provider_account_new_vue(view), %{
