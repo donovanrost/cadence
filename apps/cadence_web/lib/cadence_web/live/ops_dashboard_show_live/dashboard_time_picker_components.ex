@@ -147,7 +147,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   end
 
   defp shift_button_presentation(id, direction) do
-    label = "Move time range #{direction}wards"
+    label =
+      if(direction == "back", do: "Move time range backwards", else: "Move time range forwards")
 
     %{
       attrs: %{

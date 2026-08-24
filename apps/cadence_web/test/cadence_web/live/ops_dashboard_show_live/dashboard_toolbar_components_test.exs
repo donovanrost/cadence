@@ -616,14 +616,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
   end
 
   test "healthy viewer keeps only scope and time as primary controls" do
-    document =
-      render_component(&DashboardToolbarComponents.dashboard_toolbar/1, toolbar_assigns([]))
-      |> LazyHTML.from_fragment()
+    html = render_component(&DashboardToolbarComponents.dashboard_toolbar/1, toolbar_assigns([]))
+    document = LazyHTML.from_fragment(html)
+    time_picker = time_picker_presentation(html)
 
-    assert ["scope", "time"] =
+    assert ["scope"] =
              document
              |> LazyHTML.query("[data-dashboard-primary-control]")
              |> LazyHTML.attribute("data-dashboard-primary-control")
+
+    assert time_picker["overlay"]["root"]["attrs"]["data-dashboard-primary-control"] ==
+             "time"
 
     assert [] =
              document
