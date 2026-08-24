@@ -620,17 +620,469 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     track_async_view(view)
 
-    assert has_element?(view, "#ops-contact-requirement-show-page")
-    assert has_element?(view, "#plan-contact-requirement")
-    assert has_element?(view, "#planning-searches-empty")
+    initial_vue = contact_requirement_show_vue(view)
+    initial_page = initial_vue.props["page"]
 
-    view |> element("#plan-contact-requirement") |> render_click()
+    assert initial_page["id"] == "ops-contact-requirement-show-page"
+    assert initial_page["header"]["plan_action"]["id"] == "plan-contact-requirement"
+    assert initial_page["planning"]["searches"]["empty"]["id"] == "planning-searches-empty"
+    assert contact_requirement_stream_rows(initial_vue, "planning_searches") == []
+
+    render_hook(view, "plan", %{})
     render_async(view)
 
-    assert has_element?(view, "#planning-searches [id^=planning-search-]")
-    assert has_element?(view, "[id^=planning-search-evidence-]")
-    assert has_element?(view, "#planning-run-state", "failed")
-    assert has_element?(view, "#planning-opportunities-empty")
+    planned_vue = contact_requirement_show_vue(view)
+    planned_page = planned_vue.props["page"]
+    [search] = contact_requirement_stream_rows(planned_vue, "planning_searches")
+
+    [run] =
+      Planner.list_runs(
+        scope.organization_id,
+        mission.mission_id,
+        requirement.contact_requirement_id
+      )
+
+    [durable_search] =
+      Planner.list_searches(
+        scope.organization_id,
+        mission.mission_id,
+        run.contact_planning_run_id
+      )
+
+    assert search == %{
+             "__dom_id" => "planning-search-#{durable_search.contact_planning_search_id}",
+             "contact_planning_search_id" => durable_search.contact_planning_search_id,
+             "provider_label" =>
+               durable_search.readiness_document["message"] || "Route readiness",
+             "route_key" => durable_search.route_key,
+             "evidence" => %{
+               "id" => "planning-search-evidence-#{durable_search.contact_planning_search_id}",
+               "summary" => "Provider or route readiness prevented opportunity evaluation."
+             },
+             "outcome" => %{
+               "label" => "not ready",
+               "class" => "font-mono text-[0.65rem] uppercase text-warning"
+             },
+             "opportunity_count" => "0 options"
+           }
+
+    assert planned_page["planning"]["run_state"] == %{
+             "id" => "planning-run-state",
+             "label" => "failed"
+           }
+
+    assert planned_page["opportunities"]["list"]["empty"]["id"] ==
+             "planning-opportunities-empty"
+
+    assert contact_requirement_stream_rows(planned_vue, "opportunities") == []
+    assert_requirement_detail_json_safe(planned_vue)
+  end
+
+  test "Requirement detail exposes an exact JSON-safe page and initial stream contract" do
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope()
+    {requirement, version} = create_requirement(scope, mission, spacecraft)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+      )
+
+    vue = contact_requirement_show_vue(view)
+
+    assert vue.component == "OpsContactRequirementShow"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    assert vue.props == %{
+             "page" =>
+               contact_requirement_show_page_props(
+                 mission.mission_id,
+                 spacecraft.spacecraft_id
+               )
+           }
+
+    expected_version = %{
+      "__dom_id" => "requirement-version-#{version.contact_requirement_version_id}",
+      "contact_requirement_version_id" => version.contact_requirement_version_id,
+      "version_label" => "v1",
+      "created_at" => "16 Jul 2026 20:00Z",
+      "rationale" => "Recorder pressure requires a downlink",
+      "content_sha256" => version.content_sha256
+    }
+
+    assert contact_requirement_stream_mutations(vue, "requirement_versions") == [
+             ["replace", "/requirement_versions", []],
+             ["upsert", "/requirement_versions/-", expected_version]
+           ]
+
+    assert contact_requirement_stream_mutations(vue, "planning_searches") == [
+             ["replace", "/planning_searches", []]
+           ]
+
+    assert contact_requirement_stream_mutations(vue, "opportunities") == [
+             ["replace", "/opportunities", []]
+           ]
+
+    assert_requirement_detail_json_safe(vue)
+  end
+
+  test "Requirement detail preserves exact opportunity selection and draft Plan construction" do
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope()
+    {requirement, version} = create_requirement(scope, mission, spacecraft)
+    planning = run_planning(scope, mission, spacecraft, requirement, version)
+    [planning_search] = planning.searches
+    [snapshot] = planning.snapshots
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+      )
+
+    initial_vue = contact_requirement_show_vue(view)
+    initial_page = initial_vue.props["page"]
+
+    assert initial_page["planning"]["run_state"] == %{
+             "id" => "planning-run-state",
+             "label" => "completed"
+           }
+
+    assert initial_page["journey"]["steps"] == [
+             %{"label" => "Need", "state" => "Declared", "complete" => true},
+             %{"label" => "Options", "state" => "completed", "complete" => true},
+             %{"label" => "Plan", "state" => "Pending", "complete" => false},
+             %{"label" => "Reserved", "state" => "Pending", "complete" => false}
+           ]
+
+    expected_search = %{
+      "__dom_id" => "planning-search-#{planning_search.contact_planning_search_id}",
+      "contact_planning_search_id" => planning_search.contact_planning_search_id,
+      "provider_label" => "Ground Network Simulator",
+      "route_key" => "route-live-test",
+      "evidence" => %{
+        "id" => "planning-search-evidence-#{planning_search.contact_planning_search_id}",
+        "summary" => "Provider orbit data current"
+      },
+      "outcome" => %{
+        "label" => "succeeded with results",
+        "class" => "font-mono text-[0.65rem] uppercase text-success"
+      },
+      "opportunity_count" => "1 options"
+    }
+
+    expected_opportunity = %{
+      "__dom_id" => "planning-opportunity-#{snapshot.contact_opportunity_snapshot_id}",
+      "contact_opportunity_snapshot_id" => snapshot.contact_opportunity_snapshot_id,
+      "provider_display_name" => "Ground Network Simulator",
+      "ground_station_ref" => "station-live",
+      "starts_at" => "16 Jul 2026 21:00Z",
+      "duration" => "900 sec",
+      "eligibility" => %{
+        "label" => "Eligible",
+        "class" => "mt-1 text-xs text-success"
+      },
+      "eligible" => true,
+      "selected" => false,
+      "toggle_action" => %{
+        "id" => "toggle-#{snapshot.contact_opportunity_snapshot_id}",
+        "event" => "toggle-opportunity",
+        "payload" => %{"snapshot_id" => snapshot.contact_opportunity_snapshot_id},
+        "disabled" => false,
+        "aria_label" => "Toggle opportunity selection"
+      }
+    }
+
+    assert contact_requirement_stream_rows(initial_vue, "planning_searches") == [
+             expected_search
+           ]
+
+    assert contact_requirement_stream_rows(initial_vue, "opportunities") == [
+             expected_opportunity
+           ]
+
+    assert initial_page["opportunities"]["selected_count"] == %{
+             "id" => "selected-opportunity-count",
+             "label" => "0 selected"
+           }
+
+    assert initial_page["opportunities"]["create_action"] == %{
+             "id" => "create-contact-plan",
+             "event" => "create-plan",
+             "payload" => %{},
+             "label" => "Build draft Plan",
+             "disabled" => true
+           }
+
+    render_hook(view, "toggle-opportunity", %{
+      "snapshot_id" => snapshot.contact_opportunity_snapshot_id
+    })
+
+    selected_vue = contact_requirement_show_vue(view)
+    selected_page = selected_vue.props["page"]
+    selected_opportunity = put_in(expected_opportunity["selected"], true)
+
+    assert selected_page["opportunities"]["selected_count"] == %{
+             "id" => "selected-opportunity-count",
+             "label" => "1 selected"
+           }
+
+    assert selected_page["opportunities"]["create_action"]["disabled"] == false
+
+    assert contact_requirement_stream_mutations(selected_vue, "opportunities") == [
+             ["replace", "/opportunities", []],
+             ["upsert", "/opportunities/-", selected_opportunity]
+           ]
+
+    render_hook(view, "create-plan", %{})
+
+    [{plan, plan_version}] = ContactPlans.list(scope.organization_id, mission.mission_id)
+
+    assert plan.lifecycle_state == :draft
+    assert plan_version.selected_snapshot_ids == [snapshot.contact_opportunity_snapshot_id]
+
+    assert plan_version.planning_run_refs_document == %{
+             "runs" => [planning.run.contact_planning_run_id]
+           }
+
+    assert plan_version.rationale ==
+             "Operator-selected provider windows for payload_downlink"
+
+    assert_redirect(
+      view,
+      ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}"
+    )
+  end
+
+  test "Requirement detail keeps terminal requirements and ineligible opportunities disabled" do
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope()
+    {requirement, version} = create_requirement(scope, mission, spacecraft)
+    unavailable_opportunity = Map.put(opportunity(), "availability", "unavailable")
+
+    assert {:ok, planning} =
+             Planner.run(
+               scope,
+               mission.mission_id,
+               requirement.contact_requirement_id,
+               version.version,
+               now: fixed_now(),
+               list_routes: fn _, _, _ ->
+                 {:ok, %{routes: [route(spacecraft.spacecraft_id)], findings: []}}
+               end,
+               search_opportunities: fn _, _, _, _, _ ->
+                 {:ok, %{opportunities: [unavailable_opportunity]}}
+               end
+             )
+
+    assert {:ok, closed_requirement} =
+             ContactRequirements.close(
+               scope,
+               mission.mission_id,
+               requirement.contact_requirement_id,
+               version.version,
+               "Requirement is no longer operationally active",
+               now: fixed_now()
+             )
+
+    assert closed_requirement.lifecycle_state == :closed
+    [snapshot] = planning.snapshots
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+      )
+
+    vue = contact_requirement_show_vue(view)
+    page = vue.props["page"]
+    [opportunity_row] = contact_requirement_stream_rows(vue, "opportunities")
+
+    assert page["header"]["plan_action"] == %{
+             "id" => "plan-contact-requirement",
+             "event" => "plan",
+             "payload" => %{},
+             "label" => "Find options",
+             "disabled" => true
+           }
+
+    assert opportunity_row["contact_opportunity_snapshot_id"] ==
+             snapshot.contact_opportunity_snapshot_id
+
+    assert opportunity_row["eligibility"] == %{
+             "label" => "provider unavailable",
+             "class" => "mt-1 text-xs text-error"
+           }
+
+    assert opportunity_row["eligible"] == false
+    assert opportunity_row["selected"] == false
+    assert opportunity_row["toggle_action"]["disabled"] == true
+    assert page["opportunities"]["create_action"]["disabled"] == true
+    assert_requirement_detail_json_safe(vue)
+  end
+
+  test "Requirement detail renders the exact asynchronous planner error" do
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope()
+
+    {requirement, _version} =
+      create_requirement_with(scope, mission, spacecraft, %{
+        service_direction: :tracking,
+        contact_intent: "tracking_support"
+      })
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+      )
+
+    track_async_view(view)
+    render_hook(view, "plan", %{})
+    render_async(view)
+
+    vue = contact_requirement_show_vue(view)
+    page = vue.props["page"]
+
+    assert page["header"]["plan_action"] == %{
+             "id" => "plan-contact-requirement",
+             "event" => "plan",
+             "payload" => %{},
+             "label" => "Find options",
+             "disabled" => false
+           }
+
+    assert page["planning"]["run_state"] == %{
+             "id" => "planning-run-state",
+             "label" => "not run"
+           }
+
+    assert page["planning"]["error"] == %{
+             "id" => "contact-planning-error",
+             "message" => "Only downlink Requirements can be planned in this stage."
+           }
+
+    assert_requirement_detail_json_safe(vue)
+  end
+
+  defp contact_requirement_show_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-contact-requirement-show-component")
+  end
+
+  defp contact_requirement_stream_mutations(vue, stream_name) do
+    stream_path = "/#{stream_name}"
+
+    Enum.filter(vue.streams_diff, fn
+      ["replace", ^stream_path, _items] -> true
+      ["upsert", path, _item] -> String.starts_with?(path, stream_path <> "/")
+      ["remove", path] -> String.starts_with?(path, stream_path <> "/")
+      _operation -> false
+    end)
+  end
+
+  defp contact_requirement_stream_rows(vue, stream_name) do
+    vue
+    |> contact_requirement_stream_mutations(stream_name)
+    |> Enum.flat_map(fn
+      ["upsert", _path, row] -> [row]
+      _operation -> []
+    end)
+  end
+
+  defp assert_requirement_detail_json_safe(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp contact_requirement_show_page_props(mission_id, spacecraft_id) do
+    %{
+      "id" => "ops-contact-requirement-show-page",
+      "back_action" => %{
+        "label" => "Requirements",
+        "href" => "/missions/#{mission_id}/ops/requirements"
+      },
+      "header" => %{
+        "priority" => "high",
+        "version_label" => "Requirement v1",
+        "intent" => "Payload downlink",
+        "outcome" => "Downlink at least 1500000000 bytes across 1 eligible contact(s).",
+        "plan_action" => %{
+          "id" => "plan-contact-requirement",
+          "event" => "plan",
+          "payload" => %{},
+          "label" => "Find options",
+          "disabled" => false
+        }
+      },
+      "horizon" => %{
+        "id" => "requirement-horizon",
+        "fields" => [
+          %{
+            "label" => "Earliest acceptable",
+            "value" => "16 Jul 2026 21:00Z",
+            "class" => "mt-1 font-mono text-sm tabular-nums"
+          },
+          %{
+            "label" => "Latest acceptable",
+            "value" => "17 Jul 2026 04:00Z",
+            "class" => "mt-1 font-mono text-sm tabular-nums"
+          },
+          %{
+            "label" => "Spacecraft",
+            "value" => spacecraft_id,
+            "class" => "mt-1 truncate font-mono text-sm"
+          }
+        ],
+        "rationale" => "Recorder pressure requires a downlink"
+      },
+      "planning" => %{
+        "heading" => "Provider search evidence",
+        "description" => "No availability and a failed search remain separate operational facts.",
+        "run_state" => %{"id" => "planning-run-state", "label" => "not run"},
+        "error" => %{"id" => "contact-planning-error", "message" => nil},
+        "searches" => %{
+          "id" => "planning-searches",
+          "empty" => %{
+            "id" => "planning-searches-empty",
+            "message" => "Run planning to query every provider-ready route."
+          }
+        }
+      },
+      "opportunities" => %{
+        "heading" => "Opportunity comparison",
+        "description" => "Choose exact immutable snapshots for a draft Plan.",
+        "selected_count" => %{
+          "id" => "selected-opportunity-count",
+          "label" => "0 selected"
+        },
+        "list" => %{
+          "id" => "planning-opportunities",
+          "empty" => %{
+            "id" => "planning-opportunities-empty",
+            "message" => "No provider opportunities were captured in the latest run."
+          }
+        },
+        "footer" => "A draft records every considered option, including rejected alternatives.",
+        "create_action" => %{
+          "id" => "create-contact-plan",
+          "event" => "create-plan",
+          "payload" => %{},
+          "label" => "Build draft Plan",
+          "disabled" => true
+        }
+      },
+      "journey" => %{
+        "heading" => "Need → Options → Plan → Reserved",
+        "steps" => [
+          %{"label" => "Need", "state" => "Declared", "complete" => true},
+          %{"label" => "Options", "state" => "Pending", "complete" => false},
+          %{"label" => "Plan", "state" => "Pending", "complete" => false},
+          %{"label" => "Reserved", "state" => "Pending", "complete" => false}
+        ]
+      },
+      "versions" => %{
+        "heading" => "Immutable versions",
+        "id" => "requirement-versions"
+      }
+    }
   end
 
   test "Plan page renders an exact manifest and separates submission from admin approval" do

@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"contact_requirement_id" => requirement_id}, _session, socket) do
@@ -40,6 +41,7 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
      socket
      |> assign(:planning?, true)
      |> assign(:planning_error, nil)
+     |> assign_page_dto()
      |> start_async(:plan_contact_requirement, fn ->
        Planner.run(
          scope,
@@ -61,7 +63,12 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
     {:noreply,
      socket
      |> assign(:selected_snapshot_ids, selected)
-     |> stream(:opportunities, socket.assigns.opportunities, reset: true)}
+     |> assign_page_dto()
+     |> stream(
+       :opportunities,
+       opportunity_rows(socket.assigns.opportunities, selected),
+       reset: true
+     )}
   end
 
   def handle_event("create-plan", _params, socket) do
@@ -95,8 +102,14 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
   @impl true
   def handle_async(:plan_contact_requirement, {:ok, {:ok, _result}}, socket) do
     case load_requirement(assign(socket, :planning?, false)) do
-      {:ok, socket} -> {:noreply, socket}
-      {:error, reason} -> {:noreply, assign(socket, :planning_error, plan_error(reason))}
+      {:ok, socket} ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(:planning_error, plan_error(reason))
+         |> assign_page_dto()}
     end
   end
 
@@ -104,7 +117,8 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
     {:noreply,
      socket
      |> assign(:planning?, false)
-     |> assign(:planning_error, plan_error(reason))}
+     |> assign(:planning_error, plan_error(reason))
+     |> assign_page_dto()}
   end
 
   def handle_async(:plan_contact_requirement, {:exit, _reason}, socket) do
@@ -114,230 +128,28 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
      |> assign(
        :planning_error,
        "The planning worker stopped before provider evidence was complete."
-     )}
+     )
+     |> assign_page_dto()}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-contact-requirement-show-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto max-w-[96rem]">
-            <.link navigate={requirements_path(@current_mission.mission_id)} class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary">
-              <.icon name="hero-arrow-left" class="h-3.5 w-3.5" /> Requirements
-            </.link>
-            <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="border border-primary/30 bg-primary/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-primary">
-                    {@version.priority}
-                  </span>
-                  <span class="font-mono text-[0.65rem] text-base-content/45">
-                    Requirement v{@requirement.current_version}
-                  </span>
-                </div>
-                <h1 class="mt-2 text-2xl font-bold tracking-tight">{intent_label(@version.contact_intent)}</h1>
-                <p class="mt-2 max-w-3xl text-sm text-base-content/60">{outcome_sentence(@version)}</p>
-              </div>
-              <button
-                id="plan-contact-requirement"
-                type="button"
-                phx-click="plan"
-                disabled={@planning? or @requirement.lifecycle_state != :active}
-                class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider"
-              >
-                <%= if @planning? do %>
-                  Querying providers
-                <% else %>
-                  Find options
-                <% end %>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.65fr)] lg:p-7">
-          <div class="min-w-0 space-y-5">
-            <section id="requirement-horizon" class="border border-base-300 bg-base-200/20">
-              <div class="grid gap-4 p-4 sm:grid-cols-3">
-                <div>
-                  <p class="hud-label">Earliest acceptable</p>
-                  <p class="mt-1 font-mono text-sm tabular-nums">{format_time(@version.earliest_start)}</p>
-                </div>
-                <div>
-                  <p class="hud-label">Latest acceptable</p>
-                  <p class="mt-1 font-mono text-sm tabular-nums">{format_time(@version.latest_end)}</p>
-                </div>
-                <div>
-                  <p class="hud-label">Spacecraft</p>
-                  <p class="mt-1 truncate font-mono text-sm">{@version.spacecraft_id}</p>
-                </div>
-              </div>
-              <div class="border-t border-base-300 px-4 py-3 text-sm text-base-content/60">
-                {@version.rationale}
-              </div>
-            </section>
-
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-                <div>
-                  <p class="hud-label">Provider search evidence</p>
-                  <p class="mt-1 text-sm text-base-content/55">
-                    No availability and a failed search remain separate operational facts.
-                  </p>
-                </div>
-                <span id="planning-run-state" class="font-mono text-xs text-base-content/60">
-                  {if @latest_run, do: humanize(@latest_run.lifecycle_state), else: "not run"}
-                </span>
-              </div>
-              <p :if={@planning_error} id="contact-planning-error" class="border-b border-error/30 bg-error/5 px-4 py-3 text-sm text-error">
-                {@planning_error}
-              </p>
-              <div id="planning-searches" phx-update="stream">
-                <div id="planning-searches-empty" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
-                  Run planning to query every provider-ready route.
-                </div>
-                <div :for={{dom_id, search} <- @streams.planning_searches} id={dom_id} class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3 last:border-b-0">
-                  <div class="min-w-0">
-                    <p class="truncate text-sm font-semibold">{search.provider_display_name || readiness_label(search)}</p>
-                    <p class="mt-1 truncate font-mono text-[0.65rem] text-base-content/45">{search.route_key}</p>
-                    <p
-                      id={"planning-search-evidence-#{search.contact_planning_search_id}"}
-                      class="mt-1 text-xs text-base-content/55"
-                    >
-                      {search_evidence_summary(search)}
-                    </p>
-                  </div>
-                  <div class="text-right">
-                    <span class={search_state_class(search.outcome)}>{humanize(search.outcome)}</span>
-                    <p class="mt-1 font-mono text-[0.65rem] text-base-content/45">{search.opportunity_count} options</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-                <div>
-                  <p class="hud-label">Opportunity comparison</p>
-                  <p class="mt-1 text-sm text-base-content/55">Choose exact immutable snapshots for a draft Plan.</p>
-                </div>
-                <span id="selected-opportunity-count" class="font-mono text-sm text-primary">{MapSet.size(@selected_snapshot_ids)} selected</span>
-              </div>
-              <div id="planning-opportunities" phx-update="stream">
-                <div id="planning-opportunities-empty" class="hidden only:block px-4 py-12 text-center text-sm text-base-content/50">
-                  No provider opportunities were captured in the latest run.
-                </div>
-                <div
-                  :for={{dom_id, snapshot} <- @streams.opportunities}
-                  id={dom_id}
-                  class={[
-                    "grid gap-3 border-b border-base-300 px-4 py-4 last:border-b-0 md:grid-cols-[auto_minmax(0,1.2fr)_repeat(3,minmax(7rem,0.55fr))] md:items-center",
-                    MapSet.member?(@selected_snapshot_ids, snapshot.contact_opportunity_snapshot_id) && "bg-primary/[0.06]"
-                  ]}
-                >
-                  <button
-                    id={"toggle-#{snapshot.contact_opportunity_snapshot_id}"}
-                    type="button"
-                    phx-click="toggle-opportunity"
-                    phx-value-snapshot_id={snapshot.contact_opportunity_snapshot_id}
-                    disabled={not snapshot.eligible}
-                    aria-label="Toggle opportunity selection"
-                    class={[
-                      "h-5 w-5 border text-center font-mono text-xs",
-                      MapSet.member?(@selected_snapshot_ids, snapshot.contact_opportunity_snapshot_id) && "border-primary bg-primary text-primary-content",
-                      not MapSet.member?(@selected_snapshot_ids, snapshot.contact_opportunity_snapshot_id) && "border-base-content/30",
-                      not snapshot.eligible && "cursor-not-allowed opacity-30"
-                    ]}
-                  >
-                    {if MapSet.member?(@selected_snapshot_ids, snapshot.contact_opportunity_snapshot_id), do: "✓", else: ""}
-                  </button>
-                  <div class="min-w-0">
-                    <p class="truncate text-sm font-semibold">{snapshot.route_binding_document["provider_display_name"]}</p>
-                    <p class="mt-1 truncate font-mono text-[0.65rem] text-base-content/45">{snapshot.normalized_opportunity_document["ground_station_ref"]}</p>
-                  </div>
-                  <div>
-                    <p class="hud-label">UTC window</p>
-                    <p class="mt-1 font-mono text-xs">{format_time(snapshot.starts_at)}</p>
-                  </div>
-                  <div>
-                    <p class="hud-label">Duration</p>
-                    <p class="mt-1 font-mono text-xs">{DateTime.diff(snapshot.ends_at, snapshot.starts_at)} sec</p>
-                  </div>
-                  <div>
-                    <p class="hud-label">Eligibility</p>
-                    <p class={if snapshot.eligible, do: "mt-1 text-xs text-success", else: "mt-1 text-xs text-error"}>
-                      {eligibility_label(snapshot)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div class="flex items-center justify-between gap-4 border-t border-base-300 bg-base-200/50 px-4 py-3">
-                <p class="text-xs text-base-content/50">A draft records every considered option, including rejected alternatives.</p>
-                <button
-                  id="create-contact-plan"
-                  type="button"
-                  phx-click="create-plan"
-                  disabled={MapSet.size(@selected_snapshot_ids) == 0}
-                  class="btn btn-primary btn-sm font-mono text-xs uppercase tracking-wider"
-                >
-                  Build draft Plan
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <aside class="min-w-0 space-y-5">
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Need → Options → Plan → Reserved</p>
-              </div>
-              <div class="space-y-3 p-4 text-sm">
-                <.status_line label="Need" state="Declared" complete />
-                <.status_line label="Options" state={if @latest_run, do: humanize(@latest_run.lifecycle_state), else: "Pending"} complete={not is_nil(@latest_run)} />
-                <.status_line label="Plan" state={plan_state(@plans)} complete={@plans != []} />
-                <.status_line label="Reserved" state={reservation_state(@plans)} complete={reserved?(@plans)} />
-              </div>
-            </section>
-
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-4 py-3">
-                <p class="hud-label">Immutable versions</p>
-              </div>
-              <div id="requirement-versions" phx-update="stream">
-                <div :for={{dom_id, version} <- @streams.requirement_versions} id={dom_id} class="border-b border-base-300 px-4 py-3 last:border-b-0">
-                  <div class="flex items-center justify-between">
-                    <span class="font-mono text-xs text-primary">v{version.version}</span>
-                    <span class="font-mono text-[0.65rem] text-base-content/45">{format_time(version.created_at)}</span>
-                  </div>
-                  <p class="mt-2 text-xs text-base-content/55">{version.rationale}</p>
-                  <p class="mt-2 truncate font-mono text-[0.6rem] text-base-content/35">{version.content_sha256}</p>
-                </div>
-              </div>
-            </section>
-          </aside>
-        </div>
-      </section>
+      <.vue
+        id="ops-contact-requirement-show-component"
+        v-component="OpsContactRequirementShow"
+        page={@contact_requirement_show_page}
+        requirement_versions={@streams.requirement_versions}
+        planning_searches={@streams.planning_searches}
+        opportunities={@streams.opportunities}
+        v-on:plan={JS.push("plan")}
+        v-on:toggle-opportunity={JS.push("toggle-opportunity")}
+        v-on:create-plan={JS.push("create-plan")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
-    """
-  end
-
-  attr :label, :string, required: true
-  attr :state, :string, required: true
-  attr :complete, :boolean, default: false
-
-  defp status_line(assigns) do
-    ~H"""
-    <div class="flex items-center gap-3">
-      <span class={[
-        "flex h-5 w-5 items-center justify-center border font-mono text-[0.6rem]",
-        @complete && "border-success/50 bg-success/10 text-success",
-        not @complete && "border-base-300 text-base-content/30"
-      ]}>{if @complete, do: "✓", else: "·"}</span>
-      <span class="flex-1 text-base-content/60">{@label}</span>
-      <span class="font-mono text-xs">{@state}</span>
-    </div>
     """
   end
 
@@ -402,10 +214,190 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
        |> assign(:opportunities, opportunities)
        |> assign(:selected_snapshot_ids, selected)
        |> assign(:plans, plans)
-       |> stream(:requirement_versions, versions, reset: true)
-       |> stream(:planning_searches, searches, reset: true)
-       |> stream(:opportunities, opportunities, reset: true)}
+       |> assign_page_dto()
+       |> stream(:requirement_versions, Enum.map(versions, &version_row_dto/1), reset: true)
+       |> stream(:planning_searches, Enum.map(searches, &search_row_dto/1), reset: true)
+       |> stream(:opportunities, opportunity_rows(opportunities, selected), reset: true)}
     end
+  end
+
+  defp assign_page_dto(socket) do
+    assign(socket, :contact_requirement_show_page, page_dto(socket.assigns))
+  end
+
+  defp page_dto(assigns) do
+    %{
+      id: "ops-contact-requirement-show-page",
+      back_action: %{
+        label: "Requirements",
+        href: requirements_path(assigns.current_mission.mission_id)
+      },
+      header: %{
+        priority: to_string(assigns.version.priority),
+        version_label: "Requirement v#{assigns.requirement.current_version}",
+        intent: intent_label(assigns.version.contact_intent),
+        outcome: outcome_sentence(assigns.version),
+        plan_action: %{
+          id: "plan-contact-requirement",
+          event: "plan",
+          payload: %{},
+          label: if(assigns.planning?, do: "Querying providers", else: "Find options"),
+          disabled: assigns.planning? or assigns.requirement.lifecycle_state != :active
+        }
+      },
+      horizon: %{
+        id: "requirement-horizon",
+        fields: [
+          %{
+            label: "Earliest acceptable",
+            value: format_time(assigns.version.earliest_start),
+            class: "mt-1 font-mono text-sm tabular-nums"
+          },
+          %{
+            label: "Latest acceptable",
+            value: format_time(assigns.version.latest_end),
+            class: "mt-1 font-mono text-sm tabular-nums"
+          },
+          %{
+            label: "Spacecraft",
+            value: assigns.version.spacecraft_id,
+            class: "mt-1 truncate font-mono text-sm"
+          }
+        ],
+        rationale: assigns.version.rationale
+      },
+      planning: %{
+        heading: "Provider search evidence",
+        description: "No availability and a failed search remain separate operational facts.",
+        run_state: %{
+          id: "planning-run-state",
+          label:
+            if(assigns.latest_run,
+              do: humanize(assigns.latest_run.lifecycle_state),
+              else: "not run"
+            )
+        },
+        error: %{
+          id: "contact-planning-error",
+          message: assigns.planning_error
+        },
+        searches: %{
+          id: "planning-searches",
+          empty: %{
+            id: "planning-searches-empty",
+            message: "Run planning to query every provider-ready route."
+          }
+        }
+      },
+      opportunities: %{
+        heading: "Opportunity comparison",
+        description: "Choose exact immutable snapshots for a draft Plan.",
+        selected_count: %{
+          id: "selected-opportunity-count",
+          label: "#{MapSet.size(assigns.selected_snapshot_ids)} selected"
+        },
+        list: %{
+          id: "planning-opportunities",
+          empty: %{
+            id: "planning-opportunities-empty",
+            message: "No provider opportunities were captured in the latest run."
+          }
+        },
+        footer: "A draft records every considered option, including rejected alternatives.",
+        create_action: %{
+          id: "create-contact-plan",
+          event: "create-plan",
+          payload: %{},
+          label: "Build draft Plan",
+          disabled: MapSet.size(assigns.selected_snapshot_ids) == 0
+        }
+      },
+      journey: %{
+        heading: "Need → Options → Plan → Reserved",
+        steps: [
+          %{label: "Need", state: "Declared", complete: true},
+          %{
+            label: "Options",
+            state:
+              if(assigns.latest_run,
+                do: humanize(assigns.latest_run.lifecycle_state),
+                else: "Pending"
+              ),
+            complete: not is_nil(assigns.latest_run)
+          },
+          %{label: "Plan", state: plan_state(assigns.plans), complete: assigns.plans != []},
+          %{
+            label: "Reserved",
+            state: reservation_state(assigns.plans),
+            complete: reserved?(assigns.plans)
+          }
+        ]
+      },
+      versions: %{
+        heading: "Immutable versions",
+        id: "requirement-versions"
+      }
+    }
+  end
+
+  defp version_row_dto(version) do
+    %{
+      contact_requirement_version_id: version.contact_requirement_version_id,
+      version_label: "v#{version.version}",
+      created_at: format_time(version.created_at),
+      rationale: version.rationale,
+      content_sha256: version.content_sha256
+    }
+  end
+
+  defp search_row_dto(search) do
+    %{
+      contact_planning_search_id: search.contact_planning_search_id,
+      provider_label: search.provider_display_name || readiness_label(search),
+      route_key: search.route_key,
+      evidence: %{
+        id: "planning-search-evidence-#{search.contact_planning_search_id}",
+        summary: search_evidence_summary(search)
+      },
+      outcome: %{
+        label: humanize(search.outcome),
+        class: search_state_class(search.outcome)
+      },
+      opportunity_count: "#{search.opportunity_count} options"
+    }
+  end
+
+  defp opportunity_rows(opportunities, selected_snapshot_ids) do
+    Enum.map(opportunities, &opportunity_row_dto(&1, selected_snapshot_ids))
+  end
+
+  defp opportunity_row_dto(snapshot, selected_snapshot_ids) do
+    snapshot_id = snapshot.contact_opportunity_snapshot_id
+
+    %{
+      contact_opportunity_snapshot_id: snapshot_id,
+      provider_display_name: snapshot.route_binding_document["provider_display_name"],
+      ground_station_ref: snapshot.normalized_opportunity_document["ground_station_ref"],
+      starts_at: format_time(snapshot.starts_at),
+      duration: "#{DateTime.diff(snapshot.ends_at, snapshot.starts_at)} sec",
+      eligibility: %{
+        label: eligibility_label(snapshot),
+        class:
+          if(snapshot.eligible,
+            do: "mt-1 text-xs text-success",
+            else: "mt-1 text-xs text-error"
+          )
+      },
+      eligible: snapshot.eligible,
+      selected: MapSet.member?(selected_snapshot_ids, snapshot_id),
+      toggle_action: %{
+        id: "toggle-#{snapshot_id}",
+        event: "toggle-opportunity",
+        payload: %{snapshot_id: snapshot_id},
+        disabled: not snapshot.eligible,
+        aria_label: "Toggle opportunity selection"
+      }
+    }
   end
 
   defp requirements_path(%Phoenix.LiveView.Socket{} = socket),
