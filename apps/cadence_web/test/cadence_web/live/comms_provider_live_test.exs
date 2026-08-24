@@ -392,6 +392,42 @@ defmodule CadenceWeb.CommsProviderLiveTest do
   test "validates and synchronizes provider profiles without materializing Cadence spacecraft" do
     {conn, organization, mission} = signed_in_org_and_mission()
     provider = persist_provider!(organization.organization_id, mission.mission_id)
+    test_process = self()
+
+    previous_provider_opts =
+      Application.get_env(:cadence_web, :ground_network_provider_live_opts, [])
+
+    Application.put_env(
+      :cadence_web,
+      :ground_network_provider_live_opts,
+      previous_provider_opts
+      |> Keyword.put(:validate_response, fn ->
+        send(test_process, {:validate_provider_started, self()})
+
+        receive do
+          :finish_validate_provider -> {:ok, %{"state" => "running"}}
+        after
+          @async_timeout * 2 -> {:ok, %{"state" => "running"}}
+        end
+      end)
+      |> Keyword.put(:spacecraft_response, fn ->
+        send(test_process, {:sync_provider_started, self()})
+
+        receive do
+          :finish_sync_provider -> {:ok, []}
+        after
+          @async_timeout * 2 -> {:ok, []}
+        end
+      end)
+    )
+
+    on_exit(fn ->
+      Application.put_env(
+        :cadence_web,
+        :ground_network_provider_live_opts,
+        previous_provider_opts
+      )
+    end)
 
     assert Cadence.SpacecraftStore.list_spacecraft(
              organization.organization_id,
@@ -406,27 +442,141 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
     track_async_view(view)
 
-    assert has_element?(view, "#comms-provider-show-page")
-    assert has_element?(view, "#simulated-provider-badge")
-    assert has_element?(view, "#provider-control-plane-health", "Not validated")
-    assert has_element?(view, "#validate-provider-button")
-    assert has_element?(view, "#sync-provider-button")
-    assert has_element?(view, "#provider-admin-diagnostics")
-    assert has_element?(view, "#provider-admin-diagnostics-json")
+    assert has_element?(view, "#comms-provider-show-component.contents")
+    refute has_element?(view, "#comms-provider-show-page")
 
-    view |> element("#validate-provider-button") |> render_click()
+    initial_vue = comms_provider_show_vue(view)
+
+    assert initial_vue.component == "CommsProviderShow"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
+
+    assert initial_vue.handlers == %{
+             "archive-provider" => Phoenix.LiveView.JS.push("archive-provider"),
+             "sync-provider" => Phoenix.LiveView.JS.push("sync-provider"),
+             "validate-provider" => Phoenix.LiveView.JS.push("validate-provider")
+           }
+
+    assert initial_vue.props ==
+             comms_provider_show_props(mission, provider,
+               service_profiles_empty?: true,
+               delivery_profiles_empty?: true
+             )
+
+    assert initial_vue.props["provider"]["page_id"] == "comms-provider-show-page"
+
+    assert initial_vue.props["provider"]["simulated_badge"]["id"] ==
+             "simulated-provider-badge"
+
+    assert provider_summary_value(initial_vue, "provider-control-plane-health") ==
+             "Not validated"
+
+    assert initial_vue.props["actions"]["validate"]["id"] == "validate-provider-button"
+    assert initial_vue.props["actions"]["sync"]["id"] == "sync-provider-button"
+    assert initial_vue.props["diagnostics"]["id"] == "provider-admin-diagnostics"
+
+    assert initial_vue.props["diagnostics"]["json_id"] ==
+             "provider-admin-diagnostics-json"
+
+    assert provider_stream_mutations(initial_vue) == [
+             ["upsert", "/provider_versions/0", provider_version_row(provider)]
+           ]
+
+    assert_json_safe_show(initial_vue)
+    refute_show_secrets(initial_vue, provider)
+
+    render_hook(view, "validate-provider", %{})
+    assert_receive {:validate_provider_started, validate_provider_pid}, @async_timeout
+
+    validating_vue = comms_provider_show_vue(view)
+    assert validating_vue.props["actions"] == provider_actions_props(:validate)
+    assert provider_stream_mutations(validating_vue) == []
+    assert_json_safe_show(validating_vue)
+
+    send(validate_provider_pid, :finish_validate_provider)
     render_async(view, @async_timeout)
 
-    assert has_element?(view, "#provider-control-plane-health", "Healthy")
-    assert has_element?(view, "#provider-capabilities")
+    assert has_element?(view, "#flash-info", "Provider control plane validated.")
 
-    view |> element("#sync-provider-button") |> render_click()
+    {:ok, validated_provider} =
+      GroundNetworks.fetch_provider(
+        organization.organization_id,
+        mission.mission_id,
+        provider.provider_id
+      )
+
+    validated_vue = comms_provider_show_vue(view)
+
+    assert validated_vue.props ==
+             comms_provider_show_props(mission, validated_provider,
+               service_profiles_empty?: true,
+               delivery_profiles_empty?: true
+             )
+
+    assert provider_summary_value(validated_vue, "provider-control-plane-health") == "Healthy"
+    assert validated_vue.props["details"]["capabilities"]["id"] == "provider-capabilities"
+    assert validated_vue.props["actions"] == provider_actions_props()
+
+    assert provider_stream_mutations(validated_vue) == [
+             ["replace", "/service_profiles", []],
+             ["replace", "/delivery_profiles", []],
+             ["replace", "/provider_versions", [provider_version_row(validated_provider)]]
+           ]
+
+    assert_json_safe_show(validated_vue)
+    refute_show_secrets(validated_vue, validated_provider)
+
+    render_hook(view, "sync-provider", %{})
+    assert_receive {:sync_provider_started, sync_provider_pid}, @async_timeout
+
+    syncing_vue = comms_provider_show_vue(view)
+    assert syncing_vue.props["actions"] == provider_actions_props(:sync)
+    assert provider_stream_mutations(syncing_vue) == []
+    assert_json_safe_show(syncing_vue)
+
+    send(sync_provider_pid, :finish_sync_provider)
     render_async(view, @async_timeout)
 
-    assert has_element?(view, "#service-profile-service-realtime-ttc-downlink")
-    assert has_element?(view, "#delivery-profile-delivery-cadence-primary")
-    assert has_element?(view, "#provider-service-profile-count", "1")
-    assert has_element?(view, "#provider-delivery-profile-count", "1")
+    assert has_element?(
+             view,
+             "#flash-info",
+             "Provider inventory and profiles synchronized."
+           )
+
+    {:ok, synced_provider} =
+      GroundNetworks.fetch_provider(
+        organization.organization_id,
+        mission.mission_id,
+        provider.provider_id
+      )
+
+    synced_vue = comms_provider_show_vue(view)
+    service_profile = service_profile_row()
+    delivery_profile = delivery_profile_row()
+
+    assert synced_vue.props ==
+             comms_provider_show_props(mission, synced_provider,
+               service_profiles_empty?: false,
+               delivery_profiles_empty?: false
+             )
+
+    assert provider_stream_mutations(synced_vue) == [
+             ["replace", "/service_profiles", [service_profile]],
+             ["replace", "/delivery_profiles", [delivery_profile]],
+             ["replace", "/provider_versions", [provider_version_row(synced_provider)]]
+           ]
+
+    assert service_profile["__dom_id"] ==
+             "service-profile-service-realtime-ttc-downlink"
+
+    assert delivery_profile["__dom_id"] ==
+             "delivery-profile-delivery-cadence-primary"
+
+    assert provider_summary_value(synced_vue, "provider-service-profile-count") == 1
+    assert provider_summary_value(synced_vue, "provider-delivery-profile-count") == 1
+    assert synced_vue.props["actions"] == provider_actions_props()
+    assert_json_safe_show(synced_vue)
+    refute_show_secrets(synced_vue, synced_provider)
 
     assert Cadence.SpacecraftStore.list_spacecraft(
              organization.organization_id,
@@ -569,15 +719,347 @@ defmodule CadenceWeb.CommsProviderLiveTest do
         ~p"/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"
       )
 
+    vue = comms_provider_show_vue(view)
+
+    assert vue.component == "CommsProviderShow"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+
+    assert vue.handlers == %{
+             "archive-provider" => Phoenix.LiveView.JS.push("archive-provider"),
+             "sync-provider" => Phoenix.LiveView.JS.push("sync-provider"),
+             "validate-provider" => Phoenix.LiveView.JS.push("validate-provider")
+           }
+
+    assert vue.props ==
+             comms_provider_show_props(mission, provider,
+               service_profiles_empty?: true,
+               delivery_profiles_empty?: true
+             )
+
+    assert vue.props["actions"]["archive"] == %{
+             "id" => "archive-provider-button",
+             "label" => "Archive",
+             "confirm" => "Archive this ground network provider?",
+             "disabled" => false
+           }
+
+    assert_json_safe_show(vue)
+
     assert {:error, {:live_redirect, %{to: target}}} =
-             view |> element("#archive-provider-button") |> render_click()
+             render_hook(view, "archive-provider", %{})
 
     assert target == ~p"/missions/#{mission.mission_id}/comms/providers"
+
+    {^target, flash} = assert_redirect(view)
+    assert flash["info"] == "Ground network provider archived."
 
     assert GroundNetworks.list_providers(
              organization.organization_id,
              mission.mission_id
            ) == []
+  end
+
+  defp comms_provider_show_vue(view) do
+    LiveVue.Test.get_vue(view, id: "comms-provider-show-component")
+  end
+
+  defp comms_provider_show_props(mission, provider, opts) do
+    service_profiles_empty? = Keyword.fetch!(opts, :service_profiles_empty?)
+    delivery_profiles_empty? = Keyword.fetch!(opts, :delivery_profiles_empty?)
+
+    %{
+      "navigation" => provider_navigation_props(mission, provider),
+      "provider" =>
+        provider_show_props(
+          provider,
+          if(service_profiles_empty?, do: 0, else: 1),
+          if(delivery_profiles_empty?, do: 0, else: 1)
+        ),
+      "actions" => provider_actions_props(),
+      "profiles" => provider_profiles_props(service_profiles_empty?, delivery_profiles_empty?),
+      "details" => provider_details_props(provider),
+      "diagnostics" => provider_diagnostics_props(provider)
+    }
+  end
+
+  defp provider_navigation_props(mission, provider) do
+    %{
+      "breadcrumbs" => [
+        %{"label" => mission.display_name, "href" => "/missions/#{mission.mission_id}"},
+        %{"label" => "Comms", "href" => "/missions/#{mission.mission_id}/comms"},
+        %{
+          "label" => "Providers",
+          "href" => "/missions/#{mission.mission_id}/comms/providers"
+        },
+        %{"label" => provider.display_name, "href" => nil}
+      ]
+    }
+  end
+
+  defp provider_show_props(provider, service_profile_count, delivery_profile_count) do
+    %{
+      "page_id" => "comms-provider-show-page",
+      "display_name" => provider.display_name,
+      "provider_id" => provider.provider_id,
+      "simulated_badge" => %{"id" => "simulated-provider-badge", "label" => "Simulated"},
+      "version" => "v#{provider.version}",
+      "summary_tiles" => [
+        %{
+          "id" => "provider-control-plane-health",
+          "label" => "Control Plane",
+          "value" => provider_control_plane_label(provider)
+        },
+        %{
+          "id" => "provider-last-sync",
+          "label" => "Last Sync",
+          "value" => provider_timestamp_label(provider.last_synced_at)
+        },
+        %{
+          "id" => "provider-service-profile-count",
+          "label" => "Service Profiles",
+          "value" => service_profile_count
+        },
+        %{
+          "id" => "provider-delivery-profile-count",
+          "label" => "Delivery Profiles",
+          "value" => delivery_profile_count
+        }
+      ]
+    }
+  end
+
+  defp provider_actions_props(action \\ nil) do
+    disabled? = not is_nil(action)
+
+    %{
+      "validate" => %{
+        "id" => "validate-provider-button",
+        "label" => if(action == :validate, do: "Validating…", else: "Validate"),
+        "disabled" => disabled?
+      },
+      "sync" => %{
+        "id" => "sync-provider-button",
+        "label" => if(action == :sync, do: "Syncing…", else: "Sync Inventory"),
+        "disabled" => disabled?
+      },
+      "archive" => %{
+        "id" => "archive-provider-button",
+        "label" => "Archive",
+        "confirm" => "Archive this ground network provider?",
+        "disabled" => disabled?
+      }
+    }
+  end
+
+  defp provider_profiles_props(service_profiles_empty?, delivery_profiles_empty?) do
+    %{
+      "service" => %{
+        "id" => "provider-service-profiles",
+        "heading" => "Service Profiles",
+        "subtitle" => "Provider-owned service definitions available to contact scheduling.",
+        "empty" => service_profiles_empty?,
+        "empty_copy" => "Sync provider inventory to discover service profiles.",
+        "table_id" => "service-profiles-table",
+        "table_body_id" => "service-profiles-table-body",
+        "columns" => ["Service", "Kind", "Direction", "Data Families", "State"]
+      },
+      "delivery" => %{
+        "id" => "provider-delivery-profiles",
+        "heading" => "Delivery Profiles",
+        "subtitle" =>
+          "Provider delivery options; Cadence transports are resolved from these profiles later.",
+        "empty" => delivery_profiles_empty?,
+        "empty_copy" => "Sync provider inventory to discover delivery profiles.",
+        "table_id" => "delivery-profiles-table",
+        "table_body_id" => "delivery-profiles-table-body",
+        "columns" => ["Delivery", "Kind", "Direction", "Provider State"]
+      }
+    }
+  end
+
+  defp provider_details_props(provider) do
+    %{
+      "configuration" => %{
+        "id" => "provider-configuration",
+        "title" => "Configuration",
+        "rows" => [
+          provider_detail("Provider type", "Simulator"),
+          provider_detail(
+            "Provider Account",
+            "#{provider.provider_account_id} · v#{provider.provider_account_version}",
+            true
+          ),
+          provider_detail(
+            "Mission Grant",
+            "#{provider.provider_account_grant_id} · v#{provider.provider_account_grant_version}",
+            true
+          ),
+          provider_detail("Validated", provider_timestamp_label(provider.last_validated_at))
+        ]
+      },
+      "delivery_policy" => %{
+        "id" => "provider-delivery-policy",
+        "title" => "Delivery Change Policy",
+        "rows" => [
+          provider_detail("Mode", "Approval Required"),
+          provider_detail("Deadline behavior", "Retain Last Accepted"),
+          provider_detail("Permitted resources", "Inherited from grant")
+        ]
+      },
+      "capabilities" => provider_capabilities_props(provider),
+      "version_history" => %{
+        "id" => "provider-version-history",
+        "title" => "Version History",
+        "stream_id" => "provider-versions"
+      }
+    }
+  end
+
+  defp provider_capabilities_props(provider) do
+    items =
+      provider.capabilities_document
+      |> Map.get("operations", %{})
+      |> Enum.sort_by(fn {name, _supported?} -> name end)
+      |> Enum.map(fn {name, supported?} ->
+        %{
+          "label" => provider_humanize(name),
+          "status" => %{
+            "tone" => if(supported?, do: "ready", else: "blocked"),
+            "label" => if(supported?, do: "Supported", else: "Unavailable")
+          }
+        }
+      end)
+
+    %{
+      "id" => "provider-capabilities",
+      "title" => "Capabilities",
+      "empty" => items == [],
+      "empty_copy" => "Validate the provider to load its declared capabilities.",
+      "items" => items
+    }
+  end
+
+  defp provider_diagnostics_props(provider) do
+    %{
+      "id" => "provider-admin-diagnostics",
+      "label" => "Admin Diagnostics",
+      "json_id" => "provider-admin-diagnostics-json",
+      "rows" => [
+        provider_detail("Account ID", provider.provider_account_id, true),
+        provider_detail("Account version", "v#{provider.provider_account_version}", true),
+        provider_detail("Grant ID", provider.provider_account_grant_id, true),
+        provider_detail("Grant version", "v#{provider.provider_account_grant_version}", true)
+      ],
+      "json" =>
+        Jason.encode!(
+          %{
+            "control_plane" => provider.metadata["control_plane"],
+            "sync" => provider.metadata["sync"],
+            "capabilities" => provider.capabilities_document,
+            "inventory_summary" => provider_inventory_counts(provider.inventory_sync_document),
+            "service_profiles" => provider_inventory_items(provider, "service_profiles"),
+            "delivery_profiles" => provider_inventory_items(provider, "delivery_profiles")
+          },
+          pretty: true
+        )
+    }
+  end
+
+  defp provider_inventory_counts(document) do
+    for key <- ["spacecraft", "ground_stations", "service_profiles", "delivery_profiles"],
+        into: %{} do
+      {key, Map.take(Map.get(document, key, %{}), ["total_count", "cached_count", "truncated"])}
+    end
+  end
+
+  defp provider_inventory_items(provider, key) do
+    case get_in(provider.inventory_sync_document, [key, "items"]) do
+      items when is_list(items) -> items
+      _other -> []
+    end
+  end
+
+  defp provider_detail(label, value, mono? \\ false) do
+    %{"label" => label, "value" => value, "mono" => mono?}
+  end
+
+  defp provider_control_plane_label(provider) do
+    case get_in(provider.metadata, ["control_plane", "status"]) do
+      "healthy" -> "Healthy"
+      "failed" -> "Failed"
+      _other -> "Not validated"
+    end
+  end
+
+  defp provider_timestamp_label(nil), do: "Never"
+
+  defp provider_timestamp_label(%DateTime{} = timestamp),
+    do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%MZ")
+
+  defp provider_humanize(value) do
+    value
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp provider_summary_value(vue, id) do
+    vue.props["provider"]["summary_tiles"]
+    |> Enum.find(&(&1["id"] == id))
+    |> Map.fetch!("value")
+  end
+
+  defp provider_version_row(provider) do
+    %{
+      "__dom_id" => "provider-version-#{provider.version}",
+      "version" => provider.version,
+      "lifecycle_state" => provider.lifecycle_state |> Atom.to_string() |> String.upcase()
+    }
+  end
+
+  defp service_profile_row do
+    %{
+      "__dom_id" => "service-profile-service-realtime-ttc-downlink",
+      "id" => "service-realtime-ttc-downlink",
+      "display_name" => "Realtime TT&C downlink",
+      "service_kind" => "realtime_telemetry",
+      "direction" => "downlink",
+      "data_families" => "ccsds_tm",
+      "status" => %{"tone" => "ready", "label" => "Active"}
+    }
+  end
+
+  defp delivery_profile_row do
+    %{
+      "__dom_id" => "delivery-profile-delivery-cadence-primary",
+      "id" => "delivery-cadence-primary",
+      "display_name" => "Cadence primary telemetry ingress",
+      "operator_summary" => "Streaming to Cadence",
+      "delivery_kind" => "realtime_stream",
+      "direction" => "downlink",
+      "status" => %{"tone" => "ready", "label" => "Ready"}
+    }
+  end
+
+  defp provider_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe_show(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp refute_show_secrets(vue, provider) do
+    encoded_contract = Jason.encode!(%{"props" => vue.props, "streams_diff" => vue.streams_diff})
+
+    refute encoded_contract =~ provider.base_url
+    refute encoded_contract =~ provider.credential_ref
+    refute encoded_contract =~ provider.environment_ref
   end
 
   defp comms_provider_new_vue(view) do
