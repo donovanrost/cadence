@@ -5,321 +5,406 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentation
 
+  @source_fields [
+    {:realm, "Realm"},
+    {:data_source_id, "Data Source"},
+    {:source_binding_id, "Source Binding"},
+    {:observable_id, "Observable"},
+    {:point_id, "Point"},
+    {:source_from, "Source From"},
+    {:source_to, "Source To"},
+    {:reason, "Reason"}
+  ]
+
   attr :form, Phoenix.HTML.Form, required: true
   attr :workflow_context, :map, required: true
   attr :workflow_controls, :map, required: true
 
   def corrected_request_form(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :job_recovery,
-        HistoricalWorkflowJobRecoveryPresentation.build(
-          assigns.workflow_context,
-          assigns.workflow_controls
-        )
+    job_recovery =
+      HistoricalWorkflowJobRecoveryPresentation.build(
+        assigns.workflow_context,
+        assigns.workflow_controls
       )
 
-    ~H"""
-    <.form
-      :if={@job_recovery.correction_form.present}
-      for={@form}
-      id="dashboard-historical-workflow-correction-form"
-      phx-submit="record_corrected_historical_workflow_request"
-      class="space-y-3 rounded border border-warning/40 bg-warning/10 p-2"
-      data-workflow-action-id={@job_recovery.correction_form.id}
-      data-workflow-action-eligible={@job_recovery.correction_form.eligible}
-      data-workflow-action-reason={@job_recovery.correction_form.reason}
-      data-workflow-action-preview={@job_recovery.correction_form.preview}
-      data-historical-workflow-correction-request-mode={Map.get(@workflow_context, :request_mode) || ""}
-      data-historical-workflow-correction-request-group={Map.get(@workflow_context, :request_group_id) || ""}
-      data-historical-workflow-correction-request-item={Map.get(@workflow_context, :request_item) || ""}
-      data-historical-workflow-correction-request-item-count={
-        Integer.to_string(Map.get(@workflow_context, :request_item_count, 0) || 0)
+    if job_recovery.correction_form.present do
+      assigns =
+        assign(
+          assigns,
+          :presentation,
+          corrected_request_form_dto(assigns.form, assigns.workflow_context, job_recovery)
+        )
+
+      ~H"""
+      <.vue
+        id="historical-workflow-correction-form-component"
+        v-component="HistoricalWorkflowCorrectionForm"
+        presentation={@presentation}
+        v-ssr={false}
+        class="contents"
+      />
+      """
+    else
+      ~H""
+    end
+  end
+
+  defp corrected_request_form_dto(form, workflow_context, job_recovery) do
+    correction_form = job_recovery.correction_form
+    replacement_run_id = form_value(form, :run_id)
+
+    %{
+      root: %{
+        id: "dashboard-historical-workflow-correction-form",
+        class: "space-y-3 rounded border border-warning/40 bg-warning/10 p-2",
+        attrs:
+          raw_attrs(%{
+            "phx-submit" => "record_corrected_historical_workflow_request",
+            "data-workflow-action-id" => correction_form.id,
+            "data-workflow-action-eligible" => correction_form.eligible,
+            "data-workflow-action-reason" => correction_form.reason,
+            "data-workflow-action-preview" => correction_form.preview,
+            "data-historical-workflow-correction-request-mode" =>
+              Map.get(workflow_context, :request_mode) || "",
+            "data-historical-workflow-correction-request-group" =>
+              Map.get(workflow_context, :request_group_id) || "",
+            "data-historical-workflow-correction-request-item" =>
+              Map.get(workflow_context, :request_item) || "",
+            "data-historical-workflow-correction-request-item-count" =>
+              Integer.to_string(Map.get(workflow_context, :request_item_count, 0) || 0)
+          })
+      },
+      hidden_fields: hidden_fields_dto(form, workflow_context, replacement_run_id),
+      header: %{
+        class: "flex items-center justify-between gap-2",
+        heading: %{class: "hud-label", text: "Correct Request"},
+        badge: %{class: "badge badge-xs badge-warning", text: "New run"}
+      },
+      group_context: group_context_dto(workflow_context, replacement_run_id),
+      new_run: compact_text_field_dto(form, :run_id, "New Run"),
+      source_fields:
+        Enum.map(@source_fields, fn {key, label} ->
+          compact_text_field_dto(form, key, label)
+        end),
+      source_fields_class: "grid grid-cols-1 gap-2",
+      confirmation: %{
+        row: %{
+          id: "dashboard-historical-workflow-correction-confirm-row",
+          class:
+            "flex items-start gap-2 rounded border border-warning/40 bg-base-100/70 p-2 text-xs"
+        },
+        input: %{
+          id: "dashboard-historical-workflow-correction-confirm",
+          type: "checkbox",
+          name: form_name(form, :confirmed),
+          value: "confirmed",
+          required: true,
+          class: "checkbox checkbox-xs mt-0.5"
+        },
+        label: %{
+          class: "text-base-content/80",
+          text: "Confirm corrected workflow request"
+        }
+      },
+      submit: %{
+        id: "dashboard-historical-workflow-correction-submit",
+        type: "submit",
+        class: "btn btn-xs btn-warning btn-outline w-full justify-start",
+        icon: %{name: "hero-document-plus", class: "h-3.5 w-3.5"},
+        text: "Request corrected workflow"
       }
-    >
-      <input
-        id="dashboard-historical-workflow-correction-workflow"
-        type="hidden"
-        name={@form[:workflow].name}
-        value={@workflow_context.workflow}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-original-run-id"
-        type="hidden"
-        name={@form[:original_run_id].name}
-        value={@workflow_context.run_id}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-original-event-id"
-        type="hidden"
-        name={@form[:original_event_id].name}
-        value={@workflow_context.event_id}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-original-job-id"
-        type="hidden"
-        name={@form[:original_job_id].name}
-        value={@workflow_context.job_id}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-id"
-        type="hidden"
-        name={@form[:dashboard_id].name}
-        value={@workflow_context.dashboard_id || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-version"
-        type="hidden"
-        name={@form[:dashboard_version].name}
-        value={@workflow_context.dashboard_version || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-time-mode"
-        type="hidden"
-        name={@form[:dashboard_time_mode].name}
-        value={@workflow_context.dashboard_time_mode || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-replay-run-id"
-        type="hidden"
-        name={@form[:dashboard_replay_run_id].name}
-        value={@workflow_context.dashboard_replay_run_id || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-data-view"
-        type="hidden"
-        name={@form[:dashboard_data_view].name}
-        value={@workflow_context.dashboard_data_view || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-dashboard-limit-mode"
-        type="hidden"
-        name={@form[:dashboard_limit_mode].name}
-        value={@workflow_context.dashboard_limit_mode || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-request-mode"
-        type="hidden"
-        name={@form[:request_mode].name}
-        value={Map.get(@workflow_context, :request_mode) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-request-group-id"
-        type="hidden"
-        name={@form[:request_group_id].name}
-        value={Map.get(@workflow_context, :request_group_id) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-request-item-index"
-        type="hidden"
-        name={@form[:request_item_index].name}
-        value={request_item_index(@workflow_context)}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-request-item-count"
-        type="hidden"
-        name={@form[:request_item_count].name}
-        value={request_item_count(@workflow_context)}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-request-item-run-id"
-        type="hidden"
-        name={@form[:request_item_run_id].name}
-        value={@form[:run_id].value || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-request-event-id"
-        type="hidden"
-        name={@form[:comparison_review_request_event_id].name}
-        value={Map.get(@workflow_context, :comparison_review_request_event_id) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-request-kind"
-        type="hidden"
-        name={@form[:comparison_review_request_kind].name}
-        value={Map.get(@workflow_context, :comparison_review_request_kind) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-open-count"
-        type="hidden"
-        name={@form[:comparison_review_open_count].name}
-        value={Map.get(@workflow_context, :comparison_review_open_count) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-open-placement-ids"
-        type="hidden"
-        name={@form[:comparison_review_open_placement_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_open_placement_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-workflow-kind"
-        type="hidden"
-        name={@form[:comparison_review_workflow_kind].name}
-        value={Map.get(@workflow_context, :comparison_review_workflow_kind) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-workflow-action"
-        type="hidden"
-        name={@form[:comparison_review_workflow_action].name}
-        value={Map.get(@workflow_context, :comparison_review_workflow_action) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-workflow-selection-kind"
-        type="hidden"
-        name={@form[:comparison_review_workflow_selection_kind].name}
-        value={Map.get(@workflow_context, :comparison_review_workflow_selection_kind) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-workflow-selection-count"
-        type="hidden"
-        name={@form[:comparison_review_workflow_selection_count].name}
-        value={Map.get(@workflow_context, :comparison_review_workflow_selection_count) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-primary-data-view"
-        type="hidden"
-        name={@form[:comparison_review_primary_data_view].name}
-        value={Map.get(@workflow_context, :comparison_review_primary_data_view) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-compare-data-view"
-        type="hidden"
-        name={@form[:comparison_review_compare_data_view].name}
-        value={Map.get(@workflow_context, :comparison_review_compare_data_view) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-scope-kind"
-        type="hidden"
-        name={@form[:comparison_review_scope_kind].name}
-        value={Map.get(@workflow_context, :comparison_review_scope_kind) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-scope-ids"
-        type="hidden"
-        name={@form[:comparison_review_scope_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_scope_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-contact-ids"
-        type="hidden"
-        name={@form[:comparison_review_contact_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_contact_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-resource-ids"
-        type="hidden"
-        name={@form[:comparison_review_resource_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_resource_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-transport-ids"
-        type="hidden"
-        name={@form[:comparison_review_transport_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_transport_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-source-endpoint-ids"
-        type="hidden"
-        name={@form[:comparison_review_source_endpoint_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_source_endpoint_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-ground-station-ids"
-        type="hidden"
-        name={@form[:comparison_review_ground_station_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_ground_station_ids) || ""}
-      />
-      <input
-        id="dashboard-historical-workflow-correction-comparison-review-scope-link-ids"
-        type="hidden"
-        name={@form[:comparison_review_scope_link_ids].name}
-        value={Map.get(@workflow_context, :comparison_review_scope_link_ids) || ""}
-      />
-      <div class="flex items-center justify-between gap-2">
-        <h4 class="hud-label">Correct Request</h4>
-        <span class="badge badge-xs badge-warning">New run</span>
-      </div>
-      <dl
-        :if={DataLinkInspectorPanelPresentation.present_text?(Map.get(@workflow_context, :request_group_id))}
-        id="dashboard-historical-workflow-correction-group-context"
-        class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 rounded border border-warning/30 bg-base-100/70 p-2 text-xs"
-        data-historical-workflow-correction-group-context-request-mode={
-          Map.get(@workflow_context, :request_mode) || ""
-        }
-        data-historical-workflow-correction-group-context-request-group={
-          Map.get(@workflow_context, :request_group_id) || ""
-        }
-        data-historical-workflow-correction-group-context-request-item={
-          Map.get(@workflow_context, :request_item) || ""
-        }
-        data-historical-workflow-correction-group-context-replacement-run={
-          @form[:run_id].value || ""
-        }
-      >
-        <dt class="text-base-content/60">Group</dt>
-        <dd class="font-mono break-all">{Map.get(@workflow_context, :request_group_id)}</dd>
-        <dt class="text-base-content/60">Item</dt>
-        <dd class="font-mono">{Map.get(@workflow_context, :request_item)}</dd>
-        <dt class="text-base-content/60">Replacement</dt>
-        <dd class="font-mono break-all">{@form[:run_id].value}</dd>
-      </dl>
-      <.input field={@form[:run_id]} type="text" label="New Run" compact />
-      <div class="grid grid-cols-1 gap-2">
-        <.input field={@form[:realm]} type="text" label="Realm" compact />
-        <.input
-          field={@form[:data_source_id]}
-          type="text"
-          label="Data Source"
-          compact
-        />
-        <.input
-          field={@form[:source_binding_id]}
-          type="text"
-          label="Source Binding"
-          compact
-        />
-        <.input
-          field={@form[:observable_id]}
-          type="text"
-          label="Observable"
-          compact
-        />
-        <.input field={@form[:point_id]} type="text" label="Point" compact />
-        <.input
-          field={@form[:source_from]}
-          type="text"
-          label="Source From"
-          compact
-        />
-        <.input field={@form[:source_to]} type="text" label="Source To" compact />
-        <.input field={@form[:reason]} type="text" label="Reason" compact />
-      </div>
-      <label
-        id="dashboard-historical-workflow-correction-confirm-row"
-        class="flex items-start gap-2 rounded border border-warning/40 bg-base-100/70 p-2 text-xs"
-      >
-        <input
-          id="dashboard-historical-workflow-correction-confirm"
-          type="checkbox"
-          name={@form[:confirmed].name}
-          value="confirmed"
-          required
-          class="checkbox checkbox-xs mt-0.5"
-        />
-        <span class="text-base-content/80">
-          Confirm corrected workflow request
-        </span>
-      </label>
-      <button
-        id="dashboard-historical-workflow-correction-submit"
-        type="submit"
-        class="btn btn-xs btn-warning btn-outline w-full justify-start"
-      >
-        <.icon name="hero-document-plus" class="h-3.5 w-3.5" /> Request corrected workflow
-      </button>
-    </.form>
-    """
+    }
+  end
+
+  defp hidden_fields_dto(form, workflow_context, replacement_run_id) do
+    [
+      hidden_field_dto(
+        form,
+        :workflow,
+        "dashboard-historical-workflow-correction-workflow",
+        nullable_attribute_text(workflow_context.workflow)
+      ),
+      hidden_field_dto(
+        form,
+        :original_run_id,
+        "dashboard-historical-workflow-correction-original-run-id",
+        nullable_attribute_text(workflow_context.run_id)
+      ),
+      hidden_field_dto(
+        form,
+        :original_event_id,
+        "dashboard-historical-workflow-correction-original-event-id",
+        nullable_attribute_text(workflow_context.event_id)
+      ),
+      hidden_field_dto(
+        form,
+        :original_job_id,
+        "dashboard-historical-workflow-correction-original-job-id",
+        nullable_attribute_text(workflow_context.job_id)
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_id,
+        "dashboard-historical-workflow-correction-dashboard-id",
+        attribute_text(workflow_context.dashboard_id || "")
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_version,
+        "dashboard-historical-workflow-correction-dashboard-version",
+        attribute_text(workflow_context.dashboard_version || "")
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_time_mode,
+        "dashboard-historical-workflow-correction-dashboard-time-mode",
+        attribute_text(workflow_context.dashboard_time_mode || "")
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_replay_run_id,
+        "dashboard-historical-workflow-correction-dashboard-replay-run-id",
+        attribute_text(workflow_context.dashboard_replay_run_id || "")
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_data_view,
+        "dashboard-historical-workflow-correction-dashboard-data-view",
+        attribute_text(workflow_context.dashboard_data_view || "")
+      ),
+      hidden_field_dto(
+        form,
+        :dashboard_limit_mode,
+        "dashboard-historical-workflow-correction-dashboard-limit-mode",
+        attribute_text(workflow_context.dashboard_limit_mode || "")
+      ),
+      hidden_field_dto(
+        form,
+        :request_mode,
+        "dashboard-historical-workflow-correction-request-mode",
+        context_attribute_text(workflow_context, :request_mode)
+      ),
+      hidden_field_dto(
+        form,
+        :request_group_id,
+        "dashboard-historical-workflow-correction-request-group-id",
+        context_attribute_text(workflow_context, :request_group_id)
+      ),
+      hidden_field_dto(
+        form,
+        :request_item_index,
+        "dashboard-historical-workflow-correction-request-item-index",
+        request_item_index(workflow_context)
+      ),
+      hidden_field_dto(
+        form,
+        :request_item_count,
+        "dashboard-historical-workflow-correction-request-item-count",
+        request_item_count(workflow_context)
+      ),
+      hidden_field_dto(
+        form,
+        :request_item_run_id,
+        "dashboard-historical-workflow-correction-request-item-run-id",
+        attribute_text(replacement_run_id || "")
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_request_event_id,
+        "dashboard-historical-workflow-correction-comparison-review-request-event-id"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_request_kind,
+        "dashboard-historical-workflow-correction-comparison-review-request-kind"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_open_count,
+        "dashboard-historical-workflow-correction-comparison-review-open-count"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_open_placement_ids,
+        "dashboard-historical-workflow-correction-comparison-review-open-placement-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_workflow_kind,
+        "dashboard-historical-workflow-correction-comparison-review-workflow-kind"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_workflow_action,
+        "dashboard-historical-workflow-correction-comparison-review-workflow-action"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_workflow_selection_kind,
+        "dashboard-historical-workflow-correction-comparison-review-workflow-selection-kind"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_workflow_selection_count,
+        "dashboard-historical-workflow-correction-comparison-review-workflow-selection-count"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_primary_data_view,
+        "dashboard-historical-workflow-correction-comparison-review-primary-data-view"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_compare_data_view,
+        "dashboard-historical-workflow-correction-comparison-review-compare-data-view"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_scope_kind,
+        "dashboard-historical-workflow-correction-comparison-review-scope-kind"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_scope_ids,
+        "dashboard-historical-workflow-correction-comparison-review-scope-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_contact_ids,
+        "dashboard-historical-workflow-correction-comparison-review-contact-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_resource_ids,
+        "dashboard-historical-workflow-correction-comparison-review-resource-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_transport_ids,
+        "dashboard-historical-workflow-correction-comparison-review-transport-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_source_endpoint_ids,
+        "dashboard-historical-workflow-correction-comparison-review-source-endpoint-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_ground_station_ids,
+        "dashboard-historical-workflow-correction-comparison-review-ground-station-ids"
+      ),
+      comparison_hidden_field_dto(
+        form,
+        workflow_context,
+        :comparison_review_scope_link_ids,
+        "dashboard-historical-workflow-correction-comparison-review-scope-link-ids"
+      )
+    ]
+  end
+
+  defp comparison_hidden_field_dto(form, workflow_context, key, id) do
+    hidden_field_dto(form, key, id, context_attribute_text(workflow_context, key))
+  end
+
+  defp hidden_field_dto(form, key, id, value) do
+    %{id: id, type: "hidden", name: form_name(form, key), value: value}
+  end
+
+  defp group_context_dto(workflow_context, replacement_run_id) do
+    request_group_id = Map.get(workflow_context, :request_group_id)
+
+    %{
+      visible: DataLinkInspectorPanelPresentation.present_text?(request_group_id),
+      id: "dashboard-historical-workflow-correction-group-context",
+      class:
+        "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 rounded border border-warning/30 bg-base-100/70 p-2 text-xs",
+      attrs: %{
+        "data-historical-workflow-correction-group-context-request-mode" =>
+          context_dom_text(workflow_context, :request_mode),
+        "data-historical-workflow-correction-group-context-request-group" =>
+          dom_text(request_group_id || ""),
+        "data-historical-workflow-correction-group-context-request-item" =>
+          context_dom_text(workflow_context, :request_item),
+        "data-historical-workflow-correction-group-context-replacement-run" =>
+          dom_text(replacement_run_id || "")
+      },
+      rows: [
+        group_context_row("group", "Group", request_group_id, "font-mono break-all"),
+        group_context_row(
+          "item",
+          "Item",
+          Map.get(workflow_context, :request_item),
+          "font-mono"
+        ),
+        group_context_row(
+          "replacement",
+          "Replacement",
+          replacement_run_id,
+          "font-mono break-all"
+        )
+      ]
+    }
+  end
+
+  defp group_context_row(key, label, value, value_class) do
+    %{
+      key: key,
+      label: %{class: "text-base-content/60", text: label},
+      value: %{class: value_class, text: dom_text(value)}
+    }
+  end
+
+  defp compact_text_field_dto(form, key, label) do
+    field = form[key]
+    errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
+
+    %{
+      id: field.id,
+      name: field.name,
+      type: "text",
+      value: nullable_attribute_text(field.value),
+      required: false,
+      wrapper_class: "fieldset",
+      label: %{class: "hud-label block mb-1.5", text: label},
+      input_class: class_names(["w-full input", errors != [] && "input-error"]),
+      errors: Enum.map(errors, fn {message, _options} -> dom_text(message) end),
+      error_class: "mt-1.5 text-sm text-error"
+    }
+  end
+
+  defp form_name(form, key) do
+    field = form[key]
+    field.name
+  end
+
+  defp form_value(form, key) do
+    field = form[key]
+    field.value
+  end
+
+  defp context_dom_text(workflow_context, key) do
+    dom_text(Map.get(workflow_context, key) || "")
+  end
+
+  defp context_attribute_text(workflow_context, key) do
+    attribute_text(Map.get(workflow_context, key) || "")
   end
 
   defp request_item_index(workflow_context) do
@@ -344,4 +429,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
   end
 
   defp split_request_item(_value), do: {"", ""}
+
+  defp raw_attrs(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, dom_text(value))
+    end)
+  end
+
+  defp class_names(values) do
+    values
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.map(&dom_text/1)
+    |> Enum.join(" ")
+  end
+
+  defp nullable_attribute_text(nil), do: nil
+  defp nullable_attribute_text(false), do: nil
+  defp nullable_attribute_text(value), do: attribute_text(value)
+
+  defp attribute_text(true), do: ""
+  defp attribute_text(value), do: dom_text(value)
+
+  defp dom_text(nil), do: ""
+  defp dom_text(value) when is_binary(value), do: value
+  defp dom_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp dom_text(value) when is_number(value), do: to_string(value)
+  defp dom_text(value), do: to_string(value)
 end
