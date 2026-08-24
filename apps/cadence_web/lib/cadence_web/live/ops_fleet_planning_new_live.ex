@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{FleetPlanner, FleetPlanningPolicies}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -18,27 +19,28 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
         {:error, _reason} -> nil
       end
 
-    form =
-      to_form(
-        %{
-          "horizon_start" => datetime_local(now),
-          "horizon_end" => datetime_local(DateTime.add(now, 12, :hour)),
-          "include_recurring" => "true"
-        },
-        as: :fleet_run
-      )
+    form_params = %{
+      "horizon_start" => datetime_local(now),
+      "horizon_end" => datetime_local(DateTime.add(now, 12, :hour)),
+      "include_recurring" => "true"
+    }
+
+    {policy_state, preview} = policy_presentation_dtos(policy)
 
     {:ok,
      socket
      |> assign(:page_title, "Plan Fleet Horizon")
      |> assign(:ops_nav_item, :planning)
-     |> assign(:active_policy, policy)
-     |> assign(:form, form)}
+     |> assign(:header, header_dto())
+     |> assign(:policy_state, policy_state)
+     |> assign(:fleet_run_form, policy && fleet_run_form_dto(form_params))
+     |> assign(:preview, preview)
+     |> assign(:paths, paths_dto(socket.assigns.current_mission))}
   end
 
   @impl true
   def handle_event("validate-fleet-run", %{"fleet_run" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :fleet_run))}
+    {:noreply, assign(socket, :fleet_run_form, fleet_run_form_dto(params))}
   end
 
   def handle_event("create-fleet-run", %{"fleet_run" => params}, socket) do
@@ -71,143 +73,169 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-fleet-planning-new-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto max-w-5xl">
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/planning"}
-              class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-            >
-              <.icon name="hero-arrow-left" class="h-3.5 w-3.5" /> Fleet planning
-            </.link>
-            <h1 class="mt-4 text-2xl font-bold tracking-tight">Plan a mission horizon</h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              Choose only the time boundary. The active policy supplies concurrency, resource, quota, budget, scoring, repair, and automation rules.
-            </p>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-7">
-          <section class="border border-base-300 bg-base-200/15 p-5">
-            <%= if @active_policy do %>
-              <.form
-                for={@form}
-                id="fleet-planning-run-form"
-                phx-change="validate-fleet-run"
-                phx-submit="create-fleet-run"
-                class="space-y-5"
-              >
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <.input
-                    id="fleet-run-horizon-start"
-                    field={@form[:horizon_start]}
-                    type="datetime-local"
-                    label="Horizon starts (UTC)"
-                    required
-                  />
-                  <.input
-                    id="fleet-run-horizon-end"
-                    field={@form[:horizon_end]}
-                    type="datetime-local"
-                    label="Horizon ends (UTC)"
-                    required
-                  />
-                </div>
-
-                <.input
-                  id="fleet-run-include-recurring"
-                  field={@form[:include_recurring]}
-                  type="checkbox"
-                  label="Materialize recurring Requirement Templates in this horizon"
-                />
-
-                <div class="border-l-2 border-primary/35 bg-primary/[0.035] px-4 py-3">
-                  <p class="hud-label">Snapshot boundary</p>
-                  <p class="mt-1 text-sm text-base-content/60">
-                    Starting the run freezes exact Requirement and policy versions. Later edits stop the run closed rather than silently changing its inputs.
-                  </p>
-                </div>
-
-                <button
-                  id="start-fleet-planning-run"
-                  type="submit"
-                  class="btn btn-primary btn-sm w-full font-mono text-xs uppercase tracking-wider"
-                >
-                  Start durable planning run
-                </button>
-              </.form>
-            <% else %>
-              <div id="fleet-planning-new-policy-required" class="py-10 text-center">
-                <.icon name="hero-lock-closed" class="mx-auto h-8 w-8 text-warning/60" />
-                <h2 class="mt-4 text-base font-semibold">An approved policy is required</h2>
-                <p class="mx-auto mt-2 max-w-lg text-sm text-base-content/55">
-                  Provider searches remain stopped until an organization administrator approves the fleet boundary.
-                </p>
-                <.link
-                  navigate={~p"/missions/#{@current_mission.mission_id}/ops/planning/policy"}
-                  class="btn btn-warning btn-sm mt-5"
-                >
-                  Open policy
-                </.link>
-              </div>
-            <% end %>
-          </section>
-
-          <aside :if={@active_policy} id="fleet-run-policy-preview" class="border border-base-300 bg-base-200/15">
-            <div class="border-b border-base-300 px-4 py-3">
-              <p class="hud-label">Active policy</p>
-              <p class="mt-1 font-mono text-sm">v{policy_version(@active_policy).version}</p>
-            </div>
-            <dl class="divide-y divide-base-300 text-xs">
-              <.policy_fact
-                term="Maximum horizon"
-                value={"#{div(policy_version(@active_policy).horizon_document["max_horizon_seconds"], 3_600)} hours"}
-              />
-              <.policy_fact
-                term="Requirement workers"
-                value={policy_version(@active_policy).horizon_document["requirement_concurrency"]}
-              />
-              <.policy_fact
-                term="Provider searches"
-                value={policy_version(@active_policy).horizon_document["provider_search_concurrency"]}
-              />
-              <.policy_fact
-                term="Contact ceiling"
-                value={policy_version(@active_policy).budget_quota_document["max_contacts"] || "none"}
-              />
-              <.policy_fact
-                term="Automation"
-                value={humanize(policy_version(@active_policy).automation_repair_document["mode"])}
-              />
-            </dl>
-            <details id="fleet-run-policy-progressive-details" class="border-t border-base-300">
-              <summary class="cursor-pointer px-4 py-3 text-xs font-semibold">
-                Why these settings?
-              </summary>
-              <p class="border-t border-base-300 px-4 py-3 text-xs leading-relaxed text-base-content/55">
-                Operators choose demand and horizon. Administrators own organizational risk: provider concurrency, cost, quotas, and unattended authority.
-              </p>
-            </details>
-          </aside>
-        </div>
-      </section>
+      <.vue
+        id="ops-fleet-planning-new-component"
+        v-component="OpsFleetPlanningNew"
+        header={@header}
+        policy_state={@policy_state}
+        form={@fleet_run_form}
+        preview={@preview}
+        paths={@paths}
+        v-on:validate-fleet-run={JS.push("validate-fleet-run")}
+        v-on:create-fleet-run={JS.push("create-fleet-run")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :term, :string, required: true
-  attr :value, :any, required: true
-
-  defp policy_fact(assigns) do
-    ~H"""
-    <div class="flex items-center justify-between gap-3 px-4 py-3">
-      <dt class="text-base-content/50">{@term}</dt>
-      <dd class="font-mono text-base-content/75">{@value}</dd>
-    </div>
-    """
+  defp header_dto do
+    %{
+      id: "ops-fleet-planning-new-page",
+      back: %{label: "Fleet planning", icon: "hero-arrow-left"},
+      title: "Plan a mission horizon",
+      copy:
+        "Choose only the time boundary. The active policy supplies concurrency, resource, quota, budget, scoring, repair, and automation rules."
+    }
   end
 
-  defp policy_version({_policy, version}), do: version
+  defp policy_presentation_dtos(nil) do
+    {%{
+       active: false,
+       required: %{
+         id: "fleet-planning-new-policy-required",
+         icon: "hero-lock-closed",
+         title: "An approved policy is required",
+         copy:
+           "Provider searches remain stopped until an organization administrator approves the fleet boundary.",
+         action_label: "Open policy"
+       }
+     }, nil}
+  end
+
+  defp policy_presentation_dtos({_policy, version}) do
+    {%{active: true, required: nil}, policy_preview_dto(version)}
+  end
+
+  defp policy_preview_dto(version) do
+    %{
+      id: "fleet-run-policy-preview",
+      eyebrow: "Active policy",
+      version: "v#{version.version}",
+      facts: [
+        %{
+          term: "Maximum horizon",
+          value: "#{div(version.horizon_document["max_horizon_seconds"], 3_600)} hours"
+        },
+        %{
+          term: "Requirement workers",
+          value: to_string(version.horizon_document["requirement_concurrency"])
+        },
+        %{
+          term: "Provider searches",
+          value: to_string(version.horizon_document["provider_search_concurrency"])
+        },
+        %{
+          term: "Contact ceiling",
+          value: to_string(version.budget_quota_document["max_contacts"] || "none")
+        },
+        %{
+          term: "Automation",
+          value: humanize(version.automation_repair_document["mode"])
+        }
+      ],
+      details: %{
+        id: "fleet-run-policy-progressive-details",
+        summary: "Why these settings?",
+        copy:
+          "Operators choose demand and horizon. Administrators own organizational risk: provider concurrency, cost, quotas, and unattended authority."
+      }
+    }
+  end
+
+  defp fleet_run_form_dto(params) do
+    form = to_form(params, as: :fleet_run)
+
+    %{
+      id: "fleet-planning-run-form",
+      fields: %{
+        horizon_start:
+          text_field_dto(
+            form,
+            :horizon_start,
+            "fleet-run-horizon-start",
+            "Horizon starts (UTC)"
+          ),
+        horizon_end:
+          text_field_dto(
+            form,
+            :horizon_end,
+            "fleet-run-horizon-end",
+            "Horizon ends (UTC)"
+          ),
+        include_recurring: %{
+          id: "fleet-run-include-recurring",
+          name: "fleet_run[include_recurring]",
+          type: "checkbox",
+          label: "Materialize recurring Requirement Templates in this horizon",
+          value: truthy?(Map.get(form.params, "include_recurring")),
+          errors: form_errors(form, :include_recurring)
+        }
+      },
+      snapshot: %{
+        label: "Snapshot boundary",
+        copy:
+          "Starting the run freezes exact Requirement and policy versions. Later edits stop the run closed rather than silently changing its inputs."
+      },
+      submit: %{
+        id: "start-fleet-planning-run",
+        label: "Start durable planning run"
+      }
+    }
+  end
+
+  defp text_field_dto(form, field, id, label) do
+    %{
+      id: id,
+      name: "fleet_run[#{field}]",
+      type: "datetime-local",
+      label: label,
+      required: true,
+      value: string_form_value(form, field),
+      errors: form_errors(form, field)
+    }
+  end
+
+  defp string_form_value(form, field) do
+    case Map.get(form.params, Atom.to_string(field)) do
+      value when is_binary(value) -> value
+      nil -> ""
+      value -> to_string(value)
+    end
+  end
+
+  defp form_errors(form, field) do
+    form.errors
+    |> Keyword.get_values(field)
+    |> Enum.map(&format_form_error/1)
+  end
+
+  defp format_form_error({message, opts}) when is_binary(message) and is_list(opts) do
+    Enum.reduce(opts, message, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp format_form_error(message) when is_binary(message), do: message
+  defp format_form_error(error), do: inspect(error)
+
+  defp paths_dto(mission) do
+    %{
+      planning: ~p"/missions/#{mission.mission_id}/ops/planning",
+      policy: ~p"/missions/#{mission.mission_id}/ops/planning/policy"
+    }
+  end
 
   defp parse_datetime(value) when is_binary(value) do
     case NaiveDateTime.from_iso8601(value) do

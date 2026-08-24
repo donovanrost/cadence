@@ -42,9 +42,52 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, new_view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/planning/new")
 
-    assert has_element?(new_view, "#ops-fleet-planning-new-page")
-    assert has_element?(new_view, "#fleet-planning-new-policy-required")
+    assert has_element?(new_view, "#ops-fleet-planning-new-component")
+    refute has_element?(new_view, "#ops-fleet-planning-new-page")
+    refute has_element?(new_view, "#fleet-planning-new-policy-required")
     refute has_element?(new_view, "#fleet-planning-run-form")
+
+    new_vue = LiveVue.Test.get_vue(new_view, id: "ops-fleet-planning-new-component")
+
+    assert new_vue.component == "OpsFleetPlanningNew"
+    assert new_vue.class == "contents"
+    assert new_vue.ssr == false
+    assert new_vue.props == Jason.decode!(Jason.encode!(new_vue.props))
+
+    assert new_vue.handlers == %{
+             "create-fleet-run" => Phoenix.LiveView.JS.push("create-fleet-run"),
+             "validate-fleet-run" => Phoenix.LiveView.JS.push("validate-fleet-run")
+           }
+
+    assert new_vue.props == %{
+             "form" => nil,
+             "header" => %{
+               "id" => "ops-fleet-planning-new-page",
+               "back" => %{
+                 "icon" => "hero-arrow-left",
+                 "label" => "Fleet planning"
+               },
+               "title" => "Plan a mission horizon",
+               "copy" =>
+                 "Choose only the time boundary. The active policy supplies concurrency, resource, quota, budget, scoring, repair, and automation rules."
+             },
+             "paths" => %{
+               "planning" => "/missions/#{mission.mission_id}/ops/planning",
+               "policy" => "/missions/#{mission.mission_id}/ops/planning/policy"
+             },
+             "policy_state" => %{
+               "active" => false,
+               "required" => %{
+                 "id" => "fleet-planning-new-policy-required",
+                 "icon" => "hero-lock-closed",
+                 "title" => "An approved policy is required",
+                 "copy" =>
+                   "Provider searches remain stopped until an organization administrator approves the fleet boundary.",
+                 "action_label" => "Open policy"
+               }
+             },
+             "preview" => nil
+           }
 
     {:ok, policy_view, _html} =
       live(member_conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
@@ -189,21 +232,120 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/new")
 
-    assert has_element?(view, "#fleet-planning-run-form")
-    assert has_element?(view, "#fleet-run-policy-preview")
-    assert has_element?(view, "#fleet-run-policy-progressive-details")
+    assert has_element?(view, "#ops-fleet-planning-new-component")
+    refute has_element?(view, "#fleet-planning-run-form")
+    refute has_element?(view, "#fleet-run-policy-preview")
+    refute has_element?(view, "#fleet-run-policy-progressive-details")
+
+    initial_vue = LiveVue.Test.get_vue(view, id: "ops-fleet-planning-new-component")
+
+    assert initial_vue.component == "OpsFleetPlanningNew"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
+
+    assert initial_vue.handlers == %{
+             "create-fleet-run" => Phoenix.LiveView.JS.push("create-fleet-run"),
+             "validate-fleet-run" => Phoenix.LiveView.JS.push("validate-fleet-run")
+           }
+
+    assert initial_vue.props["form"]["id"] == "fleet-planning-run-form"
+    assert initial_vue.props["preview"]["id"] == "fleet-run-policy-preview"
+
+    assert initial_vue.props["preview"]["details"]["id"] ==
+             "fleet-run-policy-progressive-details"
 
     horizon_end = DateTime.add(now, 6, :hour)
 
-    view
-    |> form("#fleet-planning-run-form",
-      fleet_run: %{
-        "horizon_start" => datetime_local(now),
-        "horizon_end" => datetime_local(horizon_end),
-        "include_recurring" => "true"
-      }
-    )
-    |> render_submit()
+    fleet_run_params = %{
+      "horizon_start" => datetime_local(now),
+      "horizon_end" => datetime_local(horizon_end),
+      "include_recurring" => "true"
+    }
+
+    render_hook(view, "validate-fleet-run", %{"fleet_run" => fleet_run_params})
+
+    validated_vue = LiveVue.Test.get_vue(view, id: "ops-fleet-planning-new-component")
+
+    assert validated_vue.props == %{
+             "form" => %{
+               "id" => "fleet-planning-run-form",
+               "fields" => %{
+                 "horizon_start" => %{
+                   "id" => "fleet-run-horizon-start",
+                   "name" => "fleet_run[horizon_start]",
+                   "type" => "datetime-local",
+                   "label" => "Horizon starts (UTC)",
+                   "required" => true,
+                   "value" => datetime_local(now),
+                   "errors" => []
+                 },
+                 "horizon_end" => %{
+                   "id" => "fleet-run-horizon-end",
+                   "name" => "fleet_run[horizon_end]",
+                   "type" => "datetime-local",
+                   "label" => "Horizon ends (UTC)",
+                   "required" => true,
+                   "value" => datetime_local(horizon_end),
+                   "errors" => []
+                 },
+                 "include_recurring" => %{
+                   "id" => "fleet-run-include-recurring",
+                   "name" => "fleet_run[include_recurring]",
+                   "type" => "checkbox",
+                   "label" =>
+                     "Materialize recurring Requirement Templates in this horizon",
+                   "value" => true,
+                   "errors" => []
+                 }
+               },
+               "snapshot" => %{
+                 "label" => "Snapshot boundary",
+                 "copy" =>
+                   "Starting the run freezes exact Requirement and policy versions. Later edits stop the run closed rather than silently changing its inputs."
+               },
+               "submit" => %{
+                 "id" => "start-fleet-planning-run",
+                 "label" => "Start durable planning run"
+               }
+             },
+             "header" => %{
+               "id" => "ops-fleet-planning-new-page",
+               "back" => %{
+                 "icon" => "hero-arrow-left",
+                 "label" => "Fleet planning"
+               },
+               "title" => "Plan a mission horizon",
+               "copy" =>
+                 "Choose only the time boundary. The active policy supplies concurrency, resource, quota, budget, scoring, repair, and automation rules."
+             },
+             "paths" => %{
+               "planning" => "/missions/#{mission.mission_id}/ops/planning",
+               "policy" => "/missions/#{mission.mission_id}/ops/planning/policy"
+             },
+             "policy_state" => %{"active" => true, "required" => nil},
+             "preview" => %{
+               "id" => "fleet-run-policy-preview",
+               "eyebrow" => "Active policy",
+               "version" => "v1",
+               "facts" => [
+                 %{"term" => "Maximum horizon", "value" => "24 hours"},
+                 %{"term" => "Requirement workers", "value" => "4"},
+                 %{"term" => "Provider searches", "value" => "2"},
+                 %{"term" => "Contact ceiling", "value" => "100"},
+                 %{"term" => "Automation", "value" => "advisory"}
+               ],
+               "details" => %{
+                 "id" => "fleet-run-policy-progressive-details",
+                 "summary" => "Why these settings?",
+                 "copy" =>
+                   "Operators choose demand and horizon. Administrators own organizational risk: provider concurrency, cost, quotas, and unattended authority."
+               }
+             }
+           }
+
+    assert validated_vue.props == Jason.decode!(Jason.encode!(validated_vue.props))
+
+    render_hook(view, "create-fleet-run", %{"fleet_run" => fleet_run_params})
 
     [run] = FleetPlanningRuns.list(org.organization_id, mission.mission_id)
 
