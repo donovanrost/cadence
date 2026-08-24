@@ -110,12 +110,179 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert rule.transport_id == transport.transport_id
       assert is_binary(rule.materialized_link_assignment_id)
 
-      {:ok, show_view, show_html} = live(conn, target)
+      {:ok, show_view, _show_html} = live(conn, target)
       assert has_element?(show_view, "#comms-routing-show-page")
-      assert show_html =~ "Routing Rule"
-      assert show_html =~ "Durable spacecraft use of a transport"
-      assert show_html =~ "Assignment artifact"
-      refute show_html =~ "Link Template"
+      assert has_element?(show_view, "#comms-routing-show-component")
+
+      vue = routing_rule_vue(show_view)
+
+      assert vue.component == "CommsRoutingShow"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      events =
+        RoutingRuleStore.list_routing_rule_events(
+          org.organization_id,
+          mission.mission_id,
+          rule.routing_rule_id
+        )
+
+      assert vue.props == %{
+               "events" =>
+                 Enum.map(events, fn event ->
+                   %{
+                     "event_type" => human_atom(event.event_type),
+                     "occurred_at" => format_timestamp(event.occurred_at)
+                   }
+                 end),
+               "navigation" => %{
+                 "breadcrumbs" => [
+                   %{
+                     "href" => "/missions/#{mission.mission_id}",
+                     "label" => mission.display_name
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms",
+                     "label" => "Comms"
+                   },
+                   %{
+                     "href" => "/missions/#{mission.mission_id}/comms/routing",
+                     "label" => "Routing"
+                   },
+                   %{"href" => nil, "label" => rule.display_name}
+                 ]
+               },
+               "rule" => %{
+                 "description" =>
+                   "Durable spacecraft use of a transport for a purpose and direction.",
+                 "details" => [
+                   %{"label" => "Spacecraft", "value" => spacecraft.display_name},
+                   %{"label" => "Purpose", "value" => rule.purpose_label},
+                   %{"label" => "Direction", "value" => "INBOUND"},
+                   %{"label" => "Transport", "value" => transport.display_name},
+                   %{"label" => "Transport Version", "value" => "v#{transport.version}"},
+                   %{"label" => "Role", "value" => "PRIMARY"}
+                 ],
+                 "display_name" => rule.display_name,
+                 "routing_rule_id" => rule.routing_rule_id,
+                 "runtime_artifacts" => [
+                   %{
+                     "label" => "Assignment artifact",
+                     "value" => rule.materialized_link_assignment_id
+                   },
+                   %{
+                     "label" => "Path artifacts",
+                     "value" =>
+                       rule.metadata
+                       |> Map.get("materialized_path_template_ids", [])
+                       |> Enum.join(", ")
+                   }
+                 ],
+                 "runtime_artifacts_title" => "Internal Runtime Artifacts",
+                 "section_title" => "Routing Rule",
+                 "state" => %{"label" => "Enabled", "tone" => "ready"}
+               }
+             }
+
+      refute Enum.any?(
+               vue.props["rule"]["details"] ++ vue.props["rule"]["runtime_artifacts"],
+               &(&1["label"] == "Link Template")
+             )
+    end
+
+    test "shows disabled routing rule state without changing its details" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+      rule = persist_routing_rule!(org.organization_id, mission.mission_id, spacecraft, transport)
+
+      assert {:ok, disabled_rule} =
+               RoutingRuleStore.set_routing_rule_enabled(
+                 org.organization_id,
+                 mission.mission_id,
+                 rule.routing_rule_id,
+                 false
+               )
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/comms/routing/#{disabled_rule.routing_rule_id}"
+        )
+
+      props = routing_rule_vue(view).props
+
+      assert props["rule"]["state"] == %{"label" => "Disabled", "tone" => "info"}
+
+      assert Enum.at(props["rule"]["details"], 0) == %{
+               "label" => "Spacecraft",
+               "value" => spacecraft.display_name
+             }
+    end
+
+    test "missing routing rule redirects to the current mission routing list" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      assert {:error,
+              {:live_redirect,
+               %{
+                 to: to,
+                 flash: %{"error" => "Routing rule not found."}
+               }}} =
+               live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/missing")
+
+      assert to == ~p"/missions/#{mission.mission_id}/comms/routing"
+    end
+
+    test "does not expose routing rules outside the current organization or mission scope" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      other_mission =
+        TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary Mission")
+
+      other_spacecraft =
+        TestFixtures.persist_spacecraft!(other_mission, display_name: "Sibling", scid: 43)
+
+      other_transport =
+        persist_transport!(org.organization_id, other_mission.mission_id, "Sibling TCP")
+
+      other_mission_rule =
+        persist_routing_rule!(
+          org.organization_id,
+          other_mission.mission_id,
+          other_spacecraft,
+          other_transport
+        )
+
+      other_org = TestFixtures.persist_org!(display_name: "Remote Org", slug: "remote-org")
+      remote_mission = TestFixtures.persist_mission!(other_org, slug: "remote")
+      remote_spacecraft = TestFixtures.persist_spacecraft!(remote_mission, display_name: "Remote")
+
+      remote_transport =
+        persist_transport!(other_org.organization_id, remote_mission.mission_id, "Remote TCP")
+
+      other_org_rule =
+        persist_routing_rule!(
+          other_org.organization_id,
+          remote_mission.mission_id,
+          remote_spacecraft,
+          remote_transport
+        )
+
+      for foreign_rule <- [other_mission_rule, other_org_rule] do
+        assert {:error,
+                {:live_redirect,
+                 %{
+                   to: to,
+                   flash: %{"error" => "Routing rule not found."}
+                 }}} =
+                 live(
+                   conn,
+                   ~p"/missions/#{mission.mission_id}/comms/routing/#{foreign_rule.routing_rule_id}"
+                 )
+
+        assert to == ~p"/missions/#{mission.mission_id}/comms/routing"
+      end
     end
 
     test "spacecraft routing page lists rules for current spacecraft" do
@@ -179,5 +346,17 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
              RoutingRuleStore.create_routing_rule(organization_id, routing_rule)
 
     persisted
+  end
+
+  defp routing_rule_vue(view) do
+    LiveVue.Test.get_vue(view, id: "comms-routing-show-component")
+  end
+
+  defp format_timestamp(timestamp) do
+    Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%S UTC")
+  end
+
+  defp human_atom(value) when is_atom(value) do
+    value |> Atom.to_string() |> String.replace("_", " ") |> String.upcase()
   end
 end
