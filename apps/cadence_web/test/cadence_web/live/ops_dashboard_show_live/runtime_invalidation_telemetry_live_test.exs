@@ -126,13 +126,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationTelemetryLiveTest d
   end
 
   defp chart_dom_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props", "chart_id"])
   end
 
   describe "runtime invalidation telemetry surfaces" do

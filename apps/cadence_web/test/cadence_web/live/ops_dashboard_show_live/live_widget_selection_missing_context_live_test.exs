@@ -39,17 +39,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
   end
 
   defp chart_optional_attribute(html, widget_id, attribute) do
-    ids =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
-    case ids do
-      [id] -> html |> widget_point_chart_props(id) |> Map.get(prop)
-      [] -> nil
+    case widget_point_presentation_by_widget_id(html, widget_id) do
+      nil -> nil
+      presentation -> get_in(presentation, ["chart", "props", prop])
     end
   end
 

@@ -136,16 +136,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.fetch!(prop)
   end
 
   defp chart_optional_attribute(html, widget_id, attribute) do
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
-    case chart_dom_ids(html, widget_id) do
-      [id] -> html |> widget_point_chart_props(id) |> Map.get(prop)
-      [] -> nil
+    case widget_point_presentation_by_widget_id(html, widget_id) do
+      nil -> nil
+      presentation -> get_in(presentation, ["chart", "props", prop])
     end
   end
 
@@ -156,10 +157,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
   end
 
   defp chart_dom_ids(html, widget_id) do
-    html
-    |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-    |> LazyHTML.attribute("id")
+    case widget_point_presentation_by_widget_id(html, widget_id) do
+      nil -> []
+      presentation -> [get_in(presentation, ["chart", "props", "chart_id"])]
+    end
   end
 
   defp selected_datum_action(html, id) do
@@ -266,9 +267,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
 
       chart_id = chart_dom_id(render(view), trend_widget_id)
 
-      view
-      |> element("##{chart_id}")
-      |> render_hook("open_data_link", %{
+      assert String.starts_with?(chart_id, "tlm-chart-")
+
+      render_hook(view, "open_data_link", %{
         "link-id" => older_link_id,
         "placement-id" => trend_widget_id,
         "target" => "telemetry_sample",

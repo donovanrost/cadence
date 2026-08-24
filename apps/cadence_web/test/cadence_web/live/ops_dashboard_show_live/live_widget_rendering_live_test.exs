@@ -186,14 +186,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
   end
 
   defp chart_attribute(html, widget_id, attribute) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
-    html |> widget_point_chart_props(id) |> Map.fetch!(prop)
+
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
+    |> Map.fetch!(prop)
   end
 
   defp point_meta([_timestamp, _value, metadata]) when is_map(metadata), do: metadata
@@ -253,6 +251,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       trend_placement = placement_by_title(document, "Counter Trend")
       assert trend_placement.widget_def.binding.overlays == [:limits, :events, :quality]
 
+      context_item = render_item_by_title(document, "Counter")
       trend_widget = render_item_by_title(document, "Counter Trend").widget
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
@@ -265,17 +264,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
       assert has_element?(view, ~s(.grid-stack-item[gs-x="4"][gs-w="6"][gs-h="3"]))
 
-      [chart_component_id] =
-        html
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{trend_widget.widget_id}-"]))
-        |> LazyHTML.attribute("id")
+      chart_presentation =
+        widget_point_presentation_by_widget_id(view, trend_widget.widget_id)
 
-      chart_presentation = widget_point_presentation(view, chart_component_id)
       assert chart_presentation["chart"]["props"]["engine_backed"] == true
 
       # Context widget unresolved until a spacecraft context is chosen.
-      assert html =~ "Pick a spacecraft context"
+      assert widget_body_presentation(view, context_item.placement_id)["notice"]["text"] ==
+               "Pick a spacecraft context to resolve this widget."
 
       # Fixed time-series widget mounts its chart island with backfill data.
       assert chart_presentation["kind"] == "time_series"

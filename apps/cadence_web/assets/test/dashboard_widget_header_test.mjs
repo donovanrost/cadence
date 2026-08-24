@@ -17,6 +17,7 @@ assert.equal(nodeScenarioLedger.length, 6)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/DashboardWidgetHeader.vue")
+const parentComponentPath = resolve(__dirname, "../vue/DashboardWidget.vue")
 const componentsPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/ops_dashboard_show_live/components.ex",
@@ -24,8 +25,9 @@ const componentsPath = resolve(
 const appPath = resolve(__dirname, "../js/app.js")
 const overlayHookPath = resolve(__dirname, "../js/hooks/overlay.js")
 
-const [source, componentsSource, appSource, overlayHookSource] = await Promise.all([
+const [source, parentSource, componentsSource, appSource, overlayHookSource] = await Promise.all([
   readFile(componentPath, "utf8"),
+  readFile(parentComponentPath, "utf8"),
   readFile(componentsPath, "utf8"),
   readFile(appPath, "utf8"),
   readFile(overlayHookPath, "utf8"),
@@ -36,14 +38,14 @@ const controllerStart = "// DASHBOARD_WIDGET_HEADER_CONTROLLER_START"
 const controllerEnd = "// DASHBOARD_WIDGET_HEADER_CONTROLLER_END"
 const start = source.indexOf(controllerStart)
 const end = source.indexOf(controllerEnd)
-const headerHostSource = componentsSource.match(
-  /defp widget_header\(assigns\) do[\s\S]*?def widget_header_presentation\(assigns\) do/,
+const widgetHostSource = componentsSource.match(
+  /def widget\(assigns\) do[\s\S]*?def widget_presentation\(assigns\) do/,
 )?.[0]
 
 assert.ok(template, "DashboardWidgetHeader.vue must have a template block")
 assert.ok(start >= 0, "DashboardWidgetHeader.vue should expose its colocated controller")
 assert.ok(end > start, "DashboardWidgetHeader.vue should close its controller boundary")
-assert.ok(headerHostSource, "Components.widget_header/1 must remain an auditable host boundary")
+assert.ok(widgetHostSource, "Components.widget/1 must remain an auditable parent host boundary")
 
 assert.match(source, /import WidgetDataLinks from "\.\/WidgetDataLinks\.vue"/)
 assert.match(source, /import WidgetQueryDiagnostics from "\.\/WidgetQueryDiagnostics\.vue"/)
@@ -60,11 +62,13 @@ assert.match(template, /v-bind="props\.presentation\.actions\.details\.trigger\.
 assert.match(template, /v-bind="props\.presentation\.actions\.details\.panel\.attrs"/)
 assert.doesNotMatch(source, /phx-hook|data-name=|<\.vue|v-component=/)
 
-assert.match(headerHostSource, /v-component="DashboardWidgetHeader"/)
-assert.match(headerHostSource, /v-ssr=\{false\}/)
-assert.match(headerHostSource, /class="contents"/)
-assert.equal(headerHostSource.match(/<\.vue/g)?.length, 1)
-assert.doesNotMatch(headerHostSource, /phx-hook="Overlay"|WidgetDataLinks|WidgetQueryDiagnostics|WidgetWarning/)
+assert.match(parentSource, /import DashboardWidgetHeader from "\.\/DashboardWidgetHeader\.vue"/)
+assert.match(parentSource, /<DashboardWidgetHeader :presentation="composition\.header" \/>/)
+assert.match(widgetHostSource, /v-component="DashboardWidget"/)
+assert.match(widgetHostSource, /v-ssr=\{false\}/)
+assert.match(widgetHostSource, /class="contents"/)
+assert.equal(widgetHostSource.match(/<\.vue/g)?.length, 1)
+assert.doesNotMatch(widgetHostSource, /DashboardWidgetHeader|WidgetPoint|WidgetRows|phx-hook="Overlay"/)
 
 assert.match(appSource, /import Overlay from "\.\/hooks\/overlay"/)
 assert.match(appSource, /Overlay,/)

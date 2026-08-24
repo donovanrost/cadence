@@ -173,300 +173,238 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :warnings, :list, default: []
 
   def widget(assigns) do
-    ~H"""
-    <.widget_header
-      widget={@widget}
-      placement_id={@placement_id}
-      mission_id={@mission_id}
-      data={@data}
-      compare_data={@compare_data}
-      backfill={@backfill}
-      compare_backfill={@compare_backfill}
-      data_view={@data_view}
-      compare_data_view={@compare_data_view}
-      comparison_summary={@comparison_summary}
-      spacecraft={@spacecraft}
-      edit_mode?={@edit_mode?}
-      warnings={@warnings}
-    />
-    <.widget_body
-      widget={@widget}
-      placement_id={@placement_id}
-      data={@data}
-      compare_data={@compare_data}
-      point={@point}
-      backfill={@backfill}
-      compare_backfill={@compare_backfill}
-      limit_markers={@limit_markers}
-      event_markers={@event_markers}
-      annotations={@annotations}
-      selected_data_ref={@selected_data_ref}
-      time_mode={@time_mode}
-      time_from={@time_from}
-      time_to={@time_to}
-      time_axis={@time_axis}
-      window_seconds={@window_seconds}
-      replay_run_id={@replay_run_id}
-      data_realm={@data_realm}
-      data_view={@data_view}
-      compare_data_view={@compare_data_view}
-      data_source_id={@data_source_id}
-      source_binding_id={@source_binding_id}
-      context_spacecraft_id={@context_spacecraft_id}
-      chart_epoch={@chart_epoch}
-      edit_mode?={@edit_mode?}
-    />
-    """
-  end
-
-  attr :widget, :any, required: true
-  attr :placement_id, :string, required: true
-  attr :data, :any, required: true
-  attr :compare_data, :any, default: nil
-  attr :point, :any, required: true
-  attr :backfill, :any, required: true
-  attr :compare_backfill, :any, default: nil
-  attr :limit_markers, :list, required: true
-  attr :event_markers, :list, required: true
-  attr :annotations, :list, default: []
-  attr :selected_data_ref, :any, default: nil
-  attr :time_mode, :string, default: nil
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :time_axis, :string, default: nil
-  attr :window_seconds, :integer, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :data_realm, :string, default: nil
-  attr :data_view, :string, default: nil
-  attr :compare_data_view, :string, default: nil
-  attr :data_source_id, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :context_spacecraft_id, :string, required: true
-  attr :chart_epoch, :integer, required: true
-  attr :edit_mode?, :boolean, required: true
-
-  defp widget_body(%{widget: %{type: :value_tile}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 p-2 flex flex-col justify-center overflow-hidden"
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} />
-        <% @data.sample == nil -> %>
-          <.widget_lifecycle_notice data={@data} default="No data received for this point yet." />
-        <% true -> %>
-          <WidgetPointComponents.value_tile
-            widget={@widget}
-            placement_id={@placement_id}
-            data={@data}
-            compare_data={@compare_data}
-            point={@point}
-            compare_data_view={@compare_data_view}
-          />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :time_series}} = assigns) do
-    ~H"""
-    <div class={[
-      "cadence-time-series-panel-body",
-      "flex min-h-0 flex-1 flex-col overflow-hidden"
-    ]}>
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
-        <% lifecycle_blocking?(@data) and WidgetPointComponents.chart_payload_empty?(@backfill) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% lifecycle_state(@data) == :no_data and WidgetPointComponents.chart_payload_empty?(@backfill) -> %>
-          <.widget_lifecycle_notice
-            data={@data}
-            default="No historical samples in this time range."
-          />
-        <% true -> %>
-          <.widget_lifecycle_notice
-            :if={lifecycle_blocking?(@data) or lifecycle_body_notice?(@data)}
-            data={@data}
-            compact
-          />
-          <WidgetPointComponents.time_series_chart
-            widget={@widget}
-            placement_id={@placement_id}
-            data={@data}
-            compare_data={@compare_data}
-            point={@point}
-            backfill={@backfill}
-            compare_backfill={@compare_backfill}
-            limit_markers={@limit_markers}
-            event_markers={@event_markers}
-            annotations={@annotations}
-            selected_data_ref={@selected_data_ref}
-            time_mode={@time_mode}
-            time_from={@time_from}
-            time_to={@time_to}
-            time_axis={@time_axis}
-            window_seconds={@window_seconds}
-            replay_run_id={@replay_run_id}
-            data_realm={@data_realm}
-            data_view={@data_view}
-            compare_data_view={@compare_data_view}
-            data_source_id={@data_source_id}
-            source_binding_id={@source_binding_id}
-            context_spacecraft_id={@context_spacecraft_id}
-            chart_epoch={@chart_epoch}
-            edit_mode?={@edit_mode?}
-          />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :status_matrix}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 overflow-auto p-2"
-      data-status-matrix
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
-        <% lifecycle_blocking?(@data) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% @data.rows == [] -> %>
-          <.widget_lifecycle_notice data={@data} default="No current rows." />
-        <% true -> %>
-          <WidgetRowComponents.status_matrix_table
-            data={@data}
-            widget={@widget}
-            placement_id={@placement_id}
-          />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :data_table}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 overflow-auto p-2"
-      data-data-table
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
-        <% lifecycle_blocking?(@data) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% @data.rows == [] -> %>
-          <.widget_lifecycle_notice data={@data} default="No rows for this table." />
-        <% true -> %>
-          <WidgetRowComponents.data_table
-            data={@data}
-            widget={@widget}
-            placement_id={@placement_id}
-          />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :state_timeline}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 overflow-auto p-2"
-      data-state-timeline
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
-        <% lifecycle_blocking?(@data) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% @data.rows == [] -> %>
-          <.widget_lifecycle_notice
-            data={@data}
-            default="No state transitions in this time range."
-          />
-        <% true -> %>
-          <WidgetRowComponents.state_timeline data={@data} placement_id={@placement_id} />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :event_timeline}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 overflow-auto p-2"
-      data-event-timeline
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil or @data.unresolved? -> %>
-          <.widget_notice notice={unresolved_notice(@widget)} state={:unresolved} />
-        <% lifecycle_blocking?(@data) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% @data.rows == [] -> %>
-          <.widget_lifecycle_notice data={@data} default="No events in this time range." />
-        <% true -> %>
-          <WidgetRowComponents.event_timeline data={@data} placement_id={@placement_id} />
-      <% end %>
-    </div>
-    """
-  end
-
-  defp widget_body(%{widget: %{type: :constellation_health}} = assigns) do
-    ~H"""
-    <div
-      class="flex-1 min-h-0 p-2 overflow-y-auto"
-      data-engine-backed={if engine_backed?(@data), do: "true"}
-    >
-      <%= cond do %>
-        <% @data == nil -> %>
-          <.widget_notice notice="Waiting for the first rollup." state={:no_data} />
-        <% lifecycle_blocking?(@data) -> %>
-          <.widget_lifecycle_notice data={@data} />
-        <% true -> %>
-        <WidgetPointComponents.constellation_health
-          placement_id={@placement_id}
-          data={@data}
-        />
-      <% end %>
-    </div>
-    """
-  end
-
-  attr :widget, :any, required: true
-  attr :placement_id, :string, required: true
-  attr :mission_id, :string, default: nil
-  attr :data, :any, required: true
-  attr :compare_data, :any, default: nil
-  attr :backfill, :any, default: nil
-  attr :compare_backfill, :any, default: nil
-  attr :data_view, :string, default: nil
-  attr :compare_data_view, :string, default: nil
-  attr :comparison_summary, :any, default: nil
-  attr :spacecraft, :list, required: true
-  attr :edit_mode?, :boolean, required: true
-  attr :warnings, :list, default: []
-
-  defp widget_header(assigns) do
-    presentation = widget_header_presentation(assigns)
-    assigns = assign(assigns, :presentation, presentation)
+    assigns = assign(assigns, :presentation, widget_presentation(assigns))
 
     ~H"""
     <.vue
       id={@presentation.component_id}
-      v-component="DashboardWidgetHeader"
+      v-component="DashboardWidget"
       presentation={@presentation}
       v-ssr={false}
       class="contents"
     />
     """
+  end
+
+  def widget_presentation(assigns) do
+    %{
+      component_id: "dashboard-widget-#{assigns.placement_id}-component",
+      header: widget_header_presentation(assigns),
+      body: widget_body_presentation(assigns)
+    }
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :value_tile}} = assigns) do
+    {notice, content} =
+      cond do
+        assigns.data == nil or assigns.data.unresolved? ->
+          {widget_notice_presentation(unresolved_notice(assigns.widget)), nil}
+
+        assigns.data.sample == nil ->
+          {widget_lifecycle_notice_presentation(
+             assigns.data,
+             default: "No data received for this point yet."
+           ), nil}
+
+        true ->
+          {nil, widget_point_content(WidgetPointComponents.value_tile_presentation(assigns))}
+      end
+
+    widget_body_dto(
+      "value_tile",
+      "flex-1 min-h-0 p-2 flex flex-col justify-center overflow-hidden",
+      engine_backed_attrs(assigns.data),
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :time_series}} = assigns) do
+    chart_payload_empty? = WidgetPointComponents.chart_payload_empty?(assigns.backfill)
+
+    {notice, content} =
+      cond do
+        assigns.data == nil or assigns.data.unresolved? ->
+          {widget_notice_presentation(unresolved_notice(assigns.widget), state: :unresolved), nil}
+
+        lifecycle_blocking?(assigns.data) and chart_payload_empty? ->
+          {widget_lifecycle_notice_presentation(assigns.data), nil}
+
+        lifecycle_state(assigns.data) == :no_data and chart_payload_empty? ->
+          {widget_lifecycle_notice_presentation(
+             assigns.data,
+             default: "No historical samples in this time range."
+           ), nil}
+
+        true ->
+          notice =
+            if lifecycle_blocking?(assigns.data) or lifecycle_body_notice?(assigns.data) do
+              widget_lifecycle_notice_presentation(assigns.data, compact: true)
+            end
+
+          content =
+            assigns
+            |> WidgetPointComponents.time_series_presentation()
+            |> widget_point_content()
+
+          {notice, content}
+      end
+
+    widget_body_dto(
+      "time_series",
+      ["cadence-time-series-panel-body", "flex min-h-0 flex-1 flex-col overflow-hidden"],
+      %{},
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :status_matrix}} = assigns) do
+    {notice, content} =
+      row_widget_body_content(
+        assigns,
+        "No current rows.",
+        fn ->
+          WidgetRowComponents.status_matrix_presentation(
+            assigns.data,
+            assigns.widget,
+            assigns.placement_id
+          )
+        end
+      )
+
+    widget_body_dto(
+      "status_matrix",
+      "flex-1 min-h-0 overflow-auto p-2",
+      Map.put(engine_backed_attrs(assigns.data), "data-status-matrix", ""),
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :data_table}} = assigns) do
+    {notice, content} =
+      row_widget_body_content(
+        assigns,
+        "No rows for this table.",
+        fn ->
+          WidgetRowComponents.data_table_presentation(
+            assigns.data,
+            assigns.widget,
+            assigns.placement_id
+          )
+        end
+      )
+
+    widget_body_dto(
+      "data_table",
+      "flex-1 min-h-0 overflow-auto p-2",
+      Map.put(engine_backed_attrs(assigns.data), "data-data-table", ""),
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :state_timeline}} = assigns) do
+    {notice, content} =
+      row_widget_body_content(
+        assigns,
+        "No state transitions in this time range.",
+        fn ->
+          WidgetRowComponents.state_timeline_presentation(assigns.data, assigns.placement_id)
+        end
+      )
+
+    widget_body_dto(
+      "state_timeline",
+      "flex-1 min-h-0 overflow-auto p-2",
+      Map.put(engine_backed_attrs(assigns.data), "data-state-timeline", ""),
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :event_timeline}} = assigns) do
+    {notice, content} =
+      row_widget_body_content(
+        assigns,
+        "No events in this time range.",
+        fn ->
+          WidgetRowComponents.event_timeline_presentation(assigns.data, assigns.placement_id)
+        end
+      )
+
+    widget_body_dto(
+      "event_timeline",
+      "flex-1 min-h-0 overflow-auto p-2",
+      Map.put(engine_backed_attrs(assigns.data), "data-event-timeline", ""),
+      notice,
+      content
+    )
+  end
+
+  defp widget_body_presentation(%{widget: %{type: :constellation_health}} = assigns) do
+    {notice, content} =
+      cond do
+        assigns.data == nil ->
+          {widget_notice_presentation("Waiting for the first rollup.", state: :no_data), nil}
+
+        lifecycle_blocking?(assigns.data) ->
+          {widget_lifecycle_notice_presentation(assigns.data), nil}
+
+        true ->
+          content =
+            %{placement_id: assigns.placement_id, data: assigns.data}
+            |> WidgetPointComponents.constellation_health_presentation()
+            |> widget_point_content()
+
+          {nil, content}
+      end
+
+    widget_body_dto(
+      "constellation_health",
+      "flex-1 min-h-0 p-2 overflow-y-auto",
+      engine_backed_attrs(assigns.data),
+      notice,
+      content
+    )
+  end
+
+  defp row_widget_body_content(assigns, default_notice, presentation) do
+    cond do
+      assigns.data == nil or assigns.data.unresolved? ->
+        {widget_notice_presentation(unresolved_notice(assigns.widget), state: :unresolved), nil}
+
+      lifecycle_blocking?(assigns.data) ->
+        {widget_lifecycle_notice_presentation(assigns.data), nil}
+
+      assigns.data.rows == [] ->
+        {widget_lifecycle_notice_presentation(assigns.data, default: default_notice), nil}
+
+      true ->
+        {nil, widget_rows_content(presentation.())}
+    end
+  end
+
+  defp widget_body_dto(kind, class, attrs, notice, content) do
+    %{
+      kind: kind,
+      root: %{class: class, attrs: attrs},
+      notice: notice,
+      content: content
+    }
+  end
+
+  defp widget_point_content(presentation),
+    do: %{component: "WidgetPoint", presentation: presentation}
+
+  defp widget_rows_content(presentation),
+    do: %{component: "WidgetRows", presentation: presentation}
+
+  defp engine_backed_attrs(data) do
+    compact_widget_header_attrs(%{
+      "data-engine-backed" => if(engine_backed?(data), do: "true")
+    })
   end
 
   def widget_header_presentation(assigns) do
@@ -827,72 +765,79 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   defp widget_header_attr_value(value) when is_atom(value), do: Atom.to_string(value)
   defp widget_header_attr_value(value), do: to_string(value)
 
-  attr :notice, :string, required: true
-  attr :status, :atom, default: :info
-  attr :state, :atom, default: nil
-  attr :compact, :boolean, default: false
+  defp widget_notice_presentation(notice, opts \\ []) do
+    status = Keyword.get(opts, :status, :info)
+    state = Keyword.get(opts, :state)
+    compact? = Keyword.get(opts, :compact, false)
 
-  defp widget_notice(assigns) do
-    ~H"""
-    <div
-      class={[
-        "rounded border font-mono text-[0.68rem] leading-snug",
-        if(@compact, do: "mt-1 px-2 py-1", else: "px-2 py-1.5"),
-        widget_notice_class(@status)
-      ]}
-      data-widget-body-notice={notice_state(@state)}
-    >
-      {@notice}
-    </div>
-    """
+    %{
+      kind: "notice",
+      class: widget_notice_classes(status, compact?),
+      attrs:
+        compact_widget_header_attrs(%{
+          "data-widget-body-notice" => notice_state(state)
+        }),
+      text: notice,
+      actions: []
+    }
   end
 
-  attr :data, :any, required: true
-  attr :default, :string, default: nil
-  attr :compact, :boolean, default: false
+  defp widget_lifecycle_notice_presentation(data, opts \\ []) do
+    compact? = Keyword.get(opts, :compact, false)
+    actions? = not compact? and lifecycle_actionable?(data)
+    default = Keyword.get(opts, :default) || "No data available."
 
-  defp widget_lifecycle_notice(assigns) do
-    assigns =
-      assigns
-      |> assign(:state, lifecycle_state(assigns.data))
-      |> assign(:status, lifecycle_status(assigns.data) || :info)
-      |> assign(
-        :notice,
-        actionable_lifecycle_notice(assigns.data, assigns.default || "No data available.")
-      )
-      |> assign(:actions?, not assigns.compact and lifecycle_actionable?(assigns.data))
+    %{
+      kind: "lifecycle",
+      class: widget_notice_classes(lifecycle_status(data) || :info, compact?),
+      attrs: %{
+        "data-widget-body-notice" => notice_state(lifecycle_state(data)),
+        "data-widget-empty-actionable" => to_string(actions?)
+      },
+      text: actionable_lifecycle_notice(data, default),
+      actions: if(actions?, do: widget_lifecycle_notice_actions(), else: [])
+    }
+  end
 
-    ~H"""
-    <div
-      class={[
-        "rounded border font-mono text-[0.68rem] leading-snug",
-        if(@compact, do: "mt-1 px-2 py-1", else: "px-2 py-1.5"),
-        widget_notice_class(@status)
-      ]}
-      data-widget-body-notice={notice_state(@state)}
-      data-widget-empty-actionable={to_string(@actions?)}
-    >
-      <p>{@notice}</p>
-      <div :if={@actions?} class="mt-2 flex flex-wrap gap-1.5 font-sans">
-        <button
-          type="button"
-          phx-click={JS.dispatch("click", to: "#dashboard-data-controls-toggle")}
-          class="btn btn-xs btn-outline"
-          data-widget-empty-adjust-context
-        >
-          <.icon name="hero-adjustments-horizontal" class="h-3.5 w-3.5" /> Adjust scope & time
-        </button>
-        <button
-          type="button"
-          phx-click={JS.dispatch("click", to: "#dashboard-menu-trigger")}
-          class="btn btn-xs btn-ghost"
-          data-widget-empty-investigate
-        >
-          <.icon name="hero-magnifying-glass" class="h-3.5 w-3.5" /> Investigate
-        </button>
-      </div>
-    </div>
-    """
+  defp widget_notice_classes(status, compact?) do
+    [
+      "rounded border font-mono text-[0.68rem] leading-snug",
+      if(compact?, do: "mt-1 px-2 py-1", else: "px-2 py-1.5"),
+      widget_notice_class(status)
+    ]
+  end
+
+  defp widget_lifecycle_notice_actions do
+    [
+      %{
+        key: "adjust-context",
+        type: "button",
+        class: "btn btn-xs btn-outline",
+        attrs: %{
+          "phx-click" => dispatch_click("#dashboard-data-controls-toggle"),
+          "data-widget-empty-adjust-context" => ""
+        },
+        icon: %{name: "hero-adjustments-horizontal", class: "h-3.5 w-3.5"},
+        text: "Adjust scope & time"
+      },
+      %{
+        key: "investigate",
+        type: "button",
+        class: "btn btn-xs btn-ghost",
+        attrs: %{
+          "phx-click" => dispatch_click("#dashboard-menu-trigger"),
+          "data-widget-empty-investigate" => ""
+        },
+        icon: %{name: "hero-magnifying-glass", class: "h-3.5 w-3.5"},
+        text: "Investigate"
+      }
+    ]
+  end
+
+  defp dispatch_click(target) do
+    "click"
+    |> JS.dispatch(to: target)
+    |> Jason.encode!()
   end
 
   defp widget_links(%{links: links}) when is_list(links), do: links

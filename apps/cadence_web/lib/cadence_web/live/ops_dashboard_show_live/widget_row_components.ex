@@ -95,7 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponents do
     """
   end
 
-  defp status_matrix_presentation(data, widget, placement_id) do
+  def status_matrix_presentation(data, widget, placement_id) do
     %{
       kind: "status_matrix",
       component_id: "widget-rows-status-matrix-#{placement_id}-component",
@@ -242,7 +242,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponents do
     ]
   end
 
-  defp data_table_presentation(data, widget, placement_id) do
+  def data_table_presentation(data, widget, placement_id) do
     %{
       kind: "data_table",
       component_id: "widget-rows-data-table-#{placement_id}-component",
@@ -382,7 +382,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponents do
     ]
   end
 
-  defp state_timeline_presentation(data, placement_id) do
+  def state_timeline_presentation(data, placement_id) do
     lanes = Map.get(data, :lanes, [%{lane_key: "default", label: "State", rows: data.rows}])
 
     %{
@@ -529,7 +529,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponents do
     )
   end
 
-  defp event_timeline_presentation(data, placement_id) do
+  def event_timeline_presentation(data, placement_id) do
     %{
       kind: "event_timeline",
       component_id: "widget-rows-event-timeline-#{placement_id}-component",

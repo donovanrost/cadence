@@ -146,13 +146,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
   end
 
   defp chart_dom_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props", "chart_id"])
   end
 
   defp configure_telemetry_storage_source!(realm, data_source_id, binding_id) do
@@ -176,7 +172,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.fetch!(prop)
   end
 
@@ -389,9 +386,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     first_marker = List.first(source_markers)
     chart_id = chart_dom_id(html, trend_widget.widget_id)
 
-    view
-    |> element("##{chart_id}")
-    |> render_hook("open_evidence", %{
+    assert String.starts_with?(chart_id, "tlm-chart-")
+
+    render_hook(view, "open_evidence", %{
       "kind" => "source",
       "source-evidence-mode" => "health",
       "source-request-id" => first_marker["source_request_id"],

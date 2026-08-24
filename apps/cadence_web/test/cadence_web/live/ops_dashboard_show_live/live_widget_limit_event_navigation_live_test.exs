@@ -183,13 +183,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
         )
 
       document = fetch_dashboard_document!(org, mission, dashboard)
-      value_widget = render_item_by_title(document, "Counter").widget
+      value_item = render_item_by_title(document, "Counter")
+      value_widget = value_item.widget
 
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       html = render_dashboard_async(view)
 
-      assert html =~ "25"
-      assert html =~ "Red"
+      assert widget_point_value_text(html, value_item.placement_id) == "25"
+
+      assert html
+             |> widget_header_presentation(value_item.placement_id)
+             |> get_in(["status_indicators", "limit", "text"]) == "Red"
 
       component_id = "widget-data-links-#{value_widget.widget_id}-component"
       assert widget_data_link_presentation(view, component_id)

@@ -140,7 +140,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.fetch!(prop)
   end
 
@@ -148,18 +149,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.get(prop)
   end
 
   defp chart_dom_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props", "chart_id"])
   end
 
   defp centered_archive_range(timestamp_ms) do
@@ -279,6 +277,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
         )
 
       document = fetch_dashboard_document!(org, mission, dashboard)
+      context_item = render_item_by_title(document, "Counter")
       trend_widget = render_item_by_title(document, "Counter Trend").widget
       mirror_widget = render_item_by_title(document, "Counter Mirror").widget
       trend_widget_id = trend_widget.widget_id
@@ -297,9 +296,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
 
       chart_id = chart_dom_id(render(view), trend_widget_id)
 
-      view
-      |> element("##{chart_id}")
-      |> render_hook("open_data_link", %{
+      assert String.starts_with?(chart_id, "tlm-chart-")
+
+      render_hook(view, "open_data_link", %{
         "link-id" => older_link_id,
         "placement-id" => trend_widget_id,
         "target" => "telemetry_sample",
@@ -412,9 +411,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       assert_patch(view)
       render_dashboard_async(view)
       paused_html = render(view)
-      assert paused_html =~ "15"
-      assert paused_html =~ "Yellow"
-      refute paused_html =~ "Pick a spacecraft context"
+
+      assert widget_point_value_text(paused_html, context_item.placement_id) == "15"
+
+      assert paused_html
+             |> widget_header_presentation(context_item.placement_id)
+             |> get_in(["status_indicators", "limit", "text"]) == "Yellow"
+
+      refute widget_body_presentation(paused_html, context_item.placement_id)["notice"]
 
       live_preset =
         view
@@ -450,9 +454,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
 
       html = render(view)
-      assert html =~ "25"
-      assert html =~ "Red"
-      refute html =~ "Pick a spacecraft context"
+      assert widget_point_value_text(html, context_item.placement_id) == "25"
+
+      assert html
+             |> widget_header_presentation(context_item.placement_id)
+             |> get_in(["status_indicators", "limit", "text"]) == "Red"
+
+      refute widget_body_presentation(html, context_item.placement_id)["notice"]
     end
   end
 end

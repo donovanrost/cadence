@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleEmptyRowsComponentsTest
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport, only: [widget_body_presentation: 2]
 
   alias Cadence.Dashboards.RenderWidget
   alias CadenceWeb.OpsDashboardShowLive.Components
@@ -31,14 +32,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleEmptyRowsComponentsTest
           warnings: []
         )
 
-      document = LazyHTML.from_fragment(html)
+      body_notice =
+        html
+        |> widget_body_presentation("placement-1")
+        |> Map.fetch!("notice")
 
-      assert ["no_data"] =
-               document
-               |> LazyHTML.query("[data-widget-body-notice]")
-               |> LazyHTML.attribute("data-widget-body-notice")
+      assert body_notice["attrs"]["data-widget-body-notice"] == "no_data"
 
-      assert html =~ notice
+      assert body_notice["text"] == notice
     end
   end
 

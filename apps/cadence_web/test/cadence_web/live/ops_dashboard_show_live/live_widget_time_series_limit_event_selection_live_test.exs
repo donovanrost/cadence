@@ -134,13 +134,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
   end
 
   defp chart_dom_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props", "chart_id"])
   end
 
   defp chart_selected_ref(html, widget_id) do
@@ -151,7 +147,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.fetch!(prop)
   end
 
@@ -159,7 +156,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.get(prop)
   end
 
@@ -248,9 +246,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
 
       chart_id = chart_dom_id(render(view), trend_widget_id)
 
-      view
-      |> element("##{chart_id}")
-      |> render_hook("open_data_link", %{
+      assert String.starts_with?(chart_id, "tlm-chart-")
+
+      render_hook(view, "open_data_link", %{
         "link-id" => marker_link_id,
         "placement-id" => trend_widget_id,
         "target" => "limit_event",

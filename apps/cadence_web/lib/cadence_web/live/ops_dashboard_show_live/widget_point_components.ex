@@ -85,7 +85,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
     """
   end
 
-  defp value_tile_presentation(assigns) do
+  def value_tile_presentation(assigns) do
     unit =
       if show_unit?(assigns.widget) do
         value_tile_unit(assigns.data, assigns.point)
@@ -136,7 +136,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
     }
   end
 
-  defp time_series_presentation(assigns) do
+  def time_series_presentation(assigns) do
     chart_id = chart_dom_id(assigns.widget, assigns.context_spacecraft_id, assigns.chart_epoch)
 
     %{
@@ -216,7 +216,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
     }
   end
 
-  defp constellation_health_presentation(assigns) do
+  def constellation_health_presentation(assigns) do
     badges =
       Enum.map(state_severities(), fn {state, severity} ->
         severity_badge_presentation(

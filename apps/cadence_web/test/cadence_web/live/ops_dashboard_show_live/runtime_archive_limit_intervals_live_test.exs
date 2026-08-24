@@ -136,20 +136,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLimitIntervalsLiveTest d
   end
 
   defp chart_dom_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props", "chart_id"])
   end
 
   defp chart_attribute(html, widget_id, attribute) do
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> widget_point_chart_props(chart_dom_id(html, widget_id))
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> get_in(["chart", "props"])
     |> Map.fetch!(prop)
   end
 
@@ -208,9 +205,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLimitIntervalsLiveTest d
     target_id = interval_marker["target_id"]
     timestamp_ms = interval_marker["starts_at_ms"]
 
-    view
-    |> element("##{chart_id}")
-    |> render_hook("open_data_link", %{
+    assert String.starts_with?(chart_id, "tlm-chart-")
+
+    render_hook(view, "open_data_link", %{
       "link-id" => link_id,
       "target" => "limit_definition",
       "target-id" => target_id,

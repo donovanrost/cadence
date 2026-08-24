@@ -128,16 +128,49 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     item
   end
 
-  def widget_point_presentation(rendered, component_id) do
+  def dashboard_widget_presentation(rendered, placement_id) do
+    component_id = "dashboard-widget-#{placement_id}-component"
     vue = LiveVue.Test.get_vue(rendered, id: component_id)
 
-    assert vue.component == "WidgetPoint"
+    assert vue.component == "DashboardWidget"
+    assert vue.id == component_id
     assert vue.ssr == false
+    assert vue.class == "contents"
     assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
     assert vue.props["presentation"]["component_id"] == component_id
 
     vue.props["presentation"]
+  end
+
+  def widget_point_presentation(rendered, component_id) do
+    html = rendered_html(rendered)
+
+    case direct_vue(html, component_id, "WidgetPoint") do
+      nil ->
+        presentation =
+          html
+          |> dashboard_widget_presentations()
+          |> Enum.find_value(&find_component_presentation(&1, component_id))
+
+        assert presentation
+        assert presentation == Jason.decode!(Jason.encode!(presentation))
+        assert presentation["component_id"] == component_id
+        presentation
+
+      vue ->
+        assert vue.ssr == false
+        assert vue.handlers == %{}
+        assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+        assert vue.props["presentation"]["component_id"] == component_id
+        vue.props["presentation"]
+    end
+  end
+
+  def widget_body_presentation(rendered, placement_id) do
+    rendered
+    |> dashboard_widget_presentation(placement_id)
+    |> Map.fetch!("body")
   end
 
   def widget_point_chart_props(rendered, component_id) do
@@ -154,6 +187,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
       presentation = widget_point_presentation(html, component_id)
 
       if presentation["kind"] == kind, do: presentation
+    end) ||
+      Enum.find_value(dashboard_widget_presentations(html), fn presentation ->
+        point = get_in(presentation, ["body", "content", "presentation"])
+
+        if point && point["kind"] == kind, do: point
+      end)
+  end
+
+  def widget_point_presentation_by_widget_id(rendered, widget_id) do
+    html = rendered_html(rendered)
+
+    direct_presentations =
+      Enum.map(widget_point_host_ids(html), fn component_id ->
+        widget_point_presentation(html, component_id)
+      end)
+
+    nested_presentations =
+      html
+      |> dashboard_widget_presentations()
+      |> Enum.map(&get_in(&1, ["body", "content", "presentation"]))
+      |> Enum.reject(&is_nil/1)
+
+    Enum.find(direct_presentations ++ nested_presentations, fn presentation ->
+      get_in(presentation, ["chart", "props", "widget_id"]) == widget_id
     end)
   end
 
@@ -166,17 +223,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def widget_header_presentation(rendered, placement_id) do
     component_id = "dashboard-widget-header-#{placement_id}-component"
-    vue = LiveVue.Test.get_vue(rendered, id: component_id)
 
-    assert vue.component == "DashboardWidgetHeader"
-    assert vue.id == component_id
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.handlers == %{}
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["component_id"] == component_id
+    presentation =
+      rendered
+      |> dashboard_widget_presentation(placement_id)
+      |> Map.fetch!("header")
 
-    vue.props["presentation"]
+    assert presentation["component_id"] == component_id
+    presentation
   end
 
   def widget_query_presentation(rendered, placement_id) do
@@ -227,17 +281,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def widget_rows_presentation(rendered, kind, placement_id) do
     component_id = "widget-rows-#{String.replace(kind, "_", "-")}-#{placement_id}-component"
-    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    html = rendered_html(rendered)
 
-    assert vue.component == "WidgetRows"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.handlers == %{}
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["kind"] == kind
-    assert vue.props["presentation"]["component_id"] == component_id
+    presentation =
+      case direct_vue(html, component_id, "WidgetRows") do
+        nil ->
+          html
+          |> dashboard_widget_presentation(placement_id)
+          |> get_in(["body", "content", "presentation"])
 
-    vue.props["presentation"]
+        vue ->
+          assert vue.ssr == false
+          assert vue.class == "contents"
+          assert vue.handlers == %{}
+          assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+          vue.props["presentation"]
+      end
+
+    assert presentation["kind"] == kind
+    assert presentation["component_id"] == component_id
+    presentation
   end
 
   def assert_widget_row(rendered, kind, placement_id, expected_attrs) do
@@ -281,6 +344,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     html = rendered_html(rendered)
 
     direct_widget_data_link_presentation(html, component_id) ||
+      Enum.find_value(dashboard_widget_presentations(html), fn presentation ->
+        find_component_presentation(presentation, component_id)
+      end) ||
       Enum.find_value(widget_header_host_ids(html), fn host_id ->
         html
         |> LiveVue.Test.get_vue(id: host_id)
@@ -388,16 +454,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   def has_dashboard_element?(view_or_html, selector, text \\ nil) do
-    if migrated_data_link_selector?(selector) do
-      view_or_html
-      |> data_link_inspector_presentation()
-      |> presentation_element?(selector, text)
-    else
-      if is_nil(text) do
-        Phoenix.LiveViewTest.has_element?(view_or_html, selector)
-      else
-        Phoenix.LiveViewTest.has_element?(view_or_html, selector, text)
-      end
+    cond do
+      migrated_data_link_selector?(selector) ->
+        view_or_html
+        |> data_link_inspector_presentation()
+        |> presentation_element?(selector, text)
+
+      migrated_widget_selector?(selector) ->
+        view_or_html
+        |> rendered_html()
+        |> dashboard_widget_presentations()
+        |> Enum.any?(&presentation_element?(&1, selector, text))
+
+      true ->
+        if is_nil(text) do
+          Phoenix.LiveViewTest.has_element?(view_or_html, selector)
+        else
+          Phoenix.LiveViewTest.has_element?(view_or_html, selector, text)
+        end
     end
   end
 
@@ -616,12 +690,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     "dashboard-workflow-"
   ]
 
+  @migrated_widget_selector_markers [
+    "data-dashboard-widget-header",
+    "data-widget-status-indicators",
+    "data-widget-body-notice",
+    "data-widget-empty-",
+    "data-dashboard-time-series-stage",
+    "data-status-matrix",
+    "data-data-table",
+    "data-state-timeline",
+    "data-event-timeline"
+  ]
   defp migrated_data_link_selector?(selector) when is_binary(selector) do
     String.starts_with?(selector, "#dashboard-data-link-inspector ") or
       Enum.any?(@migrated_data_link_ids, &String.contains?(selector, &1))
   end
 
   defp migrated_data_link_selector?(_selector), do: false
+
+  defp migrated_widget_selector?(selector) when is_binary(selector) do
+    Enum.any?(@migrated_widget_selector_markers, &String.contains?(selector, &1))
+  end
+
+  defp migrated_widget_selector?(_selector), do: false
 
   defp presentation_element?(presentation, selector, text) do
     not is_nil(presentation_element(presentation, selector, text))
@@ -937,6 +1028,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     |> LazyHTML.from_fragment()
     |> LazyHTML.query(~s([id^="dashboard-widget-header-"][id$="-component"]))
     |> LazyHTML.attribute("id")
+  end
+
+  defp dashboard_widget_presentations(html) do
+    html
+    |> dashboard_widget_host_ids()
+    |> Enum.map(fn host_id ->
+      html
+      |> LiveVue.Test.get_vue(id: host_id)
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+    end)
+  end
+
+  defp dashboard_widget_host_ids(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([phx-hook="VueHook"][data-name="DashboardWidget"]))
+    |> LazyHTML.attribute("id")
+  end
+
+  defp direct_vue(html, component_id, component) do
+    vue = LiveVue.Test.get_vue(html, id: component_id)
+
+    if vue.component == component, do: vue
+  rescue
+    RuntimeError -> nil
   end
 
   defp direct_widget_data_link_presentation(html, component_id) do

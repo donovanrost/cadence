@@ -4,7 +4,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport,
-    only: [assert_widget_row: 4, widget_header_presentation: 2]
+    only: [
+      assert_widget_row: 4,
+      widget_body_presentation: 2,
+      widget_header_presentation: 2,
+      widget_point_presentation: 2
+    ]
 
   alias Cadence.Dashboards.RenderWidget
   alias CadenceWeb.OpsDashboardShowLive.Components
@@ -75,14 +80,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    assert html =~ "This widget does not support the selected context."
+    notice = html |> widget_body_presentation("placement-1") |> Map.fetch!("notice")
 
-    document = LazyHTML.from_fragment(html)
-
-    assert ["unsupported"] =
-             document
-             |> LazyHTML.query("[data-widget-body-notice]")
-             |> LazyHTML.attribute("data-widget-body-notice")
+    assert notice["text"] == "This widget does not support the selected context."
+    assert notice["attrs"]["data-widget-body-notice"] == "unsupported"
   end
 
   test "time series source failure renders a body notice instead of an empty chart" do
@@ -104,19 +105,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    body = widget_body_presentation(html, "placement-1")
 
-    assert ["error"] =
-             document
-             |> LazyHTML.query("[data-widget-body-notice]")
-             |> LazyHTML.attribute("data-widget-body-notice")
-
-    assert [] =
-             document
-             |> LazyHTML.query(~s([id^="widget-point-tlm-chart-"]))
-             |> LazyHTML.attribute("id")
-
-    assert html =~ "This widget cannot load because its source failed."
+    assert body["notice"]["attrs"]["data-widget-body-notice"] == "error"
+    refute body["content"]
+    assert body["notice"]["text"] == "This widget cannot load because its source failed."
   end
 
   test "no-data widgets explain the active scope mismatch and expose recovery actions" do
@@ -143,24 +136,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    notice = html |> widget_body_presentation("placement-1") |> Map.fetch!("notice")
+    [adjust_context, investigate] = notice["actions"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("[data-widget-body-notice]")
-             |> LazyHTML.attribute("data-widget-empty-actionable")
+    assert notice["attrs"]["data-widget-empty-actionable"] == "true"
+    assert adjust_context["attrs"]["data-widget-empty-adjust-context"] == ""
+    assert investigate["attrs"]["data-widget-empty-investigate"] == ""
 
-    assert [""] =
-             document
-             |> LazyHTML.query("[data-widget-empty-adjust-context]")
-             |> LazyHTML.attribute("data-widget-empty-adjust-context")
+    assert Jason.decode!(adjust_context["attrs"]["phx-click"]) == [
+             ["dispatch", %{"event" => "click", "to" => "#dashboard-data-controls-toggle"}]
+           ]
 
-    assert [""] =
-             document
-             |> LazyHTML.query("[data-widget-empty-investigate]")
-             |> LazyHTML.attribute("data-widget-empty-investigate")
+    assert Jason.decode!(investigate["attrs"]["phx-click"]) == [
+             ["dispatch", %{"event" => "click", "to" => "#dashboard-menu-trigger"}]
+           ]
 
-    assert html =~ "no rows matched this contact and source-endpoint scope"
+    assert notice["text"] =~ "no rows matched this contact and source-endpoint scope"
   end
 
   test "blocking lifecycle notices take precedence over an incidental empty reason" do
@@ -187,10 +178,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    assert html =~
+    notice = html |> widget_body_presentation("placement-1") |> Map.fetch!("notice")
+
+    assert notice["text"] ==
              "This widget cannot load because the selected time range is outside available source retention."
 
-    refute html =~ "no rows matched the active dashboard scope"
+    refute notice["text"] =~ "no rows matched the active dashboard scope"
   end
 
   test "partial data table keeps rows visible and reduces degraded coverage to an indicator" do
@@ -212,17 +205,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    body = widget_body_presentation(html, "placement-1")
+    header = widget_header_presentation(html, "placement-1")
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-widget-body-notice]")
-             |> LazyHTML.attribute("data-widget-body-notice")
+    refute body["notice"]
 
     assert "partial" ==
-             html
-             |> widget_header_presentation("placement-1")
-             |> get_in([
+             get_in(header, [
                "status_indicators",
                "lifecycle",
                "attrs",
@@ -233,7 +222,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
       "data-data-table-row" => "tlm.hk.battery_voltage"
     })
 
-    assert html =~ "This widget is showing partial data"
+    assert header["status_indicators"]["lifecycle"]["attrs"]["title"] =~
+             "This widget is showing partial data"
   end
 
   test "partial time series keeps its chart and shows a compact coverage notice" do
@@ -255,23 +245,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
         warnings: []
       )
 
-    document = LazyHTML.from_fragment(html)
+    body = widget_body_presentation(html, "placement-1")
+    chart_id = body["content"]["presentation"]["component_id"]
+    chart = widget_point_presentation(html, chart_id)
 
-    assert ["partial"] =
-             document
-             |> LazyHTML.query("[data-widget-body-notice]")
-             |> LazyHTML.attribute("data-widget-body-notice")
-
-    [chart_id] =
-      document
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-"]))
-      |> LazyHTML.attribute("id")
-
-    chart_vue = LiveVue.Test.get_vue(html, id: chart_id)
-    assert chart_vue.component == "WidgetPoint"
-    assert chart_vue.props["presentation"]["kind"] == "time_series"
-
-    assert html =~ "This widget is showing partial data"
+    assert body["notice"]["attrs"]["data-widget-body-notice"] == "partial"
+    assert chart["kind"] == "time_series"
+    assert body["notice"]["text"] =~ "This widget is showing partial data"
   end
 
   defp value_tile do

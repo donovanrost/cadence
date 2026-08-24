@@ -172,13 +172,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationEventLimitLiveTest 
   end
 
   defp chart_component_id(html, widget_id) do
-    [id] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute("id")
-
-    id
+    html
+    |> widget_point_presentation_by_widget_id(widget_id)
+    |> Map.fetch!("component_id")
   end
 
   describe "runtime invalidation event and limit surfaces" do

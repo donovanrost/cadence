@@ -2,7 +2,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWidgetHeaderComponentsTest do
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport, only: [widget_header_presentation: 2]
+
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport,
+    only: [dashboard_widget_presentation: 2, widget_header_presentation: 2]
 
   alias Cadence.Dashboards.RenderWidget
   alias CadenceWeb.OpsDashboardShowLive.Components
@@ -25,6 +27,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWidgetHeaderComponentsTest do
       type = @widget_type
       placement_id = Atom.to_string(type)
       html = render_widget(type, @widget_edit_mode?)
+      widget_presentation = dashboard_widget_presentation(html, placement_id)
       presentation = widget_header_presentation(html, placement_id)
 
       assert presentation["root"]["attrs"]["data-dashboard-widget-type"] == placement_id
@@ -35,16 +38,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWidgetHeaderComponentsTest do
 
       document = LazyHTML.from_fragment(html)
       expected_header_id = "dashboard-widget-header-#{placement_id}-component"
+      expected_widget_id = "dashboard-widget-#{placement_id}-component"
 
-      assert [^expected_header_id] =
+      assert presentation["component_id"] == expected_header_id
+      assert widget_presentation["body"]["kind"] == placement_id
+
+      assert [^expected_widget_id] =
                document
-               |> LazyHTML.query("#dashboard-widget-header-#{placement_id}-component")
+               |> LazyHTML.query("##{expected_widget_id}")
                |> LazyHTML.attribute("id")
 
-      assert expected_body_notice(type) ==
+      assert ["DashboardWidget"] =
                document
-               |> LazyHTML.query("[data-widget-body-notice]")
-               |> LazyHTML.attribute("data-widget-body-notice")
+               |> LazyHTML.query(~s([phx-hook="VueHook"]))
+               |> LazyHTML.attribute("data-name")
+
+      body_notice_state =
+        case widget_presentation["body"]["notice"] do
+          nil -> []
+          notice -> Map.get(notice["attrs"], "data-widget-body-notice") |> List.wrap()
+        end
+
+      assert expected_body_notice(type) == body_notice_state
 
       assert [] ==
                document
