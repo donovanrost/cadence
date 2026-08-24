@@ -11,6 +11,7 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.{RoutingRule, Transport}
+  alias CadenceWeb.CommsRoutingListLive
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
@@ -27,9 +28,55 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing")
 
-      assert has_element?(view, "#comms-routing-page", "No routing rules")
-      assert has_element?(view, "#new-routing-rule-link")
-      refute has_element?(view, "#routing-rules-list-component")
+      assert has_element?(view, "#comms-routing-list-page-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "comms-routing-list-page-component")
+
+      assert vue.component == "CommsRoutingListPage"
+      assert vue.class == "contents"
+      assert vue.ssr == false
+      assert Map.keys(vue.props) == ["presentation"]
+
+      presentation = vue.props["presentation"]
+
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+
+      assert presentation["root"] == %{
+               "attrs" => %{"class" => "space-y-6", "id" => "comms-routing-page"}
+             }
+
+      assert presentation["header"]["title"] == %{
+               "attrs" => %{
+                 "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+               },
+               "text" => "Routing",
+               "suffix" => %{
+                 "attrs" => %{
+                   "class" => "ml-3 font-mono text-base text-base-content/60"
+                 },
+                 "text" => "0 rules"
+               }
+             }
+
+      assert presentation["header"]["actions"]["new_rule"]["attrs"] == %{
+               "class" => "btn btn-primary btn-sm gap-1",
+               "data-phx-link" => "redirect",
+               "data-phx-link-state" => "push",
+               "href" => "/missions/#{mission.mission_id}/comms/routing/new",
+               "id" => "new-routing-rule-link"
+             }
+
+      assert presentation["empty_state"]["title"]["text"] == "No routing rules"
+
+      assert presentation["empty_state"]["action"]["attrs"] == %{
+               "class" => "btn btn-primary btn-sm",
+               "data-phx-link" => "redirect",
+               "data-phx-link-state" => "push",
+               "href" => "/missions/#{mission.mission_id}/comms/routing/new"
+             }
+
+      assert presentation["card"] == nil
+      refute Jason.encode!(presentation) =~ "routing-rules-list-component"
     end
 
     test "lists routing rules with routing vocabulary and JSON-safe row props" do
@@ -40,10 +87,32 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing")
 
-      assert has_element?(view, "#comms-routing-page")
-      assert has_element?(view, "#new-routing-rule-link")
-      assert has_element?(view, "#routing-rules-list-component")
-      assert has_element?(view, "#comms-routing-page", "Durable rules")
+      assert has_element?(view, "#comms-routing-list-page-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "comms-routing-list-page-component")
+
+      assert vue.component == "CommsRoutingListPage"
+      assert vue.class == "contents"
+      assert vue.ssr == false
+      assert Map.keys(vue.props) == ["presentation"]
+
+      presentation = vue.props["presentation"]
+
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+      assert presentation["root"]["attrs"]["id"] == "comms-routing-page"
+
+      assert presentation["header"]["actions"]["new_rule"]["attrs"]["id"] ==
+               "new-routing-rule-link"
+
+      assert presentation["header"]["subtitle"]["text"] ==
+               "Durable rules describing how spacecraft use transports for a purpose and direction."
+
+      assert presentation["header"]["title"]["suffix"]["text"] == "1 rules"
+      assert presentation["empty_state"] == nil
+
+      assert presentation["card"]["list_component"] == %{
+               "attrs" => %{"id" => "routing-rules-list-component"}
+             }
 
       sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
 
@@ -59,33 +128,44 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert routing["active"]
       assert routing["label"] == "Routing"
 
-      vue = LiveVue.Test.get_vue(view, id: "routing-rules-list-component")
+      assert presentation["card"]["rows"] == [
+               %{
+                 "id" => "routing-rule-#{rule.routing_rule_id}",
+                 "display_name" => rule.display_name,
+                 "spacecraft_name" => spacecraft.display_name,
+                 "purpose_label" => rule.purpose_label,
+                 "direction" => "INBOUND",
+                 "transport_name" => transport.display_name,
+                 "role" => "PRIMARY",
+                 "href" => "/missions/#{mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
+               }
+             ]
 
-      assert vue.component == "CommsRoutingList"
-      assert vue.ssr == false
-      assert is_binary(Jason.encode!(vue.props))
+      assert presentation["header"]["title"]["text"] == "Routing"
+      assert presentation["header"]["subtitle"]["text"] =~ "Durable rules"
 
-      assert vue.props == %{
-               "rows" => [
-                 %{
-                   "id" => "routing-rule-#{rule.routing_rule_id}",
-                   "display_name" => rule.display_name,
-                   "spacecraft_name" => spacecraft.display_name,
-                   "purpose_label" => rule.purpose_label,
-                   "direction" => "INBOUND",
-                   "transport_name" => transport.display_name,
-                   "role" => "PRIMARY",
-                   "href" =>
-                     "/missions/#{mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
-                 }
-               ]
+      encoded_presentation = Jason.encode!(presentation)
+      refute encoded_presentation =~ "Link Assignment"
+      refute encoded_presentation =~ "Link Template"
+    end
+
+    test "routing list raw attrs preserve HEEx omission boolean string and number semantics" do
+      attrs =
+        CommsRoutingListLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "empty" => "",
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "empty" => "",
+               "string" => "retained",
+               "number" => "7"
              }
-
-      page = render(view)
-      assert page =~ "Routing"
-      assert page =~ "Durable rules"
-      refute page =~ "Link Assignment"
-      refute page =~ "Link Template"
     end
 
     test "creates and shows a routing rule" do

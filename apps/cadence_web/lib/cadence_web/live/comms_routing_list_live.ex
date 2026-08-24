@@ -20,61 +20,237 @@ defmodule CadenceWeb.CommsRoutingListLive do
         &routing_rule_row(&1, mission.mission_id, spacecraft_by_id, transport_by_id)
       )
 
+    routing_rule_count = length(routing_rules)
+    routing_rules_empty? = routing_rules == []
+
     {:ok,
      socket
      |> assign(:page_title, "Comms Routing")
      |> assign(:nav_item, :comms_routing)
-     |> assign(:routing_rule_count, length(routing_rules))
-     |> assign(:routing_rules_empty?, routing_rules == [])
-     |> assign(:routing_rule_rows, routing_rule_rows)}
+     |> assign(:routing_rule_count, routing_rule_count)
+     |> assign(:routing_rules_empty?, routing_rules_empty?)
+     |> assign(:routing_rule_rows, routing_rule_rows)
+     |> assign(
+       :presentation,
+       routing_list_presentation(
+         mission,
+         routing_rule_count,
+         routing_rules_empty?,
+         routing_rule_rows
+       )
+     )}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="comms-routing-page" class="space-y-6">
-        <.page_header
-          title="Routing"
-          subtitle="Durable rules describing how spacecraft use transports for a purpose and direction."
-          breadcrumbs={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-            {"Routing", nil}
-          ]}
-        >
-          <:title_suffix>{@routing_rule_count} rules</:title_suffix>
-          <:actions>
-            <.button
-              id="new-routing-rule-link"
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
-              class="gap-1"
-            >
-              <.icon name="hero-plus" class="h-4 w-4" /> New Routing Rule
-            </.button>
-          </:actions>
-        </.page_header>
-
-        <%= if @routing_rules_empty? do %>
-          <.empty_state
-            title="No routing rules"
-            description="Create a routing rule to declare how a spacecraft should use an available transport."
-            action_label="Create the first routing rule"
-            action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
-          />
-        <% else %>
-          <.card padding={:none}>
-            <.vue
-              id="routing-rules-list-component"
-              v-component="CommsRoutingList"
-              rows={@routing_rule_rows}
-              v-ssr={false}
-            />
-          </.card>
-        <% end %>
-      </div>
+      <.vue
+        id="comms-routing-list-page-component"
+        v-component="CommsRoutingListPage"
+        presentation={@presentation}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp routing_list_presentation(mission, routing_rule_count, routing_rules_empty?, rows) do
+    new_rule_path = ~p"/missions/#{mission.mission_id}/comms/routing/new"
+
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "comms-routing-page",
+            "class" => "space-y-6"
+          })
+      },
+      "header" => header_presentation(mission, routing_rule_count, new_rule_path),
+      "empty_state" => empty_state_presentation(routing_rules_empty?, new_rule_path),
+      "card" => card_presentation(routing_rules_empty?, rows)
+    }
+  end
+
+  defp header_presentation(mission, routing_rule_count, new_rule_path) do
+    %{
+      "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+      "body" => %{
+        "attrs" => presentation_attrs(%{"class" => "flex items-end justify-between gap-4"})
+      },
+      "content" => %{"attrs" => %{}},
+      "breadcrumbs" => breadcrumbs_presentation(mission),
+      "title" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+          }),
+        "text" => "Routing",
+        "suffix" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "ml-3 font-mono text-base text-base-content/60"
+            }),
+          "text" => "#{routing_rule_count} rules"
+        }
+      },
+      "subtitle" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+          }),
+        "text" =>
+          "Durable rules describing how spacecraft use transports for a purpose and direction."
+      },
+      "actions" => %{
+        "attrs" => presentation_attrs(%{"class" => "flex items-center gap-2"}),
+        "new_rule" => %{
+          "attrs" =>
+            navigate_attrs(new_rule_path, %{
+              "id" => "new-routing-rule-link",
+              "class" => "btn btn-primary btn-sm gap-1"
+            }),
+          "icon" => %{
+            "attrs" => presentation_attrs(%{"class" => "hero-plus h-4 w-4"})
+          },
+          "text" => "New Routing Rule"
+        }
+      }
+    }
+  end
+
+  defp breadcrumbs_presentation(mission) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "aria-label" => "Breadcrumb",
+          "class" =>
+            "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+        }),
+      "items" => [
+        %{
+          "key" => "mission",
+          "separator" => nil,
+          "link" => %{
+            "attrs" =>
+              navigate_attrs(~p"/missions/#{mission.mission_id}", %{
+                "class" => "hover:text-primary transition-colors"
+              }),
+            "text" => mission.display_name
+          },
+          "current" => nil
+        },
+        %{
+          "key" => "comms",
+          "separator" => breadcrumb_separator(),
+          "link" => %{
+            "attrs" =>
+              navigate_attrs(~p"/missions/#{mission.mission_id}/comms", %{
+                "class" => "hover:text-primary transition-colors"
+              }),
+            "text" => "Comms"
+          },
+          "current" => nil
+        },
+        %{
+          "key" => "routing",
+          "separator" => breadcrumb_separator(),
+          "link" => nil,
+          "current" => %{
+            "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+            "text" => "Routing"
+          }
+        }
+      ]
+    }
+  end
+
+  defp breadcrumb_separator do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "text-base-content/20",
+          "aria-hidden" => "true"
+        }),
+      "text" => "/"
+    }
+  end
+
+  defp empty_state_presentation(true, new_rule_path) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" =>
+            "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+        }),
+      "title" => %{
+        "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+        "text" => "No routing rules"
+      },
+      "description" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+          }),
+        "text" =>
+          "Create a routing rule to declare how a spacecraft should use an available transport."
+      },
+      "action_container" => %{
+        "attrs" => presentation_attrs(%{"class" => "mt-5"})
+      },
+      "action" => %{
+        "attrs" => navigate_attrs(new_rule_path, %{"class" => "btn btn-primary btn-sm"}),
+        "icon" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "hero-plus -ml-0.5 mr-1 h-4 w-4"
+            })
+        },
+        "text" => "Create the first routing rule"
+      }
+    }
+  end
+
+  defp empty_state_presentation(false, _new_rule_path), do: nil
+
+  defp card_presentation(true, _rows), do: nil
+
+  defp card_presentation(false, rows) do
+    %{
+      "attrs" => presentation_attrs(%{"class" => "card bg-base-200 border border-base-300"}),
+      "body" => %{
+        "attrs" => presentation_attrs(%{"class" => "card-body p-0"})
+      },
+      "list_component" => %{
+        "attrs" => presentation_attrs(%{"id" => "routing-rules-list-component"})
+      },
+      "rows" => rows
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp spacecraft_lookup(organization_id, mission_id) do
