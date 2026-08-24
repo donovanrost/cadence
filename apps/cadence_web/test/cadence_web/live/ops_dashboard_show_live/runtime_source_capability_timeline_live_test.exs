@@ -17,6 +17,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
   alias Cadence.OperationalEvents.Event
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   test "event timeline source-capability posture rows open canonical operational-event inspectors" do
     {conn, org, mission} = signed_in_org_and_mission()
 
@@ -107,18 +137,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
                ~s([data-event-timeline-category="Source capability"][data-event-timeline-kind="Source capability fallback"][data-event-timeline-target="Operational event"][data-event-timeline-target-id="#{persisted_event.event_id}"][data-event-timeline-logical-source="events"][data-event-timeline-realm="flight"][data-event-timeline-data-source-id="#{DataSources.default_events_data_source().data_source_id}"][data-event-timeline-source-binding-id="#{DataSources.default_flight_events_binding().binding_id}"][data-event-timeline-dataset="mission_events"])
            )
 
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s( [data-event-timeline-row-link-target="operational event"][data-event-timeline-row-link-id="#{persisted_event.event_id}"][phx-value-target="operational_event"][phx-value-target-id="#{persisted_event.event_id}"][phx-value-realm="flight"][phx-value-source-binding-id="#{DataSources.default_flight_events_binding().binding_id}"][phx-value-data-source-id="#{DataSources.default_events_data_source().data_source_id}"])
-           )
+    row_id =
+      "event:#{source_capability_posture_id}:#{DateTime.to_unix(persisted_event.occurred_at, :millisecond)}:0"
 
-    view
-    |> element(
-      row_selector <>
-        ~s( [data-event-timeline-row-link-target="operational event"][data-event-timeline-row-link-id="#{persisted_event.event_id}"])
-    )
-    |> render_click()
+    component_id = "event-row-links-#{events_widget.widget_id}-#{row_id}-component"
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    link_attrs = %{
+      "data-event-timeline-row-link-target" => "operational event",
+      "data-event-timeline-row-link-id" => persisted_event.event_id,
+      "phx-value-target" => "operational_event",
+      "phx-value-target-id" => persisted_event.event_id,
+      "phx-value-realm" => "flight",
+      "phx-value-source-binding-id" => DataSources.default_flight_events_binding().binding_id,
+      "phx-value-data-source-id" => DataSources.default_events_data_source().data_source_id
+    }
+
+    assert_widget_data_link_item(view, component_id, link_attrs)
+
+    click_widget_data_link(view, component_id, %{
+      "data-event-timeline-row-link-target" => "operational event",
+      "data-event-timeline-row-link-id" => persisted_event.event_id
+    })
 
     operational_event_path = assert_patch(view)
     assert operational_event_path =~ "panel=data_link"

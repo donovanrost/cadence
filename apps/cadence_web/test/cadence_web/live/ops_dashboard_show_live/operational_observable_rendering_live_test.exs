@@ -20,6 +20,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -315,11 +345,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                scheduled_contact.scheduled_contact_id
              )
 
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s( [data-status-matrix-row-link-target="contact"][data-status-matrix-row-link-id="#{scheduled_contact.scheduled_contact_id}"])
-             )
+      component_id =
+        "status-row-links-#{matrix_widget.widget_id}-contacts.phase:dashboard-contact-phase-alpha-component"
+
+      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+      assert_widget_data_link_item(view, component_id, %{
+        "data-status-matrix-row-link-target" => "contact",
+        "data-status-matrix-row-link-id" => scheduled_contact.scheduled_contact_id
+      })
 
       stop_dashboard_view(view)
     end
@@ -348,21 +382,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                  ~s([data-status-matrix-frame-observable-id="comms.transport.connection_state"][data-status-matrix-product-family="connection_state"][data-status-matrix-supported-capability="connection_state"][data-status-matrix-data-source-id="managed_operational_observables"])
              )
 
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s( [data-status-matrix-row-evidence="comms.transport.connection_state:dashboard-transport-alpha"][data-status-matrix-row-evidence-observable="comms.transport.connection_state"])
-             )
+      component_id =
+        "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:dashboard-transport-alpha-component"
 
-      assert has_element?(
-               view,
-               row_selector <>
-                 ~s( [data-status-matrix-row-link="comms.transport.connection_state:dashboard-transport-alpha"][data-status-matrix-row-link-target="transport"][data-status-matrix-row-link-id="dashboard-transport-alpha"][phx-value-target="transport"][phx-value-target-id="dashboard-transport-alpha"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-             )
+      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
 
-      view
-      |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      evidence_attrs = %{
+        "data-status-matrix-row-evidence" =>
+          "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-row-evidence-observable" => "comms.transport.connection_state"
+      }
+
+      assert_widget_data_link_item(view, component_id, evidence_attrs)
+
+      assert_widget_data_link_item(view, component_id, %{
+        "data-status-matrix-row-link" =>
+          "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-row-link-target" => "transport",
+        "data-status-matrix-row-link-id" => "dashboard-transport-alpha",
+        "phx-value-target" => "transport",
+        "phx-value-target-id" => "dashboard-transport-alpha",
+        "phx-value-data-source-id" => "managed_operational_observables",
+        "phx-value-source-binding-id" => "default_flight_operational_observables"
+      })
+
+      click_widget_data_link(view, component_id, evidence_attrs)
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"
@@ -724,9 +768,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableRenderingLiveTest
                  ~s([data-status-matrix-frame-observable-id="ground.station.antenna_pointing_state"][data-status-matrix-product-family="ground_station"][data-status-matrix-supported-capability="ground_station_antenna_pointing_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
              )
 
-      view
-      |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      component_id =
+        "status-row-links-#{matrix_widget.widget_id}-ground.station.antenna_pointing_state:dss-14-component"
+
+      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+      click_widget_data_link(view, component_id, %{
+        "data-status-matrix-row-evidence" => "ground.station.antenna_pointing_state:dss-14"
+      })
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"

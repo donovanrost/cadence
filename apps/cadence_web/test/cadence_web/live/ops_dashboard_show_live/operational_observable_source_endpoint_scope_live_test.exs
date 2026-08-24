@@ -21,6 +21,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
   alias CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCommandQueueScenario
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   describe "source endpoint operational observable scope rendering" do
     test "filters operational observable transport rows and preserves DataLink context" do
       {conn, org, mission} = signed_in_org_and_mission()
@@ -153,20 +183,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
                  ~s([data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"][data-status-matrix-supported-capability="connection_state"])
              )
 
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s( [data-status-matrix-row-link="comms.transport.connection_state:dashboard-transport-alpha"][data-status-matrix-row-link-target="transport"][data-status-matrix-row-link-id="dashboard-transport-alpha"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-             )
+      component_id =
+        "status-row-links-#{matrix_widget.widget_id}-comms.transport.connection_state:dashboard-transport-alpha-component"
+
+      assert has_element?(view, "#{alpha_row_selector} [id=\"#{component_id}\"]")
+
+      link_attrs = %{
+        "data-status-matrix-row-link" =>
+          "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-row-link-target" => "transport",
+        "data-status-matrix-row-link-id" => "dashboard-transport-alpha",
+        "phx-value-data-source-id" => "managed_operational_observables",
+        "phx-value-source-binding-id" => "default_flight_operational_observables"
+      }
+
+      assert_widget_data_link_item(view, component_id, link_attrs)
 
       refute has_element?(view, beta_row_selector)
 
-      view
-      |> element(
-        alpha_row_selector <>
-          ~s( [data-status-matrix-row-link="comms.transport.connection_state:dashboard-transport-alpha"][data-status-matrix-row-link-target="transport"])
-      )
-      |> render_click()
+      click_widget_data_link(view, component_id, %{
+        "data-status-matrix-row-link" =>
+          "comms.transport.connection_state:dashboard-transport-alpha",
+        "data-status-matrix-row-link-target" => "transport"
+      })
 
       transport_link_path = assert_patch(view)
       assert transport_link_path =~ "panel=data_link"

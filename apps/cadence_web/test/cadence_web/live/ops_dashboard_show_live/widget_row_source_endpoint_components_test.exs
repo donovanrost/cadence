@@ -15,6 +15,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowSourceEndpointComponentsTest 
 
     document = LazyHTML.from_fragment(html)
 
+    [evidence, row_link] =
+      widget_data_link_items(
+        html,
+        "data-row-links-placement-1-commanding.queue_depth:endpoint-alpha-component"
+      )
+
     assert ["commanding.queue_depth:endpoint-alpha"] =
              document
              |> LazyHTML.query("[data-data-table-row]")
@@ -55,70 +61,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowSourceEndpointComponentsTest 
              |> LazyHTML.query("[data-data-table-row]")
              |> LazyHTML.attribute("data-data-table-source-binding-id")
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-link-ref]")
-             |> LazyHTML.attribute("phx-click")
+    assert row_link["attrs"]["phx-click"] == "open_data_link"
 
-    assert ["source endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-link-ref]")
-             |> LazyHTML.attribute("data-data-table-row-link-target")
+    assert row_link["attrs"]["data-data-table-row-link-target"] == "source endpoint"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-link-ref]")
-             |> LazyHTML.attribute("data-data-table-row-link-id")
+    assert row_link["attrs"]["data-data-table-row-link-id"] == "endpoint-alpha"
 
-    assert ["source_endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-link-ref]")
-             |> LazyHTML.attribute("phx-value-target")
+    assert row_link["attrs"]["phx-value-target"] == "source_endpoint"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-link-ref]")
-             |> LazyHTML.attribute("phx-value-target-id")
+    assert row_link["attrs"]["phx-value-target-id"] == "endpoint-alpha"
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-click")
+    assert evidence["attrs"]["phx-click"] == "open_evidence"
 
-    assert ["commanding.queue_depth"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("data-data-table-row-evidence-observable")
+    assert evidence["attrs"]["data-data-table-row-evidence-observable"] ==
+             "commanding.queue_depth"
 
-    assert ["frame"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-kind")
+    assert evidence["attrs"]["phx-value-kind"] == "frame"
 
-    assert ["operational_observables"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-logical-source")
+    assert evidence["attrs"]["phx-value-logical-source"] == "operational_observables"
 
-    assert ["managed_operational_observables"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-data-source-id")
+    assert evidence["attrs"]["phx-value-data-source-id"] == "managed_operational_observables"
 
-    assert ["default_flight_operational_observables"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-source-binding-id")
+    assert evidence["attrs"]["phx-value-source-binding-id"] ==
+             "default_flight_operational_observables"
 
-    assert ["source_endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-scope-kind")
+    assert evidence["attrs"]["phx-value-scope-kind"] == "source_endpoint"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row-evidence]")
-             |> LazyHTML.attribute("phx-value-scope-id")
+    assert evidence["attrs"]["phx-value-scope-id"] == "endpoint-alpha"
+  end
+
+  defp widget_data_link_items(html, component_id) do
+    vue = LiveVue.Test.get_vue(html, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]["items"]
   end
 
   defp widget do

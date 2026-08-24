@@ -283,15 +283,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
                ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport timer fired"][data-state-timeline-realm="replay"])
            )
 
-    assert has_element?(
-             view,
-             action_row_selector <>
-               ~s( [data-state-timeline-row-evidence="#{action_row_id}"][data-state-timeline-row-evidence-observable="runtime.transport_activity"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"])
-           )
+    component_id = "state-row-links-#{timeline_widget_id}-#{action_row_id}-component"
+    assert has_element?(view, "#{action_row_selector} [id=\"#{component_id}\"]")
 
-    view
-    |> element(action_row_selector <> ~s( [data-state-timeline-row-evidence]))
-    |> render_click()
+    click_widget_data_link(view, component_id, %{
+      "data-state-timeline-row-evidence" => action_row_id,
+      "data-state-timeline-row-evidence-observable" => "runtime.transport_activity",
+      "phx-click" => "open_evidence",
+      "phx-value-replay-run-id" => replay_run_id,
+      "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+      "phx-value-data-source-id" => replay_sources.operational_data_source_id
+    })
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -384,5 +386,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
       verifier_instance: verifier_instance,
       view: view
     }
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(view, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
   end
 end

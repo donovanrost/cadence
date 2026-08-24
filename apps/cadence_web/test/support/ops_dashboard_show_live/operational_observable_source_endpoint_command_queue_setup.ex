@@ -110,15 +110,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
              "1"
            )
 
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s( [data-status-matrix-row-evidence="commanding.queue_depth:#{source_endpoint.source_endpoint_id}"][data-status-matrix-row-evidence-observable="commanding.queue_depth"][phx-value-realm="flight"][phx-value-logical-source="operational_observables"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-           )
+    component_id =
+      "status-row-links-#{matrix_widget.widget_id}-commanding.queue_depth:#{source_endpoint.source_endpoint_id}-component"
 
-    view
-    |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-    |> render_click()
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    click_widget_data_link(view, component_id, %{
+      "data-status-matrix-row-evidence" =>
+        "commanding.queue_depth:#{source_endpoint.source_endpoint_id}",
+      "data-status-matrix-row-evidence-observable" => "commanding.queue_depth",
+      "phx-click" => "open_evidence",
+      "phx-value-realm" => "flight",
+      "phx-value-logical-source" => "operational_observables",
+      "phx-value-data-source-id" => "managed_operational_observables",
+      "phx-value-source-binding-id" => "default_flight_operational_observables"
+    })
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -281,5 +287,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
            )
 
     %{views: [reopened_command_queue_entry_view, view]}
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(view, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
   end
 end

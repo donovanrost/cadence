@@ -19,6 +19,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   @metric_route_scenarios [
     %{
       label: "metric sample",
@@ -294,6 +324,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
     %{
       alpha_endpoint: alpha_endpoint,
+      alpha_component_id:
+        "status-row-links-#{rf_lock_widget.widget_id}-link.rf_lock_state:link-alpha-component",
       alpha_row_selector:
         ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-alpha"]),
       alpha_transport: alpha_transport,
@@ -301,6 +333,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         ~s(#widget-#{rf_lock_widget.widget_id} [data-status-matrix-row="link.rf_lock_state:link-beta"]),
       conn: conn,
       frame_sync_interval: frame_sync_interval,
+      frame_sync_component_id:
+        "status-row-links-#{frame_sync_widget.widget_id}-link.frame_sync_state:link-alpha-component",
       frame_sync_row_selector:
         ~s(#widget-#{frame_sync_widget.widget_id} [data-status-matrix-row="link.frame_sync_state:link-alpha"]),
       observed_at: observed_at,
@@ -337,20 +371,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
 
       %{
         alpha_endpoint: alpha_endpoint,
+        alpha_component_id: alpha_component_id,
         alpha_row_selector: alpha_row_selector,
         alpha_transport: alpha_transport,
         beta_row_selector: beta_row_selector,
         conn: conn,
         frame_sync_interval: frame_sync_interval,
+        frame_sync_component_id: frame_sync_component_id,
         frame_sync_row_selector: frame_sync_row_selector,
         observed_at: observed_at,
         rf_lock_interval: rf_lock_interval,
         view: view
       } = fixture
 
-      view
-      |> element(alpha_row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      assert has_element?(view, "#{alpha_row_selector} [id=\"#{alpha_component_id}\"]")
+
+      click_widget_data_link(view, alpha_component_id, %{
+        "data-status-matrix-row-evidence" => "link.rf_lock_state:link-alpha"
+      })
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"
@@ -531,9 +569,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
                  ~s([data-status-matrix-frame-observable-id="link.frame_sync_state"][data-status-matrix-product-family="link_rf"][data-status-matrix-supported-capability="link_rf_frame_sync_state"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
              )
 
-      view
-      |> element(frame_sync_row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      assert has_element?(view, "#{frame_sync_row_selector} [id=\"#{frame_sync_component_id}\"]")
+
+      click_widget_data_link(view, frame_sync_component_id, %{
+        "data-status-matrix-row-evidence" => "link.frame_sync_state:link-alpha"
+      })
 
       frame_sync_evidence_path = assert_patch(view)
       assert frame_sync_evidence_path =~ "panel=evidence"
@@ -567,20 +607,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableLinkScopeLiveTest
         ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=link.frame_sync_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=link"][data-clipboard-text*="scope_id=link-alpha"])
       )
 
-      assert has_element?(
-               view,
-               alpha_row_selector <>
-                 ~s( [data-status-matrix-row-link="link.rf_lock_state:link-alpha"][data-status-matrix-row-link-target="transport"][data-status-matrix-row-link-id="dashboard-transport-alpha"][phx-value-target="transport"][phx-value-target-id="dashboard-transport-alpha"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-             )
+      link_attrs = %{
+        "data-status-matrix-row-link" => "link.rf_lock_state:link-alpha",
+        "data-status-matrix-row-link-target" => "transport",
+        "data-status-matrix-row-link-id" => "dashboard-transport-alpha",
+        "phx-value-target" => "transport",
+        "phx-value-target-id" => "dashboard-transport-alpha",
+        "phx-value-data-source-id" => "managed_operational_observables",
+        "phx-value-source-binding-id" => "default_flight_operational_observables"
+      }
+
+      assert_widget_data_link_item(view, alpha_component_id, link_attrs)
 
       refute has_element?(view, beta_row_selector)
 
-      view
-      |> element(
-        alpha_row_selector <>
-          ~s( [data-status-matrix-row-link="link.rf_lock_state:link-alpha"][data-status-matrix-row-link-target="transport"])
-      )
-      |> render_click()
+      click_widget_data_link(view, alpha_component_id, %{
+        "data-status-matrix-row-link" => "link.rf_lock_state:link-alpha",
+        "data-status-matrix-row-link-target" => "transport"
+      })
 
       transport_link_path = assert_patch(view)
       assert transport_link_path =~ "panel=data_link"

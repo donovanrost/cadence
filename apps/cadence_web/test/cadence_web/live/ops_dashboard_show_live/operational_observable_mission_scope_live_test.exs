@@ -21,6 +21,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
+  defp widget_data_link_items(rendered, component_id) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]["items"]
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -200,16 +209,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
                "2"
              )
 
-      assert has_element?(
-               view,
-               mission_row_selector <>
-                 ~s( [data-status-matrix-row-evidence="commanding.queue_depth:#{mission.mission_id}"][data-status-matrix-row-evidence-observable="commanding.queue_depth"][phx-value-logical-source="operational_observables"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-             )
+      component_id =
+        "status-row-links-#{matrix_widget.widget_id}-commanding.queue_depth:#{mission.mission_id}-component"
 
-      refute has_element?(
-               view,
-               ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row-link="commanding.queue_depth:#{mission.mission_id}"])
-             )
+      assert has_element?(view, "#{mission_row_selector} [id=\"#{component_id}\"]")
+      [evidence] = widget_data_link_items(view, component_id)
+
+      assert Map.take(evidence["attrs"], [
+               "data-status-matrix-row-evidence",
+               "data-status-matrix-row-evidence-observable",
+               "phx-value-logical-source",
+               "phx-value-data-source-id",
+               "phx-value-source-binding-id"
+             ]) == %{
+               "data-status-matrix-row-evidence" =>
+                 "commanding.queue_depth:#{mission.mission_id}",
+               "data-status-matrix-row-evidence-observable" => "commanding.queue_depth",
+               "phx-value-logical-source" => "operational_observables",
+               "phx-value-data-source-id" => "managed_operational_observables",
+               "phx-value-source-binding-id" => "default_flight_operational_observables"
+             }
+
+      refute Enum.any?(widget_data_link_items(view, component_id), fn item ->
+               item["kind"] == "data_link"
+             end)
 
       stop_dashboard_view(view)
     end

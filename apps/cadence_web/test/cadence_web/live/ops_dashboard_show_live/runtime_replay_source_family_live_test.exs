@@ -21,6 +21,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp assert_replay_command_request_round_trip(
          conn,
          command_queue_entry_view,
@@ -355,11 +385,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
                ~s([data-event-timeline-logical-source="events"][data-event-timeline-realm="replay"][data-event-timeline-data-source-id="#{replay_sources.events_data_source_id}"][data-event-timeline-source-binding-id="#{replay_sources.events_binding_id}"][data-event-timeline-replay-run-id="replay_run_events_ops"][data-event-timeline-dataset="mission_events_replay"])
            )
 
-    assert has_element?(
-             view,
-             event_row_selector <>
-               ~s( [data-event-timeline-row-link-target="contact"][data-event-timeline-row-link-id="#{scheduled_contact.scheduled_contact_id}"][phx-value-replay-run-id="replay_run_events_ops"][phx-value-realm="replay"][phx-value-source-binding-id="#{replay_sources.events_binding_id}"])
-           )
+    event_row_id =
+      "event:#{scheduled_contact.scheduled_contact_id}:#{DateTime.to_unix(replay_contact_starts_at, :millisecond)}:0"
+
+    event_component_id =
+      "event-row-links-#{events_widget.widget_id}-#{event_row_id}-component"
+
+    assert has_element?(view, "#{event_row_selector} [id=\"#{event_component_id}\"]")
+
+    assert_widget_data_link_item(view, event_component_id, %{
+      "data-event-timeline-row-link-target" => "contact",
+      "data-event-timeline-row-link-id" => scheduled_contact.scheduled_contact_id,
+      "phx-value-replay-run-id" => "replay_run_events_ops",
+      "phx-value-realm" => "replay",
+      "phx-value-source-binding-id" => replay_sources.events_binding_id
+    })
 
     matrix_row_selector =
       ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="contacts.phase:#{scheduled_contact.scheduled_contact_id}"])
@@ -370,17 +410,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
                ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="contact_phase"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{replay_sources.operational_data_source_id}"][data-status-matrix-source-binding-id="#{replay_sources.operational_binding_id}"][data-status-matrix-replay-run-id="replay_run_events_ops"][data-status-matrix-dataset="operational_observables_replay"])
            )
 
-    assert has_element?(
-             view,
-             matrix_row_selector <>
-               ~s( [data-status-matrix-row-link-target="contact"][data-status-matrix-row-link-id="#{scheduled_contact.scheduled_contact_id}"][phx-value-replay-run-id="replay_run_events_ops"][phx-value-realm="replay"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
+    matrix_component_id =
+      "status-row-links-#{matrix_widget.widget_id}-contacts.phase:#{scheduled_contact.scheduled_contact_id}-component"
 
-    assert has_element?(
-             view,
-             matrix_row_selector <>
-               ~s( [data-status-matrix-row-evidence="contacts.phase:#{scheduled_contact.scheduled_contact_id}"][phx-value-replay-run-id="replay_run_events_ops"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"])
-           )
+    assert has_element?(view, "#{matrix_row_selector} [id=\"#{matrix_component_id}\"]")
+
+    assert_widget_data_link_item(view, matrix_component_id, %{
+      "data-status-matrix-row-link-target" => "contact",
+      "data-status-matrix-row-link-id" => scheduled_contact.scheduled_contact_id,
+      "phx-value-replay-run-id" => "replay_run_events_ops",
+      "phx-value-realm" => "replay",
+      "phx-value-source-binding-id" => replay_sources.operational_binding_id
+    })
+
+    assert_widget_data_link_item(view, matrix_component_id, %{
+      "data-status-matrix-row-evidence" =>
+        "contacts.phase:#{scheduled_contact.scheduled_contact_id}",
+      "phx-value-replay-run-id" => "replay_run_events_ops",
+      "phx-value-source-binding-id" => replay_sources.operational_binding_id
+    })
 
     stop_dashboard_view(view)
   end
@@ -478,15 +526,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
              "1"
            )
 
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s( [data-status-matrix-row-evidence="commanding.queue_depth:#{mission.mission_id}"][data-status-matrix-row-evidence-observable="commanding.queue_depth"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"])
-           )
+    component_id =
+      "status-row-links-#{matrix_widget_id}-commanding.queue_depth:#{mission.mission_id}-component"
 
-    view
-    |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-    |> render_click()
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    evidence_attrs = %{
+      "data-status-matrix-row-evidence" => "commanding.queue_depth:#{mission.mission_id}",
+      "data-status-matrix-row-evidence-observable" => "commanding.queue_depth",
+      "phx-value-replay-run-id" => replay_run_id,
+      "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+      "phx-value-data-source-id" => replay_sources.operational_data_source_id
+    }
+
+    assert_widget_data_link_item(view, component_id, evidence_attrs)
+    click_widget_data_link(view, component_id, evidence_attrs)
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"

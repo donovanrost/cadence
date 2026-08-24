@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    [row_link] = widget_data_link_items(html, "event-row-links-placement-1-event-1-component")
 
     assert ["event-1"] =
              document
@@ -53,15 +54,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
 
     assert html =~ "10m"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row-link-ref]")
-             |> LazyHTML.attribute("phx-click")
+    assert row_link["attrs"]["phx-click"] == "open_data_link"
 
-    assert ["1781697600000"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row-link-ref]")
-             |> LazyHTML.attribute("phx-value-timestamp-ms")
+    assert row_link["attrs"]["phx-value-timestamp-ms"] == "1781697600000"
   end
 
   test "event_timeline renders historical workflow job execution evidence" do
@@ -123,6 +118,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    [row_link] =
+      widget_data_link_items(
+        html,
+        "event-row-links-placement-1-watermark-event-1-component"
+      )
+
     assert ["2026-06-17T12:04:00Z"] =
              document
              |> LazyHTML.query("[data-event-timeline-row]")
@@ -161,10 +162,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
     assert html =~ "complete 12:04:00"
     assert html =~ "latest 12:04:30"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row-link-ref]")
-             |> LazyHTML.attribute("phx-click")
+    assert row_link["attrs"]["phx-click"] == "open_data_link"
+  end
+
+  defp widget_data_link_items(html, component_id) do
+    vue = LiveVue.Test.get_vue(html, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]["items"]
   end
 
   defp event_timeline_row do

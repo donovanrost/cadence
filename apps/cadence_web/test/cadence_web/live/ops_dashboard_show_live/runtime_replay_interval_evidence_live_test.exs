@@ -17,6 +17,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
   alias Cadence.OperationalEvents.Event
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp setup_ground_station_interval_evidence! do
     observed_at = ~U[2026-06-17 12:02:00Z]
     replay_run_id = "replay_run_ground_station_connection_ops"
@@ -228,9 +258,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
                ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-realm="replay"][data-status-matrix-data-source-id="#{source_health_event.data_source_id}"][data-status-matrix-source-binding-id="#{source_health_event.source_binding_id}"][data-status-matrix-replay-run-id="#{replay_run_id}"][data-status-matrix-dataset="operational_observables_replay"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-ground-station-id="dss-14"][data-status-matrix-connection-state="connected"])
            )
 
-    view
-    |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-    |> render_click()
+    component_id =
+      "status-row-links-#{matrix_widget_id}-ground.station.connection_state:dss-14-component"
+
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    click_widget_data_link(view, component_id, %{
+      "data-status-matrix-row-evidence" => "ground.station.connection_state:dss-14"
+    })
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -523,9 +558,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
                ~s([data-state-timeline-observable="comms.transport.execution_state"][data-state-timeline-state="Initialized"][data-state-timeline-realm="replay"][data-state-timeline-data-source-id="#{source_health_event.data_source_id}"][data-state-timeline-source-binding-id="#{source_health_event.source_binding_id}"][data-state-timeline-replay-run-id="#{replay_run_id}"][data-state-timeline-dataset="operational_observables_replay"])
            )
 
-    view
-    |> element(row_selector <> ~s( [data-state-timeline-row-evidence]))
-    |> render_click()
+    component_id = "state-row-links-#{timeline_widget_id}-#{row_id}-component"
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    click_widget_data_link(view, component_id, %{
+      "data-state-timeline-row-evidence" => row_id
+    })
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -829,7 +867,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
         interval: rf_lock_interval,
         expected_snapshot_id: "rf-lock-replay-rendered-1",
         expected_state: "locked",
-        expected_transport_id: transport.transport_id
+        expected_transport_id: transport.transport_id,
+        component_id:
+          "status-row-links-#{rf_lock_widget.widget_id}-link.rf_lock_state:link-alpha-component"
       }
     )
 
@@ -854,7 +894,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIntervalEvidenceLiveTest 
         interval: frame_sync_interval,
         expected_snapshot_id: "frame-sync-replay-rendered-1",
         expected_state: "synchronized",
-        expected_transport_id: transport.transport_id
+        expected_transport_id: transport.transport_id,
+        component_id:
+          "status-row-links-#{frame_sync_widget.widget_id}-link.frame_sync_state:link-alpha-component"
       }
     )
 

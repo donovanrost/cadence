@@ -20,6 +20,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -161,16 +191,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{trend_widget.widget_id} [data-widget-data-link-target="telemetry sample"][data-widget-data-link-id="#{latest_sample.sample_id}"][phx-value-target="telemetry_sample"][phx-value-target-id="#{latest_sample.sample_id}"][phx-value-placement-id="#{trend_widget.widget_id}"][phx-value-timestamp-ms="#{latest_sample_timestamp_ms}"])
-             )
+      component_id = "widget-data-links-#{trend_widget.widget_id}-component"
+      assert has_element?(view, "#widget-#{trend_widget.widget_id} [id=\"#{component_id}\"]")
 
-      view
-      |> element(
-        ~s(#widget-#{trend_widget.widget_id} [data-widget-data-link-target="telemetry sample"][data-widget-data-link-id="#{latest_sample.sample_id}"])
-      )
-      |> render_click()
+      expected_link_attrs = %{
+        "data-widget-data-link-target" => "telemetry sample",
+        "data-widget-data-link-id" => latest_sample.sample_id,
+        "phx-value-target" => "telemetry_sample",
+        "phx-value-target-id" => latest_sample.sample_id,
+        "phx-value-placement-id" => trend_widget.widget_id,
+        "phx-value-timestamp-ms" => Integer.to_string(latest_sample_timestamp_ms)
+      }
+
+      assert_widget_data_link_item(view, component_id, expected_link_attrs)
+      click_widget_data_link(view, component_id, expected_link_attrs)
 
       latest_sample_path = assert_patch(view)
       assert latest_sample_path =~ "panel=data_link"

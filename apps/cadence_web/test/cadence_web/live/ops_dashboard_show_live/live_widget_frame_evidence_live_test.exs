@@ -29,6 +29,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -272,9 +302,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
                  ~s([data-status-matrix-source="operational_observables"][data-status-matrix-data-source-id="#{source_health_event.data_source_id}"][data-status-matrix-source-binding-id="#{source_health_event.source_binding_id}"])
              )
 
-      view
-      |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      component_id =
+        "status-row-links-#{matrix_widget_id}-comms.transport.connection_state:#{transport.transport_id}-component"
+
+      assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+      click_widget_data_link(view, component_id, %{
+        "data-status-matrix-row-evidence" =>
+          "comms.transport.connection_state:#{transport.transport_id}"
+      })
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"

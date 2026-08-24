@@ -18,6 +18,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -163,16 +193,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
       assert html =~ "25"
       assert html =~ "Red"
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{value_widget.widget_id} [data-widget-data-link-target="limit event"])
-             )
+      component_id = "widget-data-links-#{value_widget.widget_id}-component"
+      assert has_element?(view, "#widget-#{value_widget.widget_id} [id=\"#{component_id}\"]")
 
-      view
-      |> element(
-        ~s(#widget-#{value_widget.widget_id} [data-widget-data-link-target="limit event"])
-      )
-      |> render_click()
+      assert_widget_data_link_item(view, component_id, %{
+        "data-widget-data-link-target" => "limit event"
+      })
+
+      click_widget_data_link(view, component_id, %{
+        "data-widget-data-link-target" => "limit event"
+      })
 
       assert has_element?(
                view,

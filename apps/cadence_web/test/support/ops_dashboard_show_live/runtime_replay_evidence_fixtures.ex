@@ -788,10 +788,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     expected_snapshot_id = Map.fetch!(attrs, :expected_snapshot_id)
     expected_state = Map.fetch!(attrs, :expected_state)
     expected_transport_id = Map.fetch!(attrs, :expected_transport_id)
+    component_id = Map.fetch!(attrs, :component_id)
 
-    view
-    |> element(row_selector <> ~s( [data-status-matrix-row-evidence]))
-    |> render_click()
+    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+
+    click_widget_data_link(view, component_id, %{
+      "phx-click" => "open_evidence",
+      "phx-value-observable-id" => observable_id,
+      "phx-value-placement-id" => widget_id
+    })
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -1007,5 +1012,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
     document
     |> RenderItem.from_document()
     |> Enum.find(&(&1.widget.title == title))
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(view, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
   end
 end

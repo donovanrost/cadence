@@ -15,6 +15,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    [evidence, row_link] =
+      widget_data_link_items(
+        html,
+        "status-row-links-placement-1-tlm.contact.phase-component"
+      )
+
     assert html =~ "Phase"
     assert html =~ "Kind"
     assert html =~ "Status"
@@ -50,15 +56,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
              |> LazyHTML.query("[data-status-matrix-row]")
              |> LazyHTML.attribute("data-status-matrix-query-scope-ids")
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row-evidence]")
-             |> LazyHTML.attribute("phx-click")
+    assert evidence["attrs"]["phx-click"] == "open_evidence"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row-link-ref]")
-             |> LazyHTML.attribute("phx-click")
+    assert row_link["attrs"]["phx-click"] == "open_data_link"
   end
 
   test "data_table renders row context attrs and data management badges" do
@@ -149,6 +149,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    [evidence, row_link] =
+      widget_data_link_items(html, "state-row-links-placement-1-state-1-component")
+
     assert ["tlm.hk.battery_voltage"] =
              document
              |> LazyHTML.query("[data-state-timeline-lane]")
@@ -161,10 +164,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
 
     assert html =~ "5m"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query("[data-state-timeline-row-link-ref]")
-             |> LazyHTML.attribute("phx-click")
+    assert evidence["attrs"]["phx-click"] == "open_evidence"
+    assert row_link["attrs"]["phx-click"] == "open_data_link"
+  end
+
+  defp widget_data_link_items(html, component_id) do
+    vue = LiveVue.Test.get_vue(html, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]["items"]
   end
 
   defp widget do

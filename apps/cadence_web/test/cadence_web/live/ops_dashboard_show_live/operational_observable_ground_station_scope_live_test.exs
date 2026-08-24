@@ -19,6 +19,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
 
+  defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+    assert vue.component == "WidgetDataLinks"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    item =
+      Enum.find(vue.props["presentation"]["items"], fn item ->
+        Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
+      end)
+
+    assert item
+    item
+  end
+
+  defp click_widget_data_link(view, component_id, expected_attrs) do
+    item = assert_widget_data_link_item(view, component_id, expected_attrs)
+
+    payload =
+      item["attrs"]
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    render_hook(view, item["attrs"]["phx-click"], payload)
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -264,9 +294,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                  ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="connection_state"][data-status-matrix-resource-id="dss-14"][data-status-matrix-scope-kind="ground_station"][data-status-matrix-source-endpoint-id="#{alpha_endpoint.source_endpoint_id}"][data-status-matrix-ground-station-id="dss-14"])
              )
 
-      view
-      |> element(ground_station_row_selector <> ~s( [data-status-matrix-row-evidence]))
-      |> render_click()
+      component_id =
+        "status-row-links-#{matrix_widget.widget_id}-ground.station.connection_state:dss-14-component"
+
+      assert has_element?(view, "#{ground_station_row_selector} [id=\"#{component_id}\"]")
+
+      click_widget_data_link(view, component_id, %{
+        "data-status-matrix-row-evidence" => "ground.station.connection_state:dss-14"
+      })
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"
@@ -462,18 +497,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
       refute has_element?(view, beta_transport_row_selector)
       refute has_element?(view, beta_ground_station_row_selector)
 
-      assert has_element?(
-               view,
-               ground_station_row_selector <>
-                 ~s( [data-status-matrix-row-link="ground.station.connection_state:dss-14"][data-status-matrix-row-link-target="ground station"][data-status-matrix-row-link-id="dss-14"][phx-value-target="ground_station"][phx-value-target-id="dss-14"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"])
-             )
+      link_attrs = %{
+        "data-status-matrix-row-link" => "ground.station.connection_state:dss-14",
+        "data-status-matrix-row-link-target" => "ground station",
+        "data-status-matrix-row-link-id" => "dss-14",
+        "phx-value-target" => "ground_station",
+        "phx-value-target-id" => "dss-14",
+        "phx-value-data-source-id" => "managed_operational_observables",
+        "phx-value-source-binding-id" => "default_flight_operational_observables"
+      }
 
-      view
-      |> element(
-        ground_station_row_selector <>
-          ~s( [data-status-matrix-row-link="ground.station.connection_state:dss-14"][data-status-matrix-row-link-target="ground station"])
-      )
-      |> render_click()
+      assert_widget_data_link_item(view, component_id, link_attrs)
+
+      click_widget_data_link(view, component_id, %{
+        "data-status-matrix-row-link" => "ground.station.connection_state:dss-14",
+        "data-status-matrix-row-link-target" => "ground station"
+      })
 
       ground_station_link_path = assert_patch(view)
       assert ground_station_link_path =~ "panel=data_link"
