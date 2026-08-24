@@ -86,15 +86,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents do
       </div>
 
       <div class="grid gap-2">
-        <button
-          id="dashboard-evidence-copy-link"
-          type="button"
-          phx-hook="ClipboardButton"
-          data-clipboard-text={@dashboard_current_path}
-          class="btn btn-sm btn-outline justify-start"
-        >
-          <.icon name="hero-link" class="h-4 w-4" /> Copy evidence link
-        </button>
+        <.vue
+          id="dashboard-evidence-copy-link-component"
+          v-component="ClipboardButton"
+          button_id="dashboard-evidence-copy-link"
+          clipboard_text={@dashboard_current_path}
+          button_class="btn btn-sm btn-outline justify-start"
+          icon="hero-link"
+          icon_class="h-4 w-4"
+          label="Copy evidence link"
+          v-ssr={false}
+          class="contents"
+        />
         <.dashboard_actions
           actions={evidence_actions(@mission_id, @inspector, @dashboard_document)}
         />

@@ -100,18 +100,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
       >
         {@rollup.missing_count} missing
       </span>
-      <button
+      <.vue
         :if={comparison_rollup_open_findings_json(@preset)}
-        id="dashboard-comparison-open-findings-copy"
-        type="button"
-        phx-hook="ClipboardButton"
-        data-clipboard-text={comparison_rollup_open_findings_json(@preset)}
-        data-dashboard-comparison-open-findings-copy
-        class="btn btn-ghost btn-xs gap-1"
+        id="dashboard-comparison-open-findings-copy-component"
+        v-component="ClipboardButton"
+        button_id="dashboard-comparison-open-findings-copy"
+        clipboard_text={comparison_rollup_open_findings_json(@preset)}
+        button_class="btn btn-ghost btn-xs gap-1"
+        icon="hero-clipboard-document-list"
+        icon_class="h-3.5 w-3.5"
+        label="Open"
         title="Copy open comparison findings"
-      >
-        <.icon name="hero-clipboard-document-list" class="h-3.5 w-3.5" /> Open
-      </button>
+        data_attrs={%{"data-dashboard-comparison-open-findings-copy" => ""}}
+        v-ssr={false}
+        class="contents"
+      />
       <form
         :if={comparison_rollup_open_findings_json(@preset)}
         id="dashboard-comparison-open-findings-review-form"
@@ -136,18 +139,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
           <.icon name="hero-flag" class="h-3.5 w-3.5" /> Review
         </button>
       </form>
-      <button
+      <.vue
         :if={comparison_rollup_preset_path(@preset)}
-        id="dashboard-comparison-preset-copy"
-        type="button"
-        phx-hook="ClipboardButton"
-        data-clipboard-text={comparison_rollup_preset_path(@preset)}
-        data-dashboard-comparison-preset-copy
-        class="btn btn-ghost btn-xs gap-1"
+        id="dashboard-comparison-preset-copy-component"
+        v-component="ClipboardButton"
+        button_id="dashboard-comparison-preset-copy"
+        clipboard_text={comparison_rollup_preset_path(@preset)}
+        button_class="btn btn-ghost btn-xs gap-1"
+        icon="hero-bookmark-square"
+        icon_class="h-3.5 w-3.5"
+        label="Preset"
         title="Copy comparison investigation preset link"
-      >
-        <.icon name="hero-bookmark-square" class="h-3.5 w-3.5" /> Preset
-      </button>
+        data_attrs={%{"data-dashboard-comparison-preset-copy" => ""}}
+        v-ssr={false}
+        class="contents"
+      />
       <form
         :if={@preset}
         id="dashboard-comparison-preset-form"

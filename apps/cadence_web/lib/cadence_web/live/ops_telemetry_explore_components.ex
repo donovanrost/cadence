@@ -36,15 +36,18 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <button
-              id="telemetry-explore-copy-link"
-              type="button"
-              phx-hook="ClipboardButton"
-              data-clipboard-text={@investigation_path}
-              class="btn btn-ghost btn-sm"
-            >
-              <.icon name="hero-link" class="h-4 w-4" /> Copy link
-            </button>
+            <.vue
+              id="telemetry-explore-copy-link-component"
+              v-component="ClipboardButton"
+              button_id="telemetry-explore-copy-link"
+              clipboard_text={@investigation_path}
+              button_class="btn btn-ghost btn-sm"
+              icon="hero-link"
+              icon_class="h-4 w-4"
+              label="Copy link"
+              v-ssr={false}
+              class="contents"
+            />
             <.link
               :if={@explore_context.source_dashboard_id}
               id="telemetry-explore-back-to-dashboard"

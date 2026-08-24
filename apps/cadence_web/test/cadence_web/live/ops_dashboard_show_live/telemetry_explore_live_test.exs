@@ -261,10 +261,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
              ~s(#telemetry-explore-source-card[data-explore-source-state="matched"][data-explore-matched-data-source="#{source_context.data_source_id}"][data-explore-matched-source-binding="#{source_context.binding_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#telemetry-explore-copy-link[data-clipboard-text*="/ops/explore"][data-clipboard-text*="point_id=HK.counter"][data-clipboard-text*="sample_id=#{older_sample.sample_id}"][data-clipboard-text*="data_source_id=#{source_context.data_source_id}"][data-clipboard-text*="source_binding_id=#{source_context.binding_id}"])
-           )
+    copy = LiveVue.Test.get_vue(view, id: "telemetry-explore-copy-link-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "telemetry-explore-copy-link"
+    assert copy.props["clipboard_text"] =~ "/ops/explore"
+    assert copy.props["clipboard_text"] =~ "point_id=HK.counter"
+    assert copy.props["clipboard_text"] =~ "sample_id=#{older_sample.sample_id}"
+    assert copy.props["clipboard_text"] =~ "data_source_id=#{source_context.data_source_id}"
+    assert copy.props["clipboard_text"] =~ "source_binding_id=#{source_context.binding_id}"
+    assert copy.props["button_class"] == "btn btn-ghost btn-sm"
+    assert copy.props["icon"] == "hero-link"
+    assert copy.props["icon_class"] == "h-4 w-4"
+    assert copy.props["label"] == "Copy link"
+    assert copy.class == "contents"
+    refute copy.ssr
 
     assert has_element?(
              view,

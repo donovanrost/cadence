@@ -45,18 +45,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.HealthSnapshotActivityComponents do
           </dd>
         </dl>
 
-        <button
-          id={"dashboard-health-snapshot-event-copy-#{@event.dashboard_lifecycle_event_id}"}
-          type="button"
-          phx-hook="ClipboardButton"
-          data-clipboard-text={@health_snapshot.snapshot_json}
-          data-dashboard-health-snapshot-event-copy={@event.dashboard_lifecycle_event_id}
-          data-dashboard-health-snapshot-id={@health_snapshot.snapshot_id}
-          data-dashboard-health-snapshot-schema={@health_snapshot.snapshot_schema}
-          class="btn btn-ghost btn-xs shrink-0"
-        >
-          <.icon name="hero-clipboard-document" class="h-3.5 w-3.5" /> Copy
-        </button>
+        <.vue
+          id={"dashboard-health-snapshot-event-copy-#{@event.dashboard_lifecycle_event_id}-component"}
+          v-component="ClipboardButton"
+          button_id={"dashboard-health-snapshot-event-copy-#{@event.dashboard_lifecycle_event_id}"}
+          clipboard_text={@health_snapshot.snapshot_json}
+          button_class="btn btn-ghost btn-xs shrink-0"
+          icon="hero-clipboard-document"
+          icon_class="h-3.5 w-3.5"
+          label="Copy"
+          data_attrs={%{
+            "data-dashboard-health-snapshot-event-copy" => @event.dashboard_lifecycle_event_id,
+            "data-dashboard-health-snapshot-id" => @health_snapshot.snapshot_id,
+            "data-dashboard-health-snapshot-schema" => @health_snapshot.snapshot_schema
+          }}
+          v-ssr={false}
+          class="contents"
+        />
       </div>
 
       <div class="grid grid-cols-2 gap-2">

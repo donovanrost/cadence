@@ -23,7 +23,18 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
 
     assert has_element?(view, "#dashboard-diagnostic-collection-cache.text-primary")
     assert has_element?(view, "#dashboard-diagnostic-row-cache-contract")
-    assert has_element?(view, "#dashboard-diagnostic-copy-identity")
+    copy =
+      LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "dashboard-diagnostic-copy-identity"
+    assert copy.props["clipboard_text"] == "cache_contract"
+    assert copy.props["button_class"] == "btn btn-outline btn-xs"
+    assert copy.props["icon"] == "hero-clipboard"
+    assert copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert copy.props["label"] == "Copy identity"
+    assert copy.class == "contents"
+    refute copy.ssr
     assert has_element?(view, "#diagnostics-open-explore")
     assert has_element?(view, "#diagnostics-open-sources")
     assert has_element?(view, "#diagnostics-open-catalog")
@@ -116,7 +127,13 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
 
     assert has_element?(view, "#dashboard-diagnostic-detail", "replay_run_mismatch")
     assert has_element?(view, "#dashboard-diagnostic-detail", "stale_for_context")
-    assert has_element?(view, "#dashboard-diagnostic-copy-identity")
+    copy =
+      LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "dashboard-diagnostic-copy-identity"
+    assert copy.props["clipboard_text"] =~ decision.invalidation_event_id
+    refute copy.ssr
   end
 
   defp signed_in_user_org_and_mission do

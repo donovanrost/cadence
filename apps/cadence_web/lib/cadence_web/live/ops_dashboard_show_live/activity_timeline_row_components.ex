@@ -85,18 +85,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponents do
               >
                 <.icon name="hero-bookmark-square" class="h-3.5 w-3.5" /> Select
               </button>
-              <button
-                id={"dashboard-activity-link-copy-#{@row.event_id}"}
-                type="button"
-                class="btn btn-ghost btn-xs"
-                phx-hook="ClipboardButton"
-                data-clipboard-text={
+              <.vue
+                id={"dashboard-activity-link-copy-#{@row.event_id}-component"}
+                v-component="ClipboardButton"
+                button_id={"dashboard-activity-link-copy-#{@row.event_id}"}
+                clipboard_text={
                   ActivityNavigation.link(@dashboard_current_path, @activity.mode, @row.event)
                 }
-                data-dashboard-activity-link-copy={@row.event_id}
-              >
-                <.icon name="hero-link" class="h-3.5 w-3.5" /> Copy link
-              </button>
+                button_class="btn btn-ghost btn-xs"
+                icon="hero-link"
+                icon_class="h-3.5 w-3.5"
+                label="Copy link"
+                data_attrs={%{"data-dashboard-activity-link-copy" => @row.event_id}}
+                v-ssr={false}
+                class="contents"
+              />
             </div>
             <ComparisonReviewActivity.request_details
               row={

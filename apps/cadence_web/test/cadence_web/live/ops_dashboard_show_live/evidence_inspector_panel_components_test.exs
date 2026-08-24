@@ -47,10 +47,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-evidence-inspector")
              |> LazyHTML.attribute("data-evidence-subject")
 
-    assert ["/missions/mission-1/ops/dashboards/dashboard-1?panel=evidence"] =
-             document
-             |> LazyHTML.query("#dashboard-evidence-copy-link")
-             |> LazyHTML.attribute("data-clipboard-text")
+    copy = LiveVue.Test.get_vue(html, id: "dashboard-evidence-copy-link-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "dashboard-evidence-copy-link"
+
+    assert copy.props["clipboard_text"] ==
+             "/missions/mission-1/ops/dashboards/dashboard-1?panel=evidence"
+
+    assert copy.props["button_class"] == "btn btn-sm btn-outline justify-start"
+    assert copy.props["icon"] == "hero-link"
+    assert copy.props["icon_class"] == "h-4 w-4"
+    assert copy.props["label"] == "Copy evidence link"
+    assert copy.class == "contents"
+    refute copy.ssr
 
     assert "questdb-flight" =
              document

@@ -4,7 +4,6 @@ import {LiveSocket} from "phoenix_live_view"
 import {getHooks} from "live_vue"
 import liveVueApp from "../vue"
 import {createLiveToastHook} from "../../deps/live_toast"
-import ClipboardButton from "./hooks/clipboard_button"
 import DashboardGrid from "./hooks/dashboard_grid"
 import DashboardEditorGuard from "./hooks/dashboard_editor_guard"
 import DropdownMenu from "./hooks/dropdown_menu"
@@ -15,7 +14,6 @@ import TelemetryChart from "./hooks/telemetry_chart"
 import TimeRangeRecents from "./hooks/time_range_recents"
 
 const Hooks = {
-  ClipboardButton,
   DashboardGrid,
   DashboardEditorGuard,
   DropdownMenu,

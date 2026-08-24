@@ -46,20 +46,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
         {dashboard_health_summary(@health)}
       </span>
       <div class="ml-auto flex items-center gap-1">
-        <button
-          id="dashboard-health-snapshot-copy"
-          type="button"
-          phx-hook="ClipboardButton"
-          data-clipboard-text={dashboard_health_snapshot_json(@health)}
-          class="btn btn-ghost btn-xs btn-square"
+        <.vue
+          id="dashboard-health-snapshot-copy-component"
+          v-component="ClipboardButton"
+          button_id="dashboard-health-snapshot-copy"
+          clipboard_text={dashboard_health_snapshot_json(@health)}
+          button_class="btn btn-ghost btn-xs btn-square"
+          icon="hero-clipboard-document"
+          icon_class="h-3.5 w-3.5"
           title="Copy dashboard health snapshot"
-          aria-label="Copy dashboard health snapshot"
-          data-dashboard-health-snapshot-copy
-          data-dashboard-health-snapshot-schema={dashboard_health_value(@health, :snapshot_schema)}
-          data-dashboard-health-snapshot-id={dashboard_health_value(@health, :snapshot_id)}
-        >
-          <.icon name="hero-clipboard-document" class="h-3.5 w-3.5" />
-        </button>
+          aria_label="Copy dashboard health snapshot"
+          data_attrs={%{
+            "data-dashboard-health-snapshot-copy" => "",
+            "data-dashboard-health-snapshot-schema" =>
+              dashboard_health_value(@health, :snapshot_schema),
+            "data-dashboard-health-snapshot-id" => dashboard_health_value(@health, :snapshot_id)
+          }}
+          v-ssr={false}
+          class="contents"
+        />
         <button
           type="button"
           phx-click="open_evidence"

@@ -160,15 +160,18 @@ defmodule CadenceWeb.OpsTimelineLive do
                   </button>
                 </div>
 
-                <button
-                  id="timeline-copy-event-link"
-                  type="button"
-                  phx-hook="ClipboardButton"
-                  data-clipboard-text={timeline_event_path(@current_mission.mission_id, @timeline_context, @selected_event.mission_event_id)}
-                  class="btn btn-xs btn-outline w-full justify-start"
-                >
-                  <.icon name="hero-link" class="h-3.5 w-3.5" /> Copy canonical event link
-                </button>
+                <.vue
+                  id="timeline-copy-event-link-component"
+                  v-component="ClipboardButton"
+                  button_id="timeline-copy-event-link"
+                  clipboard_text={timeline_event_path(@current_mission.mission_id, @timeline_context, @selected_event.mission_event_id)}
+                  button_class="btn btn-xs btn-outline w-full justify-start"
+                  icon="hero-link"
+                  icon_class="h-3.5 w-3.5"
+                  label="Copy canonical event link"
+                  v-ssr={false}
+                  class="contents"
+                />
 
                 <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
                   <%= for row <- event_rows(@selected_event) do %>
