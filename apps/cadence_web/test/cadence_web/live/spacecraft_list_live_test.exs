@@ -18,38 +18,70 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
     {TestFixtures.member_conn(user), org, mission}
   end
 
+  defp spacecraft_list_props(view) do
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-list-component")
+    assert vue.component == "SpacecraftList"
+    vue.props
+  end
+
   describe "mount" do
     test "renders empty state when there are no spacecraft" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert html =~ "No spacecraft"
-      assert html =~ ~p"/missions/#{mission.mission_id}/spacecraft/new"
+      assert has_element?(view, "#spacecraft-list-component")
+
+      props = spacecraft_list_props(view)
+
+      assert props["roster"]["fleet_empty"]
+
+      assert props["roster"]["new_spacecraft_href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/new"
+
+      assert props["profiles"]["empty"]
     end
 
-    test "renders spacecraft in the vehicles management card" do
+    test "renders spacecraft through JSON-safe roster props" do
       {conn, _org, mission} = signed_in_org_and_mission()
-      _s1 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-1", scid: 101)
+      s1 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-1", scid: 101)
       s2 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-2")
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert has_element?(view, "#spacecraft-vehicles-card td", "Alpha-1")
-      assert has_element?(view, "#spacecraft-vehicles-card td", "Alpha-2")
-      assert has_element?(view, "#spacecraft-vehicles-card td", "101")
-      assert has_element?(view, "#spacecraft-vehicles-card td", "Not set")
+      props = spacecraft_list_props(view)
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/new']",
-               "New spacecraft"
-             )
+      assert props["roster"]["new_spacecraft_href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/new"
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}/identity']"
-             )
+      assert props["roster"]["rows"] == [
+               %{
+                 "id" => "spacecraft-#{s1.spacecraft_id}",
+                 "actions_id" => "#{s1.spacecraft_id}-actions",
+                 "display_name" => "Alpha-1",
+                 "scid_label" => "101",
+                 "scid_missing" => false,
+                 "profile_label" => "Not selected",
+                 "status" => "attention",
+                 "status_label" => "Needs profile",
+                 "href" => "/missions/#{mission.mission_id}/spacecraft/#{s1.spacecraft_id}",
+                 "identity_href" =>
+                   "/missions/#{mission.mission_id}/spacecraft/#{s1.spacecraft_id}/identity"
+               },
+               %{
+                 "id" => "spacecraft-#{s2.spacecraft_id}",
+                 "actions_id" => "#{s2.spacecraft_id}-actions",
+                 "display_name" => "Alpha-2",
+                 "scid_label" => "Not set",
+                 "scid_missing" => true,
+                 "profile_label" => "Not selected",
+                 "status" => "attention",
+                 "status_label" => "Needs SCID",
+                 "href" => "/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}",
+                 "identity_href" =>
+                   "/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}/identity"
+               }
+             ]
     end
 
     test "shows only spacecraft belonging to this mission" do
@@ -58,13 +90,16 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       other_mission =
         TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary")
 
-      _mine = TestFixtures.persist_spacecraft!(mission, display_name: "Mine-1")
-      _theirs = TestFixtures.persist_spacecraft!(other_mission, display_name: "Theirs-1")
+      mine = TestFixtures.persist_spacecraft!(mission, display_name: "Mine-1")
+      theirs = TestFixtures.persist_spacecraft!(other_mission, display_name: "Theirs-1")
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert html =~ "Mine-1"
-      refute html =~ "Theirs-1"
+      rows = spacecraft_list_props(view)["roster"]["rows"]
+
+      assert Enum.map(rows, & &1["id"]) == ["spacecraft-#{mine.spacecraft_id}"]
+      refute Enum.any?(rows, &(&1["id"] == "spacecraft-#{theirs.spacecraft_id}"))
+      refute Enum.any?(rows, &(&1["display_name"] == "Theirs-1"))
     end
 
     test "shows only spacecraft belonging to the current organization" do
@@ -75,11 +110,14 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       other_mission =
         TestFixtures.persist_mission!(other_org, slug: "remote", display_name: "Remote")
 
-      _theirs = TestFixtures.persist_spacecraft!(other_mission, display_name: "Other-Org-Craft")
+      theirs = TestFixtures.persist_spacecraft!(other_mission, display_name: "Other-Org-Craft")
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      refute html =~ "Other-Org-Craft"
+      rows = spacecraft_list_props(view)["roster"]["rows"]
+
+      refute Enum.any?(rows, &(&1["id"] == "spacecraft-#{theirs.spacecraft_id}"))
+      refute Enum.any?(rows, &(&1["display_name"] == "Other-Org-Craft"))
     end
   end
 
@@ -90,11 +128,10 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}']",
-               "Alpha-1"
-             )
+      [row] = spacecraft_list_props(view)["roster"]["rows"]
+
+      assert row["display_name"] == "Alpha-1"
+      assert row["href"] == "/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}"
     end
 
     test "search narrows the roster" do
@@ -104,13 +141,13 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      html =
-        view
-        |> element("#spacecraft-roster-toolbar form")
-        |> render_change(%{"q" => "Bravo"})
+      render_hook(view, "search", %{"q" => "Bravo"})
 
-      refute html =~ "Alpha-1"
-      assert has_element?(view, "#spacecraft-vehicles-card td", "Bravo-2")
+      roster = spacecraft_list_props(view)["roster"]
+
+      assert roster["search"] == "Bravo"
+      assert Enum.map(roster["rows"], & &1["display_name"]) == ["Bravo-2"]
+      refute Enum.any?(roster["rows"], &(&1["display_name"] == "Alpha-1"))
     end
 
     test "filter tiles patch to a filtered roster" do
@@ -120,17 +157,24 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert has_element?(
-               view,
-               "#spacecraft-setup-summary a[href*='filter=missing_scid']"
-             )
+      props = spacecraft_list_props(view)
+
+      missing_scid_tile =
+        Enum.find(props["summary_tiles"], &(&1["id"] == "spacecraft-tile-missing-scid"))
+
+      assert missing_scid_tile["href"] =~ "filter=missing_scid"
 
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/spacecraft?filter=missing_scid")
 
-      assert has_element?(view, "#spacecraft-vehicles-card td", "No-Scid")
-      refute has_element?(view, "#spacecraft-vehicles-card td", "Alpha-1")
-      assert has_element?(view, "#spacecraft-tile-missing-scid[aria-current='true']")
+      props = spacecraft_list_props(view)
+
+      missing_scid_tile =
+        Enum.find(props["summary_tiles"], &(&1["id"] == "spacecraft-tile-missing-scid"))
+
+      assert Enum.map(props["roster"]["rows"], & &1["display_name"]) == ["No-Scid"]
+      refute Enum.any?(props["roster"]["rows"], &(&1["display_name"] == "Alpha-1"))
+      assert missing_scid_tile["active"]
     end
 
     test "sorts by SCID descending via the header button" do
@@ -139,13 +183,15 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       _high = TestFixtures.persist_spacecraft!(mission, display_name: "High", scid: 900)
 
       {:ok, view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft?sort=scid&dir=desc")
+        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft?sort=scid&dir=asc")
 
-      html = render(view)
-      high_at = :binary.match(html, "High") |> elem(0)
-      low_at = :binary.match(html, "Low") |> elem(0)
-      assert high_at < low_at
-      assert has_element?(view, "th[aria-sort='descending']")
+      render_hook(view, "sort", %{"sort" => "scid"})
+
+      roster = spacecraft_list_props(view)["roster"]
+
+      assert roster["sort_by"] == "scid"
+      assert roster["sort_dir"] == "desc"
+      assert Enum.map(roster["rows"], & &1["display_name"]) == ["High", "Low"]
     end
 
     test "paginates past fifty spacecraft" do
@@ -160,15 +206,21 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert has_element?(view, "#spacecraft-roster-pagination", "1–50 of 51")
-      assert has_element?(view, "#spacecraft-vehicles-card td", "SC-001")
-      refute has_element?(view, "#spacecraft-vehicles-card td", "SC-051")
+      roster = spacecraft_list_props(view)["roster"]
 
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft?page=2")
+      assert roster["pagination_visible"]
+      assert roster["range_label"] == "1–50 of 51"
+      assert List.first(roster["rows"])["display_name"] == "SC-001"
+      refute Enum.any?(roster["rows"], &(&1["display_name"] == "SC-051"))
 
-      assert has_element?(view, "#spacecraft-roster-pagination", "51–51 of 51")
-      assert has_element?(view, "#spacecraft-vehicles-card td", "SC-051")
-      refute has_element?(view, "#spacecraft-vehicles-card td", "SC-001")
+      render_hook(view, "paginate", %{"page" => "2"})
+
+      roster = spacecraft_list_props(view)["roster"]
+
+      assert roster["page"] == 2
+      assert roster["range_label"] == "51–51 of 51"
+      assert Enum.map(roster["rows"], & &1["display_name"]) == ["SC-051"]
+      refute Enum.any?(roster["rows"], &(&1["display_name"] == "SC-001"))
     end
 
     test "filtered-empty roster keeps the table copy, not the empty-mission state" do
@@ -178,13 +230,11 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/spacecraft?filter=missing_scid")
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card",
-               "No spacecraft match the current search or filter."
-             )
+      roster = spacecraft_list_props(view)["roster"]
 
-      refute has_element?(view, "#spacecraft-vehicles-card", "No spacecraft yet")
+      assert roster["filtered_empty"]
+      refute roster["fleet_empty"]
+      assert roster["rows"] == []
     end
   end
 end

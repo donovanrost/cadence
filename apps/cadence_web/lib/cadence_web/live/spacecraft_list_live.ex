@@ -10,8 +10,6 @@ defmodule CadenceWeb.SpacecraftListLive do
 
   use CadenceWeb, :live_view
 
-  import CadenceWeb.SpacecraftListComponents
-
   alias CadenceWeb.ListParams
 
   @page_size 50
@@ -33,18 +31,13 @@ defmodule CadenceWeb.SpacecraftListLive do
      socket
      |> assign(:page_title, "Spacecraft")
      |> assign(:nav_item, :spacecraft)
+     |> assign(:profiles, profiles)
      |> assign(:profiles_by_id, Map.new(profiles, &{&1.spacecraft_type_id, &1}))
      |> assign(:latest_versions, latest_versions)
      |> assign(:summary, summary)
      |> assign(:drift_count, drift_count(summary, latest_versions))
      |> assign(:version_counts_by_profile, version_counts_by_profile(summary))
-     |> assign(:fleet_empty?, summary.total == 0)
-     |> assign(:profile_count, length(profiles))
-     |> assign(:profiles_empty?, profiles == [])
-     |> assign(:profiles_truncated?, length(profiles) > @profile_preview_limit)
-     |> stream(:spacecraft_profiles, Enum.take(profiles, @profile_preview_limit),
-       dom_id: &"spacecraft-profile-preview-#{&1.spacecraft_type_id}"
-     )}
+     |> assign(:spacecraft_list_props, nil)}
   end
 
   @impl true
@@ -54,16 +47,13 @@ defmodule CadenceWeb.SpacecraftListLive do
     list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
     filter = parse_filter(params["filter"])
     {list, page} = fetch_roster(organization_id, mission.mission_id, list, filter, socket)
+    spacecraft_list_props = spacecraft_list_props(mission.mission_id, list, filter, page, socket)
 
     {:noreply,
      socket
      |> assign(:list, list)
      |> assign(:filter, filter)
-     |> assign(:roster, %{page | items: []})
-     |> stream(:spacecraft, page.items,
-       reset: true,
-       dom_id: &"spacecraft-#{&1.spacecraft_id}"
-     )}
+     |> assign(:spacecraft_list_props, spacecraft_list_props)}
   end
 
   @impl true
@@ -96,36 +86,13 @@ defmodule CadenceWeb.SpacecraftListLive do
         ]}
       />
 
-      <.summary_tiles
-        mission_id={@current_mission.mission_id}
-        summary={@summary}
-        drift_count={@drift_count}
-        list={@list}
-        filter={@filter}
-      />
-
-      <.roster_card
-        mission_id={@current_mission.mission_id}
-        rows={@streams.spacecraft}
-        list={@list}
-        filter={@filter}
-        roster={@roster}
-        fleet_empty?={@fleet_empty?}
-        summary={@summary}
-        profiles_by_id={@profiles_by_id}
-        latest_versions={@latest_versions}
-      />
-
-      <.profiles_card
-        mission_id={@current_mission.mission_id}
-        rows={@streams.spacecraft_profiles}
-        list={@list}
-        profiles_empty?={@profiles_empty?}
-        profiles_truncated?={@profiles_truncated?}
-        profile_count={@profile_count}
-        drift_count={@drift_count}
-        version_counts_by_profile={@version_counts_by_profile}
-        latest_versions={@latest_versions}
+      <.vue
+        id="spacecraft-list-component"
+        v-component="SpacecraftList"
+        summary_tiles={@spacecraft_list_props.summary_tiles}
+        roster={@spacecraft_list_props.roster}
+        profiles={@spacecraft_list_props.profiles}
+        v-ssr={false}
       />
     </div>
     """
@@ -175,6 +142,263 @@ defmodule CadenceWeb.SpacecraftListLive do
 
   defp sort_tuple(%ListParams{sort: "display_name", dir: dir}), do: {:display_name, dir}
   defp sort_tuple(%ListParams{sort: "scid", dir: dir}), do: {:scid, dir}
+
+  defp spacecraft_list_props(mission_id, list, filter, page, socket) do
+    %{
+      summary_tiles:
+        summary_tiles_dto(
+          mission_id,
+          list,
+          filter,
+          socket.assigns.summary,
+          socket.assigns.drift_count
+        ),
+      roster:
+        roster_dto(
+          mission_id,
+          list,
+          page,
+          socket.assigns.summary,
+          socket.assigns.profiles_by_id,
+          socket.assigns.latest_versions
+        ),
+      profiles:
+        profiles_dto(
+          mission_id,
+          list,
+          socket.assigns.profiles,
+          socket.assigns.drift_count,
+          socket.assigns.version_counts_by_profile,
+          socket.assigns.latest_versions
+        )
+    }
+  end
+
+  defp summary_tiles_dto(mission_id, list, filter, summary, drift_count) do
+    [
+      summary_tile_dto(
+        "spacecraft-tile-all",
+        "Vehicles",
+        summary.total,
+        filter_path(mission_id, list, nil),
+        is_nil(filter),
+        false
+      ),
+      summary_tile_dto(
+        "spacecraft-tile-missing-scid",
+        "Missing SCID",
+        summary.missing_scid,
+        filter_path(mission_id, list, "missing_scid"),
+        filter == :missing_scid,
+        summary.missing_scid > 0
+      ),
+      summary_tile_dto(
+        "spacecraft-tile-missing-profile",
+        "Missing profile",
+        summary.missing_profile,
+        filter_path(mission_id, list, "missing_profile"),
+        filter == :missing_profile,
+        summary.missing_profile > 0
+      ),
+      summary_tile_dto(
+        "spacecraft-tile-drift",
+        "Profile drift",
+        drift_count,
+        filter_path(mission_id, list, "drift"),
+        filter == :drift,
+        drift_count > 0
+      )
+    ]
+  end
+
+  defp summary_tile_dto(id, label, value, href, active, warning) do
+    %{id: id, label: label, value: value, href: href, active: active, warning: warning}
+  end
+
+  defp roster_dto(mission_id, list, page, summary, profiles_by_id, latest_versions) do
+    last_page = max(ceil(page.total_count / page.page_size), 1)
+
+    %{
+      fleet_empty: summary.total == 0,
+      subtitle: "#{summary.total} total · #{summary.missing_profile} missing profile",
+      new_spacecraft_href: ~p"/missions/#{mission_id}/spacecraft/new",
+      search: list.q || "",
+      sort_by: list.sort,
+      sort_dir: Atom.to_string(list.dir),
+      filtered_empty: page.total_count == 0,
+      page: page.page,
+      page_size: page.page_size,
+      total_count: page.total_count,
+      pagination_visible: page.total_count > page.page_size,
+      range_label: range_label(page),
+      previous_page: page.page - 1,
+      next_page: page.page + 1,
+      previous_disabled: page.page <= 1,
+      next_disabled: page.page >= last_page,
+      rows:
+        Enum.map(
+          page.items,
+          &spacecraft_row_dto(&1, mission_id, profiles_by_id, latest_versions)
+        )
+    }
+  end
+
+  defp spacecraft_row_dto(spacecraft, mission_id, profiles_by_id, latest_versions) do
+    status = setup_status(spacecraft, latest_versions)
+
+    %{
+      id: "spacecraft-#{spacecraft.spacecraft_id}",
+      actions_id: "#{spacecraft.spacecraft_id}-actions",
+      display_name: spacecraft.display_name,
+      scid_label: if(spacecraft.scid, do: to_string(spacecraft.scid), else: "Not set"),
+      scid_missing: is_nil(spacecraft.scid),
+      profile_label: profile_label(spacecraft, profiles_by_id),
+      status: Atom.to_string(status),
+      status_label: setup_status_label(spacecraft, latest_versions),
+      href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}",
+      identity_href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
+    }
+  end
+
+  defp profiles_dto(
+         mission_id,
+         list,
+         profiles,
+         drift_count,
+         version_counts_by_profile,
+         latest_versions
+       ) do
+    %{
+      empty: profiles == [],
+      truncated: length(profiles) > @profile_preview_limit,
+      subtitle: "#{length(profiles)} total · #{drift_count} drift warning",
+      new_profile_href: ~p"/missions/#{mission_id}/spacecraft/profiles/new",
+      all_profiles_href: ~p"/missions/#{mission_id}/spacecraft/profiles",
+      rows:
+        profiles
+        |> Enum.take(@profile_preview_limit)
+        |> Enum.map(
+          &profile_row_dto(
+            &1,
+            mission_id,
+            list,
+            Map.get(version_counts_by_profile, &1.spacecraft_type_id, []),
+            Map.get(latest_versions, &1.spacecraft_type_id)
+          )
+        )
+    }
+  end
+
+  defp profile_row_dto(profile, mission_id, list, version_counts, latest_version) do
+    status = profile_status(profile)
+
+    %{
+      id: "spacecraft-profile-preview-#{profile.spacecraft_type_id}",
+      display_name: profile.display_name,
+      href: ~p"/missions/#{mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}",
+      fleet_entries:
+        profile_fleet_entries(profile, mission_id, list, version_counts, latest_version),
+      protocols: "#{profile.downlink_protocol} / #{profile.uplink_protocol}",
+      applications: applications_summary(profile.applications),
+      status: Atom.to_string(status),
+      status_label: profile_status_label(profile)
+    }
+  end
+
+  defp profile_fleet_entries(profile, mission_id, list, version_counts, latest_version) do
+    version_counts
+    |> Enum.sort_by(& &1.spacecraft_type_version, :desc)
+    |> Enum.map(fn entry ->
+      stale = stale_version?(entry, latest_version)
+
+      %{
+        label: "v#{entry.spacecraft_type_version} × #{entry.count}",
+        href:
+          if(stale,
+            do: filter_path(mission_id, list, "profile:#{profile.spacecraft_type_id}"),
+            else: nil
+          )
+      }
+    end)
+  end
+
+  defp filter_path(mission_id, %ListParams{} = list, filter) do
+    query = ListParams.to_query(%{list | page: 1}, filter: filter)
+    ~p"/missions/#{mission_id}/spacecraft?#{query}"
+  end
+
+  defp range_label(%{page: page, page_size: size, total_count: total}) do
+    first = (page - 1) * size + 1
+    last = min(page * size, total)
+    "#{first}–#{last} of #{total}"
+  end
+
+  defp profile_label(%{spacecraft_type_id: nil}, _profiles_by_id), do: "Not selected"
+
+  defp profile_label(spacecraft, profiles_by_id) do
+    case Map.get(profiles_by_id, spacecraft.spacecraft_type_id) do
+      nil ->
+        "Missing profile"
+
+      profile ->
+        "#{profile.display_name} v#{spacecraft.spacecraft_type_version || profile.version}"
+    end
+  end
+
+  defp setup_status(%{scid: nil}, _latest_versions), do: :attention
+  defp setup_status(%{spacecraft_type_id: nil}, _latest_versions), do: :attention
+
+  defp setup_status(spacecraft, latest_versions) do
+    if profile_drift?(spacecraft, latest_versions), do: :attention, else: :ready
+  end
+
+  defp setup_status_label(%{scid: nil}, _latest_versions), do: "Needs SCID"
+  defp setup_status_label(%{spacecraft_type_id: nil}, _latest_versions), do: "Needs profile"
+
+  defp setup_status_label(spacecraft, latest_versions) do
+    if profile_drift?(spacecraft, latest_versions), do: "Profile drift", else: "Setup complete"
+  end
+
+  defp profile_drift?(spacecraft, latest_versions) do
+    case Map.get(latest_versions, spacecraft.spacecraft_type_id) do
+      nil ->
+        false
+
+      latest ->
+        is_integer(spacecraft.spacecraft_type_version) and
+          spacecraft.spacecraft_type_version < latest
+    end
+  end
+
+  defp stale_version?(entry, latest_version) do
+    is_integer(latest_version) and is_integer(entry.spacecraft_type_version) and
+      entry.spacecraft_type_version < latest_version
+  end
+
+  defp profile_status(%{lifecycle_state: :active}), do: :ready
+  defp profile_status(_profile), do: :attention
+
+  defp profile_status_label(%{lifecycle_state: :active}), do: "Active"
+  defp profile_status_label(_profile), do: "Archived"
+
+  defp applications_summary(applications)
+       when is_map(applications) and map_size(applications) > 0 do
+    applications
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.map_join(", ", &humanize_application_key/1)
+  end
+
+  defp applications_summary(_), do: "None"
+
+  defp humanize_application_key(key) when is_atom(key),
+    do: key |> Atom.to_string() |> humanize_application_key()
+
+  defp humanize_application_key(key) when is_binary(key) do
+    key
+    |> String.split("_")
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
 
   defp drift_count(summary, latest_versions) do
     summary.profile_version_counts

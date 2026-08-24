@@ -27,23 +27,28 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
       assert has_element?(view, "#spacecraft-management-page")
-      assert has_element?(view, "#spacecraft-vehicles-card")
-      assert has_element?(view, "#spacecraft-profiles-card")
+      assert has_element?(view, "#spacecraft-list-component")
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/new']",
-               "New spacecraft"
+      vue = LiveVue.Test.get_vue(view, id: "spacecraft-list-component")
+      assert vue.component == "SpacecraftList"
+
+      assert vue.props["roster"]["new_spacecraft_href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/new"
+
+      assert vue.props["profiles"]["new_profile_href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/profiles/new"
+
+      assert Enum.any?(
+               vue.props["roster"]["rows"],
+               &(&1["id"] == "spacecraft-#{spacecraft.spacecraft_id}" and
+                   &1["display_name"] == spacecraft.display_name)
              )
 
-      assert has_element?(
-               view,
-               "#spacecraft-profiles-card a[href='/missions/#{mission.mission_id}/spacecraft/profiles/new']",
-               "New profile"
+      assert Enum.any?(
+               vue.props["profiles"]["rows"],
+               &(&1["id"] == "spacecraft-profile-preview-#{profile.spacecraft_type_id}" and
+                   &1["display_name"] == profile.display_name)
              )
-
-      assert has_element?(view, "#spacecraft-vehicles-card td", spacecraft.display_name)
-      assert has_element?(view, "#spacecraft-profiles-card td", profile.display_name)
 
       page_header =
         view
