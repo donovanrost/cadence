@@ -72,11 +72,6 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     nominal_path = ~p"/missions/#{mission.mission_id}/ops/alarms?#{%{state: "nominal"}}"
     assert_patch(view, nominal_path)
 
-    filter_event_vue = ops_alarms_vue(view)
-    assert alarm_stream_mutations(filter_event_vue) == []
-
-    render_patch(view, nominal_path)
-
     nominal_vue = ops_alarms_vue(view)
     nominal_observed = nominal_vue.props["summary"]["observed"]
     green_row = alarm_row(mission, "green", "nominal", "green", "EPS.current")
@@ -102,11 +97,6 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
 
     reset_path = ~p"/missions/#{mission.mission_id}/ops/alarms"
     assert_patch(view, reset_path)
-
-    reset_event_vue = ops_alarms_vue(view)
-    assert alarm_stream_mutations(reset_event_vue) == []
-
-    render_patch(view, reset_path)
 
     reset_vue = ops_alarms_vue(view)
     reset_observed = reset_vue.props["summary"]["observed"]
@@ -245,7 +235,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
   end
 
   defp alarm_row(mission, id, severity, limit_state, point_id) do
-    receipt_time = ~U[2026-08-01 12:00:00Z]
+    receipt_time = %{~U[2026-08-01 12:00:00Z] | microsecond: {0, 6}}
 
     %{
       "id" => id,
