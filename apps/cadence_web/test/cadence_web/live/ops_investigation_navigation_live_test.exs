@@ -79,16 +79,30 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     track_dashboard_view(explore)
 
     assert has_element?(explore, "#ops-context-rail")
-    assert has_element?(explore, "#telemetry-explore-question-data-operations")
-    assert has_element?(explore, "#telemetry-explore-open-source")
-    assert has_element?(explore, "#telemetry-explore-open-dashboard-diagnostics")
+    explore_vue = LiveVue.Test.get_vue(explore, id: "ops-telemetry-explore-component")
+    assert explore_vue.component == "OpsTelemetryExplore"
+    assert explore_vue.ssr == false
+    assert explore_vue.props == Jason.decode!(Jason.encode!(explore_vue.props))
 
-    assert has_element?(
-             explore,
-             ~s(#telemetry-explore-back-to-dashboard[href*="replay_run_id=replay-investigation"][href*="data_view=all_revisions"][href*="source_binding_id=investigation-binding"][href*="selected_id=HK.counter"])
-           )
+    question_actions = explore_vue.props["question_briefing"]["actions"]
+    source_actions = explore_vue.props["source_context"]["actions"]
 
-    timeline_path = link_href(explore, "#telemetry-explore-question-timeline")
+    data_operations_path =
+      action_href(question_actions, "telemetry-explore-question-data-operations")
+
+    source_path = action_href(source_actions, "telemetry-explore-open-source")
+
+    diagnostics_path =
+      action_href(source_actions, "telemetry-explore-open-dashboard-diagnostics")
+
+    back_to_dashboard = explore_vue.props["navigation"]["back_to_dashboard"]
+    assert back_to_dashboard["id"] == "telemetry-explore-back-to-dashboard"
+    assert back_to_dashboard["href"] =~ "replay_run_id=replay-investigation"
+    assert back_to_dashboard["href"] =~ "data_view=all_revisions"
+    assert back_to_dashboard["href"] =~ "source_binding_id=investigation-binding"
+    assert back_to_dashboard["href"] =~ "selected_id=HK.counter"
+
+    timeline_path = action_href(question_actions, "telemetry-explore-question-timeline")
     assert timeline_path =~ "return_to=explore"
     assert timeline_path =~ "replay_run_id=replay-investigation"
     assert timeline_path =~ "data_view=all_revisions"
@@ -104,21 +118,21 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
            )
 
     {:ok, source_view, _html} =
-      live(conn, link_href(explore, "#telemetry-explore-open-source"))
+      live(conn, source_path)
 
     track_dashboard_view(source_view)
     assert has_element?(source_view, "#ops-context-rail")
     assert has_element?(source_view, "#ops-data-sources-page")
 
     {:ok, data_operations, _html} =
-      live(conn, link_href(explore, "#telemetry-explore-question-data-operations"))
+      live(conn, data_operations_path)
 
     track_dashboard_view(data_operations)
     assert has_element?(data_operations, "#ops-context-rail")
     assert has_element?(data_operations, "#ops-data-operations-page")
 
     {:ok, diagnostics, _html} =
-      live(conn, link_href(explore, "#telemetry-explore-open-dashboard-diagnostics"))
+      live(conn, diagnostics_path)
 
     track_dashboard_view(diagnostics)
     assert has_element?(diagnostics, "#ops-context-rail")
@@ -132,6 +146,12 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     |> LazyHTML.query(selector)
     |> LazyHTML.attribute("href")
     |> List.first()
+  end
+
+  defp action_href(actions, id) do
+    actions
+    |> Enum.find(&(&1["id"] == id))
+    |> Map.fetch!("href")
   end
 
   defp merge_query(path, extra) do

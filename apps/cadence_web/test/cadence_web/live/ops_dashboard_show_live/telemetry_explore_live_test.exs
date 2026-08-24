@@ -262,6 +262,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
 
     assert investigation["path"] =~ "point_id=HK.counter"
     assert investigation["fingerprint"] =~ ~r/^[a-f0-9]{12}$/
+
     assert vue.props["navigation"]["back_to_dashboard"]["id"] ==
              "telemetry-explore-back-to-dashboard"
 
@@ -280,7 +281,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     refute cleared_path =~ "sample_id="
     refute cleared_path =~ "selected_time="
     refute cleared_path =~ "source_dashboard_id="
-    render_patch(view, cleared_path)
     assert telemetry_explore_vue(view).props["selected_sample"] == nil
 
     from = "2023-11-14T22:14:45Z"
@@ -322,9 +322,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert patched_path =~ "data_source_id=#{source_context.data_source_id}"
     assert patched_path =~ "source_binding_id=#{source_context.binding_id}"
     refute patched_path =~ "logical_source=telemetry"
-    render_patch(view, patched_path)
 
     archive_vue = telemetry_explore_vue(view)
+
     assert row_value(archive_vue.props["source_context"]["rows"], "Requested realm") ==
              "rehearsal"
 
@@ -363,7 +363,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     refute filtered_path =~ "time_mode=latest"
     refute filtered_path =~ "order=desc"
     refute filtered_path =~ "limit=100"
-    render_patch(view, filtered_path)
 
     filtered_vue = telemetry_explore_vue(view)
 
@@ -445,7 +444,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert preset_path =~ "question=what_changed"
     assert preset_path =~ "time_mode=last_1h"
     assert preset_path =~ "selection_view=all_revisions"
-    render_patch(explore, preset_path)
 
     preset_vue = telemetry_explore_vue(explore)
     briefing = preset_vue.props["question_briefing"]
@@ -455,6 +453,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert briefing["question"] == "what_changed"
     assert Enum.any?(briefing["actions"], &(&1["id"] == "telemetry-explore-question-timeline"))
     assert authoring["form"]["id"] == "telemetry-explore-add-to-dashboard-form"
+
     assert authoring["form"]["values"] == %{
              "dashboard_id" => "",
              "title" => "",
@@ -522,6 +521,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
       |> OpsTelemetryExploreComponents.presentation_props()
 
     refute Map.has_key?(viewer_props, :authoring)
+
     assert get_in(author_props, [:authoring, :form, :id]) ==
              "telemetry-explore-add-to-dashboard-form"
 
@@ -580,6 +580,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert filter_form["fields"]["point_id"]["name"] == "explore[point_id]"
     assert filter_form["fields"]["limit"]["min"] == "1"
     assert filter_form["fields"]["limit"]["max"] == "1000"
+
     assert filter_form["submit"] == %{
              "icon" => "hero-arrow-path",
              "id" => "telemetry-explore-apply-filters",
