@@ -11,6 +11,8 @@ defmodule CadenceWeb.CommsLiveTest do
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Comms.TransportStore
+  alias Cadence.Contacts.{PathTemplate, TransportProfile}
+  alias Cadence.SourceEndpoints.SourceEndpoint
 
   alias Cadence.Comms.Transport
   alias CadenceWeb.TestFixtures
@@ -149,15 +151,24 @@ defmodule CadenceWeb.CommsLiveTest do
 
     test "renders dedicated validation page grouped by setup owner" do
       {conn, _org, mission} = signed_in_org_and_mission()
-      _spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
 
-      assert has_element?(view, "#comms-validation-page")
-      assert has_element?(view, "#comms-validation-spacecraft-setup")
-      assert has_element?(view, "#comms-validation-transport-setup")
-      assert render(view) =~ "Spacecraft Setup"
-      assert render(view) =~ "Transport Setup"
+      assert has_element?(view, "#comms-validation-component")
+
+      vue = comms_validation_vue(view)
+
+      assert vue.props == %{
+               "validation" =>
+                 expected_dedicated_validation(mission, [
+                   expected_spacecraft_setup_group(spacecraft, mission.mission_id),
+                   expected_transport_setup_group(mission.mission_id),
+                   expected_advanced_runtime_identity_group()
+                 ])
+             }
+
+      refute has_element?(view, "#comms-validation-page")
 
       assert has_element?(
                view,
@@ -165,8 +176,53 @@ defmodule CadenceWeb.CommsLiveTest do
                "Validation"
              )
 
-      refute render(view) =~ "Link Template"
-      refute render(view) =~ "Link Assignments"
+      refute inspect(vue.props) =~ "Link Template"
+      refute inspect(vue.props) =~ "Link Assignments"
+    end
+
+    test "keeps dedicated validation groups in setup-owner order" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Needs Routing")
+      _transport = persist_transport!(org.organization_id, mission.mission_id)
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+
+      groups = comms_validation_vue(view).props["validation"]["finding_groups"]
+
+      assert Enum.map(groups, &Map.take(&1, ["id", "title", "description"])) == [
+               %{
+                 "id" => "comms-validation-spacecraft-setup",
+                 "title" => "Spacecraft Setup",
+                 "description" =>
+                   "Identity, Spacecraft Profile, and application setup owned by each spacecraft."
+               },
+               %{
+                 "id" => "comms-validation-routing-setup",
+                 "title" => "Routing Setup",
+                 "description" => "Durable rules for how spacecraft use mission Transports."
+               },
+               %{
+                 "id" => "comms-validation-advanced-runtime-identity",
+                 "title" => "Internal Runtime Artifacts",
+                 "description" =>
+                   "Diagnostics for internal execution artifacts derived from spacecraft routing setup."
+               }
+             ]
+
+      assert Enum.find(groups, &(&1["id"] == "comms-validation-routing-setup")) ==
+               expected_routing_setup_group(spacecraft, mission.mission_id)
+    end
+
+    test "projects the no-findings card through exact JSON-safe props" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      persist_validation_clear_setup!(org.organization_id, mission.mission_id)
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+
+      vue = comms_validation_vue(view)
+
+      assert vue.props == %{"validation" => expected_dedicated_validation(mission, [])}
+      refute has_element?(view, "#comms-validation-page")
     end
 
     test "projects required application installation status into Comms Validation" do
@@ -184,16 +240,20 @@ defmodule CadenceWeb.CommsLiveTest do
         live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
 
       finding_id =
-        "#comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
+        "comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
 
-      assert has_element?(view, finding_id)
-      assert has_element?(view, "#{finding_id} h3", "Nova-1 — Telemetry Decom: Not installed")
+      validation = comms_validation_vue(view).props["validation"]
 
-      assert has_element?(
-               view,
-               "#{finding_id} a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications']",
-               "Review applications"
-             )
+      assert validation_finding(validation, finding_id) == %{
+               "id" => finding_id,
+               "title" => "Nova-1 — Telemetry Decom: Not installed",
+               "body" =>
+                 "Telemetry Decom reports not installed for this spacecraft. Review the application before treating Comms setup as ready.",
+               "action_label" => "Review applications",
+               "action_href" =>
+                 "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications",
+               "status" => %{"tone" => "blocked", "label" => "Blocking"}
+             }
     end
 
     test "projects installed application status without application-specific Comms code" do
@@ -218,18 +278,23 @@ defmodule CadenceWeb.CommsLiveTest do
         live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
 
       finding_id =
-        "#comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
+        "comms-validation-application-#{spacecraft.spacecraft_id}-telemetry_decom"
 
-      assert has_element?(view, finding_id)
-      assert has_element?(view, "#{finding_id} h3", "Nova-1 — Telemetry Decom: Not configured")
+      validation = comms_validation_vue(view).props["validation"]
+      application_finding = validation_finding(validation, finding_id)
 
-      assert has_element?(
-               view,
-               "#{finding_id} a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom']",
-               "Review application"
-             )
+      assert application_finding == %{
+               "id" => finding_id,
+               "title" => "Nova-1 — Telemetry Decom: Not configured",
+               "body" =>
+                 "Telemetry Decom reports not configured for this spacecraft. Review the application before treating Comms setup as ready.",
+               "action_label" => "Review application",
+               "action_href" =>
+                 "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom",
+               "status" => %{"tone" => "blocked", "label" => "Blocking"}
+             }
 
-      refute has_element?(view, finding_id, "Configure telemetry")
+      refute inspect(application_finding) =~ "Configure telemetry"
     end
 
     test "leaves the Comms section collapsed when not on a /comms route" do
@@ -389,6 +454,116 @@ defmodule CadenceWeb.CommsLiveTest do
       "action_href" => action_href,
       "status" => %{"tone" => tone, "label" => label}
     }
+  end
+
+  defp comms_validation_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "comms-validation-component")
+
+    assert vue.component == "CommsValidation"
+    assert vue.ssr == false
+    assert is_binary(Jason.encode!(vue.props))
+
+    vue
+  end
+
+  defp expected_dedicated_validation(mission, finding_groups) do
+    finding_count = Enum.sum(Enum.map(finding_groups, &length(&1["findings"])))
+
+    %{
+      "id" => "comms-validation-page",
+      "title" => "Validation",
+      "subtitle" =>
+        "Actionable checks for saved Spacecraft, Transport, Routing, and advanced runtime compatibility setup.",
+      "breadcrumbs" => [
+        %{"label" => mission.display_name, "href" => "/missions/#{mission.mission_id}"},
+        %{"label" => "Comms", "href" => "/missions/#{mission.mission_id}/comms"},
+        %{"label" => "Validation", "href" => nil}
+      ],
+      "finding_count_suffix" => "#{finding_count} findings",
+      "status" =>
+        if(finding_count == 0,
+          do: %{"tone" => "ready", "label" => "No findings"},
+          else: %{"tone" => "attention", "label" => "#{finding_count} findings"}
+        ),
+      "empty" => finding_count == 0,
+      "empty_state" => %{
+        "id" => "comms-validation-empty",
+        "title" => "No setup findings",
+        "description" => "The saved mission-management configuration looks consistent."
+      },
+      "findings_id" => "comms-validation-findings",
+      "finding_groups" => finding_groups
+    }
+  end
+
+  defp expected_routing_setup_group(spacecraft, mission_id) do
+    %{
+      "id" => "comms-validation-routing-setup",
+      "title" => "Routing Setup",
+      "description" => "Durable rules for how spacecraft use mission Transports.",
+      "findings" => [
+        expected_finding(
+          "No Routing Rules configured",
+          "Create Routing Rules to declare how spacecraft use mission Transports.",
+          "blocked",
+          "Blocking",
+          "Create Routing Rule",
+          "/missions/#{mission_id}/comms/routing/new"
+        ),
+        expected_finding(
+          "#{spacecraft.display_name} has no Routing Rule",
+          "Add a Routing Rule when this spacecraft should use a mission Transport.",
+          "attention",
+          "Warning",
+          "Review Routing",
+          "/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
+        )
+      ]
+    }
+  end
+
+  defp validation_finding(validation, finding_id) do
+    validation["finding_groups"]
+    |> Enum.flat_map(& &1["findings"])
+    |> Enum.find(&(&1["id"] == finding_id))
+  end
+
+  defp persist_validation_clear_setup!(organization_id, mission_id) do
+    transport = persist_transport!(organization_id, mission_id)
+
+    source_endpoint =
+      SourceEndpoint.new(%{
+        mission_id: mission_id,
+        display_name: "Validation telemetry identity"
+      })
+
+    assert {:ok, _source_endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(organization_id, source_endpoint)
+
+    transport_profile =
+      TransportProfile.new(%{
+        mission_id: mission_id,
+        family_key: :uplink_gateway,
+        target_scope: :path,
+        configuration: %{"route" => "validation"}
+      })
+
+    assert {:ok, transport_profile} =
+             Cadence.Contacts.persist_transport_profile(organization_id, transport_profile)
+
+    path_template =
+      PathTemplate.new(%{
+        mission_id: mission_id,
+        direction: :downlink,
+        selection_role: :selected,
+        provider_profile_ids: [transport.materialized_provider_profile_id],
+        transport_profile_ids: [transport_profile.transport_profile_id]
+      })
+
+    assert {:ok, _path_template} =
+             Cadence.Contacts.persist_path_template(organization_id, path_template)
+
+    :ok
   end
 
   defp persist_transport!(organization_id, mission_id) do
