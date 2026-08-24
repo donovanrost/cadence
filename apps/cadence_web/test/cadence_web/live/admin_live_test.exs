@@ -396,17 +396,61 @@ defmodule CadenceWeb.AdminLiveTest do
       {:ok, view, _html} =
         live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
 
-      view
-      |> form("#invite-form",
-        invite: %{
-          email: "new-user@example.com",
-          display_name: "New User",
-          membership_role: "organization_admin"
-        }
-      )
-      |> render_submit()
+      assert has_element?(view, "#admin-organization-invite-component")
 
-      assert_redirect(view, ~p"/admin/organizations/#{org.organization_id}")
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-invite-component")
+
+      assert vue.component == "AdminOrganizationInvite"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "form" => %{
+                 "display_name" => "",
+                 "email" => "",
+                 "grant_platform_admin" => false,
+                 "membership_role" => "member"
+               },
+               "page" => %{
+                 "breadcrumbs" => [
+                   %{"href" => "/admin", "label" => "Platform Admin"},
+                   %{"href" => "/admin/organizations", "label" => "Organizations"},
+                   %{
+                     "href" => "/admin/organizations/#{org.organization_id}",
+                     "label" => "Cadence Ops"
+                   },
+                   %{"href" => nil, "label" => "Invite User"}
+                 ],
+                 "cancel_href" => "/admin/organizations/#{org.organization_id}",
+                 "cancel_label" => "Cancel",
+                 "role_options" => [
+                   %{"label" => "Organization Admin", "value" => "organization_admin"},
+                   %{"label" => "Member", "value" => "member"}
+                 ],
+                 "submit_label" => "Send invitation",
+                 "subtitle" =>
+                   "Invite a user to Cadence Ops. The invited user will see a notification and must accept the invitation to gain access.",
+                 "title" => "Invite User"
+               }
+             }
+
+      assert vue.handlers == %{
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
+             }
+
+      render_hook(view, "save", %{
+        "invite" => %{
+          "email" => "new-user@example.com",
+          "display_name" => "New User",
+          "membership_role" => "organization_admin",
+          "grant_platform_admin" => "false"
+        }
+      })
+
+      {redirect_path, flash} = assert_redirect(view)
+      assert redirect_path == ~p"/admin/organizations/#{org.organization_id}"
+      assert flash["info"] == "Invitation sent to new-user@example.com."
 
       # Verify invitation email was delivered
       assert_received {:email, email}
@@ -439,17 +483,19 @@ defmodule CadenceWeb.AdminLiveTest do
       {:ok, view, _html} =
         live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
 
-      view
-      |> form("#invite-form",
-        invite: %{
-          email: "existing@example.com",
-          membership_role: "member"
+      render_hook(view, "save", %{
+        "invite" => %{
+          "email" => "existing@example.com",
+          "display_name" => "",
+          "membership_role" => "member",
+          "grant_platform_admin" => "false"
         }
-      )
-      |> render_submit()
+      })
 
       # Should redirect back to org detail
-      assert_redirect(view, ~p"/admin/organizations/#{org.organization_id}")
+      {redirect_path, flash} = assert_redirect(view)
+      assert redirect_path == ~p"/admin/organizations/#{org.organization_id}"
+      assert flash["info"] == "Invitation sent to existing@example.com."
 
       assert [invitation] = Cadence.Accounts.list_pending_invitations(org.organization_id)
 
@@ -472,6 +518,93 @@ defmodule CadenceWeb.AdminLiveTest do
                  "role_label" => "Member"
                }
              ]
+    end
+
+    test "invite validation preserves all Vue-owned form values", %{admin_conn: admin_conn} do
+      org = create_test_org!("Cadence Ops", "cadence-ops")
+
+      {:ok, view, _html} =
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
+
+      render_hook(view, "validate", %{
+        "invite" => %{
+          "email" => "operator@example.com",
+          "display_name" => "Flight Operator",
+          "membership_role" => "organization_admin",
+          "grant_platform_admin" => "true"
+        }
+      })
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-invite-component")
+
+      assert vue.props["form"] == %{
+               "email" => "operator@example.com",
+               "display_name" => "Flight Operator",
+               "membership_role" => "organization_admin",
+               "grant_platform_admin" => true
+             }
+
+      assert is_binary(Jason.encode!(vue.props))
+    end
+
+    test "invite errors preserve submitted values and exact messages", %{admin_conn: admin_conn} do
+      org = create_test_org!("Cadence Ops", "cadence-ops")
+
+      {:ok, view, _html} =
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
+
+      render_hook(view, "save", %{
+        "invite" => %{
+          "email" => "",
+          "display_name" => "Pending Operator",
+          "membership_role" => "organization_admin",
+          "grant_platform_admin" => "true"
+        }
+      })
+
+      assert has_element?(view, "#flash-error[role='alert']", "Email is required.")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-invite-component")
+
+      assert vue.props["form"] == %{
+               "email" => "",
+               "display_name" => "Pending Operator",
+               "membership_role" => "organization_admin",
+               "grant_platform_admin" => true
+             }
+
+      render_hook(view, "save", %{
+        "invite" => %{
+          "email" => "operator@example.com",
+          "display_name" => "Pending Operator",
+          "membership_role" => "invalid-role",
+          "grant_platform_admin" => "false"
+        }
+      })
+
+      assert has_element?(view, "#flash-error[role='alert']", "Select a valid role.")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-invite-component")
+
+      assert vue.props["form"] == %{
+               "email" => "operator@example.com",
+               "display_name" => "Pending Operator",
+               "membership_role" => "invalid-role",
+               "grant_platform_admin" => false
+             }
+
+      assert Cadence.Accounts.list_pending_invitations(org.organization_id) == []
+    end
+
+    test "missing organization flashes and redirects to the organization list", %{
+      admin_conn: admin_conn
+    } do
+      assert {:error,
+              {:live_redirect,
+               %{to: to, flash: %{"error" => "Organization not found."}}}} =
+               live(admin_conn, ~p"/admin/organizations/missing/invite")
+
+      assert to == ~p"/admin/organizations"
     end
   end
 
