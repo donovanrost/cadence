@@ -12,6 +12,7 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
   alias Cadence.Limits.{Event, Store}
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   setup do
     user = TestFixtures.persist_user!()
@@ -35,49 +36,74 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
 
     assert has_element?(view, "#mission-applications-page")
-    assert has_element?(view, "#mission-application-derived_telemetry")
+    assert has_element?(view, "#mission-applications-component")
 
-    assert has_element?(
-             view,
-             "#install-mission-application-derived_telemetry",
-             "Install"
-           )
+    vue = mission_applications_vue(view)
 
-    view
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    assert vue.component == "MissionApplications"
+    assert vue.handlers["install"] == JS.push("install_application")
+    assert vue.handlers["disable"] == JS.push("disable_application")
+    assert vue.handlers["uninstall"] == JS.push("uninstall_application")
 
-    assert has_element?(
-             view,
-             "#mission-application-derived_telemetry a[href='/missions/#{context.mission.mission_id}/applications/derived_telemetry']",
-             "Manage"
-           )
+    application = application_prop(view, "derived_telemetry")
 
-    assert has_element?(
-             view,
-             "#disable-mission-application-derived_telemetry[data-application-lifecycle-action='disable'][data-confirmation-required='true'][data-confirmation-tone='attention']",
-             "Disable workspace"
-           )
+    assert application["id"] == "mission-application-derived_telemetry"
 
-    assert has_element?(
-             view,
-             "#disable-mission-application-derived_telemetry[data-confirm*='active runtime state is unchanged']"
-           )
+    assert application["install_action"]["id"] ==
+             "install-mission-application-derived_telemetry"
 
-    assert has_element?(
-             view,
-             "#uninstall-mission-application-derived_telemetry[data-application-lifecycle-action='uninstall'][data-confirmation-required='true'][data-confirmation-tone='danger']",
-             "Uninstall"
-           )
+    assert application["install_action"]["label"] == "Install"
+
+    assert application["status"] == %{
+             "state" => "not_installed",
+             "label" => "Not installed",
+             "tone" => "info",
+             "facts" => [
+               %{
+                 "id" => "workspace",
+                 "label" => "Workspace",
+                 "value" => "Install to configure"
+               },
+               %{
+                 "id" => "application_version",
+                 "label" => "Application version",
+                 "value" => "v1"
+               }
+             ]
+           }
+
+    render_click(view, "install_application", %{"key" => "derived_telemetry"})
+
+    application = application_prop(view, "derived_telemetry")
+
+    assert application["manageable"]
+
+    assert application["manage_path"] ==
+             "/missions/#{context.mission.mission_id}/applications/derived_telemetry"
+
+    disable_action = application["disable_action"]
+
+    assert disable_action["id"] == "disable-mission-application-derived_telemetry"
+    assert disable_action["action_id"] == "disable"
+    assert disable_action["label"] == "Disable workspace"
+    assert disable_action["confirmation"]["tone"] == "attention"
+
+    assert disable_action["confirmation"]["prompt"] =~
+             "active runtime state is unchanged"
+
+    uninstall_action = application["uninstall_action"]
+
+    assert uninstall_action["id"] == "uninstall-mission-application-derived_telemetry"
+    assert uninstall_action["action_id"] == "uninstall"
+    assert uninstall_action["label"] == "Uninstall"
+    assert uninstall_action["confirmation"]["tone"] == "danger"
   end
 
   test "renders and submits a generated form through the declarative host", context do
     {:ok, inventory, _html} =
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
 
-    inventory
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    render_click(inventory, "install_application", %{"key" => "derived_telemetry"})
 
     application_path =
       ~p"/missions/#{context.mission.mission_id}/applications/derived_telemetry"
@@ -150,9 +176,7 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     {:ok, inventory, _html} =
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
 
-    inventory
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    render_click(inventory, "install_application", %{"key" => "derived_telemetry"})
 
     for number <- 1..21 do
       suffix = number |> Integer.to_string() |> String.pad_leading(3, "0")
@@ -235,30 +259,29 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     inventory_path = ~p"/missions/#{context.mission.mission_id}/applications"
     {:ok, view, _html} = live(context.conn, inventory_path)
 
-    view
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    render_click(view, "install_application", %{"key" => "derived_telemetry"})
 
-    assert has_element?(view, "#disable-mission-application-derived_telemetry")
-    assert has_element?(view, "#uninstall-mission-application-derived_telemetry")
+    application = application_prop(view, "derived_telemetry")
+    assert application["disable_action"]["id"] == "disable-mission-application-derived_telemetry"
 
-    view
-    |> element("#disable-mission-application-derived_telemetry")
-    |> render_click()
+    assert application["uninstall_action"]["id"] ==
+             "uninstall-mission-application-derived_telemetry"
 
-    assert has_element?(view, "#install-mission-application-derived_telemetry", "Enable")
-    assert has_element?(view, "#uninstall-mission-application-derived_telemetry")
+    render_click(view, "disable_application", %{"key" => "derived_telemetry"})
 
-    view
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    application = application_prop(view, "derived_telemetry")
+    assert application["install_action"]["label"] == "Enable"
 
-    view
-    |> element("#uninstall-mission-application-derived_telemetry")
-    |> render_click()
+    assert application["uninstall_action"]["id"] ==
+             "uninstall-mission-application-derived_telemetry"
 
-    assert has_element?(view, "#install-mission-application-derived_telemetry", "Reinstall")
-    refute has_element?(view, "#uninstall-mission-application-derived_telemetry")
+    render_click(view, "install_application", %{"key" => "derived_telemetry"})
+
+    render_click(view, "uninstall_application", %{"key" => "derived_telemetry"})
+
+    application = application_prop(view, "derived_telemetry")
+    assert application["install_action"]["label"] == "Reinstall"
+    assert is_nil(application["uninstall_action"])
 
     assert {:error,
             {:live_redirect,
@@ -271,11 +294,10 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
                ~p"/missions/#{context.mission.mission_id}/applications/derived_telemetry"
              )
 
-    view
-    |> element("#install-mission-application-derived_telemetry")
-    |> render_click()
+    render_click(view, "install_application", %{"key" => "derived_telemetry"})
 
-    assert has_element?(view, "#disable-mission-application-derived_telemetry")
+    assert application_prop(view, "derived_telemetry")["disable_action"]["id"] ==
+             "disable-mission-application-derived_telemetry"
   end
 
   test "installs limits and versions a governed threshold definition through the host", context do
@@ -294,12 +316,21 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     {:ok, inventory, _html} =
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
 
-    assert has_element?(inventory, "#mission-application-limits")
-    assert has_element?(inventory, "#install-mission-application-limits", "Install")
+    limits_application = application_prop(inventory, "limits")
+    assert limits_application["id"] == "mission-application-limits"
+    assert limits_application["install_action"]["id"] == "install-mission-application-limits"
+    assert limits_application["install_action"]["label"] == "Install"
 
-    inventory
-    |> element("#install-mission-application-limits")
-    |> render_click()
+    assert Enum.any?(
+             limits_application["status"]["facts"],
+             &(&1 == %{
+                 "id" => "workspace",
+                 "label" => "Workspace",
+                 "value" => "Install to configure"
+               })
+           )
+
+    render_click(inventory, "install_application", %{"key" => "limits"})
 
     application_path = ~p"/missions/#{context.mission.mission_id}/applications/limits"
     {:ok, view, _html} = live(context.conn, application_path)
@@ -536,5 +567,16 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
              )
 
     assert path == ~p"/missions/#{context.mission.mission_id}/applications"
+  end
+
+  defp mission_applications_vue(view) do
+    LiveVue.Test.get_vue(view, id: "mission-applications-component")
+  end
+
+  defp application_prop(view, application_key) do
+    view
+    |> mission_applications_vue()
+    |> get_in([:props, "applications"])
+    |> Enum.find(&(&1["application_key"] == application_key))
   end
 end
