@@ -210,10 +210,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
         nil ->
           html
           |> dashboard_canvas_widgets()
-          |> Enum.find_value(fn widget ->
-            if widget["presentation"]["component_id"] == component_id,
-              do: widget["presentation"]
-          end)
+          |> Enum.find_value(&matching_widget_presentation(&1, component_id))
 
         vue ->
           assert vue.id == component_id
@@ -228,6 +225,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     assert presentation["component_id"] == component_id
     assert presentation == Jason.decode!(Jason.encode!(presentation))
     presentation
+  end
+
+  defp matching_widget_presentation(widget, component_id) do
+    presentation = widget["presentation"]
+    if presentation["component_id"] == component_id, do: presentation
   end
 
   def dashboard_canvas_presentation(rendered) do

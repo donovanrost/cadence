@@ -787,22 +787,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponentsTest do
 
     assert Enum.sort(Map.keys(root["params"])) == Enum.sort(expected_keys)
 
-    Enum.each(hidden_fields, fn field ->
-      key = form_param_key(field["attrs"]["name"], root["param"])
-      assert root["params"][key] == field["attrs"]["value"]
-    end)
-
-    Enum.each(fields, fn field ->
-      assert field["control"]["attrs"]["name"] == "#{root["param"]}[#{field["key"]}]"
-
-      if field["type"] == "checkbox" do
-        expected_value =
-          if Map.has_key?(field["control"]["attrs"], "checked"), do: "true", else: "false"
-
-        assert root["params"][field["key"]] == expected_value
-      end
-    end)
+    Enum.each(hidden_fields, &assert_hidden_field_param_contract(&1, root))
+    Enum.each(fields, &assert_rendered_field_param_contract(&1, root))
   end
+
+  defp assert_hidden_field_param_contract(field, root) do
+    key = form_param_key(field["attrs"]["name"], root["param"])
+    assert root["params"][key] == field["attrs"]["value"]
+  end
+
+  defp assert_rendered_field_param_contract(field, root) do
+    assert field["control"]["attrs"]["name"] == "#{root["param"]}[#{field["key"]}]"
+
+    assert_checkbox_param_contract(field, root)
+  end
+
+  defp assert_checkbox_param_contract(%{"type" => "checkbox"} = field, root) do
+    expected_value =
+      if Map.has_key?(field["control"]["attrs"], "checked"), do: "true", else: "false"
+
+    assert root["params"][field["key"]] == expected_value
+  end
+
+  defp assert_checkbox_param_contract(_field, _root), do: nil
 
   defp rendered_fields(presentation) do
     case presentation["point_widget"] do
