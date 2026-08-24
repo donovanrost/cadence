@@ -4,10 +4,9 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   # Authz note: Catalog management currently permitted for any active org member.
   use CadenceWeb, :live_view
 
-  import CadenceWeb.Catalog.Components
-
   alias Cadence.Catalog
   alias Cadence.Catalog.Events
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"artifact_id" => artifact_id}, _session, socket) do
@@ -26,7 +25,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
          |> assign(:page_title, artifact.artifact_name)
          |> assign(:nav_item, :catalog)
          |> assign(:artifact, artifact)
-         |> assign(:runs, runs)}
+         |> assign_runs(runs)}
 
       {:error, _reason} ->
         {:ok,
@@ -45,7 +44,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
              :import_run_failed
            ] do
     if run.artifact_id == socket.assigns.artifact.artifact_id do
-      {:noreply, update(socket, :runs, &upsert_run(&1, run))}
+      {:noreply, assign_runs(socket, upsert_run(socket.assigns.runs, run))}
     else
       {:noreply, socket}
     end
@@ -92,110 +91,75 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title={@artifact.artifact_name}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
-          {@artifact.artifact_name, nil}
-        ]}
-      />
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="catalog-artifact-show-page" class="space-y-6">
+        <.page_header
+          title={@artifact.artifact_name}
+          breadcrumbs={[
+            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+            {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+            {@artifact.artifact_name, nil}
+          ]}
+        />
 
-      <.artifact_metadata_card current_mission={@current_mission} artifact={@artifact} />
-
-      <.artifact_runs_section current_mission={@current_mission} runs={@runs} />
-    </div>
-    """
-  end
-
-  attr :current_mission, :map, required: true
-  attr :artifact, :map, required: true
-
-  defp artifact_metadata_card(assigns) do
-    ~H"""
-    <.card title="Artifact">
-      <div class="divide-y divide-base-300">
-        <.detail_row label="Format" value={@artifact.format_key} mono />
-        <.detail_row label="Media type" value={@artifact.media_type} mono />
-        <.detail_row label="Content SHA-256">
-          <span class="font-mono text-xs break-all">{@artifact.content_sha256}</span>
-        </.detail_row>
-        <.detail_row
-          label="Uploaded at"
-          value={Calendar.strftime(@artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC")}
+        <.vue
+          id="catalog-artifact-show-component"
+          v-component="CatalogArtifactShow"
+          artifact={@artifact_show_props.artifact}
+          runs={@artifact_show_props.runs}
+          v-on:reimport={JS.push("reimport")}
+          v-ssr={false}
         />
       </div>
-      <div class="flex items-center gap-3 pt-2">
-        <.button
-          variant={:ghost}
-          href={
-            ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}/download"
-          }
-        >
-          <span class="hero-arrow-down-tray h-4 w-4"></span> Download original
-        </.button>
-        <.button phx-click="reimport">
-          <span class="hero-arrow-path h-4 w-4"></span> Re-import
-        </.button>
-      </div>
-    </.card>
+    </Layouts.app>
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :runs, :list, required: true
+  defp assign_runs(socket, runs) do
+    mission_id = socket.assigns.current_mission.mission_id
+    artifact = socket.assigns.artifact
 
-  defp artifact_runs_section(assigns) do
-    ~H"""
-    <div>
-      <p class="hud-label mb-2">Import runs</p>
-      <%= if @runs == [] do %>
-        <.artifact_runs_empty />
-      <% else %>
-        <.artifact_runs_table current_mission={@current_mission} runs={@runs} />
-      <% end %>
-    </div>
-    """
+    socket
+    |> assign(:runs, runs)
+    |> assign(:artifact_show_props, artifact_show_props(artifact, runs, mission_id))
   end
 
-  defp artifact_runs_empty(assigns) do
-    ~H"""
-    <.card>
-      <.empty_state compact title="No runs yet." />
-    </.card>
-    """
+  defp artifact_show_props(artifact, runs, mission_id) do
+    %{
+      artifact: %{
+        format_key: artifact.format_key,
+        media_type: artifact.media_type || "—",
+        content_sha256: artifact.content_sha256,
+        uploaded_at: Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC"),
+        download_href:
+          ~p"/missions/#{mission_id}/catalog/artifacts/#{artifact.artifact_id}/download"
+      },
+      runs: Enum.map(runs, &run_dto(&1, mission_id))
+    }
   end
 
-  attr :current_mission, :map, required: true
-  attr :runs, :list, required: true
-
-  defp artifact_runs_table(assigns) do
-    ~H"""
-    <.card padding={:none}>
-      <.table id="catalog-artifact-runs-table" rows={@runs} row_accent={false}>
-        <:col :let={run} label="Status"><.import_run_status_badge status={run.status} /></:col>
-        <:col :let={run} label="Started" class="text-sm text-base-content/70">
-          {Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S")}
-        </:col>
-        <:col :let={run} label="Completed" class="text-sm text-base-content/70">
-          <%= if run.completed_at,
-            do: Calendar.strftime(run.completed_at, "%Y-%m-%d %H:%M:%S"),
-            else: "—" %>
-        </:col>
-        <:col :let={run} label="Actions" align={:right}>
-          <.action_menu id={"#{run.import_run_id}-actions"}>
-            <:action>
-              <.link navigate={
-                ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"
-              }>
-                View run
-              </.link>
-            </:action>
-          </.action_menu>
-        </:col>
-      </.table>
-    </.card>
-    """
+  defp run_dto(run, mission_id) do
+    %{
+      id: "catalog-artifact-run-#{run.import_run_id}",
+      actions_id: "#{run.import_run_id}-actions",
+      status: status_badge(run.status),
+      status_label: status_label(run.status),
+      started_at: Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S"),
+      completed_at: completed_at(run.completed_at),
+      href: ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
+    }
   end
+
+  defp completed_at(nil), do: "—"
+  defp completed_at(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
+
+  defp status_badge(:running), do: "info"
+  defp status_badge(:completed), do: "ready"
+  defp status_badge(:failed), do: "blocked"
+  defp status_badge(_status), do: "info"
+
+  defp status_label(:running), do: "Running"
+  defp status_label(:completed), do: "Completed"
+  defp status_label(:failed), do: "Failed"
+  defp status_label(status), do: status |> to_string() |> String.capitalize()
 end
