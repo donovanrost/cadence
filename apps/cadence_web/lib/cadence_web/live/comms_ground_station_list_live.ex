@@ -32,14 +32,16 @@ defmodule CadenceWeb.CommsGroundStationListLive do
   def handle_params(params, _uri, socket) do
     list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
     {visible, total} = filter_ground_stations(socket.assigns.ground_stations, list)
+    mission_id = socket.assigns.current_mission.mission_id
 
     {:noreply,
      socket
      |> assign(:list, list)
+     |> assign(:ground_station_sort_dir, Atom.to_string(list.dir))
      |> assign(:filtered_count, total)
-     |> stream(:ground_stations, visible,
-       reset: true,
-       dom_id: &"ground-station-#{&1.ground_station_id}"
+     |> assign(
+       :ground_station_table_rows,
+       Enum.map(visible, &ground_station_table_row(&1, mission_id))
      )}
   end
 
@@ -127,50 +129,32 @@ defmodule CadenceWeb.CommsGroundStationListLive do
         />
       <% else %>
         <.card padding={:none}>
-          <.toolbar
-            id="ground-stations-toolbar"
+          <.vue
+            id="ground-stations-list-component"
+            v-component="CommsGroundStationList"
+            rows={@ground_station_table_rows}
             search={@list.q}
-            placeholder="Search ground stations"
-          />
-          <.table
-            id="ground-stations-table"
-            body_id="ground-stations"
-            rows={@streams.ground_stations}
-            sort_by={@list.sort}
-            sort_dir={@list.dir}
-          >
-            <:col :let={ground_station} label="Name" sort="display_name" class="font-medium">
-              <.link
-                navigate={
-                  ~p"/missions/#{@current_mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
-                }
-                class="text-primary hover:underline"
-              >
-                {ground_station.display_name}
-              </.link>
-            </:col>
-            <:col :let={ground_station} label="Provider" mono class="uppercase text-primary/80">
-              {ground_station.provider || "UNSPECIFIED"}
-            </:col>
-            <:col :let={ground_station} label="Region" mono class="text-base-content/70">
-              {ground_station.region || "none"}
-            </:col>
-            <:col :let={ground_station} label="Station ID" mono class="text-base-content/70">
-              {ground_station.ground_station_id}
-            </:col>
-          </.table>
-          <p :if={@filtered_count == 0} class="py-6 text-center text-sm text-base-content/70">
-            No ground stations match the current search.
-          </p>
-          <.pagination
-            id="ground-stations-pagination"
+            sort={@list.sort}
+            sort_dir={@ground_station_sort_dir}
             page={@list.page}
             page_size={50}
             total_count={@filtered_count}
+            v-ssr={false}
           />
         </.card>
       <% end %>
     </div>
     """
+  end
+
+  defp ground_station_table_row(ground_station, mission_id) do
+    %{
+      id: "ground-station-#{ground_station.ground_station_id}",
+      display_name: ground_station.display_name,
+      provider: ground_station.provider || "UNSPECIFIED",
+      region: ground_station.region || "none",
+      ground_station_id: ground_station.ground_station_id,
+      href: ~p"/missions/#{mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
+    }
   end
 end
