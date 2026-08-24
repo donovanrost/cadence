@@ -3,6 +3,7 @@ defmodule CadenceWeb.NotificationsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Notifications.Notification
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -11,7 +12,7 @@ defmodule CadenceWeb.NotificationsLive do
     {:ok,
      socket
      |> assign(:page_title, "Notifications")
-     |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
+     |> assign_notifications(Cadence.Notifications.list_notifications(user_id))}
   end
 
   @impl true
@@ -37,40 +38,30 @@ defmodule CadenceWeb.NotificationsLive do
           {:noreply,
            socket
            |> put_flash(:error, accept_error_message(reason))
-           |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
+           |> assign_notifications(Cadence.Notifications.list_notifications(user_id))}
       end
     else
       _other ->
         {:noreply,
          socket
          |> put_flash(:error, "That notification is no longer available.")
-         |> assign(:notifications, Cadence.Notifications.list_notifications(user_id))}
+         |> assign_notifications(Cadence.Notifications.list_notifications(user_id))}
     end
   end
 
   @impl true
   def handle_event("mark_read", %{"notification_id" => id}, socket) do
-    user_id = socket.assigns.current_scope.user.user_id
-
-    case Cadence.Notifications.mark_notification_read(id, user_id) do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:notifications, replace_in_list(socket.assigns.notifications, updated))}
-
-      {:error, _reason} ->
-        {:noreply, socket}
-    end
+    mark_notification_read(socket, id)
   end
 
   @impl true
   def handle_info({:notification_created, %Notification{} = n}, socket) do
-    {:noreply, assign(socket, :notifications, [n | socket.assigns.notifications])}
+    {:noreply, assign_notifications(socket, [n | socket.assigns.notifications])}
   end
 
   @impl true
   def handle_info({:notification_updated, %Notification{} = n}, socket) do
-    {:noreply, assign(socket, :notifications, replace_in_list(socket.assigns.notifications, n))}
+    {:noreply, assign_notifications(socket, replace_in_list(socket.assigns.notifications, n))}
   end
 
   @impl true
@@ -78,92 +69,92 @@ defmodule CadenceWeb.NotificationsLive do
     user_id = socket.assigns.current_scope.user.user_id
     # After accept_invitation_as_user marks related notifications read, the bell hook
     # already fired; just refresh the full list from DB so stale rows disappear.
-    {:noreply, assign(socket, :notifications, Cadence.Notifications.list_notifications(user_id))}
+    {:noreply, assign_notifications(socket, Cadence.Notifications.list_notifications(user_id))}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-4 max-w-2xl mx-auto">
-      <.page_header
-        title="Notifications"
-        subtitle="Invitations, access grants, and system notices."
-      />
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="notifications-page" class="space-y-4 max-w-2xl mx-auto">
+        <.page_header
+          title="Notifications"
+          subtitle="Invitations, access grants, and system notices."
+        />
 
-      <%= if @notifications == [] do %>
-        <.empty_state icon="hero-bell" title="No notifications" description="All caught up." />
-      <% else %>
-        <div class="space-y-2">
-          <.notification_card :for={n <- @notifications} notification={n} />
+        <div :if={@notifications_empty?} id="notifications-empty-state">
+          <.empty_state icon="hero-bell" title="No notifications" description="All caught up." />
         </div>
-      <% end %>
-    </div>
-    """
-  end
 
-  attr :notification, Notification, required: true
-
-  defp notification_card(assigns) do
-    ~H"""
-    <%!-- Read/unread state drives the left accent via the class escape hatch. --%>
-    <.card
-      padding={:none}
-      class={"border-l-2 transition-all " <>
-        if(is_nil(@notification.read_at), do: "border-l-primary", else: "border-l-base-300")}
-    >
-      <div class="flex flex-row items-start gap-4 p-4">
-        <div class="flex-1 min-w-0">
-          <p class={[
-            "text-sm",
-            if(is_nil(@notification.read_at),
-              do: "font-bold text-base-content",
-              else: "text-base-content/70"
-            )
-          ]}>
-            {@notification.title}
-          </p>
-          <p :if={@notification.body} class="mt-1 text-xs text-base-content/70">
-            {@notification.body}
-          </p>
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <.notification_actions notification={@notification} />
-        </div>
+        <.vue
+          :if={!@notifications_empty?}
+          id="notifications-panel-component"
+          v-component="NotificationsPanel"
+          notifications={@notification_rows}
+          v-on:accept-invitation={JS.push("accept_invitation")}
+          v-on:mark-read={JS.push("mark_read")}
+          v-ssr={false}
+        />
       </div>
-    </.card>
+    </Layouts.app>
     """
   end
 
-  attr :notification, Notification, required: true
+  defp mark_notification_read(socket, id) do
+    user_id = socket.assigns.current_scope.user.user_id
 
-  defp notification_actions(assigns) do
-    ~H"""
-    <%= case @notification.kind do %>
-      <% :organization_invitation -> %>
-        <.button
-          :if={is_nil(@notification.read_at)}
-          size={:xs}
-          phx-click="accept_invitation"
-          phx-value-notification_id={@notification.notification_id}
-        >
-          Accept
-        </.button>
-        <span :if={@notification.read_at} class="hud-label">
-          Accepted
-        </span>
-      <% _ -> %>
-        <.button
-          :if={is_nil(@notification.read_at)}
-          variant={:ghost}
-          size={:xs}
-          phx-click="mark_read"
-          phx-value-notification_id={@notification.notification_id}
-        >
-          Mark read
-        </.button>
-    <% end %>
-    """
+    case Cadence.Notifications.mark_notification_read(id, user_id) do
+      {:ok, updated} ->
+        {:noreply,
+         assign_notifications(
+           socket,
+           replace_in_list(socket.assigns.notifications, updated)
+         )}
+
+      {:error, _reason} ->
+        {:noreply, socket}
+    end
   end
+
+  defp assign_notifications(socket, notifications) do
+    socket
+    |> assign(:notifications, notifications)
+    |> assign(:notification_rows, Enum.map(notifications, &notification_row/1))
+    |> assign(:notifications_empty?, notifications == [])
+  end
+
+  defp notification_row(%Notification{} = notification) do
+    notification_id = notification.notification_id
+    {action, action_label} = notification_action(notification)
+
+    %{
+      id: "notification-#{notification_id}",
+      notification_id: notification_id,
+      kind: Atom.to_string(notification.kind),
+      title: notification.title,
+      body: notification.body,
+      unread: Notification.unread?(notification),
+      action: action,
+      action_label: action_label,
+      state_label: notification_state_label(notification)
+    }
+  end
+
+  defp notification_action(%Notification{kind: :organization_invitation, read_at: nil}),
+    do: {"accept_invitation", "Accept"}
+
+  defp notification_action(%Notification{read_at: nil}),
+    do: {"mark_read", "Mark read"}
+
+  defp notification_action(%Notification{}), do: {nil, nil}
+
+  defp notification_state_label(%Notification{
+         kind: :organization_invitation,
+         read_at: %DateTime{}
+       }),
+       do: "Accepted"
+
+  defp notification_state_label(%Notification{}), do: nil
 
   defp replace_in_list(list, %Notification{} = n) do
     Enum.map(list, fn existing ->
