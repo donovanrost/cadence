@@ -15,11 +15,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents do
     assigns = assign(assigns, :presentation, presentation(assigns))
 
     ~H"""
-    <.vue
+    <div
       id={@presentation.root.attrs["id"]}
-      v-component="RuntimeDiagnosticsPanel"
-      presentation={@presentation}
-      v-ssr={false}
       class={@presentation.root.attrs["class"]}
       data-runtime-invalidation-events={
         @presentation.root.attrs["data-runtime-invalidation-events"]
@@ -107,7 +104,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents do
       data-runtime-source-dependency-degraded-count={
         @presentation.root.attrs["data-runtime-source-dependency-degraded-count"]
       }
-    />
+    >
+      <.vue
+        id="dashboard-diagnostics-panel-component"
+        v-component="RuntimeDiagnosticsPanel"
+        presentation={@presentation}
+        v-ssr={false}
+        class="space-y-5"
+      />
+    </div>
     """
   end
 

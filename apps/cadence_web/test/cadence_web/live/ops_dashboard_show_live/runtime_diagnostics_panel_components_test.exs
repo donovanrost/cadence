@@ -88,7 +88,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
       )
 
     document = LazyHTML.from_fragment(html)
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel-component")
     presentation = vue.props["presentation"]
 
     host_ids = [
@@ -106,12 +106,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
     assert host_ids ==
              Enum.map(sections, & &1["root"]["attrs"]["id"])
 
-    assert ["dashboard-diagnostics-panel"] ==
+    assert ["dashboard-diagnostics-panel-component"] ==
              document
              |> LazyHTML.query(~s([phx-hook="VueHook"]))
              |> LazyHTML.attribute("id")
 
-    assert vue.id == "dashboard-diagnostics-panel"
+    assert vue.id == "dashboard-diagnostics-panel-component"
     assert vue.component == "RuntimeDiagnosticsPanel"
     assert vue.ssr == false
     assert vue.class == "space-y-5"
@@ -165,7 +165,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
           })
       )
 
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel-component")
     panel = vue.props["presentation"]
     presentation = panel["engine_section"]["presentation"]
 
@@ -261,7 +261,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
 
   defp panel_presentation(html) do
     html
-    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel")
+    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel-component")
     |> Map.fetch!(:props)
     |> Map.fetch!("presentation")
   end

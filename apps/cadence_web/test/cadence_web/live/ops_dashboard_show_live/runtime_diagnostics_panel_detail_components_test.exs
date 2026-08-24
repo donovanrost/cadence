@@ -191,7 +191,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
 
   defp panel_presentation(html) do
     html
-    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel")
+    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel-component")
     |> Map.fetch!(:props)
     |> Map.fetch!("presentation")
   end
