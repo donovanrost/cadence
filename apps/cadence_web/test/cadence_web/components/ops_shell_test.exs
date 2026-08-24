@@ -16,7 +16,9 @@ defmodule CadenceWeb.Components.OpsShellTest do
       platform_admin?: false
     ]
     |> Keyword.merge(overrides)
-    |> then(&render_component(&OpsShell.ops_status_bar/1, &1))
+    |> then(fn merged_assigns ->
+      render_component(&OpsShell.ops_status_bar/1, merged_assigns)
+    end)
     |> LiveVue.Test.get_vue(id: "ops-status-bar-component")
   end
 
@@ -24,7 +26,7 @@ defmodule CadenceWeb.Components.OpsShellTest do
     %{normalized_state_counts: %{red: red, yellow: yellow}}
   end
 
-  defp scope(user, organization \\ nil) do
+  defp scope(user, organization) do
     %{
       user: user,
       organization: organization,

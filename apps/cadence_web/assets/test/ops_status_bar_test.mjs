@@ -14,10 +14,19 @@ const paths = {
   dropdown: resolve(testDirectory, "../vue/dropdown_controller.js"),
   phoenix: resolve(testDirectory, "../../lib/cadence_web/components/ops_shell.ex"),
   ui: resolve(testDirectory, "../../lib/cadence_web/components/ui.ex"),
+  phoenixTest: resolve(testDirectory, "../../test/cadence_web/components/ops_shell_test.exs"),
 }
 
-const [source, clockSource, notificationsSource, userMenuSource, dropdownSource, phoenixSource, uiSource] =
-  await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
+const [
+  source,
+  clockSource,
+  notificationsSource,
+  userMenuSource,
+  dropdownSource,
+  phoenixSource,
+  uiSource,
+  phoenixTestSource,
+] = await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -119,6 +128,11 @@ for (const token of [
 
 assert.match(uiSource, /def notifications_bell_presentation\(assigns\) do/)
 assert.match(uiSource, /def user_menu_presentation\(assigns\) do/)
+assert.match(
+  phoenixTestSource,
+  /then\(fn merged_assigns ->\s+render_component\(&OpsShell\.ops_status_bar\/1, merged_assigns\)\s+end\)/,
+)
+assert.doesNotMatch(phoenixTestSource, /then\(&render_component/)
 assert.match(clockSource, /timerId = setInterval\(updateUtcTime, 1000\)/)
 assert.match(clockSource, /if \(timerId !== undefined\) clearInterval\(timerId\)/)
 
