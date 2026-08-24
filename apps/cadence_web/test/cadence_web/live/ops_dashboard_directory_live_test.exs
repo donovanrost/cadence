@@ -502,7 +502,7 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
       "dashboard_id" => dashboard_id,
       "name" => dashboard.name,
       "description" => dashboard.description,
-      "tags" => dashboard.metadata["tags"] || [],
+      "tags" => Enum.sort(dashboard.metadata["tags"] || []),
       "lifecycle" => %{
         "state" => "active",
         "class" =>
