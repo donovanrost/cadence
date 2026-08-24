@@ -95,25 +95,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-data-realm="flight"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
            )
 
-    row_selector =
-      ~s(#widget-#{matrix_widget.widget_id} [data-status-matrix-row="commanding.queue_depth:#{source_endpoint.source_endpoint_id}"])
+    row =
+      assert_widget_row(view, "status_matrix", matrix_widget.widget_id, %{
+        "data-status-matrix-row" =>
+          "commanding.queue_depth:#{source_endpoint.source_endpoint_id}",
+        "data-status-matrix-source" => "operational_observables",
+        "data-status-matrix-status-policy" => "metric_value",
+        "data-status-matrix-realm" => "flight",
+        "data-status-matrix-resource-id" => source_endpoint.source_endpoint_id,
+        "data-status-matrix-scope-kind" => "source_endpoint",
+        "data-status-matrix-source-endpoint-id" => source_endpoint.source_endpoint_id,
+        "data-status-matrix-product-family" => "commanding",
+        "data-status-matrix-supported-capability" => "command_queue_depth",
+        "data-status-matrix-data-source-id" => "managed_operational_observables",
+        "data-status-matrix-source-binding-id" => "default_flight_operational_observables"
+      })
 
-    assert has_element?(
-             view,
-             row_selector <>
-               ~s([data-status-matrix-source="operational_observables"][data-status-matrix-status-policy="metric_value"][data-status-matrix-realm="flight"][data-status-matrix-resource-id="#{source_endpoint.source_endpoint_id}"][data-status-matrix-scope-kind="source_endpoint"][data-status-matrix-source-endpoint-id="#{source_endpoint.source_endpoint_id}"][data-status-matrix-product-family="commanding"][data-status-matrix-supported-capability="command_queue_depth"][data-status-matrix-data-source-id="managed_operational_observables"][data-status-matrix-source-binding-id="default_flight_operational_observables"])
-           )
-
-    assert has_element?(
-             view,
-             row_selector <> ~s( [data-status-matrix-field="value"]),
-             "1"
-           )
+    assert_widget_row_field(row, "value", "1")
 
     component_id =
       "status-row-links-#{matrix_widget.widget_id}-commanding.queue_depth:#{source_endpoint.source_endpoint_id}-component"
 
-    assert has_element?(view, "#{row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-status-matrix-row-evidence" =>
@@ -290,14 +293,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
   end
 
   defp click_widget_data_link(view, component_id, expected_attrs) do
-    vue = LiveVue.Test.get_vue(view, id: component_id)
-    assert vue.component == "WidgetDataLinks"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    presentation = widget_data_link_presentation(view, component_id)
+    assert presentation
+    assert presentation["component_id"] == component_id
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
 
     item =
-      Enum.find(vue.props["presentation"]["items"], fn item ->
+      Enum.find(presentation["items"], fn item ->
         Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
       end)
 
@@ -311,6 +313,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
       end)
       |> Map.new()
 
-    render_hook(view, item["attrs"]["phx-click"], payload)
+    event = Map.fetch!(item["attrs"], "phx-click")
+    render_hook(view, event, payload)
   end
 end

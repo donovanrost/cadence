@@ -256,35 +256,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     timer_row_id =
       "state:runtime.transport_activity:#{DateTime.to_unix(timer_at, :millisecond)}:2"
 
-    record_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{record_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => record_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport control input handled",
+      "data-state-timeline-realm" => "replay",
+      "data-state-timeline-data-source-id" => replay_sources.operational_data_source_id,
+      "data-state-timeline-source-binding-id" => replay_sources.operational_binding_id,
+      "data-state-timeline-replay-run-id" => replay_run_id,
+      "data-state-timeline-dataset" => "operational_observables_replay"
+    })
 
-    action_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{action_row_id}"])
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => action_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport action requested",
+      "data-state-timeline-realm" => "replay"
+    })
 
-    timer_row_selector =
-      ~s(#widget-#{timeline_widget_id} [data-state-timeline-row="#{timer_row_id}"])
-
-    assert has_element?(
-             view,
-             record_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport control input handled"][data-state-timeline-realm="replay"][data-state-timeline-data-source-id="#{replay_sources.operational_data_source_id}"][data-state-timeline-source-binding-id="#{replay_sources.operational_binding_id}"][data-state-timeline-replay-run-id="#{replay_run_id}"][data-state-timeline-dataset="operational_observables_replay"])
-           )
-
-    assert has_element?(
-             view,
-             action_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport action requested"][data-state-timeline-realm="replay"])
-           )
-
-    assert has_element?(
-             view,
-             timer_row_selector <>
-               ~s([data-state-timeline-observable="runtime.transport_activity"][data-state-timeline-state="Transport timer fired"][data-state-timeline-realm="replay"])
-           )
+    assert_widget_row(view, "state_timeline", timeline_widget_id, %{
+      "data-state-timeline-row" => timer_row_id,
+      "data-state-timeline-observable" => "runtime.transport_activity",
+      "data-state-timeline-state" => "Transport timer fired",
+      "data-state-timeline-realm" => "replay"
+    })
 
     component_id = "state-row-links-#{timeline_widget_id}-#{action_row_id}-component"
-    assert has_element?(view, "#{action_row_selector} [id=\"#{component_id}\"]")
+    assert widget_data_link_presentation(view, component_id)
 
     click_widget_data_link(view, component_id, %{
       "data-state-timeline-row-evidence" => action_row_id,
@@ -370,7 +368,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
     %{
       action_at: action_at,
       action_event: action_event,
-      action_row_selector: action_row_selector,
       capability_verifier_instance: capability_verifier_instance,
       conn: conn,
       failed_verifier_instance: failed_verifier_instance,
@@ -389,14 +386,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
   end
 
   defp click_widget_data_link(view, component_id, expected_attrs) do
-    vue = LiveVue.Test.get_vue(view, id: component_id)
-    assert vue.component == "WidgetDataLinks"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    presentation = widget_data_link_presentation(view, component_id)
+    assert presentation
+    assert presentation["component_id"] == component_id
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
 
     item =
-      Enum.find(vue.props["presentation"]["items"], fn item ->
+      Enum.find(presentation["items"], fn item ->
         Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
       end)
 
@@ -410,6 +406,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayTransportEvidenceSetup do
       end)
       |> Map.new()
 
-    render_hook(view, item["attrs"]["phx-click"], payload)
+    event = Map.fetch!(item["attrs"], "phx-click")
+    render_hook(view, event, payload)
   end
 end

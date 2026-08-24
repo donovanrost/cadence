@@ -1014,14 +1014,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
   end
 
   defp click_widget_data_link(view, component_id, expected_attrs) do
-    vue = LiveVue.Test.get_vue(view, id: component_id)
-    assert vue.component == "WidgetDataLinks"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    presentation = widget_data_link_presentation(view, component_id)
+    assert presentation
+    assert presentation["component_id"] == component_id
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
 
     item =
-      Enum.find(vue.props["presentation"]["items"], fn item ->
+      Enum.find(presentation["items"], fn item ->
         Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
       end)
 
@@ -1035,6 +1034,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayEvidenceFixtures do
       end)
       |> Map.new()
 
-    render_hook(view, item["attrs"]["phx-click"], payload)
+    event = Map.fetch!(item["attrs"], "phx-click")
+    render_hook(view, event, payload)
   end
 end
