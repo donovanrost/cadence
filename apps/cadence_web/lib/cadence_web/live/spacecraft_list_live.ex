@@ -37,7 +37,7 @@ defmodule CadenceWeb.SpacecraftListLive do
      |> assign(:summary, summary)
      |> assign(:drift_count, drift_count(summary, latest_versions))
      |> assign(:version_counts_by_profile, version_counts_by_profile(summary))
-     |> assign(:spacecraft_list_props, nil)}
+     |> assign(:presentation, nil)}
   end
 
   @impl true
@@ -47,13 +47,13 @@ defmodule CadenceWeb.SpacecraftListLive do
     list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
     filter = parse_filter(params["filter"])
     {list, page} = fetch_roster(organization_id, mission.mission_id, list, filter, socket)
-    spacecraft_list_props = spacecraft_list_props(mission.mission_id, list, filter, page, socket)
+    presentation = page_presentation_dto(mission, list, filter, page, socket)
 
     {:noreply,
      socket
      |> assign(:list, list)
      |> assign(:filter, filter)
-     |> assign(:spacecraft_list_props, spacecraft_list_props)}
+     |> assign(:presentation, presentation)}
   end
 
   @impl true
@@ -76,26 +76,149 @@ defmodule CadenceWeb.SpacecraftListLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="spacecraft-management-page" class="space-y-6">
-      <.page_header
-        title="Spacecraft"
-        subtitle="Manage mission spacecraft identities and reusable spacecraft profiles."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", nil}
-        ]}
-      />
-
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-list-component"
-        v-component="SpacecraftList"
-        summary_tiles={@spacecraft_list_props.summary_tiles}
-        roster={@spacecraft_list_props.roster}
-        profiles={@spacecraft_list_props.profiles}
+        v-component="SpacecraftListPage"
+        presentation={@presentation}
         v-ssr={false}
+        class="contents"
       />
-    </div>
+    </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp page_presentation_dto(mission, list, filter, page, socket) do
+    mission_id = mission.mission_id
+
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "spacecraft-management-page",
+            "class" => "space-y-6"
+          })
+      },
+      "header" => header_presentation(),
+      "breadcrumbs" => breadcrumbs_presentation(mission),
+      "summary_tiles" =>
+        summary_tiles_dto(
+          mission_id,
+          list,
+          filter,
+          socket.assigns.summary,
+          socket.assigns.drift_count
+        ),
+      "roster" =>
+        roster_dto(
+          mission_id,
+          list,
+          page,
+          socket.assigns.summary,
+          socket.assigns.profiles_by_id,
+          socket.assigns.latest_versions
+        ),
+      "profiles" =>
+        profiles_dto(
+          mission_id,
+          list,
+          socket.assigns.profiles,
+          socket.assigns.drift_count,
+          socket.assigns.version_counts_by_profile,
+          socket.assigns.latest_versions
+        )
+    }
+  end
+
+  defp header_presentation do
+    %{
+      "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+      "body" => %{"attrs" => %{}},
+      "content" => %{"attrs" => %{}},
+      "title" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+          }),
+        "text" => "Spacecraft"
+      },
+      "subtitle" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+          }),
+        "text" => "Manage mission spacecraft identities and reusable spacecraft profiles."
+      }
+    }
+  end
+
+  defp breadcrumbs_presentation(mission) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "aria-label" => "Breadcrumb",
+          "class" =>
+            "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+        }),
+      "items" => [
+        %{
+          "key" => "mission",
+          "separator" => nil,
+          "link" => %{
+            "attrs" =>
+              navigate_attrs(~p"/missions/#{mission.mission_id}", %{
+                "class" => "hover:text-primary transition-colors"
+              }),
+            "text" => mission.display_name
+          },
+          "current" => nil
+        },
+        %{
+          "key" => "spacecraft",
+          "separator" => breadcrumb_separator(),
+          "link" => nil,
+          "current" => %{
+            "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+            "text" => "Spacecraft"
+          }
+        }
+      ]
+    }
+  end
+
+  defp breadcrumb_separator do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "text-base-content/20",
+          "aria-hidden" => "true"
+        }),
+      "text" => "/"
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp fetch_roster(organization_id, mission_id, list, filter, socket) do
@@ -142,37 +265,6 @@ defmodule CadenceWeb.SpacecraftListLive do
 
   defp sort_tuple(%ListParams{sort: "display_name", dir: dir}), do: {:display_name, dir}
   defp sort_tuple(%ListParams{sort: "scid", dir: dir}), do: {:scid, dir}
-
-  defp spacecraft_list_props(mission_id, list, filter, page, socket) do
-    %{
-      summary_tiles:
-        summary_tiles_dto(
-          mission_id,
-          list,
-          filter,
-          socket.assigns.summary,
-          socket.assigns.drift_count
-        ),
-      roster:
-        roster_dto(
-          mission_id,
-          list,
-          page,
-          socket.assigns.summary,
-          socket.assigns.profiles_by_id,
-          socket.assigns.latest_versions
-        ),
-      profiles:
-        profiles_dto(
-          mission_id,
-          list,
-          socket.assigns.profiles,
-          socket.assigns.drift_count,
-          socket.assigns.version_counts_by_profile,
-          socket.assigns.latest_versions
-        )
-    }
-  end
 
   defp summary_tiles_dto(mission_id, list, filter, summary, drift_count) do
     [

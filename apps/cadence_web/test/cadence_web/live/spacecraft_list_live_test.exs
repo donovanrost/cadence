@@ -9,6 +9,7 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
+  alias CadenceWeb.SpacecraftListLive
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -20,8 +21,11 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
   defp spacecraft_list_props(view) do
     vue = LiveVue.Test.get_vue(view, id: "spacecraft-list-component")
-    assert vue.component == "SpacecraftList"
-    vue.props
+    assert vue.component == "SpacecraftListPage"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert Map.keys(vue.props) == ["presentation"]
+    vue.props["presentation"]
   end
 
   describe "mount" do
@@ -235,6 +239,82 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       assert roster["filtered_empty"]
       refute roster["fleet_empty"]
       assert roster["rows"] == []
+    end
+  end
+
+  describe "page presentation" do
+    test "projects the complete page through one JSON-safe non-SSR parent" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+
+      presentation = spacecraft_list_props(view)
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+
+      assert presentation["root"] == %{
+               "attrs" => %{
+                 "class" => "space-y-6",
+                 "id" => "spacecraft-management-page"
+               }
+             }
+
+      assert presentation["header"] == %{
+               "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
+               "body" => %{"attrs" => %{}},
+               "content" => %{"attrs" => %{}},
+               "title" => %{
+                 "attrs" => %{
+                   "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+                 },
+                 "text" => "Spacecraft"
+               },
+               "subtitle" => %{
+                 "attrs" => %{
+                   "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+                 },
+                 "text" =>
+                   "Manage mission spacecraft identities and reusable spacecraft profiles."
+               }
+             }
+
+      assert presentation["breadcrumbs"]["attrs"] == %{
+               "aria-label" => "Breadcrumb",
+               "class" =>
+                 "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+             }
+
+      assert Enum.map(presentation["breadcrumbs"]["items"], fn item ->
+               (item["link"] && item["link"]["text"]) || item["current"]["text"]
+             end) == [mission.display_name, "Spacecraft"]
+
+      assert Enum.map(presentation["breadcrumbs"]["items"], fn item ->
+               item["link"] && item["link"]["attrs"]["href"]
+             end) == ["/missions/#{mission.mission_id}", nil]
+
+      mission_link = List.first(presentation["breadcrumbs"]["items"])["link"]["attrs"]
+      assert mission_link["data-phx-link"] == "redirect"
+      assert mission_link["data-phx-link-state"] == "push"
+
+      assert is_list(presentation["summary_tiles"])
+      assert is_map(presentation["roster"])
+      assert is_map(presentation["profiles"])
+    end
+
+    test "raw attrs preserve HEEx nil, false, true, string, and number semantics" do
+      attrs =
+        SpacecraftListLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
     end
   end
 end

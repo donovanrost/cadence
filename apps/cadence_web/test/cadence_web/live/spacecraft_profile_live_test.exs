@@ -87,34 +87,33 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert has_element?(view, "#spacecraft-management-page")
       assert has_element?(view, "#spacecraft-list-component")
 
       vue = LiveVue.Test.get_vue(view, id: "spacecraft-list-component")
-      assert vue.component == "SpacecraftList"
+      assert vue.component == "SpacecraftListPage"
+      presentation = vue.props["presentation"]
 
-      assert vue.props["roster"]["new_spacecraft_href"] ==
+      assert presentation["root"]["attrs"]["id"] == "spacecraft-management-page"
+
+      assert presentation["roster"]["new_spacecraft_href"] ==
                "/missions/#{mission.mission_id}/spacecraft/new"
 
-      assert vue.props["profiles"]["new_profile_href"] ==
+      assert presentation["profiles"]["new_profile_href"] ==
                "/missions/#{mission.mission_id}/spacecraft/profiles/new"
 
       assert Enum.any?(
-               vue.props["roster"]["rows"],
+               presentation["roster"]["rows"],
                &(&1["id"] == "spacecraft-#{spacecraft.spacecraft_id}" and
                    &1["display_name"] == spacecraft.display_name)
              )
 
       assert Enum.any?(
-               vue.props["profiles"]["rows"],
+               presentation["profiles"]["rows"],
                &(&1["id"] == "spacecraft-profile-preview-#{profile.spacecraft_type_id}" and
                    &1["display_name"] == profile.display_name)
              )
 
-      page_header =
-        view
-        |> element("#spacecraft-management-page > header:first-child")
-        |> render()
+      page_header = Jason.encode!(presentation["header"])
 
       refute page_header =~ "New spacecraft"
       refute page_header =~ "New profile"
