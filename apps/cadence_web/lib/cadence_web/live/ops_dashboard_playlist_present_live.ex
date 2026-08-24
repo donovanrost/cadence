@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistPresentLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.{DashboardSummary, Management}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"playlist_id" => playlist_id} = params, _session, socket) do
@@ -52,28 +53,15 @@ defmodule CadenceWeb.OpsDashboardPlaylistPresentLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-playlist-present-page" class="flex h-full min-h-0 flex-col bg-base-100" data-wallboard-mode={to_string(@dashboard_playlist.wallboard_mode)}>
-        <header class="flex shrink-0 flex-wrap items-center gap-3 border-b border-warning/35 bg-warning/10 px-4 py-2">
-          <div class="min-w-0 flex-1">
-            <p class="hud-label">{if @dashboard_playlist.wallboard_mode, do: "Wallboard", else: "Presentation"} · {@dashboard_playlist.name}</p>
-            <p class="truncate text-sm font-semibold">{@current_dashboard.name}</p>
-          </div>
-          <div id="dashboard-playlist-freshness-signal" data-freshness-visible="true" class="flex items-center gap-2 border border-warning/30 bg-base-100 px-3 py-1.5 text-xs">
-            <.icon name="hero-signal" class="h-4 w-4 text-warning" />
-            <span>Live freshness, stale, partial, disconnected, and unsupported states remain visible in the canvas and context rail.</span>
-          </div>
-          <span id="dashboard-playlist-position" class="font-mono text-xs">{@current_index + 1}/{length(@dashboard_playlist.dashboard_ids)}</span>
-          <.button id="dashboard-playlist-next" size={:xs} variant={:ghost} phx-click="next_dashboard">Next</.button>
-        </header>
-        <iframe :if={@current_dashboard_available?} id="dashboard-playlist-frame" title={@current_dashboard.name} src={@current_dashboard_path} class="min-h-0 flex-1 w-full border-0" data-dashboard-id={@current_dashboard.dashboard_id}></iframe>
-        <div :if={not @current_dashboard_available?} id="dashboard-playlist-unavailable" data-dashboard-state="unsupported" class="flex min-h-0 flex-1 items-center justify-center bg-error/5 p-8">
-          <div class="max-w-xl border border-error/35 bg-base-100 p-6 text-center">
-            <.icon name="hero-exclamation-triangle" class="mx-auto h-8 w-8 text-error" />
-            <h2 class="mt-3 text-lg font-semibold">Referenced dashboard is unavailable</h2>
-            <p class="mt-2 text-sm text-base-content/60">The playlist reference is preserved, but presentation cannot silently skip or mask a missing or archived dashboard.</p>
-          </div>
-        </div>
-      </section>
+      <.vue
+        id="dashboard-playlist-present-component"
+        v-component="OpsDashboardPlaylistPresent"
+        page={@playlist_present_page}
+        current_dashboard={@current_dashboard_details}
+        v-on:next-dashboard={JS.push("next_dashboard")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
@@ -104,14 +92,62 @@ defmodule CadenceWeb.OpsDashboardPlaylistPresentLive do
 
     available? = Map.has_key?(summaries, dashboard_id)
 
+    current_dashboard_path =
+      ~p"/missions/#{socket.assigns.current_mission.mission_id}/ops/dashboards/#{dashboard_id}?presentation=playlist"
+
     socket
     |> assign(:current_index, index)
     |> assign(:current_dashboard, summary)
     |> assign(:current_dashboard_available?, available?)
+    |> assign(:current_dashboard_path, current_dashboard_path)
+    |> assign(:playlist_present_page, playlist_present_page_dto(playlist, index))
     |> assign(
-      :current_dashboard_path,
-      ~p"/missions/#{socket.assigns.current_mission.mission_id}/ops/dashboards/#{dashboard_id}?presentation=playlist"
+      :current_dashboard_details,
+      current_dashboard_dto(summary, available?, current_dashboard_path)
     )
+  end
+
+  defp playlist_present_page_dto(playlist, index) do
+    %{
+      id: "dashboard-playlist-present-page",
+      wallboard_mode: playlist.wallboard_mode,
+      mode_label: if(playlist.wallboard_mode, do: "Wallboard", else: "Presentation"),
+      playlist_name: playlist.name,
+      freshness_signal: %{
+        id: "dashboard-playlist-freshness-signal",
+        visible: true,
+        icon: "hero-signal",
+        copy:
+          "Live freshness, stale, partial, disconnected, and unsupported states remain visible in the canvas and context rail."
+      },
+      position: %{
+        id: "dashboard-playlist-position",
+        current: index + 1,
+        total: length(playlist.dashboard_ids)
+      },
+      next_action: %{
+        id: "dashboard-playlist-next",
+        label: "Next"
+      },
+      unavailable: %{
+        id: "dashboard-playlist-unavailable",
+        state: "unsupported",
+        icon: "hero-exclamation-triangle",
+        title: "Referenced dashboard is unavailable",
+        copy:
+          "The playlist reference is preserved, but presentation cannot silently skip or mask a missing or archived dashboard."
+      }
+    }
+  end
+
+  defp current_dashboard_dto(summary, available?, path) do
+    %{
+      dashboard_id: summary.dashboard_id,
+      name: summary.name,
+      available: available?,
+      path: path,
+      frame_id: "dashboard-playlist-frame"
+    }
   end
 
   defp dashboard_summaries(socket) do

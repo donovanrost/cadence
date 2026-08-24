@@ -32,36 +32,181 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     assert playlist.dashboard_ids == [power.dashboard_id, thermal.dashboard_id]
     refute Map.has_key?(Map.from_struct(playlist), :documents)
 
-    {:ok, present, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
-      )
+    present_path =
+      ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
+
+    {:ok, present, _html} = live(conn, present_path)
 
     assert has_element?(present, "#ops-context-rail")
-    assert has_element?(present, ~s(#dashboard-playlist-present-page[data-wallboard-mode="true"]))
+    assert has_element?(present, "#dashboard-playlist-present-component.contents")
 
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-freshness-signal[data-freshness-visible="true"])
-           )
+    initial_vue = LiveVue.Test.get_vue(present, id: "dashboard-playlist-present-component")
 
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-frame[data-dashboard-id="#{power.dashboard_id}"])
-           )
+    assert initial_vue.component == "OpsDashboardPlaylistPresent"
+    assert initial_vue.ssr == false
+    assert initial_vue.props == Jason.decode!(Jason.encode!(initial_vue.props))
+    assert initial_vue.handlers == %{
+             "next-dashboard" => Phoenix.LiveView.JS.push("next_dashboard")
+           }
 
-    present |> element("#dashboard-playlist-next") |> render_click()
+    initial_props = %{
+      "page" => %{
+        "id" => "dashboard-playlist-present-page",
+        "wallboard_mode" => true,
+        "mode_label" => "Wallboard",
+        "playlist_name" => "Flight wallboard",
+        "freshness_signal" => %{
+          "id" => "dashboard-playlist-freshness-signal",
+          "visible" => true,
+          "icon" => "hero-signal",
+          "copy" =>
+            "Live freshness, stale, partial, disconnected, and unsupported states remain visible in the canvas and context rail."
+        },
+        "position" => %{
+          "id" => "dashboard-playlist-position",
+          "current" => 1,
+          "total" => 2
+        },
+        "next_action" => %{
+          "id" => "dashboard-playlist-next",
+          "label" => "Next"
+        },
+        "unavailable" => %{
+          "id" => "dashboard-playlist-unavailable",
+          "state" => "unsupported",
+          "icon" => "hero-exclamation-triangle",
+          "title" => "Referenced dashboard is unavailable",
+          "copy" =>
+            "The playlist reference is preserved, but presentation cannot silently skip or mask a missing or archived dashboard."
+        }
+      },
+      "current_dashboard" => %{
+        "dashboard_id" => power.dashboard_id,
+        "name" => "Power",
+        "available" => true,
+        "path" =>
+          "/missions/#{mission.mission_id}/ops/dashboards/#{power.dashboard_id}?presentation=playlist",
+        "frame_id" => "dashboard-playlist-frame"
+      }
+    }
 
-    assert_patch(
-      present,
-      ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present?index=1"
-    )
+    assert initial_vue.props == initial_props
 
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-frame[data-dashboard-id="#{thermal.dashboard_id}"])
-           )
+    # One-to-one preservation of the original presentation assertions now carried by Vue props.
+    assert initial_vue.props["page"]["id"] == "dashboard-playlist-present-page"
+    assert initial_vue.props["page"]["wallboard_mode"] == true
+
+    assert initial_vue.props["page"]["freshness_signal"]["id"] ==
+             "dashboard-playlist-freshness-signal"
+
+    assert initial_vue.props["page"]["freshness_signal"]["visible"] == true
+    assert initial_vue.props["current_dashboard"]["frame_id"] == "dashboard-playlist-frame"
+    assert initial_vue.props["current_dashboard"]["dashboard_id"] == power.dashboard_id
+
+    render_hook(present, "next_dashboard", %{})
+
+    assert_patch(present, present_path <> "?index=1")
+    render_patch(present, present_path <> "?index=1")
+
+    rotated_vue = LiveVue.Test.get_vue(present, id: "dashboard-playlist-present-component")
+
+    rotated_props =
+      initial_props
+      |> put_in(["page", "position", "current"], 2)
+      |> put_in(["current_dashboard"], %{
+        "dashboard_id" => thermal.dashboard_id,
+        "name" => "Thermal",
+        "available" => true,
+        "path" =>
+          "/missions/#{mission.mission_id}/ops/dashboards/#{thermal.dashboard_id}?presentation=playlist",
+        "frame_id" => "dashboard-playlist-frame"
+      })
+
+    assert rotated_vue.props == rotated_props
+    assert rotated_vue.props == Jason.decode!(Jason.encode!(rotated_vue.props))
+    assert rotated_vue.props["current_dashboard"]["frame_id"] == "dashboard-playlist-frame"
+    assert rotated_vue.props["current_dashboard"]["dashboard_id"] == thermal.dashboard_id
+
+    send(present.pid, :rotate_playlist)
+    assert_patch(present, present_path <> "?index=0")
+    render_patch(present, present_path <> "?index=0")
+
+    timer_rotated_vue = LiveVue.Test.get_vue(present, id: "dashboard-playlist-present-component")
+
+    assert timer_rotated_vue.props == initial_props
+
+    assert :ok =
+             Cadence.Dashboards.archive_document(
+               org.organization_id,
+               mission.mission_id,
+               thermal.dashboard_id,
+               expected_version: 1,
+               actor_id: user.user_id
+             )
+
+    render_patch(present, present_path <> "?index=3")
+
+    unavailable_vue = LiveVue.Test.get_vue(present, id: "dashboard-playlist-present-component")
+
+    unavailable_props =
+      rotated_props
+      |> put_in(["current_dashboard"], %{
+        "dashboard_id" => thermal.dashboard_id,
+        "name" => "Unavailable dashboard",
+        "available" => false,
+        "path" =>
+          "/missions/#{mission.mission_id}/ops/dashboards/#{thermal.dashboard_id}?presentation=playlist",
+        "frame_id" => "dashboard-playlist-frame"
+      })
+
+    assert unavailable_vue.props == unavailable_props
+    assert unavailable_vue.props["page"]["position"] == %{
+             "id" => "dashboard-playlist-position",
+             "current" => 2,
+             "total" => 2
+           }
+
+    assert unavailable_vue.props["page"]["unavailable"] == %{
+             "id" => "dashboard-playlist-unavailable",
+             "state" => "unsupported",
+             "icon" => "hero-exclamation-triangle",
+             "title" => "Referenced dashboard is unavailable",
+             "copy" =>
+               "The playlist reference is preserved, but presentation cannot silently skip or mask a missing or archived dashboard."
+           }
+
+    dashboard_list_path = ~p"/missions/#{mission.mission_id}/ops/dashboards"
+
+    assert {:error,
+            {:live_redirect,
+             %{
+               to: ^dashboard_list_path,
+               flash: %{
+                 "error" =>
+                   "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
+               }
+             }}}} =
+             live(
+               conn,
+               ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/missing-dashboard-playlist/present"
+             )
+
+    sibling_mission = TestFixtures.persist_mission!(org, slug: "dashboard-playlists-sibling")
+    sibling_dashboard_list_path = ~p"/missions/#{sibling_mission.mission_id}/ops/dashboards"
+
+    assert {:error,
+            {:live_redirect,
+             %{
+               to: ^sibling_dashboard_list_path,
+               flash: %{
+                 "error" =>
+                   "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
+               }
+             }}}} =
+             live(
+               conn,
+               ~p"/missions/#{sibling_mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
+             )
   end
 
   test "author page creates playlists through the dashboard-author session" do
