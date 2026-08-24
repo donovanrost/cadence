@@ -53,8 +53,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
                "format_key" => artifact.format_key,
                "media_type" => artifact.media_type,
                "content_sha256" => artifact.content_sha256,
-               "uploaded_at" =>
-                 Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC"),
+               "uploaded_at" => Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC"),
                "download_href" =>
                  "/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}/download"
              },
@@ -64,10 +63,8 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
                  "actions_id" => "#{completed.import_run_id}-actions",
                  "status" => "ready",
                  "status_label" => "Completed",
-                 "started_at" =>
-                   Calendar.strftime(completed.started_at, "%Y-%m-%d %H:%M:%S"),
-                 "completed_at" =>
-                   Calendar.strftime(completed.completed_at, "%Y-%m-%d %H:%M:%S"),
+                 "started_at" => Calendar.strftime(completed.started_at, "%Y-%m-%d %H:%M:%S"),
+                 "completed_at" => Calendar.strftime(completed.completed_at, "%Y-%m-%d %H:%M:%S"),
                  "href" =>
                    "/missions/#{mission.mission_id}/catalog/imports/#{completed.import_run_id}"
                }
@@ -132,6 +129,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
     assert [completed_props] = artifact_show_vue(view).props["runs"]
     assert completed_props["status"] == "ready"
     assert completed_props["status_label"] == "Completed"
+
     assert completed_props["completed_at"] ==
              Calendar.strftime(completed.completed_at, "%Y-%m-%d %H:%M:%S")
 
