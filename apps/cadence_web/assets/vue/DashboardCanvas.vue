@@ -1,7 +1,6 @@
 <script setup>
 import DashboardComparisonInspector from "./DashboardComparisonInspector.vue"
 import DashboardGrid from "./DashboardGrid.vue"
-import DashboardWidget from "./DashboardWidget.vue"
 
 defineProps({
   presentation: {type: Object, required: true},
@@ -9,6 +8,18 @@ defineProps({
 
 const emit = defineEmits(["layout_changed"])
 const forwardLayoutChanged = (payload) => emit("layout_changed", payload)
+
+// A section's disclosure state belongs to this client-rendered canvas. Keep
+// the browser's latest state across LiveVue prop updates while retaining the
+// server-presented open value for a section's first render.
+const sectionOpenByKey = new Map()
+const sectionOpen = (group) =>
+  sectionOpenByKey.has(group.key)
+    ? sectionOpenByKey.get(group.key)
+    : Object.hasOwn(group.section.root.attrs, "open")
+const rememberSectionOpen = (group, event) => {
+  sectionOpenByKey.set(group.key, event.currentTarget.open)
+}
 </script>
 
 <template>
@@ -19,7 +30,12 @@ const forwardLayoutChanged = (payload) => emit("layout_changed", payload)
         :key="group.key"
         v-bind="group.root.attrs"
       >
-        <details v-if="group.section" v-bind="group.section.root.attrs">
+        <details
+          v-if="group.section"
+          v-bind="group.section.root.attrs"
+          :open="sectionOpen(group)"
+          @toggle="rememberSectionOpen(group, $event)"
+        >
           <summary v-bind="group.section.summary.attrs">
             <span v-bind="group.section.summary.icon.attrs"></span>
             <div v-bind="group.section.summary.copy.attrs">
@@ -37,27 +53,10 @@ const forwardLayoutChanged = (payload) => emit("layout_changed", payload)
             >{{ group.section.summary.count.text }}</span>
           </summary>
 
-          <div v-bind="group.grid.root.attrs">
-            <div
-              v-for="widget in group.grid.widgets"
-              :key="widget.key"
-              v-bind="widget.shell.attrs"
-            >
-              <div v-bind="widget.content.attrs">
-                <div v-bind="widget.host.attrs">
-                  <DashboardWidget :presentation="widget.presentation" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-bind="group.grid.controller.host.attrs">
-            <DashboardGrid
-              :target_id="group.grid.controller.props.target_id"
-              :edit_mode="group.grid.controller.props.edit_mode"
-              :item_ids="group.grid.controller.props.item_ids"
-              @layout_changed="forwardLayoutChanged"
-            />
-          </div>
+          <DashboardGrid
+            :presentation="group.grid"
+            @layout_changed="forwardLayoutChanged"
+          />
         </details>
 
         <template v-else>
@@ -69,27 +68,10 @@ const forwardLayoutChanged = (payload) => emit("layout_changed", payload)
             }}</span>
           </header>
 
-          <div v-bind="group.grid.root.attrs">
-            <div
-              v-for="widget in group.grid.widgets"
-              :key="widget.key"
-              v-bind="widget.shell.attrs"
-            >
-              <div v-bind="widget.content.attrs">
-                <div v-bind="widget.host.attrs">
-                  <DashboardWidget :presentation="widget.presentation" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-bind="group.grid.controller.host.attrs">
-            <DashboardGrid
-              :target_id="group.grid.controller.props.target_id"
-              :edit_mode="group.grid.controller.props.edit_mode"
-              :item_ids="group.grid.controller.props.item_ids"
-              @layout_changed="forwardLayoutChanged"
-            />
-          </div>
+          <DashboardGrid
+            :presentation="group.grid"
+            @layout_changed="forwardLayoutChanged"
+          />
         </template>
       </section>
 

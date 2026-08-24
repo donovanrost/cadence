@@ -3,20 +3,21 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import vm from "node:vm"
 
 const scenarioLedger = [
   "Controller exposes one non-SSR DashboardCanvas host with one presentation prop",
-  "DashboardCanvas directly composes DashboardWidget DashboardGrid and DashboardComparisonInspector",
+  "DashboardCanvas composes DashboardGrid and DashboardComparisonInspector while the grid owns widgets",
   "outer flex content and optional inspector remain siblings",
-  "section and unsectioned groups preserve grid-before-controller topology",
+  "dashboard section disclosure state survives LiveVue prop updates by stable group key",
+  "section and unsectioned groups use the same Vue-owned grid subtree",
   "GridStack items remain direct grid children with exact controller props",
   "every DashboardGrid layout event is re-emitted by DashboardCanvas",
   "Phoenix maps the parent layout event to layout_changed",
   "empty editor viewer and absent branches remain server-presented",
   "raw attrs preserve omission empty-string and stringification semantics",
-  "comparison presentation reuses the existing narrow Phoenix builder",
   "authenticated viewer and author router sessions stay unchanged",
-  "existing child component sources stay byte-for-byte unchanged",
+  "the global morphdom callback is retired while unrelated child sources remain unchanged",
 ]
 
 assert.equal(scenarioLedger.length, 12)
@@ -27,6 +28,7 @@ const liveRoot = resolve(__dirname, "../../lib/cadence_web/live/ops_dashboard_sh
 const routerPath = resolve(__dirname, "../../lib/cadence_web/router.ex")
 
 const paths = {
+  app: resolve(__dirname, "../js/app.js"),
   canvas: resolve(vueRoot, "DashboardCanvas.vue"),
   widget: resolve(vueRoot, "DashboardWidget.vue"),
   grid: resolve(vueRoot, "DashboardGrid.vue"),
@@ -42,10 +44,14 @@ const entries = await Promise.all(
   Object.entries(paths).map(async ([key, path]) => [key, await readFile(path, "utf8")]),
 )
 const source = Object.fromEntries(entries)
+const canvasScript = source.canvas.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = source.canvas.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const gridTemplate = source.grid.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 const renderSource = source.controller.match(/def render\(assigns\) do[\s\S]*?\n  end\nend\s*$/)?.[0]
 
+assert.ok(canvasScript, "DashboardCanvas.vue must expose auditable section state")
 assert.ok(template, "DashboardCanvas.vue must expose an auditable template")
+assert.ok(gridTemplate, "DashboardGrid.vue must expose an auditable owned grid subtree")
 assert.ok(renderSource, "Controller.render/1 must expose an auditable host")
 assert.equal(renderSource.match(/<\.vue/g)?.length, 2)
 assert.equal(renderSource.match(/v-component="DashboardCanvas"/g)?.length, 1)
@@ -58,10 +64,13 @@ assert.match(renderSource, /v-ssr=\{false\}/)
 assert.match(renderSource, /class="contents"/)
 assert.doesNotMatch(renderSource, /v-component="Dashboard(Grid|Widget|ComparisonInspector)"/)
 
-for (const component of ["DashboardWidget", "DashboardGrid", "DashboardComparisonInspector"]) {
+for (const component of ["DashboardGrid", "DashboardComparisonInspector"]) {
   assert.match(source.canvas, new RegExp(`import ${component} from "\\./${component}\\.vue"`))
   assert.match(template, new RegExp(`<${component}\\b`))
 }
+assert.doesNotMatch(source.canvas, /import DashboardWidget/)
+assert.match(source.grid, /import DashboardWidget from "\.\/DashboardWidget\.vue"/)
+assert.match(gridTemplate, /<DashboardWidget :presentation="widget\.presentation" \/>/)
 
 assert.match(template, /^  <div v-bind="presentation\.root\.attrs">/)
 assert.match(template, /<div v-bind="presentation\.content\.attrs">/)
@@ -69,27 +78,68 @@ assert.match(
   template,
   /<div\n      v-if="presentation\.comparison_inspector"\n      v-bind="presentation\.comparison_inspector\.host\.attrs"[\s\S]*?:presentation="presentation\.comparison_inspector\.presentation"/,
 )
-assert.match(template, /<details v-if="group\.section" v-bind="group\.section\.root\.attrs">/)
+assert.match(
+  template,
+  /<details\n          v-if="group\.section"\n          v-bind="group\.section\.root\.attrs"\n          :open="sectionOpen\(group\)"\n          @toggle="rememberSectionOpen\(group, \$event\)"/,
+)
 assert.match(template, /<summary v-bind="group\.section\.summary\.attrs">/)
 assert.match(template, /<header v-if="group\.header" v-bind="group\.header\.attrs">/)
 
-const gridRoots = [...template.matchAll(/<div v-bind="group\.grid\.root\.attrs">/g)]
 const gridControllers = [...template.matchAll(/<DashboardGrid\b/g)]
-assert.equal(gridRoots.length, 2, "section and unsectioned branches each render one target grid")
 assert.equal(gridControllers.length, 2, "section and unsectioned branches each compose one controller")
-for (let index = 0; index < 2; index += 1) {
-  assert.ok(gridRoots[index].index < gridControllers[index].index, "target grid must precede its controller")
-}
-
-assert.equal(template.match(/v-for="widget in group\.grid\.widgets"/g)?.length, 2)
-assert.equal(template.match(/v-bind="widget\.shell\.attrs"/g)?.length, 2)
-assert.equal(template.match(/<DashboardWidget :presentation="widget\.presentation" \/>/g)?.length, 2)
-assert.equal(template.match(/:target_id="group\.grid\.controller\.props\.target_id"/g)?.length, 2)
-assert.equal(template.match(/:edit_mode="group\.grid\.controller\.props\.edit_mode"/g)?.length, 2)
-assert.equal(template.match(/:item_ids="group\.grid\.controller\.props\.item_ids"/g)?.length, 2)
+assert.equal(template.match(/:presentation="group\.grid"/g)?.length, 2)
 assert.equal(template.match(/@layout_changed="forwardLayoutChanged"/g)?.length, 2)
 assert.match(source.canvas, /const emit = defineEmits\(\["layout_changed"\]\)/)
 assert.match(source.canvas, /emit\("layout_changed", payload\)/)
+
+assert.match(gridTemplate, /^  <div ref="gridElement" v-bind="props\.presentation\.root\.attrs">/)
+assert.match(gridTemplate, /v-for="widget in props\.presentation\.widgets"/)
+assert.match(gridTemplate, /:key="widget\.key"/)
+assert.match(gridTemplate, /v-bind="widget\.shell\.attrs"/)
+assert.match(gridTemplate, /v-bind="widget\.content\.attrs"/)
+assert.match(gridTemplate, /v-bind="widget\.host\.attrs"/)
+assert.match(gridTemplate, /<div v-bind="props\.presentation\.controller\.host\.attrs">/)
+assert.match(
+  gridTemplate,
+  /:data-dashboard-grid-target="props\.presentation\.controller\.props\.target_id"/,
+)
+assert.match(
+  gridTemplate,
+  /:data-edit-mode="String\(props\.presentation\.controller\.props\.edit_mode\)"/,
+)
+assert.match(
+  gridTemplate,
+  /:data-dashboard-grid-item-count="String\(props\.presentation\.controller\.props\.item_ids\.length\)"/,
+)
+assert.ok(
+  gridTemplate.indexOf('ref="gridElement"') <
+    gridTemplate.indexOf('v-bind="props.presentation.controller.host.attrs"'),
+  "target grid must precede its controller marker",
+)
+
+const canvasContext = {
+  defineProps() {},
+  defineEmits() {
+    return () => {}
+  },
+}
+vm.createContext(canvasContext)
+vm.runInContext(
+  canvasScript.replace(/^import .*$/gm, "") +
+    "\nglobalThis.DashboardCanvasTest = {sectionOpen, rememberSectionOpen}",
+  canvasContext,
+)
+const defaultOpenGroup = {key: "power", section: {root: {attrs: {open: ""}}}}
+const defaultClosedGroup = {key: "comms", section: {root: {attrs: {}}}}
+assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultOpenGroup), true)
+assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultClosedGroup), false)
+canvasContext.DashboardCanvasTest.rememberSectionOpen(defaultOpenGroup, {
+  currentTarget: {open: false},
+})
+assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultOpenGroup), false)
+
+assert.match(source.app, /hooks: \{\.\.\.Hooks, \.\.\.getHooks\(liveVueApp\)\}/)
+assert.doesNotMatch(source.app, /\bdom:\s*\{|onBeforeElUpdated|grid-stack|ui-resizable-handle/)
 
 assert.match(source.presentation, /"class" => "flex flex-1 min-h-0"/)
 assert.match(source.presentation, /"id" => "dashboard-widget-group-#\{group_id\}"/)
@@ -126,7 +176,6 @@ assert.match(
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 assert.equal(sha256(source.widget), "a643f2e4a4348b821f2d0c54e2fea18b22383097b624f4c9ad5f718aad0625de")
-assert.equal(sha256(source.grid), "b0c49435a148f81d5e569a6513187a4846c82d7c9af16b48e442f7791dae43b3")
 assert.equal(sha256(source.inspector), "81f389567edd64256254aab2d8f18d2f4eff7d9251dd61777f7b15ad931112cd")
 
 assert.doesNotMatch(source.canvas, /phx-hook|localStorage|<script(?! setup)/)

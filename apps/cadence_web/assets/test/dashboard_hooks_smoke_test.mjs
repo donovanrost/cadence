@@ -29,7 +29,7 @@ async function loadControllerSfc(path, replacements = [], context = {}, exposure
 
   vm.createContext(vmContext)
   vm.runInContext(testableSource, vmContext, { filename: path })
-  return {...vmContext, template}
+  return {...vmContext, source, template}
 }
 
 function classList(...initialClasses) {
@@ -61,15 +61,6 @@ function classList(...initialClasses) {
   let mountedCallback
   let updatedCallback
   let unmountedCallback
-  let observerCallback
-  let observerTarget
-  let observerOptions
-  let observerObserveCount = 0
-  let observerDisconnectCount = 0
-  let observerConnected = false
-  const notifyObservedMutation = (record) => {
-    if (observerConnected) observerCallback([record])
-  }
   const connectedNode = {
     x: 2,
     y: 3,
@@ -90,7 +81,8 @@ function classList(...initialClasses) {
     },
     on(event, handler) {
       gridCalls.push(["on", event])
-      this.changeHandler = handler
+      if (event === "change") this.changeHandler = handler
+      if (event === "dragstop resizestop") this.gestureStopHandler = handler
     },
     setStatic(value) {
       gridCalls.push(["setStatic", value])
@@ -100,21 +92,17 @@ function classList(...initialClasses) {
       } else {
         gridElement.classList.remove("grid-stack-static")
       }
-      notifyObservedMutation({type: "attributes", attributeName: "class", target: gridElement})
     },
     makeWidget(el) {
       gridCalls.push(["makeWidget", el.id])
       el.gridstackNode = { el }
-      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     movable(el, value) {
       gridCalls.push(["movable", el.id, value])
       if (value) el.classList.add("ui-draggable")
-      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     resizable(el, value) {
       gridCalls.push(["resizable", el.id, value])
-      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     removeWidget(_el, removeDom, triggerEvent) {
       gridCalls.push(["removeWidget", removeDom, triggerEvent])
@@ -173,25 +161,6 @@ function classList(...initialClasses) {
     item.parentElement = gridElement
   })
 
-  class FakeMutationObserver {
-    constructor(callback) {
-      observerCallback = callback
-    }
-
-    observe(target, options) {
-      if (observerOptions) assert.equal(options, observerOptions)
-      observerTarget = target
-      observerOptions = options
-      observerObserveCount += 1
-      observerConnected = true
-    }
-
-    disconnect() {
-      observerDisconnectCount += 1
-      observerConnected = false
-    }
-  }
-
   const runAnimationFrame = (id) => {
     const callback = animationFrameCallbacks.get(id)
     assert.equal(typeof callback, "function")
@@ -199,36 +168,42 @@ function classList(...initialClasses) {
     callback()
   }
 
-  const props = {target_id: "dashboard-grid-alpha", edit_mode: false, item_ids: ["widget-alpha"]}
+  const props = {
+    presentation: {
+      root: {attrs: {id: "dashboard-grid-alpha", class: "grid-stack gs-12"}},
+      widgets: [],
+      controller: {
+        host: {attrs: {id: "dashboard-grid-alpha-controller", class: "hidden"}},
+        props: {
+          target_id: "dashboard-grid-alpha",
+          edit_mode: false,
+          item_ids: ["widget-alpha"],
+        },
+      },
+    },
+  }
   const emittedEvents = []
   const context = await loadControllerSfc(
     gridPath,
     [
       [
-        'import {onBeforeUnmount, onMounted, onUpdated} from "vue"\n',
-        "const {onBeforeUnmount, onMounted, onUpdated} = globalThis.Vue\n",
+        'import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"\n',
+        "const {onBeforeUnmount, onMounted, onUpdated, ref} = globalThis.Vue\n",
       ],
       [
         'import GridStack from "../vendor/gridstack/gridstack-all"\n',
         "const GridStack = globalThis.GridStack\n",
       ],
+      ['import DashboardWidget from "./DashboardWidget.vue"\n', ""],
     ],
     {
       defineProps(definition) {
-        assert.equal(definition.target_id.required, true)
-        assert.equal(definition.edit_mode.default, false)
-        assert.equal(definition.item_ids.type.name, "Array")
+        assert.equal(definition.presentation.required, true)
         return props
       },
       defineEmits(names) {
         assert.equal(Array.from(names).join(","), "layout_changed")
         return (event, payload) => emittedEvents.push([event, payload])
-      },
-      document: {
-        getElementById(id) {
-          assert.equal(id, props.target_id)
-          return gridElement
-        },
       },
       GridStack: {
         init(options, el) {
@@ -236,7 +211,6 @@ function classList(...initialClasses) {
           return fakeGrid
         },
       },
-      MutationObserver: FakeMutationObserver,
       requestAnimationFrame(callback) {
         const id = ++nextAnimationFrameId
         animationFrameCallbacks.set(id, callback)
@@ -260,12 +234,17 @@ function classList(...initialClasses) {
         onMounted: (callback) => { mountedCallback = callback },
         onUpdated: (callback) => { updatedCallback = callback },
         onBeforeUnmount: (callback) => { unmountedCallback = callback },
+        ref: (value) => ({value: value === null ? gridElement : value}),
       },
     },
     "\nglobalThis.DashboardGridTest = {DashboardGridController, getController: () => controller}"
   )
 
   assert.match(context.template, /data-dashboard-grid-controller/)
+  assert.match(context.template, /<div ref="gridElement" v-bind="props\.presentation\.root\.attrs">/)
+  assert.match(context.template, /v-for="widget in props\.presentation\.widgets"/)
+  assert.doesNotMatch(context.source, /MutationObserver|onBeforeElUpdated|gridObserver/)
+  assert.match(context.source, /this\.grid\.destroy\(false\)/)
   assert.equal(typeof mountedCallback, "function")
   assert.equal(typeof updatedCallback, "function")
   assert.equal(typeof unmountedCallback, "function")
@@ -273,30 +252,13 @@ function classList(...initialClasses) {
   mountedCallback()
   const controller = context.DashboardGridTest.getController()
 
-  assert.deepEqual(gridCalls.slice(0, 2), [
+  assert.deepEqual(gridCalls.slice(0, 3), [
     ["init", true, "e, se, s", true],
     ["on", "change"],
+    ["on", "dragstop resizestop"],
   ])
   assert.equal(typeof sectionListeners.get("toggle"), "function")
-  assert.equal(typeof observerCallback, "function")
-  assert.equal(observerTarget, gridElement)
-  assert.equal(observerObserveCount, 1)
-  assert.equal(observerConnected, true)
-  assert.deepEqual(JSON.parse(JSON.stringify(observerOptions)), {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: [
-      "class",
-      "data-edit-mode",
-      "gs-id",
-      "gs-x",
-      "gs-y",
-      "gs-w",
-      "gs-h",
-      "gs-auto-position",
-    ],
-  })
+  assert.equal(typeof fakeGrid.gestureStopHandler, "function")
 
   gridElement.gestureActive = true
   const callsBeforeGestureUpdate = gridCalls.length
@@ -304,11 +266,11 @@ function classList(...initialClasses) {
   assert.equal(gridCalls.length, callsBeforeGestureUpdate)
   gridElement.gestureActive = false
 
-  props.edit_mode = true
+  props.presentation.controller.props.edit_mode = true
   gridElement.dataset.editMode = "true"
   updatedCallback()
 
-  assert.deepEqual(gridCalls.slice(2, 6), [
+  assert.deepEqual(gridCalls.slice(3, 7), [
     ["makeWidget", "widget-new"],
     ["movable", "widget-existing", true],
     ["resizable", "widget-existing", true],
@@ -316,41 +278,32 @@ function classList(...initialClasses) {
   ])
   // Entering edit lifts static mode and switches to float(false) so
   // neighbors reflow classically while the operator rearranges.
-  assert.deepEqual(gridCalls.slice(6, 8), [
+  assert.deepEqual(gridCalls.slice(7, 9), [
     ["setStatic", false],
     ["float", false],
   ])
   assert.equal(animationFrameCallbacks.size, 0)
 
-  const externalGridItem = {
-    id: "widget-external",
+  const vueAddedGridItem = {
+    id: "widget-vue-added",
     parentElement: gridElement,
     classList: classList("grid-stack-item"),
   }
-  gridItems.push(externalGridItem)
-  const callsBeforeExternalMutation = gridCalls.length
-  observerCallback([{type: "childList", target: gridElement}])
-  observerCallback([{type: "attributes", attributeName: "gs-x", target: externalGridItem}])
-  assert.equal(animationFrameCallbacks.size, 1)
-  assert.equal(gridCalls.length, callsBeforeExternalMutation)
-  const observesBeforeExternalReconciliation = observerObserveCount
-  const disconnectsBeforeExternalReconciliation = observerDisconnectCount
-  runAnimationFrame(nextAnimationFrameId)
+  gridItems.push(vueAddedGridItem)
+  updatedCallback()
   assert.equal(
-    gridCalls.some(([name, id]) => name === "makeWidget" && id === "widget-external"),
+    gridCalls.some(([name, id]) => name === "makeWidget" && id === "widget-vue-added"),
     true
   )
-  assert.equal(observerDisconnectCount, disconnectsBeforeExternalReconciliation + 1)
-  assert.equal(observerObserveCount, observesBeforeExternalReconciliation + 1)
-  assert.equal(observerConnected, true)
-  // The fake GridStack methods attempt to report their own class mutations.
-  // Observation is suspended during reconciliation, so no recursive frame is
-  // scheduled when the observer is reattached.
   assert.equal(animationFrameCallbacks.size, 0)
 
-  const nestedWidgetContent = {parentElement: {parentElement: externalGridItem}}
-  observerCallback([{type: "childList", target: nestedWidgetContent}])
-  assert.equal(animationFrameCallbacks.size, 0)
+  gridItems[1].classList.remove("ui-draggable")
+  const callsBeforeGestureStop = gridCalls.length
+  fakeGrid.gestureStopHandler()
+  assert.deepEqual(gridCalls.slice(callsBeforeGestureStop, callsBeforeGestureStop + 2), [
+    ["movable", "widget-existing", true],
+    ["resizable", "widget-existing", true],
+  ])
 
   controller.flushLayout()
 
@@ -382,11 +335,19 @@ function classList(...initialClasses) {
   sectionDetails.open = true
   fakeGrid.prevWidth = 720
   sectionListeners.get("toggle")()
+  const canceledSectionResizeFrame = nextAnimationFrameId
+  sectionDetails.open = false
+  sectionListeners.get("toggle")()
+  assert.equal(canceledAnimationFrames.includes(canceledSectionResizeFrame), true)
+  assert.equal(animationFrameCallbacks.size, 0)
+
+  sectionDetails.open = true
+  sectionListeners.get("toggle")()
   runAnimationFrame(nextAnimationFrameId)
   assert.equal(fakeGrid.prevWidth, undefined)
   assert.deepEqual(gridCalls.at(-1), ["onResize"])
 
-  props.edit_mode = false
+  props.presentation.controller.props.edit_mode = false
   gridElement.dataset.editMode = "false"
   updatedCallback()
 
@@ -397,15 +358,13 @@ function classList(...initialClasses) {
     ["setStatic", true],
   ])
 
-  observerCallback([{type: "childList", target: gridElement}])
-  const pendingReconciliationFrame = nextAnimationFrameId
-  assert.equal(animationFrameCallbacks.has(pendingReconciliationFrame), true)
-  const disconnectsBeforeUnmount = observerDisconnectCount
+  sectionDetails.open = true
+  sectionListeners.get("toggle")()
+  const pendingSectionResizeFrame = nextAnimationFrameId
+  assert.equal(animationFrameCallbacks.has(pendingSectionResizeFrame), true)
   unmountedCallback()
   assert.deepEqual(gridCalls.at(-1), ["destroy", false])
-  assert.equal(observerDisconnectCount, disconnectsBeforeUnmount + 1)
-  assert.equal(observerConnected, false)
-  assert.equal(canceledAnimationFrames.includes(pendingReconciliationFrame), true)
+  assert.equal(canceledAnimationFrames.includes(pendingSectionResizeFrame), true)
   assert.equal(animationFrameCallbacks.size, 0)
   assert.equal(sectionListeners.size, 0)
   assert.equal(context.DashboardGridTest.getController(), null)
