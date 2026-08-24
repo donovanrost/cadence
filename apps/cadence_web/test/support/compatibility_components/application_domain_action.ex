@@ -1,5 +1,6 @@
+# Test-only compatibility renderer preserving the pre-LiveVue component contract.
 defmodule CadenceWeb.Components.ApplicationDomainAction do
-  @moduledoc "Host-owned trigger for application-defined domain actions."
+  @moduledoc false
 
   use Phoenix.Component
 

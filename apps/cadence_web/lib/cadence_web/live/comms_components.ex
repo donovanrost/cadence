@@ -1,36 +1,5 @@
 defmodule CadenceWeb.CommsComponents do
-  @moduledoc false
-
-  use Phoenix.Component
-
-  import CadenceWeb.Components.Badges, only: [status_badge: 1]
-  import CadenceWeb.Components.Card, only: [card: 1]
-
-  attr :title, :string, required: true
-  attr :value, :integer, required: true
-  attr :description, :string, required: true
-  attr :navigate, :string, default: nil
-  attr :status, :atom, default: :info
-
-  def readiness_card(assigns) do
-    ~H"""
-    <.card>
-      <div class="flex items-start justify-between gap-4">
-        <p class="hud-label">{@title}</p>
-        <.status_badge status={@status} />
-      </div>
-      <p class="mt-3 mc-value-large text-base-content">{@value}</p>
-      <p class="mt-2 text-sm text-base-content/70">{@description}</p>
-      <.link
-        :if={@navigate}
-        navigate={@navigate}
-        class="mt-4 inline-flex text-sm text-primary hover:underline"
-      >
-        Review configuration &rarr;
-      </.link>
-    </.card>
-    """
-  end
+  @moduledoc "Shared non-UI formatting and parameter helpers for Comms workflows."
 
   def display_name(%{metadata: metadata} = resource, fallback_field)
       when is_map(metadata) and is_atom(fallback_field) do

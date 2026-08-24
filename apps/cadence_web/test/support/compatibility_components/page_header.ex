@@ -1,17 +1,8 @@
+# Test-only compatibility renderer preserving the pre-LiveVue component contract.
 defmodule CadenceWeb.Components.PageHeader do
-  @moduledoc """
-  The canonical page header: title block over the standard
-  `border-b border-primary/20 pb-4` rule.
-
-  Navigation context goes above the title — a `breadcrumbs` trail (delegated to
-  `CadenceWeb.UI.breadcrumbs/1`) for hierarchy, or a plain `eyebrow` label.
-  Right-side buttons and status pills go in the `:actions` slot; inline counts
-  next to the title go in `:title_suffix`.
-  """
+  @moduledoc false
 
   use Phoenix.Component
-
-  import CadenceWeb.UI, only: [breadcrumbs: 1]
 
   attr :title, :string, required: true
   attr :subtitle, :string, default: nil
@@ -41,6 +32,31 @@ defmodule CadenceWeb.Components.PageHeader do
         </div>
       </div>
     </header>
+    """
+  end
+
+  attr :items, :list, required: true
+
+  defp breadcrumbs(assigns) do
+    assigns = assign(assigns, :last_index, length(assigns.items) - 1)
+
+    ~H"""
+    <nav
+      aria-label="Breadcrumb"
+      class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+    >
+      <%= for {{label, path}, index} <- Enum.with_index(@items) do %>
+        <span :if={index > 0} class="text-base-content/20" aria-hidden="true">/</span>
+        <%= cond do %>
+          <% index == @last_index -> %>
+            <span class="text-primary/90">{label}</span>
+          <% path -> %>
+            <.link navigate={path} class="hover:text-primary transition-colors">{label}</.link>
+          <% true -> %>
+            <span>{label}</span>
+        <% end %>
+      <% end %>
+    </nav>
     """
   end
 end

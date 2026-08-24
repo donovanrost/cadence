@@ -1,5 +1,6 @@
+# Test-only compatibility renderer preserving the pre-LiveVue component contract.
 defmodule CadenceWeb.Components.ApplicationActionButton do
-  @moduledoc "Shared host treatment for typed application action buttons."
+  @moduledoc false
 
   use Phoenix.Component
 

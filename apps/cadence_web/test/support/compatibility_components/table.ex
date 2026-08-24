@@ -1,20 +1,6 @@
+# Test-only compatibility renderer preserving the pre-LiveVue component contract.
 defmodule CadenceWeb.Components.Table do
-  @moduledoc """
-  The canonical Cadence data table.
-
-  Headers are always `hud-label`. Rows get the standard hover accent
-  (`border-l-2` cyan reveal) unless `row_accent={false}`. Columns opt into
-  right alignment with `align={:right}` (numeric and action columns) and
-  monospace cells with `mono` (identifiers, versions, counts).
-
-  Accepts a plain list or a `Phoenix.LiveView.LiveStream` for `rows`; streams
-  render with `phx-update="stream"` and derive row DOM ids automatically.
-  The `:col` slot always receives the item itself (never the stream tuple).
-
-  Tables with structural needs beyond this (checkbox selection, expander rows,
-  nested tables) should use a bounded, purpose-built host component such as the
-  declarative Packet Bindings renderer.
-  """
+  @moduledoc false
 
   use Phoenix.Component
 

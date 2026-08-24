@@ -31,6 +31,12 @@ defmodule CadenceWeb.ApplicationInventory do
   def declared(%Scope{}, %HostContext{}, _declarations),
     do: {:error, :invalid_application_declarations}
 
+  @spec dom_id(HostContext.t(), binary()) :: binary()
+  def dom_id(%HostContext{placement: placement}, application_key)
+      when is_binary(application_key) do
+    "#{placement}-application-#{safe_application_key(application_key)}"
+  end
+
   @doc """
   Builds the application inventory for a spacecraft from its exact pinned
   profile plus any retained application installations.
@@ -65,4 +71,6 @@ defmodule CadenceWeb.ApplicationInventory do
   end
 
   defp spacecraft_declarations(%Scope{}, %Spacecraft{}), do: %{}
+
+  defp safe_application_key(key), do: String.replace(key, ~r/[^A-Za-z0-9_-]+/, "-")
 end

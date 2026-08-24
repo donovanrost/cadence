@@ -11,6 +11,7 @@ defmodule CadenceWeb.ComponentsTest do
   alias CadenceWeb.Components.ListControls
   alias CadenceWeb.Components.PageHeader
   alias CadenceWeb.Components.Table
+  alias CadenceWeb.TestSupport.{BadgeComponents, CardComponents}
 
   describe "button/1" do
     test "primary default carries small size without glow" do
@@ -120,7 +121,7 @@ defmodule CadenceWeb.ComponentsTest do
     end
 
     test "stat_tile renders label over mono value" do
-      html = render_component(&Card.stat_tile/1, label: "Vehicles", value: 4)
+      html = render_component(&CardComponents.stat_tile/1, label: "Vehicles", value: 4)
 
       assert html =~ "hud-label"
       assert html =~ "font-mono"
@@ -130,7 +131,7 @@ defmodule CadenceWeb.ComponentsTest do
 
     test "stat_tile with patch renders a filter link with active state" do
       html =
-        render_component(&Card.stat_tile/1,
+        render_component(&CardComponents.stat_tile/1,
           label: "Missing profile",
           value: 3,
           patch: "/spacecraft?filter=missing_profile",
@@ -378,7 +379,7 @@ defmodule CadenceWeb.ComponentsTest do
     end
 
     test "severity_badge renders count and label" do
-      html = render_component(&Badges.severity_badge/1, severity: :critical, count: 3)
+      html = render_component(&BadgeComponents.severity_badge/1, severity: :critical, count: 3)
 
       assert html =~ "3"
       assert html =~ "CRIT"

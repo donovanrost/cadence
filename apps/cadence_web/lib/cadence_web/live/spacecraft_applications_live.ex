@@ -10,7 +10,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     LifecycleActions
   }
 
-  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryCard, ApplicationInventoryLifecycle}
+  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryLifecycle}
   alias Phoenix.LiveView.JS
 
   @impl true
@@ -350,7 +350,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   end
 
   defp application_row_dto(application, host_context, mission_id, spacecraft_id) do
-    card_id = ApplicationInventoryCard.dom_id(host_context, application.application_key)
+    card_id = ApplicationInventory.dom_id(host_context, application.application_key)
 
     %{
       id: card_id,
