@@ -99,6 +99,38 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     assert summary == "Updated dashboard sections"
   end
 
+  test "presented section actions dispatch move, edit, and remove events" do
+    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
+    dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Section Actions")
+
+    {:ok, editor, _html} =
+      await_live_result(live(conn, edit_path(mission, dashboard)))
+
+    add_section(editor, "Power")
+    add_section(editor, "Thermal")
+
+    click_dashboard_section_action(editor, "Thermal", "move-up")
+
+    assert Enum.map(dashboard_section_list(editor), & &1["content"]["title"]["text"]) ==
+             ["Thermal", "Power"]
+
+    click_dashboard_section_action(editor, "Thermal", "edit")
+
+    assert dashboard_section_form(editor)["heading"]["text"] == "Edit section"
+
+    update_section(editor, %{
+      "section_id" => section_id(editor, "Thermal"),
+      "title" => "Thermal Operations",
+      "description" => "",
+      "collapsed_by_default" => "false"
+    })
+
+    click_dashboard_section_action(editor, "Power", "remove")
+
+    assert Enum.map(dashboard_section_list(editor), & &1["content"]["title"]["text"]) ==
+             ["Thermal Operations"]
+  end
+
   test "Discard leaves the starting document and version history untouched" do
     {conn, _user, org, mission} = signed_in_user_org_and_mission()
     dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Discard Editor")
@@ -160,19 +192,94 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   defp add_section(view, title) do
     click_editor_action(view, "manage-dashboard-sections")
 
-    view
-    |> form("#dashboard-section-form",
-      section: %{title: title, description: "", collapsed_by_default: "false"}
-    )
-    |> render_submit()
+    params = %{
+      "section_id" => "",
+      "title" => title,
+      "description" => "",
+      "collapsed_by_default" => "false"
+    }
+
+    change_dashboard_section_form(view, params)
+    assert dashboard_section_form(view)["root"]["params"] == params
+    submit_dashboard_section_form(view, params)
+  end
+
+  defp update_section(view, params) do
+    change_dashboard_section_form(view, params)
+    assert dashboard_section_form(view)["root"]["params"] == params
+    submit_dashboard_section_form(view, params)
   end
 
   defp dashboard_section_list(view) do
     view
-    |> LiveVue.Test.get_vue(id: "dashboard-section-list-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    |> dashboard_section_manager()
     |> Map.fetch!("sections")
+  end
+
+  defp dashboard_section_form(view) do
+    view
+    |> dashboard_section_manager_presentation()
+    |> Map.fetch!("form")
+  end
+
+  defp dashboard_section_manager(view) do
+    view
+    |> dashboard_section_manager_presentation()
+    |> Map.fetch!("section_list")
+  end
+
+  defp dashboard_section_manager_presentation(view) do
+    assert has_element?(view, "#dashboard-section-manager-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-section-manager-component")
+    assert vue.component == "DashboardSectionManager"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
+  end
+
+  defp change_dashboard_section_form(view, params) do
+    form = dashboard_section_form(view)
+
+    render_change(
+      view,
+      form["root"]["attrs"]["phx-change"],
+      %{form["root"]["param"] => params}
+    )
+  end
+
+  defp submit_dashboard_section_form(view, params) do
+    form = dashboard_section_form(view)
+
+    render_submit(
+      view,
+      form["root"]["attrs"]["phx-submit"],
+      %{form["root"]["param"] => params}
+    )
+  end
+
+  defp click_dashboard_section_action(view, title, key) do
+    assert section =
+             Enum.find(
+               dashboard_section_list(view),
+               &(&1["content"]["title"]["text"] == title)
+             )
+
+    assert action = Enum.find(section["actions"]["buttons"], &(&1["key"] == key))
+    attrs = action["attrs"]
+
+    render_click(view, Map.fetch!(attrs, "phx-click"), event_params(attrs))
+  end
+
+  defp section_id(view, title) do
+    assert section =
+             Enum.find(
+               dashboard_section_list(view),
+               &(&1["content"]["title"]["text"] == title)
+             )
+
+    section["attrs"]["data-dashboard-section"]
   end
 
   defp click_editor_action(view, id) do
@@ -181,11 +288,15 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     render_click(
       view,
       Map.fetch!(attrs, "phx-click"),
-      Enum.reduce(attrs, %{}, fn
-        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
-        {_attribute, _value}, params -> params
-      end)
+      event_params(attrs)
     )
+  end
+
+  defp event_params(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
+      {_attribute, _value}, params -> params
+    end)
   end
 
   defp editor_action(view, id) do

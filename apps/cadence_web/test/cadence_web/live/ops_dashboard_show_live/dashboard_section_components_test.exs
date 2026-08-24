@@ -7,8 +7,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
   alias CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents
 
   test "section_manager exposes the ordered section list and exact action contract" do
-    presentation =
-      section_list_presentation([
+    manager =
+      section_manager_presentation([
         %Section{
           section_id: "power",
           title: "Power",
@@ -28,6 +28,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
           collapsed_by_default?: false
         }
       ])
+
+    assert manager |> Map.keys() |> Enum.sort() == ~w(form root section_list)
+    assert manager["root"] == %{"attrs" => %{"class" => "space-y-5"}}
+
+    presentation = manager["section_list"]
 
     assert presentation |> Map.keys() |> Enum.sort() == ~w(empty root sections)
 
@@ -180,10 +185,123 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
     refute Map.has_key?(action(thermal, "move-down")["attrs"], "disabled")
     refute Map.has_key?(action(communications, "move-up")["attrs"], "disabled")
     assert action(communications, "move-down")["attrs"]["disabled"] == ""
+
+    assert manager["form"] == %{
+             "root" => %{
+               "attrs" => %{
+                 "class" => "space-y-3 border-t border-base-300/60 pt-4",
+                 "id" => "dashboard-section-form",
+                 "phx-change" => "validate_dashboard_section",
+                 "phx-submit" => "save_dashboard_section"
+               },
+               "param" => "section",
+               "params" => %{
+                 "collapsed_by_default" => "false",
+                 "description" => "",
+                 "section_id" => "",
+                 "title" => ""
+               }
+             },
+             "section_id" => %{
+               "attrs" => %{
+                 "name" => "section[section_id]",
+                 "type" => "hidden",
+                 "value" => ""
+               }
+             },
+             "heading" => %{
+               "attrs" => %{"class" => "hud-label"},
+               "text" => "Add section"
+             },
+             "title" => %{
+               "wrapper" => %{"attrs" => %{"class" => "fieldset mb-3"}},
+               "label" => %{
+                 "attrs" => %{"class" => "hud-label block mb-1.5"},
+                 "text" => "Title"
+               },
+               "control" => %{
+                 "attrs" => %{
+                   "class" => "w-full input",
+                   "id" => "section_title",
+                   "name" => "section[title]",
+                   "required" => "",
+                   "type" => "text",
+                   "value" => ""
+                 }
+               },
+               "errors" => []
+             },
+             "description" => %{
+               "wrapper" => %{"attrs" => %{"class" => "fieldset mb-3"}},
+               "label" => %{
+                 "attrs" => %{"class" => "hud-label block mb-1.5"},
+                 "text" => "Description"
+               },
+               "control" => %{
+                 "attrs" => %{
+                   "class" => "w-full textarea",
+                   "id" => "section_description",
+                   "name" => "section[description]"
+                 },
+                 "text" => ""
+               },
+               "errors" => []
+             },
+             "collapsed_by_default" => %{
+               "wrapper" => %{"attrs" => %{"class" => "fieldset mb-3"}},
+               "label" => %{
+                 "attrs" => %{"class" => "flex cursor-pointer items-start gap-3"}
+               },
+               "hidden_control" => %{
+                 "attrs" => %{
+                   "name" => "section[collapsed_by_default]",
+                   "type" => "hidden",
+                   "value" => "false"
+                 }
+               },
+               "control" => %{
+                 "attrs" => %{
+                   "class" => "checkbox checkbox-sm mt-0.5",
+                   "id" => "section_collapsed_by_default",
+                   "name" => "section[collapsed_by_default]",
+                   "type" => "checkbox",
+                   "value" => "true"
+                 }
+               },
+               "text" => %{
+                 "wrapper" => %{"attrs" => %{}},
+                 "label" => %{
+                   "attrs" => %{"class" => "block text-sm font-medium"},
+                   "text" => "Collapse by default for operators"
+                 }
+               }
+             },
+             "error" => nil,
+             "actions" => %{
+               "attrs" => %{"class" => "flex gap-2"},
+               "save" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-primary btn-sm",
+                   "id" => "save-dashboard-section",
+                   "type" => "submit"
+                 },
+                 "text" => "Add section"
+               },
+               "cancel" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-ghost btn-sm",
+                   "phx-click" => "open_dashboard_sections",
+                   "type" => "button"
+                 },
+                 "text" => "Cancel",
+                 "visible" => false
+               }
+             }
+           }
   end
 
   test "section_manager exposes the empty state and disables both moves for one section" do
-    empty = section_list_presentation([])
+    empty = section_manager_presentation([])["section_list"]
 
     assert empty["sections"] == []
 
@@ -193,15 +311,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
              "visible" => true
            }
 
-    single =
-      section_list_presentation([
-        %Section{
-          section_id: "only",
-          title: "Only section",
-          description: nil,
-          collapsed_by_default?: false
-        }
-      ])
+    manager =
+      section_manager_presentation(
+        [
+          %Section{
+            section_id: "only",
+            title: "Only section",
+            description: nil,
+            collapsed_by_default?: false
+          }
+        ],
+        params: %{
+          "section_id" => "only",
+          "title" => "Only section",
+          "description" => "Primary channel",
+          "collapsed_by_default" => "true"
+        },
+        error: "Section title must be 1 to 80 characters."
+      )
+
+    single = manager["section_list"]
 
     assert single["empty"]["visible"] == false
     assert [section] = single["sections"]
@@ -209,6 +338,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
     assert action(section, "move-down")["attrs"]["disabled"] == ""
     refute Map.has_key?(action(section, "edit")["attrs"], "disabled")
     refute Map.has_key?(action(section, "remove")["attrs"], "disabled")
+
+    form = manager["form"]
+
+    assert form["root"]["params"] == %{
+             "collapsed_by_default" => "true",
+             "description" => "Primary channel",
+             "section_id" => "only",
+             "title" => "Only section"
+           }
+
+    assert form["section_id"]["attrs"]["value"] == "only"
+    assert form["heading"]["text"] == "Edit section"
+    assert form["title"]["control"]["attrs"]["value"] == "Only section"
+    assert form["description"]["control"]["text"] == "Primary channel"
+    assert form["collapsed_by_default"]["control"]["attrs"]["checked"] == ""
+
+    assert form["error"] == %{
+             "attrs" => %{"class" => "text-sm text-error"},
+             "text" => "Section title must be 1 to 80 characters."
+           }
+
+    assert form["actions"]["save"]["text"] == "Save section"
+
+    assert form["actions"]["cancel"] == %{
+             "attrs" => %{
+               "class" => "btn btn-ghost btn-sm",
+               "phx-click" => "open_dashboard_sections",
+               "type" => "button"
+             },
+             "text" => "Cancel",
+             "visible" => true
+           }
   end
 
   test "section_manager preserves raw HEEx attribute body and truthiness semantics" do
@@ -220,14 +381,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
     Enum.zip([values, expected_body, expected_direct_attr, expected_truth])
     |> Enum.each(fn {value, body, direct_attr, truthy?} ->
       presentation =
-        section_list_presentation([
+        section_manager_presentation([
           %Section{
             section_id: value,
             title: value,
             description: value,
             collapsed_by_default?: value
           }
-        ])
+        ])["section_list"]
 
       assert [section] = presentation["sections"]
       assert section["key"] == "dashboard-section-#{body}"
@@ -262,29 +423,53 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponentsTest do
       assert action(section, "move-up")["attrs"]["disabled"] == ""
       assert action(section, "move-down")["attrs"]["disabled"] == ""
     end)
+
+    nil_description =
+      section_manager_presentation([],
+        params: %{
+          "section_id" => "",
+          "title" => "",
+          "description" => nil,
+          "collapsed_by_default" => "false"
+        }
+      )
+
+    newline_description =
+      section_manager_presentation([],
+        params: %{
+          "section_id" => "",
+          "title" => "",
+          "description" => "\nLeading newline",
+          "collapsed_by_default" => "false"
+        }
+      )
+
+    assert nil_description["form"]["description"]["control"]["text"] == ""
+
+    assert newline_description["form"]["description"]["control"]["text"] ==
+             "\nLeading newline"
   end
 
-  defp section_list_presentation(sections) do
+  defp section_manager_presentation(sections, options \\ []) do
+    params =
+      Keyword.get(options, :params, %{
+        "section_id" => "",
+        "title" => "",
+        "description" => "",
+        "collapsed_by_default" => "false"
+      })
+
     html =
       render_component(&DashboardSectionComponents.section_manager/1,
         document: %Document{sections: sections},
-        form:
-          Phoenix.Component.to_form(
-            %{
-              "section_id" => "",
-              "title" => "",
-              "description" => "",
-              "collapsed_by_default" => "false"
-            },
-            as: :section
-          ),
-        error: nil
+        form: Phoenix.Component.to_form(params, as: :section),
+        error: Keyword.get(options, :error)
       )
 
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-section-list-component")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-section-manager-component")
 
-    assert vue.id == "dashboard-section-list-component"
-    assert vue.component == "DashboardSectionList"
+    assert vue.id == "dashboard-section-manager-component"
+    assert vue.component == "DashboardSectionManager"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}

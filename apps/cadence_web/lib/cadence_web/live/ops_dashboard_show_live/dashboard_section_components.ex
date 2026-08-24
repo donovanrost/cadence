@@ -7,54 +7,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
   attr :error, :string, default: nil
 
   def section_manager(assigns) do
-    assigns = assign(assigns, :section_list, section_list_dto(assigns.document.sections))
+    assigns = assign(assigns, :presentation, section_manager_presentation(assigns))
 
     ~H"""
-    <div class="space-y-5">
-      <.vue
-        id="dashboard-section-list-component"
-        v-component="DashboardSectionList"
-        presentation={@section_list}
-        v-ssr={false}
-        class="contents"
-      />
-
-      <.form
-        for={@form}
-        id="dashboard-section-form"
-        phx-change="validate_dashboard_section"
-        phx-submit="save_dashboard_section"
-        class="space-y-3 border-t border-base-300/60 pt-4"
-      >
-        <input type="hidden" name={@form[:section_id].name} value={@form[:section_id].value} />
-        <p class="hud-label">
-          {if @form[:section_id].value in [nil, ""], do: "Add section", else: "Edit section"}
-        </p>
-        <.input field={@form[:title]} type="text" label="Title" required />
-        <.input field={@form[:description]} type="textarea" label="Description" />
-        <.input
-          field={@form[:collapsed_by_default]}
-          type="checkbox"
-          label="Collapse by default for operators"
-        />
-        <p :if={@error} class="text-sm text-error">{@error}</p>
-        <div class="flex gap-2">
-          <.button id="save-dashboard-section" type="submit" size={:sm}>
-            {if @form[:section_id].value in [nil, ""], do: "Add section", else: "Save section"}
-          </.button>
-          <button
-            :if={@form[:section_id].value not in [nil, ""]}
-            type="button"
-            phx-click="open_dashboard_sections"
-            class="btn btn-ghost btn-sm"
-          >Cancel</button>
-        </div>
-      </.form>
-    </div>
+    <.vue
+      id="dashboard-section-manager-component"
+      v-component="DashboardSectionManager"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
-  defp section_list_dto(sections) do
+  defp section_manager_presentation(assigns) do
+    editing? = assigns.form[:section_id].value not in [nil, ""]
+
+    %{
+      root: %{attrs: raw_attributes(%{"class" => "space-y-5"})},
+      section_list: section_list_presentation(assigns.document.sections),
+      form: section_form_presentation(assigns.form, assigns.error, editing?)
+    }
+  end
+
+  def section_list_presentation(sections) do
     last_index = length(sections) - 1
 
     %{
@@ -75,6 +51,180 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
         |> Enum.with_index()
         |> Enum.map(fn {section, index} -> section_dto(section, index, last_index) end)
     }
+  end
+
+  defp section_form_presentation(form, error, editing?) do
+    %{
+      root: %{
+        attrs:
+          raw_attributes(%{
+            "id" => "dashboard-section-form",
+            "phx-change" => "validate_dashboard_section",
+            "phx-submit" => "save_dashboard_section",
+            "class" => "space-y-3 border-t border-base-300/60 pt-4"
+          }),
+        param: rendered_body(form.name),
+        params: active_form_params(form)
+      },
+      section_id: %{
+        attrs:
+          raw_attributes(%{
+            "type" => "hidden",
+            "name" => form[:section_id].name,
+            "value" => form[:section_id].value
+          })
+      },
+      heading: %{
+        attrs: raw_attributes(%{"class" => "hud-label"}),
+        text: if(editing?, do: "Edit section", else: "Add section")
+      },
+      title: standard_field_presentation(form, :title, "text", "Title", required: true),
+      description: textarea_field_presentation(form, :description, "Description"),
+      collapsed_by_default:
+        checkbox_field_presentation(
+          form,
+          :collapsed_by_default,
+          "Collapse by default for operators"
+        ),
+      error: optional_text_presentation(error, "text-sm text-error"),
+      actions: %{
+        attrs: raw_attributes(%{"class" => "flex gap-2"}),
+        save: %{
+          attrs:
+            raw_attributes(%{
+              "id" => "save-dashboard-section",
+              "type" => "submit",
+              "class" => "btn btn-primary btn-sm"
+            }),
+          text: if(editing?, do: "Save section", else: "Add section")
+        },
+        cancel: %{
+          visible: editing?,
+          attrs:
+            raw_attributes(%{
+              "type" => "button",
+              "phx-click" => "open_dashboard_sections",
+              "class" => "btn btn-ghost btn-sm"
+            }),
+          text: "Cancel"
+        }
+      }
+    }
+  end
+
+  defp standard_field_presentation(form, field, type, label, options) do
+    form_field = form[field]
+    errors = form_field_errors(form_field)
+
+    %{
+      wrapper: %{attrs: raw_attributes(%{"class" => "fieldset mb-3"})},
+      label: %{
+        attrs: raw_attributes(%{"class" => "hud-label block mb-1.5"}),
+        text: label
+      },
+      control: %{
+        attrs:
+          raw_attributes(%{
+            "id" => form_field.id,
+            "name" => form_field.name,
+            "type" => type,
+            "value" => form_field.value,
+            "required" => Keyword.get(options, :required, false),
+            "class" => class_list(["w-full input", errors != [] && "input-error"])
+          })
+      },
+      errors: Enum.map(errors, &field_error_presentation/1)
+    }
+  end
+
+  defp textarea_field_presentation(form, field, label) do
+    form_field = form[field]
+    errors = form_field_errors(form_field)
+
+    %{
+      wrapper: %{attrs: raw_attributes(%{"class" => "fieldset mb-3"})},
+      label: %{
+        attrs: raw_attributes(%{"class" => "hud-label block mb-1.5"}),
+        text: label
+      },
+      control: %{
+        attrs:
+          raw_attributes(%{
+            "id" => form_field.id,
+            "name" => form_field.name,
+            "class" => class_list(["w-full textarea", errors != [] && "textarea-error"])
+          }),
+        text: rendered_body(form_field.value)
+      },
+      errors: Enum.map(errors, &field_error_presentation/1)
+    }
+  end
+
+  defp checkbox_field_presentation(form, field, label) do
+    form_field = form[field]
+
+    %{
+      wrapper: %{attrs: raw_attributes(%{"class" => "fieldset mb-3"})},
+      label: %{
+        attrs: raw_attributes(%{"class" => "flex cursor-pointer items-start gap-3"})
+      },
+      hidden_control: %{
+        attrs:
+          raw_attributes(%{
+            "type" => "hidden",
+            "name" => form_field.name,
+            "value" => "false"
+          })
+      },
+      control: %{
+        attrs:
+          raw_attributes(%{
+            "type" => "checkbox",
+            "id" => form_field.id,
+            "name" => form_field.name,
+            "value" => "true",
+            "checked" => to_string(form_field.value) == "true",
+            "class" => "checkbox checkbox-sm mt-0.5"
+          })
+      },
+      text: %{
+        wrapper: %{attrs: %{}},
+        label: %{
+          attrs: raw_attributes(%{"class" => "block text-sm font-medium"}),
+          text: label
+        }
+      }
+    }
+  end
+
+  defp active_form_params(form) do
+    Map.new([:section_id, :title, :description, :collapsed_by_default], fn field ->
+      value = form[field].value
+
+      active_value =
+        if field == :collapsed_by_default,
+          do: if(to_string(value) == "true", do: "true", else: "false"),
+          else: rendered_body(value)
+
+      {Atom.to_string(field), active_value}
+    end)
+  end
+
+  defp form_field_errors(form_field) do
+    if Phoenix.Component.used_input?(form_field), do: form_field.errors, else: []
+  end
+
+  defp field_error_presentation({message, _opts}),
+    do: %{attrs: raw_attributes(%{"class" => "mt-1.5 text-sm text-error"}), text: message}
+
+  defp field_error_presentation(message),
+    do: %{attrs: raw_attributes(%{"class" => "mt-1.5 text-sm text-error"}), text: message}
+
+  defp optional_text_presentation(nil, _class), do: nil
+  defp optional_text_presentation(false, _class), do: nil
+
+  defp optional_text_presentation(text, class_name) do
+    %{attrs: raw_attributes(%{"class" => class_name}), text: rendered_body(text)}
   end
 
   defp section_dto(section, index, last_index) do
