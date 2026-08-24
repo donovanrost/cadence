@@ -40,10 +40,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContextControlLiveTest do
   end
 
   defp context_selector_presentation(view) do
-    view
-    |> LiveVue.Test.get_vue(id: "dashboard-runtime-context-selector-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    dashboard_context_selector_presentation(view)
   end
 
   defp find_context_node(%{"attrs" => attrs} = node, attribute, value) do

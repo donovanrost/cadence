@@ -232,9 +232,64 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def dashboard_runtime_controls(view_or_html) do
     view_or_html
-    |> LiveVue.Test.get_vue(id: "dashboard-runtime-controls-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("runtime_controls")
+    |> dashboard_toolbar_presentation()
+    |> get_in([
+      "viewer",
+      "operational_scope",
+      "panel",
+      "body",
+      "query_options",
+      "panel",
+      "runtime_controls"
+    ])
+  end
+
+  def dashboard_toolbar_presentation(view_or_html) do
+    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-toolbar-component")
+
+    assert vue.component == "DashboardToolbar"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
+  end
+
+  def dashboard_time_picker_presentation(view_or_html) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> get_in(["viewer", "time_picker"])
+  end
+
+  def dashboard_context_selector_presentation(view_or_html) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> get_in(["viewer", "operational_scope", "panel", "body", "context"])
+  end
+
+  def dashboard_editor_actions_presentation(view_or_html) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> Map.get("editor_actions")
+  end
+
+  def dashboard_comparison_toggle_presentation(view_or_html) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> Map.get("comparison_toggle")
+  end
+
+  def dashboard_toolbar_data_health(view_or_html) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> Map.get("data_health")
+  end
+
+  def dashboard_toolbar_menu_item(view_or_html, id) do
+    view_or_html
+    |> dashboard_toolbar_presentation()
+    |> get_in(["menu", "panel", "items"])
+    |> Enum.find(&(&1["key"] == id))
   end
 
   def dashboard_runtime_control(runtime_controls, id) do

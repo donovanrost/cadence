@@ -177,10 +177,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-issues[data-dashboard-data-issue-codes*="unsupported_source_capability"])
-             )
+      data_health = dashboard_toolbar_data_health(view)
+
+      assert data_health["root"]["attrs"]["id"] == "dashboard-data-issues"
+
+      assert data_health["root"]["attrs"]["data-dashboard-data-issue-codes"] =~
+               "unsupported_source_capability"
 
       assert has_element?(
                view,
@@ -197,7 +199,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
                ~s(#ops-dashboard-show-page[data-runtime-source-execution-degraded-actions*="requires_configuration_change"][data-runtime-source-execution-degraded-actions*="inspect_source_capability"])
              )
 
-      assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
+      diagnostics_attrs =
+        dashboard_toolbar_menu_item(view, "dashboard-diagnostics-button")["link"]["attrs"]
+
+      assert diagnostics_attrs["href"] =~ "/diagnostics"
+      assert diagnostics_attrs["data-phx-link"] == "redirect"
+      assert diagnostics_attrs["data-phx-link-state"] == "push"
 
       header = widget_header_presentation(view, widget.widget_id)
       assert header["root"]["attrs"]["data-warning-codes"] =~ "unsupported_source_capability"
@@ -312,7 +319,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
 
     html
     |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([data-name="WidgetWarning"]))
+    |> LazyHTML.query(~s([id^="widget-"][id*="-engine-warning-"][id$="-component"]))
     |> LazyHTML.attribute("id")
     |> Enum.map(fn id ->
       html

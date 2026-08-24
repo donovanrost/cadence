@@ -7,13 +7,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
   alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents
+  alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarWarningPresentation
   alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
+  alias Phoenix.LiveView.JS
 
   defp time_picker_presentation(html) do
     html
-    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    |> toolbar_presentation()
+    |> get_in(["viewer", "time_picker"])
   end
 
   test "dashboard_toolbar exposes mission scope alongside spacecraft context search" do
@@ -27,7 +29,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
     context = context_selector_presentation(html)
     mission = context_node_by_attr(context, "phx-value-scope-kind", "mission")
     input = context_node_by_attr(context, "id", "context-search")
@@ -39,10 +40,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert input["attrs"]["placeholder"] ==
              "Find mission, spacecraft, contact, source, transport, ground, or link"
 
-    assert ["#"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("href")
+    assert toolbar_menu_item(html, "dashboard-versions-button")["link"]["attrs"]["href"] == "#"
   end
 
   test "dashboard_toolbar exposes scheduled and realized contacts as runtime contexts" do
@@ -132,7 +130,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
     presentation = editor_actions_presentation(html)
 
     assert editor_action(presentation, "edit-paused-note")["text"] ==
@@ -140,32 +137,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
     assert editor_action(presentation, "edit-layout-toggle")["text"] == "Done"
 
-    assert [] =
-             document
-             |> LazyHTML.query(~s(button[data-dashboard-lifecycle-action="publish"]))
-             |> LazyHTML.attribute("data-dashboard-action-available")
+    refute Enum.any?(
+             presentation["elements"],
+             &(&1["attrs"]["id"] == "dashboard-lifecycle-publish")
+           )
 
-    assert [] =
-             document
-             |> LazyHTML.query(~s(button[data-dashboard-lifecycle-action="archive"]))
-             |> LazyHTML.attribute("data-dashboard-action-available")
+    refute Enum.any?(
+             presentation["elements"],
+             &(&1["attrs"]["id"] == "dashboard-lifecycle-archive")
+           )
 
-    assert [historical_request_path] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-request-button")
-             |> LazyHTML.attribute("href")
+    historical_request_path =
+      toolbar_menu_item(html, "dashboard-historical-workflow-request-button")["link"]["attrs"][
+        "href"
+      ]
 
     assert historical_request_path =~ "/missions/mission-1/ops/data-operations?"
 
-    assert ["#"] =
-             document
-             |> LazyHTML.query("#dashboard-diagnostics-button")
-             |> LazyHTML.attribute("href")
+    assert toolbar_menu_item(html, "dashboard-diagnostics-button")["link"]["attrs"]["href"] ==
+             "#"
 
-    assert [] =
-             document
-             |> LazyHTML.query("#runtime-context-controls")
-             |> LazyHTML.attribute("id")
+    assert toolbar_presentation(html)["viewer"] == nil
   end
 
   test "dashboard_toolbar renders publish readiness summary" do
@@ -601,69 +593,52 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
           ],
           [edit_mode?: true, comparison_available?: true, comparison_open?: true]
         ] do
-      document =
+      presentation =
         render_component(
           &DashboardToolbarComponents.dashboard_toolbar/1,
           toolbar_assigns(overrides)
         )
-        |> LazyHTML.from_fragment()
+        |> toolbar_presentation()
 
-      assert [] =
-               document
-               |> LazyHTML.query("#dashboard-comparison-toggle-component")
-               |> LazyHTML.attribute("id")
+      assert presentation["comparison_toggle"] == nil
     end
   end
 
   test "healthy viewer keeps only scope and time as primary controls" do
     html = render_component(&DashboardToolbarComponents.dashboard_toolbar/1, toolbar_assigns([]))
-    document = LazyHTML.from_fragment(html)
+    presentation = toolbar_presentation(html)
     time_picker = time_picker_presentation(html)
 
-    assert ["scope"] =
-             document
-             |> LazyHTML.query("[data-dashboard-primary-control]")
-             |> LazyHTML.attribute("data-dashboard-primary-control")
+    assert presentation["viewer"]["operational_scope"]["root"]["attrs"][
+             "data-dashboard-primary-control"
+           ] == "scope"
 
     assert time_picker["overlay"]["root"]["attrs"]["data-dashboard-primary-control"] ==
              "time"
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-query-options")
-             |> LazyHTML.attribute("open")
+    refute presentation["viewer"]["operational_scope"]["panel"]["body"]["query_options"][
+             "attrs"
+           ]["open"]
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-data-override]")
-             |> LazyHTML.attribute("data-dashboard-data-override")
-
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-investigate-toggle")
-             |> LazyHTML.attribute("id")
+    assert presentation["viewer"]["operational_scope"]["trigger"]["override"] == nil
+    refute toolbar_menu_item(html, "dashboard-investigate-toggle")
   end
 
   test "non-default data context opens provenance controls and exposes a compact override" do
-    document =
+    presentation =
       render_component(
         &DashboardToolbarComponents.dashboard_toolbar/1,
         toolbar_assigns(data_realm: "replay", data_view: "as_recorded", limit_mode: "current")
       )
-      |> LazyHTML.from_fragment()
+      |> toolbar_presentation()
 
-    assert [""] =
-             document
-             |> LazyHTML.query("#dashboard-query-options")
-             |> LazyHTML.attribute("open")
+    assert presentation["viewer"]["operational_scope"]["panel"]["body"]["query_options"][
+             "attrs"
+           ]["open"]
 
-    assert [""] =
-             document
-             |> LazyHTML.query("[data-dashboard-data-override]")
-             |> LazyHTML.attribute("data-dashboard-data-override")
-
-    assert document |> LazyHTML.query("[data-dashboard-data-override]") |> LazyHTML.text() =~
-             "Replay · As recorded"
+    override = presentation["viewer"]["operational_scope"]["trigger"]["override"]
+    assert override["attrs"]["data-dashboard-data-override"] == ""
+    assert override["text"] =~ "Replay · As recorded"
   end
 
   test "dashboard_toolbar keeps telemetry primary and consolidates data issues" do
@@ -694,78 +669,110 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
-
+    presentation = toolbar_presentation(html)
     time_picker = time_picker_presentation(html)
 
-    assert ["dashboard-telemetry-toolbar"] =
-             document
-             |> LazyHTML.query("#dashboard-telemetry-toolbar")
-             |> LazyHTML.attribute("id")
+    assert presentation["root"]["attrs"]["id"] == "dashboard-telemetry-toolbar"
 
     assert time_picker["overlay"]["trigger"]["active_range"]["attrs"][
              "data-dashboard-time-summary"
            ] == "live"
 
-    assert ["3"] =
-             document
-             |> LazyHTML.query("#dashboard-data-issues")
-             |> LazyHTML.attribute("data-dashboard-data-issue-count")
+    data_health = presentation["data_health"]
+    assert data_health["root"]["attrs"]["data-dashboard-data-issue-count"] == "3"
 
-    assert ["data_sources"] =
-             document
-             |> LazyHTML.query("#dashboard-data-issues-open")
-             |> LazyHTML.attribute("data-dashboard-data-issue-action")
+    assert [warning] = data_health["panel"]["body"]["warnings"]
+    assert warning["component_id"] == "dashboard-data-issue-warning-0-component"
+    assert warning["overlay"]["attrs"]["data-engine-warning-detail"] == "stale_data"
 
-    assert [source_path] =
-             document
-             |> LazyHTML.query("#dashboard-data-issues-open")
-             |> LazyHTML.attribute("href")
+    assert data_health["panel"]["body"]["action"]["attrs"][
+             "data-dashboard-data-issue-action"
+           ] == "data_sources"
+
+    source_path = data_health["panel"]["body"]["action"]["attrs"]["href"]
 
     assert source_path =~ "/missions/mission-1/ops/data-sources"
 
-    assert [diagnostics_path] =
-             document
-             |> LazyHTML.query("#dashboard-data-issues-diagnostics")
-             |> LazyHTML.attribute("href")
+    diagnostics_path =
+      data_health["panel"]["body"]["diagnostics_action"]["attrs"]["href"]
 
     assert diagnostics_path =~ "/missions/mission-1/ops/dashboards/dashboard-1/diagnostics"
 
-    assert ["dashboard-data-controls-panel"] =
-             document
-             |> LazyHTML.query("#dashboard-data-controls-panel")
-             |> LazyHTML.attribute("id")
+    assert presentation["viewer"]["operational_scope"]["panel"]["attrs"]["id"] ==
+             "dashboard-data-controls-panel"
 
-    assert ["dashboard-query-options-panel"] =
-             document
-             |> LazyHTML.query("#dashboard-query-options-panel")
-             |> LazyHTML.attribute("id")
+    assert presentation["viewer"]["operational_scope"]["panel"]["body"]["query_options"][
+             "panel"
+           ]["attrs"]["id"] == "dashboard-query-options-panel"
 
     assert time_picker["overlay"]["panel"]["attrs"]["id"] ==
              "dashboard-time-controls-panel"
 
-    assert ["Dashboard operational scope"] =
-             document
-             |> LazyHTML.query("#dashboard-data-controls-toggle")
-             |> LazyHTML.attribute("aria-label")
+    assert presentation["viewer"]["operational_scope"]["trigger"]["attrs"]["aria-label"] ==
+             "Dashboard operational scope"
 
-    assert ["Dashboard data options"] =
-             document
-             |> LazyHTML.query("#dashboard-query-options-toggle")
-             |> LazyHTML.attribute("aria-label")
+    assert presentation["viewer"]["operational_scope"]["panel"]["body"]["query_options"][
+             "summary"
+           ]["attrs"]["aria-label"] == "Dashboard data options"
 
     assert time_picker["overlay"]["trigger"]["attrs"]["aria-label"] ==
              "Dashboard time range"
 
-    assert ["dashboard-menu-menu"] =
-             document
-             |> LazyHTML.query("#dashboard-menu-menu")
-             |> LazyHTML.attribute("id")
+    assert presentation["menu"]["panel"]["attrs"]["id"] == "dashboard-menu-menu"
 
-    assert ["dashboard-investigate-telemetry"] =
-             document
-             |> LazyHTML.query("#dashboard-menu-menu #dashboard-investigate-telemetry")
-             |> LazyHTML.attribute("id")
+    assert toolbar_menu_item(html, "dashboard-investigate-telemetry")["key"] ==
+             "dashboard-investigate-telemetry"
+  end
+
+  test "toolbar-owned warning presentation preserves the existing warning contract" do
+    warning = %{
+      code_text: "source_degraded",
+      label: "Source degraded",
+      message: "Telemetry source returned degraded data.",
+      severity: :warning,
+      details: %{
+        source_request_id: "request-1",
+        logical_source: "simulator",
+        realm: "flight",
+        data_source_id: "questdb-flight",
+        source_binding_id: "binding-flight",
+        data_view: "canonical",
+        time_mode: "wall_clock",
+        time_axis: "receipt_time",
+        replay_run_id: "replay-1"
+      },
+      detail_rows: [%{label: "Source request", value: "request-1"}],
+      evidence: [
+        %{
+          kind_text: "source",
+          id: "request-1",
+          source_text: "simulator",
+          observed_at_text: "2026-06-17T12:00:00Z"
+        }
+      ],
+      links: [
+        %{
+          link_id: "warning-link-1",
+          target_text: "telemetry_sample",
+          target_id: "sample-1",
+          source_text: "telemetry"
+        }
+      ]
+    }
+
+    expected =
+      render_component(
+        &WidgetWarningComponents.engine_warning_badge/1,
+        id: "dashboard-data-issue-warning-0",
+        warning: warning
+      )
+      |> LiveVue.Test.get_vue(id: "dashboard-data-issue-warning-0-component")
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+
+    actual = DashboardToolbarWarningPresentation.build("dashboard-data-issue-warning-0", warning)
+
+    assert Jason.decode!(Jason.encode!(actual)) == expected
   end
 
   test "publish readiness stays out of the viewing toolbar" do
@@ -777,11 +784,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    assert [] =
-             html
-             |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#dashboard-editor-actions-component")
-             |> LazyHTML.attribute("id")
+    assert toolbar_presentation(html)["editor_actions"] == nil
   end
 
   test "viewing toolbar exposes correlated time state and context-preserving drilldowns" do
@@ -803,7 +806,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
         )
       )
 
-    document = LazyHTML.from_fragment(html)
     time_picker = time_picker_presentation(html)
 
     live_preset =
@@ -818,10 +820,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
     assert live_preset["attrs"]["phx-click"] == "set_time_preset"
     assert live_preset["attrs"]["phx-value-preset"] == "live"
 
-    assert [href] =
-             document
-             |> LazyHTML.query("#dashboard-investigate-telemetry")
-             |> LazyHTML.attribute("href")
+    href = toolbar_menu_item(html, "dashboard-investigate-telemetry")["link"]["attrs"]["href"]
 
     uri = URI.parse(href)
     query = URI.decode_query(uri.query)
@@ -874,45 +873,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
   end
 
   defp editor_actions_presentation(html) do
-    assert ["dashboard-editor-actions-component"] =
-             html
-             |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#dashboard-editor-actions-component")
-             |> LazyHTML.attribute("id")
-
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-editor-actions-component")
-
-    assert vue.component == "DashboardEditorActions"
-    assert vue.id == "dashboard-editor-actions-component"
-    assert vue.class == "contents"
-    refute vue.ssr
-    assert vue.handlers == %{}
-    assert vue.slots == %{}
-    assert Map.keys(vue.props) == ["presentation"]
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-
-    Map.fetch!(vue.props, "presentation")
+    html
+    |> toolbar_presentation()
+    |> Map.fetch!("editor_actions")
   end
 
   defp context_selector_presentation(html) do
-    assert ["dashboard-runtime-context-selector-component"] =
-             html
-             |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#dashboard-runtime-context-selector-component")
-             |> LazyHTML.attribute("id")
-
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-runtime-context-selector-component")
-
-    assert vue.component == "DashboardRuntimeContextSelector"
-    assert vue.id == "dashboard-runtime-context-selector-component"
-    assert vue.class == "contents"
-    refute vue.ssr
-    assert vue.handlers == %{}
-    assert vue.slots == %{}
-    assert Map.keys(vue.props) == ["presentation"]
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-
-    Map.fetch!(vue.props, "presentation")
+    html
+    |> toolbar_presentation()
+    |> get_in(["viewer", "operational_scope", "panel", "body", "context"])
   end
 
   defp context_node_by_attr(%{"attrs" => attrs} = node, attribute, value) do
@@ -934,24 +903,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
   end
 
   defp comparison_toggle_presentation(html) do
-    assert ["dashboard-comparison-toggle-component"] =
+    html
+    |> toolbar_presentation()
+    |> Map.fetch!("comparison_toggle")
+  end
+
+  defp toolbar_presentation(html) do
+    assert ["dashboard-toolbar-component"] =
              html
              |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#dashboard-comparison-toggle-component")
+             |> LazyHTML.query("#dashboard-toolbar-component")
              |> LazyHTML.attribute("id")
 
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-toggle-component")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-toolbar-component")
 
-    assert vue.component == "DashboardComparisonToggle"
-    assert vue.id == "dashboard-comparison-toggle-component"
+    assert vue.component == "DashboardToolbar"
+    assert vue.id == "dashboard-toolbar-component"
     assert vue.class == "contents"
     refute vue.ssr
-    assert vue.handlers == %{}
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
     assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     Map.fetch!(vue.props, "presentation")
+  end
+
+  defp toolbar_menu_item(html, id) do
+    html
+    |> toolbar_presentation()
+    |> get_in(["menu", "panel", "items"])
+    |> Enum.find(&(&1["key"] == id))
   end
 
   defp data_binding do

@@ -55,9 +55,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionMissingContextLiveT
 
   defp selected_datum_action(html, id) do
     html
-    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
-    |> Map.fetch!(:props)
-    |> get_in(["presentation", "selected_datum"])
+    |> dashboard_time_picker_presentation()
+    |> Map.fetch!("selected_datum")
     |> find_selected_datum_node("id", id)
   end
 

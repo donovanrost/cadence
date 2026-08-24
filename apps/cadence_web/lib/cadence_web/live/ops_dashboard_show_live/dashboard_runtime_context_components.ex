@@ -4,28 +4,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextPresentation
 
-  attr :current_mission, :any, default: nil
-  attr :spacecraft, :list, required: true
-  attr :source_endpoints, :list, default: []
-  attr :transports, :list, default: []
-  attr :ground_stations, :list, default: []
-  attr :link_assignments, :list, default: []
-  attr :scheduled_contacts, :list, default: []
-  attr :realized_contacts, :list, default: []
-  attr :context_spacecraft_id, :string, required: true
-  attr :context_scope_kind, :string, default: nil
-  attr :context_scope_id, :string, default: nil
-  attr :context_scope_ids, :list, default: []
-  attr :query, :string, required: true
+  attr(:current_mission, :any, default: nil)
+  attr(:spacecraft, :list, required: true)
+  attr(:source_endpoints, :list, default: [])
+  attr(:transports, :list, default: [])
+  attr(:ground_stations, :list, default: [])
+  attr(:link_assignments, :list, default: [])
+  attr(:scheduled_contacts, :list, default: [])
+  attr(:realized_contacts, :list, default: [])
+  attr(:context_spacecraft_id, :string, required: true)
+  attr(:context_scope_kind, :string, default: nil)
+  attr(:context_scope_id, :string, default: nil)
+  attr(:context_scope_ids, :list, default: [])
+  attr(:query, :string, required: true)
 
   def context_selector(assigns) do
-    context_presentation = DashboardRuntimeContextPresentation.build(assigns)
-
     assigns =
       assign(
         assigns,
         :context_selector_presentation,
-        context_selector_presentation(context_presentation, assigns.query)
+        context_selector_presentation(assigns)
       )
 
     ~H"""
@@ -39,14 +37,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents do
     """
   end
 
-  defp context_selector_presentation(context_presentation, query) do
+  def context_selector_presentation(assigns) do
+    context_presentation = DashboardRuntimeContextPresentation.build(assigns)
+
     node(
       "context-selector-root",
       "div",
       %{"class" => "relative min-w-0"},
       selected_context_nodes(context_presentation) ++
-        [context_search_heading(), context_search_form(query)] ++
-        context_result_list_nodes(context_presentation, query)
+        [context_search_heading(), context_search_form(assigns.query)] ++
+        context_result_list_nodes(context_presentation, assigns.query)
     )
   end
 

@@ -180,10 +180,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
       {:ok, view, _html} = live(conn, show_path(mission, dashboard) <> "?realm=rehearsal")
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-issues[data-dashboard-data-issue-codes*="missing_source_binding"])
-             )
+      data_health = dashboard_toolbar_data_health(view)
+
+      assert data_health["root"]["attrs"]["id"] == "dashboard-data-issues"
+
+      assert data_health["root"]["attrs"]["data-dashboard-data-issue-codes"] =~
+               "missing_source_binding"
 
       refute has_element?(view, "#dashboard-source-health-component")
 

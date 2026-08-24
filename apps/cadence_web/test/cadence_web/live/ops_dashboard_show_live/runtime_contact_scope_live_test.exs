@@ -204,7 +204,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                ~s(#ops-dashboard-show-page[data-dashboard-health-state="stale"][data-dashboard-health-stale-placements="#{trend_item.placement_id}"][data-dashboard-health-affected-placements="#{trend_item.placement_id}"])
              )
 
-      assert has_element?(view, "#dashboard-data-issues")
+      data_health = dashboard_toolbar_data_health(view)
+      assert data_health["root"]["attrs"]["id"] == "dashboard-data-issues"
       refute has_element?(view, "#dashboard-health-rollup")
       refute has_element?(view, ~s([data-ops-context-section="dashboard_health"]))
       refute has_element?(view, ~s([data-ops-context-section="source_status"]))

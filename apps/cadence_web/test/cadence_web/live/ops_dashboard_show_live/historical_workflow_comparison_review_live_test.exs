@@ -124,22 +124,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
       render_dashboard_async(view)
 
-      assert ["dashboard-comparison-toggle-component"] =
-               view
-               |> render()
-               |> LazyHTML.from_fragment()
-               |> LazyHTML.query("#dashboard-comparison-toggle-component")
-               |> LazyHTML.attribute("id")
+      assert has_element?(view, "#dashboard-toolbar-component")
+      comparison_toggle = dashboard_comparison_toggle_presentation(view)
 
-      comparison_toggle =
-        LiveVue.Test.get_vue(view, id: "dashboard-comparison-toggle-component")
-
-      assert comparison_toggle.props["presentation"]["root"]["attrs"]["id"] ==
+      assert comparison_toggle["root"]["attrs"]["id"] ==
                "dashboard-comparison-toggle"
 
       render_click(
         view,
-        comparison_toggle.props["presentation"]["root"]["attrs"]["phx-click"]
+        comparison_toggle["root"]["attrs"]["phx-click"]
       )
 
       comparison_inspector =

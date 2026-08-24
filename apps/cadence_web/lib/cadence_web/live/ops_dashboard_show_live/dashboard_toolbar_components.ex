@@ -6,7 +6,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeContextComponents
   alias CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents
   alias CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents
-  alias CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents
+  alias CadenceWeb.OpsDashboardShowLive.DashboardToolbarWarningPresentation
+  alias Phoenix.LiveView.JS
 
   @data_source_issue_codes [
     :missing_source_binding,
@@ -78,6 +79,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   attr(:comparison_open_count, :integer, default: 0)
 
   def dashboard_toolbar(assigns) do
+    assigns = assign(assigns, :presentation, dashboard_toolbar_presentation(assigns))
+
+    ~H"""
+    <.vue
+      id="dashboard-toolbar-component"
+      v-component="DashboardToolbar"
+      presentation={@presentation}
+      v-on:recents-loaded={JS.push("time_recents_loaded")}
+      v-on:select-range={JS.push("set_chart_time_range")}
+      v-ssr={false}
+      class="contents"
+    />
+    """
+  end
+
+  def dashboard_toolbar_presentation(assigns) do
     assigns =
       assigns
       |> assign(:data_issue_count, data_issue_count(assigns))
@@ -92,324 +109,436 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
       |> assign(:dashboard_share_path, dashboard_share_path(assigns))
       |> assign(:data_query_label, data_query_label(assigns))
       |> assign(:data_query_overrides?, data_query_overrides?(assigns))
-      |> assign(:comparison_toggle, dashboard_comparison_toggle_dto(assigns))
-      |> assign(:editor_actions, dashboard_editor_actions_dto(assigns))
       |> then(&assign(&1, :data_issue_action, data_issue_action(&1)))
 
-    ~H"""
-    <div
-      id="dashboard-telemetry-toolbar"
-      class="min-h-10 shrink-0 flex items-center gap-2 border-b border-base-300/50 bg-base-200/35 px-3 py-1"
-      data-dashboard-viewer-toolbar={to_string(not @edit_mode?)}
-    >
-      <div class="min-w-0 flex-1">
-        <h1
-          class="break-words text-sm font-semibold leading-tight tracking-tight"
-          title={@dashboard_document.description}
-        >
-          {@dashboard_document.name}
-        </h1>
-      </div>
-
-      <div
-        :if={not @edit_mode?}
-        id="runtime-context-controls"
-        class="cadence-dashboard-query-strip"
-      >
-        <.popover
-          id="dashboard-data-controls"
-          trigger_id="dashboard-data-controls-toggle"
-          panel_id="dashboard-data-controls-panel"
-          label="Dashboard operational scope"
-          placement={:bottom_start}
-          width={:lg}
-          trigger_class="cadence-dashboard-query-trigger"
-          data-dashboard-primary-control="scope"
-          data-query-overrides={to_string(@data_query_overrides?)}
-        >
-          <:trigger>
-            <span class="cadence-dashboard-query-trigger-label">Scope</span>
-            <span class="cadence-dashboard-query-trigger-value hidden max-w-36 sm:inline">
-              {runtime_scope_label(@current_mission, @spacecraft, @context_scope_kind, @context_scope_id, @context_scope_ids)}
-            </span>
-            <span
-              :if={@data_query_overrides?}
-              class="cadence-dashboard-context-override hidden max-w-40 md:inline-flex"
-              data-dashboard-data-override
-            >
-              {@data_query_label}
-            </span>
-            <.icon name="hero-chevron-down" class="h-3 w-3 shrink-0 text-base-content/40" />
-          </:trigger>
-          <div class="cadence-dashboard-query-panel-header">
-            <.icon name="hero-viewfinder-circle" class="mt-0.5 h-4 w-4 text-primary" />
-            <div>
-              <p class="text-xs font-semibold text-base-content/85">Operational scope</p>
-              <p class="mt-0.5 text-[0.68rem] text-base-content/50">
-                Focus every widget without leaving the dashboard.
-              </p>
-            </div>
-          </div>
-          <div class="cadence-dashboard-query-panel-body">
-            <DashboardRuntimeContextComponents.context_selector
-              :if={@show_context?}
-              current_mission={@current_mission}
-              spacecraft={@spacecraft}
-              source_endpoints={@source_endpoints}
-              transports={@transports}
-              ground_stations={@ground_stations}
-              link_assignments={@link_assignments}
-              scheduled_contacts={@scheduled_contacts}
-              realized_contacts={@realized_contacts}
-              context_spacecraft_id={@context_spacecraft_id}
-              context_scope_kind={@context_scope_kind}
-              context_scope_id={@context_scope_id}
-              context_scope_ids={@context_scope_ids}
-              query={@query}
-            />
-            <details
-              id="dashboard-query-options"
-              open={@data_query_overrides?}
-              class="cadence-dashboard-context-advanced"
-              data-query-overrides={to_string(@data_query_overrides?)}
-            >
-              <summary
-                id="dashboard-query-options-toggle"
-                class="cadence-dashboard-context-advanced-summary"
-                aria-label="Dashboard data options"
-              >
-                <span class="flex min-w-0 items-center gap-2">
-                  <.icon name="hero-circle-stack" class="h-4 w-4 shrink-0 text-primary" />
-                  <span class="min-w-0">
-                    <span class="block text-xs font-semibold text-base-content/85">
-                      Data provenance & semantics
-                    </span>
-                    <span class="block truncate text-[0.68rem] text-base-content/50">
-                      {if @data_query_overrides?, do: @data_query_label, else: "Flight · Canonical · Observed limits"}
-                    </span>
-                  </span>
-                </span>
-                <.icon name="hero-chevron-right" class="h-3.5 w-3.5 shrink-0 text-base-content/45 transition-transform" />
-              </summary>
-              <div id="dashboard-query-options-panel" class="pt-3">
-                <DashboardRuntimeControlsComponents.runtime_context_controls
-                  section={:data}
-                  time_mode={@time_mode}
-                  time_from={@time_from}
-                  time_to={@time_to}
-                  replay_run_id={@replay_run_id}
-                  time_validation={@time_validation}
-                  data_realm={@data_realm}
-                  data_realms={@data_realms}
-                  data_view={@data_view}
-                  compare_data_view={@compare_data_view}
-                  data_source_id={@data_source_id}
-                  source_binding_id={@source_binding_id}
-                  data_bindings={@data_bindings}
-                  replay_runs={@replay_runs}
-                  selected_replay_run={@selected_replay_run}
-                  limit_mode={@limit_mode}
-                  limit_mode_fallback={@limit_mode_fallback}
-                  hidden_marker_categories={@hidden_marker_categories}
-                  selected_data_ref={@selected_data_ref}
-                  time_axis={@time_axis}
-                />
-              </div>
-            </details>
-          </div>
-        </.popover>
-
-        <DashboardTimePickerComponents.time_toolbar_cluster
-          time_mode={@time_mode}
-          time_axis={@time_axis}
-          time_from={@time_from}
-          time_to={@time_to}
-          replay_run_id={@replay_run_id}
-          time_validation={@time_validation}
-          data_realm={@data_realm}
-          data_view={@data_view}
-          compare_data_view={@compare_data_view}
-          source_binding_id={@source_binding_id}
-          limit_mode={@limit_mode}
-          replay_runs={@replay_runs}
-          selected_replay_run={@selected_replay_run}
-          selected_data_ref={@selected_data_ref}
-          quick_query={@time_quick_query}
-          recent_ranges={@time_recent_ranges}
-        />
-      </div>
-
-      <.vue
-        :if={@comparison_toggle}
-        id="dashboard-comparison-toggle-component"
-        v-component="DashboardComparisonToggle"
-        presentation={@comparison_toggle}
-        v-ssr={false}
-        class="contents"
-      />
-
-      <.popover
-        :if={@data_issue_count > 0}
-        id="dashboard-data-issues"
-        label="Dashboard data health"
-        width={:md}
-        data-dashboard-data-issue-count={@data_issue_count}
-        data-dashboard-data-issue-status={@data_issue_status}
-        data-dashboard-data-issue-codes={data_issue_codes(@dashboard_warnings)}
-      >
-        <:trigger>
-          <span
-            class={[
-              "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[0.68rem] font-semibold",
-              data_issue_class(@data_issue_status)
-            ]}
-            title="Open data health summary"
-            data-dashboard-data-issues-toggle
-          >
-            <.icon name="hero-exclamation-triangle" class="h-3.5 w-3.5" />
-            <span>{@data_issue_count}</span>
-            <span class="hidden sm:inline">
-              data {if @data_issue_count == 1, do: "issue", else: "issues"}
-            </span>
-          </span>
-        </:trigger>
-        <div class="p-3 text-xs">
-          <div class="flex items-start gap-2 border-b border-base-300/60 pb-2">
-            <.icon name="hero-signal" class="mt-0.5 h-4 w-4 text-warning" />
-            <div class="min-w-0">
-              <p class="font-semibold text-base-content">Data health</p>
-              <p class="mt-0.5 text-base-content/60">{data_issue_summary(@dashboard_health)}</p>
-            </div>
-          </div>
-          <div :if={@dashboard_warnings != []} class="mt-2 flex flex-wrap gap-1">
-            <WidgetWarningComponents.engine_warning_badge
-              :for={{warning, index} <- Enum.with_index(@dashboard_warnings)}
-              id={"dashboard-data-issue-warning-#{index}"}
-              warning={warning}
-            />
-          </div>
-          <p
-            :if={@dashboard_degraded? and @dashboard_warnings == []}
-            class="mt-2 text-base-content/65"
-          >
-            One or more sources returned degraded data.
-          </p>
-          <.link
-            id="dashboard-data-issues-open"
-            navigate={@data_issue_action.path}
-            class="btn btn-outline btn-xs mt-3 w-full justify-start"
-            data-dashboard-data-issue-action={@data_issue_action.kind}
-          >
-            <.icon name={@data_issue_action.icon} class="h-3.5 w-3.5" />
-            {@data_issue_action.label}
-          </.link>
-          <.link
-            :if={@data_issue_action.kind == "data_sources"}
-            id="dashboard-data-issues-diagnostics"
-            navigate={@dashboard_diagnostics_path}
-            class="btn btn-ghost btn-xs mt-1 w-full justify-start"
-          >
-            <.icon name="hero-wrench-screwdriver" class="h-3.5 w-3.5" />
-            Dashboard diagnostics
-          </.link>
-        </div>
-      </.popover>
-
-      <.vue
-        :if={@editor_actions}
-        id="dashboard-editor-actions-component"
-        v-component="DashboardEditorActions"
-        presentation={@editor_actions}
-        v-ssr={false}
-        class="contents"
-      />
-      <.action_menu id="dashboard-menu">
-        <:action :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}>
-          <.link id="dashboard-investigate-telemetry" navigate={telemetry_explore_path(assigns)}>
-            <.icon name="hero-chart-bar-square" class="h-4 w-4" /> Explore telemetry
-          </.link>
-        </:action>
-        <:action :if={not @edit_mode? and not is_nil(@mission_id) and not is_nil(@dashboard_id)}>
-          <.link
-            id="dashboard-investigate-sources"
-            navigate={~p"/missions/#{@mission_id}/ops/data-sources?source_dashboard_id=#{@dashboard_id}"}
-          >
-            <.icon name="hero-circle-stack" class="h-4 w-4" /> Data Sources
-          </.link>
-        </:action>
-        <:action :if={not @edit_mode? and not is_nil(@mission_id)}>
-          <.link id="dashboard-investigate-contacts" navigate={~p"/missions/#{@mission_id}/ops/contacts"}>
-            <.icon name="hero-signal" class="h-4 w-4" /> Contacts
-          </.link>
-        </:action>
-        <:action :if={not @edit_mode? and @dashboard_author?}>
-          <.link
-            id="dashboard-edit-link"
-            navigate={@dashboard_edit_path}
-          >
-            <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit Dashboard
-          </.link>
-        </:action>
-        <:action>
-          <.link
-            id="dashboard-versions-button"
-            navigate={@dashboard_activity_path}
-            data-dashboard-comparison-review-open-count={
-              comparison_review_open_request_count(@dashboard_comparison_review_queue)
-            }
-            data-dashboard-comparison-review-open-requests={
-              comparison_review_open_request_ids_attr(@dashboard_comparison_review_queue)
-            }
-            data-dashboard-comparison-review-open-placements={
-              comparison_review_open_placements_attr(@dashboard_comparison_review_queue)
-            }
-          >
-            <.icon name="hero-clock" class="h-4 w-4" /> Versions & activity
-            <span
-              :if={comparison_review_open_request_count(@dashboard_comparison_review_queue) != "0"}
-              class="badge badge-warning badge-xs"
-              data-dashboard-comparison-review-open-toolbar-badge
-            >
-              {comparison_review_open_request_count(@dashboard_comparison_review_queue)}
-            </span>
-          </.link>
-        </:action>
-        <:action>
-          <.link
-            id="dashboard-historical-workflow-request-button"
-            navigate={@historical_request_path}
-          >
-            <.icon name="hero-document-plus" class="h-4 w-4" /> Request historical data
-          </.link>
-        </:action>
-        <:action>
-          <.link
-            id="dashboard-diagnostics-button"
-            navigate={@dashboard_diagnostics_path}
-          >
-            <.icon name="hero-chart-bar-square" class="h-4 w-4" /> Diagnostics
-          </.link>
-        </:action>
-        <:action :if={@dashboard_author?}>
-          <.link
-            id="dashboard-share-button"
-            navigate={@dashboard_share_path}
-          >
-            <.icon name="hero-share" class="h-4 w-4" /> Share current context
-          </.link>
-        </:action>
-        <:action :if={@dashboard_author?}>
-          <.link
-            id="dashboard-settings-button"
-            navigate={@dashboard_settings_path}
-          >
-            <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Settings
-          </.link>
-        </:action>
-      </.action_menu>
-    </div>
-    """
+    %{
+      root: %{
+        attrs: %{
+          id: "dashboard-telemetry-toolbar",
+          class:
+            "min-h-10 shrink-0 flex items-center gap-2 border-b border-base-300/50 bg-base-200/35 px-3 py-1",
+          "data-dashboard-viewer-toolbar": to_string(not assigns.edit_mode?)
+        }
+      },
+      title: %{
+        wrapper_class: "min-w-0 flex-1",
+        attrs: %{
+          class: "break-words text-sm font-semibold leading-tight tracking-tight",
+          title: map_value(assigns.dashboard_document, :description)
+        },
+        text: map_value(assigns.dashboard_document, :name)
+      },
+      viewer: dashboard_viewer_dto(assigns),
+      comparison_toggle: dashboard_comparison_toggle_dto(assigns),
+      data_health: dashboard_data_health_dto(assigns),
+      editor_actions: dashboard_editor_actions_dto(assigns),
+      menu: dashboard_menu_dto(assigns)
+    }
   end
+
+  defp dashboard_viewer_dto(%{edit_mode?: true}), do: nil
+
+  defp dashboard_viewer_dto(assigns) do
+    time_picker_assigns =
+      assigns
+      |> Map.put(:quick_query, assigns.time_quick_query)
+      |> Map.put(:recent_ranges, assigns.time_recent_ranges)
+
+    %{
+      root: %{attrs: %{id: "runtime-context-controls", class: "cadence-dashboard-query-strip"}},
+      operational_scope: operational_scope_dto(assigns),
+      time_picker_host: component_host("dashboard-time-picker-component"),
+      time_picker: DashboardTimePickerComponents.time_toolbar_presentation(time_picker_assigns)
+    }
+  end
+
+  defp operational_scope_dto(assigns) do
+    %{
+      root: %{
+        attrs: %{
+          id: "dashboard-data-controls",
+          "data-overlay-kind": "popover",
+          "data-overlay-placement": "bottom-start",
+          "data-dashboard-primary-control": "scope",
+          "data-query-overrides": to_string(assigns.data_query_overrides?),
+          class: "cadence-overlay"
+        }
+      },
+      trigger: %{
+        attrs: %{
+          id: "dashboard-data-controls-toggle",
+          type: "button",
+          "data-overlay-trigger": "",
+          "aria-haspopup": "dialog",
+          "aria-expanded": "false",
+          "aria-controls": "dashboard-data-controls-panel",
+          "aria-label": "Dashboard operational scope",
+          class: "cadence-overlay-trigger cadence-dashboard-query-trigger"
+        },
+        label: %{class: "cadence-dashboard-query-trigger-label", text: "Scope"},
+        value: %{
+          class: "cadence-dashboard-query-trigger-value hidden max-w-36 sm:inline",
+          text:
+            runtime_scope_label(
+              assigns.current_mission,
+              assigns.spacecraft,
+              assigns.context_scope_kind,
+              assigns.context_scope_id,
+              assigns.context_scope_ids
+            )
+        },
+        override:
+          if(assigns.data_query_overrides?,
+            do: %{
+              attrs: %{
+                class: "cadence-dashboard-context-override hidden max-w-40 md:inline-flex",
+                "data-dashboard-data-override": ""
+              },
+              text: assigns.data_query_label
+            }
+          ),
+        icon_class: "hero-chevron-down h-3 w-3 shrink-0 text-base-content/40"
+      },
+      panel: %{
+        attrs: %{
+          id: "dashboard-data-controls-panel",
+          "data-overlay-panel": "",
+          "data-overlay-width": "lg",
+          "aria-label": "Dashboard operational scope",
+          class: "cadence-overlay-panel cadence-popover-panel",
+          hidden: true
+        },
+        header: %{
+          class: "cadence-dashboard-query-panel-header",
+          icon_class: "hero-viewfinder-circle mt-0.5 h-4 w-4 text-primary",
+          title: %{class: "text-xs font-semibold text-base-content/85", text: "Operational scope"},
+          description: %{
+            class: "mt-0.5 text-[0.68rem] text-base-content/50",
+            text: "Focus every widget without leaving the dashboard."
+          }
+        },
+        body: %{
+          class: "cadence-dashboard-query-panel-body",
+          context_host: component_host("dashboard-runtime-context-selector-component"),
+          context:
+            if(assigns.show_context?,
+              do: DashboardRuntimeContextComponents.context_selector_presentation(assigns)
+            ),
+          query_options: dashboard_query_options_dto(assigns)
+        }
+      }
+    }
+  end
+
+  defp dashboard_query_options_dto(assigns) do
+    %{
+      attrs: %{
+        id: "dashboard-query-options",
+        open: assigns.data_query_overrides?,
+        class: "cadence-dashboard-context-advanced",
+        "data-query-overrides": to_string(assigns.data_query_overrides?)
+      },
+      summary: %{
+        attrs: %{
+          id: "dashboard-query-options-toggle",
+          class: "cadence-dashboard-context-advanced-summary",
+          "aria-label": "Dashboard data options"
+        },
+        leading_class: "flex min-w-0 items-center gap-2",
+        icon_class: "hero-circle-stack h-4 w-4 shrink-0 text-primary",
+        copy_class: "min-w-0",
+        title: %{
+          class: "block text-xs font-semibold text-base-content/85",
+          text: "Data provenance & semantics"
+        },
+        description: %{
+          class: "block truncate text-[0.68rem] text-base-content/50",
+          text:
+            if(assigns.data_query_overrides?,
+              do: assigns.data_query_label,
+              else: "Flight · Canonical · Observed limits"
+            )
+        },
+        chevron_class:
+          "hero-chevron-right h-3.5 w-3.5 shrink-0 text-base-content/45 transition-transform"
+      },
+      panel: %{
+        attrs: %{id: "dashboard-query-options-panel", class: "pt-3"},
+        runtime_controls_host: component_host("dashboard-runtime-controls-component"),
+        runtime_controls:
+          assigns
+          |> Map.put(:section, :data)
+          |> DashboardRuntimeControlsComponents.runtime_controls_presentation()
+      }
+    }
+  end
+
+  defp dashboard_data_health_dto(%{data_issue_count: 0}), do: nil
+
+  defp dashboard_data_health_dto(assigns) do
+    warnings =
+      assigns.dashboard_warnings
+      |> Enum.with_index()
+      |> Enum.map(fn {warning, index} ->
+        DashboardToolbarWarningPresentation.build(
+          "dashboard-data-issue-warning-#{index}",
+          warning
+        )
+      end)
+
+    %{
+      root: %{
+        attrs: %{
+          id: "dashboard-data-issues",
+          "data-overlay-kind": "popover",
+          "data-overlay-placement": "bottom-end",
+          "data-dashboard-data-issue-count": Integer.to_string(assigns.data_issue_count),
+          "data-dashboard-data-issue-status": to_string(assigns.data_issue_status),
+          "data-dashboard-data-issue-codes": data_issue_codes(assigns.dashboard_warnings),
+          class: "cadence-overlay"
+        }
+      },
+      trigger: %{
+        attrs: %{
+          id: "dashboard-data-issues-trigger",
+          type: "button",
+          "data-overlay-trigger": "",
+          "aria-haspopup": "dialog",
+          "aria-expanded": "false",
+          "aria-controls": "dashboard-data-issues-panel",
+          "aria-label": "Dashboard data health",
+          class: "cadence-overlay-trigger"
+        },
+        badge: %{
+          attrs: %{
+            class:
+              "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[0.68rem] font-semibold #{data_issue_class(assigns.data_issue_status)}",
+            title: "Open data health summary",
+            "data-dashboard-data-issues-toggle": ""
+          },
+          icon_class: "hero-exclamation-triangle h-3.5 w-3.5",
+          count: Integer.to_string(assigns.data_issue_count),
+          label: "data #{if assigns.data_issue_count == 1, do: "issue", else: "issues"}"
+        }
+      },
+      panel: %{
+        attrs: %{
+          id: "dashboard-data-issues-panel",
+          "data-overlay-panel": "",
+          "data-overlay-width": "md",
+          "aria-label": "Dashboard data health",
+          class: "cadence-overlay-panel cadence-popover-panel",
+          hidden: true
+        },
+        body: %{
+          class: "p-3 text-xs",
+          header: %{
+            class: "flex items-start gap-2 border-b border-base-300/60 pb-2",
+            icon_class: "hero-signal mt-0.5 h-4 w-4 text-warning",
+            copy_class: "min-w-0",
+            title: %{class: "font-semibold text-base-content", text: "Data health"},
+            summary: %{
+              class: "mt-0.5 text-base-content/60",
+              text: data_issue_summary(assigns.dashboard_health)
+            }
+          },
+          warnings_class: "mt-2 flex flex-wrap gap-1",
+          warnings: warnings,
+          degraded_message:
+            if(assigns.dashboard_degraded? and warnings == [],
+              do: %{
+                class: "mt-2 text-base-content/65",
+                text: "One or more sources returned degraded data."
+              }
+            ),
+          action: data_issue_link_dto(assigns.data_issue_action),
+          diagnostics_action:
+            if(assigns.data_issue_action.kind == "data_sources",
+              do: %{
+                attrs:
+                  live_link_attrs(
+                    "dashboard-data-issues-diagnostics",
+                    assigns.dashboard_diagnostics_path,
+                    %{class: "btn btn-ghost btn-xs mt-1 w-full justify-start"}
+                  ),
+                icon_class: "hero-wrench-screwdriver h-3.5 w-3.5",
+                text: "Dashboard diagnostics"
+              }
+            )
+        }
+      }
+    }
+  end
+
+  defp data_issue_link_dto(action) do
+    %{
+      attrs:
+        live_link_attrs("dashboard-data-issues-open", action.path, %{
+          class: "btn btn-outline btn-xs mt-3 w-full justify-start",
+          "data-dashboard-data-issue-action": action.kind
+        }),
+      icon_class: "#{action.icon} h-3.5 w-3.5",
+      text: action.label
+    }
+  end
+
+  defp dashboard_menu_dto(assigns) do
+    open_summary = comparison_review_open_summary(assigns.dashboard_comparison_review_queue)
+
+    items =
+      [
+        if(
+          not assigns.edit_mode? and not is_nil(assigns.mission_id) and
+            not is_nil(assigns.dashboard_id),
+          do:
+            menu_item(
+              "dashboard-investigate-telemetry",
+              telemetry_explore_path(assigns),
+              "hero-chart-bar-square",
+              "Explore telemetry"
+            )
+        ),
+        if(
+          not assigns.edit_mode? and not is_nil(assigns.mission_id) and
+            not is_nil(assigns.dashboard_id),
+          do:
+            menu_item(
+              "dashboard-investigate-sources",
+              ~p"/missions/#{assigns.mission_id}/ops/data-sources?source_dashboard_id=#{assigns.dashboard_id}",
+              "hero-circle-stack",
+              "Data Sources"
+            )
+        ),
+        if(not assigns.edit_mode? and not is_nil(assigns.mission_id),
+          do:
+            menu_item(
+              "dashboard-investigate-contacts",
+              ~p"/missions/#{assigns.mission_id}/ops/contacts",
+              "hero-signal",
+              "Contacts"
+            )
+        ),
+        if(not assigns.edit_mode? and assigns.dashboard_author?,
+          do:
+            menu_item(
+              "dashboard-edit-link",
+              assigns.dashboard_edit_path,
+              "hero-pencil-square",
+              "Edit Dashboard"
+            )
+        ),
+        menu_item(
+          "dashboard-versions-button",
+          assigns.dashboard_activity_path,
+          "hero-clock",
+          "Versions & activity",
+          %{
+            "data-dashboard-comparison-review-open-count": open_summary.count_text,
+            "data-dashboard-comparison-review-open-requests": open_summary.request_ids_attr,
+            "data-dashboard-comparison-review-open-placements": open_summary.placements_attr
+          },
+          if(open_summary.count_text != "0",
+            do: %{
+              class: "badge badge-warning badge-xs",
+              attrs: %{"data-dashboard-comparison-review-open-toolbar-badge": ""},
+              text: open_summary.count_text
+            }
+          )
+        ),
+        menu_item(
+          "dashboard-historical-workflow-request-button",
+          assigns.historical_request_path,
+          "hero-document-plus",
+          "Request historical data"
+        ),
+        menu_item(
+          "dashboard-diagnostics-button",
+          assigns.dashboard_diagnostics_path,
+          "hero-chart-bar-square",
+          "Diagnostics"
+        ),
+        if(assigns.dashboard_author?,
+          do:
+            menu_item(
+              "dashboard-share-button",
+              assigns.dashboard_share_path,
+              "hero-share",
+              "Share current context"
+            )
+        ),
+        if(assigns.dashboard_author?,
+          do:
+            menu_item(
+              "dashboard-settings-button",
+              assigns.dashboard_settings_path,
+              "hero-cog-6-tooth",
+              "Settings"
+            )
+        )
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    %{
+      root: %{
+        attrs: %{
+          id: "dashboard-menu",
+          "data-overlay-kind": "menu",
+          "data-overlay-placement": "bottom-end",
+          class: "cadence-overlay"
+        }
+      },
+      trigger: %{
+        attrs: %{
+          id: "dashboard-menu-trigger",
+          type: "button",
+          "data-overlay-trigger": "",
+          "aria-haspopup": "menu",
+          "aria-expanded": "false",
+          "aria-controls": "dashboard-menu-menu",
+          "aria-label": "Actions",
+          class: "cadence-overlay-trigger btn btn-ghost btn-xs"
+        },
+        icon_class: "hero-ellipsis-vertical h-5 w-5"
+      },
+      panel: %{
+        attrs: %{
+          id: "dashboard-menu-menu",
+          role: "menu",
+          "data-overlay-panel": "",
+          class: "cadence-overlay-panel cadence-menu-panel",
+          hidden: true
+        },
+        items: items
+      }
+    }
+  end
+
+  defp menu_item(id, path, icon, text, extra_attrs \\ %{}, badge \\ nil) do
+    %{
+      key: id,
+      wrapper: %{attrs: %{role: "none", class: "cadence-menu-item"}},
+      link: %{
+        attrs: live_link_attrs(id, path, extra_attrs),
+        icon_class: "#{icon} h-4 w-4",
+        text: text,
+        badge: badge
+      }
+    }
+  end
+
+  defp live_link_attrs(id, path, extra_attrs) do
+    Map.merge(
+      %{
+        id: id,
+        href: path,
+        "data-phx-link": "redirect",
+        "data-phx-link-state": "push"
+      },
+      extra_attrs
+    )
+  end
+
+  defp component_host(id), do: %{attrs: %{id: id, class: "contents"}}
 
   defp runtime_scope_label(_mission, _spacecraft, scope_kind, _scope_id, scope_ids)
        when is_list(scope_ids) and length(scope_ids) > 1 do

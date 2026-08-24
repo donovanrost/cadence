@@ -59,7 +59,11 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     assert has_element?(dashboard_view, "#ops-context-rail-component")
 
-    explore_path = link_href(dashboard_view, "#dashboard-investigate-telemetry")
+    explore_path =
+      dashboard_toolbar_menu_item(dashboard_view, "dashboard-investigate-telemetry")["link"][
+        "attrs"
+      ]["href"]
+
     assert explore_path =~ "source_dashboard_id=#{dashboard.dashboard_id}"
     assert explore_path =~ "time_mode=archive"
     assert explore_path =~ "selection_view=all_revisions"

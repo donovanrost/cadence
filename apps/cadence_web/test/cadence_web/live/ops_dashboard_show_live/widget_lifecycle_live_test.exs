@@ -266,7 +266,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
         )
 
       await_dashboard_resolved(viewer)
-      refute has_element?(viewer, "#edit-paused-note")
+      assert dashboard_editor_actions_presentation(viewer) == nil
       assert widget_point_value_text(viewer, widget_id) == "5678"
 
       stop_dashboard_view(viewer)
@@ -373,10 +373,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   end
 
   defp editor_action(view, id) do
-    assert has_element?(view, "#dashboard-editor-actions-component")
-    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
-    assert vue.component == "DashboardEditorActions"
-    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    assert has_element?(view, "#dashboard-toolbar-component")
+    presentation = dashboard_editor_actions_presentation(view)
+    assert action = Enum.find(presentation["elements"], &(&1["attrs"]["id"] == id))
     action
   end
 

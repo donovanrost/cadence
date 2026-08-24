@@ -190,9 +190,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
 
   defp selected_datum_action(html, id) do
     html
-    |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
-    |> Map.fetch!(:props)
-    |> get_in(["presentation", "selected_datum"])
+    |> dashboard_time_picker_presentation()
+    |> Map.fetch!("selected_datum")
     |> find_selected_datum_node("id", id)
   end
 
@@ -208,10 +207,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
   end
 
   defp context_selector_presentation(view) do
-    view
-    |> LiveVue.Test.get_vue(id: "dashboard-runtime-context-selector-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
+    dashboard_context_selector_presentation(view)
   end
 
   defp find_context_node(%{"attrs" => attrs} = node, attribute, value) do
@@ -422,9 +418,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
 
       live_preset =
         view
-        |> LiveVue.Test.get_vue(id: "dashboard-time-picker-component")
-        |> Map.fetch!(:props)
-        |> get_in(["presentation", "time_picker", "quick_ranges", "presets", "items"])
+        |> dashboard_time_picker_presentation()
+        |> get_in(["time_picker", "quick_ranges", "presets", "items"])
         |> Enum.find(&(&1["attrs"]["id"] == "dashboard-time-preset-live"))
 
       refute live_preset["attrs"]["disabled"]

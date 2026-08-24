@@ -5,30 +5,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
   alias Cadence.DataSources.DataBinding
   alias CadenceWeb.OpsDashboardShowLive.MarkerCategories
 
-  attr :time_mode, :string, required: true
-  attr :time_axis, :string, default: "generation_time"
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :time_validation, :string, default: "ok"
-  attr :data_realm, :string, required: true
-  attr :data_realms, :list, required: true
-  attr :data_view, :string, required: true
-  attr :compare_data_view, :string, default: nil
-  attr :data_source_id, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :data_bindings, :list, required: true
-  attr :replay_runs, :list, default: []
-  attr :selected_replay_run, :any, default: nil
-  attr :limit_mode, :string, required: true
-  attr :limit_mode_fallback, :map, default: nil
-  attr :hidden_marker_categories, :list, default: []
-  attr :selected_data_ref, :any, default: nil
-  attr :section, :atom, values: [:all, :data], default: :all
+  attr(:time_mode, :string, required: true)
+  attr(:time_axis, :string, default: "generation_time")
+  attr(:time_from, :string, default: nil)
+  attr(:time_to, :string, default: nil)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:time_validation, :string, default: "ok")
+  attr(:data_realm, :string, required: true)
+  attr(:data_realms, :list, required: true)
+  attr(:data_view, :string, required: true)
+  attr(:compare_data_view, :string, default: nil)
+  attr(:data_source_id, :string, default: nil)
+  attr(:source_binding_id, :string, default: nil)
+  attr(:data_bindings, :list, required: true)
+  attr(:replay_runs, :list, default: [])
+  attr(:selected_replay_run, :any, default: nil)
+  attr(:limit_mode, :string, required: true)
+  attr(:limit_mode_fallback, :map, default: nil)
+  attr(:hidden_marker_categories, :list, default: [])
+  attr(:selected_data_ref, :any, default: nil)
+  attr(:section, :atom, values: [:all, :data], default: :all)
 
   def runtime_context_controls(assigns) do
-    data_form = to_form(runtime_form_params(assigns))
-    assigns = assign(assigns, :runtime_controls, runtime_controls_dto(assigns, data_form))
+    assigns = assign(assigns, :runtime_controls, runtime_controls_presentation(assigns))
 
     ~H"""
     <.vue
@@ -39,6 +38,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardRuntimeControlsComponents do
       class="contents"
     />
     """
+  end
+
+  def runtime_controls_presentation(assigns) do
+    data_form = to_form(runtime_form_params(assigns))
+    runtime_controls_dto(assigns, data_form)
   end
 
   defp runtime_controls_dto(assigns, data_form) do

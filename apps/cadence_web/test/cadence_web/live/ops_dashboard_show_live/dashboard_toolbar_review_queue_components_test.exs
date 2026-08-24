@@ -38,37 +38,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    item = versions_item(html)
+    attrs = item["link"]["attrs"]
 
-    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("href")
+    assert attrs["href"] == "/missions/mission-1/ops/dashboards/dashboard-1/activity"
+    refute Map.has_key?(attrs, "phx-click")
+    assert attrs["data-dashboard-comparison-review-open-count"] == "1"
+    assert attrs["data-dashboard-comparison-review-open-requests"] == "review-request-1"
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("phx-click")
+    assert attrs["data-dashboard-comparison-review-open-placements"] ==
+             "placement-1,placement-2"
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert ["review-request-1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
-
-    assert ["placement-1,placement-2"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
-
-    assert [_class] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-toolbar-badge]")
-             |> LazyHTML.attribute("class")
+    assert item["link"]["badge"]["attrs"] == %{
+             "data-dashboard-comparison-review-open-toolbar-badge" => ""
+           }
   end
 
   test "dashboard_toolbar does not derive open review badges from lifecycle events" do
@@ -86,22 +69,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    item = versions_item(html)
+    attrs = item["link"]["attrs"]
 
-    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("href")
-
-    assert ["0"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-open-toolbar-badge]")
-             |> LazyHTML.attribute("class")
+    assert attrs["href"] == "/missions/mission-1/ops/dashboards/dashboard-1/activity"
+    assert attrs["data-dashboard-comparison-review-open-count"] == "0"
+    assert item["link"]["badge"] == nil
   end
 
   test "dashboard_toolbar routes versions button from materialized review queue" do
@@ -128,27 +101,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
         )
       )
 
-    document = LazyHTML.from_fragment(html)
+    attrs = versions_item(html)["link"]["attrs"]
 
-    assert ["/missions/mission-1/ops/dashboards/dashboard-1/activity"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("href")
-
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
-
-    assert ["review-request-from-queue"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
-
-    assert ["placement-9"] =
-             document
-             |> LazyHTML.query("#dashboard-versions-button")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
+    assert attrs["href"] == "/missions/mission-1/ops/dashboards/dashboard-1/activity"
+    assert attrs["data-dashboard-comparison-review-open-count"] == "1"
+    assert attrs["data-dashboard-comparison-review-open-requests"] == "review-request-from-queue"
+    assert attrs["data-dashboard-comparison-review-open-placements"] == "placement-9"
   end
 
   defp toolbar_assigns(overrides) do
@@ -203,5 +161,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarReviewQueueComponentsT
       priority: 0,
       status: :active
     }
+  end
+
+  defp versions_item(html) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-toolbar-component")
+    |> Map.fetch!(:props)
+    |> get_in(["presentation", "menu", "panel", "items"])
+    |> Enum.find(&(&1["key"] == "dashboard-versions-button"))
   end
 end

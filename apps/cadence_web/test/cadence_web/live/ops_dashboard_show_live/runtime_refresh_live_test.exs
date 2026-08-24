@@ -269,7 +269,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
 
       refute has_element?(view, "#dashboard-source-health-component")
 
-      assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
+      diagnostics_attrs =
+        dashboard_toolbar_menu_item(view, "dashboard-diagnostics-button")["link"]["attrs"]
+
+      assert diagnostics_attrs["href"] =~ "/diagnostics"
+      assert diagnostics_attrs["data-phx-link"] == "redirect"
+      assert diagnostics_attrs["data-phx-link-state"] == "push"
 
       {:ok, context_only_view, _html} =
         live(

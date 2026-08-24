@@ -141,11 +141,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="replay_run"][data-dashboard-replay-run-id="replay_run_001"][data-dashboard-data-realm="replay"][data-engine-time-mode="replay_run"][data-engine-replay-run-id="replay_run_001"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
            )
 
-    time_picker_vue = LiveVue.Test.get_vue(view, id: "dashboard-time-picker-component")
-    assert time_picker_vue.component == "DashboardTimePicker"
-    assert time_picker_vue.ssr == false
-    assert time_picker_vue.props == Jason.decode!(Jason.encode!(time_picker_vue.props))
-    time_picker_presentation = time_picker_vue.props["presentation"]
+    assert has_element?(view, "#dashboard-toolbar-component")
+    time_picker_presentation = dashboard_time_picker_presentation(view)
 
     assert time_picker_presentation["overlay"]["trigger"]["active_range"]["attrs"][
              "data-dashboard-time-mode"
@@ -167,10 +164,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
 
     assert replay_presentation["warning"] == nil
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-historical-workflow-request-button[href*="/ops/data-operations"][href*="dashboard_time_mode=replay_run"][href*="dashboard_replay_run_id=replay_run_001"][href*="dashboard_limit_mode=observed"])
-           )
+    historical_request_attrs =
+      dashboard_toolbar_menu_item(view, "dashboard-historical-workflow-request-button")["link"][
+        "attrs"
+      ]
+
+    assert historical_request_attrs["href"] =~ "/ops/data-operations"
+    assert historical_request_attrs["href"] =~ "dashboard_time_mode=replay_run"
+    assert historical_request_attrs["href"] =~ "dashboard_replay_run_id=replay_run_001"
+    assert historical_request_attrs["href"] =~ "dashboard_limit_mode=observed"
+    assert historical_request_attrs["data-phx-link"] == "redirect"
+    assert historical_request_attrs["data-phx-link-state"] == "push"
 
     warning =
       view

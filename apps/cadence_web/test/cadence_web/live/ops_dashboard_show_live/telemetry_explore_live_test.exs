@@ -548,10 +548,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   end
 
   defp click_editor_action(view, id) do
-    assert has_element?(view, "#dashboard-editor-actions-component")
-    vue = LiveVue.Test.get_vue(view, id: "dashboard-editor-actions-component")
-    assert vue.component == "DashboardEditorActions"
-    assert action = Enum.find(vue.props["presentation"]["elements"], &(&1["attrs"]["id"] == id))
+    assert has_element?(view, "#dashboard-toolbar-component")
+    presentation = dashboard_editor_actions_presentation(view)
+    assert action = Enum.find(presentation["elements"], &(&1["attrs"]["id"] == id))
     attrs = action["attrs"]
 
     render_click(

@@ -204,6 +204,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveInvalidationLiveTest do
              ~s(#ops-dashboard-show-page[data-engine-resolve-mode="context_change"][data-runtime-last-invalidation-boundary="dashboard_version_changed"][data-runtime-last-invalidation-refresh-reason="runtime_invalidation"])
            )
 
-    assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
+    diagnostics_attrs =
+      dashboard_toolbar_menu_item(view, "dashboard-diagnostics-button")["link"]["attrs"]
+
+    assert diagnostics_attrs["href"] =~ "/diagnostics"
+    assert diagnostics_attrs["data-phx-link"] == "redirect"
+    assert diagnostics_attrs["data-phx-link-state"] == "push"
   end
 end

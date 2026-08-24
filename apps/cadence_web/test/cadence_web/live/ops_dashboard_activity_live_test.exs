@@ -396,14 +396,17 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     {:ok, viewer, _html} =
       await_live_result(live(conn, viewer_path(mission, dashboard)))
 
-    assert has_element?(viewer, "#dashboard-edit-link")
-    assert has_element?(viewer, "#dashboard-settings-button")
-    assert has_element?(viewer, "#dashboard-versions-button")
-    assert has_element?(viewer, "#dashboard-diagnostics-button")
+    assert dashboard_toolbar_menu_item(viewer, "dashboard-edit-link")
+    assert dashboard_toolbar_menu_item(viewer, "dashboard-settings-button")
+    assert dashboard_toolbar_menu_item(viewer, "dashboard-versions-button")
+    assert dashboard_toolbar_menu_item(viewer, "dashboard-diagnostics-button")
 
-    refute has_element?(viewer, ~s(#dashboard-menu [phx-click="publish_dashboard"]))
-    refute has_element?(viewer, ~s(#dashboard-menu [phx-click="archive_dashboard"]))
-    refute has_element?(viewer, ~s(#dashboard-menu [phx-click="open_rename"]))
+    menu_json =
+      viewer |> dashboard_toolbar_presentation() |> Map.fetch!("menu") |> Jason.encode!()
+
+    refute menu_json =~ "publish_dashboard"
+    refute menu_json =~ "archive_dashboard"
+    refute menu_json =~ "open_rename"
   end
 
   defp viewer_path(mission, dashboard) do
