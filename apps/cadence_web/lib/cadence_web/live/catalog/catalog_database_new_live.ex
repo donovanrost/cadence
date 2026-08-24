@@ -181,16 +181,28 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.vue
-        id="catalog-database-new-component"
-        v-component="CatalogDatabaseNew"
-        page={@page}
-        v-ssr={false}
-      >
-        <:upload_form>
-          <.upload_card uploads={@uploads} form={@database_form} />
-        </:upload_form>
-      </.vue>
+      <div id={@page.id} class="space-y-6 max-w-2xl">
+        <.vue
+          id="catalog-database-new-component"
+          v-component="CatalogDatabaseNew"
+          page={@page}
+          v-ssr={false}
+          class="contents"
+        />
+
+        <.upload_card uploads={@uploads} form={@database_form} />
+
+        <div>
+          <.button
+            id={@page.cancel.id}
+            variant={:ghost}
+            size={:md}
+            navigate={@page.cancel.href}
+          >
+            {@page.cancel.label}
+          </.button>
+        </div>
+      </div>
     </Layouts.app>
     """
   end

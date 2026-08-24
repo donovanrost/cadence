@@ -23,12 +23,16 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 
+    assert has_element?(view, "#catalog-database-new-page")
     assert has_element?(view, "#catalog-database-new-component")
+    assert has_element?(view, "#catalog-upload-form[phx-change='validate'][phx-submit='save']")
+    assert has_element?(view, "#catalog-database-new-cancel")
 
     vue = catalog_database_new_vue(view)
 
     assert vue.component == "CatalogDatabaseNew"
     assert vue.ssr == false
+    assert vue.class == "contents"
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     assert vue.props == %{
@@ -53,14 +57,6 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
                }
              }
            }
-
-    assert Map.has_key?(vue.slots, "upload_form")
-
-    upload_form = LazyHTML.query(upload_form_slot(vue), "#catalog-upload-form")
-
-    assert upload_form
-    assert ["validate"] = LazyHTML.attribute(upload_form, "phx-change")
-    assert ["save"] = LazyHTML.attribute(upload_form, "phx-submit")
   end
 
   test "shows a friendly banner when no importer matches the file" do
@@ -80,10 +76,8 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.bin")
 
-    upload_form_text = view |> upload_form_slot() |> LazyHTML.text()
-
-    assert upload_form_text =~ "No importer supports"
-    assert upload_form_text =~ "mission.bin"
+    assert has_element?(view, "#catalog-upload-form", "No importer supports")
+    assert has_element?(view, "#catalog-upload-form", "mission.bin")
   end
 
   test "discovers packaged built-ins through the extension catalog" do
@@ -111,7 +105,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.yaml")
 
-    assert view |> upload_form_slot() |> LazyHTML.text() =~ "Cadence YAML Database"
+    assert has_element?(view, "#catalog-upload-form", "Cadence YAML Database")
 
     result =
       render_submit(view, "save", %{
@@ -150,7 +144,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.yaml")
 
-    assert view |> upload_form_slot() |> LazyHTML.text() =~ "Cadence YAML Database"
+    assert has_element?(view, "#catalog-upload-form", "Cadence YAML Database")
 
     result =
       render_submit(view, "save", %{
@@ -168,17 +162,5 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
   defp catalog_database_new_vue(view) do
     LiveVue.Test.get_vue(view, id: "catalog-database-new-component")
-  end
-
-  defp upload_form_slot(%{slots: slots}) do
-    slots
-    |> Map.fetch!("upload_form")
-    |> LazyHTML.from_fragment()
-  end
-
-  defp upload_form_slot(view) do
-    view
-    |> catalog_database_new_vue()
-    |> upload_form_slot()
   end
 end
