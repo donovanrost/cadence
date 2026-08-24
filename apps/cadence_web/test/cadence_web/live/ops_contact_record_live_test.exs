@@ -63,15 +63,25 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
     conn = TestFixtures.member_conn(user)
     {:ok, ledger_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
 
-    assert has_element?(
-             ledger_view,
-             ~s(#contact-record-realized-contact-record-alpha[data-contact-record-kind="realized"])
-           )
+    ledger_vue = LiveVue.Test.get_vue(ledger_view, id: "ops-contact-schedule-component")
 
-    assert has_element?(
-             ledger_view,
-             ~s(#open-contact-record-realized-contact-record-alpha[href="/missions/#{mission.mission_id}/ops/contacts/records/realized-contact-record-alpha"])
-           )
+    assert ledger_vue.component == "OpsContactSchedule"
+    assert ledger_vue.ssr == false
+    assert ledger_vue.class == "contents"
+    assert ledger_vue.slots == %{}
+    assert ledger_vue.streams_diff == Jason.decode!(Jason.encode!(ledger_vue.streams_diff))
+
+    assert [ledger_row] = stream_upserts(ledger_vue, "contact_records")
+    assert ledger_row["__dom_id"] == "contact-record-realized-contact-record-alpha"
+    assert ledger_row["kind"] == "realized"
+
+    assert ledger_row["inspect_action"] == %{
+             "id" => "open-contact-record-realized-contact-record-alpha",
+             "label" => "Inspect",
+             "icon" => "hero-arrow-right",
+             "href" =>
+               "/missions/#{mission.mission_id}/ops/contacts/records/realized-contact-record-alpha"
+           }
 
     {:ok, record_view, _html} =
       live(
@@ -431,6 +441,15 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
     record["header"]["actions"]
     |> Enum.find(&(&1["id"] == action_id))
     |> Map.fetch!("href")
+  end
+
+  defp stream_upserts(vue, stream) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", path, _row] -> String.starts_with?(path, "/#{stream}/")
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, row] -> row end)
   end
 
   defp decode_query(href) do
