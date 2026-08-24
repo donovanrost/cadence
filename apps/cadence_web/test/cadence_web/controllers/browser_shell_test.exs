@@ -38,9 +38,14 @@ defmodule CadenceWeb.BrowserShellTest do
 
   test "sign-in page renders a single unified sign-in form", %{conn: conn} do
     response = conn |> get("/sign-in") |> html_response(200)
+    document = LazyHTML.from_fragment(response)
+    sign_in_component = LazyHTML.query(document, "#user-session-component")
 
-    assert response =~ "Sign in"
-    assert response =~ ~s(id="sign-in-form")
+    assert LazyHTML.attribute(sign_in_component, "data-name") == ["UserSession"]
+
+    assert [props] = LazyHTML.attribute(sign_in_component, "data-props")
+    assert props =~ "^heading^:^Sign in^"
+    assert props =~ "^id^:^sign-in-form^"
     refute response =~ "setup-access-sign-in-form"
     refute response =~ "durable-sign-in-form"
   end
