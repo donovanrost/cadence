@@ -28,6 +28,16 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     vue
   end
 
+  defp spacecraft_profile_show_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-profile-show-component")
+
+    assert vue.component == "SpacecraftTypeShow"
+    assert vue.ssr == false
+    assert is_binary(Jason.encode!(vue.props))
+
+    vue
+  end
+
   describe "profile routes" do
     test "spacecraft management page exposes vehicle and profile cards with scoped actions" do
       {conn, _org, mission} = signed_in_org_and_mission()
@@ -223,16 +233,243 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
       {conn, _org, mission} = signed_in_org_and_mission()
       profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
 
-      {:ok, view, html} =
+      {:ok, view, _html} =
         live(
           conn,
           ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
         )
 
-      assert has_element?(view, "a[href='/missions/#{mission.mission_id}/spacecraft/profiles']")
-      assert html =~ "Aurora Bus"
-      assert html =~ "Byte Interpretation"
-      refute html =~ "Spacecraft Type"
+      assert has_element?(view, "#spacecraft-profile-show-page")
+      assert has_element?(view, "#spacecraft-profile-show-component")
+
+      vue = spacecraft_profile_show_vue(view)
+
+      assert vue.props["navigation"]["profiles"]["href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/profiles"
+
+      assert vue.props["profile"]["display_name"] == "Aurora Bus"
+      assert vue.props["labels"]["byte_interpretation"] == "Byte Interpretation"
+      refute inspect(vue.props) =~ "Spacecraft Type"
+    end
+
+    test "provides exact JSON-safe profile detail and version history props" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      profile_v1 =
+        TestFixtures.persist_spacecraft_profile!(mission,
+          display_name: "Aurora Bus",
+          downlink_protocol: :aos,
+          uplink_protocol: :tc,
+          frame_parameters: %{"frame_size" => 1024, "ocf_length" => 0},
+          applications: %{"telemetry_decom" => %{}}
+        )
+
+      profile_v2 = %Cadence.SpacecraftType{
+        profile_v1
+        | version: 2,
+          downlink_protocol: :uslp,
+          uplink_protocol: :uslp,
+          frame_parameters: %{
+            "frame_size" => 2048,
+            "ocf_length" => 0,
+            "secondary_header_enabled" => true,
+            "truncated_primary_header" => false
+          },
+          applications: %{
+            "command_dispatch" => %{},
+            "telemetry_decom" => %{}
+          }
+      }
+
+      assert {:ok, persisted_v2} =
+               Cadence.SpacecraftTypeStore.persist_spacecraft_type(
+                 org.organization_id,
+                 profile_v2
+               )
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{profile_v1.spacecraft_type_id}"
+        )
+
+      vue = spacecraft_profile_show_vue(view)
+
+      assert vue.props == %{
+               "labels" => %{
+                 "applications" => "Applications",
+                 "byte_interpretation" => "Byte Interpretation",
+                 "downlink" => "Downlink",
+                 "downlink_protocol" => "Downlink Protocol",
+                 "frame_parameters" => "Frame Parameters",
+                 "lifecycle" => "Lifecycle",
+                 "no_applications" => "No applications enabled.",
+                 "packet_protocol" => "Packet Protocol",
+                 "uplink" => "Uplink",
+                 "uplink_protocol" => "Uplink Protocol",
+                 "version" => "Version",
+                 "version_history" => "Version History"
+               },
+               "navigation" => %{
+                 "current" => %{"label" => "Aurora Bus"},
+                 "mission" => %{
+                   "href" => "/missions/#{mission.mission_id}",
+                   "label" => "Primary Mission"
+                 },
+                 "profiles" => %{
+                   "href" => "/missions/#{mission.mission_id}/spacecraft/profiles",
+                   "label" => "Spacecraft Profiles"
+                 },
+                 "spacecraft" => %{
+                   "href" => "/missions/#{mission.mission_id}/spacecraft",
+                   "label" => "Spacecraft"
+                 }
+               },
+               "profile" => %{
+                 "applications" => [
+                   %{
+                     "id" => "spacecraft-profile-application-command_dispatch",
+                     "label" => "Command Dispatch"
+                   },
+                   %{
+                     "id" => "spacecraft-profile-application-telemetry_decom",
+                     "label" => "Telemetry Decom"
+                   }
+                 ],
+                 "display_name" => "Aurora Bus",
+                 "downlink_protocol" => "USLP",
+                 "frame_parameters" => [
+                   %{
+                     "id" => "spacecraft-profile-frame-parameter-frame_size",
+                     "label" => "Frame Size",
+                     "value" => "2048"
+                   },
+                   %{
+                     "id" => "spacecraft-profile-frame-parameter-ocf_length",
+                     "label" => "Ocf Length",
+                     "value" => "0"
+                   },
+                   %{
+                     "id" => "spacecraft-profile-frame-parameter-secondary_header_enabled",
+                     "label" => "Secondary Header Enabled",
+                     "value" => "yes"
+                   },
+                   %{
+                     "id" => "spacecraft-profile-frame-parameter-truncated_primary_header",
+                     "label" => "Truncated Primary Header",
+                     "value" => "no"
+                   }
+                 ],
+                 "id" => "spacecraft-profile-#{profile_v1.spacecraft_type_id}",
+                 "lifecycle" => "active",
+                 "packet_protocol" => "space_packet",
+                 "profile_id" => profile_v1.spacecraft_type_id,
+                 "uplink_protocol" => "USLP",
+                 "version" => "v2"
+               },
+               "versions" => [
+                 %{
+                   "downlink_protocol" => "USLP",
+                   "id" =>
+                     "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-2",
+                   "lifecycle" => "active",
+                   "uplink_protocol" => "USLP",
+                   "version" => "v2"
+                 },
+                 %{
+                   "downlink_protocol" => "AOS",
+                   "id" =>
+                     "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-1",
+                   "lifecycle" => "active",
+                   "uplink_protocol" => "TC",
+                   "version" => "v1"
+                 }
+               ]
+             }
+
+      assert persisted_v2.spacecraft_type_id == profile_v1.spacecraft_type_id
+    end
+
+    test "preserves empty frame-parameter and application presentation behavior" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      profile =
+        TestFixtures.persist_spacecraft_profile!(mission,
+          display_name: "Minimal Bus",
+          frame_parameters: %{},
+          applications: %{}
+        )
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+        )
+
+      props = spacecraft_profile_show_vue(view).props
+
+      assert props["profile"]["frame_parameters"] == []
+      assert props["profile"]["applications"] == []
+      assert props["labels"]["no_applications"] == "No applications enabled."
+      assert [%{"version" => "v1"}] = Enum.map(props["versions"], &Map.take(&1, ["version"]))
+    end
+
+    test "missing profile redirects to the scoped profile list with the existing error" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      assert {:error,
+              {:live_redirect,
+               %{
+                 to: to,
+                 flash: %{"error" => "Spacecraft profile not found."}
+               }}} =
+               live(
+                 conn,
+                 ~p"/missions/#{mission.mission_id}/spacecraft/profiles/missing-profile"
+               )
+
+      assert to == ~p"/missions/#{mission.mission_id}/spacecraft/profiles"
+    end
+
+    test "does not expose profile details outside the current mission or organization scope" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      other_mission =
+        TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary Mission")
+
+      same_org_foreign =
+        TestFixtures.persist_spacecraft_profile!(other_mission, display_name: "Same Org Foreign")
+
+      other_org = TestFixtures.persist_org!(display_name: "Other", slug: "other-org")
+      other_org_mission = TestFixtures.persist_mission!(other_org, slug: "remote")
+
+      other_org_foreign =
+        TestFixtures.persist_spacecraft_profile!(other_org_mission,
+          display_name: "Other Org Foreign"
+        )
+
+      for foreign_profile <- [same_org_foreign, other_org_foreign] do
+        assert {:error,
+                {:live_redirect,
+                 %{
+                   to: to,
+                   flash: %{"error" => "Spacecraft profile not found."}
+                 }}} =
+                 live(
+                   conn,
+                   ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{foreign_profile.spacecraft_type_id}"
+                 )
+
+        assert to == ~p"/missions/#{mission.mission_id}/spacecraft/profiles"
+      end
+    end
+
+    test "unauthenticated profile detail requests redirect to sign in", %{conn: conn} do
+      assert {:error, {:redirect, %{to: "/sign-in"}}} =
+               live(
+                 conn,
+                 ~p"/missions/mission-test/spacecraft/profiles/spacecraft-profile-test"
+               )
     end
   end
 end
