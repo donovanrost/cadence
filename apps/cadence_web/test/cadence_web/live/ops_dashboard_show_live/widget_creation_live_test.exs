@@ -188,7 +188,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel")
-      assert has_element?(view, ~s([data-event-timeline]))
+      assert has_dashboard_element?(view, ~s([data-event-timeline]))
 
       click_editor_action(view, "dashboard-editor-save")
 
@@ -238,7 +238,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       await_dashboard_resolved(view)
 
       refute has_element?(view, "#dashboard-panel")
-      assert has_element?(view, ~s([data-state-timeline]))
+      assert has_dashboard_element?(view, ~s([data-state-timeline]))
 
       click_editor_action(view, "dashboard-editor-save")
 
