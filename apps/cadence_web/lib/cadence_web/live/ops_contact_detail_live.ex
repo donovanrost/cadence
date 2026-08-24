@@ -18,6 +18,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
     ProviderAudit
   }
 
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @decision_states [:pending_approval, :acknowledgment_required]
@@ -327,13 +328,13 @@ defmodule CadenceWeb.OpsContactDetailLive do
       proposal_hash: %{
         id: "#{form_name}_proposal_hash",
         name: "#{form_name}[proposal_hash]",
-        value: Phoenix.HTML.Form.input_value(form, :proposal_hash)
+        value: Form.input_value(form, :proposal_hash)
       },
       reason: %{
         id: "#{form_name}_reason",
         name: "#{form_name}[reason]",
         label: decision_reason_label(kind),
-        value: Phoenix.HTML.Form.input_value(form, :reason),
+        value: Form.input_value(form, :reason),
         required: true
       },
       submit: %{

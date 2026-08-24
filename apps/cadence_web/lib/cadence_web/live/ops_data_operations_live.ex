@@ -8,6 +8,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   }
 
   alias CadenceWeb.OpsDataOperationsLive.Presentation
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @request_context_keys ~w(
@@ -389,7 +390,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
   defp request_values(form) do
     (@request_visible_fields ++ @request_hidden_fields)
     |> Map.new(fn field ->
-      {Atom.to_string(field), form |> Phoenix.HTML.Form.input_value(field) |> form_value()}
+      {Atom.to_string(field), form |> Form.input_value(field) |> form_value()}
     end)
   end
 

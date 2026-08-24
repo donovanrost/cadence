@@ -1064,8 +1064,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
     values
     |> List.flatten()
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&dom_text/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &dom_text/1)
   end
 
   defp dom_text(nil), do: ""

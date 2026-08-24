@@ -6,7 +6,9 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
   alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Projections.ContactStatus
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
+  alias Phoenix.LiveView.Socket
 
   @impl true
   def mount(%{"contact_plan_id" => plan_id}, _session, socket) do
@@ -449,7 +451,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
       type: "textarea",
       label: label,
       required: true,
-      value: form |> Phoenix.HTML.Form.input_value(:reason) |> string_value()
+      value: form |> Form.input_value(:reason) |> string_value()
     }
   end
 
@@ -510,7 +512,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
 
   defp requirement_path(mission_id, []), do: requirements_path(mission_id)
 
-  defp requirements_path(%Phoenix.LiveView.Socket{} = socket),
+  defp requirements_path(%Socket{} = socket),
     do: requirements_path(socket.assigns.current_mission.mission_id)
 
   defp requirements_path(mission_id), do: ~p"/missions/#{mission_id}/ops/requirements"
