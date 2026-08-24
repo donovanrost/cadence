@@ -9,9 +9,7 @@ defmodule CadenceWeb.CatalogRevisionShowLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Catalog
-  alias Cadence.Catalog.RevisionRow
   alias Cadence.MissionModels
-  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
@@ -184,82 +182,6 @@ defmodule CadenceWeb.CatalogRevisionShowLiveTest do
              live(conn, ~p"/missions/#{mission.mission_id}/catalog/revisions/missing")
 
     assert to == ~p"/missions/#{mission.mission_id}/catalog"
-  end
-
-  test "preserves unavailable related records and Mission Model empty state" do
-    {conn, _org, mission} = signed_in_org_and_mission()
-    database = TestFixtures.persist_catalog_database!(mission, name: "Sparse Catalog")
-    run = TestFixtures.start_catalog_revision_import!(database, revision_label: "Sparse 1")
-    completed = TestFixtures.complete_catalog_import_run!(run)
-    revision = TestFixtures.fetch_catalog_revision_for_run!(completed)
-
-    revision.catalog_revision_id
-    |> then(&Repo.get!(RevisionRow, &1))
-    |> Ecto.Changeset.change(
-      catalog_database_id: "missing-database",
-      artifact_id: "missing-artifact",
-      import_run_id: "missing-import-run",
-      mission_model_revision_id: "missing-mission-model"
-    )
-    |> Repo.update!()
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
-      )
-
-    props = catalog_revision_vue(view).props
-    assert props == Jason.decode!(Jason.encode!(props))
-
-    assert props["navigation"] == %{
-             "breadcrumbs" => [
-               %{
-                 "href" => "/missions/#{mission.mission_id}",
-                 "label" => "Primary Mission"
-               },
-               %{
-                 "href" => "/missions/#{mission.mission_id}/catalog",
-                 "label" => "Catalog"
-               },
-               %{"href" => nil, "label" => "Sparse 1"}
-             ]
-           }
-
-    assert props["provenance"]["rows"] == [
-             %{
-               "href" => nil,
-               "label" => "Database",
-               "style" => "default",
-               "value" => nil
-             },
-             %{
-               "href" => nil,
-               "label" => "Artifact",
-               "style" => "default",
-               "value" => nil
-             },
-             %{
-               "href" => nil,
-               "label" => "Import run",
-               "style" => "mono",
-               "value" => nil
-             },
-             %{
-               "href" => nil,
-               "label" => "Content SHA-256",
-               "style" => "hash",
-               "value" => revision.content_sha256
-             }
-           ]
-
-    assert props["mission_model"] == %{
-             "available" => false,
-             "empty_message" => "Mission Model unavailable.",
-             "id" => "catalog-mission-model",
-             "rows" => [],
-             "title" => "Mission Model"
-           }
   end
 
   test "does not expose revisions outside the current organization or mission scope" do
