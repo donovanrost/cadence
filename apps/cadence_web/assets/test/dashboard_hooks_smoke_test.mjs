@@ -64,7 +64,12 @@ function classList(...initialClasses) {
   let observerCallback
   let observerTarget
   let observerOptions
+  let observerObserveCount = 0
   let observerDisconnectCount = 0
+  let observerConnected = false
+  const notifyObservedMutation = (record) => {
+    if (observerConnected) observerCallback([record])
+  }
   const connectedNode = {
     x: 2,
     y: 3,
@@ -95,17 +100,21 @@ function classList(...initialClasses) {
       } else {
         gridElement.classList.remove("grid-stack-static")
       }
+      notifyObservedMutation({type: "attributes", attributeName: "class", target: gridElement})
     },
     makeWidget(el) {
       gridCalls.push(["makeWidget", el.id])
       el.gridstackNode = { el }
+      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     movable(el, value) {
       gridCalls.push(["movable", el.id, value])
       if (value) el.classList.add("ui-draggable")
+      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     resizable(el, value) {
       gridCalls.push(["resizable", el.id, value])
+      notifyObservedMutation({type: "attributes", attributeName: "class", target: el})
     },
     removeWidget(_el, removeDom, triggerEvent) {
       gridCalls.push(["removeWidget", removeDom, triggerEvent])
@@ -170,12 +179,16 @@ function classList(...initialClasses) {
     }
 
     observe(target, options) {
+      if (observerOptions) assert.equal(options, observerOptions)
       observerTarget = target
       observerOptions = options
+      observerObserveCount += 1
+      observerConnected = true
     }
 
     disconnect() {
       observerDisconnectCount += 1
+      observerConnected = false
     }
   }
 
@@ -267,6 +280,8 @@ function classList(...initialClasses) {
   assert.equal(typeof sectionListeners.get("toggle"), "function")
   assert.equal(typeof observerCallback, "function")
   assert.equal(observerTarget, gridElement)
+  assert.equal(observerObserveCount, 1)
+  assert.equal(observerConnected, true)
   assert.deepEqual(JSON.parse(JSON.stringify(observerOptions)), {
     childList: true,
     subtree: true,
@@ -305,6 +320,7 @@ function classList(...initialClasses) {
     ["setStatic", false],
     ["float", false],
   ])
+  assert.equal(animationFrameCallbacks.size, 0)
 
   const externalGridItem = {
     id: "widget-external",
@@ -317,11 +333,20 @@ function classList(...initialClasses) {
   observerCallback([{type: "attributes", attributeName: "gs-x", target: externalGridItem}])
   assert.equal(animationFrameCallbacks.size, 1)
   assert.equal(gridCalls.length, callsBeforeExternalMutation)
+  const observesBeforeExternalReconciliation = observerObserveCount
+  const disconnectsBeforeExternalReconciliation = observerDisconnectCount
   runAnimationFrame(nextAnimationFrameId)
   assert.equal(
     gridCalls.some(([name, id]) => name === "makeWidget" && id === "widget-external"),
     true
   )
+  assert.equal(observerDisconnectCount, disconnectsBeforeExternalReconciliation + 1)
+  assert.equal(observerObserveCount, observesBeforeExternalReconciliation + 1)
+  assert.equal(observerConnected, true)
+  // The fake GridStack methods attempt to report their own class mutations.
+  // Observation is suspended during reconciliation, so no recursive frame is
+  // scheduled when the observer is reattached.
+  assert.equal(animationFrameCallbacks.size, 0)
 
   const nestedWidgetContent = {parentElement: {parentElement: externalGridItem}}
   observerCallback([{type: "childList", target: nestedWidgetContent}])
@@ -375,9 +400,11 @@ function classList(...initialClasses) {
   observerCallback([{type: "childList", target: gridElement}])
   const pendingReconciliationFrame = nextAnimationFrameId
   assert.equal(animationFrameCallbacks.has(pendingReconciliationFrame), true)
+  const disconnectsBeforeUnmount = observerDisconnectCount
   unmountedCallback()
   assert.deepEqual(gridCalls.at(-1), ["destroy", false])
-  assert.equal(observerDisconnectCount, 1)
+  assert.equal(observerDisconnectCount, disconnectsBeforeUnmount + 1)
+  assert.equal(observerConnected, false)
   assert.equal(canceledAnimationFrames.includes(pendingReconciliationFrame), true)
   assert.equal(animationFrameCallbacks.size, 0)
   assert.equal(sectionListeners.size, 0)

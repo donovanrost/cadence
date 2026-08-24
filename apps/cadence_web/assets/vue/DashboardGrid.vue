@@ -6,16 +6,21 @@ import {onBeforeUnmount, onMounted, onUpdated} from "vue"
 import GridStack from "../vendor/gridstack/gridstack-all"
 
 const LAYOUT_PUSH_DEBOUNCE_MS = 400
-const RECONCILIATION_ATTRIBUTES = [
-  "class",
-  "data-edit-mode",
-  "gs-id",
-  "gs-x",
-  "gs-y",
-  "gs-w",
-  "gs-h",
-  "gs-auto-position",
-]
+const GRID_OBSERVER_OPTIONS = {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: [
+    "class",
+    "data-edit-mode",
+    "gs-id",
+    "gs-x",
+    "gs-y",
+    "gs-w",
+    "gs-h",
+    "gs-auto-position",
+  ],
+}
 
 // GridStack + LiveView coexistence:
 // - View mode runs staticGrid, so GridStack never mutates the DOM after init
@@ -80,18 +85,23 @@ const DashboardGridController = {
         this.scheduleReconciliation()
       }
     })
-    this.gridObserver.observe(this.el, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: RECONCILIATION_ATTRIBUTES,
-    })
+    this.observeGrid()
   },
 
   updated() {
     if (this.gestureActive()) return
-    this.reconcileItems()
-    this.syncEditMode()
+
+    // GridStack mutates the same attributes this observer watches. Suspend
+    // observation around reconciliation so those controller-owned mutations
+    // cannot enqueue another reconciliation frame. disconnect() also discards
+    // any already-queued records; the current DOM state is reconciled below.
+    this.gridObserver?.disconnect()
+    try {
+      this.reconcileItems()
+      this.syncEditMode()
+    } finally {
+      this.observeGrid()
+    }
   },
 
   destroyed() {
@@ -125,6 +135,10 @@ const DashboardGridController = {
     // GridStack item contract. Reconcile only mutations on the grid itself or
     // one of its direct item children.
     return record.target === this.el || record.target.parentElement === this.el
+  },
+
+  observeGrid() {
+    this.gridObserver?.observe(this.el, GRID_OBSERVER_OPTIONS)
   },
 
   scheduleReconciliation() {
