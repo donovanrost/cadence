@@ -1,7 +1,7 @@
-defmodule CadenceWeb.Assets.TelemetryChartHookTest do
+defmodule CadenceWeb.Assets.TelemetryChartComponentTest do
   use ExUnit.Case, async: true
 
-  test "telemetry chart hook merges typed marker append payloads" do
+  test "telemetry chart LiveVue controller preserves its browser contract" do
     app_root = Path.expand("../../..", __DIR__)
     script = Path.join(app_root, "assets/test/telemetry_chart_append_test.mjs")
 

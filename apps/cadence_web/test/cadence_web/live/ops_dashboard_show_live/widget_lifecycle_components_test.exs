@@ -124,8 +124,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
 
     assert [] =
              document
-             |> LazyHTML.query(~s([phx-hook="TelemetryChart"]))
-             |> LazyHTML.attribute("phx-hook")
+             |> LazyHTML.query(~s([id^="tlm-chart-"]))
+             |> LazyHTML.attribute("id")
 
     assert html =~ "This widget cannot load because its source failed."
   end
@@ -269,10 +269,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
              |> LazyHTML.query("[data-widget-body-notice]")
              |> LazyHTML.attribute("data-widget-body-notice")
 
-    assert ["TelemetryChart"] =
-             document
-             |> LazyHTML.query(~s([phx-hook="TelemetryChart"]))
-             |> LazyHTML.attribute("phx-hook")
+    [chart_id] =
+      document
+      |> LazyHTML.query(~s([id^="tlm-chart-"]))
+      |> LazyHTML.attribute("id")
+
+    assert LiveVue.Test.get_vue(html, id: chart_id).component == "TelemetryChart"
 
     assert html =~ "This widget is showing partial data"
   end

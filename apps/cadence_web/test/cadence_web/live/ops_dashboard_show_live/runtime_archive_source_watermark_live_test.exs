@@ -169,13 +169,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
   end
 
   defp chart_attribute(html, widget_id, attribute) do
-    [value] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute(attribute)
+    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
-    Jason.decode!(value)
+    html
+    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
+    |> Map.fetch!(:props)
+    |> Map.fetch!(prop)
   end
 
   test "archive time-series charts expose source watermark retention gaps" do

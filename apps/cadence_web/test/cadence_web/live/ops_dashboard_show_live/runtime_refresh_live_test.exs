@@ -234,12 +234,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-decision-actions="start_resolve accept_result"][data-runtime-resolved="true"])
              )
 
-      assert has_element?(view, ~s([data-engine-backed="true"]))
-
-      assert has_element?(
-               view,
-               ~s([phx-hook="TelemetryChart"][data-engine-backed="true"])
-             )
+      chart_vue = LiveVue.Test.get_vue(view, name: "TelemetryChart")
+      assert chart_vue.props["engine_backed"] == true
+      assert chart_vue.component == "TelemetryChart"
 
       assert render(view) =~ "5"
 
@@ -315,7 +312,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-decision-actions="start_resolve accept_result"][data-runtime-resolved="true"])
              )
 
-      assert has_element?(view, ~s([data-engine-backed="true"]))
+      assert LiveVue.Test.get_vue(view, name: "TelemetryChart").props["engine_backed"] == true
       assert render(view) =~ "9"
     end
   end

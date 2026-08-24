@@ -5,16 +5,30 @@ import { fileURLToPath } from "node:url"
 import vm from "node:vm"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const hookPath = resolve(__dirname, "../js/hooks/telemetry_chart.js")
+const componentPath = resolve(__dirname, "../vue/TelemetryChart.vue")
 
-const source = await readFile(hookPath, "utf8")
-const testableSource = source
-  .replace('import uPlot from "../../vendor/uplot/uPlot.esm"\n', "const uPlot = class {}\n")
-  .replace("export default TelemetryChart", "globalThis.TelemetryChart = TelemetryChart")
+const sfcSource = await readFile(componentPath, "utf8")
+const controllerStart = sfcSource.indexOf("const TelemetryChartController = {")
+const controllerEnd = sfcSource.indexOf("\n\nconst props = defineProps", controllerStart)
 
-const context = { console, setTimeout: (callback) => callback() }
+assert.ok(controllerStart >= 0, "TelemetryChart.vue should colocate its chart controller")
+assert.ok(controllerEnd > controllerStart, "TelemetryChart.vue should expose a testable controller boundary")
+assert.match(sfcSource, /useLiveEvent\("tlm:append"/)
+assert.match(sfcSource, /useLiveEvent\("tlm:select"/)
+assert.match(sfcSource, /live\.pushEvent\(event, payload\)/)
+assert.match(sfcSource, /onBeforeUnmount\(\(\) =>/)
+assert.match(sfcSource, /:id="props\.chart_id"/)
+assert.match(sfcSource, /data-telemetry-chart/)
+
+const testableSource = `const uPlot = class {}\n${sfcSource.slice(controllerStart, controllerEnd)}\nglobalThis.TelemetryChart = TelemetryChartController`
+
+const context = {
+  console,
+  clearTimeout: () => {},
+  setTimeout: (callback) => callback(),
+}
 vm.createContext(context)
-vm.runInContext(testableSource, context, { filename: hookPath })
+vm.runInContext(testableSource, context, { filename: componentPath })
 
 const TelemetryChart = context.TelemetryChart
 
@@ -1287,6 +1301,95 @@ function chartWithPlot(limitMarkers = []) {
     },
   ])
   assert.equal(chart.clearedSelection.width, 0)
+}
+
+{
+  const chart = Object.create(TelemetryChart)
+  chart.widgetId = "widget-1"
+  chart.placementId = "placement-1"
+  chart.plotSeries = []
+  chart.receivedSeries = []
+  chart.receivedMarkers = []
+  chart.seriesPayloadPointCount = () => 0
+  chart.appendSeriesPayload = payload => {
+    chart.receivedSeries.push(payload)
+    return false
+  }
+  chart.appendMarkerPayload = payload => {
+    chart.receivedMarkers.push(payload)
+    return false
+  }
+  chart.advanceLiveWindow = () => false
+  chart.recordLiveActivity = () => {}
+
+  chart.handleAppend({
+    series: {"other-placement": [[1000, 1, {}]]},
+    markers: {"other-placement": [{marker_id: "other"}]},
+  })
+
+  chart.handleAppend({
+    series: {"placement-1": [[2000, 2, {}]]},
+    markers: {"placement-1": [{marker_id: "matching"}]},
+  })
+
+  assert.equal(chart.receivedSeries[0], undefined)
+  assert.equal(chart.receivedMarkers[0], undefined)
+  assert.deepEqual(plain(chart.receivedSeries[1]), [[2000, 2, {}]])
+  assert.deepEqual(plain(chart.receivedMarkers[1]), [{marker_id: "matching"}])
+}
+
+{
+  const chart = Object.create(TelemetryChart)
+  let selectionRenderCount = 0
+  chart.renderSelection = () => selectionRenderCount += 1
+
+  chart.handleSelection({selection: {target: "telemetry_sample", target_id: "sample-1"}})
+  assert.deepEqual(plain(chart.selectedRef), {
+    target: "telemetry_sample",
+    target_id: "sample-1",
+  })
+  assert.equal(selectionRenderCount, 1)
+
+  chart.handleSelection({selection: null})
+  assert.equal(chart.selectedRef, null)
+  assert.equal(selectionRenderCount, 2)
+}
+
+{
+  const removedListeners = []
+  const clearedTimers = []
+  let observerDisconnects = 0
+  let chartDestroys = 0
+
+  context.clearTimeout = timer => clearedTimers.push(timer)
+
+  const chart = Object.create(TelemetryChart)
+  chart.handleClick = () => {}
+  chart.handleRangeSelection = () => {}
+  chart.liveHeartbeatTimer = "heartbeat-timer"
+  chart.liveArrivalTimer = "arrival-timer"
+  chart.el = {
+    removeEventListener(name, handler) {
+      removedListeners.push({target: "root", name, handler})
+    },
+  }
+  chart.rangeSelectionOverlay = {
+    removeEventListener(name, handler) {
+      removedListeners.push({target: "range", name, handler})
+    },
+  }
+  chart.resizeObserver = {disconnect: () => observerDisconnects += 1}
+  chart.chart = {destroy: () => chartDestroys += 1}
+
+  chart.destroyed()
+
+  assert.deepEqual(removedListeners.map(({target, name}) => ({target, name})), [
+    {target: "root", name: "click"},
+    {target: "range", name: "mouseup"},
+  ])
+  assert.deepEqual(clearedTimers, ["heartbeat-timer", "arrival-timer"])
+  assert.equal(observerDisconnects, 1)
+  assert.equal(chartDestroys, 1)
 }
 
 console.log("telemetry_chart_append_test passed")

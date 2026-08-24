@@ -86,7 +86,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
     refute html =~ ">V<"
   end
 
-  test "time_series_chart exposes chart hook payload and data-management attrs" do
+  test "time_series_chart exposes a JSON-safe LiveVue chart contract" do
     html =
       render_component(&WidgetPointComponents.time_series_chart/1,
         widget: widget(:time_series),
@@ -114,42 +114,43 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
-    chart = LazyHTML.query(document, ~s([phx-hook="TelemetryChart"]))
+    vue = LiveVue.Test.get_vue(html, id: "tlm-chart-widget-1-spacecraft-1-7-component")
 
-    assert ["tlm-chart-widget-1-spacecraft-1-7"] = LazyHTML.attribute(chart, "id")
-    assert ["placement-1"] = LazyHTML.attribute(chart, "data-placement-id")
-    assert ["V"] = LazyHTML.attribute(chart, "data-unit")
-    assert ["replay_run"] = LazyHTML.attribute(chart, "data-time-mode")
-    assert ["2026-06-25T11:55:00Z"] = LazyHTML.attribute(chart, "data-time-from")
-    assert ["2026-06-25T12:00:00Z"] = LazyHTML.attribute(chart, "data-time-to")
-    assert ["receipt_time"] = LazyHTML.attribute(chart, "data-time-axis")
-    assert ["replay-run-1"] = LazyHTML.attribute(chart, "data-replay-run-id")
-    assert ["rehearsal"] = LazyHTML.attribute(chart, "data-data-realm")
-    assert ["all_revisions"] = LazyHTML.attribute(chart, "data-data-view")
-    assert ["canonical"] = LazyHTML.attribute(chart, "data-compare-data-view")
-    assert ["questdb-rehearsal"] = LazyHTML.attribute(chart, "data-data-source-id")
-    assert ["binding-rehearsal"] = LazyHTML.attribute(chart, "data-source-binding-id")
-    assert ["cadence-dashboard-time"] = LazyHTML.attribute(chart, "data-correlation-group")
-    assert ["false"] = LazyHTML.attribute(chart, "data-edit-mode")
-    assert ["auto"] = LazyHTML.attribute(chart, "data-legend-mode")
-    assert ["8"] = LazyHTML.attribute(chart, "data-fill-opacity")
-    assert ["grafana"] = LazyHTML.attribute(chart, "data-panel-presentation")
-    assert ["all_revisions,corrected"] = LazyHTML.attribute(chart, "data-data-management-badges")
+    assert vue.component == "TelemetryChart"
+    assert vue.ssr == false
+    assert vue.class == "min-h-0 flex-1 overflow-hidden"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert vue.props["chart_id"] == "tlm-chart-widget-1-spacecraft-1-7"
+    assert vue.props["widget_id"] == "widget-1"
+    assert vue.props["placement_id"] == "placement-1"
+    assert vue.props["unit"] == "V"
+    assert vue.props["time_mode"] == "replay_run"
+    assert vue.props["time_from"] == "2026-06-25T11:55:00Z"
+    assert vue.props["time_to"] == "2026-06-25T12:00:00Z"
+    assert vue.props["time_axis"] == "receipt_time"
+    assert vue.props["replay_run_id"] == "replay-run-1"
+    assert vue.props["data_realm"] == "rehearsal"
+    assert vue.props["data_view"] == "all_revisions"
+    assert vue.props["compare_data_view"] == "canonical"
+    assert vue.props["data_source_id"] == "questdb-rehearsal"
+    assert vue.props["source_binding_id"] == "binding-rehearsal"
+    assert vue.props["correlation_group"] == "cadence-dashboard-time"
+    assert vue.props["edit_mode"] == false
+    assert vue.props["legend_mode"] == "auto"
+    assert vue.props["fill_opacity"] == 8
+    assert vue.props["data_management_badges"] == "all_revisions,corrected"
 
     assert [""] =
              document
              |> LazyHTML.query("[data-dashboard-time-series-stage]")
              |> LazyHTML.attribute("data-dashboard-time-series-stage")
 
-    assert ["recomputed,backfill"] =
-             LazyHTML.attribute(chart, "data-compare-data-management-badges")
-
-    [encoded_backfill] = LazyHTML.attribute(chart, "data-backfill")
+    assert vue.props["compare_data_management_badges"] == "recomputed,backfill"
 
     assert %{"series" => [%{"id" => "primary", "points" => [[_, 42, _]]}]} =
-             Jason.decode!(encoded_backfill)
-
-    [encoded_compare_backfill] = LazyHTML.attribute(chart, "data-compare-backfill")
+             vue.props["backfill"]
 
     assert %{
              "series" => [
@@ -166,10 +167,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
                  ]
                }
              ]
-           } = Jason.decode!(encoded_compare_backfill)
+           } = vue.props["compare_backfill"]
 
-    [encoded_selected] = LazyHTML.attribute(chart, "data-selected-ref")
-    assert %{"kind" => "sample", "id" => "sample-1"} = Jason.decode!(encoded_selected)
+    assert %{"kind" => "sample", "id" => "sample-1"} = vue.props["selected_ref"]
 
     assert ["all_revisions"] =
              document

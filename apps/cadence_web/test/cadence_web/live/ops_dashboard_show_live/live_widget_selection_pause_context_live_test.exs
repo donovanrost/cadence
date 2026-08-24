@@ -137,23 +137,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
   end
 
   defp chart_attribute(html, widget_id, attribute) do
-    [value] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute(attribute)
+    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
-    Jason.decode!(value)
+    html
+    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
+    |> Map.fetch!(:props)
+    |> Map.fetch!(prop)
   end
 
   defp chart_optional_attribute(html, widget_id, attribute) do
-    case html
-         |> LazyHTML.from_fragment()
-         |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
-         |> LazyHTML.attribute(attribute) do
-      [value] -> Jason.decode!(value)
-      [] -> nil
-    end
+    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
+
+    html
+    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
+    |> Map.fetch!(:props)
+    |> Map.get(prop)
   end
 
   defp chart_dom_id(html, widget_id) do

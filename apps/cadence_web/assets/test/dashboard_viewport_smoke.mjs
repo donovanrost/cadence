@@ -340,14 +340,14 @@ function viewportProfile(name) {
     return {
       ...viewportProfile("rendered-dashboard"),
       name,
-      chartSelector: "[phx-hook='TelemetryChart'] .uplot",
+      chartSelector: "[data-telemetry-chart] .uplot",
       copyClickSelector: "[data-clipboard-button]",
       readyExpression: `
         Boolean(
           window.liveSocket &&
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
-          document.querySelector("[phx-hook='TelemetryChart'] .uplot") &&
+          document.querySelector("[data-telemetry-chart] .uplot") &&
           document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
         )
       `,
@@ -369,7 +369,7 @@ function viewportProfile(name) {
         "#dashboard-edit-link",
         ".grid-stack",
         ".grid-stack-item",
-        "[phx-hook='TelemetryChart']",
+        "[data-telemetry-chart]",
         "#dashboard-panel",
         "#dashboard-data-link-inspector",
         "#dashboard-data-link-copy-link",
@@ -377,7 +377,7 @@ function viewportProfile(name) {
         "#dashboard-evidence-copy-link",
       ].join(", "),
       gridItemSelector: ".grid-stack-item",
-      chartSelector: "[phx-hook='TelemetryChart']",
+      chartSelector: "[data-telemetry-chart]",
       panelSelector: "#dashboard-panel, #dashboard-data-link-inspector, #dashboard-evidence-inspector",
       copySelector: "[data-clipboard-button]",
       allowedOverlapSelector: "#dashboard-panel",
@@ -1126,7 +1126,7 @@ async function profileReadinessDiagnostics(client) {
           openRequests: section.dataset.dashboardComparisonReviewOpenRequests || "",
           openPlacements: section.dataset.dashboardComparisonReviewOpenPlacements || ""
         })),
-        telemetryCharts: Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).map((chart) => {
+        telemetryCharts: Array.from(document.querySelectorAll("[data-telemetry-chart]")).map((chart) => {
           let eventMarkers = []
           try {
             const parsed = JSON.parse(chart.dataset.eventMarkers || "[]")
@@ -1159,7 +1159,7 @@ async function profileReadinessDiagnostics(client) {
             })).slice(0, 10)
           }
         }).slice(0, 6),
-        chartHookCount: document.querySelectorAll("[phx-hook='TelemetryChart']").length,
+        chartHookCount: document.querySelectorAll("[data-telemetry-chart]").length,
         uplotCount: document.querySelectorAll(".uplot").length,
         gridClass: document.querySelector(".grid-stack")?.className,
         gridStyle: document.querySelector(".grid-stack")?.getAttribute("style"),
@@ -2256,7 +2256,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
         panelPresent: Boolean(document.querySelector("#dashboard-panel")),
         selectedDataLinkPresent: Boolean(document.querySelector("#dashboard-data-link-inspector")),
         liveSocketConnected: Boolean(window.liveSocket?.isConnected?.()),
-        chartRendered: Boolean(document.querySelector("[phx-hook='TelemetryChart'] .uplot"))
+        chartRendered: Boolean(document.querySelector("[data-telemetry-chart] .uplot"))
       }))()
     `,
     returnByValue: true,
@@ -7957,7 +7957,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page") &&
-        document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='${placementId}'] .uplot")
+        document.querySelector("[data-telemetry-chart][data-placement-id='${placementId}'] .uplot")
       )
     `,
     10_000,
@@ -7969,7 +7969,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
       (() => {
         const sourceEndpointId = ${JSON.stringify(sourceEndpointId)}
         const root = document.querySelector("#ops-dashboard-show-page")
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='${placementId}']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='${placementId}']")
         const widget = document.querySelector("#widget-${placementId}")
         const backfill = JSON.parse(chart?.dataset.backfill || "{}")
         const seriesList = (backfill.series || []).filter(
@@ -11220,7 +11220,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
-        document.querySelector(${JSON.stringify(widgetSelector)} + " [phx-hook='TelemetryChart']")
+        document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
     `,
     10_000,
@@ -11234,7 +11234,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
         const returnedObservable = ${JSON.stringify(returnedObservable)}
         const emptyObservable = ${JSON.stringify(emptyObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const notice = widget?.querySelector("[data-widget-body-notice='partial']")
         const badge = widget?.querySelector("[data-widget-source-badge='partial']")
         let backfill = {}
@@ -11274,7 +11274,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
         const emptyObservable = ${JSON.stringify(emptyObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const panel = widget?.querySelector(":scope > .grid-stack-item-content")
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const notice = widget?.querySelector("[data-widget-body-notice='partial']")
         const badge = widget?.querySelector("[data-widget-source-badge='partial']")
         let backfill = {}
@@ -11511,7 +11511,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
           badge?.dataset.widgetSourceBadgeBinding === ${JSON.stringify(expectedSourceBindingId)} &&
           badge?.dataset.widgetSourceBadgeScopeKind === "spacecraft" &&
           badge?.dataset.widgetSourceBadgeScopeId === ${JSON.stringify(spacecraftId)} &&
-          !widget.querySelector("[phx-hook='TelemetryChart']")
+          !widget.querySelector("[data-telemetry-chart]")
         )
       })()
     `,
@@ -11527,7 +11527,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
         const notice = widget?.querySelector("[data-widget-body-notice='no_data']")
         const badge = widget?.querySelector("button[data-widget-source-badge='no_data']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         let backfill = {}
         try {
           backfill = JSON.parse(chart?.dataset.backfill || "{}")
@@ -11555,7 +11555,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
           noticePresent: Boolean(notice),
           noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
           chartMarkerCount: widget?.querySelectorAll("[data-event-marker-target], [data-source-watermark-marker]").length || 0,
           backfillSeriesCount: (backfill.series || []).length,
@@ -11692,7 +11692,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
-        document.querySelector(${JSON.stringify(widgetSelector)} + " [phx-hook='TelemetryChart']")
+        document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
     `,
     10_000,
@@ -11705,7 +11705,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
       (() => {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='stale']")
         let backfill = {}
         try {
@@ -11749,7 +11749,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const root = document.querySelector("#ops-dashboard-show-page")
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='stale']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
         let backfill = {}
@@ -11778,7 +11778,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
           sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
           chartTimeMode: chart?.dataset.timeMode || "",
@@ -12019,7 +12019,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
-        document.querySelector(${JSON.stringify(widgetSelector)} + " [phx-hook='TelemetryChart']")
+        document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
     `,
     10_000,
@@ -12032,7 +12032,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
       (() => {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='unknown']")
         let backfill = {}
         try {
@@ -12076,7 +12076,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const root = document.querySelector("#ops-dashboard-show-page")
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='unknown']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
         let backfill = {}
@@ -12105,7 +12105,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
           sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
           chartTimeMode: chart?.dataset.timeMode || "",
@@ -12345,7 +12345,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
-        document.querySelector(${JSON.stringify(widgetSelector)} + " [phx-hook='TelemetryChart']")
+        document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
     `,
     10_000,
@@ -12358,7 +12358,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
       (() => {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='retention_gap']")
         let backfill = {}
         let markers = []
@@ -12410,7 +12410,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const root = document.querySelector("#ops-dashboard-show-page")
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='retention_gap']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
         let backfill = {}
@@ -12446,7 +12446,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
           sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
           chartTimeMode: chart?.dataset.timeMode || "",
@@ -12696,7 +12696,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
-        document.querySelector(${JSON.stringify(widgetSelector)} + " [phx-hook='TelemetryChart']")
+        document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
     `,
     10_000,
@@ -12709,7 +12709,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
       (() => {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='degraded']")
         let backfill = {}
         try {
@@ -12758,7 +12758,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
         const expectedObservable = ${JSON.stringify(expectedObservable)}
         const root = document.querySelector("#ops-dashboard-show-page")
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const badge = widget?.querySelector("button[data-widget-source-badge='degraded']")
         const queryDiagnostics = widget?.querySelector("[data-widget-query-diagnostics]")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
@@ -12791,7 +12791,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           sourceHealthReasons: widget?.dataset.widgetSourceHealthReasons || "",
           sourceHealthEventIds: widget?.dataset.widgetSourceHealthEventIds || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartDataSourceId: chart?.dataset.dataSourceId || "",
           chartSourceBindingId: chart?.dataset.sourceBindingId || "",
           chartTimeMode: chart?.dataset.timeMode || "",
@@ -13142,7 +13142,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
           badge?.dataset.widgetSourceBadgeBinding === ${JSON.stringify(expectedSourceBindingId)} &&
           badge?.dataset.widgetSourceBadgeScopeKind === "spacecraft" &&
           badge?.dataset.widgetSourceBadgeScopeId === ${JSON.stringify(spacecraftId)} &&
-          !widget.querySelector("[phx-hook='TelemetryChart']")
+          !widget.querySelector("[data-telemetry-chart]")
         )
       })()
     `,
@@ -13158,7 +13158,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
         const badge = widget?.querySelector("button[data-widget-source-badge='unavailable']")
         const notice = widget?.querySelector("[data-widget-body-notice='error']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         let backfill = {}
         try {
           backfill = JSON.parse(chart?.dataset.backfill || "{}")
@@ -13187,7 +13187,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
           noticePresent: Boolean(notice),
           noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
           chartMarkerCount: widget?.querySelectorAll("[data-event-marker-target], [data-source-watermark-marker]").length || 0,
           backfillSeriesCount: (backfill.series || []).length,
@@ -17557,7 +17557,7 @@ async function inspectChartLegendInteraction(client, placementId) {
     client,
     `
       (() => {
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='${placementId}']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='${placementId}']")
         return Boolean(
           chart &&
           chart.querySelectorAll("[data-chart-legend-item]").length >= 2 &&
@@ -17573,7 +17573,7 @@ async function inspectChartLegendInteraction(client, placementId) {
     expression: `
       (() => {
         const placementId = ${JSON.stringify(placementId)}
-        const chartSelector = "[phx-hook='TelemetryChart'][data-placement-id='" + placementId + "']"
+        const chartSelector = "[data-telemetry-chart][data-placement-id='" + placementId + "']"
         const read = () => {
           const chart = document.querySelector(chartSelector)
           const items = Array.from(chart?.querySelectorAll("[data-chart-legend-item]") || []).map((item) => ({
@@ -17631,7 +17631,7 @@ async function inspectChartAxisModeInteraction(client, placementId) {
     client,
     `
       (() => {
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='${placementId}']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='${placementId}']")
         return Boolean(
           chart &&
           chart.querySelector("[data-chart-axis-mode]") &&
@@ -17648,7 +17648,7 @@ async function inspectChartAxisModeInteraction(client, placementId) {
     expression: `
       (() => {
         const placementId = ${JSON.stringify(placementId)}
-        const chartSelector = "[phx-hook='TelemetryChart'][data-placement-id='" + placementId + "']"
+        const chartSelector = "[data-telemetry-chart][data-placement-id='" + placementId + "']"
         const read = () => {
           const chart = document.querySelector(chartSelector)
           const axisButton = chart?.querySelector("[data-chart-axis-mode]")
@@ -17738,8 +17738,8 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
         window.liveSocket.isConnected() &&
         document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page") &&
-        document.querySelectorAll("[phx-hook='TelemetryChart']").length >= 2 &&
-        document.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length >= 2
+        document.querySelectorAll("[data-telemetry-chart]").length >= 2 &&
+        document.querySelectorAll("[data-telemetry-chart] .uplot").length >= 2
       )
     `,
     10_000,
@@ -17750,7 +17750,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     expression: `
       (() => {
         const root = document.querySelector("#ops-dashboard-show-page")
-        const charts = Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']"))
+        const charts = Array.from(document.querySelectorAll("[data-telemetry-chart]"))
         const parseBackfill = (chart) => {
           try {
             return JSON.parse(chart.dataset.backfill || "{}")
@@ -17865,7 +17865,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           rootScopeKind: root?.dataset.dashboardScopeKind || "",
           rootScopeId: root?.dataset.dashboardScopeId || "",
           chartCount: charts.length,
-          uplotCount: document.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length,
+          uplotCount: document.querySelectorAll("[data-telemetry-chart] .uplot").length,
           chartSummaries,
           widgets: {
             rf: widgetSummary("placement-rf-snr-history"),
@@ -18273,7 +18273,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
   const sourceHealthAnnotationClick = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='placement-transport-bitrate-history']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='placement-transport-bitrate-history']")
         const control = Array.from(chart?.querySelectorAll("[data-chart-annotation-control='true']") || []).find(
           (candidate) => candidate.dataset.chartAnnotationId === ${JSON.stringify(sourceHealthAnnotation.annotationId)}
         )
@@ -18436,7 +18436,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     const sourceWatermarkMarkerClick = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='placement-transport-bitrate-history']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='placement-transport-bitrate-history']")
         const control = Array.from(chart?.querySelectorAll("[data-event-marker-target='source watermark']") || []).find(
           (candidate) => candidate.dataset.eventMarkerId === ${JSON.stringify(sourceWatermarkMarker.sourceWatermarkEventId)}
         )
@@ -19118,7 +19118,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
   const clickTargetResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).find((chart) => {
+        const chart = Array.from(document.querySelectorAll("[data-telemetry-chart]")).find((chart) => {
           const payload = JSON.parse(chart.dataset.backfill || "{}")
           return (payload.series || []).some(
             (series) => series.observable_id === "link.snr_db" && (series.points || []).length > 0
@@ -19256,7 +19256,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
   const ebn0ClickTargetResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).find((chart) => {
+        const chart = Array.from(document.querySelectorAll("[data-telemetry-chart]")).find((chart) => {
           const payload = JSON.parse(chart.dataset.backfill || "{}")
           return (payload.series || []).some(
             (series) => series.observable_id === "link.eb_n0_db" && (series.points || []).length > 0
@@ -19440,7 +19440,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
   const bitrateClickTargetResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).find((chart) => {
+        const chart = Array.from(document.querySelectorAll("[data-telemetry-chart]")).find((chart) => {
           const payload = JSON.parse(chart.dataset.backfill || "{}")
           return (payload.series || []).some(
             (series) =>
@@ -19676,7 +19676,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
     `
       (() => {
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         let backfill = {}
         try {
           backfill = JSON.parse(chart?.dataset.backfill || "{}")
@@ -19707,7 +19707,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
     expression: `
       (() => {
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         const indicator = widget?.querySelector("[data-widget-lifecycle-indicator='partial']")
         const badge = widget?.querySelector("[data-widget-source-badge='partial']")
         let backfill = {}
@@ -20029,8 +20029,8 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
           url: window.location.href,
           rootScopeKind: root?.dataset.dashboardScopeKind || "",
           rootScopeId: root?.dataset.dashboardScopeId || "",
-          chartCount: document.querySelectorAll("[phx-hook='TelemetryChart']").length,
-          uplotCount: document.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length,
+          chartCount: document.querySelectorAll("[data-telemetry-chart]").length,
+          uplotCount: document.querySelectorAll("[data-telemetry-chart] .uplot").length,
           rf: widgetSummary("placement-rf-snr-history"),
           rfEbn0: widgetSummary("placement-rf-ebn0-history"),
           rfMixed: widgetSummary("placement-rf-mixed-history"),
@@ -20544,7 +20544,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
           badge?.dataset.widgetSourceBadgeBinding === ${JSON.stringify(expectedSourceBindingId)} &&
           badge?.dataset.widgetSourceBadgeScopeKind === "source_endpoint" &&
           badge?.dataset.widgetSourceBadgeScopeId === ${JSON.stringify(sourceEndpointId)} &&
-          !widget.querySelector("[phx-hook='TelemetryChart']")
+          !widget.querySelector("[data-telemetry-chart]")
         )
       })()
     `,
@@ -20560,7 +20560,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
         const badge = widget?.querySelector("button[data-widget-source-badge='unavailable']")
         const notice = widget?.querySelector("[data-widget-body-notice='error']")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
-        const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
+        const chart = widget?.querySelector("[data-telemetry-chart]")
         let backfill = {}
         try {
           backfill = JSON.parse(chart?.dataset.backfill || "{}")
@@ -20591,7 +20591,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
           noticePresent: Boolean(notice),
           noticeText: notice?.querySelector("p")?.textContent?.replace(/\\s+/g, " ").trim() || notice?.textContent?.replace(/\\s+/g, " ").trim() || "",
           chartPresent: Boolean(chart),
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
           chartMarkerCount: widget?.querySelectorAll("[data-event-marker-target], [data-source-watermark-marker]").length || 0,
           backfillSeriesCount: (backfill.series || []).length,
@@ -22789,7 +22789,7 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
           engineWarningPresent: Boolean(engineWarning),
           engineWarningText: engineWarning?.textContent?.replace(/\\s+/g, " ").trim() || "",
           engineWarningTitle: engineWarning?.getAttribute("title") || "",
-          chartCount: document.querySelectorAll("[phx-hook='TelemetryChart']").length,
+          chartCount: document.querySelectorAll("[data-telemetry-chart]").length,
           dataLinkCount: card?.querySelectorAll("[data-widget-value-link]").length || 0,
         }
       })()
@@ -22874,7 +22874,7 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
           widget?.dataset.widgetLifecycleWarningCodes?.split(",").includes("unsupported_observable_scope") &&
           widget?.dataset.widgetPlacementWarningCodes?.split(",").includes("unsupported_observable_scope") &&
           notice?.textContent?.includes("selected context") &&
-          !widget.querySelector("[phx-hook='TelemetryChart']")
+          !widget.querySelector("[data-telemetry-chart]")
         )
       })()
     `,
@@ -22913,8 +22913,8 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
           engineWarningPresent: Boolean(engineWarning),
           engineWarningText: engineWarning?.textContent?.replace(/\\s+/g, " ").trim() || "",
           engineWarningTitle: engineWarning?.getAttribute("title") || "",
-          chartHookCount: widget?.querySelectorAll("[phx-hook='TelemetryChart']").length || 0,
-          uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
+          chartHookCount: widget?.querySelectorAll("[data-telemetry-chart]").length || 0,
+          uplotCount: widget?.querySelectorAll("[data-telemetry-chart] .uplot").length || 0,
           chartPointLinkCount: widget?.querySelectorAll("[data-chart-point-link]").length || 0,
           chartMarkerCount: widget?.querySelectorAll("[data-event-marker-target], [data-source-watermark-marker]").length || 0,
           dataLinkMenuCount: widget?.querySelectorAll("[data-widget-data-links]").length || 0,
@@ -30792,7 +30792,7 @@ async function runRevisionDecisionLimitModeInspection(client, profile) {
     `
       Boolean(
         document.querySelector(
-          "[phx-hook='TelemetryChart'][data-placement-id='placement-revision-counter-trend'] [data-event-marker-target='telemetry revision decision']"
+          "[data-telemetry-chart][data-placement-id='placement-revision-counter-trend'] [data-event-marker-target='telemetry revision decision']"
         )
       )
     `,
@@ -30803,7 +30803,7 @@ async function runRevisionDecisionLimitModeInspection(client, profile) {
   const markerClickResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const chart = document.querySelector("[phx-hook='TelemetryChart'][data-placement-id='placement-revision-counter-trend']")
+        const chart = document.querySelector("[data-telemetry-chart][data-placement-id='placement-revision-counter-trend']")
         const control = chart?.querySelector("[data-event-marker-target='telemetry revision decision']")
         if (!chart || !control) {
           return { clicked: false, targetId: "", ref: "", reason: "missing telemetry revision marker control" }
@@ -31030,7 +31030,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
   const placementId = "placement-retention-counter-trend"
-  const chartSelector = `[phx-hook='TelemetryChart'][data-placement-id='${placementId}']`
+  const chartSelector = `[data-telemetry-chart][data-placement-id='${placementId}']`
   const expectedSourceWatermarkEventId = argValue("--expected-source-watermark-event-id") || ""
   const absentSourceWatermarkEventIds = (argValue("--absent-source-watermark-event-ids") || "")
     .split(",")
@@ -31291,7 +31291,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
         const sourceChart = document.querySelector(${JSON.stringify(chartSelector)})
         const peerChart = ${JSON.stringify(expectedSharedCursorPeerPlacementId)}
           ? document.querySelector(
-              "[phx-hook='TelemetryChart'][data-placement-id='" +
+              "[data-telemetry-chart][data-placement-id='" +
                 ${JSON.stringify(expectedSharedCursorPeerPlacementId)} +
                 "']"
             )
@@ -31649,7 +31649,7 @@ async function runTelemetryRevisionRangeEvidenceInspection(client, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
   const placementId = "placement-revision-counter-trend"
-  const chartSelector = `[phx-hook='TelemetryChart'][data-placement-id='${placementId}']`
+  const chartSelector = `[data-telemetry-chart][data-placement-id='${placementId}']`
   const expectedWarningCode = expectedRevisionRangeWarningCode()
   const expectedRevisionState = expectedRevisionRangeState()
   const expectedSubject = expectedRevisionEvidenceSubject()
@@ -31953,7 +31953,7 @@ async function runTelemetryRevisionRangeAbsenceInspection(client, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
   const placementId = "placement-revision-counter-trend"
-  const chartSelector = `[phx-hook='TelemetryChart'][data-placement-id='${placementId}']`
+  const chartSelector = `[data-telemetry-chart][data-placement-id='${placementId}']`
   const absentWarningCodes = absentRevisionRangeWarningCodes()
 
   assert.ok(
@@ -32739,7 +32739,7 @@ async function runLiveTelemetryStreamInspection(client, profile) {
               .filter(Boolean)
               .join(" | ")
           })),
-          charts: Array.from(document.querySelectorAll("[phx-hook='TelemetryChart']")).map((chart) => ({
+          charts: Array.from(document.querySelectorAll("[data-telemetry-chart]")).map((chart) => ({
             id: chart.id || "",
             placementId: chart.dataset.placementId || "",
             widgetId: chart.dataset.widgetId || "",

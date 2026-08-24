@@ -1,12 +1,61 @@
-import uPlot from "../../vendor/uplot/uPlot.esm"
+<script setup>
+import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"
+import {useLiveEvent, useLiveVue} from "live_vue"
+import uPlot from "../vendor/uplot/uPlot.esm"
 
-// Live telemetry strip chart. The LiveView owns the data: it embeds a
-// `data-backfill` series on mount and pushes one consolidated "tlm:append"
-// event per tick; every chart hook filters that event by its widget id.
-// The container uses phx-update="ignore", so a context switch remounts the
-// hook through a new DOM id rather than mutating it in place.
-const TelemetryChart = {
+// Live telemetry strip chart. Phoenix owns the data and pushes one consolidated
+// "tlm:append" event per tick; every chart island filters that event by widget
+// or placement id. A context switch changes the LiveVue root id through
+// chart_epoch, preserving the legacy remount boundary.
+const TelemetryChartController = {
+  handleAppend({
+    series,
+    markers,
+    window_end_ms: windowEndMs,
+    refresh_interval_ms: refreshIntervalMs,
+  }) {
+    const points = series && (series[this.widgetId] || series[this.placementId])
+    const appendedPointCount = this.seriesPayloadPointCount(points)
+    const previousPlotSeriesLength = (this.plotSeries || []).length
+    const appendedSeries = this.appendSeriesPayload(points)
+
+    const markerAppends = markers && (markers[this.widgetId] || markers[this.placementId])
+    const appendedMarkers = this.appendMarkerPayload(markerAppends)
+    const advancedLiveWindow = this.advanceLiveWindow(windowEndMs)
+    this.recordLiveActivity({
+      appendedPointCount,
+      advancedLiveWindow,
+      refreshIntervalMs,
+      seriesPayload: points,
+      windowEndMs,
+    })
+    if (!appendedSeries && !appendedMarkers && !advancedLiveWindow) return
+
+    this.trimToWindow()
+
+    if ((this.plotSeries || []).length !== previousPlotSeriesLength) {
+      this.rebuildChart()
+    } else {
+      this.chart.setData(this.plotData())
+      this.renderEventMarkers()
+      this.renderAnnotations()
+      this.renderLimitMarkers()
+      this.renderLegend()
+      this.renderSelection()
+      this.renderLiveEdge()
+    }
+  },
+
+  handleSelection({selection}) {
+    this.selectedRef = selection || null
+    this.renderSelection()
+  },
+
   mounted() {
+    this.mountChart()
+  },
+
+  mountChart() {
     this.widgetId = this.el.dataset.widgetId
     this.placementId = this.el.dataset.placementId
     this.windowSeconds = parseInt(this.el.dataset.windowSeconds, 10) || 300
@@ -70,49 +119,6 @@ const TelemetryChart = {
     this.handleClick = (event) => this.openPointInspector(event)
     this.el.addEventListener("click", this.handleClick)
 
-    this.handleEvent("tlm:append", ({
-      series,
-      markers,
-      window_end_ms: windowEndMs,
-      refresh_interval_ms: refreshIntervalMs,
-    }) => {
-      const points = series && (series[this.widgetId] || series[this.placementId])
-      const appendedPointCount = this.seriesPayloadPointCount(points)
-      const previousPlotSeriesLength = (this.plotSeries || []).length
-      const appendedSeries = this.appendSeriesPayload(points)
-
-      const markerAppends = markers && (markers[this.widgetId] || markers[this.placementId])
-      const appendedMarkers = this.appendMarkerPayload(markerAppends)
-      const advancedLiveWindow = this.advanceLiveWindow(windowEndMs)
-      this.recordLiveActivity({
-        appendedPointCount,
-        advancedLiveWindow,
-        refreshIntervalMs,
-        seriesPayload: points,
-        windowEndMs,
-      })
-      if (!appendedSeries && !appendedMarkers && !advancedLiveWindow) return
-
-      this.trimToWindow()
-
-      if ((this.plotSeries || []).length !== previousPlotSeriesLength) {
-        this.rebuildChart()
-      } else {
-        this.chart.setData(this.plotData())
-        this.renderEventMarkers()
-        this.renderAnnotations()
-        this.renderLimitMarkers()
-        this.renderLegend()
-        this.renderSelection()
-        this.renderLiveEdge()
-      }
-    })
-
-    this.handleEvent("tlm:select", ({ selection }) => {
-      this.selectedRef = selection || null
-      this.renderSelection()
-    })
-
     this.resizeObserver = new ResizeObserver(() => {
       this.renderLegend()
       this.chart.setSize(this.chartSize())
@@ -123,6 +129,11 @@ const TelemetryChart = {
       this.renderLiveEdge()
     })
     this.resizeObserver.observe(this.el)
+  },
+
+  updated() {
+    this.selectedRef = JSON.parse(this.el.dataset.selectedRef || "null")
+    this.renderSelection()
   },
 
   destroyed() {
@@ -2964,7 +2975,7 @@ const TelemetryChart = {
     if (!page || !page.querySelectorAll) return
 
     const charts = Array.from(
-      page.querySelectorAll("[phx-hook='TelemetryChart'][data-time-mode='live']")
+      page.querySelectorAll("[data-telemetry-chart][data-time-mode='live']")
     )
 
     if (charts.length === 0) {
@@ -3298,4 +3309,109 @@ const TelemetryChart = {
   },
 }
 
-export default TelemetryChart
+const props = defineProps({
+  chart_id: {type: String, required: true},
+  widget_id: {type: String, required: true},
+  placement_id: {type: String, required: true},
+  window_seconds: {type: Number, required: true},
+  correlation_group: {type: String, required: true},
+  edit_mode: {type: Boolean, default: false},
+  show_min_max_band: {type: Boolean, default: true},
+  legend_mode: {type: String, default: "auto"},
+  line_width: {type: String, default: "normal"},
+  fill_opacity: {type: Number, default: 8},
+  span_gaps: {type: Boolean, default: false},
+  show_points: {type: Boolean, default: false},
+  axis_mode: {type: String, default: "unit"},
+  shared_tooltip: {type: Boolean, default: true},
+  label: {type: String, default: ""},
+  unit: {type: String, default: ""},
+  backfill: {type: [Array, Object], default: () => []},
+  compare_backfill: {type: [Array, Object], default: () => []},
+  limit_markers: {type: Array, default: () => []},
+  event_markers: {type: Array, default: () => []},
+  annotations: {type: Array, default: () => []},
+  selected_ref: {default: null},
+  time_mode: {type: String, default: ""},
+  time_from: {type: String, default: ""},
+  time_to: {type: String, default: ""},
+  time_axis: {type: String, default: ""},
+  replay_run_id: {type: String, default: ""},
+  data_realm: {type: String, default: ""},
+  data_view: {type: String, default: ""},
+  compare_data_view: {type: String, default: ""},
+  data_source_id: {type: String, default: ""},
+  source_binding_id: {type: String, default: ""},
+  data_management_badges: {type: String, default: ""},
+  compare_data_management_badges: {type: String, default: ""},
+  engine_backed: {type: Boolean, default: false},
+})
+
+const chartRoot = ref(null)
+const live = useLiveVue()
+let controller = null
+
+const serialize = value => JSON.stringify(value ?? null)
+
+useLiveEvent("tlm:append", payload => controller?.handleAppend(payload))
+useLiveEvent("tlm:select", payload => controller?.handleSelection(payload))
+
+onMounted(() => {
+  controller = Object.create(TelemetryChartController)
+  controller.el = chartRoot.value
+  controller.pushEvent = (event, payload) => live.pushEvent(event, payload)
+  controller.mounted()
+})
+
+onUpdated(() => controller?.updated())
+
+onBeforeUnmount(() => {
+  controller?.destroyed()
+  controller = null
+})
+</script>
+
+<template>
+  <div
+    ref="chartRoot"
+    :id="props.chart_id"
+    data-telemetry-chart
+    data-dashboard-time-series-chart
+    :data-widget-id="props.widget_id"
+    :data-placement-id="props.placement_id"
+    :data-window-seconds="String(props.window_seconds)"
+    :data-correlation-group="props.correlation_group"
+    :data-edit-mode="String(props.edit_mode)"
+    :data-show-min-max-band="String(props.show_min_max_band)"
+    :data-legend-mode="props.legend_mode"
+    :data-line-width="props.line_width"
+    :data-fill-opacity="String(props.fill_opacity)"
+    :data-span-gaps="String(props.span_gaps)"
+    :data-show-points="String(props.show_points)"
+    :data-axis-mode="props.axis_mode"
+    :data-shared-tooltip="String(props.shared_tooltip)"
+    :data-label="props.label"
+    :data-unit="props.unit"
+    :data-backfill="serialize(props.backfill)"
+    :data-compare-backfill="serialize(props.compare_backfill)"
+    :data-limit-markers="serialize(props.limit_markers)"
+    :data-event-markers="serialize(props.event_markers)"
+    :data-annotations="serialize(props.annotations)"
+    :data-selected-ref="serialize(props.selected_ref)"
+    :data-time-mode="props.time_mode"
+    :data-time-from="props.time_from"
+    :data-time-to="props.time_to"
+    :data-time-axis="props.time_axis"
+    :data-replay-run-id="props.replay_run_id"
+    :data-data-realm="props.data_realm"
+    :data-data-view="props.data_view"
+    :data-compare-data-view="props.compare_data_view"
+    :data-data-source-id="props.data_source_id"
+    :data-source-binding-id="props.source_binding_id"
+    :data-data-management-badges="props.data_management_badges"
+    :data-compare-data-management-badges="props.compare_data_management_badges"
+    :data-engine-backed="props.engine_backed ? 'true' : undefined"
+    data-panel-presentation="grafana"
+    class="cadence-time-series-chart h-full min-h-0 w-full flex-1 overflow-hidden"
+  ></div>
+</template>

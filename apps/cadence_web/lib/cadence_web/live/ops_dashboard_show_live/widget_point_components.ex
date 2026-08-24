@@ -85,62 +85,58 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
         data_view={@data_view}
         compare_data_view={@compare_data_view}
       />
-      <div
-        id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch)}
-        phx-hook="TelemetryChart"
-        phx-update="ignore"
-        data-widget-id={@widget.widget_id}
-        data-placement-id={@placement_id}
-        data-window-seconds={@window_seconds || @widget.options.window_seconds}
-        data-correlation-group="cadence-dashboard-time"
-        data-edit-mode={to_string(@edit_mode?)}
-        data-show-min-max-band={option_text(@widget, :show_min_max_band, true)}
-        data-legend-mode={option_text(@widget, :legend_mode, "auto")}
-        data-line-width={option_text(@widget, :line_width, "normal")}
-        data-fill-opacity={option_text(@widget, :fill_opacity, 8)}
-        data-span-gaps={option_text(@widget, :span_gaps, false)}
-        data-show-points={option_text(@widget, :show_points, false)}
-        data-axis-mode={option_text(@widget, :axis_mode, "unit")}
-        data-shared-tooltip={option_text(@widget, :shared_tooltip, true)}
-        data-label={@widget.title}
-        data-unit={(@point && @point.unit) || ""}
-        data-backfill={Jason.encode!(@backfill || [])}
-        data-compare-backfill={Jason.encode!(@compare_backfill || [])}
-        data-limit-markers={Jason.encode!(@limit_markers || [])}
-        data-event-markers={Jason.encode!(@event_markers || [])}
-        data-annotations={Jason.encode!(@annotations || [])}
-        data-selected-ref={Jason.encode!(@selected_data_ref)}
-        data-time-mode={@time_mode || ""}
-        data-time-from={@time_from || ""}
-        data-time-to={@time_to || ""}
-        data-time-axis={@time_axis || ""}
-        data-replay-run-id={@replay_run_id || ""}
-        data-data-realm={@data_realm || ""}
-        data-data-view={@data_view || ""}
-        data-compare-data-view={@compare_data_view || ""}
-        data-data-source-id={
+      <.vue
+        id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch) <> "-component"}
+        v-component="TelemetryChart"
+        chart_id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch)}
+        widget_id={@widget.widget_id}
+        placement_id={@placement_id}
+        window_seconds={@window_seconds || @widget.options.window_seconds}
+        correlation_group="cadence-dashboard-time"
+        edit_mode={@edit_mode?}
+        show_min_max_band={option_value(@widget, :show_min_max_band, true)}
+        legend_mode={option_value(@widget, :legend_mode, "auto")}
+        line_width={option_value(@widget, :line_width, "normal")}
+        fill_opacity={option_value(@widget, :fill_opacity, 8)}
+        span_gaps={option_value(@widget, :span_gaps, false)}
+        show_points={option_value(@widget, :show_points, false)}
+        axis_mode={option_value(@widget, :axis_mode, "unit")}
+        shared_tooltip={option_value(@widget, :shared_tooltip, true)}
+        label={@widget.title}
+        unit={(@point && @point.unit) || ""}
+        backfill={@backfill || []}
+        compare_backfill={@compare_backfill || []}
+        limit_markers={@limit_markers || []}
+        event_markers={@event_markers || []}
+        annotations={@annotations || []}
+        selected_ref={@selected_data_ref}
+        time_mode={@time_mode || ""}
+        time_from={@time_from || ""}
+        time_to={@time_to || ""}
+        time_axis={@time_axis || ""}
+        replay_run_id={@replay_run_id || ""}
+        data_realm={@data_realm || ""}
+        data_view={@data_view || ""}
+        compare_data_view={@compare_data_view || ""}
+        data_source_id={
           @data_source_id || chart_payload_context_value(@backfill, :data_source_id)
         }
-        data-source-binding-id={
+        source_binding_id={
           @source_binding_id || chart_payload_context_value(@backfill, :source_binding_id)
         }
-        data-data-management-badges={
+        data_management_badges={
           WidgetDataManagementComponents.widget_data_management_badge_codes([@data, @backfill])
         }
-        data-compare-data-management-badges={
+        compare_data_management_badges={
           WidgetDataManagementComponents.widget_data_management_badge_codes([
             @compare_data,
             @compare_backfill
           ])
         }
-        data-engine-backed={if engine_backed?(@data), do: "true"}
-        data-panel-presentation="grafana"
-        class={[
-          "cadence-time-series-chart",
-          "min-h-0 flex-1 overflow-hidden"
-        ]}
-      >
-      </div>
+        engine_backed={engine_backed?(@data)}
+        v-ssr={false}
+        class="min-h-0 flex-1 overflow-hidden"
+      />
     </div>
     """
   end
@@ -259,8 +255,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   defp value_tile_unit(_data, _point), do: nil
 
   defp show_unit?(widget), do: option_value(widget, :show_unit, true) == true
-
-  defp option_text(widget, key, default), do: widget |> option_value(key, default) |> to_string()
 
   defp option_value(%{options: options}, key, default) when is_map(options) do
     Map.get(options, key, Map.get(options, to_string(key), default))

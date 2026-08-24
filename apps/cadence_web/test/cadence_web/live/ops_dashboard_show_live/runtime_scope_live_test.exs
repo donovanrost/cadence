@@ -145,13 +145,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
   end
 
   defp chart_attribute(html, widget_id, attribute) do
-    [value] =
+    [id] =
       html
       |> LazyHTML.from_fragment()
       |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
-      |> LazyHTML.attribute(attribute)
+      |> LazyHTML.attribute("id")
 
-    Jason.decode!(value)
+    prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
+    html |> LiveVue.Test.get_vue(id: id) |> Map.fetch!(:props) |> Map.fetch!(prop)
   end
 
   test "explicit generic scope URL drives the dashboard runtime context" do

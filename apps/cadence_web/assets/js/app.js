@@ -10,7 +10,6 @@ import DropdownMenu from "./hooks/dropdown_menu"
 import NavRail from "./hooks/nav_rail"
 import Overlay from "./hooks/overlay"
 import ResizablePanel from "./hooks/resizable_panel"
-import TelemetryChart from "./hooks/telemetry_chart"
 
 const Hooks = {
   DashboardGrid,
@@ -19,8 +18,7 @@ const Hooks = {
   LiveToast: createLiveToastHook(),
   NavRail,
   Overlay,
-  ResizablePanel,
-  TelemetryChart
+  ResizablePanel
 }
 
 const csrfToken = document
