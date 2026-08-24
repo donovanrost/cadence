@@ -526,6 +526,67 @@ function classList(...initialClasses) {
 }
 
 {
+  const panePath = resolve(__dirname, "../vue/DashboardAbsoluteRangePane.vue")
+  const source = await readFile(panePath, "utf8")
+  const script = source.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
+  const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+  assert.ok(script, "DashboardAbsoluteRangePane.vue must have a script setup block")
+  assert.ok(template, "DashboardAbsoluteRangePane.vue must have a template block")
+  assert.match(script, /import TimeRangeRecents from "\.\/TimeRangeRecents\.vue"/)
+  assert.match(template, /^  <div v-bind="props\.root\.attrs">/)
+  assert.match(template, /<form v-bind="props\.form\.attrs">/)
+  assert.match(template, /<div :class="props\.form\.from\.wrapper_class">/)
+  assert.match(template, /<input v-bind="props\.form\.from\.attrs" \/>/)
+  assert.match(template, /<div :class="props\.form\.to\.margin_class">/)
+  assert.match(template, /<input v-bind="props\.form\.to\.field\.attrs" \/>/)
+  assert.match(template, /<button v-bind="props\.form\.submit\.attrs">/)
+  assert.match(template, /<span v-if="props\.validation" v-bind="props\.validation\.attrs">/)
+  assert.match(template, /<div v-bind="props\.recents\.attrs">/)
+  assert.match(template, /<TimeRangeRecents/)
+  assert.match(template, /:ranges="props\.recents\.ranges"/)
+  assert.match(template, /@recents-loaded="forwardRecentsLoaded"/)
+  assert.match(template, /@select-range="forwardSelectRange"/)
+
+  let propDefinitions
+  const events = []
+  const context = {
+    defineProps: (definitions) => {
+      propDefinitions = definitions
+      return {}
+    },
+    defineEmits: (names) => {
+      assert.equal(Array.from(names).join(","), "recents-loaded,select-range")
+      return (name, payload) => events.push({name, payload})
+    },
+  }
+
+  const testableScript = script
+    .replace('import TimeRangeRecents from "./TimeRangeRecents.vue"', "") +
+    "\nglobalThis.DashboardAbsoluteRangePane = {forwardRecentsLoaded, forwardSelectRange}"
+
+  vm.createContext(context)
+  vm.runInContext(testableScript, context, {filename: panePath})
+
+  assert.equal(Object.keys(propDefinitions).join(","), "root,heading,form,validation,recents")
+  assert.equal(propDefinitions.root.required, true)
+  assert.equal(propDefinitions.heading.required, true)
+  assert.equal(propDefinitions.form.required, true)
+  assert.equal(propDefinitions.validation.default, null)
+  assert.equal(propDefinitions.recents.required, true)
+
+  const recentsPayload = {ranges: [{from: "now-5m", to: "now"}]}
+  const selectPayload = {from: "2026-08-01T10:00:00Z", to: "2026-08-01T12:00:00Z"}
+  context.DashboardAbsoluteRangePane.forwardRecentsLoaded(recentsPayload)
+  context.DashboardAbsoluteRangePane.forwardSelectRange(selectPayload)
+
+  assert.equal(events[0].name, "recents-loaded")
+  assert.equal(events[0].payload, recentsPayload)
+  assert.equal(events[1].name, "select-range")
+  assert.equal(events[1].payload, selectPayload)
+}
+
+{
   const recentsPath = resolve(__dirname, "../vue/TimeRangeRecents.vue")
   const source = await readFile(recentsPath, "utf8")
   const script = source.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]

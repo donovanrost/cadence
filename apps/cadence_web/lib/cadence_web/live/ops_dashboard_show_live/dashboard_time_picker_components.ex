@@ -188,88 +188,115 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   attr :recent_ranges, :list, default: []
 
   defp absolute_range_pane(assigns) do
+    range_form =
+      to_form(%{"from" => assigns.time_from || "", "to" => assigns.time_to || ""})
+
     assigns =
-      assign(
-        assigns,
-        :range_form,
-        to_form(%{"from" => assigns.time_from || "", "to" => assigns.time_to || ""})
+      assign(assigns,
+        absolute_range_root: %{attrs: %{class: "min-w-0 flex-1"}},
+        absolute_range_heading: %{
+          attrs: %{
+            id: "dashboard-range-heading",
+            class: "text-xs font-semibold text-base-content/85"
+          },
+          text: "Absolute time range"
+        },
+        absolute_range_form: absolute_range_form_dto(range_form),
+        absolute_range_validation: time_validation_dto(assigns.time_validation),
+        absolute_range_recents: recent_ranges_dto(assigns.recent_ranges)
       )
 
     ~H"""
-    <div class="min-w-0 flex-1">
-      <p id="dashboard-range-heading" class="text-xs font-semibold text-base-content/85">
-        Absolute time range
-      </p>
-      <.form
-        for={@range_form}
-        id="dashboard-custom-range-form"
-        phx-submit="set_chart_time_range"
-        class="mt-2"
-      >
-        <.input
-          field={@range_form[:from]}
-          id="dashboard-time-from"
-          type="text"
-          label="From"
-          placeholder="now-6h or 2026-08-01T16:30:00Z"
-          compact
-          class="input-xs font-mono"
-        />
-        <div class="mt-2">
-          <.input
-            field={@range_form[:to]}
-            id="dashboard-time-to"
-            type="text"
-            label="To"
-            placeholder="now"
-            compact
-            class="input-xs font-mono"
-          />
-        </div>
-        <.button id="dashboard-apply-time-range" type="submit" variant={:primary} size={:xs} class="mt-2">
-          Apply time range
-        </.button>
-      </.form>
-      <span
-        :if={@time_validation != "ok"}
-        id="dashboard-time-validation"
-        data-time-validation={@time_validation}
-        class="badge badge-warning badge-xs mt-2"
-      >
-        Time reset
-      </span>
-      <.recent_ranges_section recent_ranges={@recent_ranges} />
-    </div>
+    <.vue
+      id="dashboard-time-absolute-range-component"
+      v-component="DashboardAbsoluteRangePane"
+      root={@absolute_range_root}
+      heading={@absolute_range_heading}
+      form={@absolute_range_form}
+      validation={@absolute_range_validation}
+      recents={@absolute_range_recents}
+      v-on:recents-loaded={JS.push("time_recents_loaded")}
+      v-on:select-range={JS.push("set_chart_time_range")}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
-  attr :recent_ranges, :list, default: []
+  defp absolute_range_form_dto(range_form) do
+    %{
+      attrs: %{
+        id: "dashboard-custom-range-form",
+        "phx-submit": "set_chart_time_range",
+        class: "mt-2"
+      },
+      from:
+        absolute_range_field_dto(
+          range_form[:from],
+          "dashboard-time-from",
+          "From",
+          "now-6h or 2026-08-01T16:30:00Z"
+        ),
+      to: %{
+        margin_class: "mt-2",
+        field: absolute_range_field_dto(range_form[:to], "dashboard-time-to", "To", "now")
+      },
+      submit: %{
+        attrs: %{
+          id: "dashboard-apply-time-range",
+          type: "submit",
+          class: "btn btn-primary btn-xs mt-2"
+        },
+        text: "Apply time range"
+      }
+    }
+  end
 
-  defp recent_ranges_section(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :recent_range_props,
-        Enum.map(assigns.recent_ranges, fn range ->
+  defp absolute_range_field_dto(field, id, label, placeholder) do
+    %{
+      wrapper_class: "fieldset",
+      label: %{class: "hud-label block mb-1.5", text: label},
+      attrs: %{
+        id: id,
+        name: field.name,
+        type: "text",
+        value: field.value,
+        placeholder: placeholder,
+        required: false,
+        autocomplete: nil,
+        class: "w-full input input-xs font-mono"
+      }
+    }
+  end
+
+  defp time_validation_dto("ok"), do: nil
+
+  defp time_validation_dto(time_validation) do
+    %{
+      attrs: %{
+        id: "dashboard-time-validation",
+        "data-time-validation": time_validation,
+        class: "badge badge-warning badge-xs mt-2"
+      },
+      text: "Time reset"
+    }
+  end
+
+  defp recent_ranges_dto(recent_ranges) do
+    %{
+      attrs: %{
+        id: "dashboard-time-recents",
+        class: "mt-3 border-t border-base-300/60 pt-2"
+      },
+      ranges:
+        Enum.map(recent_ranges, fn range ->
           %{
             from: range.from,
             to: range.to,
             label: TimeRange.label(range.from, range.to) || "#{range.from} to #{range.to}"
           }
         end)
-      )
-
-    ~H"""
-    <.vue
-      id="dashboard-time-recents"
-      v-component="TimeRangeRecents"
-      ranges={@recent_range_props}
-      v-on:recents-loaded={JS.push("time_recents_loaded")}
-      v-on:select-range={JS.push("set_chart_time_range")}
-      v-ssr={false}
-      class="mt-3 border-t border-base-300/60 pt-2"
-    />
-    """
+    }
   end
 
   attr :time_mode, :string, required: true

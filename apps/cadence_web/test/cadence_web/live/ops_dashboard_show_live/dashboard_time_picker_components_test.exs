@@ -95,6 +95,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     |> Enum.find(&(&1["attrs"]["id"] == id))
   end
 
+  defp absolute_range_vue(html) do
+    LiveVue.Test.get_vue(html, id: "dashboard-time-absolute-range-component")
+  end
+
+  defp absolute_range_props(html) do
+    html
+    |> absolute_range_vue()
+    |> Map.fetch!(:props)
+  end
+
   defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
     if attrs[attribute] == value do
       node
@@ -577,59 +587,158 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   end
 
   test "archive mode renders the time validation badge and range form values" do
-    document =
-      LazyHTML.from_fragment(
-        render_cluster(
-          time_mode: "archive",
-          time_from: "2026-06-17T12:00:00Z",
-          time_to: "2026-06-17T12:05:00Z",
-          time_validation: "reset"
-        )
+    html =
+      render_cluster(
+        time_mode: "archive",
+        time_from: "2026-06-17T12:00:00Z",
+        time_to: "2026-06-17T12:05:00Z",
+        time_validation: "reset"
       )
 
-    assert ["reset"] =
-             document
-             |> LazyHTML.query("#dashboard-time-validation")
-             |> LazyHTML.attribute("data-time-validation")
+    document = LazyHTML.from_fragment(html)
+    vue = absolute_range_vue(html)
+    props = vue.props
+
+    assert document
+           |> LazyHTML.query("#dashboard-time-absolute-range-component")
+           |> Enum.count() == 1
+
+    assert document
+           |> LazyHTML.query(
+             "#dashboard-time-absolute-range-component #dashboard-custom-range-form"
+           )
+           |> Enum.empty?()
+
+    assert vue.id == "dashboard-time-absolute-range-component"
+    assert vue.component == "DashboardAbsoluteRangePane"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers["recents-loaded"] == JS.push("time_recents_loaded")
+    assert vue.handlers["select-range"] == JS.push("set_chart_time_range")
+    assert vue.slots == %{}
+    assert Map.keys(props) |> Enum.sort() == ["form", "heading", "recents", "root", "validation"]
+    assert props == Jason.decode!(Jason.encode!(props))
+
+    assert props["root"] == %{
+             "attrs" => %{"class" => "min-w-0 flex-1"}
+           }
+
+    assert props["heading"] == %{
+             "attrs" => %{
+               "id" => "dashboard-range-heading",
+               "class" => "text-xs font-semibold text-base-content/85"
+             },
+             "text" => "Absolute time range"
+           }
+
+    assert props["form"] == %{
+             "attrs" => %{
+               "id" => "dashboard-custom-range-form",
+               "phx-submit" => "set_chart_time_range",
+               "class" => "mt-2"
+             },
+             "from" => %{
+               "wrapper_class" => "fieldset",
+               "label" => %{
+                 "class" => "hud-label block mb-1.5",
+                 "text" => "From"
+               },
+               "attrs" => %{
+                 "id" => "dashboard-time-from",
+                 "name" => "from",
+                 "type" => "text",
+                 "value" => "2026-06-17T12:00:00Z",
+                 "placeholder" => "now-6h or 2026-08-01T16:30:00Z",
+                 "required" => false,
+                 "autocomplete" => nil,
+                 "class" => "w-full input input-xs font-mono"
+               }
+             },
+             "to" => %{
+               "margin_class" => "mt-2",
+               "field" => %{
+                 "wrapper_class" => "fieldset",
+                 "label" => %{
+                   "class" => "hud-label block mb-1.5",
+                   "text" => "To"
+                 },
+                 "attrs" => %{
+                   "id" => "dashboard-time-to",
+                   "name" => "to",
+                   "type" => "text",
+                   "value" => "2026-06-17T12:05:00Z",
+                   "placeholder" => "now",
+                   "required" => false,
+                   "autocomplete" => nil,
+                   "class" => "w-full input input-xs font-mono"
+                 }
+               }
+             },
+             "submit" => %{
+               "attrs" => %{
+                 "id" => "dashboard-apply-time-range",
+                 "type" => "submit",
+                 "class" => "btn btn-primary btn-xs mt-2"
+               },
+               "text" => "Apply time range"
+             }
+           }
+
+    assert props["validation"] == %{
+             "attrs" => %{
+               "id" => "dashboard-time-validation",
+               "data-time-validation" => "reset",
+               "class" => "badge badge-warning badge-xs mt-2"
+             },
+             "text" => "Time reset"
+           }
 
     assert ["false"] =
              document
              |> LazyHTML.query("#dashboard-live-follow-indicator")
              |> LazyHTML.attribute("data-dashboard-live-follow")
-
-    assert ["2026-06-17T12:00:00Z"] =
-             document |> LazyHTML.query("#dashboard-time-from") |> LazyHTML.attribute("value")
-
-    assert ["2026-06-17T12:05:00Z"] =
-             document |> LazyHTML.query("#dashboard-time-to") |> LazyHTML.attribute("value")
   end
 
   test "renders recently used ranges with an empty state fallback" do
-    empty = LiveVue.Test.get_vue(render_cluster([]), id: "dashboard-time-recents")
+    empty = absolute_range_vue(render_cluster([]))
 
-    assert empty.component == "TimeRangeRecents"
-    assert empty.id == "dashboard-time-recents"
+    assert empty.component == "DashboardAbsoluteRangePane"
+    assert empty.id == "dashboard-time-absolute-range-component"
     assert empty.ssr == false
-    assert empty.class == "mt-3 border-t border-base-300/60 pt-2"
-    assert empty.props["ranges"] == []
+    assert empty.class == "contents"
+    assert empty.props["validation"] == nil
+
+    assert empty.props["recents"] == %{
+             "attrs" => %{
+               "id" => "dashboard-time-recents",
+               "class" => "mt-3 border-t border-base-300/60 pt-2"
+             },
+             "ranges" => []
+           }
+
     assert empty.handlers["recents-loaded"] == JS.push("time_recents_loaded")
     assert empty.handlers["select-range"] == JS.push("set_chart_time_range")
 
     populated =
-      LiveVue.Test.get_vue(
+      absolute_range_props(
         render_cluster(
           recent_ranges: [
-            %{from: "2026-06-17T12:00:00Z", to: "2026-06-17T12:05:00Z"}
+            %{from: "2026-06-17T12:00:00Z", to: "2026-06-17T12:05:00Z"},
+            %{from: "2026-06-17T13:00:00Z", to: "2026-06-17T14:00:00Z"}
           ]
-        ),
-        id: "dashboard-time-recents"
+        )
       )
 
-    assert populated.props["ranges"] == [
+    assert populated["recents"]["ranges"] == [
              %{
                "from" => "2026-06-17T12:00:00Z",
                "to" => "2026-06-17T12:05:00Z",
                "label" => "2026-06-17 12:00:00 to 2026-06-17 12:05:00 UTC"
+             },
+             %{
+               "from" => "2026-06-17T13:00:00Z",
+               "to" => "2026-06-17T14:00:00Z",
+               "label" => "2026-06-17 13:00:00 to 2026-06-17 14:00:00 UTC"
              }
            ]
   end

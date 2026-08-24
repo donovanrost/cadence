@@ -189,6 +189,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     |> Enum.find(&(&1["attrs"]["id"] == id))
   end
 
+  defp absolute_range_props(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-time-absolute-range-component")
+    |> Map.fetch!(:props)
+  end
+
   test "quick ranges slide live, absolute bounds snapshot archive, and live resumes" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
@@ -218,12 +224,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
 
     refute quick_range_item(view, "dashboard-time-preset-live")["attrs"]["disabled"]
 
-    view
-    |> form("#dashboard-custom-range-form", %{
+    range_params = %{
       "from" => "2026-06-17T12:00:00Z",
       "to" => "2026-06-17T12:05:00Z"
-    })
-    |> render_submit()
+    }
+
+    absolute_range = absolute_range_props(view)
+    assert absolute_range["form"]["attrs"]["id"] == "dashboard-custom-range-form"
+    assert absolute_range["form"]["attrs"]["phx-submit"] == "set_chart_time_range"
+    assert absolute_range["form"]["from"]["attrs"]["name"] == "from"
+    assert absolute_range["form"]["from"]["attrs"]["value"] == "now-5m"
+    assert absolute_range["form"]["to"]["field"]["attrs"]["name"] == "to"
+    assert absolute_range["form"]["to"]["field"]["attrs"]["value"] == "now"
+
+    render_submit(view, "set_chart_time_range", range_params)
 
     patched_path = assert_patch(view)
     assert patched_path =~ "time_mode=archive"
