@@ -56,7 +56,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
 
     body = presentation["body"]
     assert body["class"] == "p-2 text-xs"
-    assert body["heading"] == %{"class" => "font-semibold text-base-content", "text" => "Source degraded"}
+
+    assert body["heading"] == %{
+             "class" => "font-semibold text-base-content",
+             "text" => "Source degraded"
+           }
 
     assert body["message"] == %{
              "class" => "mt-1 text-base-content/70",
@@ -93,6 +97,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
            }
 
     assert body["details"]["visible"] == true
+
     assert body["details"]["class"] ==
              "mt-2 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1"
 
@@ -129,9 +134,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
              "grid grid-cols-[6rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1"
            ]
 
-    assert Enum.map(body["evidence"]["rows"], & &1["attrs"]["data-warning-evidence-kind"]) == ["source", "frame"]
+    assert Enum.map(body["evidence"]["rows"], & &1["attrs"]["data-warning-evidence-kind"]) == [
+             "source",
+             "frame"
+           ]
 
-    assert Enum.map(body["evidence"]["rows"], & &1["attrs"]["data-warning-evidence-id"]) == ["request-1", "frame-1"]
+    assert Enum.map(body["evidence"]["rows"], & &1["attrs"]["data-warning-evidence-id"]) == [
+             "request-1",
+             "frame-1"
+           ]
 
     assert Enum.map(body["evidence"]["rows"], fn row ->
              Enum.map(row["fields"], &{&1["label"]["text"], &1["value"]["text"]})
@@ -230,6 +241,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
              "phx-value-link-id" => "warning-link-1",
              "phx-value-placement-id" => "placement-1",
              "phx-value-realm" => "simulation",
+             "phx-value-replay-run-id" => "replay-1",
              "phx-value-source-binding-id" => "binding-sim",
              "phx-value-target" => "telemetry_sample",
              "phx-value-target-id" => "sample-1",
@@ -384,8 +396,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponentsTest do
   end
 
   defp render_vue(warning) do
-    &WidgetWarningComponents.engine_warning_badge/1
-    |> render_component(
+    render_component(
+      &WidgetWarningComponents.engine_warning_badge/1,
       id: "widget-placement-1-engine-warning-0",
       warning: warning,
       placement_id: "placement-1"

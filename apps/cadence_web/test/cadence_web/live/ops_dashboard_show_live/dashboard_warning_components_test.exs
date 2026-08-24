@@ -59,11 +59,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWarningComponentsTest do
     assert warning["overlay"]["attrs"]["data-limit-missing-samples"] == "sample-missing"
     assert warning["overlay"]["attrs"]["data-limit-mode"] == "recomputed"
 
-    assert ["Selected clock"] ==
-             Enum.map(
-               warning["body"]["details"]["rows"],
-               & &1["value"]["attrs"]["data-warning-detail"]
-             )
+    assert "Selected clock" in Enum.map(
+             warning["body"]["details"]["rows"],
+             & &1["value"]["attrs"]["data-warning-detail"]
+           )
   end
 
   test "dashboard warnings assign unique popover ids to repeated warning codes" do

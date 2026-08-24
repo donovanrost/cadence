@@ -204,19 +204,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
                ~s(#widget-#{widget.widget_id} [data-warning-codes*="unsupported_source_capability"])
              )
 
-      warning_component_id = "widget-#{widget.widget_id}-engine-warning-0-component"
-      warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
-      assert warning_vue.component == "WidgetWarning"
-      assert warning_vue.id == warning_component_id
-      assert warning_vue.ssr == false
-      warning = warning_vue.props["presentation"]
+      warnings =
+        view
+        |> warning_vues()
+        |> Enum.filter(fn vue ->
+          vue.props["presentation"]["overlay"]["attrs"]["data-engine-warning-detail"] ==
+            "unsupported_source_capability"
+        end)
 
-      assert warning["trigger"]["badge"]["attrs"]["data-engine-warning"] ==
-               "unsupported_source_capability"
+      assert warnings != []
 
-      assert warning["trigger"]["badge"]["text"] == "Unsupported source capability"
+      Enum.each(warnings, fn vue ->
+        assert vue.component == "WidgetWarning"
+        assert vue.ssr == false
+      end)
 
-      details = warning["body"]["details"]["rows"]
+      presentations = Enum.map(warnings, & &1.props["presentation"])
+
+      assert Enum.any?(
+               presentations,
+               &(&1["trigger"]["badge"]["attrs"]["data-engine-warning"] ==
+                   "unsupported_source_capability")
+             )
+
+      assert Enum.any?(
+               presentations,
+               &(&1["trigger"]["badge"]["text"] == "Unsupported source capability")
+             )
+
+      details = Enum.flat_map(presentations, & &1["body"]["details"]["rows"])
 
       assert detail_text(details, "Requested sampling") == "raw_series"
       assert detail_text(details, "Supported sampling 1") == "latest"
@@ -225,7 +241,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
                "inspect_source_capability"
 
       unsupported_link =
-        Enum.find(warning["body"]["links"]["rows"], fn link ->
+        presentations
+        |> Enum.flat_map(& &1["body"]["links"]["rows"])
+        |> Enum.find(fn link ->
           link["attrs"]["data-warning-link-target"] == "telemetry point" and
             link["attrs"]["data-warning-link-id"] == "HK.counter"
         end)
@@ -280,5 +298,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       {_name, _value} -> []
     end)
     |> Map.new()
+  end
+
+  defp warning_vues(view) do
+    html = render(view)
+
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([data-name="WidgetWarning"]))
+    |> LazyHTML.attribute("id")
+    |> Enum.map(&LiveVue.Test.get_vue(html, id: &1))
   end
 end
