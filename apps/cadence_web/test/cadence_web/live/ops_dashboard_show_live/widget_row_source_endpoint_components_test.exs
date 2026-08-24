@@ -13,53 +13,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowSourceEndpointComponentsTest 
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = widget_rows_presentation(html)
+    row = hd(presentation["rows"])
 
     [evidence, row_link] =
-      widget_data_link_items(
-        html,
-        "data-row-links-placement-1-commanding.queue_depth:endpoint-alpha-component"
-      )
+      row
+      |> Map.fetch!("cells")
+      |> Enum.find(&(&1["key"] == "actions"))
+      |> Map.fetch!("link_menu")
+      |> Map.fetch!("items")
 
-    assert ["commanding.queue_depth:endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-row")
+    assert row["attrs"]["data-data-table-row"] == "commanding.queue_depth:endpoint-alpha"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-resource-id")
+    assert row["attrs"]["data-data-table-resource-id"] == "endpoint-alpha"
 
-    assert ["source_endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-query-scope-kind")
+    assert row["attrs"]["data-data-table-query-scope-kind"] == "source_endpoint"
 
-    assert ["commanding.queue_depth"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-frame-observable-id")
+    assert row["attrs"]["data-data-table-frame-observable-id"] == "commanding.queue_depth"
 
-    assert ["commanding"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-product-family")
+    assert row["attrs"]["data-data-table-product-family"] == "commanding"
 
-    assert ["command_queue_depth"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-supported-capability")
+    assert row["attrs"]["data-data-table-supported-capability"] == "command_queue_depth"
 
-    assert ["managed_operational_observables"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-data-source-id")
+    assert row["attrs"]["data-data-table-data-source-id"] ==
+             "managed_operational_observables"
 
-    assert ["default_flight_operational_observables"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-source-binding-id")
+    assert row["attrs"]["data-data-table-source-binding-id"] ==
+             "default_flight_operational_observables"
 
     assert row_link["attrs"]["phx-click"] == "open_data_link"
 
@@ -90,13 +70,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowSourceEndpointComponentsTest 
     assert evidence["attrs"]["phx-value-scope-id"] == "endpoint-alpha"
   end
 
-  defp widget_data_link_items(html, component_id) do
+  defp widget_rows_presentation(html) do
+    component_id = "widget-rows-data-table-placement-1-component"
     vue = LiveVue.Test.get_vue(html, id: component_id)
-    assert vue.component == "WidgetDataLinks"
+    assert vue.component == "WidgetRows"
     assert vue.ssr == false
     assert vue.class == "contents"
+    assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["items"]
+    assert vue.props["presentation"]["kind"] == "data_table"
+    assert vue.props["presentation"]["component_id"] == component_id
+    vue.props["presentation"]
   end
 
   defp widget do

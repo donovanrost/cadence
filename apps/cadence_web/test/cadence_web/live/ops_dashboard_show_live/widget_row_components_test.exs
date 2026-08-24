@@ -13,48 +13,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
-
-    [evidence, row_link] =
-      widget_data_link_items(
+    presentation =
+      widget_rows_presentation(
         html,
-        "status-row-links-placement-1-tlm.contact.phase-component"
+        "widget-rows-status-matrix-placement-1-component",
+        "status_matrix"
       )
 
-    assert html =~ "Phase"
-    assert html =~ "Kind"
-    assert html =~ "Status"
-    assert html =~ "Contact"
+    row = hd(presentation["rows"])
 
-    assert ["tlm.contact.phase"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-row")
+    [evidence, row_link] = table_row_link_items(row)
 
-    assert ["source-request-1"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-source-request-id")
+    headings = Enum.map(presentation["head"]["cells"], & &1["text"])
 
-    assert ["link-alpha"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-link-id")
+    assert "Phase" in headings
+    assert "Kind" in headings
+    assert "Status" in headings
+    assert "Contact" in headings
 
-    assert ["transport"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-query-scope-kind")
+    assert row["attrs"]["data-status-matrix-row"] == "tlm.contact.phase"
 
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-query-scope-id")
+    assert row["attrs"]["data-status-matrix-source-request-id"] == "source-request-1"
 
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query("[data-status-matrix-row]")
-             |> LazyHTML.attribute("data-status-matrix-query-scope-ids")
+    assert row["attrs"]["data-status-matrix-link-id"] == "link-alpha"
+
+    assert row["attrs"]["data-status-matrix-query-scope-kind"] == "transport"
+
+    assert row["attrs"]["data-status-matrix-query-scope-id"] == "transport-alpha"
+
+    assert row["attrs"]["data-status-matrix-query-scope-ids"] ==
+             "transport-alpha,transport-beta"
 
     assert evidence["attrs"]["phx-click"] == "open_evidence"
 
@@ -69,62 +57,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation =
+      widget_rows_presentation(
+        html,
+        "widget-rows-data-table-placement-1-component",
+        "data_table"
+      )
 
-    assert ["tlm.hk.battery_voltage"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-row")
+    row = hd(presentation["rows"])
+    quality_cell = Enum.find(row["cells"], &(&1["key"] == "quality"))
+    corrected_badge = Enum.find(quality_cell["badges"], &(&1["text"] == "corrected"))
 
-    assert ["flight"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-realm")
+    assert row["attrs"]["data-data-table-row"] == "tlm.hk.battery_voltage"
 
-    assert ["link-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-link-id")
+    assert row["attrs"]["data-data-table-realm"] == "flight"
 
-    assert ["source_endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-scope-kind")
+    assert row["attrs"]["data-data-table-link-id"] == "link-alpha"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-source-endpoint-id")
+    assert row["attrs"]["data-data-table-scope-kind"] == "source_endpoint"
 
-    assert ["source_endpoint"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-query-scope-kind")
+    assert row["attrs"]["data-data-table-source-endpoint-id"] == "endpoint-alpha"
 
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-query-scope-id")
+    assert row["attrs"]["data-data-table-query-scope-kind"] == "source_endpoint"
 
-    assert ["endpoint-alpha,endpoint-beta"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-table-query-scope-ids")
+    assert row["attrs"]["data-data-table-query-scope-id"] == "endpoint-alpha"
 
-    assert ["corrected"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-management-badges")
+    assert row["attrs"]["data-data-table-query-scope-ids"] == "endpoint-alpha,endpoint-beta"
 
-    assert ["stale_data"] =
-             document
-             |> LazyHTML.query("[data-data-table-row]")
-             |> LazyHTML.attribute("data-data-management-warning-codes")
+    assert row["attrs"]["data-data-management-badges"] == "corrected"
 
-    assert ["corrected"] =
-             document
-             |> LazyHTML.query("[data-data-management-badge]")
-             |> LazyHTML.attribute("data-data-management-badge")
+    assert row["attrs"]["data-data-management-warning-codes"] == "stale_data"
+
+    assert corrected_badge["attrs"]["data-data-management-badge"] == "corrected"
   end
 
   test "state_timeline renders lanes, state labels, duration, and row links" do
@@ -147,34 +111,45 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetRowComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation =
+      widget_rows_presentation(
+        html,
+        "widget-rows-state-timeline-placement-1-component",
+        "state_timeline"
+      )
 
-    [evidence, row_link] =
-      widget_data_link_items(html, "state-row-links-placement-1-state-1-component")
+    lane = hd(presentation["lanes"])
+    row = hd(lane["rows"])
+    [evidence, row_link] = row["link_menu"]["items"]
 
-    assert ["tlm.hk.battery_voltage"] =
-             document
-             |> LazyHTML.query("[data-state-timeline-lane]")
-             |> LazyHTML.attribute("data-state-timeline-lane")
+    assert lane["attrs"]["data-state-timeline-lane"] == "tlm.hk.battery_voltage"
 
-    assert ["Red"] =
-             document
-             |> LazyHTML.query("[data-state-timeline-row]")
-             |> LazyHTML.attribute("data-state-timeline-state")
+    assert row["attrs"]["data-state-timeline-state"] == "Red"
 
-    assert html =~ "5m"
+    assert "5m" in row["metadata"]
 
     assert evidence["attrs"]["phx-click"] == "open_evidence"
     assert row_link["attrs"]["phx-click"] == "open_data_link"
   end
 
-  defp widget_data_link_items(html, component_id) do
+  defp widget_rows_presentation(html, component_id, kind) do
     vue = LiveVue.Test.get_vue(html, id: component_id)
-    assert vue.component == "WidgetDataLinks"
+    assert vue.component == "WidgetRows"
     assert vue.ssr == false
     assert vue.class == "contents"
+    assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["items"]
+    assert vue.props["presentation"]["kind"] == kind
+    assert vue.props["presentation"]["component_id"] == component_id
+    vue.props["presentation"]
+  end
+
+  defp table_row_link_items(row) do
+    row
+    |> Map.fetch!("cells")
+    |> Enum.find(&(&1["key"] == "actions"))
+    |> Map.fetch!("link_menu")
+    |> Map.fetch!("items")
   end
 
   defp widget do

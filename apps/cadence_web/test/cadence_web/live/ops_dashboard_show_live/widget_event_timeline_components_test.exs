@@ -12,47 +12,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
-    [row_link] = widget_data_link_items(html, "event-row-links-placement-1-event-1-component")
+    presentation = widget_rows_presentation(html)
+    row = hd(presentation["rows"])
+    [row_link] = row["link_menu"]["items"]
 
-    assert ["event-1"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-row")
+    badge =
+      Enum.find(
+        row["badges"],
+        &(&1["attrs"]["data-data-management-badge"] == "backfill_started")
+      )
 
-    assert ["Warning"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-severity")
+    assert row["attrs"]["data-event-timeline-row"] == "event-1"
 
-    assert ["backfill_started"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-data-management-badges")
+    assert row["attrs"]["data-event-timeline-severity"] == "Warning"
 
-    assert ["backfill_started"] =
-             document
-             |> LazyHTML.query("[data-data-management-badge]")
-             |> LazyHTML.attribute("data-data-management-badge")
+    assert row["attrs"]["data-data-management-badges"] == "backfill_started"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started"][data-data-link-target="telemetry_backfill_lifecycle_event"])
-             )
-             |> LazyHTML.attribute("phx-click")
+    assert badge["attrs"]["data-data-management-badge"] == "backfill_started"
 
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-target-id")
+    assert badge["attrs"]["data-data-link-target"] == "telemetry_backfill_lifecycle_event"
+    assert badge["attrs"]["phx-click"] == "open_data_link"
+    assert badge["attrs"]["phx-value-target-id"] == "backfill-event-1"
 
-    assert ["direct:telemetry_backfill_lifecycle_event:backfill-event-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-link-id")
+    assert badge["attrs"]["phx-value-link-id"] ==
+             "direct:telemetry_backfill_lifecycle_event:backfill-event-1"
 
-    assert html =~ "10m"
+    assert "10m" in row["metadata"]
 
     assert row_link["attrs"]["phx-click"] == "open_data_link"
 
@@ -66,47 +51,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    row = html |> widget_rows_presentation() |> Map.fetch!("rows") |> hd()
 
-    assert ["backfill_started_dispatch_degraded"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-data-management-badges")
+    badge =
+      Enum.find(
+        row["badges"],
+        &(&1["attrs"]["data-data-management-badge"] ==
+            "backfill_started_dispatch_degraded")
+      )
 
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-run-id")
+    assert row["attrs"]["data-data-management-badges"] ==
+             "backfill_started_dispatch_degraded"
 
-    assert ["job-1"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-id")
+    assert badge["attrs"]["data-data-management-workflow-run-id"] == "backfill-run-1"
 
-    assert ["failed"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-status")
+    assert badge["attrs"]["data-data-management-workflow-job-id"] == "job-1"
 
-    assert ["dispatcher unavailable"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-failure")
+    assert badge["attrs"]["data-data-management-workflow-job-status"] == "failed"
 
-    assert ["Backfill dispatch failed - workflow job failed: dispatcher unavailable"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("title")
+    assert badge["attrs"]["data-data-management-workflow-job-failure"] ==
+             "dispatcher unavailable"
+
+    assert badge["attrs"]["title"] ==
+             "Backfill dispatch failed - workflow job failed: dispatcher unavailable"
   end
 
   test "event_timeline renders source watermark audit details" do
@@ -116,62 +83,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetEventTimelineComponentsTest do
         placement_id: "placement-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    row = html |> widget_rows_presentation() |> Map.fetch!("rows") |> hd()
+    [row_link] = row["link_menu"]["items"]
 
-    [row_link] =
-      widget_data_link_items(
-        html,
-        "event-row-links-placement-1-watermark-event-1-component"
-      )
+    assert row["attrs"]["data-event-timeline-complete-through"] == "2026-06-17T12:04:00Z"
 
-    assert ["2026-06-17T12:04:00Z"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-complete-through")
+    assert row["attrs"]["data-event-timeline-target"] == "Source watermark event"
 
-    assert ["Source watermark event"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-target")
+    assert row["attrs"]["data-event-timeline-target-id"] == "watermark-event-1"
 
-    assert ["watermark-event-1"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-target-id")
+    assert row["attrs"]["data-event-timeline-latest-receipt-time"] ==
+             "2026-06-17T12:04:30Z"
 
-    assert ["2026-06-17T12:04:30Z"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-latest-receipt-time")
+    assert row["attrs"]["data-event-timeline-confidence"] == "Best effort"
 
-    assert ["Best effort"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-confidence")
+    assert row["attrs"]["data-event-timeline-reason"] == "Source watermark observed"
 
-    assert ["Source watermark observed"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-event-timeline-reason")
+    assert row["attrs"]["data-data-management-badges"] == "advanced"
 
-    assert ["advanced"] =
-             document
-             |> LazyHTML.query("[data-event-timeline-row]")
-             |> LazyHTML.attribute("data-data-management-badges")
-
-    assert html =~ "complete 12:04:00"
-    assert html =~ "latest 12:04:30"
+    assert "complete 12:04:00" in row["metadata"]
+    assert "latest 12:04:30" in row["metadata"]
 
     assert row_link["attrs"]["phx-click"] == "open_data_link"
   end
 
-  defp widget_data_link_items(html, component_id) do
+  defp widget_rows_presentation(html) do
+    component_id = "widget-rows-event-timeline-placement-1-component"
     vue = LiveVue.Test.get_vue(html, id: component_id)
-    assert vue.component == "WidgetDataLinks"
+    assert vue.component == "WidgetRows"
     assert vue.ssr == false
     assert vue.class == "contents"
+    assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["items"]
+    assert vue.props["presentation"]["kind"] == "event_timeline"
+    assert vue.props["presentation"]["component_id"] == component_id
+    vue.props["presentation"]
   end
 
   defp event_timeline_row do

@@ -22,12 +22,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableMissionScopeLiveT
   alias CadenceWeb.TestFixtures
 
   defp widget_data_link_items(rendered, component_id) do
-    vue = LiveVue.Test.get_vue(rendered, id: component_id)
-    assert vue.component == "WidgetDataLinks"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]["items"]
+    presentation = widget_data_link_presentation(rendered, component_id)
+    assert presentation
+    assert presentation["component_id"] == component_id
+    presentation["items"]
   end
 
   defp signed_in_user_org_and_mission do

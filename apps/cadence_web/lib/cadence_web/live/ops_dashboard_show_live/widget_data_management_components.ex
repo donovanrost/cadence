@@ -4,8 +4,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.DataLinkAttrs
 
-  attr :badge, :map, required: true
-  attr :class, :string, default: nil
+  attr(:badge, :map, required: true)
+  attr(:class, :string, default: nil)
 
   def data_management_badge(assigns) do
     assigns =
@@ -90,13 +90,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
     """
   end
 
-  attr :placement_id, :string, required: true
-  attr :data, :any, default: nil
-  attr :backfill, :any, default: nil
-  attr :compare_data, :any, default: nil
-  attr :compare_backfill, :any, default: nil
-  attr :data_view, :string, default: nil
-  attr :compare_data_view, :string, default: nil
+  attr(:placement_id, :string, required: true)
+  attr(:data, :any, default: nil)
+  attr(:backfill, :any, default: nil)
+  attr(:compare_data, :any, default: nil)
+  attr(:compare_backfill, :any, default: nil)
+  attr(:data_view, :string, default: nil)
+  attr(:compare_data_view, :string, default: nil)
 
   def chart_data_management_strip(assigns) do
     primary_badges = widget_data_management_badges([assigns.data, assigns.backfill])
@@ -289,6 +289,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
       "data-data-management-summary" => fallback_empty_attr_value(summary),
       "title" => direct_attr_value(title)
     })
+  end
+
+  def data_management_badge_presentation(badge, extra_class \\ nil) do
+    actionable? = data_management_badge_actionable?(badge)
+    data_link_target = data_management_badge_data_link_target(badge)
+    data_link_id = data_management_badge_data_link_id(badge)
+    data_link_key = data_management_badge_data_link_key(badge)
+    summary = data_management_badge_summary(badge)
+    title = data_management_badge_title(badge)
+
+    %{
+      tag: if(actionable?, do: "button", else: "span"),
+      class:
+        [
+          if(actionable?, do: "badge badge-xs cursor-pointer", else: "badge badge-xs"),
+          data_management_badge_class(badge),
+          extra_class
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join(" "),
+      attrs:
+        chart_data_management_badge_attrs(
+          badge,
+          actionable?,
+          data_link_target,
+          data_link_id,
+          data_link_key,
+          summary,
+          title
+        ),
+      text: rendered_body(Map.get(badge, :label, Map.get(badge, "label")))
+    }
   end
 
   def data_management_badges(%{data_management: %{badges: badges}}) when is_list(badges),

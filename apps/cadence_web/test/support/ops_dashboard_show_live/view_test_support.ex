@@ -1,8 +1,8 @@
 defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   @moduledoc false
 
-  import ExUnit.Assertions, only: [flunk: 1]
-  import Phoenix.LiveViewTest, only: [has_element?: 2]
+  import ExUnit.Assertions, only: [assert: 1, flunk: 1, refute: 1]
+  import Phoenix.LiveViewTest, only: [has_element?: 2, render: 1]
 
   alias CadenceWeb.AsyncLiveViewTestSupport
 
@@ -59,6 +59,65 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def stop_dashboard_view(view, timeout \\ @default_timeout) do
     AsyncLiveViewTestSupport.stop_async_view(view, timeout)
+  end
+
+  def widget_rows_presentation(rendered, kind, placement_id) do
+    component_id = "widget-rows-#{String.replace(kind, "_", "-")}-#{placement_id}-component"
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+
+    assert vue.component == "WidgetRows"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["kind"] == kind
+    assert vue.props["presentation"]["component_id"] == component_id
+
+    vue.props["presentation"]
+  end
+
+  def assert_widget_row(rendered, kind, placement_id, expected_attrs) do
+    row =
+      rendered
+      |> widget_rows_presentation(kind, placement_id)
+      |> widget_rows()
+      |> Enum.find(&attrs_match?(&1["attrs"], expected_attrs))
+
+    assert row
+    row
+  end
+
+  def refute_widget_row(rendered, kind, placement_id, expected_attrs) do
+    row =
+      rendered
+      |> widget_rows_presentation(kind, placement_id)
+      |> widget_rows()
+      |> Enum.find(&attrs_match?(&1["attrs"], expected_attrs))
+
+    refute row
+  end
+
+  def widget_row_field(row, key) do
+    row
+    |> Map.get("cells", [])
+    |> Enum.find(&(&1["key"] == key))
+    |> case do
+      nil -> nil
+      cell -> cell["text"]
+    end
+  end
+
+  def widget_data_link_presentation(rendered, component_id) do
+    rendered
+    |> rendered_html()
+    |> widget_rows_host_ids()
+    |> Enum.find_value(fn host_id ->
+      rendered
+      |> LiveVue.Test.get_vue(id: host_id)
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+      |> find_component_presentation(component_id)
+    end)
   end
 
   def dashboard_runtime_controls(view_or_html) do
@@ -160,4 +219,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
         Map.put(params, name, value)
     end
   end
+
+  defp widget_rows(%{"kind" => "state_timeline", "lanes" => lanes}) do
+    Enum.flat_map(lanes, & &1["rows"])
+  end
+
+  defp widget_rows(%{"rows" => rows}), do: rows
+
+  defp attrs_match?(attrs, expected_attrs) do
+    Enum.all?(expected_attrs, fn {name, value} -> attrs[name] == value end)
+  end
+
+  defp rendered_html(rendered) when is_binary(rendered), do: rendered
+  defp rendered_html(view), do: render(view)
+
+  defp widget_rows_host_ids(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([id^="widget-rows-"][id$="-component"]))
+    |> LazyHTML.attribute("id")
+  end
+
+  defp find_component_presentation(
+         %{"component_id" => component_id} = presentation,
+         component_id
+       ),
+       do: presentation
+
+  defp find_component_presentation(value, component_id) when is_map(value) do
+    Enum.find_value(value, fn {_key, nested} ->
+      find_component_presentation(nested, component_id)
+    end)
+  end
+
+  defp find_component_presentation(value, component_id) when is_list(value) do
+    Enum.find_value(value, &find_component_presentation(&1, component_id))
+  end
+
+  defp find_component_presentation(_value, _component_id), do: nil
 end

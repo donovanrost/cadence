@@ -30,14 +30,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
   alias CadenceWeb.TestFixtures
 
   defp assert_widget_data_link_item(rendered, component_id, expected_attrs) do
-    vue = LiveVue.Test.get_vue(rendered, id: component_id)
-    assert vue.component == "WidgetDataLinks"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    presentation = widget_data_link_presentation(rendered, component_id)
+    assert presentation
+    assert presentation["component_id"] == component_id
 
     item =
-      Enum.find(vue.props["presentation"]["items"], fn item ->
+      Enum.find(presentation["items"], fn item ->
         Enum.all?(expected_attrs, fn {name, value} -> item["attrs"][name] == value end)
       end)
 

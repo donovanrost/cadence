@@ -55,24 +55,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
   attr(:placement_id, :string, required: true)
 
   def status_matrix_row_link_menu(assigns) do
-    observable_id = text_value(assigns.row.observable_id)
-    observable_attr = direct_attr_value(assigns.row.observable_id)
-    overlay_id = "status-row-links-#{assigns.placement_id}-#{observable_id}"
-    label = "Inspect #{observable_id}"
-
     presentation =
-      popover_presentation(
-        "status_matrix_row",
-        overlay_id,
-        label,
-        %{"data-status-matrix-row-links" => observable_attr},
-        %{"data-status-matrix-row-link-menu" => observable_attr},
-        [status_matrix_evidence_item(assigns.row, assigns.placement_id, observable_attr)] ++
-          Enum.map(
-            assigns.links,
-            &status_matrix_link_item(&1, assigns.placement_id, observable_attr)
-          )
-      )
+      status_matrix_row_link_presentation(assigns.row, assigns.links, assigns.placement_id)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -85,6 +69,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
       class="contents"
     />
     """
+  end
+
+  def status_matrix_row_link_presentation(row, links, placement_id) do
+    observable_id = text_value(row.observable_id)
+    observable_attr = direct_attr_value(row.observable_id)
+    overlay_id = "status-row-links-#{placement_id}-#{observable_id}"
+    label = "Inspect #{observable_id}"
+
+    popover_presentation(
+      "status_matrix_row",
+      overlay_id,
+      label,
+      %{"data-status-matrix-row-links" => observable_attr},
+      %{"data-status-matrix-row-link-menu" => observable_attr},
+      [status_matrix_evidence_item(row, placement_id, observable_attr)] ++
+        Enum.map(links, &status_matrix_link_item(&1, placement_id, observable_attr))
+    )
   end
 
   attr(:row, :map, required: true)
@@ -92,24 +93,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
   attr(:placement_id, :string, required: true)
 
   def data_table_row_link_menu(assigns) do
-    observable_id = text_value(assigns.row.observable_id)
-    observable_attr = direct_attr_value(assigns.row.observable_id)
-    overlay_id = "data-row-links-#{assigns.placement_id}-#{observable_id}"
-    label = "Inspect #{observable_id}"
-
     presentation =
-      popover_presentation(
-        "data_table_row",
-        overlay_id,
-        label,
-        %{"data-data-table-row-links" => observable_attr},
-        %{"data-data-table-row-link-menu" => observable_attr},
-        [data_table_evidence_item(assigns.row, assigns.placement_id, observable_attr)] ++
-          Enum.map(
-            assigns.links,
-            &data_table_link_item(&1, assigns.placement_id, observable_attr)
-          )
-      )
+      data_table_row_link_presentation(assigns.row, assigns.links, assigns.placement_id)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -122,6 +107,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
       class="contents"
     />
     """
+  end
+
+  def data_table_row_link_presentation(row, links, placement_id) do
+    observable_id = text_value(row.observable_id)
+    observable_attr = direct_attr_value(row.observable_id)
+    overlay_id = "data-row-links-#{placement_id}-#{observable_id}"
+    label = "Inspect #{observable_id}"
+
+    popover_presentation(
+      "data_table_row",
+      overlay_id,
+      label,
+      %{"data-data-table-row-links" => observable_attr},
+      %{"data-data-table-row-link-menu" => observable_attr},
+      [data_table_evidence_item(row, placement_id, observable_attr)] ++
+        Enum.map(links, &data_table_link_item(&1, placement_id, observable_attr))
+    )
   end
 
   attr(:row, :map, required: true)
@@ -129,26 +131,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
   attr(:placement_id, :string, required: true)
 
   def state_timeline_row_link_menu(assigns) do
-    row_id = text_value(assigns.row.row_id)
-    row_id_attr = direct_attr_value(assigns.row.row_id)
-    observable_id = text_value(Map.get(assigns.row, :observable_id))
-    overlay_id = "state-row-links-#{assigns.placement_id}-#{row_id}"
-    label = "Inspect #{observable_id} state transition"
-    timestamp_ms = state_timeline_link_timestamp_ms(assigns.row)
-
     presentation =
-      popover_presentation(
-        "state_timeline_row",
-        overlay_id,
-        label,
-        %{"data-state-timeline-row-links" => row_id_attr},
-        %{"data-state-timeline-row-link-menu" => row_id_attr},
-        [state_timeline_evidence_item(assigns.row, assigns.placement_id, row_id_attr)] ++
-          Enum.map(
-            assigns.links,
-            &state_timeline_link_item(&1, assigns.placement_id, row_id_attr, timestamp_ms)
-          )
-      )
+      state_timeline_row_link_presentation(assigns.row, assigns.links, assigns.placement_id)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -163,30 +147,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
     """
   end
 
+  def state_timeline_row_link_presentation(row, links, placement_id) do
+    row_id = text_value(row.row_id)
+    row_id_attr = direct_attr_value(row.row_id)
+    observable_id = text_value(Map.get(row, :observable_id))
+    overlay_id = "state-row-links-#{placement_id}-#{row_id}"
+    label = "Inspect #{observable_id} state transition"
+    timestamp_ms = state_timeline_link_timestamp_ms(row)
+
+    popover_presentation(
+      "state_timeline_row",
+      overlay_id,
+      label,
+      %{"data-state-timeline-row-links" => row_id_attr},
+      %{"data-state-timeline-row-link-menu" => row_id_attr},
+      [state_timeline_evidence_item(row, placement_id, row_id_attr)] ++
+        Enum.map(
+          links,
+          &state_timeline_link_item(&1, placement_id, row_id_attr, timestamp_ms)
+        )
+    )
+  end
+
   attr(:row, :map, required: true)
   attr(:links, :list, required: true)
   attr(:placement_id, :string, required: true)
 
   def event_timeline_row_link_menu(assigns) do
-    row_id = text_value(assigns.row.row_id)
-    row_id_attr = direct_attr_value(assigns.row.row_id)
-    title = text_value(Map.get(assigns.row, :title))
-    overlay_id = "event-row-links-#{assigns.placement_id}-#{row_id}"
-    label = "Inspect #{title}"
-    timestamp_ms = event_timeline_link_timestamp_ms(assigns.row)
-
     presentation =
-      popover_presentation(
-        "event_timeline_row",
-        overlay_id,
-        label,
-        %{"data-event-timeline-row-links" => row_id_attr},
-        %{"data-event-timeline-row-link-menu" => row_id_attr},
-        Enum.map(
-          assigns.links,
-          &event_timeline_link_item(&1, assigns.placement_id, row_id_attr, timestamp_ms)
-        )
-      )
+      event_timeline_row_link_presentation(assigns.row, assigns.links, assigns.placement_id)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -199,6 +188,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
       class="contents"
     />
     """
+  end
+
+  def event_timeline_row_link_presentation(row, links, placement_id) do
+    row_id = text_value(row.row_id)
+    row_id_attr = direct_attr_value(row.row_id)
+    title = text_value(Map.get(row, :title))
+    overlay_id = "event-row-links-#{placement_id}-#{row_id}"
+    label = "Inspect #{title}"
+    timestamp_ms = event_timeline_link_timestamp_ms(row)
+
+    popover_presentation(
+      "event_timeline_row",
+      overlay_id,
+      label,
+      %{"data-event-timeline-row-links" => row_id_attr},
+      %{"data-event-timeline-row-link-menu" => row_id_attr},
+      Enum.map(
+        links,
+        &event_timeline_link_item(&1, placement_id, row_id_attr, timestamp_ms)
+      )
+    )
   end
 
   defp popover_presentation(kind, overlay_id, label, overlay_attrs, trigger_attrs, items) do
