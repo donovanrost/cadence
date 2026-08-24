@@ -412,20 +412,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              expected_remaining_work_entry(
                0,
                replacement_entry_attrs(
-                 "HK.current run-003 replacement run-003-corrected stage requested next approve",
-                 "HK.current run-003",
-                 "run-003-corrected",
-                 "requested",
-                 "approve",
-                 "pending",
-                 "3:HK.current run-003-corrected queued job-3 event=event-3",
-                 "event-3",
-                 "job-3",
-                 "queued",
-                 nil,
-                 nil,
-                 "active",
-                 "wait_for_replacement_job_start"
+                 {
+                   "HK.current run-003 replacement run-003-corrected stage requested next approve",
+                   "HK.current run-003",
+                   "run-003-corrected",
+                   "requested",
+                   "approve",
+                   "pending"
+                 },
+                 {
+                   "3:HK.current run-003-corrected queued job-3 event=event-3",
+                   "event-3",
+                   "job-3",
+                   "queued",
+                   nil,
+                   nil,
+                   "active",
+                   "wait_for_replacement_job_start"
+                 }
                ),
                "run-003-corrected",
                "pending",
@@ -437,20 +441,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              expected_remaining_work_entry(
                1,
                replacement_entry_attrs(
-                 "HK.voltage run-004 replacement run-004-corrected stage approved next start",
-                 "HK.voltage run-004",
-                 "run-004-corrected",
-                 "approved",
-                 "start",
-                 "pending",
-                 "4:HK.voltage run-004-corrected failed job-4 event=event-4",
-                 "event-4",
-                 "job-4",
-                 "failed",
-                 nil,
-                 nil,
-                 "",
-                 "inspect_failed_replacement_job"
+                 {
+                   "HK.voltage run-004 replacement run-004-corrected stage approved next start",
+                   "HK.voltage run-004",
+                   "run-004-corrected",
+                   "approved",
+                   "start",
+                   "pending"
+                 },
+                 {
+                   "4:HK.voltage run-004-corrected failed job-4 event=event-4",
+                   "event-4",
+                   "job-4",
+                   "failed",
+                   nil,
+                   nil,
+                   "",
+                   "inspect_failed_replacement_job"
+                 }
                ),
                "run-004-corrected",
                "pending",
@@ -482,20 +490,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              expected_remaining_work_entry(
                2,
                replacement_entry_attrs(
-                 "HK.gyro run-006 replacement run-006-corrected stage started next complete",
-                 "HK.gyro run-006",
-                 "run-006-corrected",
-                 "started",
-                 "complete",
-                 "pending",
-                 "6:HK.gyro run-006-corrected running job-6 event=event-6 started=2023-11-14T22:00:00Z",
-                 "event-6",
-                 "job-6",
-                 "running",
-                 "2023-11-14T22:00:00Z",
-                 nil,
-                 "stale",
-                 "inspect_stale_replacement_job"
+                 {
+                   "HK.gyro run-006 replacement run-006-corrected stage started next complete",
+                   "HK.gyro run-006",
+                   "run-006-corrected",
+                   "started",
+                   "complete",
+                   "pending"
+                 },
+                 {
+                   "6:HK.gyro run-006-corrected running job-6 event=event-6 started=2023-11-14T22:00:00Z",
+                   "event-6",
+                   "job-6",
+                   "running",
+                   "2023-11-14T22:00:00Z",
+                   nil,
+                   "stale",
+                   "inspect_stale_replacement_job"
+                 }
                ),
                "run-006-corrected",
                "pending",
@@ -528,20 +540,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              expected_remaining_work_entry(
                3,
                replacement_entry_attrs(
-                 "HK.temp run-005 replacement run-005-corrected stage completed next done",
-                 "HK.temp run-005",
-                 "run-005-corrected",
-                 "completed",
-                 "done",
-                 "complete",
-                 "5:HK.temp run-005-corrected completed job-5 event=event-5 completed=2023-11-14T22:05:00Z",
-                 "event-5",
-                 "job-5",
-                 "completed",
-                 nil,
-                 "2023-11-14T22:05:00Z",
-                 "",
-                 "replacement_complete"
+                 {
+                   "HK.temp run-005 replacement run-005-corrected stage completed next done",
+                   "HK.temp run-005",
+                   "run-005-corrected",
+                   "completed",
+                   "done",
+                   "complete"
+                 },
+                 {
+                   "5:HK.temp run-005-corrected completed job-5 event=event-5 completed=2023-11-14T22:05:00Z",
+                   "event-5",
+                   "job-5",
+                   "completed",
+                   nil,
+                   "2023-11-14T22:05:00Z",
+                   "",
+                   "replacement_complete"
+                 }
                ),
                "run-005-corrected",
                "complete",
@@ -994,20 +1010,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
   end
 
   defp replacement_entry_attrs(
-         raw,
-         source,
-         replacement_run,
-         stage,
-         next_action,
-         status,
-         job_item,
-         event_id,
-         job_id,
-         job_status,
-         job_started,
-         job_completed,
-         job_age_state,
-         job_action
+         {raw, source, replacement_run, stage, next_action, status},
+         {
+           job_item,
+           event_id,
+           job_id,
+           job_status,
+           job_started,
+           job_completed,
+           job_age_state,
+           job_action
+         }
        ) do
     %{
       "data-historical-workflow-group-recovery-remaining-work-item" => raw,
