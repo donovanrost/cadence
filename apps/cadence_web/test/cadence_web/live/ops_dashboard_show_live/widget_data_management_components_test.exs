@@ -214,32 +214,262 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
   end
 
   test "chart_data_management_strip combines primary and compare badges with view labels" do
+    strip_actionable_badge =
+      actionable_badge()
+      |> Map.merge(%{placement_id: "badge-placement", timestamp_ms: 1_781_568_000_000})
+
     html =
       render_component(&WidgetDataManagementComponents.chart_data_management_strip/1,
+        placement_id: "chart-strip",
         data: data_with_badges([data_view_badge("all_revisions"), data_view_badge("corrected")]),
-        backfill: data_with_badges([actionable_badge()]),
+        backfill: data_with_badges([strip_actionable_badge]),
         compare_data: data_with_badges([data_view_badge("recomputed")]),
         compare_backfill: data_with_badges([data_view_badge("backfill")]),
         data_view: "all_revisions",
         compare_data_view: "canonical"
       )
 
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "chart-data-management-chart-strip-component")
 
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query("[data-chart-data-view-comparison]")
-             |> LazyHTML.attribute("data-primary-data-view")
+    assert vue.component == "ChartDataManagementStrip"
+    assert vue.id == "chart-data-management-chart-strip-component"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert ["canonical"] =
-             document
-             |> LazyHTML.query("[data-chart-data-view-comparison]")
-             |> LazyHTML.attribute("data-compare-data-view")
+    presentation = vue.props["presentation"]
 
-    assert ["all_revisions", "corrected", "backfill_started", "recomputed", "backfill"] =
-             document
-             |> LazyHTML.query("[data-chart-data-management-strip] [data-data-management-badge]")
-             |> LazyHTML.attribute("data-data-management-badge")
+    assert presentation["root"] == %{
+             "class" => "flex flex-wrap gap-1",
+             "attrs" => %{
+               "data-chart-data-management-strip" => "",
+               "data-chart-data-view" => "all_revisions",
+               "data-chart-compare-data-view" => "canonical"
+             }
+           }
+
+    assert presentation["comparison"] == %{
+             "class" => "badge badge-xs badge-ghost border-base-300/80 font-mono",
+             "attrs" => %{
+               "data-chart-data-view-comparison" => "",
+               "data-primary-data-view" => "all_revisions",
+               "data-compare-data-view" => "canonical",
+               "title" => "Primary All revisions compared with Canonical"
+             },
+             "text" => "All revisions vs Canonical"
+           }
+
+    assert presentation["badges"] == [
+             %{
+               "key" => "primary-0",
+               "tag" => "span",
+               "class" =>
+                 "badge badge-xs badge-info badge-outline data-management-primary",
+               "attrs" => %{
+                 "data-data-management-badge" => "all_revisions",
+                 "data-data-management-kind" => "data_view",
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "",
+                 "title" => "all revisions"
+               },
+               "text" => "all revisions"
+             },
+             %{
+               "key" => "primary-1",
+               "tag" => "span",
+               "class" =>
+                 "badge badge-xs badge-info badge-outline data-management-primary",
+               "attrs" => %{
+                 "data-data-management-badge" => "corrected",
+                 "data-data-management-kind" => "data_view",
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "",
+                 "title" => "corrected"
+               },
+               "text" => "corrected"
+             },
+             %{
+               "key" => "primary-2",
+               "tag" => "button",
+               "class" =>
+                 "badge badge-xs cursor-pointer badge-warning data-management-primary",
+               "attrs" => %{
+                 "type" => "button",
+                 "phx-click" => "open_data_link",
+                 "phx-value-link-id" =>
+                   "direct:telemetry_backfill_lifecycle_event:backfill-event-1",
+                 "phx-value-target" => "telemetry_backfill_lifecycle_event",
+                 "phx-value-target-id" => "backfill-event-1",
+                 "phx-value-placement-id" => "badge-placement",
+                 "phx-value-timestamp-ms" => "1781568000000",
+                 "phx-value-realm" => "replay",
+                 "phx-value-data-view" => "all_revisions",
+                 "phx-value-data-source-id" => "questdb-replay",
+                 "phx-value-source-binding-id" => "binding-replay",
+                 "phx-value-time-mode" => "replay_run",
+                 "phx-value-time-axis" => "generation_time",
+                 "phx-value-replay-run-id" => "replay-run-1",
+                 "data-data-management-badge" => "backfill_started",
+                 "data-data-management-kind" => "workflow",
+                 "data-data-management-code" => "telemetry_backfill_started",
+                 "data-data-link-id" =>
+                   "direct:telemetry_backfill_lifecycle_event:backfill-event-1",
+                 "data-data-link-target" => "telemetry_backfill_lifecycle_event",
+                 "data-data-link-target-id" => "backfill-event-1",
+                 "data-data-link-realm" => "replay",
+                 "data-data-link-data-view" => "all_revisions",
+                 "data-data-link-data-source-id" => "questdb-replay",
+                 "data-data-link-source-binding-id" => "binding-replay",
+                 "data-data-link-time-mode" => "replay_run",
+                 "data-data-link-time-axis" => "generation_time",
+                 "data-data-link-replay-run-id" => "replay-run-1",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "Operator requested replay",
+                 "title" => "Backfill started - Operator requested replay"
+               },
+               "text" => "Backfill started"
+             },
+             %{
+               "key" => "compare-0",
+               "tag" => "span",
+               "class" =>
+                 "badge badge-xs badge-info badge-outline data-management-compare",
+               "attrs" => %{
+                 "data-data-management-badge" => "recomputed",
+                 "data-data-management-kind" => "data_view",
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "",
+                 "title" => "recomputed"
+               },
+               "text" => "recomputed"
+             },
+             %{
+               "key" => "compare-1",
+               "tag" => "span",
+               "class" =>
+                 "badge badge-xs badge-info badge-outline data-management-compare",
+               "attrs" => %{
+                 "data-data-management-badge" => "backfill",
+                 "data-data-management-kind" => "data_view",
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "",
+                 "title" => "backfill"
+               },
+               "text" => "backfill"
+             }
+           ]
+  end
+
+  test "chart_data_management_strip omits the island when the original strip is hidden" do
+    html =
+      render_component(&WidgetDataManagementComponents.chart_data_management_strip/1,
+        placement_id: "hidden",
+        compare_data_view: "   "
+      )
+
+    assert [] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#chart-data-management-hidden-component")
+             |> LazyHTML.attribute("id")
+  end
+
+  test "chart_data_management_strip preserves raw and fallback HEEx scalar semantics" do
+    html =
+      render_component(&WidgetDataManagementComponents.chart_data_management_strip/1,
+        placement_id: "scalars",
+        data:
+          data_with_badges([
+            %{kind: true, value: false, code: false, label: false, status: :unknown},
+            %{kind: 42, value: 7, code: 9, label: true, status: :unknown, summary: 11},
+            %{kind: nil, value: nil, code: true, label: nil, status: :unknown}
+          ]),
+        data_view: false,
+        compare_data_view: nil
+      )
+
+    vue = LiveVue.Test.get_vue(html, id: "chart-data-management-scalars-component")
+    presentation = vue.props["presentation"]
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert presentation["root"]["attrs"] == %{
+             "data-chart-data-management-strip" => "",
+             "data-chart-data-view" => "",
+             "data-chart-compare-data-view" => ""
+           }
+
+    assert presentation["comparison"] == nil
+
+    assert presentation["badges"] == [
+             %{
+               "key" => "primary-0",
+               "tag" => "span",
+               "class" => "badge badge-xs badge-ghost data-management-primary",
+               "attrs" => %{
+                 "data-data-management-kind" => "",
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "",
+                 "title" => "false"
+               },
+               "text" => "false"
+             },
+             %{
+               "key" => "primary-1",
+               "tag" => "span",
+               "class" => "badge badge-xs badge-ghost data-management-primary",
+               "attrs" => %{
+                 "data-data-management-badge" => "7",
+                 "data-data-management-kind" => "42",
+                 "data-data-management-code" => "9",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => "11",
+                 "title" => "true - 11"
+               },
+               "text" => "true"
+             },
+             %{
+               "key" => "primary-2",
+               "tag" => "span",
+               "class" => "badge badge-xs badge-ghost data-management-primary",
+               "attrs" => %{
+                 "data-data-management-code" => "",
+                 "data-data-management-workflow-run-id" => "",
+                 "data-data-management-workflow-job-id" => "",
+                 "data-data-management-workflow-job-status" => "",
+                 "data-data-management-workflow-job-failure" => "",
+                 "data-data-management-summary" => ""
+               },
+               "text" => ""
+             }
+           ]
   end
 
   test "badge code helpers summarize data-management values" do

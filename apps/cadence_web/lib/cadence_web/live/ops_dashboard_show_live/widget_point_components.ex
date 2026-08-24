@@ -78,6 +78,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
       data-dashboard-time-series-stage
     >
       <WidgetDataManagementComponents.chart_data_management_strip
+        placement_id={@placement_id}
         data={@data}
         backfill={@backfill}
         compare_data={@compare_data}

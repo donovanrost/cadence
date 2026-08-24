@@ -90,6 +90,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
     """
   end
 
+  attr :placement_id, :string, required: true
   attr :data, :any, default: nil
   attr :backfill, :any, default: nil
   attr :compare_data, :any, default: nil
@@ -98,44 +99,190 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
   attr :compare_data_view, :string, default: nil
 
   def chart_data_management_strip(assigns) do
-    assigns =
-      assigns
-      |> assign(:primary_badges, widget_data_management_badges([assigns.data, assigns.backfill]))
-      |> assign(
-        :compare_badges,
-        widget_data_management_badges([assigns.compare_data, assigns.compare_backfill])
-      )
+    primary_badges = widget_data_management_badges([assigns.data, assigns.backfill])
+    compare_badges = widget_data_management_badges([assigns.compare_data, assigns.compare_backfill])
+
+    presentation =
+      if primary_badges != [] or compare_badges != [] or present_text?(assigns.compare_data_view) do
+        chart_data_management_strip_dto(
+          primary_badges,
+          compare_badges,
+          assigns.data_view,
+          assigns.compare_data_view
+        )
+      end
+
+    assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
-    <div
-      :if={@primary_badges != [] or @compare_badges != [] or present_text?(@compare_data_view)}
-      class="flex flex-wrap gap-1"
-      data-chart-data-management-strip
-      data-chart-data-view={@data_view || ""}
-      data-chart-compare-data-view={@compare_data_view || ""}
-    >
-      <span
-        :if={present_text?(@compare_data_view)}
-        class="badge badge-xs badge-ghost border-base-300/80 font-mono"
-        data-chart-data-view-comparison
-        data-primary-data-view={@data_view || ""}
-        data-compare-data-view={@compare_data_view || ""}
-        title={"Primary #{data_view_label(@data_view)} compared with #{data_view_label(@compare_data_view)}"}
-      >
-        {data_view_label(@data_view)} vs {data_view_label(@compare_data_view)}
-      </span>
-      <.data_management_badge
-        :for={badge <- @primary_badges}
-        badge={badge}
-        class="data-management-primary"
-      />
-      <.data_management_badge
-        :for={badge <- @compare_badges}
-        badge={badge}
-        class="data-management-compare"
-      />
-    </div>
+    <.vue
+      :if={@presentation}
+      id={"chart-data-management-#{@placement_id}-component"}
+      v-component="ChartDataManagementStrip"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp chart_data_management_strip_dto(
+         primary_badges,
+         compare_badges,
+         data_view,
+         compare_data_view
+       ) do
+    %{
+      root: %{
+        class: "flex flex-wrap gap-1",
+        attrs:
+          compact_attrs(%{
+            "data-chart-data-management-strip" => direct_attr_value(true),
+            "data-chart-data-view" => fallback_empty_attr_value(data_view),
+            "data-chart-compare-data-view" => fallback_empty_attr_value(compare_data_view)
+          })
+      },
+      comparison: chart_data_view_comparison_dto(data_view, compare_data_view),
+      badges:
+        chart_data_management_badges_dto(primary_badges, "primary") ++
+          chart_data_management_badges_dto(compare_badges, "compare")
+    }
+  end
+
+  defp chart_data_view_comparison_dto(data_view, compare_data_view) do
+    if present_text?(compare_data_view) do
+      primary_label = data_view_label(data_view)
+      compare_label = data_view_label(compare_data_view)
+
+      %{
+        class: "badge badge-xs badge-ghost border-base-300/80 font-mono",
+        attrs:
+          compact_attrs(%{
+            "data-chart-data-view-comparison" => direct_attr_value(true),
+            "data-primary-data-view" => fallback_empty_attr_value(data_view),
+            "data-compare-data-view" => fallback_empty_attr_value(compare_data_view),
+            "title" =>
+              direct_attr_value("Primary #{primary_label} compared with #{compare_label}")
+          }),
+        text: "#{primary_label} vs #{compare_label}"
+      }
+    end
+  end
+
+  defp chart_data_management_badges_dto(badges, role) do
+    badges
+    |> Enum.with_index()
+    |> Enum.map(fn {badge, index} -> chart_data_management_badge_dto(badge, role, index) end)
+  end
+
+  defp chart_data_management_badge_dto(badge, role, index) do
+    actionable? = data_management_badge_actionable?(badge)
+    data_link_target = data_management_badge_data_link_target(badge)
+    data_link_id = data_management_badge_data_link_id(badge)
+    data_link_key = data_management_badge_data_link_key(badge)
+    summary = data_management_badge_summary(badge)
+    title = data_management_badge_title(badge)
+
+    %{
+      key: "#{role}-#{index}",
+      tag: if(actionable?, do: "button", else: "span"),
+      class:
+        [
+          if(actionable?, do: "badge badge-xs cursor-pointer", else: "badge badge-xs"),
+          data_management_badge_class(badge),
+          "data-management-#{role}"
+        ]
+        |> Enum.join(" "),
+      attrs:
+        chart_data_management_badge_attrs(
+          badge,
+          actionable?,
+          data_link_target,
+          data_link_id,
+          data_link_key,
+          summary,
+          title
+        ),
+      text: rendered_body(badge.label)
+    }
+  end
+
+  defp chart_data_management_badge_attrs(
+         badge,
+         true,
+         data_link_target,
+         data_link_id,
+         data_link_key,
+         summary,
+         title
+       ) do
+    badge
+    |> DataLinkAttrs.open(
+      link_id: data_link_key,
+      target: data_link_target,
+      target_id: data_link_id
+    )
+    |> Map.merge(%{
+      "type" => "button",
+      "phx-click" => "open_data_link",
+      "data-data-management-badge" => direct_attr_value(badge.value),
+      "data-data-management-kind" => direct_attr_value(badge.kind),
+      "data-data-management-code" => fallback_empty_attr_value(badge.code),
+      "data-data-link-id" => direct_attr_value(data_link_key),
+      "data-data-link-target" => direct_attr_value(data_link_target),
+      "data-data-link-target-id" => direct_attr_value(data_link_id),
+      "data-data-link-realm" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :realm)),
+      "data-data-link-data-view" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :data_view)),
+      "data-data-link-data-source-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :data_source_id)),
+      "data-data-link-source-binding-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :source_binding_id)),
+      "data-data-link-time-mode" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :time_mode)),
+      "data-data-link-time-axis" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :time_axis)),
+      "data-data-link-replay-run-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :replay_run_id)),
+      "data-data-management-workflow-run-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_run_id)),
+      "data-data-management-workflow-job-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_id)),
+      "data-data-management-workflow-job-status" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_status)),
+      "data-data-management-workflow-job-failure" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_failure)),
+      "data-data-management-summary" => fallback_empty_attr_value(summary),
+      "title" => direct_attr_value(title)
+    })
+    |> compact_attrs()
+  end
+
+  defp chart_data_management_badge_attrs(
+         badge,
+         false,
+         _data_link_target,
+         _data_link_id,
+         _data_link_key,
+         summary,
+         title
+       ) do
+    compact_attrs(%{
+      "data-data-management-badge" => direct_attr_value(badge.value),
+      "data-data-management-kind" => direct_attr_value(badge.kind),
+      "data-data-management-code" => fallback_empty_attr_value(badge.code),
+      "data-data-management-workflow-run-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_run_id)),
+      "data-data-management-workflow-job-id" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_id)),
+      "data-data-management-workflow-job-status" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_status)),
+      "data-data-management-workflow-job-failure" =>
+        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_failure)),
+      "data-data-management-summary" => fallback_empty_attr_value(summary),
+      "title" => direct_attr_value(title)
+    })
   end
 
   def data_management_badges(%{data_management: %{badges: badges}}) when is_list(badges),
@@ -248,6 +395,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
   defp data_management_badge_class(%{status: :attention}), do: "badge-warning badge-outline"
   defp data_management_badge_class(%{status: :info}), do: "badge-info badge-outline"
   defp data_management_badge_class(_badge), do: "badge-ghost"
+
+  defp direct_attr_value(value) when value in [nil, false], do: nil
+  defp direct_attr_value(true), do: ""
+  defp direct_attr_value(value), do: rendered_body(value)
+
+  defp fallback_empty_attr_value(value) when value in [nil, false, true], do: ""
+  defp fallback_empty_attr_value(value), do: rendered_body(value)
+
+  defp compact_attrs(attrs) do
+    attrs
+    |> Enum.reject(fn {_name, value} -> is_nil(value) end)
+    |> Map.new()
+  end
+
+  defp rendered_body(value), do: to_string(value)
 
   defp data_view_options do
     [

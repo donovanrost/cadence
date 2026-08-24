@@ -116,6 +116,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
     document = LazyHTML.from_fragment(html)
     vue = LiveVue.Test.get_vue(html, id: "tlm-chart-widget-1-spacecraft-1-7-component")
 
+    strip_vue =
+      LiveVue.Test.get_vue(html, id: "chart-data-management-placement-1-component")
+
     assert vue.component == "TelemetryChart"
     assert vue.ssr == false
     assert vue.class == "min-h-0 flex-1 overflow-hidden"
@@ -171,15 +174,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponentsTest do
 
     assert %{"kind" => "sample", "id" => "sample-1"} = vue.props["selected_ref"]
 
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query("[data-chart-data-view-comparison]")
-             |> LazyHTML.attribute("data-primary-data-view")
+    assert strip_vue.component == "ChartDataManagementStrip"
+    assert strip_vue.id == "chart-data-management-placement-1-component"
+    assert strip_vue.class == "contents"
+    refute strip_vue.ssr
+    assert strip_vue.handlers == %{}
+    assert strip_vue.props == Jason.decode!(Jason.encode!(strip_vue.props))
 
-    assert ["canonical"] =
-             document
-             |> LazyHTML.query("[data-chart-data-view-comparison]")
-             |> LazyHTML.attribute("data-compare-data-view")
+    comparison_attrs = strip_vue.props["presentation"]["comparison"]["attrs"]
+
+    assert comparison_attrs["data-primary-data-view"] == "all_revisions"
+    assert comparison_attrs["data-compare-data-view"] == "canonical"
   end
 
   test "constellation_health renders counts and per-spacecraft state dots" do
