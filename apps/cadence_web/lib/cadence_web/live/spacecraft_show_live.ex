@@ -2,8 +2,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.SpacecraftShowComponents, only: [type_binding_card: 1, applications_card: 1]
-
   alias Cadence.Applications.HostContext
   alias CadenceWeb.ApplicationInventory
   alias CadenceWeb.SpacecraftApplicationSummary
@@ -12,14 +10,18 @@ defmodule CadenceWeb.SpacecraftShowLive do
   @impl true
   def mount(_params, _session, socket) do
     spacecraft = socket.assigns.current_spacecraft
+    mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
-    mission_id = socket.assigns.current_mission.mission_id
 
     runtime_identity =
-      SpacecraftCommsReadiness.runtime_identity(organization_id, mission_id, spacecraft)
+      SpacecraftCommsReadiness.runtime_identity(
+        organization_id,
+        mission.mission_id,
+        spacecraft
+      )
 
-    type_binding = load_type_binding(organization_id, mission_id, spacecraft)
-    host_context = HostContext.spacecraft(mission_id, spacecraft.spacecraft_id)
+    type_binding = load_type_binding(organization_id, mission.mission_id, spacecraft)
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
     applications = load_applications(socket.assigns.current_scope, type_binding, host_context)
     application_summary = SpacecraftApplicationSummary.build(type_binding, applications)
 
@@ -27,12 +29,30 @@ defmodule CadenceWeb.SpacecraftShowLive do
      socket
      |> assign(:page_title, spacecraft.display_name)
      |> assign(:nav_item, :spacecraft)
-     |> assign(:applications_empty?, applications == [])
-     |> assign(:application_summary, application_summary)
-     |> assign(:runtime_identity, runtime_identity)
-     |> assign(:type_binding, type_binding)
-     |> stream_configure(:profile_applications, dom_id: &application_dom_id/1)
-     |> stream(:profile_applications, applications)}
+     |> assign(:spacecraft_page, page_dto(mission, spacecraft))
+     |> assign(
+       :profile_binding,
+       profile_binding_dto(type_binding, mission.mission_id, spacecraft.spacecraft_id)
+     )
+     |> assign(
+       :application_inventory,
+       application_inventory_dto(
+         type_binding,
+         applications,
+         mission.mission_id,
+         spacecraft.spacecraft_id
+       )
+     )
+     |> assign(
+       :workflow_cards,
+       workflow_cards_dto(
+         spacecraft,
+         runtime_identity,
+         application_summary,
+         mission.mission_id
+       )
+     )
+     |> assign(:spacecraft_overview, overview_dto(mission, spacecraft))}
   end
 
   defp load_applications(scope, nil, host_context) do
@@ -88,150 +108,202 @@ defmodule CadenceWeb.SpacecraftShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-    <div id="spacecraft-show-page" class="space-y-6">
-      <.page_header
-        title={@current_spacecraft.display_name}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {@current_spacecraft.display_name, nil}
-        ]}
-      >
-        <:title_suffix>
-          <span :if={@current_spacecraft.scid} class="mc-value-small text-base-content">
-            SCID {@current_spacecraft.scid}
-          </span>
-          <span :if={is_nil(@current_spacecraft.scid)} class="hud-label text-warning/70">
-            SCID not set
-          </span>
-        </:title_suffix>
-      </.page_header>
-
-      <.type_binding_card
-        mission_id={@current_mission.mission_id}
-        spacecraft_id={@current_spacecraft.spacecraft_id}
-        type_binding={@type_binding}
+      <.vue
+        id="spacecraft-show-component"
+        v-component="SpacecraftShow"
+        page={@spacecraft_page}
+        profile_binding={@profile_binding}
+        applications={@application_inventory}
+        workflow_cards={@workflow_cards}
+        overview={@spacecraft_overview}
+        v-ssr={false}
       />
-
-      <.applications_card
-        type_binding={@type_binding}
-        applications={@streams.profile_applications}
-        applications_empty?={@applications_empty?}
-        mission_id={@current_mission.mission_id}
-        spacecraft_id={@current_spacecraft.spacecraft_id}
-      />
-
-      <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-3">
-        <.workflow_card
-          id="spacecraft-overview-identity"
-          title="Identity"
-          value={identity_summary(@current_spacecraft, @runtime_identity)}
-          description="Values Cadence uses to recognize incoming bytes."
-          status={identity_status(@current_spacecraft, @runtime_identity)}
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-          }
-          action_label="Edit Identity"
-        />
-        <.workflow_card
-          id="spacecraft-overview-applications"
-          title="Applications"
-          value={@application_summary.status.label}
-          description={@application_summary.description}
-          status={@application_summary.status.tone}
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"
-          }
-          action_label={@application_summary.action_label}
-        />
-        <.workflow_card
-          id="spacecraft-overview-readiness"
-          title="Readiness"
-          value={overall_readiness_label(@current_spacecraft, @application_summary)}
-          description="Identity and application status at a glance."
-          status={overall_status(@current_spacecraft, @application_summary)}
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
-          }
-          action_label="Review"
-        />
-      </section>
-
-      <.overview_card
-        current_spacecraft={@current_spacecraft}
-        current_mission={@current_mission}
-      />
-    </div>
     </Layouts.app>
     """
   end
 
-  attr :current_spacecraft, :any, required: true
-  attr :current_mission, :any, required: true
-
-  defp overview_card(assigns) do
-    ~H"""
-    <.card title="Overview">
-      <div class="mt-3 grid gap-x-8 gap-y-1 md:grid-cols-2">
-        <.detail_row label="SCID" value={format_scid(@current_spacecraft.scid)} />
-        <.detail_row label="Display name" value={@current_spacecraft.display_name} />
-        <.detail_row label="Spacecraft ID">
-          <span class="text-xs">{@current_spacecraft.spacecraft_id}</span>
-        </.detail_row>
-        <div class="hud-data-row">
-          <span class="hud-data-label">Mission</span>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}"}
-            class="hud-data-value text-primary hover:underline"
-          >
-            {@current_mission.display_name}
-          </.link>
-        </div>
-        <div class="hud-data-row md:col-span-2">
-          <span class="hud-data-label">Organization ID</span>
-          <span class="hud-data-value text-xs">{@current_spacecraft.organization_id}</span>
-        </div>
-      </div>
-
-      <div :if={map_size(@current_spacecraft.metadata) > 0} class="pt-2">
-        <details class="text-sm">
-          <summary class="cursor-pointer hud-label hover:text-primary">
-            Metadata
-          </summary>
-          <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{Jason.encode!(@current_spacecraft.metadata, pretty: true)}</pre>
-        </details>
-      </div>
-    </.card>
-    """
+  defp page_dto(mission, spacecraft) do
+    %{
+      id: "spacecraft-show-page",
+      header: %{
+        title: spacecraft.display_name,
+        breadcrumbs: [
+          breadcrumb_dto(mission.display_name, ~p"/missions/#{mission.mission_id}"),
+          breadcrumb_dto("Spacecraft", ~p"/missions/#{mission.mission_id}/spacecraft"),
+          breadcrumb_dto(spacecraft.display_name, nil)
+        ],
+        title_suffix: %{
+          set: not is_nil(spacecraft.scid),
+          label: if(is_nil(spacecraft.scid), do: "SCID not set", else: "SCID #{spacecraft.scid}")
+        }
+      }
+    }
   end
 
-  attr :id, :string, required: true
-  attr :title, :string, required: true
-  attr :value, :string, required: true
-  attr :description, :string, required: true
-  attr :status, :atom, required: true
-  attr :navigate, :string, default: nil
-  attr :action_label, :string, default: nil
+  defp breadcrumb_dto(label, href), do: %{label: label, href: href}
 
-  defp workflow_card(assigns) do
-    ~H"""
-    <.card id={@id}>
-      <div class="flex items-start justify-between gap-3">
-        <p class="hud-label">{@title}</p>
-        <.status_badge status={@status} />
-      </div>
-      <h2 class="mt-3 text-base font-semibold">{@value}</h2>
-      <p class="mt-2 text-sm text-base-content/70">{@description}</p>
-      <.link
-        :if={@navigate}
-        navigate={@navigate}
-        class="mt-4 inline-flex text-sm text-primary hover:underline"
-      >
-        {@action_label} &rarr;
-      </.link>
-    </.card>
-    """
+  defp profile_binding_dto(nil, mission_id, spacecraft_id) do
+    %{
+      id: "spacecraft-profile-binding",
+      eyebrow: "Spacecraft Profile",
+      bound: false,
+      title: "No profile selected",
+      description: "Select a spacecraft profile to pin a reusable byte-interpretation contract.",
+      version: nil,
+      protocols: [],
+      status: status_dto(:attention, "Unbound"),
+      view_profile_href: nil,
+      profile_action: %{
+        label: "Select profile",
+        href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/identity"
+      }
+    }
   end
+
+  defp profile_binding_dto(type_binding, mission_id, spacecraft_id) do
+    pinned = type_binding.pinned
+
+    status =
+      if type_binding.drift? do
+        status_dto(:attention, "Drift · latest v#{type_binding.latest_version}")
+      else
+        status_dto(:ready, "Current")
+      end
+
+    %{
+      id: "spacecraft-profile-binding",
+      eyebrow: "Spacecraft Profile",
+      bound: true,
+      title: pinned.display_name,
+      description: nil,
+      version: "v#{pinned.version}",
+      protocols: [
+        %{label: "DOWN", value: to_string(pinned.downlink_protocol)},
+        %{label: "UP", value: to_string(pinned.uplink_protocol)}
+      ],
+      status: status,
+      view_profile_href:
+        ~p"/missions/#{mission_id}/spacecraft/profiles/#{pinned.spacecraft_type_id}",
+      profile_action: %{
+        label: "Change profile",
+        href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/identity"
+      }
+    }
+  end
+
+  defp application_inventory_dto(type_binding, applications, mission_id, spacecraft_id) do
+    %{
+      id: "spacecraft-applications",
+      list_id: "spacecraft-profile-applications",
+      visible: not is_nil(type_binding) or applications != [],
+      title: "Applications",
+      description:
+        if(is_nil(type_binding),
+          do:
+            "Retained spacecraft installations. Select a profile to restore desired application declarations.",
+          else:
+            "Platform applications enabled by this spacecraft's profile. Per-application configuration is set per spacecraft."
+        ),
+      empty: applications == [],
+      empty_state: "No applications enabled by this profile.",
+      rows: Enum.map(applications, &application_dto(&1, mission_id, spacecraft_id)),
+      view_action: %{
+        label: "View applications",
+        href: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/applications"
+      }
+    }
+  end
+
+  defp application_dto(application, mission_id, spacecraft_id) do
+    %{
+      id: application_dom_id(application),
+      application_key: application.application_key,
+      display_name: application.display_name,
+      status: status_dto(application.status.tone, application.status.label),
+      manage_href:
+        if(application.manageable?,
+          do:
+            ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/applications/#{application.application_key}",
+          else: nil
+        )
+    }
+  end
+
+  defp workflow_cards_dto(spacecraft, runtime_identity, application_summary, mission_id) do
+    spacecraft_id = spacecraft.spacecraft_id
+
+    [
+      workflow_card_dto(
+        "spacecraft-overview-identity",
+        "Identity",
+        identity_summary(spacecraft, runtime_identity),
+        "Values Cadence uses to recognize incoming bytes.",
+        identity_status(spacecraft, runtime_identity),
+        "Edit Identity",
+        ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/identity"
+      ),
+      workflow_card_dto(
+        "spacecraft-overview-applications",
+        "Applications",
+        application_summary.status.label,
+        application_summary.description,
+        application_summary.status.tone,
+        application_summary.action_label,
+        ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/applications"
+      ),
+      workflow_card_dto(
+        "spacecraft-overview-readiness",
+        "Readiness",
+        overall_readiness_label(spacecraft, application_summary),
+        "Identity and application status at a glance.",
+        overall_status(spacecraft, application_summary),
+        "Review",
+        ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/readiness"
+      )
+    ]
+  end
+
+  defp workflow_card_dto(id, title, value, description, status, action_label, action_href) do
+    %{
+      id: id,
+      title: title,
+      value: value,
+      description: description,
+      status: status_dto(status),
+      action: %{label: action_label, href: action_href}
+    }
+  end
+
+  defp overview_dto(mission, spacecraft) do
+    %{
+      title: "Overview",
+      scid: %{label: "SCID", value: format_scid(spacecraft.scid)},
+      display_name: %{label: "Display name", value: spacecraft.display_name},
+      spacecraft_id: %{label: "Spacecraft ID", value: spacecraft.spacecraft_id},
+      mission: %{
+        label: "Mission",
+        value: mission.display_name,
+        href: ~p"/missions/#{mission.mission_id}"
+      },
+      organization_id: %{
+        label: "Organization ID",
+        value: spacecraft.organization_id
+      },
+      metadata_json: metadata_json(spacecraft.metadata)
+    }
+  end
+
+  defp metadata_json(metadata) when map_size(metadata) == 0, do: nil
+  defp metadata_json(metadata), do: Jason.encode!(metadata, pretty: true)
+
+  defp status_dto(status, label \\ nil) do
+    %{tone: Atom.to_string(status), label: label || status_label(status)}
+  end
+
+  defp status_label(:ready), do: "Ready"
+  defp status_label(:attention), do: "Needs Work"
+  defp status_label(:blocked), do: "Missing"
+  defp status_label(:info), do: "Setup"
 
   defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
   defp identity_status(_spacecraft, nil), do: :attention
