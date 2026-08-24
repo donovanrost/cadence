@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
 
   alias CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents
   alias CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentation
+  alias CadenceWeb.OpsDashboardShowLive.DashboardEditorConflictComponents
   alias CadenceWeb.OpsDashboardShowLive.DashboardSectionEditing
   alias CadenceWeb.OpsDashboardShowLive.FormComponents
   alias CadenceWeb.OpsDashboardShowLive.HealthSnapshotEvents
@@ -787,22 +788,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
         dashboard_degraded?={@render_model.dashboard_warning_props.degraded?}
         dashboard_health={@render_model.dashboard_health}
       />
-      <div
-        :if={@editor_conflict}
-        id="dashboard-editor-conflict"
-        class="flex shrink-0 items-center gap-3 border-b border-error/40 bg-error/10 px-3 py-2 text-sm"
-        data-editor-starting-version={@editor_conflict.starting_version}
-        data-editor-current-version={@editor_conflict.current_version}
-      >
-        <.icon name="hero-exclamation-triangle" class="h-4 w-4 shrink-0 text-error" />
-        <p class="min-w-0 flex-1">
-          Version {@editor_conflict.current_version} was saved elsewhere. Your staged candidate is
-          intact; reload before continuing to avoid an accidental overwrite.
-        </p>
-        <.button id="dashboard-editor-reload" variant={:ghost} size={:xs} phx-click="reload_editor">
-          Reload latest
-        </.button>
-      </div>
+      <DashboardEditorConflictComponents.dashboard_editor_conflict conflict={@editor_conflict} />
       <.vue
         id="dashboard-canvas-component"
         v-component="DashboardCanvas"
