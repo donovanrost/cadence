@@ -48,45 +48,163 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/provider-accounts/new")
 
-    assert has_element?(view, "#provider-account-form")
-    assert has_element?(view, "#provider-account-boundary-note")
+    assert has_element?(view, "#provider-account-new-component")
+    refute has_element?(view, "#provider-account-form")
 
-    assert has_element?(
-             view,
-             "#provider-connector-summary[data-provider-type='simulator'][data-provider-client='simulator_http']"
-           )
+    vue = provider_account_new_vue(view)
 
-    assert has_element?(
-             view,
-             "#provider-connector-configuration[data-extension-presentation='provider_connector']"
-           )
+    assert vue.component == "ProviderAccountNew"
+    assert vue.class == "max-w-3xl space-y-6"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert has_element?(view, "#provider-account-control-plane-section-fields")
-    assert has_element?(view, "#provider-connector-configuration-input-base-url")
-    assert has_element?(view, "select[name='provider_account[backend_type]']")
-    assert has_element?(view, "input[name='provider_account[backend_key]']")
-    refute has_element?(view, "input[name='provider_account[secret_material]']")
-    refute has_element?(view, "input[type='password']")
+    assert vue.handlers == %{
+             "save" => Phoenix.LiveView.JS.push("save"),
+             "validate" => Phoenix.LiveView.JS.push("validate")
+           }
 
-    assert {:error, {:live_redirect, %{to: target}}} =
-             view
-             |> form("#provider-account-form",
-               provider_account: %{
-                 display_name: "Local Ground Network Simulator",
-                 provider_type: "simulator",
-                 base_url: "http://127.0.0.1:4101",
-                 region_ref: "local",
-                 environment_ref: "demo-alpha",
-                 event_ingestion_mode: "polling",
-                 backend_type: "external",
-                 backend_key: "providers/local-simulator",
-                 allowed_services: "telemetry, tracking",
-                 allowed_directions: "downlink",
-                 allowed_stations: "station-alpha",
-                 max_quota: "50"
-               }
-             )
-             |> render_submit()
+    assert vue.props["page"] == %{
+             "id" => "provider-account-new-page",
+             "heading" => "Register Provider Account",
+             "subtitle" =>
+               "Create one organization-owned control-plane identity. Mission access is granted separately.",
+             "breadcrumbs" => [
+               %{"label" => "Provider Accounts", "href" => "/provider-accounts"},
+               %{"label" => "New", "href" => nil}
+             ]
+           }
+
+    form_dto = vue.props["form"]
+    assert form_dto["id"] == "provider-account-form"
+    assert form_dto["hidden_field_keys"] == ["provider_account_id", "credential_ref"]
+    assert form_dto["connector"]["boundary"]["id"] == "provider-account-boundary-note"
+
+    assert form_dto["connector"]["options"] == [
+             %{
+               "label" => "Ground Network Simulator",
+               "value" => "simulator",
+               "disabled" => false
+             }
+           ]
+
+    assert form_dto["connector"]["selected"] == %{
+             "id" => "provider-connector-summary",
+             "form_value" => "simulator",
+             "provider_type" => "simulator",
+             "client_key" => "simulator_http",
+             "label" => "Ground Network Simulator",
+             "description" =>
+               "Cadence simulator control plane for local scheduling, profile sync, and provider events."
+           }
+
+    configuration = form_dto["connector"]["configuration"]
+    assert configuration["id"] == "provider-connector-configuration"
+    assert configuration["kind"] == "provider_connector"
+
+    assert [control_plane] = configuration["sections"]
+    assert control_plane["id"] == "provider-account-control-plane-section"
+    assert control_plane["fields_id"] == "provider-account-control-plane-section-fields"
+
+    assert Enum.map(control_plane["fields"], & &1["key"]) == [
+             "base_url",
+             "region_ref",
+             "environment_ref",
+             "event_ingestion_mode"
+           ]
+
+    assert Enum.find(control_plane["fields"], &(&1["key"] == "base_url")) == %{
+             "key" => "base_url",
+             "wrapper_id" => "provider-connector-configuration-field-base-url",
+             "id" => "provider-connector-configuration-input-base-url",
+             "name" => "provider_account[base_url]",
+             "type" => "url",
+             "label" => "Provider API Base URL",
+             "required" => true,
+             "placeholder" => "http://127.0.0.1:4101",
+             "help" => nil,
+             "step" => nil,
+             "min" => nil,
+             "max" => nil,
+             "default" => "http://127.0.0.1:4101",
+             "value" => "http://127.0.0.1:4101",
+             "options" => [],
+             "reference" => nil,
+             "visible_when" => nil
+           }
+
+    fields = provider_account_fields(vue)
+    backend_type = Enum.find(fields, &(&1["key"] == "backend_type"))
+    backend_key = Enum.find(fields, &(&1["key"] == "backend_key"))
+
+    assert backend_type["type"] == "select"
+    assert backend_type["name"] == "provider_account[backend_type]"
+    assert backend_key["type"] == "text"
+    assert backend_key["name"] == "provider_account[backend_key]"
+    refute Enum.any?(fields, &(&1["name"] == "provider_account[secret_material]"))
+    refute Enum.any?(fields, &(&1["type"] == "password"))
+
+    render_hook(view, "validate", %{
+      "provider_account" =>
+        provider_account_params(vue, %{
+          "display_name" => "Local Ground Network Simulator",
+          "provider_type" => "unsupported-provider",
+          "base_url" => "http://127.0.0.1:4201",
+          "environment_ref" => "demo-alpha",
+          "event_ingestion_mode" => "hybrid",
+          "backend_type" => "env",
+          "backend_key" => "CADENCE_LOCAL_SIMULATOR_TOKEN"
+        })
+    })
+
+    validated_vue = provider_account_new_vue(view)
+    validated_fields = provider_account_fields(validated_vue)
+
+    assert validated_vue.props["form"]["connector"]["selected"]["form_value"] == "simulator"
+    assert Enum.find(validated_fields, &(&1["key"] == "provider_type"))["value"] == "simulator"
+
+    validated_backend_key = Enum.find(validated_fields, &(&1["key"] == "backend_key"))
+    assert validated_backend_key["label"] == "Environment Variable"
+    assert validated_backend_key["placeholder"] == "CADENCE_SIMULATOR_TOKEN"
+    assert validated_backend_key["value"] == "CADENCE_LOCAL_SIMULATOR_TOKEN"
+
+    validated_base_url = Enum.find(validated_fields, &(&1["key"] == "base_url"))
+    assert validated_base_url["value"] == "http://127.0.0.1:4201"
+
+    invalid_provider_params =
+      provider_account_params(validated_vue, %{"provider_type" => "unsupported-provider"})
+
+    render_hook(view, "save", %{"provider_account" => invalid_provider_params})
+    assert has_element?(view, "#flash-error[role='alert']", "Could not register provider account")
+    assert ProviderAccounts.list_for_system(organization.organization_id) == []
+
+    invalid_backend_params =
+      provider_account_params(provider_account_new_vue(view), %{
+        "provider_type" => "simulator",
+        "backend_type" => "inline"
+      })
+
+    render_hook(view, "save", %{"provider_account" => invalid_backend_params})
+    assert has_element?(view, "#flash-error[role='alert']", "Select a supported secret backend")
+    assert ProviderAccounts.list_for_system(organization.organization_id) == []
+
+    valid_params =
+      provider_account_params(provider_account_new_vue(view), %{
+        "display_name" => "Local Ground Network Simulator",
+        "provider_type" => "simulator",
+        "base_url" => "http://127.0.0.1:4101",
+        "region_ref" => "local",
+        "environment_ref" => "demo-alpha",
+        "event_ingestion_mode" => "polling",
+        "backend_type" => "external",
+        "backend_key" => "providers/local-simulator",
+        "allowed_services" => "telemetry, tracking",
+        "allowed_directions" => "downlink",
+        "allowed_stations" => "station-alpha",
+        "max_quota" => "50"
+      })
+
+    render_hook(view, "save", %{"provider_account" => valid_params})
+    {target, _flash} = assert_redirect(view)
 
     assert target =~ "/provider-accounts/"
     assert [{account, version}] = ProviderAccounts.list_for_system(organization.organization_id)
@@ -268,5 +386,23 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
       "client_reference" => "cadence-contact-web",
       "data" => %{}
     }
+  end
+
+  defp provider_account_new_vue(view) do
+    LiveVue.Test.get_vue(view, id: "provider-account-new-component")
+  end
+
+  defp provider_account_fields(vue) do
+    form = vue.props["form"]
+
+    Map.values(form["fields"]) ++
+      Enum.flat_map(form["connector"]["configuration"]["sections"], & &1["fields"])
+  end
+
+  defp provider_account_params(vue, overrides) do
+    vue
+    |> provider_account_fields()
+    |> Map.new(&{&1["key"], &1["value"]})
+    |> Map.merge(overrides)
   end
 end
