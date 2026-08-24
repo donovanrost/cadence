@@ -110,7 +110,10 @@ defmodule CadenceWeb.Components.OpsShell do
     <.vue
       id="ops-nav-rail-component"
       v-component="OpsNavRail"
-      props={@ops_nav_props}
+      groups={@ops_nav_props["groups"]}
+      dashboard_groups={@ops_nav_props["dashboard_groups"]}
+      empty_state={@ops_nav_props["empty_state"]}
+      new_dashboard={@ops_nav_props["new_dashboard"]}
       v-ssr={false}
       class="contents"
     />

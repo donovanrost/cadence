@@ -5,11 +5,13 @@ defmodule CadenceWeb.OpsNavTestSupport do
 
   def ops_nav_vue(renderable) do
     vue = LiveVue.Test.get_vue(renderable, id: "ops-nav-rail-component")
+    prop_keys = vue.props |> Map.keys() |> Enum.sort()
 
     assert vue.component == "OpsNavRail"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.slots == %{}
+    assert prop_keys == ~w(dashboard_groups empty_state groups new_dashboard)
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue
