@@ -4,6 +4,7 @@ import {reactive, watch} from "vue"
 type Header = {
   id: string
   back: {
+    id: string
     label: string
     icon: string
   }
@@ -16,6 +17,7 @@ type PolicyRequired = {
   icon: string
   title: string
   copy: string
+  action_id: string
   action_label: string
 }
 
@@ -160,6 +162,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
     <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
       <div class="mx-auto max-w-5xl">
         <a
+          :id="header.back.id"
           :href="paths.planning"
           data-phx-link="redirect"
           data-phx-link-state="push"
@@ -280,6 +283,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
             {{ policy_state.required.copy }}
           </p>
           <a
+            :id="policy_state.required.action_id"
             :href="paths.policy"
             data-phx-link="redirect"
             data-phx-link-state="push"

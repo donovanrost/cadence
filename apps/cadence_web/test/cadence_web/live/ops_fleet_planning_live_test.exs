@@ -64,6 +64,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              "header" => %{
                "id" => "ops-fleet-planning-new-page",
                "back" => %{
+                 "id" => "fleet-planning-back-link",
                  "icon" => "hero-arrow-left",
                  "label" => "Fleet planning"
                },
@@ -83,6 +84,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                  "title" => "An approved policy is required",
                  "copy" =>
                    "Provider searches remain stopped until an organization administrator approves the fleet boundary.",
+                 "action_id" => "fleet-planning-open-policy-link",
                  "action_label" => "Open policy"
                }
              },
@@ -292,8 +294,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                    "id" => "fleet-run-include-recurring",
                    "name" => "fleet_run[include_recurring]",
                    "type" => "checkbox",
-                   "label" =>
-                     "Materialize recurring Requirement Templates in this horizon",
+                   "label" => "Materialize recurring Requirement Templates in this horizon",
                    "value" => true,
                    "errors" => []
                  }
@@ -311,6 +312,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              "header" => %{
                "id" => "ops-fleet-planning-new-page",
                "back" => %{
+                 "id" => "fleet-planning-back-link",
                  "icon" => "hero-arrow-left",
                  "label" => "Fleet planning"
                },

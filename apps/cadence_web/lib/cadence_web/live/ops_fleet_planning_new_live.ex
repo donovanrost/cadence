@@ -93,7 +93,11 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
   defp header_dto do
     %{
       id: "ops-fleet-planning-new-page",
-      back: %{label: "Fleet planning", icon: "hero-arrow-left"},
+      back: %{
+        id: "fleet-planning-back-link",
+        label: "Fleet planning",
+        icon: "hero-arrow-left"
+      },
       title: "Plan a mission horizon",
       copy:
         "Choose only the time boundary. The active policy supplies concurrency, resource, quota, budget, scoring, repair, and automation rules."
@@ -109,6 +113,7 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
          title: "An approved policy is required",
          copy:
            "Provider searches remain stopped until an organization administrator approves the fleet boundary.",
+         action_id: "fleet-planning-open-policy-link",
          action_label: "Open policy"
        }
      }, nil}
