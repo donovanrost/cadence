@@ -204,40 +204,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
                ~s(#widget-#{widget.widget_id} [data-warning-codes*="unsupported_source_capability"])
              )
 
-      assert has_element?(
-               view,
-               ~s([data-engine-warning="unsupported_source_capability"]),
-               "Unsupported source capability"
-             )
+      warning_component_id = "widget-#{widget.widget_id}-engine-warning-0-component"
+      warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
+      assert warning_vue.component == "WidgetWarning"
+      assert warning_vue.id == warning_component_id
+      assert warning_vue.ssr == false
+      warning = warning_vue.props["presentation"]
 
-      assert has_element?(
-               view,
-               ~s([data-engine-warning-detail="unsupported_source_capability"] [data-warning-detail="Requested sampling"]),
-               "raw_series"
-             )
+      assert warning["trigger"]["badge"]["attrs"]["data-engine-warning"] ==
+               "unsupported_source_capability"
 
-      assert has_element?(
-               view,
-               ~s([data-engine-warning-detail="unsupported_source_capability"] [data-warning-detail="Supported sampling 1"]),
-               "latest"
-             )
+      assert warning["trigger"]["badge"]["text"] == "Unsupported source capability"
 
-      assert has_element?(
-               view,
-               ~s([data-engine-warning-detail="unsupported_source_capability"] [data-warning-detail="Source execution action"]),
+      details = warning["body"]["details"]["rows"]
+
+      assert detail_text(details, "Requested sampling") == "raw_series"
+      assert detail_text(details, "Supported sampling 1") == "latest"
+
+      assert detail_text(details, "Source execution action") ==
                "inspect_source_capability"
-             )
 
-      assert has_element?(
-               view,
-               ~s([data-engine-warning-detail="unsupported_source_capability"] [data-warning-link-target="telemetry point"][data-warning-link-id="HK.counter"][phx-value-data-source-id][phx-value-source-binding-id])
-             )
+      unsupported_link =
+        Enum.find(warning["body"]["links"]["rows"], fn link ->
+          link["attrs"]["data-warning-link-target"] == "telemetry point" and
+            link["attrs"]["data-warning-link-id"] == "HK.counter"
+        end)
 
-      view
-      |> element(
-        ~s(#widget-#{widget.widget_id} [data-engine-warning-detail="unsupported_source_capability"] [data-warning-link-target="telemetry point"][data-warning-link-id="HK.counter"][phx-value-data-source-id][phx-value-source-binding-id])
+      assert unsupported_link
+      assert Map.has_key?(unsupported_link["attrs"], "phx-value-data-source-id")
+      assert Map.has_key?(unsupported_link["attrs"], "phx-value-source-binding-id")
+
+      render_hook(
+        view,
+        unsupported_link["attrs"]["phx-click"],
+        event_params(unsupported_link["attrs"])
       )
-      |> render_click()
 
       unsupported_link_path = assert_patch(view)
       assert unsupported_link_path =~ "panel=data_link"
@@ -263,5 +264,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
 
       stop_dashboard_view(view)
     end
+  end
+
+  defp detail_text(details, label) do
+    case Enum.find(details, &(&1["value"]["attrs"]["data-warning-detail"] == label)) do
+      nil -> nil
+      detail -> detail["value"]["text"]
+    end
+  end
+
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
   end
 end

@@ -52,11 +52,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
     assert has_element?(view, ~s|#dashboard-data-view option[value="all_revisions"]|)
     assert has_element?(view, ~s|#dashboard-compare-data-view option[value="canonical"]|)
 
-    assert has_element?(
-             view,
-             ~s(#widget-#{runtime_item.widget.widget_id} [data-engine-warning="all_revisions_view"]),
-             "All revisions"
-           )
+    warning_component_id =
+      "widget-#{runtime_item.widget.widget_id}-engine-warning-0-component"
+
+    warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
+    assert warning_vue.component == "WidgetWarning"
+    assert warning_vue.id == warning_component_id
+    assert warning_vue.ssr == false
+
+    assert warning_vue.props["presentation"]["trigger"]["badge"] == %{
+             "attrs" => %{
+               "data-engine-warning" => "all_revisions_view",
+               "title" => "Telemetry source is showing all observation revisions"
+             },
+             "class" => "badge badge-xs cursor-pointer badge-warning",
+             "text" => "All revisions"
+           }
 
     assert has_element?(
              view,

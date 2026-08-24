@@ -192,11 +192,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#widget-#{widget.widget_id} [data-warning-codes*="missing_source_binding"])
              )
 
-      view
-      |> element(
-        ~s(#widget-#{widget.widget_id} [data-warning-evidence-open][phx-value-warning-code="missing_source_binding"][phx-value-logical-source="limits"][phx-value-realm="rehearsal"][phx-value-source-request-id])
+      warning_component_id = "widget-#{widget.widget_id}-engine-warning-0-component"
+      warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
+      assert warning_vue.component == "WidgetWarning"
+      assert warning_vue.id == warning_component_id
+      assert warning_vue.ssr == false
+      warning = warning_vue.props["presentation"]
+      evidence_button = warning["body"]["evidence_button"]
+
+      assert evidence_button["attrs"]["data-warning-evidence-open"] == ""
+      assert evidence_button["attrs"]["phx-value-warning-code"] == "missing_source_binding"
+      assert evidence_button["attrs"]["phx-value-logical-source"] == "limits"
+      assert evidence_button["attrs"]["phx-value-realm"] == "rehearsal"
+      assert Map.has_key?(evidence_button["attrs"], "phx-value-source-request-id")
+
+      render_hook(
+        view,
+        evidence_button["attrs"]["phx-click"],
+        event_params(evidence_button["attrs"])
       )
-      |> render_click()
 
       warning_evidence_path = assert_patch(view)
       assert warning_evidence_path =~ "panel=evidence"
@@ -281,5 +295,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
       refute cleared_source_evidence_path =~ "panel="
       refute cleared_source_evidence_path =~ "selected_evidence_kind="
     end
+  end
+
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
   end
 end

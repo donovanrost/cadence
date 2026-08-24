@@ -45,20 +45,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWarningComponentsTest do
              |> LazyHTML.query("#dashboard-engine-warnings")
              |> LazyHTML.attribute("data-warning-codes")
 
-    warning =
-      LazyHTML.query(document, ~s([data-engine-warning-detail="incomplete_limit_evaluation"]))
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-engine-warning-0-component")
+    assert vue.component == "WidgetWarning"
+    assert vue.id == "dashboard-engine-warning-0-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    warning = vue.props["presentation"]
 
     assert [
              "observed=limit_event_receipt_time requested_time_axis=receipt_time requested_time_mode=archive"
-           ] = LazyHTML.attribute(warning, "data-limit-selected-clock")
+           ] == [warning["overlay"]["attrs"]["data-limit-selected-clock"]]
 
-    assert ["sample-missing"] = LazyHTML.attribute(warning, "data-limit-missing-samples")
-    assert ["recomputed"] = LazyHTML.attribute(warning, "data-limit-mode")
+    assert warning["overlay"]["attrs"]["data-limit-missing-samples"] == "sample-missing"
+    assert warning["overlay"]["attrs"]["data-limit-mode"] == "recomputed"
 
-    assert ["Selected clock"] =
-             document
-             |> LazyHTML.query(~s([data-warning-detail="Selected clock"]))
-             |> LazyHTML.attribute("data-warning-detail")
+    assert ["Selected clock"] ==
+             Enum.map(
+               warning["body"]["details"]["rows"],
+               & &1["value"]["attrs"]["data-warning-detail"]
+             )
   end
 
   test "dashboard warnings assign unique popover ids to repeated warning codes" do
@@ -82,11 +87,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWarningComponentsTest do
         warnings: [repeated_warning, repeated_warning]
       )
 
-    document = LazyHTML.from_fragment(html)
+    warnings =
+      for index <- 0..1 do
+        component_id = "dashboard-engine-warning-#{index}-component"
+        vue = LiveVue.Test.get_vue(html, id: component_id)
+        assert vue.component == "WidgetWarning"
+        assert vue.id == component_id
+        assert vue.ssr == false
+        vue.props["presentation"]
+      end
 
-    assert ["dashboard-engine-warning-0", "dashboard-engine-warning-1"] =
-             document
-             |> LazyHTML.query(~s([data-engine-warning-detail="unknown_limit_definition"]))
-             |> LazyHTML.attribute("id")
+    assert Enum.map(warnings, & &1["overlay"]["id"]) == [
+             "dashboard-engine-warning-0",
+             "dashboard-engine-warning-1"
+           ]
+
+    assert Enum.map(warnings, & &1["overlay"]["attrs"]["data-engine-warning-detail"]) == [
+             "unknown_limit_definition",
+             "unknown_limit_definition"
+           ]
   end
 end

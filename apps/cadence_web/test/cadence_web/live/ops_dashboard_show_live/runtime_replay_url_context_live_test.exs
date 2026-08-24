@@ -163,11 +163,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#dashboard-historical-workflow-request-button[href*="/ops/data-operations"][href*="dashboard_time_mode=replay_run"][href*="dashboard_replay_run_id=replay_run_001"][href*="dashboard_limit_mode=observed"])
            )
 
-    view
-    |> element(
-      ~s(#widget-#{replay_widget.widget_id} [data-engine-warning-detail="capability_fallback"] [data-warning-link-target="telemetry point"])
+    warning_component_id = "widget-#{replay_widget.widget_id}-engine-warning-0-component"
+    warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
+    assert warning_vue.component == "WidgetWarning"
+    assert warning_vue.id == warning_component_id
+    assert warning_vue.ssr == false
+    warning = warning_vue.props["presentation"]
+
+    assert warning["overlay"]["attrs"]["data-engine-warning-detail"] == "capability_fallback"
+
+    capability_link =
+      Enum.find(warning["body"]["links"]["rows"], fn link ->
+        link["attrs"]["data-warning-link-target"] == "telemetry point"
+      end)
+
+    assert capability_link
+
+    render_hook(
+      view,
+      capability_link["attrs"]["phx-click"],
+      event_params(capability_link["attrs"])
     )
-    |> render_click()
 
     assert has_element?(
              view,
@@ -218,5 +234,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              view,
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-engine-time-mode="live"][data-engine-snapshot="false"][data-engine-live-append-eligible="true"])
            )
+  end
+
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
   end
 end
