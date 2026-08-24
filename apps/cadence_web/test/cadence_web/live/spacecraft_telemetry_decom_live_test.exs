@@ -371,37 +371,74 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
              "#spacecraft-application-host[data-application-key='telemetry_decom'][data-surface-id='packet_bindings'][data-renderer='declarative']"
            )
 
-    assert has_element?(view, "#application-surface-navigation")
-    assert has_element?(view, "#packet-bindings-surface[data-activation-state='configured']")
-    assert has_element?(view, "#packet-bindings-form")
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    assert vue.component == "ApplicationHost"
+    assert vue.handlers["application_form_change"] == JS.push("application_form_change")
+    assert vue.handlers["application_action"] == JS.push("application_action")
+    assert vue.handlers["application_table_page"] == JS.push("application_table_page")
 
-    assert has_element?(
-             view,
-             "#packet-binding-groups details[data-apid='42'][data-state='available']"
-           )
+    assert vue.props["navigation"]["id"] == "application-surface-navigation"
 
-    refute has_element?(
-             view,
-             "#packet-binding-groups input[name='application_action[selected_packet_ids][]'][checked]"
-           )
+    bindings = vue.props["declarative_surface"]["packet_bindings"]
+    assert bindings["id"] == "packet-bindings-surface"
+    assert bindings["activation_state"] == "configured"
+    assert bindings["form"]["id"] == "packet-bindings-form"
+    assert bindings["form"]["selected_packet_ids"] == []
+    assert bindings["instructions"]["shared_input"] =~ "another application reading this APID"
 
-    assert has_element?(
-             view,
-             "#packet-binding-groups tr[data-resource-kind='field'][data-compatibility='compatible']",
-             "mode"
-           )
+    assert bindings["instructions"]["save_status"] =~
+             "Mission activation remains separately governed"
 
-    view
-    |> form("#packet-bindings-form", %{
-      "application_action" => %{"selected_packet_ids" => [packet.packet_definition_id]}
+    assert bindings["action"] == %{
+             "id" => "packet-bindings-submit",
+             "action_id" => "save_packet_bindings",
+             "label" => "Save packet bindings",
+             "version" => 1,
+             "intent" => "configuration",
+             "scope" => "spacecraft",
+             "effect" => "durable",
+             "execution" => "immediate",
+             "confirmation" => nil,
+             "disabled" => false
+           }
+
+    refute Jason.encode!(%{"props" => vue.props, "streams_diff" => vue.streams_diff}) =~
+             "operate_mission"
+
+    groups =
+      for ["upsert", path, group] <- vue.streams_diff,
+          String.starts_with?(path, "/application_surface_packet_groups/"),
+          do: group
+
+    assert [group] = groups
+    assert group["__dom_id"] =~ "packet-binding-group-"
+    assert group["apid"] == 42
+    assert group["state"] == "available"
+    refute group["selected"]
+
+    assert Enum.any?(group["resources"], fn resource ->
+             resource["resource_kind"] == "field" and
+               resource["compatibility"] == "compatible" and resource["path"] =~ "mode"
+           end)
+
+    action_params =
+      Map.new(bindings["form"]["hidden_fields"], &{&1["field"], &1["value"]})
+      |> Map.put(
+        bindings["form"]["source_endpoint"]["field"],
+        bindings["form"]["source_endpoint"]["value"]
+      )
+      |> Map.put("selected_packet_ids", [packet.packet_definition_id])
+
+    render_hook(view, "application_action", %{
+      "action-id" => bindings["action"]["action_id"],
+      "application_action" => action_params
     })
-    |> render_submit()
 
-    assert has_element?(
-             view,
-             "#application-action-feedback[data-kind='success'][data-code='action_completed']",
-             "Packet bindings saved"
-           )
+    saved_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    feedback = saved_vue.props["declarative_surface"]["action_feedback"]
+    assert feedback["kind"] == "success"
+    assert feedback["code"] == "action_completed"
+    assert feedback["message"] =~ "Packet bindings saved"
 
     scope = installation_read_scope(org.organization_id)
     host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
@@ -418,8 +455,19 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     assert configuration.configuration_version == 1
     assert Enum.map(configuration.bindings, & &1.apid) == [42]
-    assert has_element?(view, "#packet-bindings-surface[data-activation-state='configured']")
-    assert has_element?(view, "#packet-binding-groups details[data-state='selected']")
+
+    saved_bindings = saved_vue.props["declarative_surface"]["packet_bindings"]
+    assert saved_bindings["activation_state"] == "configured"
+
+    saved_groups =
+      for ["upsert", path, group] <- saved_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_packet_groups/"),
+          do: group
+
+    assert Enum.any?(saved_groups, &(&1["state"] == "selected"))
+
+    contract = %{"props" => saved_vue.props, "streams_diff" => saved_vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
   test "renders compiler findings through the host diagnostic contract" do
@@ -457,6 +505,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         conn,
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
+
+    host_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    assert host_vue.component == "ApplicationHost"
+    assert host_vue.props["host"]["renderer"] == "trusted"
+    assert host_vue.props["declarative_surface"] == nil
+    assert host_vue.handlers == %{}
 
     diagnostics = telemetry_decom_vue(view).props["preview"]["diagnostics"]
 
@@ -773,8 +827,21 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
       )
 
-    assert has_element?(view, "#packet-binding-groups details[data-apid='42']", "HEALTH")
-    assert has_element?(view, "#packet-binding-groups tr[data-resource-kind='field']", "mode")
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+
+    groups =
+      for ["upsert", path, group] <- vue.streams_diff,
+          String.starts_with?(path, "/application_surface_packet_groups/"),
+          do: group
+
+    assert [group] = groups
+    assert group["apid"] == 42
+    assert group["packet_name"] == "HEALTH"
+
+    assert Enum.any?(
+             group["resources"],
+             &(&1["resource_kind"] == "field" and &1["path"] =~ "mode")
+           )
   end
 
   test "selected Packet Bindings expand their resource ledger by default" do
@@ -796,8 +863,17 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
       )
 
-    assert has_element?(view, "#packet-binding-groups details[data-state='selected'][open]")
-    assert has_element?(view, "#packet-binding-groups", "mode")
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+
+    groups =
+      for ["upsert", path, group] <- vue.streams_diff,
+          String.starts_with?(path, "/application_surface_packet_groups/"),
+          do: group
+
+    assert [group] = groups
+    assert group["state"] == "selected"
+    assert group["expanded"]
+    assert Enum.any?(group["resources"], &(&1["path"] =~ "mode"))
   end
 
   test "switching catalog revision clears the legacy APID selection without a second mutation UI" do

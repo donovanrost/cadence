@@ -14,11 +14,12 @@ defmodule CadenceWeb.ApplicationHostLive do
 
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.ExtensionCatalog
+  alias Cadence.Reads.ApplicationSurfaces
   alias CadenceWeb.ApplicationSurfaceRegistry
+  alias Phoenix.LiveView.JS
 
   alias CadenceWeb.ApplicationSurfaces.{
     Declarative,
-    DocumentState,
     ReferenceEvents,
     TableEvents
   }
@@ -100,7 +101,7 @@ defmodule CadenceWeb.ApplicationHostLive do
              socket.assigns.application_host_context,
              request
            ),
-         {:ok, socket} <- DocumentState.load(socket) do
+         {:ok, socket} <- load_declarative_surface(socket) do
       {:noreply,
        assign_action_feedback(
          socket,
@@ -147,7 +148,24 @@ defmodule CadenceWeb.ApplicationHostLive do
         _uri,
         %{assigns: %{application_renderer_kind: :declarative}} = socket
       ) do
-    TableEvents.handle_params(params, socket)
+    query_params = TableEvents.query_params(params)
+
+    if query_params == socket.assigns.application_surface_query_params do
+      {:noreply, socket}
+    else
+      case load_declarative_surface(socket, query_params) do
+        {:ok, socket} ->
+          {:noreply, socket}
+
+        {:error, _reason} ->
+          {:noreply,
+           assign(socket, :application_action_feedback, %{
+             kind: :error,
+             code: "surface_page_failed",
+             message: "The requested application page could not be loaded."
+           })}
+      end
+    end
   end
 
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
@@ -184,11 +202,17 @@ defmodule CadenceWeb.ApplicationHostLive do
         data-application-installation-id={@application_installation.application_installation_id}
         data-surface-id={@application_surface_definition.surface_id}
       >
-        <.surface_navigation
-          surfaces={@application_workspace_surfaces}
-          current_surface={@application_surface_definition}
-          host_context={@application_host_context}
-          application_key={@application_definition.application_key}
+        <.vue
+          id="application-host-component"
+          v-component="ApplicationHost"
+          host={application_host_dto(assigns)}
+          navigation={surface_navigation_dto(assigns)}
+          declarative_surface={nil}
+          application_surface_rows={[]}
+          application_surface_activity={[]}
+          application_surface_packet_groups={[]}
+          v-ssr={false}
+          class="contents"
         />
         {@rendered_application_surface}
       </div>
@@ -207,21 +231,28 @@ defmodule CadenceWeb.ApplicationHostLive do
         data-surface-id={@application_surface_definition.surface_id}
         data-renderer="declarative"
       >
-        <.surface_navigation
-          surfaces={@application_workspace_surfaces}
-          current_surface={@application_surface_definition}
-          host_context={@application_host_context}
-          application_key={@application_definition.application_key}
-        />
-        <Declarative.surface
-          document={@application_surface_document}
-          application_definition={@application_definition}
-          surface_definition={@application_surface_definition}
-          form={@application_surface_form}
-          action_feedback={@application_action_feedback}
-          rows={@streams.application_surface_rows}
-          activity_items={@streams.application_surface_activity}
-          packet_groups={@streams.application_surface_packet_groups}
+        <.vue
+          id="application-host-component"
+          v-component="ApplicationHost"
+          host={application_host_dto(assigns)}
+          navigation={surface_navigation_dto(assigns)}
+          declarative_surface={
+            Declarative.presentation(
+              @application_surface_document,
+              @application_definition,
+              @application_surface_definition,
+              @application_surface_form,
+              @application_action_feedback
+            )
+          }
+          application_surface_rows={@streams.application_surface_rows}
+          application_surface_activity={@streams.application_surface_activity}
+          application_surface_packet_groups={@streams.application_surface_packet_groups}
+          v-on:application_form_change={JS.push("application_form_change")}
+          v-on:application_action={JS.push("application_action")}
+          v-on:application_table_page={JS.push("application_table_page")}
+          v-ssr={false}
+          class="contents"
         />
       </div>
     </Layouts.app>
@@ -251,18 +282,91 @@ defmodule CadenceWeb.ApplicationHostLive do
        ) do
     socket
     |> assign(:application_renderer_kind, :declarative)
-    |> stream_configure(:application_surface_rows, dom_id: &"application-surface-row-#{&1.id}")
+    |> stream_configure(:application_surface_rows, dom_id: &Declarative.table_row_dom_id/1)
     |> stream_configure(:application_surface_activity,
-      dom_id: &"application-surface-activity-#{&1.id}"
+      dom_id: &Declarative.activity_item_dom_id/1
     )
     |> stream_configure(:application_surface_packet_groups,
-      dom_id: &"packet-binding-group-#{&1.id}"
+      dom_id: &Declarative.packet_group_dom_id/1
     )
-    |> DocumentState.load()
+    |> load_declarative_surface()
   end
 
   defp mount_renderer(_socket, %SurfaceDefinition{}),
     do: {:error, :unsupported_application_renderer}
+
+  defp load_declarative_surface(socket, params \\ nil) do
+    params = params || socket.assigns.application_surface_query_params
+
+    with {:ok, document} <-
+           ApplicationSurfaces.load(
+             socket.assigns.current_scope,
+             socket.assigns.application_host_context,
+             socket.assigns.application_definition.application_key,
+             socket.assigns.application_definition.version,
+             socket.assigns.application_surface_definition,
+             params
+           ) do
+      {:ok,
+       socket
+       |> assign(:application_surface_document, document)
+       |> assign(:application_surface_form, declarative_surface_form(document))
+       |> assign(:application_surface_query_params, params)
+       |> present_declarative_streams(document)}
+    end
+  end
+
+  defp present_declarative_streams(socket, document) do
+    socket
+    |> stream(
+      :application_surface_rows,
+      Declarative.table_row_dtos(document),
+      reset: true
+    )
+    |> stream(
+      :application_surface_activity,
+      Declarative.activity_item_dtos(document),
+      reset: true
+    )
+    |> stream(
+      :application_surface_packet_groups,
+      Declarative.packet_group_dtos(document),
+      reset: true
+    )
+  end
+
+  defp declarative_surface_form(%{form: form}) when not is_nil(form) do
+    params =
+      Map.new(form.fields, fn field ->
+        {Atom.to_string(field.field), field.default}
+      end)
+
+    to_form(params, as: :application_action)
+  end
+
+  defp declarative_surface_form(%{packet_bindings: nil}), do: nil
+
+  defp declarative_surface_form(%{packet_bindings: packet_bindings}) do
+    selected_packet_ids =
+      packet_bindings.packet_groups
+      |> Enum.filter(& &1.selected)
+      |> Enum.map(& &1.packet_id)
+
+    to_form(
+      %{
+        "input_id" => packet_bindings.input_definition.input_id,
+        "input_version" => Integer.to_string(packet_bindings.input_definition.version),
+        "catalog_revision_id" => packet_bindings.catalog_revision_id || "",
+        "source_endpoint_ref" => packet_bindings.source_endpoint_ref || "",
+        "expected_configuration_version" => version_value(packet_bindings.configured_version),
+        "selected_packet_ids" => selected_packet_ids
+      },
+      as: :application_action
+    )
+  end
+
+  defp version_value(nil), do: ""
+  defp version_value(version), do: Integer.to_string(version)
 
   defp failed_surface_form(%{form: nil, packet_bindings: nil}, _params, _failure), do: nil
 
@@ -337,36 +441,39 @@ defmodule CadenceWeb.ApplicationHostLive do
   defp application_host_dom_id(%HostContext{placement: :mission}),
     do: "mission-application-host"
 
-  attr :surfaces, :list, required: true
-  attr :current_surface, :any, required: true
-  attr :host_context, :any, required: true
-  attr :application_key, :string, required: true
+  defp application_host_dto(assigns) do
+    %{
+      dom_id: application_host_dom_id(assigns.application_host_context),
+      application_key: assigns.application_definition.application_key,
+      application_version: assigns.application_definition.version,
+      application_installation_id: assigns.application_installation.application_installation_id,
+      surface_id: assigns.application_surface_definition.surface_id,
+      renderer: Atom.to_string(assigns.application_renderer_kind)
+    }
+  end
 
-  defp surface_navigation(assigns) do
-    ~H"""
-    <nav
-      :if={length(@surfaces) > 1}
-      id="application-surface-navigation"
-      aria-label="Application surfaces"
-      class="mb-5 flex flex-wrap items-center gap-1 border-b border-base-300/70"
-    >
-      <.link
-        :for={surface <- @surfaces}
-        id={"application-surface-nav-#{surface.surface_id}"}
-        navigate={application_surface_path(@host_context, @application_key, surface.surface_id)}
-        aria-current={if(surface.surface_id == @current_surface.surface_id, do: "page", else: nil)}
-        class={[
-          "relative -mb-px border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors",
-          surface.surface_id == @current_surface.surface_id &&
-            "border-primary text-primary",
-          surface.surface_id != @current_surface.surface_id &&
-            "border-transparent text-base-content/55 hover:border-base-content/30 hover:text-base-content"
-        ]}
-      >
-        {Map.get(surface.navigation, :label, surface.surface_id)}
-      </.link>
-    </nav>
-    """
+  defp surface_navigation_dto(assigns) do
+    if length(assigns.application_workspace_surfaces) > 1 do
+      %{
+        id: "application-surface-navigation",
+        label: "Application surfaces",
+        items:
+          Enum.map(assigns.application_workspace_surfaces, fn surface ->
+            %{
+              id: "application-surface-nav-#{surface.surface_id}",
+              surface_id: surface.surface_id,
+              label: Map.get(surface.navigation, :label, surface.surface_id),
+              href:
+                application_surface_path(
+                  assigns.application_host_context,
+                  assigns.application_definition.application_key,
+                  surface.surface_id
+                ),
+              current: surface.surface_id == assigns.application_surface_definition.surface_id
+            }
+          end)
+      }
+    end
   end
 
   defp application_surface_path(

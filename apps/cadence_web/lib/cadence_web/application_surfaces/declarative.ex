@@ -1,299 +1,456 @@
 defmodule CadenceWeb.ApplicationSurfaces.Declarative do
-  @moduledoc "Bounded renderer for first-party declarative application surface documents."
+  @moduledoc "Builds bounded, JSON-safe presentation DTOs for declarative application surfaces."
 
-  use CadenceWeb, :html
+  alias Cadence.Applications.{
+    ActionConfirmation,
+    ActionDefinition,
+    ApplicationDefinition,
+    SurfaceDefinition,
+    SurfaceDocument
+  }
 
-  alias Cadence.Applications.SurfaceDocument
-  alias Cadence.Applications.SurfaceElements.{Activity, GeneratedForm, PacketBindings, Table}
-  alias Cadence.Extensions.Presentation.FieldDefinition
+  alias Cadence.Applications.SurfaceElements.{
+    Activity,
+    Diagnostics,
+    GeneratedForm,
+    PacketBindings,
+    Table
+  }
 
-  attr :document, SurfaceDocument, required: true
-  attr :application_definition, :any, required: true
-  attr :surface_definition, :any, required: true
-  attr :form, :any, default: nil
-  attr :action_feedback, :map, default: nil
-  attr :rows, :any, required: true
-  attr :activity_items, :any, required: true
-  attr :packet_groups, :any, required: true
+  alias Cadence.Extensions.Presentation.{
+    FieldDefinition,
+    ReferenceDefinition,
+    ReferenceOption,
+    ReferencePage
+  }
 
-  def surface(assigns) do
-    ~H"""
-    <div id="declarative-application-surface" class="space-y-6">
-      <.page_header title={@document.title} subtitle={@document.description} />
+  alias Phoenix.HTML.Form
 
-      <.action_feedback :if={@action_feedback} feedback={@action_feedback} />
-
-      <section
-        :if={@document.stats != []}
-        id="application-surface-stats"
-        class="grid gap-4 md:grid-cols-3"
-      >
-        <.card :for={stat <- @document.stats} id={"application-surface-stat-#{stat.id}"}>
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="hud-label">{stat.label}</p>
-              <p class="mt-2 text-2xl font-semibold">{stat.value}</p>
-            </div>
-            <.status_badge status={stat.tone} />
-          </div>
-        </.card>
-      </section>
-
-      <.application_diagnostics
-        :if={@document.diagnostics}
-        definition={@document.diagnostics}
-      />
-      <.generated_form
-        :if={@document.form}
-        definition={@document.form}
-        application_definition={@application_definition}
-        surface_definition={@surface_definition}
-        form={@form}
-      />
-      <.packet_bindings
-        :if={@document.packet_bindings}
-        definition={@document.packet_bindings}
-        application_definition={@application_definition}
-        surface_definition={@surface_definition}
-        form={@form}
-        groups={@packet_groups}
-      />
-      <.surface_table :if={@document.table} definition={@document.table} rows={@rows} />
-      <.activity
-        :if={@document.activity}
-        definition={@document.activity}
-        items={@activity_items}
-      />
-    </div>
-    """
+  @spec presentation(
+          SurfaceDocument.t(),
+          ApplicationDefinition.t(),
+          SurfaceDefinition.t(),
+          Form.t() | nil,
+          map() | nil
+        ) :: map()
+  def presentation(
+        %SurfaceDocument{} = document,
+        %ApplicationDefinition{} = application,
+        %SurfaceDefinition{} = surface,
+        form,
+        action_feedback
+      ) do
+    %{
+      id: "declarative-application-surface",
+      page: %{
+        title: document.title,
+        subtitle: document.description
+      },
+      action_feedback: action_feedback_dto(action_feedback),
+      stats: Enum.map(document.stats, &stat_dto/1),
+      diagnostics: diagnostics_dto(document.diagnostics),
+      form: generated_form_dto(document.form, application, surface, form),
+      packet_bindings: packet_bindings_dto(document.packet_bindings, application, surface, form),
+      table: table_dto(document.table),
+      activity: activity_dto(document.activity)
+    }
   end
 
-  attr :definition, PacketBindings, required: true
-  attr :application_definition, :any, required: true
-  attr :surface_definition, :any, required: true
-  attr :form, :any, required: true
-  attr :groups, :any, required: true
+  @spec table_row_dtos(SurfaceDocument.t()) :: [map()]
+  def table_row_dtos(%SurfaceDocument{table: nil}), do: []
 
-  defp packet_bindings(assigns) do
-    ~H"""
-    <section
-      id={@definition.id}
-      data-activation-state={@definition.activation_state}
-      class="overflow-hidden border-y border-base-300/80 bg-base-100"
-    >
-      <header class="grid gap-4 border-b border-base-300/70 bg-base-200/35 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div>
-          <div class="flex flex-wrap items-center gap-2">
-            <p class="hud-label">Packet input routing</p>
-            <.status_badge status={packet_binding_tone(@definition.activation_state)} />
-            <span class="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-base-content/45">
-              {packet_binding_state_label(@definition.activation_state)}
-            </span>
-          </div>
-          <h2 class="mt-2 text-lg font-semibold tracking-tight">{@definition.title}</h2>
-          <p :if={@definition.description} class="mt-1 max-w-4xl text-sm text-base-content/60">
-            {@definition.description}
-          </p>
-        </div>
-        <div class="flex items-center gap-3 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-base-content/50">
-          <span>Desired {version_label(@definition.configured_version)}</span>
-          <span aria-hidden="true">·</span>
-          <span>Active {version_label(@definition.applied_version)}</span>
-        </div>
-      </header>
-
-      <.form
-        for={@form}
-        id="packet-bindings-form"
-        phx-submit="application_action"
-        phx-value-action-id={@definition.action_id}
-      >
-        <.input field={@form[:input_id]} type="hidden" />
-        <.input field={@form[:input_version]} type="hidden" />
-        <.input field={@form[:catalog_revision_id]} type="hidden" />
-        <.input field={@form[:expected_configuration_version]} type="hidden" />
-
-        <div class="grid gap-4 border-b border-base-300/60 px-4 py-3 md:grid-cols-[minmax(16rem,28rem)_1fr] md:items-end">
-          <.input
-            field={@form[:source_endpoint_ref]}
-            type="select"
-            label="Source endpoint"
-            options={Enum.map(@definition.source_endpoints, &{&1.label, &1.value})}
-            disabled={!@definition.save_enabled}
-            class="font-mono text-sm"
-          />
-          <p class="pb-3 text-xs text-base-content/50">
-            Shared input policy: another application reading this APID does not block selection.
-          </p>
-        </div>
-
-        <div
-          id="packet-binding-groups"
-          phx-update="stream"
-          class="divide-y divide-base-300/65"
-        >
-          <div id="packet-bindings-empty" class="hidden only:block px-4 py-12 text-center">
-            <.icon name="hero-signal-slash" class="mx-auto size-6 text-base-content/35" />
-            <p class="mt-3 font-medium">{@definition.empty_title}</p>
-            <p :if={@definition.empty_description} class="mt-1 text-sm text-base-content/55">
-              {@definition.empty_description}
-            </p>
-          </div>
-
-          <details
-            :for={{dom_id, group} <- @groups}
-            id={dom_id}
-            open={group.expanded}
-            data-packet-id={group.packet_id}
-            data-apid={group.apid}
-            data-state={group.state}
-            class="group relative"
-          >
-            <summary class="grid cursor-pointer list-none grid-cols-[0.25rem_minmax(0,1fr)_auto] items-stretch gap-4 px-4 py-3 marker:hidden hover:bg-base-200/30">
-              <span class={[
-                "rounded-full",
-                packet_group_rail_class(group.state)
-              ]}>
-              </span>
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span class="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.13em] text-primary/80">
-                    APID {group.apid}
-                  </span>
-                  <strong class="truncate font-mono text-sm">{group.packet_name}</strong>
-                  <span class="text-xs text-base-content/45">{group.model_label}</span>
-                </div>
-                <p class="mt-1 truncate font-mono text-[0.68rem] text-base-content/45">
-                  {group.selector_summary}
-                </p>
-              </div>
-              <div class="flex items-center gap-3 pl-3">
-                <span :if={group.consumers != []} class="hidden text-xs text-base-content/50 sm:inline">
-                  {Enum.join(group.consumers, ", ")}
-                </span>
-                <label
-                  for={"packet-binding-select-#{group.packet_id}"}
-                  class={[
-                    "flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em]",
-                    group.selectable && "cursor-pointer",
-                    !group.selectable && "cursor-not-allowed text-base-content/35"
-                  ]}
-                >
-                  <input
-                    type="checkbox"
-                    id={"packet-binding-select-#{group.packet_id}"}
-                    name="application_action[selected_packet_ids][]"
-                    value={group.packet_id}
-                    aria-label={"Route #{group.packet_name}, APID #{group.apid}, into #{@application_definition.display_name}"}
-                    checked={group.selected}
-                    disabled={!group.selectable or !@definition.save_enabled}
-                    class="checkbox checkbox-primary checkbox-sm"
-                  />
-                  Route
-                </label>
-                <.icon
-                  name="hero-chevron-down"
-                  class="size-4 text-base-content/45 transition-transform group-open:rotate-180"
-                />
-              </div>
-            </summary>
-
-            <div class="border-t border-base-300/50 bg-base-200/20 px-4 pb-4 pl-8 pt-3">
-              <p :if={group.reason} class="mb-3 text-xs text-warning">{group.reason}</p>
-              <div class="overflow-x-auto">
-                <table class="table table-xs">
-                  <thead>
-                    <tr>
-                      <th>Resource</th>
-                      <th>Type</th>
-                      <th>Size</th>
-                      <th>Consumers</th>
-                      <th>This app</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      :for={resource <- group.resources}
-                      id={"packet-binding-resource-#{resource.id}"}
-                      data-resource-kind={resource.resource_kind}
-                      data-compatibility={resource.compatibility}
-                      class={resource.resource_kind == :binary_region && "border-l-4 border-l-base-content/25"}
-                    >
-                      <td>
-                        <p class="font-mono text-xs">{resource.path}</p>
-                        <p :if={resource.reason} class="mt-1 max-w-xl text-[0.68rem] text-base-content/45">
-                          {resource.reason}
-                        </p>
-                      </td>
-                      <td class="font-mono text-xs">{resource_type_label(resource)}</td>
-                      <td class="font-mono text-xs text-base-content/55">
-                        {resource_size_label(resource.size_bits)}
-                      </td>
-                      <td class="text-xs text-base-content/55">
-                        {consumer_label(resource.consumers)}
-                      </td>
-                      <td>
-                        <span class={[
-                          "badge badge-sm",
-                          resource.selected && "badge-primary",
-                          !resource.selected && resource.compatibility == :compatible && "badge-ghost",
-                          resource.compatibility == :incompatible && "badge-outline opacity-50"
-                        ]}>
-                          {resource_selection_label(resource)}
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <footer class="flex flex-wrap items-center justify-between gap-4 border-t border-base-300/70 bg-base-200/30 px-4 py-3">
-          <p id="packet-bindings-status" aria-live="polite" class="text-xs text-base-content/50">
-            Saving changes desired routing only. Mission activation remains separately governed.
-          </p>
-          <.application_domain_action
-            id="packet-bindings-submit"
-            application_definition={@application_definition}
-            surface_definition={@surface_definition}
-            action_id={@definition.action_id}
-            label={@definition.submit_label}
-            type="submit"
-            size={:md}
-            disabled={!@definition.save_enabled}
-          />
-        </footer>
-      </.form>
-    </section>
-    """
+  def table_row_dtos(%SurfaceDocument{table: %Table{columns: columns, page: page}}) do
+    Enum.map(page.items, fn row ->
+      %{
+        id: row.id,
+        __dom_id: table_row_dom_id(row),
+        values:
+          Map.new(columns, fn column ->
+            {Atom.to_string(column.key), Map.fetch!(row, column.key)}
+          end)
+      }
+    end)
   end
 
-  defp packet_binding_tone(:active), do: :ready
-  defp packet_binding_tone(:outdated), do: :attention
-  defp packet_binding_tone(:configured), do: :attention
-  defp packet_binding_tone(:unavailable), do: :blocked
-  defp packet_binding_tone(:disabled), do: :info
-  defp packet_binding_tone(:unconfigured), do: :info
+  @spec activity_item_dtos(SurfaceDocument.t()) :: [map()]
+  def activity_item_dtos(%SurfaceDocument{activity: nil}), do: []
 
-  defp packet_binding_state_label(state),
-    do: state |> Atom.to_string() |> String.replace("_", " ")
+  def activity_item_dtos(%SurfaceDocument{activity: %Activity{items: items}}) do
+    Enum.map(items, fn item ->
+      %{
+        id: item.id,
+        __dom_id: activity_item_dom_id(item),
+        title: item.title,
+        detail: item.detail,
+        value: item.value,
+        timestamp: item.timestamp,
+        tone: Atom.to_string(item.tone),
+        tone_label: status_tone_label(item.tone)
+      }
+    end)
+  end
 
-  defp version_label(nil), do: "—"
-  defp version_label(version), do: "v#{version}"
+  @spec packet_group_dtos(SurfaceDocument.t()) :: [map()]
+  def packet_group_dtos(%SurfaceDocument{packet_bindings: nil}), do: []
 
-  defp packet_group_rail_class(:selected), do: "bg-primary"
-  defp packet_group_rail_class(:invalid), do: "bg-error"
-  defp packet_group_rail_class(:unavailable), do: "bg-base-content/20"
-  defp packet_group_rail_class(:available), do: "bg-base-content/35"
+  def packet_group_dtos(%SurfaceDocument{packet_bindings: %PacketBindings{packet_groups: groups}}) do
+    Enum.map(groups, fn group ->
+      %{
+        id: group.id,
+        __dom_id: packet_group_dom_id(group),
+        packet_id: group.packet_id,
+        packet_name: group.packet_name,
+        apid: group.apid,
+        selector_summary: group.selector_summary,
+        model_label: group.model_label,
+        selected: group.selected,
+        expanded: group.expanded,
+        selectable: group.selectable,
+        state: Atom.to_string(group.state),
+        reason: group.reason,
+        consumers: group.consumers,
+        resources: Enum.map(group.resources, &packet_resource_dto/1)
+      }
+    end)
+  end
+
+  @spec table_row_dom_id(map()) :: binary()
+  def table_row_dom_id(%{__dom_id: dom_id}) when is_binary(dom_id), do: dom_id
+  def table_row_dom_id(%{id: id}) when is_binary(id), do: "application-surface-row-#{id}"
+
+  @spec activity_item_dom_id(map()) :: binary()
+  def activity_item_dom_id(%{__dom_id: dom_id}) when is_binary(dom_id), do: dom_id
+
+  def activity_item_dom_id(%{id: id}) when is_binary(id),
+    do: "application-surface-activity-#{id}"
+
+  @spec packet_group_dom_id(map()) :: binary()
+  def packet_group_dom_id(%{__dom_id: dom_id}) when is_binary(dom_id), do: dom_id
+  def packet_group_dom_id(%{id: id}) when is_binary(id), do: "packet-binding-group-#{id}"
+
+  defp stat_dto(stat) do
+    %{
+      id: "application-surface-stat-#{stat.id}",
+      stat_id: stat.id,
+      label: stat.label,
+      value: stat.value,
+      tone: Atom.to_string(stat.tone),
+      tone_label: status_tone_label(stat.tone)
+    }
+  end
+
+  defp diagnostics_dto(nil), do: nil
+  defp diagnostics_dto(%Diagnostics{items: []}), do: nil
+
+  defp diagnostics_dto(%Diagnostics{} = diagnostics) do
+    severity = overall_severity(diagnostics.items)
+
+    %{
+      id: diagnostics.id,
+      items_id: "#{diagnostics.id}-items",
+      role: if(severity == :error, do: "alert", else: "status"),
+      severity: Atom.to_string(severity),
+      count: length(diagnostics.items),
+      total_count: diagnostics.total_count,
+      count_label: diagnostic_count_label(diagnostics),
+      label: diagnostic_severity_label(severity),
+      title: diagnostics.title,
+      description: diagnostics.description,
+      items: Enum.map(diagnostics.items, &diagnostic_item_dto(diagnostics.id, &1))
+    }
+  end
+
+  defp diagnostic_item_dto(diagnostics_id, item) do
+    %{
+      id: "#{diagnostics_id}-item-#{item.id}",
+      diagnostic_id: item.id,
+      code: item.code,
+      severity: Atom.to_string(item.severity),
+      title: item.title,
+      detail: item.detail,
+      value: item.value
+    }
+  end
+
+  defp overall_severity(items) do
+    cond do
+      Enum.any?(items, &(&1.severity == :error)) -> :error
+      Enum.any?(items, &(&1.severity == :warning)) -> :warning
+      true -> :info
+    end
+  end
+
+  defp diagnostic_count_label(%Diagnostics{items: items, total_count: total_count}) do
+    visible_count = length(items)
+
+    if visible_count < total_count do
+      "#{visible_count} shown · #{total_count} total"
+    else
+      "#{total_count} #{if(total_count == 1, do: "finding", else: "findings")}"
+    end
+  end
+
+  defp diagnostic_severity_label(:error), do: "Blocked"
+  defp diagnostic_severity_label(:warning), do: "Advisory"
+  defp diagnostic_severity_label(:info), do: "Notice"
+
+  defp action_feedback_dto(nil), do: nil
+
+  defp action_feedback_dto(feedback) do
+    %{
+      id: "application-action-feedback",
+      role: if(feedback.kind == :error, do: "alert", else: "status"),
+      kind: Atom.to_string(feedback.kind),
+      code: feedback.code,
+      label: if(feedback.kind == :success, do: "Action complete", else: "Action blocked"),
+      message: feedback.message
+    }
+  end
+
+  defp generated_form_dto(nil, _application, _surface, _form), do: nil
+
+  defp generated_form_dto(
+         %GeneratedForm{} = definition,
+         %ApplicationDefinition{} = application,
+         %SurfaceDefinition{} = surface,
+         %Form{} = form
+       ) do
+    %{
+      id: definition.id,
+      form_id: "#{definition.id}-fields",
+      title: definition.title,
+      description: definition.description,
+      fields: Enum.map(definition.fields, &field_dto(definition.id, form, &1)),
+      action:
+        domain_action_dto(
+          application,
+          surface,
+          definition.action_id,
+          "#{definition.id}-submit",
+          definition.submit_label,
+          false
+        )
+    }
+  end
+
+  defp field_dto(form_id, %Form{} = form, %FieldDefinition{} = field) do
+    field_name = Atom.to_string(field.field)
+
+    %{
+      id: "#{form_id}-field-#{field_name}",
+      field: field_name,
+      input_id: Form.input_id(form, field.field),
+      name: Form.input_name(form, field.field),
+      type: field_input_type(field),
+      contract_type: Atom.to_string(field.type),
+      label: field.label,
+      placeholder: field.placeholder,
+      help: field.help,
+      required: field.required,
+      step: field.step,
+      min: field.min,
+      max: field.max,
+      value: string_form_value(form, field.field),
+      errors: form_errors(form, field.field),
+      options: field_options_dto(field),
+      reference: reference_dto(form_id, field),
+      visible_when: visibility_dto(field.visible_when)
+    }
+  end
+
+  defp field_input_type(%FieldDefinition{type: :reference, reference: %{mode: :search}}),
+    do: "text"
+
+  defp field_input_type(%FieldDefinition{type: :reference}), do: "select"
+  defp field_input_type(%FieldDefinition{type: type}), do: Atom.to_string(type)
+
+  defp field_options_dto(%FieldDefinition{type: :reference, reference_page: page}),
+    do: reference_options_dto(page)
+
+  defp field_options_dto(%FieldDefinition{options: options}),
+    do: Enum.map(options, &option_dto/1)
+
+  defp option_dto({label, value}) do
+    %{label: label, value: value, disabled: false, description: nil}
+  end
+
+  defp option_dto({label, value, opts}) do
+    %{
+      label: label,
+      value: value,
+      disabled: Keyword.get(opts, :disabled, false),
+      description: Keyword.get(opts, :title)
+    }
+  end
+
+  defp option_dto(%ReferenceOption{} = option) do
+    %{
+      label: option.label,
+      value: option.value,
+      disabled: false,
+      description: option.description
+    }
+  end
+
+  defp reference_dto(_form_id, %FieldDefinition{reference: nil}), do: nil
+
+  defp reference_dto(
+         form_id,
+         %FieldDefinition{
+           field: field,
+           reference: %ReferenceDefinition{} = reference,
+           reference_page: page
+         }
+       ) do
+    page = page || %ReferencePage{query: "", options: [], more?: false}
+
+    %{
+      provider_id: reference.provider_id,
+      version: reference.version,
+      mode: Atom.to_string(reference.mode),
+      query: page.query,
+      result_limit: reference.result_limit,
+      options_id: "#{form_id}-reference-#{field}-options",
+      status_id: "#{form_id}-reference-#{field}-status",
+      match_count: length(page.options),
+      more_matches: page.more?,
+      debounce_ms: 250,
+      max_length: 120,
+      result_summary: reference_result_summary(page),
+      options: reference_options_dto(page)
+    }
+  end
+
+  defp reference_options_dto(%ReferencePage{options: options}),
+    do: Enum.map(options, &option_dto/1)
+
+  defp reference_options_dto(nil), do: []
+
+  defp reference_result_summary(%ReferencePage{options: [], query: ""}),
+    do: "No active mission references"
+
+  defp reference_result_summary(%ReferencePage{options: [], query: _query}),
+    do: "No matching mission references"
+
+  defp reference_result_summary(%ReferencePage{options: options, more?: true}),
+    do: "First #{length(options)} matches · keep typing to narrow"
+
+  defp reference_result_summary(%ReferencePage{options: options}) do
+    "#{length(options)} mission reference#{if(length(options) == 1, do: "", else: "s")}"
+  end
+
+  defp visibility_dto(nil), do: nil
+
+  defp visibility_dto(%{field: field, equals: expected}) do
+    %{field: Atom.to_string(field), equals: presentation_string(expected)}
+  end
+
+  defp packet_bindings_dto(nil, _application, _surface, _form), do: nil
+
+  defp packet_bindings_dto(
+         %PacketBindings{} = definition,
+         %ApplicationDefinition{} = application,
+         %SurfaceDefinition{} = surface,
+         %Form{} = form
+       ) do
+    %{
+      id: definition.id,
+      activation_state: Atom.to_string(definition.activation_state),
+      tone: packet_binding_tone(definition.activation_state),
+      tone_label: definition.activation_state |> packet_binding_tone() |> status_tone_label(),
+      state_label: definition.activation_state |> Atom.to_string() |> String.replace("_", " "),
+      title: definition.title,
+      description: definition.description,
+      configured_version_label: version_label(definition.configured_version),
+      applied_version_label: version_label(definition.applied_version),
+      save_enabled: definition.save_enabled,
+      application_display_name: application.display_name,
+      form: packet_form_dto(form, definition),
+      action:
+        domain_action_dto(
+          application,
+          surface,
+          definition.action_id,
+          "packet-bindings-submit",
+          definition.submit_label,
+          not definition.save_enabled
+        ),
+      instructions: %{
+        shared_input:
+          "Shared input policy: another application reading this APID does not block selection.",
+        save_status:
+          "Saving changes desired routing only. Mission activation remains separately governed."
+      },
+      empty: %{
+        id: "packet-bindings-empty",
+        title: definition.empty_title,
+        description: definition.empty_description
+      }
+    }
+  end
+
+  defp packet_form_dto(%Form{} = form, %PacketBindings{} = definition) do
+    %{
+      id: "packet-bindings-form",
+      hidden_fields:
+        Enum.map(
+          [:input_id, :input_version, :catalog_revision_id, :expected_configuration_version],
+          &basic_form_field_dto(form, &1, "hidden")
+        ),
+      source_endpoint:
+        basic_form_field_dto(form, :source_endpoint_ref, "select")
+        |> Map.merge(%{
+          label: "Source endpoint",
+          disabled: not definition.save_enabled,
+          options:
+            Enum.map(definition.source_endpoints, fn endpoint ->
+              %{label: endpoint.label, value: endpoint.value, disabled: false}
+            end)
+        }),
+      selected_packet_ids: string_list_form_value(form, :selected_packet_ids)
+    }
+  end
+
+  defp basic_form_field_dto(%Form{} = form, field, type) do
+    %{
+      id: Form.input_id(form, field),
+      field: Atom.to_string(field),
+      name: Form.input_name(form, field),
+      type: type,
+      value: string_form_value(form, field),
+      errors: form_errors(form, field)
+    }
+  end
+
+  defp packet_resource_dto(resource) do
+    %{
+      id: "packet-binding-resource-#{resource.id}",
+      resource_id: resource.resource_id,
+      path: resource.path,
+      resource_kind: Atom.to_string(resource.resource_kind),
+      data_type: atom_string(resource.data_type),
+      size_bits: resource.size_bits,
+      compatibility: Atom.to_string(resource.compatibility),
+      reason: resource.reason,
+      selected: resource.selected,
+      role: Atom.to_string(resource.role),
+      consumers: resource.consumers,
+      type_label: resource_type_label(resource),
+      size_label: resource_size_label(resource.size_bits),
+      consumer_label: consumer_label(resource.consumers),
+      selection_label: resource_selection_label(resource)
+    }
+  end
 
   defp resource_type_label(%{resource_kind: :binary_region}), do: "binary"
   defp resource_type_label(%{data_type: nil}), do: "packet"
   defp resource_type_label(%{data_type: data_type}), do: Atom.to_string(data_type)
 
   defp resource_size_label(nil), do: "—"
-  defp resource_size_label(size_bits) when rem(size_bits, 8) == 0, do: "#{div(size_bits, 8)} B"
+
+  defp resource_size_label(size_bits) when rem(size_bits, 8) == 0,
+    do: "#{div(size_bits, 8)} B"
+
   defp resource_size_label(size_bits), do: "#{size_bits} bit"
 
   defp consumer_label([]), do: "Unbound"
@@ -303,303 +460,164 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
   defp resource_selection_label(%{selected: true}), do: "Selected"
   defp resource_selection_label(_resource), do: "Available"
 
-  attr :feedback, :map, required: true
+  defp packet_binding_tone(:active), do: "ready"
+  defp packet_binding_tone(:outdated), do: "attention"
+  defp packet_binding_tone(:configured), do: "attention"
+  defp packet_binding_tone(:unavailable), do: "blocked"
+  defp packet_binding_tone(:disabled), do: "info"
+  defp packet_binding_tone(:unconfigured), do: "info"
 
-  defp action_feedback(assigns) do
-    ~H"""
-    <aside
-      id="application-action-feedback"
-      role={if(@feedback.kind == :error, do: "alert", else: "status")}
-      aria-live="polite"
-      data-kind={Atom.to_string(@feedback.kind)}
-      data-code={@feedback.code}
-      class={[
-        "grid grid-cols-[0.3rem_auto_minmax(0,1fr)] items-center gap-4 border-y border-base-300/70 bg-base-200/45 px-4 py-3",
-        @feedback.kind == :success && "text-success",
-        @feedback.kind == :error && "text-error"
-      ]}
-    >
-      <span
-        class={[
-          "h-full min-h-10 rounded-full",
-          @feedback.kind == :success && "bg-success",
-          @feedback.kind == :error && "bg-error"
-        ]}
-      >
-      </span>
-      <.icon
-        name={if(@feedback.kind == :success, do: "hero-check-circle", else: "hero-exclamation-triangle")}
-        class="size-5"
-      />
-      <div class="text-base-content">
-        <p class="hud-label">
-          {if(@feedback.kind == :success, do: "Action complete", else: "Action blocked")}
-        </p>
-        <p class="mt-1 text-sm text-base-content/75">{@feedback.message}</p>
-      </div>
-    </aside>
-    """
+  defp status_tone_label(:ready), do: "Ready"
+  defp status_tone_label(:attention), do: "Needs Work"
+  defp status_tone_label(:blocked), do: "Missing"
+  defp status_tone_label(:info), do: "Setup"
+  defp status_tone_label("ready"), do: "Ready"
+  defp status_tone_label("attention"), do: "Needs Work"
+  defp status_tone_label("blocked"), do: "Missing"
+  defp status_tone_label("info"), do: "Setup"
+
+  defp version_label(nil), do: "—"
+  defp version_label(version), do: "v#{version}"
+
+  defp table_dto(nil), do: nil
+
+  defp table_dto(%Table{} = table) do
+    %{
+      id: table.id,
+      rows_id: "#{table.id}-rows",
+      title: table.title,
+      description: table.description,
+      columns:
+        Enum.map(table.columns, fn column ->
+          %{key: Atom.to_string(column.key), label: column.label, mono: column.mono}
+        end),
+      empty: %{
+        id: "#{table.id}-empty",
+        title: table.empty_title,
+        description: table.empty_description
+      },
+      pagination: pagination_dto(table)
+    }
   end
 
-  attr :definition, GeneratedForm, required: true
-  attr :application_definition, :any, required: true
-  attr :surface_definition, :any, required: true
-  attr :form, :any, required: true
+  defp pagination_dto(%Table{page: page, id: table_id}) do
+    last_page = max(ceil(page.total_count / page.page_size), 1)
 
-  defp generated_form(assigns) do
-    ~H"""
-    <.card id={@definition.id}>
-      <.section_header
-        title={@definition.title}
-        description={@definition.description}
-      />
-
-      <.form
-        for={@form}
-        id={"#{@definition.id}-fields"}
-        phx-change="application_form_change"
-        phx-submit="application_action"
-        phx-value-action-id={@definition.action_id}
-        class="mt-5"
-      >
-        <div class="grid gap-x-4 md:grid-cols-2">
-          <div
-            :for={field <- @definition.fields}
-            id={"#{@definition.id}-field-#{field.field}"}
-            data-field-type={field.type}
-            data-reference-provider={reference_provider_id(field)}
-            data-reference-version={reference_provider_version(field)}
-            data-reference-mode={reference_mode(field)}
-            data-reference-query={reference_query(field)}
-          >
-            <%= if searchable_reference?(field) do %>
-              <.input
-                field={@form[field.field]}
-                type="text"
-                label={field.label}
-                placeholder={field.placeholder}
-                required={field.required}
-                list={reference_list_id(@definition.id, field)}
-                maxlength="120"
-                autocomplete="off"
-                phx-debounce="250"
-                class="font-mono text-sm"
-              />
-              <datalist id={reference_list_id(@definition.id, field)}>
-                <option
-                  :for={option <- field.reference_page.options}
-                  value={option.value}
-                  label={option.label}
-                >
-                  {option.description}
-                </option>
-              </datalist>
-              <p
-                id={"#{@definition.id}-reference-#{field.field}-status"}
-                data-match-count={length(field.reference_page.options)}
-                data-more-matches={to_string(field.reference_page.more?)}
-                aria-live="polite"
-                class="-mt-1 mb-2 flex items-center gap-1.5 border-l-2 border-primary/45 pl-2 font-mono text-[0.68rem] uppercase tracking-[0.09em] text-base-content/55"
-              >
-                <.icon name="hero-magnifying-glass" class="size-3.5 text-primary/70" />
-                {reference_result_summary(field.reference_page)}
-              </p>
-            <% else %>
-              <.input
-                field={@form[field.field]}
-                type={input_type(field)}
-                label={field.label}
-                placeholder={field.placeholder}
-                required={field.required}
-                options={field_options(field)}
-                step={field.step}
-                min={field.min}
-                max={field.max}
-                class={if(field.type == :textarea, do: "min-h-24", else: nil)}
-              />
-            <% end %>
-            <p
-              :if={field.help}
-              class={[
-                "mb-3 text-xs text-base-content/55",
-                searchable_reference?(field) && "mt-1",
-                !searchable_reference?(field) && "-mt-1"
-              ]}
-            >
-              {field.help}
-            </p>
-          </div>
-        </div>
-        <.application_domain_action
-          id={"#{@definition.id}-submit"}
-          application_definition={@application_definition}
-          surface_definition={@surface_definition}
-          action_id={@definition.action_id}
-          label={@definition.submit_label}
-          type="submit"
-          size={:md}
-        />
-      </.form>
-    </.card>
-    """
+    %{
+      id: "#{table_id}-pagination",
+      visible: page.total_count > page.page_size,
+      page: page.page,
+      page_size: page.page_size,
+      total_count: page.total_count,
+      range_label: pagination_range_label(page),
+      previous_label: "Prev",
+      next_label: "Next",
+      previous_page: max(page.page - 1, 1),
+      next_page: min(page.page + 1, last_page),
+      previous_disabled: page.page <= 1,
+      next_disabled: page.page >= last_page
+    }
   end
 
-  attr :definition, Table, required: true
-  attr :rows, :any, required: true
-
-  defp surface_table(assigns) do
-    assigns = assign(assigns, :page, assigns.definition.page)
-
-    ~H"""
-    <.card id={@definition.id} padding={:none}>
-      <div class="px-4 pt-4">
-        <.section_header
-          title={@definition.title}
-          description={@definition.description}
-        />
-      </div>
-
-      <div class="mt-5 overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th :for={column <- @definition.columns}>{column.label}</th>
-            </tr>
-          </thead>
-          <tbody id={"#{@definition.id}-rows"} phx-update="stream">
-            <tr id={"#{@definition.id}-empty"} class="hidden only:table-row">
-              <td colspan={length(@definition.columns)}>
-                <div class="py-8 text-center">
-                  <p class="font-medium">{@definition.empty_title}</p>
-                  <p :if={@definition.empty_description} class="mt-1 text-sm text-base-content/60">
-                    {@definition.empty_description}
-                  </p>
-                </div>
-              </td>
-            </tr>
-            <tr :for={{dom_id, row} <- @rows} id={dom_id}>
-              <td
-                :for={column <- @definition.columns}
-                class={column.mono && "font-mono text-xs"}
-              >
-                {Map.get(row, column.key)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <.pagination
-        id={"#{@definition.id}-pagination"}
-        page={@page.page}
-        page_size={@page.page_size}
-        total_count={@page.total_count}
-        on_paginate="application_table_page"
-      />
-    </.card>
-    """
+  defp pagination_range_label(page) do
+    first = (page.page - 1) * page.page_size + 1
+    last = min(page.page * page.page_size, page.total_count)
+    "#{first}–#{last} of #{page.total_count}"
   end
 
-  attr :definition, Activity, required: true
-  attr :items, :any, required: true
+  defp activity_dto(nil), do: nil
 
-  defp activity(assigns) do
-    ~H"""
-    <.card id={@definition.id}>
-      <.section_header title={@definition.title} description={@definition.description} />
-
-      <div
-        id={"#{@definition.id}-items"}
-        class="mt-5 divide-y divide-base-300/60 border-y border-base-300/60"
-        phx-update="stream"
-      >
-        <div id={"#{@definition.id}-empty"} class="hidden only:block py-8 text-center">
-          <p class="font-medium">{@definition.empty_title}</p>
-          <p :if={@definition.empty_description} class="mt-1 text-sm text-base-content/60">
-            {@definition.empty_description}
-          </p>
-        </div>
-        <article
-          :for={{dom_id, item} <- @items}
-          id={dom_id}
-          class="group grid grid-cols-[0.35rem_minmax(0,1fr)_auto] gap-4 py-4"
-        >
-          <div class={[
-            "rounded-full transition-transform duration-200 group-hover:scale-y-110",
-            activity_rail_class(item.tone)
-          ]}>
-          </div>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="truncate font-medium text-base-content">{item.title}</h3>
-              <.status_badge status={item.tone} />
-            </div>
-            <p class="mt-1 text-xs uppercase tracking-[0.12em] text-base-content/55">
-              {item.detail}
-            </p>
-            <time :if={item.timestamp} class="mt-2 block font-mono text-[0.7rem] text-base-content/45">
-              {item.timestamp}
-            </time>
-          </div>
-          <p :if={item.value} class="self-center font-mono text-lg text-base-content">
-            {item.value}
-          </p>
-        </article>
-      </div>
-    </.card>
-    """
+  defp activity_dto(%Activity{} = activity) do
+    %{
+      id: activity.id,
+      items_id: "#{activity.id}-items",
+      title: activity.title,
+      description: activity.description,
+      empty: %{
+        id: "#{activity.id}-empty",
+        title: activity.empty_title,
+        description: activity.empty_description
+      }
+    }
   end
 
-  defp activity_rail_class(:blocked), do: "bg-error"
-  defp activity_rail_class(:attention), do: "bg-warning"
-  defp activity_rail_class(:ready), do: "bg-success"
-  defp activity_rail_class(:info), do: "bg-info"
+  defp domain_action_dto(
+         %ApplicationDefinition{} = application,
+         %SurfaceDefinition{} = surface,
+         action_id,
+         id,
+         label,
+         disabled
+       ) do
+    with true <- action_id in surface.actions,
+         {:ok, %ActionDefinition{} = action} <-
+           ApplicationDefinition.fetch_action(application, action_id),
+         true <- action.scope == surface.scope,
+         :ok <- ActionDefinition.validate(action) do
+      %{
+        id: id,
+        action_id: action.action_id,
+        label: label,
+        version: action.version,
+        intent: Atom.to_string(action.intent),
+        scope: Atom.to_string(action.scope),
+        effect: Atom.to_string(action.effect),
+        execution: Atom.to_string(action.execution),
+        confirmation: confirmation_dto(action.confirmation),
+        disabled: disabled
+      }
+    else
+      reason -> raise ArgumentError, "invalid declarative domain action: #{inspect(reason)}"
+    end
+  end
 
-  defp input_type(%FieldDefinition{type: :reference}), do: "select"
-  defp input_type(%FieldDefinition{type: type}), do: Atom.to_string(type)
+  defp confirmation_dto(nil), do: nil
 
-  defp field_options(%FieldDefinition{type: :reference, reference_page: reference_page}),
-    do: reference_page.options
+  defp confirmation_dto(%ActionConfirmation{} = confirmation) do
+    %{
+      title: confirmation.title,
+      message: confirmation.message,
+      confirm_label: confirmation.confirm_label,
+      tone: Atom.to_string(confirmation.tone),
+      prompt: ActionConfirmation.prompt(confirmation)
+    }
+  end
 
-  defp field_options(%FieldDefinition{} = field), do: field.options
+  defp string_form_value(%Form{} = form, field) do
+    form.params
+    |> Map.get(Atom.to_string(field), Form.input_value(form, field))
+    |> presentation_string()
+  end
 
-  defp searchable_reference?(%FieldDefinition{
-         type: :reference,
-         reference: %{mode: :search},
-         reference_page: %{options: options}
-       })
-       when is_list(options),
-       do: true
+  defp string_list_form_value(%Form{} = form, field) do
+    case Map.get(form.params, Atom.to_string(field), Form.input_value(form, field)) do
+      values when is_list(values) -> Enum.map(values, &presentation_string/1)
+      nil -> []
+      value -> [presentation_string(value)]
+    end
+  end
 
-  defp searchable_reference?(%FieldDefinition{}), do: false
+  defp form_errors(%Form{} = form, field) do
+    form.errors
+    |> Keyword.get_values(field)
+    |> Enum.map(&format_form_error/1)
+  end
 
-  defp reference_list_id(form_id, %FieldDefinition{field: field}),
-    do: "#{form_id}-reference-#{field}-options"
+  defp format_form_error({message, opts}) when is_binary(message) and is_list(opts) do
+    Enum.reduce(opts, message, fn {key, value}, formatted ->
+      String.replace(formatted, "%{#{key}}", to_string(value))
+    end)
+  end
 
-  defp reference_result_summary(%{options: [], query: ""}),
-    do: "No active mission references"
+  defp format_form_error(message) when is_binary(message), do: message
+  defp format_form_error(_invalid), do: "Invalid value"
 
-  defp reference_result_summary(%{options: [], query: _query}),
-    do: "No matching mission references"
+  defp presentation_string(nil), do: ""
+  defp presentation_string(value) when is_binary(value), do: value
+  defp presentation_string(value) when is_atom(value), do: Atom.to_string(value)
+  defp presentation_string(value) when is_number(value), do: to_string(value)
+  defp presentation_string(_unsupported), do: ""
 
-  defp reference_result_summary(%{options: options, more?: true}),
-    do: "First #{length(options)} matches · keep typing to narrow"
-
-  defp reference_result_summary(%{options: options}),
-    do: "#{length(options)} mission reference#{if(length(options) == 1, do: "", else: "s")}"
-
-  defp reference_provider_id(%FieldDefinition{reference: %{provider_id: provider_id}}),
-    do: provider_id
-
-  defp reference_provider_id(%FieldDefinition{}), do: nil
-
-  defp reference_provider_version(%FieldDefinition{reference: %{version: version}}),
-    do: version
-
-  defp reference_provider_version(%FieldDefinition{}), do: nil
-
-  defp reference_mode(%FieldDefinition{reference: %{mode: mode}}), do: mode
-  defp reference_mode(%FieldDefinition{}), do: nil
-
-  defp reference_query(%FieldDefinition{reference_page: %{query: query}}), do: query
-  defp reference_query(%FieldDefinition{}), do: nil
+  defp atom_string(nil), do: nil
+  defp atom_string(value) when is_atom(value), do: Atom.to_string(value)
 end

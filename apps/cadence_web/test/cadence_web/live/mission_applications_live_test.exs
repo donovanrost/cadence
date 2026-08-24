@@ -115,61 +115,106 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
              "#mission-application-host[data-application-key='derived_telemetry'][data-application-version='1'][data-surface-id='manage'][data-renderer='declarative']"
            )
 
-    assert has_element?(view, "#declarative-application-surface")
-    assert has_element?(view, "#derived-telemetry-definition-form-fields")
+    assert has_element?(view, "#application-host-component")
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definition-form-submit[data-application-domain-action='save_definition'][data-action-version='1'][data-action-intent='configuration'][data-action-scope='mission'][data-action-effect='durable'][data-action-execution='immediate'][data-confirmation-required='false']",
-             "Save definition"
-           )
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    assert vue.component == "ApplicationHost"
+    assert vue.handlers["application_form_change"] == JS.push("application_form_change")
+    assert vue.handlers["application_action"] == JS.push("application_action")
+    assert vue.handlers["application_table_page"] == JS.push("application_table_page")
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definition-form-field-point_id[data-field-type='text'] input[type='text'][name='application_action[point_id]']"
-           )
+    stream_names =
+      for ["replace", "/" <> stream_name, []] <- vue.streams_diff,
+          do: stream_name
 
-    refute has_element?(
-             view,
-             "#derived-telemetry-definition-form-fields select[name='application_action[point_id]']"
-           )
+    assert Enum.sort(stream_names) ==
+             ~w(application_surface_activity application_surface_packet_groups application_surface_rows)
 
-    assert has_element?(view, "#derived-telemetry-definitions-rows")
+    assert Map.take(vue.props["host"], [
+             "dom_id",
+             "application_key",
+             "application_version",
+             "surface_id",
+             "renderer"
+           ]) == %{
+             "dom_id" => "mission-application-host",
+             "application_key" => "derived_telemetry",
+             "application_version" => 1,
+             "surface_id" => "manage",
+             "renderer" => "declarative"
+           }
 
-    view
-    |> form("#derived-telemetry-definition-form-fields", %{
+    surface = vue.props["declarative_surface"]
+    assert surface["id"] == "declarative-application-surface"
+
+    form = surface["form"]
+    assert form["form_id"] == "derived-telemetry-definition-form-fields"
+
+    assert form["action"] == %{
+             "id" => "derived-telemetry-definition-form-submit",
+             "action_id" => "save_definition",
+             "label" => "Save definition",
+             "version" => 1,
+             "intent" => "configuration",
+             "scope" => "mission",
+             "effect" => "durable",
+             "execution" => "immediate",
+             "confirmation" => nil,
+             "disabled" => false
+           }
+
+    point_id_field = Enum.find(form["fields"], &(&1["field"] == "point_id"))
+    assert point_id_field["id"] == "derived-telemetry-definition-form-field-point_id"
+    assert point_id_field["contract_type"] == "text"
+    assert point_id_field["type"] == "text"
+    assert point_id_field["name"] == "application_action[point_id]"
+    assert point_id_field["value"] == ""
+    assert point_id_field["reference"] == nil
+
+    assert surface["table"]["rows_id"] == "derived-telemetry-definitions-rows"
+
+    render_hook(view, "application_action", %{
+      "action-id" => "save_definition",
       "application_action" => %{
         "point_id" => "DERIVED.bus_power",
         "point_name" => "Bus power",
         "expression" => "HK.voltage * HK.current"
       }
     })
-    |> render_submit()
 
-    assert has_element?(
-             view,
-             "#application-action-feedback[data-kind='success'][data-code='action_completed']",
-             "Derived telemetry definition saved."
-           )
+    refreshed_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']"
-           )
+    assert refreshed_vue.props["declarative_surface"]["action_feedback"] == %{
+             "id" => "application-action-feedback",
+             "role" => "status",
+             "kind" => "success",
+             "code" => "action_completed",
+             "label" => "Action complete",
+             "message" => "Derived telemetry definition saved."
+           }
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.bus_power"
-           )
+    rows =
+      for ["upsert", path, row] <- refreshed_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
+
+    assert [row] = rows
+    assert row["__dom_id"] =~ "application-surface-row-"
+    assert row["values"]["point_id"] == "DERIVED.bus_power"
 
     {:ok, remounted_view, _html} = live(context.conn, application_path)
 
-    assert has_element?(
-             remounted_view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.bus_power"
-           )
+    remounted_vue = LiveVue.Test.get_vue(remounted_view, id: "application-host-component")
+
+    remounted_rows =
+      for ["upsert", path, row] <- remounted_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
+
+    assert Enum.any?(remounted_rows, &(&1["values"]["point_id"] == "DERIVED.bus_power"))
+
+    contract = %{"props" => refreshed_vue.props, "streams_diff" => refreshed_vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
   test "paginates declarative application tables through shareable host state", context do
@@ -198,61 +243,53 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
 
     {:ok, view, _html} = live(context.conn, application_path)
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-pagination",
-             "1–20 of 21"
-           )
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    pagination = vue.props["declarative_surface"]["table"]["pagination"]
+    assert pagination["id"] == "derived-telemetry-definitions-pagination"
+    assert pagination["range_label"] == "1–20 of 21"
+    assert pagination["next_label"] == "Next"
+    assert pagination["next_page"] == 2
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.live_paged_001"
-           )
+    page_one_rows =
+      for ["upsert", path, row] <- vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
 
-    refute has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.live_paged_021"
-           )
+    assert Enum.any?(page_one_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_001"))
+    refute Enum.any?(page_one_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
 
-    view
-    |> element(
-      "#derived-telemetry-definitions-pagination button[phx-value-page='2']",
-      "Next"
-    )
-    |> render_click()
+    render_hook(view, "application_table_page", %{"page" => "2"})
 
     page_two_path =
       "/missions/#{context.mission.mission_id}/applications/derived_telemetry/manage?page=2"
 
     assert_patch(view, page_two_path)
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.live_paged_021"
-           )
+    page_two_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    page_two_pagination = page_two_vue.props["declarative_surface"]["table"]["pagination"]
+    assert page_two_pagination["page"] == 2
+    assert page_two_pagination["previous_label"] == "Prev"
+    assert page_two_pagination["previous_page"] == 1
 
-    refute has_element?(
-             view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.live_paged_001"
-           )
+    page_two_rows =
+      for ["upsert", path, row] <- page_two_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
 
-    assert has_element?(
-             view,
-             "#derived-telemetry-definitions-pagination button[phx-value-page='1']",
-             "Prev"
-           )
+    assert Enum.any?(page_two_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
+    refute Enum.any?(page_two_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_001"))
 
     {:ok, deep_linked_view, _html} = live(context.conn, page_two_path)
 
-    assert has_element?(
-             deep_linked_view,
-             "#derived-telemetry-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.live_paged_021"
-           )
+    deep_linked_vue = LiveVue.Test.get_vue(deep_linked_view, id: "application-host-component")
+
+    deep_linked_rows =
+      for ["upsert", path, row] <- deep_linked_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
+
+    assert deep_linked_vue.props["declarative_surface"]["table"]["pagination"]["page"] == 2
+    assert Enum.any?(deep_linked_rows, &(&1["values"]["point_id"] == "DERIVED.live_paged_021"))
   end
 
   test "disables, uninstalls, and reinstalls a mission application", context do
@@ -340,117 +377,140 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
              "#mission-application-host[data-application-key='limits'][data-application-version='1'][data-surface-id='manage'][data-renderer='declarative']"
            )
 
-    assert has_element?(view, "#limit-definition-form-fields")
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    surface = vue.props["declarative_surface"]
+    form = surface["form"]
+    assert form["form_id"] == "limit-definition-form-fields"
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-submit[data-application-domain-action='save_limit_definition'][data-action-version='1'][data-action-intent='configuration'][data-action-scope='mission'][data-action-effect='durable'][data-action-execution='immediate'][data-confirmation-required='false']",
-             "Save limit definition"
-           )
+    assert form["action"] == %{
+             "id" => "limit-definition-form-submit",
+             "action_id" => "save_limit_definition",
+             "label" => "Save limit definition",
+             "version" => 1,
+             "intent" => "configuration",
+             "scope" => "mission",
+             "effect" => "durable",
+             "execution" => "immediate",
+             "confirmation" => nil,
+             "disabled" => false
+           }
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-field-point_id[data-field-type='reference'][data-reference-provider='cadence.telemetry.canonical_points'][data-reference-version='1'][data-reference-mode='search'][data-reference-query='']"
-           )
+    point_id_field = Enum.find(form["fields"], &(&1["field"] == "point_id"))
+    assert point_id_field["id"] == "limit-definition-form-field-point_id"
+    assert point_id_field["contract_type"] == "reference"
+    assert point_id_field["type"] == "text"
+    assert point_id_field["name"] == "application_action[point_id]"
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-fields input[name='application_action[point_id]'][list='limit-definition-form-reference-point_id-options'][phx-debounce='250']"
-           )
+    assert point_id_field["reference"] == %{
+             "provider_id" => "cadence.telemetry.canonical_points",
+             "version" => 1,
+             "mode" => "search",
+             "query" => "",
+             "result_limit" => 20,
+             "options_id" => "limit-definition-form-reference-point_id-options",
+             "status_id" => "limit-definition-form-reference-point_id-status",
+             "match_count" => 1,
+             "more_matches" => false,
+             "debounce_ms" => 250,
+             "max_length" => 120,
+             "result_summary" => "1 mission reference",
+             "options" => [
+               %{
+                 "label" => "DERIVED.bus_power",
+                 "value" => "DERIVED.bus_power",
+                 "disabled" => false,
+                 "description" => "Derived telemetry · Bus power"
+               }
+             ]
+           }
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-reference-point_id-options option[value='DERIVED.bus_power'][label='DERIVED.bus_power']"
-           )
-
-    assert has_element?(
-             view,
-             "#limit-definition-form-reference-point_id-status[data-match-count='1'][data-more-matches='false']",
-             "1 mission reference"
-           )
-
-    view
-    |> element("#limit-definition-form-fields")
-    |> render_change(%{
+    render_hook(view, "application_form_change", %{
       "_target" => ["application_action", "point_id"],
       "application_action" => %{"point_id" => "power"}
     })
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-field-point_id[data-reference-query='power']"
+    searched_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    searched_form = searched_vue.props["declarative_surface"]["form"]
+    searched_point_id = Enum.find(searched_form["fields"], &(&1["field"] == "point_id"))
+    assert searched_point_id["reference"]["query"] == "power"
+
+    assert Enum.any?(
+             searched_point_id["reference"]["options"],
+             &(&1["value"] == "DERIVED.bus_power")
            )
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-reference-point_id-options option[value='DERIVED.bus_power']"
-           )
-
-    view
-    |> element("#limit-definition-form-fields")
-    |> render_change(%{
+    render_hook(view, "application_form_change", %{
       "_target" => ["application_action", "point_id"],
       "application_action" => %{"point_id" => "missing"}
     })
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-reference-point_id-status[data-match-count='0'][data-more-matches='false']",
-             "No matching mission references"
-           )
+    missing_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    missing_form = missing_vue.props["declarative_surface"]["form"]
+    missing_point_id = Enum.find(missing_form["fields"], &(&1["field"] == "point_id"))
+    assert missing_point_id["reference"]["match_count"] == 0
+    assert missing_point_id["reference"]["more_matches"] == false
+    assert missing_point_id["reference"]["result_summary"] == "No matching mission references"
+    assert missing_point_id["reference"]["options"] == []
 
-    refute has_element?(
-             view,
-             "#limit-definition-form-reference-point_id-options option[value='DERIVED.bus_power']"
-           )
+    number_fields = Enum.filter(missing_form["fields"], &(&1["type"] == "number"))
+    assert Enum.all?(number_fields, &(&1["step"] == "any"))
 
-    assert has_element?(view, "#limit-definition-form-fields input[type='number'][step='any']")
-    assert has_element?(view, "#limit-definitions-rows")
-    refute has_element?(view, "#limit-current-posture-items")
+    assert missing_vue.props["declarative_surface"]["table"]["rows_id"] ==
+             "limit-definitions-rows"
 
-    assert has_element?(
-             view,
-             "#application-surface-nav-manage[aria-current='page']",
-             "Definitions"
-           )
+    assert missing_vue.props["declarative_surface"]["activity"] == nil
+
+    navigation = missing_vue.props["navigation"]
+    manage_item = Enum.find(navigation["items"], &(&1["surface_id"] == "manage"))
+    assert manage_item["id"] == "application-surface-nav-manage"
+    assert manage_item["current"]
+    assert manage_item["label"] == "Definitions"
 
     activity_path =
       ~p"/missions/#{context.mission.mission_id}/applications/limits/activity"
 
-    assert has_element?(
-             view,
-             "#application-surface-nav-activity[href='#{activity_path}']",
-             "Current posture"
-           )
+    activity_item = Enum.find(navigation["items"], &(&1["surface_id"] == "activity"))
+    assert activity_item["id"] == "application-surface-nav-activity"
+    assert activity_item["href"] == activity_path
+    assert activity_item["label"] == "Current posture"
 
-    view
-    |> form("#limit-definition-form-fields", %{
+    render_hook(view, "application_action", %{
+      "action-id" => "save_limit_definition",
       "application_action" => %{
         "point_id" => "DERIVED.bus_power",
         "limit_set_name" => "FLIGHT",
         "red_high" => "hot"
       }
     })
-    |> render_submit()
 
-    assert has_element?(
-             view,
-             "#application-action-feedback[data-kind='error'][data-code='invalid_number']",
-             "Red high must be a number."
-           )
+    invalid_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    invalid_surface = invalid_vue.props["declarative_surface"]
 
-    assert has_element?(
-             view,
-             "#limit-definition-form-fields input[name='application_action[red_high]'][value='hot'].input-error"
-           )
+    assert invalid_surface["action_feedback"] == %{
+             "id" => "application-action-feedback",
+             "role" => "alert",
+             "kind" => "error",
+             "code" => "invalid_number",
+             "label" => "Action blocked",
+             "message" => "Red high must be a number."
+           }
 
-    refute has_element?(
-             view,
-             "#limit-definitions-rows tr[id^='application-surface-row-']"
-           )
+    red_high_field =
+      Enum.find(invalid_surface["form"]["fields"], &(&1["field"] == "red_high"))
 
-    view
-    |> form("#limit-definition-form-fields", %{
+    assert red_high_field["name"] == "application_action[red_high]"
+    assert red_high_field["value"] == "hot"
+    assert red_high_field["errors"] == ["Red high must be a number."]
+
+    invalid_rows =
+      for ["upsert", path, row] <- invalid_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
+
+    assert invalid_rows == []
+
+    render_hook(view, "application_action", %{
+      "action_id" => "save_limit_definition",
       "application_action" => %{
         "point_id" => "DERIVED.bus_power",
         "limit_set_name" => "FLIGHT",
@@ -460,25 +520,22 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
         "red_high" => "32.5"
       }
     })
-    |> render_submit()
 
-    assert has_element?(
-             view,
-             "#application-action-feedback[data-kind='success'][data-code='action_completed']",
+    saved_vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+    assert saved_vue.props["declarative_surface"]["action_feedback"]["kind"] == "success"
+    assert saved_vue.props["declarative_surface"]["action_feedback"]["code"] == "action_completed"
+
+    assert saved_vue.props["declarative_surface"]["action_feedback"]["message"] ==
              "Limit definition saved."
-           )
 
-    assert has_element?(
-             view,
-             "#limit-definitions-rows tr[id^='application-surface-row-']",
-             "DERIVED.bus_power"
-           )
+    saved_rows =
+      for ["upsert", path, row] <- saved_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
 
-    assert has_element?(
-             view,
-             "#limit-definitions-rows tr[id^='application-surface-row-']",
-             "RL 24.0 · YL 25.5 · YH 31.0 · RH 32.5"
-           )
+    assert [saved_row] = saved_rows
+    assert saved_row["values"]["point"] == "DERIVED.bus_power"
+    assert saved_row["values"]["thresholds"] == "RL 24.0 · YL 25.5 · YH 31.0 · RH 32.5"
 
     now = DateTime.utc_now()
 
@@ -505,14 +562,15 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     assert {:ok, [_row]} = Store.persist_latest_states(Repo, [event])
 
     {:ok, remounted_view, _html} = live(context.conn, application_path)
+    remounted_vue = LiveVue.Test.get_vue(remounted_view, id: "application-host-component")
 
-    assert has_element?(
-             remounted_view,
-             "#limit-definitions-rows tr[id^='application-surface-row-']",
-             "v1"
-           )
+    remounted_rows =
+      for ["upsert", path, row] <- remounted_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_rows/"),
+          do: row
 
-    refute has_element?(remounted_view, "#limit-current-posture-items")
+    assert Enum.any?(remounted_rows, &(&1["values"]["version"] == "v1"))
+    assert remounted_vue.props["declarative_surface"]["activity"] == nil
 
     {:ok, activity_view, _html} = live(context.conn, activity_path)
 
@@ -521,37 +579,38 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
              "#mission-application-host[data-application-key='limits'][data-surface-id='activity']"
            )
 
-    assert has_element?(
-             activity_view,
-             "#application-surface-nav-activity[aria-current='page']",
-             "Current posture"
-           )
+    activity_vue = LiveVue.Test.get_vue(activity_view, id: "application-host-component")
+    activity_surface = activity_vue.props["declarative_surface"]
+    activity_navigation = activity_vue.props["navigation"]
 
-    refute has_element?(activity_view, "#limit-definition-form-fields")
-    refute has_element?(activity_view, "#limit-definitions-rows")
+    current_activity_item =
+      Enum.find(activity_navigation["items"], &(&1["surface_id"] == "activity"))
 
-    assert has_element?(
-             activity_view,
-             "#limit-current-diagnostics[data-diagnostic-severity='error'][data-diagnostic-count='1'][data-diagnostic-total='1']"
-           )
+    assert current_activity_item["current"]
+    assert current_activity_item["label"] == "Current posture"
+    assert activity_surface["form"] == nil
+    assert activity_surface["table"] == nil
 
-    assert has_element?(
-             activity_view,
-             "#limit-current-diagnostics-item-red-departures[data-diagnostic-code='limits.current.red'][data-diagnostic-severity='error']",
-             "Red limit departures"
-           )
+    assert activity_surface["diagnostics"]["id"] == "limit-current-diagnostics"
+    assert activity_surface["diagnostics"]["severity"] == "error"
+    assert activity_surface["diagnostics"]["count"] == 1
+    assert activity_surface["diagnostics"]["total_count"] == 1
 
-    assert has_element?(
-             activity_view,
-             "#limit-current-posture-items article[id^='application-surface-activity-']",
-             "Bus voltage"
-           )
+    assert [diagnostic] = activity_surface["diagnostics"]["items"]
+    assert diagnostic["id"] == "limit-current-diagnostics-item-red-departures"
+    assert diagnostic["code"] == "limits.current.red"
+    assert diagnostic["severity"] == "error"
+    assert diagnostic["title"] == "Red limit departures"
 
-    assert has_element?(
-             activity_view,
-             "#limit-current-posture-items article[id^='application-surface-activity-']",
-             "33.2"
-           )
+    activity_rows =
+      for ["upsert", path, item] <- activity_vue.streams_diff,
+          String.starts_with?(path, "/application_surface_activity/"),
+          do: item
+
+    assert [activity_row] = activity_rows
+    assert activity_row["__dom_id"] =~ "application-surface-activity-"
+    assert activity_row["title"] == "Bus voltage"
+    assert activity_row["value"] == "33.2"
   end
 
   test "known but uninstalled mission application redirects to the inventory", context do
