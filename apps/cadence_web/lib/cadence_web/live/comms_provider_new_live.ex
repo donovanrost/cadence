@@ -11,40 +11,36 @@ defmodule CadenceWeb.CommsProviderNewLive do
     ProviderAccounts
   }
 
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     bindings = granted_bindings(scope.organization_id, mission.mission_id)
     default_grant_id = bindings |> List.first() |> binding_value(:grant_id, "")
     params = default_params(default_grant_id)
+    selected_binding = find_binding(bindings, default_grant_id)
 
     {:ok,
      socket
      |> assign(:page_title, "New Mission Provider")
      |> assign(:nav_item, :comms_providers)
      |> assign(:provider_bindings, bindings)
-     |> assign(:provider_binding_options, binding_options(bindings))
-     |> assign(:grants_empty?, bindings == [])
-     |> assign(:selected_binding, find_binding(bindings, default_grant_id))
-     |> assign(:selected_policy_mode, params["policy_mode"])
-     |> assign(:form, to_form(params, as: :provider))}
+     |> assign(:page, page_dto(mission))
+     |> assign(:accounts, accounts_dto(bindings, selected_binding))
+     |> assign(:notes, notes_dto())
+     |> assign(:form, form_dto(params, mission, bindings))}
   end
 
   @impl true
   def handle_event("validate", %{"provider" => params}, socket) do
-    {:noreply,
-     socket
-     |> assign(
-       :selected_binding,
-       find_binding(socket.assigns.provider_bindings, params["provider_account_grant_id"])
-     )
-     |> assign(:selected_policy_mode, params["policy_mode"])
-     |> assign(:form, to_form(params, as: :provider))}
+    {:noreply, sync_form(socket, params)}
   end
 
   @impl true
   def handle_event("save", %{"provider" => params}, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    socket = sync_form(socket, params)
 
     with {:ok, binding} <- selected_binding(socket.assigns.provider_bindings, params),
          {:ok, attrs} <- provider_attrs(params, mission.mission_id, binding),
@@ -69,174 +65,289 @@ defmodule CadenceWeb.CommsProviderNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-provider-new-page" class="max-w-3xl space-y-6">
-      <.page_header
-        title="New Mission Provider"
-        subtitle="Bind an organization-approved ground network account and define this mission's delivery tolerances."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Providers", ~p"/missions/#{@current_mission.mission_id}/comms/providers"},
-          {"New", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="comms-provider-new-component"
+        v-component="CommsProviderNew"
+        page={@page}
+        accounts={@accounts}
+        notes={@notes}
+        form={@form}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="max-w-3xl space-y-6"
       />
-
-      <div
-        :if={@grants_empty?}
-        id="mission-provider-no-grants"
-        class="border border-warning/40 bg-warning/10 p-5"
-      >
-        <p class="font-semibold">This mission has no Provider Account grants.</p>
-        <p class="mt-1 text-sm text-base-content/70">
-          An organization administrator must grant an account before mission setup can continue.
-        </p>
-        <.button class="mt-4" navigate={~p"/provider-accounts"} variant={:secondary}>
-          Open Provider Accounts
-        </.button>
-      </div>
-
-      <.form
-        :if={!@grants_empty?}
-        for={@form}
-        id="mission-provider-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section number="01" title="Mission Binding">
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-          <.input
-            field={@form[:provider_account_grant_id]}
-            type="select"
-            label="Granted Provider Account"
-            options={@provider_binding_options}
-            required
-          />
-
-          <div :if={@selected_binding} id="mission-provider-account-summary" class="border border-base-300 bg-base-200/60 p-4">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <p class="hud-label">Organization-owned configuration</p>
-                <p class="mt-1 font-medium">{@selected_binding.account.display_name}</p>
-                <p class="mt-1 font-mono text-xs text-base-content/50">
-                  account v{@selected_binding.account_version.version} · grant v{@selected_binding.grant.version}
-                </p>
-              </div>
-              <.status_badge status={:ready} label="Granted" />
-            </div>
-            <div class="mt-4 grid gap-3 sm:grid-cols-2">
-              <div>
-                <p class="hud-label">Account Guardrails</p>
-                <p class="mt-1 text-xs text-base-content/70">
-                  {restriction_summary(@selected_binding.account_version.guardrails)}
-                </p>
-              </div>
-              <div>
-                <p class="hud-label">Mission Restrictions</p>
-                <p class="mt-1 text-xs text-base-content/70">
-                  {restriction_summary(@selected_binding.grant.restrictions)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </.form_section>
-
-        <.form_section number="02" title="Mission Resource Scope">
-          <.input
-            field={@form[:permitted_resource_refs]}
-            type="text"
-            label="Permitted Stations or Service Pools"
-            placeholder="station-alpha, station-beta"
-          />
-          <p id="mission-provider-resource-guardrail-note" class="text-xs text-base-content/60">
-            Leave blank to inherit the grant. Any listed resources must be inside both the account
-            guardrails and the mission grant.
-          </p>
-        </.form_section>
-
-        <.form_section number="03" title="Delivery Change Policy">
-          <.input
-            field={@form[:policy_mode]}
-            type="select"
-            label="Material Change Handling"
-            options={[
-              {"Require approval for every material change", "approval_required"},
-              {"Automatically accept changes within limits", "bounded_automatic"}
-            ]}
-            required
-          />
-
-          <div
-            :if={@selected_policy_mode == "approval_required"}
-            id="mission-provider-approval-policy-guidance"
-            class="border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70"
-          >
-            Provider facts are still recorded immediately, but actionable schedule or resource
-            changes wait for an authorized operator decision.
-          </div>
-
-          <div
-            :if={@selected_policy_mode == "bounded_automatic"}
-            id="mission-provider-bounded-policy-fields"
-            class="grid gap-4 sm:grid-cols-2"
-          >
-            <.input
-              field={@form[:maximum_earlier_start_shift_seconds]}
-              type="number"
-              min="0"
-              label="Max Earlier Start Shift (seconds)"
-            />
-            <.input
-              field={@form[:maximum_later_start_shift_seconds]}
-              type="number"
-              min="0"
-              label="Max Later Start Shift (seconds)"
-            />
-            <.input
-              field={@form[:maximum_earlier_end_shift_seconds]}
-              type="number"
-              min="0"
-              label="Max Earlier End Shift (seconds)"
-            />
-            <.input
-              field={@form[:maximum_later_end_shift_seconds]}
-              type="number"
-              min="0"
-              label="Max Later End Shift (seconds)"
-            />
-            <.input
-              field={@form[:minimum_retained_duration_seconds]}
-              type="number"
-              min="1"
-              label="Minimum Retained Duration (seconds)"
-            />
-            <.input
-              field={@form[:approved_station_substitutions]}
-              type="text"
-              label="Approved Station Substitutions"
-              placeholder="station-alpha, station-beta"
-            />
-          </div>
-
-          <.input
-            field={@form[:deadline_behavior]}
-            type="select"
-            label="No-response Deadline Behavior"
-            options={[
-              {"Retain last accepted schedule", "retain_last_accepted"},
-              {"Cancel if still actionable", "cancel_if_actionable"}
-            ]}
-            required
-          />
-        </.form_section>
-
-        <.form_actions
-          submit="Create Mission Provider"
-          cancel_navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
-        />
-      </.form>
-    </div>
+    </Layouts.app>
     """
+  end
+
+  defp sync_form(socket, params) do
+    bindings = socket.assigns.provider_bindings
+    selected_binding = find_binding(bindings, params["provider_account_grant_id"])
+
+    socket
+    |> assign(:accounts, accounts_dto(bindings, selected_binding))
+    |> assign(:form, form_dto(params, socket.assigns.current_mission, bindings))
+  end
+
+  defp page_dto(mission) do
+    %{
+      id: "comms-provider-new-page",
+      title: "New Mission Provider",
+      subtitle:
+        "Bind an organization-approved ground network account and define this mission's delivery tolerances.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{label: "Providers", href: ~p"/missions/#{mission.mission_id}/comms/providers"},
+        %{label: "New", href: nil}
+      ]
+    }
+  end
+
+  defp accounts_dto(bindings, selected_binding) do
+    %{
+      empty: bindings == [],
+      options: Enum.map(bindings, &binding_option_dto/1),
+      selected: account_summary_dto(selected_binding),
+      empty_state: %{
+        id: "mission-provider-no-grants",
+        heading: "This mission has no Provider Account grants.",
+        message:
+          "An organization administrator must grant an account before mission setup can continue.",
+        action: %{
+          id: "open-provider-accounts-link",
+          label: "Open Provider Accounts",
+          href: ~p"/provider-accounts"
+        }
+      }
+    }
+  end
+
+  defp account_summary_dto(nil), do: nil
+
+  defp account_summary_dto(binding) do
+    %{
+      id: "mission-provider-account-summary",
+      ownership_label: "Organization-owned configuration",
+      display_name: binding.account.display_name,
+      version_label:
+        "account v#{binding.account_version.version} · grant v#{binding.grant.version}",
+      badge: %{status: "ready", label: "Granted"},
+      restrictions: [
+        %{
+          label: "Account Guardrails",
+          summary: restriction_summary(binding.account_version.guardrails)
+        },
+        %{
+          label: "Mission Restrictions",
+          summary: restriction_summary(binding.grant.restrictions)
+        }
+      ]
+    }
+  end
+
+  defp notes_dto do
+    %{
+      secret_boundary: %{
+        id: "mission-provider-secret-boundary-note",
+        text:
+          "Provider endpoint, credential, and environment values remain organization-owned and are never exposed to this mission form."
+      },
+      resource_boundary: %{
+        id: "mission-provider-resource-guardrail-note",
+        text:
+          "Leave blank to inherit the grant. Any listed resources must be inside both the account guardrails and the mission grant."
+      }
+    }
+  end
+
+  defp form_dto(params, mission, bindings) do
+    policy_mode = string_param(params, "policy_mode")
+
+    %{
+      id: "mission-provider-form",
+      sections: %{
+        binding:
+          section_dto(
+            "mission-provider-binding-section",
+            "01",
+            "Mission Binding",
+            ["display_name", "provider_account_grant_id"]
+          ),
+        resource_scope:
+          section_dto(
+            "mission-provider-resource-scope-section",
+            "02",
+            "Mission Resource Scope",
+            ["permitted_resource_refs"]
+          ),
+        delivery_policy:
+          section_dto(
+            "mission-provider-delivery-policy-section",
+            "03",
+            "Delivery Change Policy",
+            ["policy_mode", "deadline_behavior"]
+          )
+      },
+      fields: fields_dto(params, bindings),
+      conditional: %{
+        approval_guidance: %{
+          id: "mission-provider-approval-policy-guidance",
+          active: policy_mode == "approval_required",
+          visible_when: %{field: "policy_mode", equals: "approval_required"},
+          text:
+            "Provider facts are still recorded immediately, but actionable schedule or resource changes wait for an authorized operator decision."
+        },
+        bounded_policy: %{
+          id: "mission-provider-bounded-policy-fields",
+          active: policy_mode == "bounded_automatic",
+          visible_when: %{field: "policy_mode", equals: "bounded_automatic"},
+          field_keys: [
+            "maximum_earlier_start_shift_seconds",
+            "maximum_later_start_shift_seconds",
+            "maximum_earlier_end_shift_seconds",
+            "maximum_later_end_shift_seconds",
+            "minimum_retained_duration_seconds",
+            "approved_station_substitutions"
+          ]
+        }
+      },
+      actions: %{
+        submit: %{id: "create-mission-provider-button", label: "Create Mission Provider"},
+        cancel: %{
+          id: "cancel-mission-provider-link",
+          label: "Cancel",
+          href: ~p"/missions/#{mission.mission_id}/comms/providers"
+        }
+      }
+    }
+  end
+
+  defp section_dto(id, number, title, field_keys) do
+    %{id: id, number: number, title: title, field_keys: field_keys}
+  end
+
+  defp fields_dto(params, bindings) do
+    %{
+      display_name:
+        field_dto(:display_name, "text", "Display Name", params, required: true),
+      provider_account_grant_id:
+        field_dto(
+          :provider_account_grant_id,
+          "select",
+          "Granted Provider Account",
+          params,
+          required: true,
+          options: Enum.map(bindings, &binding_option_dto/1)
+        ),
+      permitted_resource_refs:
+        field_dto(
+          :permitted_resource_refs,
+          "text",
+          "Permitted Stations or Service Pools",
+          params,
+          placeholder: "station-alpha, station-beta"
+        ),
+      policy_mode:
+        field_dto(:policy_mode, "select", "Material Change Handling", params,
+          required: true,
+          options: [
+            option_dto("Require approval for every material change", "approval_required"),
+            option_dto("Automatically accept changes within limits", "bounded_automatic")
+          ]
+        ),
+      maximum_earlier_start_shift_seconds:
+        field_dto(
+          :maximum_earlier_start_shift_seconds,
+          "number",
+          "Max Earlier Start Shift (seconds)",
+          params,
+          min: 0
+        ),
+      maximum_later_start_shift_seconds:
+        field_dto(
+          :maximum_later_start_shift_seconds,
+          "number",
+          "Max Later Start Shift (seconds)",
+          params,
+          min: 0
+        ),
+      maximum_earlier_end_shift_seconds:
+        field_dto(
+          :maximum_earlier_end_shift_seconds,
+          "number",
+          "Max Earlier End Shift (seconds)",
+          params,
+          min: 0
+        ),
+      maximum_later_end_shift_seconds:
+        field_dto(
+          :maximum_later_end_shift_seconds,
+          "number",
+          "Max Later End Shift (seconds)",
+          params,
+          min: 0
+        ),
+      minimum_retained_duration_seconds:
+        field_dto(
+          :minimum_retained_duration_seconds,
+          "number",
+          "Minimum Retained Duration (seconds)",
+          params,
+          min: 1
+        ),
+      approved_station_substitutions:
+        field_dto(
+          :approved_station_substitutions,
+          "text",
+          "Approved Station Substitutions",
+          params,
+          placeholder: "station-alpha, station-beta"
+        ),
+      deadline_behavior:
+        field_dto(:deadline_behavior, "select", "No-response Deadline Behavior", params,
+          required: true,
+          options: [
+            option_dto("Retain last accepted schedule", "retain_last_accepted"),
+            option_dto("Cancel if still actionable", "cancel_if_actionable")
+          ]
+        )
+    }
+  end
+
+  defp field_dto(field, type, label, params, opts) do
+    key = Atom.to_string(field)
+
+    %{
+      key: key,
+      id: "provider_#{key}",
+      name: "provider[#{key}]",
+      type: type,
+      label: label,
+      required: Keyword.get(opts, :required, false),
+      placeholder: Keyword.get(opts, :placeholder),
+      min: Keyword.get(opts, :min),
+      options: Keyword.get(opts, :options, []),
+      value: string_param(params, key)
+    }
+  end
+
+  defp binding_option_dto(binding) do
+    option_dto(
+      "#{binding.account.display_name} · account v#{binding.account_version.version} · grant v#{binding.grant.version}",
+      binding.grant_id
+    )
+  end
+
+  defp option_dto(label, value), do: %{label: label, value: value}
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 
   defp granted_bindings(organization_id, mission_id) do
@@ -373,13 +484,6 @@ defmodule CadenceWeb.CommsProviderNewLive do
     else
       {:error, "Permitted resources must stay within the Provider Account grant."}
     end
-  end
-
-  defp binding_options(bindings) do
-    Enum.map(bindings, fn binding ->
-      {"#{binding.account.display_name} · account v#{binding.account_version.version} · grant v#{binding.grant.version}",
-       binding.grant_id}
-    end)
   end
 
   defp binding_value(nil, _key, default), do: default
