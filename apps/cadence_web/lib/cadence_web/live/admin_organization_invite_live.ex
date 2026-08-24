@@ -2,6 +2,8 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(%{"org_id" => org_id}, _session, socket) do
     case Cadence.Organizations.fetch_organization(org_id) do
@@ -11,7 +13,8 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
          |> assign(:page_title, "Invite to #{organization.display_name}")
          |> assign(:nav_item, :admin_organizations)
          |> assign(:organization, organization)
-         |> assign(:form, to_form(default_invite_params(), as: :invite))}
+         |> assign(:page, page_dto(organization))
+         |> assign(:form, form_dto(default_invite_params()))}
 
       {:error, :organization_not_found} ->
         {:ok,
@@ -23,7 +26,7 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
 
   @impl true
   def handle_event("validate", %{"invite" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :invite))}
+    {:noreply, assign(socket, :form, form_dto(params))}
   end
 
   @impl true
@@ -62,60 +65,61 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
          |> push_navigate(to: ~p"/admin/organizations/#{org.organization_id}")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, error_message(reason))}
+        {:noreply,
+         socket
+         |> assign(:form, form_dto(params))
+         |> put_flash(:error, error_message(reason))}
     end
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-xl">
-      <.page_header
-        title="Invite User"
-        subtitle={"Invite a user to #{@organization.display_name}. The invited user will see a notification and must accept the invitation to gain access."}
-        breadcrumbs={[
-          {"Platform Admin", ~p"/admin"},
-          {"Organizations", ~p"/admin/organizations"},
-          {@organization.display_name, ~p"/admin/organizations/#{@organization.organization_id}"},
-          {"Invite User", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="admin-organization-invite-component"
+        v-component="AdminOrganizationInvite"
+        page={@page}
+        form={@form}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
       />
-
-      <.form for={@form} id="invite-form" phx-change="validate" phx-submit="save" class="space-y-4">
-        <.input
-          field={@form[:email]}
-          type="email"
-          label="Email"
-          placeholder="operator@example.com"
-          required
-        />
-        <.input
-          field={@form[:display_name]}
-          type="text"
-          label="Display Name"
-          placeholder="Flight Operator"
-        />
-        <.input
-          field={@form[:membership_role]}
-          type="select"
-          label="Role"
-          options={[{"Organization Admin", "organization_admin"}, {"Member", "member"}]}
-        />
-
-        <.input
-          field={@form[:grant_platform_admin]}
-          type="checkbox"
-          label="Grant platform admin"
-          description="Platform admins can manage all organizations and system settings."
-        />
-
-        <.form_actions
-          submit="Send invitation"
-          cancel_navigate={~p"/admin/organizations/#{@organization.organization_id}"}
-        />
-      </.form>
-    </div>
+    </Layouts.app>
     """
+  end
+
+  defp page_dto(organization) do
+    %{
+      title: "Invite User",
+      subtitle:
+        "Invite a user to #{organization.display_name}. The invited user will see a notification and must accept the invitation to gain access.",
+      breadcrumbs: [
+        %{label: "Platform Admin", href: ~p"/admin"},
+        %{label: "Organizations", href: ~p"/admin/organizations"},
+        %{
+          label: organization.display_name,
+          href: ~p"/admin/organizations/#{organization.organization_id}"
+        },
+        %{label: "Invite User", href: nil}
+      ],
+      role_options: [
+        %{label: "Organization Admin", value: "organization_admin"},
+        %{label: "Member", value: "member"}
+      ],
+      submit_label: "Send invitation",
+      cancel_label: "Cancel",
+      cancel_href: ~p"/admin/organizations/#{organization.organization_id}"
+    }
+  end
+
+  defp form_dto(params) do
+    %{
+      email: string_param(params, "email"),
+      display_name: string_param(params, "display_name"),
+      membership_role: string_param(params, "membership_role", "member"),
+      grant_platform_admin: boolean_param(params, "grant_platform_admin")
+    }
   end
 
   defp default_invite_params do
@@ -125,6 +129,17 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
       "membership_role" => "member",
       "grant_platform_admin" => "false"
     }
+  end
+
+  defp string_param(params, key, default \\ "") when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> default
+    end
+  end
+
+  defp boolean_param(params, key) when is_map(params) do
+    Map.get(params, key) in [true, "true"]
   end
 
   defp normalize_role("organization_admin"), do: :organization_admin
