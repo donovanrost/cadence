@@ -14,6 +14,8 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     ProviderEventInbox
   }
 
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(%{"provider_account_id" => provider_account_id}, _session, socket) do
     socket =
@@ -161,178 +163,27 @@ defmodule CadenceWeb.ProviderAccountShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="provider-account-show-page" class="space-y-6">
-        <.page_header
-          title={@provider_account.display_name}
-          subtitle={@provider_account.provider_account_id}
-          breadcrumbs={[
-            {"Provider Accounts", ~p"/provider-accounts"},
-            {@provider_account.display_name, nil}
-          ]}
-        >
-          <:title_suffix>
-            <span class="font-mono text-xs text-base-content/60">
-              config v{@account_version.version}
-            </span>
-          </:title_suffix>
-          <:actions>
-            <.button
-              id="validate-provider-account-button"
-              variant={:secondary}
-              phx-click="validate-account"
-              disabled={!is_nil(@account_action) or @credential.status == :revoked}
-            >
-              <.icon name="hero-shield-check" class="h-4 w-4" />
-              {if(@account_action == :validate, do: "Validating…", else: "Validate")}
-            </.button>
-            <.button
-              id="rotate-provider-credential-button"
-              phx-click="rotate-credential"
-              disabled={!is_nil(@account_action) or @credential.status == :revoked}
-            >
-              <.icon name="hero-arrow-path" class="h-4 w-4" />
-              {if(@account_action == :rotate, do: "Rotating…", else: "Rotate")}
-            </.button>
-            <.button
-              :if={@credential.status != :revoked}
-              id="revoke-provider-credential-button"
-              variant={:danger}
-              phx-click="revoke-credential"
-              data-confirm="Revoke this Provider Account credential? New provider operations will stop."
-              disabled={!is_nil(@account_action)}
-            >
-              Revoke Credential
-            </.button>
-          </:actions>
-        </.page_header>
-
-        <div class="grid gap-3 md:grid-cols-4">
-          <.stat_tile id="provider-account-health" label="Account Health" value={account_health(@provider_account)} />
-          <.stat_tile id="provider-account-credential-status" label="Credential" value={credential_status(@credential)} />
-          <.stat_tile id="provider-account-event-mode" label="Event Mode" value={humanize(@account_version.event_ingestion_mode)} />
-          <.stat_tile id="provider-account-grant-count" label="Mission Grants" value={@active_grant_count} />
-        </div>
-
-        <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
-          <div class="space-y-4">
-            <.card
-              id="provider-account-grants-card"
-              heading="Mission Grants"
-              subtitle="Explicit, versioned authorization. Mission restrictions may narrow but never widen organization guardrails."
-              padding={:none}
-            >
-              <div id="provider-account-grants" phx-update="stream" class="divide-y divide-base-300">
-                <div id="provider-account-grants-empty" class="hidden only:block p-5 text-sm text-base-content/60">
-                  No missions have access to this account.
-                </div>
-                <div :for={{dom_id, grant} <- @streams.account_grants} id={dom_id} class="flex items-start justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p class="font-medium">{mission_name(@mission_names, grant.mission_id)}</p>
-                    <p class="mt-1 font-mono text-xs text-base-content/50">
-                      grant v{grant.version} · account v{grant.provider_account_version}
-                    </p>
-                    <p :if={map_size(grant.restrictions) > 0} class="mt-2 text-xs text-base-content/60">
-                      {restriction_summary(grant.restrictions)}
-                    </p>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <.status_badge status={grant_status(grant)} label={humanize(grant.lifecycle_state)} />
-                    <.button
-                      :if={grant.lifecycle_state == :active}
-                      id={"revoke-grant-#{grant.provider_account_grant_id}"}
-                      size={:xs}
-                      variant={:danger}
-                      phx-click="revoke-grant"
-                      phx-value-grant-id={grant.provider_account_grant_id}
-                      data-confirm="Revoke this mission grant? New operations will stop."
-                    >
-                      Revoke
-                    </.button>
-                  </div>
-                </div>
-              </div>
-            </.card>
-
-            <.card id="provider-account-grant-form-card" heading="Grant Mission Access" subtitle="Start from organization guardrails and optionally narrow the mission scope.">
-              <.form for={@grant_form} id="provider-account-grant-form" phx-submit="grant-mission" class="space-y-4">
-                <.input field={@grant_form[:mission_id]} type="select" label="Mission" options={@mission_options} required />
-                <.input field={@grant_form[:allowed_services]} type="text" label="Allowed Services" placeholder="telemetry, tracking" />
-                <.input field={@grant_form[:allowed_stations]} type="text" label="Allowed Stations" placeholder="station-alpha" />
-                <.input field={@grant_form[:max_quota]} type="number" min="0" label="Maximum Quota" />
-                <.input field={@grant_form[:grant_reason]} type="text" label="Grant Reason" placeholder="Flight operations authorization" />
-                <div class="flex justify-end">
-                  <.button id="grant-provider-account-button" type="submit">Grant Access</.button>
-                </div>
-              </.form>
-            </.card>
-
-            <.card id="provider-account-audit-card" heading="Recent Account Activity" subtitle="Bounded, append-only account and credential evidence." padding={:none}>
-              <div id="provider-account-audit" phx-update="stream" class="divide-y divide-base-300">
-                <div id="provider-account-audit-empty" class="hidden only:block p-5 text-sm text-base-content/60">No account activity recorded.</div>
-                <div :for={{dom_id, entry} <- @streams.account_audit} id={dom_id} class="grid gap-2 px-5 py-3 sm:grid-cols-[10rem_minmax(0,1fr)_6rem] sm:items-center">
-                  <time class="font-mono text-xs text-base-content/50">{timestamp_label(entry.recorded_at)}</time>
-                  <span class="text-sm">{audit_label(entry.action)}</span>
-                  <.status_badge status={audit_status(entry.outcome)} label={entry.outcome} />
-                </div>
-              </div>
-            </.card>
-          </div>
-
-          <aside class="space-y-4">
-            <.card id="provider-account-configuration" title="Effective Configuration">
-              <div class="mt-3 divide-y divide-base-300">
-                <.detail_row label="Provider" value={humanize(@account_version.provider_type)} />
-                <.detail_row label="Region" value={@account_version.region_ref || "Not specified"} mono />
-                <.detail_row label="Environment" value={@account_version.environment_ref} mono />
-                <.detail_row label="Validated" value={timestamp_label(@provider_account.last_validated_at)} />
-              </div>
-            </.card>
-
-            <.card id="provider-account-ingestion" title="Event Ingestion">
-              <div class="mt-3 divide-y divide-base-300">
-                <.detail_row label="Mode" value={humanize(@account_version.event_ingestion_mode)} />
-                <div id="provider-account-ingestion-health">
-                  <.detail_row label="Cursor health" value={@ingestion_summary.health} />
-                </div>
-                <div id="provider-account-ingestion-backlog">
-                  <.detail_row label="Inbox backlog" value={to_string(@ingestion_summary.backlog)} mono />
-                </div>
-                <div id="provider-account-ingestion-quarantined">
-                  <.detail_row label="Quarantined" value={to_string(@ingestion_summary.quarantined)} mono />
-                </div>
-                <div id="provider-account-ingestion-last-event">
-                  <.detail_row label="Last provider event" value={timestamp_label(@ingestion_summary.last_event_at)} />
-                </div>
-              </div>
-              <p class="mt-3 text-xs text-base-content/50">
-                {@ingestion_summary.description}
-              </p>
-            </.card>
-
-            <.card id="provider-account-guardrails" title="Organization Guardrails">
-              <pre class="mt-3 max-h-72 overflow-auto bg-base-100/50 p-3 font-mono text-xs text-base-content/70">{Jason.encode!(@account_version.guardrails, pretty: true)}</pre>
-            </.card>
-          </aside>
-        </div>
-
-        <details id="provider-account-admin-diagnostics" class="rounded border border-base-300 bg-base-200/60 p-4 text-sm">
-          <summary class="cursor-pointer hud-label hover:text-primary">Admin Diagnostics</summary>
-          <div class="mt-4 grid gap-4 lg:grid-cols-2">
-            <div class="divide-y divide-base-300">
-              <.detail_row label="API base URL" value={@account_version.base_url} mono />
-              <.detail_row label="Client adapter" value={Atom.to_string(@account_version.client_key)} mono />
-              <.detail_row label="Credential registry version" value={"v#{@credential.registry_version}"} mono />
-              <.detail_row label="Credential backend" value={humanize(@credential.backend_type)} />
-            </div>
-            <div class="divide-y divide-base-300">
-              <.detail_row label="Account version" value={"v#{@account_version.version}"} mono />
-              <.detail_row label="Credential status" value={humanize(@credential.status)} />
-              <.detail_row label="Last resolved" value={timestamp_label(@credential.last_resolved_at)} />
-              <.detail_row label="Last rotated" value={timestamp_label(@credential.last_rotated_at)} />
-            </div>
-          </div>
-        </details>
-      </div>
+      <.vue
+        id="provider-account-show-component"
+        v-component="ProviderAccountShow"
+        page={provider_account_page_dto(@provider_account, @account_version)}
+        actions={account_actions_dto(@account_action, @credential)}
+        stats={account_stats_dto(@provider_account, @account_version, @credential, @active_grant_count)}
+        grant_form={@grant_form}
+        configuration={configuration_dto(@provider_account, @account_version)}
+        ingestion={ingestion_dto(@account_version, @ingestion_summary)}
+        guardrails={guardrails_dto(@account_version.guardrails)}
+        diagnostics={diagnostics_dto(@account_version, @credential)}
+        account_grants={@streams.account_grants}
+        account_audit={@streams.account_audit}
+        v-on:validate-account={JS.push("validate-account")}
+        v-on:rotate-credential={JS.push("rotate-credential")}
+        v-on:revoke-credential={JS.push("revoke-credential")}
+        v-on:grant-mission={JS.push("grant-mission")}
+        v-on:revoke-grant={JS.push("revoke-grant")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
@@ -371,6 +222,9 @@ defmodule CadenceWeb.ProviderAccountShowLive do
       inbox_counts =
         ProviderEventInbox.counts(scope.organization_id, account.provider_account_id)
 
+      grant_rows = Enum.map(grants, &grant_dto(&1, mission_names))
+      audit_rows = Enum.map(audits, &audit_dto/1)
+
       {:ok,
        socket
        |> assign(:page_title, account.display_name)
@@ -381,11 +235,9 @@ defmodule CadenceWeb.ProviderAccountShowLive do
        |> assign(:ingestion_summary, ingestion_summary(cursors, inbox_counts))
        |> assign(:account_action, nil)
        |> assign(:active_grant_count, Enum.count(grants, &(&1.lifecycle_state == :active)))
-       |> assign(:mission_names, mission_names)
-       |> assign(:mission_options, mission_options)
-       |> assign(:grant_form, to_form(default_grant_params(), as: :grant))
-       |> stream(:account_grants, grants, reset: true)
-       |> stream(:account_audit, audits, reset: true)}
+       |> assign(:grant_form, grant_form_dto(mission_options))
+       |> stream(:account_grants, grant_rows, reset: true)
+       |> stream(:account_audit, audit_rows, reset: true)}
     end
   end
 
@@ -422,6 +274,272 @@ defmodule CadenceWeb.ProviderAccountShowLive do
   end
 
   defp state_count(counts, state), do: Map.get(counts, state, 0)
+
+  defp provider_account_page_dto(account, version) do
+    %{
+      id: "provider-account-show-page",
+      header: %{
+        title: account.display_name,
+        subtitle: account.provider_account_id,
+        config_label: "config v#{version.version}",
+        breadcrumbs: [
+          %{label: "Provider Accounts", href: ~p"/provider-accounts"},
+          %{label: account.display_name, href: nil}
+        ]
+      },
+      grants: %{
+        card_id: "provider-account-grants-card",
+        heading: "Mission Grants",
+        subtitle:
+          "Explicit, versioned authorization. Mission restrictions may narrow but never widen organization guardrails.",
+        stream_id: "provider-account-grants",
+        empty: %{
+          id: "provider-account-grants-empty",
+          text: "No missions have access to this account."
+        }
+      },
+      grant_form_card: %{
+        id: "provider-account-grant-form-card",
+        heading: "Grant Mission Access",
+        subtitle: "Start from organization guardrails and optionally narrow the mission scope."
+      },
+      audit: %{
+        card_id: "provider-account-audit-card",
+        heading: "Recent Account Activity",
+        subtitle: "Bounded, append-only account and credential evidence.",
+        stream_id: "provider-account-audit",
+        empty: %{
+          id: "provider-account-audit-empty",
+          text: "No account activity recorded."
+        }
+      }
+    }
+  end
+
+  defp account_actions_dto(account_action, credential) do
+    busy? = not is_nil(account_action)
+    revoked? = credential.status == :revoked
+
+    %{
+      validate: %{
+        id: "validate-provider-account-button",
+        icon: "hero-shield-check",
+        label: if(account_action == :validate, do: "Validating…", else: "Validate"),
+        disabled: busy? or revoked?,
+        payload: %{}
+      },
+      rotate: %{
+        id: "rotate-provider-credential-button",
+        icon: "hero-arrow-path",
+        label: if(account_action == :rotate, do: "Rotating…", else: "Rotate"),
+        disabled: busy? or revoked?,
+        payload: %{}
+      },
+      revoke:
+        if(revoked?,
+          do: nil,
+          else: %{
+            id: "revoke-provider-credential-button",
+            label: "Revoke Credential",
+            confirm:
+              "Revoke this Provider Account credential? New provider operations will stop.",
+            disabled: busy?,
+            payload: %{}
+          }
+        )
+    }
+  end
+
+  defp account_stats_dto(account, version, credential, active_grant_count) do
+    [
+      stat_dto("provider-account-health", "Account Health", account_health(account)),
+      stat_dto(
+        "provider-account-credential-status",
+        "Credential",
+        credential_status(credential)
+      ),
+      stat_dto(
+        "provider-account-event-mode",
+        "Event Mode",
+        humanize(version.event_ingestion_mode)
+      ),
+      stat_dto("provider-account-grant-count", "Mission Grants", active_grant_count)
+    ]
+  end
+
+  defp stat_dto(id, label, value), do: %{id: id, label: label, value: value}
+
+  defp grant_form_dto(mission_options) do
+    params = default_grant_params()
+
+    %{
+      id: "provider-account-grant-form",
+      values: params,
+      fields: %{
+        mission_id:
+          grant_field_dto(:mission_id, "select", "Mission", params,
+            required: true,
+            options:
+              Enum.map(mission_options, fn {label, value} ->
+                %{label: label, value: value, disabled: false}
+              end)
+          ),
+        allowed_services:
+          grant_field_dto(:allowed_services, "text", "Allowed Services", params,
+            placeholder: "telemetry, tracking"
+          ),
+        allowed_stations:
+          grant_field_dto(:allowed_stations, "text", "Allowed Stations", params,
+            placeholder: "station-alpha"
+          ),
+        max_quota: grant_field_dto(:max_quota, "number", "Maximum Quota", params, min: 0),
+        grant_reason:
+          grant_field_dto(:grant_reason, "text", "Grant Reason", params,
+            placeholder: "Flight operations authorization"
+          )
+      },
+      action: %{id: "grant-provider-account-button", label: "Grant Access"}
+    }
+  end
+
+  defp grant_field_dto(field, type, label, params, opts) do
+    key = Atom.to_string(field)
+
+    %{
+      key: key,
+      id: "grant_#{key}",
+      name: "grant[#{key}]",
+      type: type,
+      label: label,
+      value: Map.fetch!(params, key),
+      required: Keyword.get(opts, :required, false),
+      min: Keyword.get(opts, :min),
+      placeholder: Keyword.get(opts, :placeholder),
+      options: Keyword.get(opts, :options, [])
+    }
+  end
+
+  defp grant_dto(grant, mission_names) do
+    %{
+      id: grant.provider_account_grant_id,
+      provider_account_grant_id: grant.provider_account_grant_id,
+      mission_name: mission_name(mission_names, grant.mission_id),
+      version_label: "grant v#{grant.version} · account v#{grant.provider_account_version}",
+      restriction_summary:
+        if(map_size(grant.restrictions) > 0,
+          do: restriction_summary(grant.restrictions),
+          else: nil
+        ),
+      lifecycle: %{
+        status: grant |> grant_status() |> Atom.to_string(),
+        label: humanize(grant.lifecycle_state)
+      },
+      revoke:
+        if(grant.lifecycle_state == :active,
+          do: %{
+            id: "revoke-grant-#{grant.provider_account_grant_id}",
+            label: "Revoke",
+            confirm: "Revoke this mission grant? New operations will stop.",
+            payload: %{"grant-id" => grant.provider_account_grant_id}
+          },
+          else: nil
+        )
+    }
+  end
+
+  defp audit_dto(entry) do
+    %{
+      id: entry.provider_audit_entry_id,
+      provider_audit_entry_id: entry.provider_audit_entry_id,
+      recorded_at: timestamp_label(entry.recorded_at),
+      action: audit_label(entry.action),
+      outcome: %{
+        status: entry.outcome |> audit_status() |> Atom.to_string(),
+        label: entry.outcome
+      }
+    }
+  end
+
+  defp configuration_dto(account, version) do
+    %{
+      id: "provider-account-configuration",
+      title: "Effective Configuration",
+      rows: [
+        detail_dto("Provider", humanize(version.provider_type)),
+        detail_dto("Region", version.region_ref || "Not specified", true),
+        detail_dto("Environment", version.environment_ref, true),
+        detail_dto("Validated", timestamp_label(account.last_validated_at))
+      ]
+    }
+  end
+
+  defp ingestion_dto(version, summary) do
+    %{
+      id: "provider-account-ingestion",
+      title: "Event Ingestion",
+      rows: [
+        detail_dto("Mode", humanize(version.event_ingestion_mode)),
+        detail_dto(
+          "Cursor health",
+          summary.health,
+          false,
+          "provider-account-ingestion-health"
+        ),
+        detail_dto(
+          "Inbox backlog",
+          to_string(summary.backlog),
+          true,
+          "provider-account-ingestion-backlog"
+        ),
+        detail_dto(
+          "Quarantined",
+          to_string(summary.quarantined),
+          true,
+          "provider-account-ingestion-quarantined"
+        ),
+        detail_dto(
+          "Last provider event",
+          timestamp_label(summary.last_event_at),
+          false,
+          "provider-account-ingestion-last-event"
+        )
+      ],
+      description: summary.description
+    }
+  end
+
+  defp guardrails_dto(guardrails) do
+    %{
+      id: "provider-account-guardrails",
+      title: "Organization Guardrails",
+      json: Jason.encode!(guardrails, pretty: true)
+    }
+  end
+
+  defp diagnostics_dto(version, credential) do
+    %{
+      id: "provider-account-admin-diagnostics",
+      title: "Admin Diagnostics",
+      columns: [
+        [
+          detail_dto("API base URL", version.base_url, true),
+          detail_dto("Client adapter", Atom.to_string(version.client_key), true),
+          detail_dto("Credential registry version", "v#{credential.registry_version}", true),
+          detail_dto("Credential backend", humanize(credential.backend_type))
+        ],
+        [
+          detail_dto("Account version", "v#{version.version}", true),
+          detail_dto("Credential status", humanize(credential.status)),
+          detail_dto("Last resolved", timestamp_label(credential.last_resolved_at)),
+          detail_dto("Last rotated", timestamp_label(credential.last_rotated_at))
+        ]
+      ]
+    }
+  end
+
+  defp detail_dto(label, value, mono \\ false, wrapper_id \\ nil) do
+    %{label: label, value: value || "—", mono: mono, wrapper_id: wrapper_id}
+  end
 
   defp default_grant_params do
     %{
