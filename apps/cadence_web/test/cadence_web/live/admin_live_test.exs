@@ -80,8 +80,10 @@ defmodule CadenceWeb.AdminLiveTest do
     end
 
     test "organization list shows empty state when no orgs exist", %{admin_conn: admin_conn} do
-      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations")
-      assert html =~ "No organizations yet"
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations")
+
+      assert has_element?(view, "#admin-organizations-page", "No organizations yet")
+      refute has_element?(view, "#admin-organization-list-component")
     end
 
     test "admin can create an organization", %{admin_conn: admin_conn} do
@@ -94,9 +96,25 @@ defmodule CadenceWeb.AdminLiveTest do
       assert_redirect(view, ~p"/admin/organizations")
 
       # Verify the org appears in the list
-      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations")
-      assert html =~ "Test Org"
-      assert html =~ "test-org"
+      {:ok, list_view, _html} = live(admin_conn, ~p"/admin/organizations")
+
+      assert has_element?(list_view, "#admin-organization-list-component")
+
+      vue = LiveVue.Test.get_vue(list_view, id: "admin-organization-list-component")
+      assert [organization] = Cadence.Organizations.list_organizations()
+
+      assert vue.component == "AdminOrganizationList"
+
+      assert vue.props == %{
+               "rows" => [
+                 %{
+                   "id" => "admin-organization-#{organization.organization_id}",
+                   "display_name" => "Test Org",
+                   "slug" => "test-org",
+                   "href" => "/admin/organizations/#{organization.organization_id}"
+                 }
+               ]
+             }
     end
 
     test "admin can view organization detail with no members", %{admin_conn: admin_conn} do
