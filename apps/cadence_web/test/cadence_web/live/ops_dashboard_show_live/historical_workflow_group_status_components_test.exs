@@ -248,8 +248,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                  "event-3",
                  "job-3",
                  "queued",
-                 "",
-                 "",
+                 nil,
+                 nil,
                  "active",
                  "wait_for_replacement_job_start"
                ),
@@ -273,8 +273,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                  "event-4",
                  "job-4",
                  "failed",
-                 "",
-                 "",
+                 nil,
+                 nil,
                  "",
                  "inspect_failed_replacement_job"
                ),
@@ -319,7 +319,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                  "job-6",
                  "running",
                  "2023-11-14T22:00:00Z",
-                 "",
+                 nil,
                  "stale",
                  "inspect_stale_replacement_job"
                ),
@@ -364,7 +364,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                  "event-5",
                  "job-5",
                  "completed",
-                 "",
+                 nil,
                  "2023-11-14T22:05:00Z",
                  "",
                  "replacement_complete"
@@ -677,6 +677,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
       "data-historical-workflow-group-recovery-remaining-work-job-action" => job_action,
       "data-historical-workflow-group-recovery-remaining-work-job-item" => job_item
     }
+    |> Enum.reject(fn {_key, value} -> value in [nil, false] end)
+    |> Map.new()
   end
 
   defp action_button(id, class, text, icon, attrs) do

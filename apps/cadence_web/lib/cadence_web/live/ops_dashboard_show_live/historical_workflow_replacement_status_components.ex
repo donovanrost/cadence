@@ -47,7 +47,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementStatusCom
 
   defp remaining_work_dto(workflow_context, replacement_recovery) do
     %{
-      visible: replacement_recovery.entries != [],
+      visible: true,
       id: "dashboard-historical-workflow-group-recovery-remaining-work",
       class: "mt-2 space-y-2 rounded border border-primary/30 bg-primary/5 p-2",
       attrs:
