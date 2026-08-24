@@ -13,67 +13,152 @@ defmodule CadenceWeb.OrganizationHomeLive do
      socket
      |> assign(:page_title, org.display_name)
      |> assign(:nav_item, :organization_home)
-     |> assign(:organization, org)
-     |> assign(summary)
-     |> assign(:recent_mission_rows, Enum.map(summary.recent_missions, &recent_mission_row/1))}
+     |> assign(:presentation, presentation_dto(org, summary))}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header title={@organization.display_name} subtitle={@organization.slug} />
-
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
-        id="organization-stats-component"
-        v-component="OrganizationStats"
-        mission_count={@mission_count}
-        spacecraft_count={@spacecraft_count}
-        member_count={@member_count}
+        id="organization-home-component"
+        v-component="OrganizationHome"
+        presentation={@presentation}
         v-ssr={false}
       />
-
-      <.recent_missions_card
-        recent_missions={@recent_missions}
-        recent_mission_rows={@recent_mission_rows}
-      />
-    </div>
+    </Layouts.app>
     """
   end
 
-  attr(:recent_missions, :list, required: true)
-  attr(:recent_mission_rows, :list, required: true)
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
 
-  defp recent_missions_card(assigns) do
-    ~H"""
-    <.card id="organization-recent-missions">
-      <.section_header eyebrow="Recent Missions" title="Jump into a mission">
-        <:actions>
-          <.button variant={:ghost} navigate={~p"/missions"}>All missions</.button>
-        </:actions>
-      </.section_header>
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
 
-      <%= if @recent_missions == [] do %>
-        <div class="mt-6">
-          <.empty_state
-            icon="hero-rocket-launch"
-            title="No missions yet"
-            description="Create your first mission to get started."
-            action_label="New Mission"
-            action_navigate={~p"/missions/new"}
-          />
-        </div>
-      <% else %>
-        <.vue
-          id="organization-recent-missions-component"
-          v-component="RecentMissions"
-          rows={@recent_mission_rows}
-          v-ssr={false}
-        />
-      <% end %>
-    </.card>
-    """
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
   end
+
+  defp presentation_dto(org, summary) do
+    %{
+      "root" => %{
+        "attrs" => presentation_attrs(%{"class" => "space-y-6"})
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{"attrs" => %{}},
+        "content" => %{"attrs" => %{}},
+        "title" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+            }),
+          "text" => org.display_name
+        },
+        "subtitle" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+            }),
+          "text" => org.slug
+        }
+      },
+      "stats" => %{
+        "mission_count" => summary.mission_count,
+        "spacecraft_count" => summary.spacecraft_count,
+        "member_count" => summary.member_count
+      },
+      "recent_missions" => recent_missions_presentation(summary.recent_missions)
+    }
+  end
+
+  defp recent_missions_presentation(recent_missions) do
+    %{
+      "card" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "card bg-base-200 border border-base-300",
+            "id" => "organization-recent-missions"
+          })
+      },
+      "body" => %{
+        "attrs" => presentation_attrs(%{"class" => "card-body p-6"})
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "flex items-start justify-between gap-4"}),
+        "content" => %{"attrs" => %{}},
+        "eyebrow" => %{
+          "attrs" => presentation_attrs(%{"class" => "hud-label mb-2"}),
+          "text" => "Recent Missions"
+        },
+        "title" => %{
+          "attrs" => presentation_attrs(%{"class" => "text-lg font-semibold"}),
+          "text" => "Jump into a mission"
+        },
+        "actions" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "flex flex-wrap items-center justify-end gap-2"
+            })
+        },
+        "all_missions" => %{
+          "attrs" => navigate_attrs(~p"/missions", %{"class" => "btn btn-ghost btn-sm"}),
+          "text" => "All missions"
+        }
+      },
+      "empty_state" => empty_state_presentation(recent_missions),
+      "rows" => Enum.map(recent_missions, &recent_mission_row/1)
+    }
+  end
+
+  defp empty_state_presentation([]) do
+    %{
+      "container" => %{
+        "attrs" => presentation_attrs(%{"class" => "mt-6"})
+      },
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" =>
+              "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+          })
+      },
+      "icon" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "hero-rocket-launch mx-auto h-10 w-10 text-base-content/30 block"
+          })
+      },
+      "title" => %{
+        "attrs" => presentation_attrs(%{"class" => "hud-label mt-3"}),
+        "text" => "No missions yet"
+      },
+      "description" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+          }),
+        "text" => "Create your first mission to get started."
+      },
+      "action_container" => %{
+        "attrs" => presentation_attrs(%{"class" => "mt-5"})
+      },
+      "action" => %{
+        "attrs" => navigate_attrs(~p"/missions/new", %{"class" => "btn btn-primary btn-sm"}),
+        "text" => "New Mission"
+      },
+      "action_icon" => %{
+        "attrs" => presentation_attrs(%{"class" => "hero-plus -ml-0.5 mr-1 h-4 w-4"})
+      }
+    }
+  end
+
+  defp empty_state_presentation(_recent_missions), do: nil
 
   defp load_summary(organization_id) do
     missions = Cadence.Missions.list_missions(organization_id)
@@ -107,13 +192,25 @@ defmodule CadenceWeb.OrganizationHomeLive do
   end
 
   defp recent_mission_row(row) do
+    href = ~p"/missions/#{row.mission.mission_id}"
+
     %{
-      id: "organization-recent-mission-#{row.mission.mission_id}",
-      display_name: row.mission.display_name,
-      slug: row.mission.slug,
-      status: Atom.to_string(row.status),
-      status_label: row.status_label,
-      href: ~p"/missions/#{row.mission.mission_id}"
+      "id" => "organization-recent-mission-#{row.mission.mission_id}",
+      "display_name" => row.mission.display_name,
+      "slug" => row.mission.slug,
+      "status" => Atom.to_string(row.status),
+      "status_label" => row.status_label,
+      "href" => href
     }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 end
