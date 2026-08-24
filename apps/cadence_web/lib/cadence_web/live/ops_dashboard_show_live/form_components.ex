@@ -137,29 +137,82 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
   attr :dashboard_document, :any, required: true
 
   defp rename_form(assigns) do
+    form =
+      to_form(
+        %{
+          "name" => assigns.dashboard_document.name,
+          "description" => assigns.dashboard_document.description
+        },
+        as: :dashboard
+      )
+
+    assigns = assign(assigns, :presentation, rename_form_presentation(form))
+
     ~H"""
-    <.form
-      for={to_form(%{"name" => @dashboard_document.name, "description" => @dashboard_document.description || ""}, as: :dashboard)}
-      id="rename-dashboard-form"
-      phx-submit="rename"
-      class="space-y-4"
-    >
-      <.input
-        name="dashboard[name]"
-        value={@dashboard_document.name}
-        type="text"
-        label="Name"
-        required
-      />
-      <.input
-        name="dashboard[description]"
-        value={@dashboard_document.description}
-        type="text"
-        label="Description"
-      />
-      <.button type="submit" size={:md}>Save</.button>
-    </.form>
+    <.vue
+      id="rename-dashboard-form-component"
+      v-component="RenameDashboardForm"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp rename_form_presentation(form) do
+    %{
+      root: %{
+        attrs:
+          raw_attributes(%{
+            "id" => "rename-dashboard-form",
+            "phx-submit" => "rename",
+            "class" => "space-y-4"
+          }),
+        param: rendered_body(form.name),
+        params: active_rename_form_params(form)
+      },
+      fields: [
+        rename_text_field_presentation(form, :name, "Name", required: true),
+        rename_text_field_presentation(form, :description, "Description", required: false)
+      ],
+      submit: %{
+        attrs:
+          raw_attributes(%{
+            "type" => "submit",
+            "class" => "btn btn-primary"
+          }),
+        text: "Save"
+      }
+    }
+  end
+
+  defp rename_text_field_presentation(form, field, label, options) do
+    form_field = form[field]
+
+    %{
+      key: Atom.to_string(field),
+      wrapper: %{attrs: raw_attributes(%{"class" => "fieldset mb-3"})},
+      label: %{
+        attrs: raw_attributes(%{"class" => "hud-label block mb-1.5"}),
+        text: label
+      },
+      control: %{
+        attrs:
+          raw_attributes(%{
+            "name" => form_field.name,
+            "type" => "text",
+            "required" => Keyword.fetch!(options, :required),
+            "class" => "w-full input"
+          }),
+        value: nullable_rendered_body(form_field.value)
+      }
+    }
+  end
+
+  defp active_rename_form_params(form) do
+    Map.new([:name, :description], fn field ->
+      {Atom.to_string(field), rendered_body(form[field].value)}
+    end)
   end
 
   defp data_link_panel?({:data_link, _inspector}), do: true
@@ -192,4 +245,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
   defp panel_title({:data_link, inspector}), do: inspector.title
   defp panel_title({:evidence, inspector}), do: inspector.title
   defp panel_title({:widget_inspect, %{title: title}}), do: "Inspect: #{title}"
+
+  defp raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), rendered_body(value))
+    end)
+  end
+
+  defp nullable_rendered_body(nil), do: nil
+  defp nullable_rendered_body(value), do: rendered_body(value)
+
+  defp rendered_body(nil), do: ""
+  defp rendered_body(value), do: to_string(value)
 end
