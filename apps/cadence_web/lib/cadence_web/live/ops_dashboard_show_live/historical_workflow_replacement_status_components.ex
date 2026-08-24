@@ -12,7 +12,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementStatusCom
       assign(
         assigns,
         :presentation,
-        replacement_status_dto(
+        presentation(
           assigns.workflow_context,
           assigns.replacement_recovery,
           assigns.closure_readiness,
@@ -31,12 +31,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementStatusCom
     """
   end
 
-  defp replacement_status_dto(
-         workflow_context,
-         replacement_recovery,
-         closure_readiness,
-         group_recovery_forms
-       ) do
+  def presentation(
+        workflow_context,
+        replacement_recovery,
+        closure_readiness,
+        group_recovery_forms
+      ) do
     %{
       remaining_work: remaining_work_dto(workflow_context, replacement_recovery),
       closure_readiness: closure_readiness_dto(closure_readiness, group_recovery_forms)

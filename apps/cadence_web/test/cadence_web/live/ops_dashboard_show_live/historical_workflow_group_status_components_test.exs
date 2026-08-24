@@ -3,38 +3,46 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupRecoveryFormPresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponents
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementRecovery
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowReplacementStatusComponents
 
   test "group_status renders recovery handoffs and replacement advancement contract" do
+    workflow_context = group_context()
+    workflow_controls = workflow_controls()
+
     html =
       render_component(&HistoricalWorkflowGroupStatusComponents.group_status/1,
-        workflow_context: group_context(),
-        workflow_controls: workflow_controls(),
+        workflow_context: workflow_context,
+        workflow_controls: workflow_controls,
         dashboard_current_path:
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1&panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = group_status_presentation(html)
     replacement_status = replacement_status_presentation(html)
     remaining_work = replacement_status["remaining_work"]
+    document = LazyHTML.from_fragment(html)
 
-    assert ["request-group-1"] =
+    assert [] =
              document
-             |> LazyHTML.query("#dashboard-historical-workflow-group-summary")
-             |> LazyHTML.attribute("data-historical-workflow-group-id")
+             |> LazyHTML.query("#dashboard-historical-workflow-replacement-status-component")
+             |> LazyHTML.attribute("id")
 
-    assert [
+    assert presentation["root"]["attrs"]["data-historical-workflow-group-id"] ==
+             "request-group-1"
+
+    assert presentation["root"]["attrs"]["data-historical-workflow-group-handoff-summary"] ==
              "group request-group-1; failed; progress 2/4; jobs queued 1, failed 1; failed 2; retryable 2; correction 0; resolved 0; failed items job-1,job-2"
-           ] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-group-summary")
-             |> LazyHTML.attribute("data-historical-workflow-group-handoff-summary")
 
-    review_href =
-      document
-      |> LazyHTML.query("[data-historical-workflow-review-origin-link]")
-      |> LazyHTML.attribute("data-historical-workflow-review-origin-href")
-      |> List.first()
+    assert presentation["root"] == %{
+             "id" => "dashboard-historical-workflow-group-summary",
+             "class" => "rounded border border-primary/30 bg-primary/5 p-2 text-xs",
+             "attrs" => expected_root_attrs()
+           }
+
+    review_href = presentation["review_origin"]["review_link"]["href"]
 
     assert review_href_query(review_href) == %{
              "scope_kind" => "mission",
@@ -44,20 +52,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              "activity_event" => "review-request-1"
            }
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-group-recovery")
-             |> LazyHTML.attribute("data-historical-workflow-group-recovery-failed-item-handoffs")
+    assert presentation["recovery"]["attrs"][
+             "data-historical-workflow-group-recovery-failed-item-handoffs"
+           ] == "2"
 
-    assert ["failed-event-2", "failed-event-3"] =
-             document
-             |> LazyHTML.query("[data-historical-workflow-group-recovery-failed-item]")
-             |> LazyHTML.attribute("data-historical-workflow-group-recovery-failed-item")
+    handoff_links = presentation["recovery"]["failed_item_handoffs"]["links"]["entries"]
 
-    assert ["HK voltage bus", "HK.current"] =
-             document
-             |> LazyHTML.query("[data-historical-workflow-group-recovery-failed-item]")
-             |> LazyHTML.attribute("data-historical-workflow-group-recovery-failed-item-label")
+    assert Enum.map(
+             handoff_links,
+             & &1["attrs"]["data-historical-workflow-group-recovery-failed-item"]
+           ) == ["failed-event-2", "failed-event-3"]
+
+    assert Enum.map(
+             handoff_links,
+             & &1["attrs"]["data-historical-workflow-group-recovery-failed-item-label"]
+           ) == ["HK voltage bus", "HK.current"]
 
     assert Map.take(remaining_work, ["visible", "id", "class", "attrs", "header"]) == %{
              "visible" => true,
@@ -126,17 +135,182 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              ]
            }
 
-    assert ["approved"] =
-             document
-             |> LazyHTML.query("#dashboard-historical-workflow-group-recovery-advance-corrected")
-             |> LazyHTML.attribute("data-workflow-action-stage")
+    advancement_form = presentation["recovery"]["execution_plan"]["advancement_form"]
 
-    assert ["replacement_corrections"] =
-             document
-             |> LazyHTML.query(
-               ~s(input[name="historical_workflow_group[group_transition_scope]"])
-             )
-             |> LazyHTML.attribute("value")
+    assert advancement_form["button"]["attrs"]["data-workflow-action-stage"] == "approved"
+
+    assert advancement_form["hidden_fields"]
+           |> Enum.find(
+             &(&1["attrs"]["name"] ==
+                 "historical_workflow_group[group_transition_scope]")
+           )
+           |> get_in(["attrs", "value"]) == "replacement_corrections"
+
+    assert presentation
+           |> Map.take(["job_progress", "execution_audit", "review_origin", "recovery"])
+           |> Map.new(fn {section, value} -> {section, value["visible"]} end) == %{
+             "job_progress" => true,
+             "execution_audit" => true,
+             "review_origin" => true,
+             "recovery" => true
+           }
+
+    assert presentation["review_origin"]["review_link"] == %{
+             "href" => review_href,
+             "class" =>
+               "inline-flex items-center gap-1 font-mono text-primary hover:text-primary-focus",
+             "text" => "Open review",
+             "icon" => %{"name" => "hero-arrow-top-right-on-square", "class" => "h-3 w-3"},
+             "attrs" => %{
+               "data-historical-workflow-review-origin-link" => "review-request-1",
+               "data-historical-workflow-review-origin-href" => review_href,
+               "data-phx-link" => "patch",
+               "data-phx-link-state" => "push"
+             }
+           }
+
+    assert Enum.map(
+             presentation["review_origin"]["placements"]["links"],
+             fn link ->
+               {
+                 link["text"],
+                 review_href_query(link["href"]),
+                 Map.take(link["attrs"], ["data-phx-link", "data-phx-link-state"])
+               }
+             end
+           ) == [
+             {
+               "placement-1",
+               %{
+                 "scope_kind" => "mission",
+                 "scope_id" => "mission-1",
+                 "panel" => "versions",
+                 "activity_filter" => "open_comparison_reviews",
+                 "activity_event" => "review-request-1",
+                 "selected_placement" => "placement-1"
+               },
+               %{"data-phx-link" => "patch", "data-phx-link-state" => "push"}
+             },
+             {
+               "placement-2",
+               %{
+                 "scope_kind" => "mission",
+                 "scope_id" => "mission-1",
+                 "panel" => "versions",
+                 "activity_filter" => "open_comparison_reviews",
+                 "activity_event" => "review-request-1",
+                 "selected_placement" => "placement-2"
+               },
+               %{"data-phx-link" => "patch", "data-phx-link-state" => "push"}
+             }
+           ]
+
+    assert Enum.map(handoff_links, fn link ->
+             {
+               link["attrs"]["data-historical-workflow-group-recovery-failed-item"],
+               review_href_query(link["href"]),
+               Map.take(link["attrs"], ["data-phx-link", "data-phx-link-state"])
+             }
+           end) == [
+             {
+               "failed-event-2",
+               %{
+                 "scope_kind" => "mission",
+                 "scope_id" => "mission-1",
+                 "panel" => "data_link",
+                 "selected_target" => "telemetry_backfill_lifecycle_event",
+                 "selected_id" => "failed-event-2"
+               },
+               %{"data-phx-link" => "patch", "data-phx-link-state" => "push"}
+             },
+             {
+               "failed-event-3",
+               %{
+                 "scope_kind" => "mission",
+                 "scope_id" => "mission-1",
+                 "panel" => "data_link",
+                 "selected_target" => "telemetry_backfill_lifecycle_event",
+                 "selected_id" => "failed-event-3"
+               },
+               %{"data-phx-link" => "patch", "data-phx-link-state" => "push"}
+             }
+           ]
+
+    assert presentation["recovery"]["execution_plan"]["retry_button"] == %{
+             "visible" => true,
+             "id" => "dashboard-historical-workflow-group-retry-failed",
+             "type" => "button",
+             "class" => "btn btn-xs btn-error btn-outline mt-2 w-full justify-start",
+             "text" => "Retry failed items",
+             "icon" => %{"name" => "hero-arrow-path", "class" => "size-3"},
+             "attrs" => %{
+               "phx-click" => "retry_historical_workflow_group_failed_jobs",
+               "phx-value-request-group-id" => "request-group-1",
+               "phx-value-event-id" => "source-event-1",
+               "data-workflow-action-id" => "retry-group-failed",
+               "data-workflow-action-eligible" => "true",
+               "data-workflow-action-eligible-count" => "2",
+               "data-workflow-action-reason" => "retryable_group_failures",
+               "data-workflow-action-preview" => "Retry every retryable failed job.",
+               "data-workflow-action-expected-effect" =>
+                 "Retry will requeue 2 failed items and select the retried lifecycle event.",
+               "data-confirm" => "Retry every retryable failed job in this request group?"
+             }
+           }
+
+    assert Map.take(advancement_form, ["visible", "id", "class", "attrs", "header", "preview"]) ==
+             %{
+               "visible" => true,
+               "id" => "dashboard-historical-workflow-group-recovery-advance-corrected-form",
+               "class" => "mt-2 space-y-2 rounded border border-primary/30 bg-primary/5 p-2",
+               "attrs" => %{
+                 "phx-submit" => "record_historical_workflow_group_stage",
+                 "data-historical-workflow-group-recovery-advance-request-group" =>
+                   "request-group-1",
+                 "data-historical-workflow-group-recovery-advance-stage" => "approved",
+                 "data-historical-workflow-group-recovery-advance-eligible" => "true",
+                 "data-historical-workflow-group-recovery-advance-count" => "1",
+                 "data-historical-workflow-group-recovery-advance-reason" =>
+                   "eligible_group_items",
+                 "data-historical-workflow-group-recovery-advance-preview" =>
+                   "Advance 1 corrected replacement request to approved.",
+                 "data-historical-workflow-group-recovery-advance-correction-tasks" =>
+                   "HK.current run-003 replacement run-003-corrected stage requested next approve"
+               },
+               "header" => %{
+                 "class" => "flex items-center justify-between gap-2",
+                 "label" => text_presentation("hud-label", "Replacement Advancement"),
+                 "count" => text_presentation("font-mono text-base-content/70", "1")
+               },
+               "preview" =>
+                 text_presentation(
+                   "text-base-content/75",
+                   "Advance 1 corrected replacement request to approved."
+                 )
+             }
+
+    assert advancement_form["hidden_fields"] ==
+             expected_advancement_hidden_fields()
+
+    assert advancement_form["button"] == expected_advancement_button()
+
+    replacement_recovery =
+      HistoricalWorkflowReplacementRecovery.build(workflow_context, workflow_controls)
+
+    expected_replacement_status =
+      HistoricalWorkflowReplacementStatusComponents.presentation(
+        workflow_context,
+        replacement_recovery,
+        replacement_recovery.closure_readiness,
+        HistoricalWorkflowGroupRecoveryFormPresentation.build(
+          workflow_context,
+          replacement_recovery
+        )
+      )
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    assert replacement_status == expected_replacement_status
   end
 
   test "group_status summarizes replacement work and exposes scoped job recovery actions" do
@@ -506,6 +680,68 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              document
              |> LazyHTML.query("#dashboard-historical-workflow-group-summary")
              |> LazyHTML.attribute("id")
+
+    assert [] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-status-component")
+             |> LazyHTML.attribute("id")
+  end
+
+  test "group_status omits every conditional outer section when its server presentation is absent" do
+    workflow_context =
+      group_context()
+      |> Map.merge(%{
+        request_group_state: "idle",
+        request_group_progress: "0/0",
+        request_group_job_progress: nil,
+        request_group_job_items: nil,
+        request_group_requested: "0",
+        request_group_approved: "0",
+        request_group_started: "0",
+        request_group_completed: "0",
+        request_group_failed: "0",
+        request_group_resolved_failed: "0",
+        request_group_retryable_failed: "0",
+        request_group_nonretryable_failed: "0",
+        comparison_review_request_event_id: nil,
+        comparison_review_request_kind: nil,
+        comparison_review_open_count: "0",
+        comparison_review_open_placement_ids: nil,
+        request_group_retried_items: nil,
+        request_group_corrected_items: nil,
+        request_group_correction_tasks: nil,
+        request_group_failed_items: nil,
+        request_group_failed_item_events: nil
+      })
+
+    html =
+      render_component(&HistoricalWorkflowGroupStatusComponents.group_status/1,
+        workflow_context: workflow_context,
+        workflow_controls: %{
+          workflow_controls()
+          | group_retryable_failures: false,
+            group_retry_action: nil,
+            group_stage_actions: []
+        },
+        dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
+      )
+
+    presentation = group_status_presentation(html)
+
+    assert %{
+             "job_progress" => false,
+             "execution_audit" => false,
+             "review_origin" => false,
+             "recovery" => false
+           } ==
+             presentation
+             |> Map.take(["job_progress", "execution_audit", "review_origin", "recovery"])
+             |> Map.new(fn {section, value} -> {section, value["visible"]} end)
+
+    assert presentation["review_origin"]["placements"]["visible"] == false
+    assert presentation["recovery"]["failed_item_handoffs"]["visible"] == false
+    assert presentation["recovery"]["execution_plan"]["retry_button"]["visible"] == false
+    assert presentation["recovery"]["execution_plan"]["advancement_form"]["visible"] == false
   end
 
   defp workflow_controls do
@@ -589,20 +825,132 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
   end
 
   defp replacement_status_presentation(html) do
+    html
+    |> group_status_presentation()
+    |> get_in(["recovery", "execution_plan", "replacement_status"])
+  end
+
+  defp group_status_presentation(html) do
     vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-historical-workflow-replacement-status-component"
+        id: "dashboard-historical-workflow-group-status-component"
       )
 
-    assert vue.component == "HistoricalWorkflowReplacementStatus"
-    assert vue.id == "dashboard-historical-workflow-replacement-status-component"
+    assert vue.component == "HistoricalWorkflowGroupStatus"
+    assert vue.id == "dashboard-historical-workflow-group-status-component"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}
+    assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     Map.fetch!(vue.props, "presentation")
+  end
+
+  defp expected_root_attrs do
+    %{
+      "data-historical-workflow-group-id" => "request-group-1",
+      "data-historical-workflow-group-state" => "failed",
+      "data-historical-workflow-group-terminal" => "false",
+      "data-historical-workflow-group-size" => "4",
+      "data-historical-workflow-group-progress" => "2/4",
+      "data-historical-workflow-group-requested" => "4",
+      "data-historical-workflow-group-approved" => "4",
+      "data-historical-workflow-group-started" => "4",
+      "data-historical-workflow-group-completed" => "2",
+      "data-historical-workflow-group-failed" => "2",
+      "data-historical-workflow-group-resolved-failed" => "0",
+      "data-historical-workflow-group-retry-resolved" => "0",
+      "data-historical-workflow-group-correction-requested" => "0",
+      "data-historical-workflow-group-correction-started" => "0",
+      "data-historical-workflow-group-correction-completed" => "0",
+      "data-historical-workflow-group-correction-superseded" => "0",
+      "data-historical-workflow-group-request-eligible" => "false",
+      "data-historical-workflow-group-approve-eligible" => "false",
+      "data-historical-workflow-group-reject-eligible" => "false",
+      "data-historical-workflow-group-start-eligible" => "false",
+      "data-historical-workflow-group-complete-eligible" => "false",
+      "data-historical-workflow-group-fail-eligible" => "false",
+      "data-historical-workflow-group-retryable-failed" => "2",
+      "data-historical-workflow-group-nonretryable-failed" => "0",
+      "data-historical-workflow-group-comparison-review-request" => "review-request-1",
+      "data-historical-workflow-group-comparison-review-kind" =>
+        "comparison_open_findings_review",
+      "data-historical-workflow-group-comparison-review-open-count" => "2",
+      "data-historical-workflow-group-comparison-review-placements" => "placement-1,placement-2",
+      "data-historical-workflow-group-comparison-review-workflow-kind" =>
+        "bulk_correction_authority_review",
+      "data-historical-workflow-group-comparison-review-workflow-action" =>
+        "request_comparison_review",
+      "data-historical-workflow-group-comparison-review-workflow-selection-kind" =>
+        "open_comparison_findings",
+      "data-historical-workflow-group-comparison-review-workflow-selection-count" => "2",
+      "data-historical-workflow-group-comparison-review-primary-data-view" => "all_revisions",
+      "data-historical-workflow-group-comparison-review-compare-data-view" => "canonical",
+      "data-historical-workflow-group-handoff-summary" =>
+        "group request-group-1; failed; progress 2/4; jobs queued 1, failed 1; failed 2; retryable 2; correction 0; resolved 0; failed items job-1,job-2"
+    }
+  end
+
+  defp expected_advancement_hidden_fields do
+    [
+      {"workflow", ""},
+      {"request_group_id", "request-group-1"},
+      {"realm", ""},
+      {"data_source_id", ""},
+      {"source_binding_id", ""},
+      {"dashboard_id", ""},
+      {"dashboard_version", ""},
+      {"dashboard_time_mode", ""},
+      {"dashboard_replay_run_id", ""},
+      {"dashboard_data_view", ""},
+      {"dashboard_limit_mode", ""},
+      {"reason", "dashboard_recovery_replacement_approved"},
+      {"group_transition_scope", "replacement_corrections"},
+      {
+        "group_correction_tasks",
+        "HK.current run-003 replacement run-003-corrected stage requested next approve"
+      },
+      {"confirmed", "confirmed"}
+    ]
+    |> Enum.with_index()
+    |> Enum.map(fn {{name, value}, index} ->
+      %{
+        "key" => "historical-workflow-advancement-hidden-#{index}",
+        "attrs" => %{
+          "type" => "hidden",
+          "name" => "historical_workflow_group[#{name}]",
+          "value" => value
+        }
+      }
+    end)
+  end
+
+  defp expected_advancement_button do
+    %{
+      "id" => "dashboard-historical-workflow-group-recovery-advance-corrected",
+      "type" => "submit",
+      "class" => "btn btn-xs btn-primary btn-outline w-full justify-between gap-2",
+      "attrs" => %{
+        "name" => "historical_workflow_group[stage]",
+        "value" => "approved",
+        "data-workflow-action-id" => "group-stage-approved",
+        "data-workflow-action-eligible" => "true",
+        "data-workflow-action-eligible-count" => "1",
+        "data-workflow-action-stage" => "approved",
+        "data-workflow-action-reason" => "eligible_group_items",
+        "data-workflow-action-preview" => "Advance 1 corrected replacement request to approved.",
+        "data-workflow-action-correction-tasks" =>
+          "HK.current run-003 replacement run-003-corrected stage requested next approve"
+      },
+      "label" => %{
+        "class" => "flex min-w-0 items-center gap-1",
+        "text" => "Advance replacements",
+        "icon" => %{"name" => "hero-forward", "class" => "h-3.5 w-3.5"}
+      },
+      "count" => text_presentation("font-mono", "1")
+    }
   end
 
   defp expected_remaining_work_entry(

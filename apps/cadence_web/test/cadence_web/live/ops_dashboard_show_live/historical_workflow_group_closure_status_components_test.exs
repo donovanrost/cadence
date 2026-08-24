@@ -535,8 +535,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupClosureStatusCo
 
   defp closure_readiness_presentation(html) do
     html
-    |> replacement_status_presentation()
+    |> group_status_replacement_presentation()
     |> Map.fetch!("closure_readiness")
+  end
+
+  defp group_status_replacement_presentation(html) do
+    vue =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-historical-workflow-group-status-component"
+      )
+
+    assert vue.component == "HistoricalWorkflowGroupStatus"
+    assert vue.id == "dashboard-historical-workflow-group-status-component"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    get_in(vue.props, ["presentation", "recovery", "execution_plan", "replacement_status"])
   end
 
   defp closure_detail(key, label, value_class, value) do
