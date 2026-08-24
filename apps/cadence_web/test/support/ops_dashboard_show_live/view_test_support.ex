@@ -317,7 +317,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   def data_link_inspector_presentation(view_or_html) do
-    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-data-link-inspector")
+    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-data-link-inspector-component")
 
     assert vue.component == "DataLinkInspectorPanel"
     assert vue.ssr == false
@@ -392,9 +392,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
 
   def submit_data_link_inspector_form(view, control, params) do
     presentation = data_link_inspector_presentation(view)
-    event = get_in(presentation, [control, "form", "attrs", "phx-submit"])
+    form = get_in(presentation, [control, "form"])
+    event = get_in(form, ["attrs", "phx-submit"])
     assert is_binary(event)
-    Phoenix.LiveViewTest.render_submit(view, event, params)
+
+    default_params =
+      (form["hidden_fields"] ++ Enum.map(form["fields"], &form_field_submission/1))
+      |> Enum.reduce(%{}, fn attrs, submission ->
+        put_dashboard_runtime_param(submission, attrs["name"], attrs["value"])
+      end)
+
+    Phoenix.LiveViewTest.render_submit(view, event, deep_merge(default_params, params))
   end
 
   def dashboard_runtime_control(runtime_controls, id) do
@@ -488,6 +496,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
       nil ->
         Map.put(params, name, value)
     end
+  end
+
+  defp form_field_submission(%{"attrs" => attrs, "options" => options}) do
+    value = options |> Enum.find(& &1["selected"]) |> Map.fetch!("value")
+    Map.put(attrs, "value", value)
+  end
+
+  defp form_field_submission(%{"attrs" => attrs}), do: attrs
+
+  defp deep_merge(left, right) when is_map(left) and is_map(right) do
+    Map.merge(left, right, fn _key, left_value, right_value ->
+      if is_map(left_value) and is_map(right_value) do
+        deep_merge(left_value, right_value)
+      else
+        right_value
+      end
+    end)
   end
 
   defp widget_rows(%{"kind" => "state_timeline", "lanes" => lanes}) do

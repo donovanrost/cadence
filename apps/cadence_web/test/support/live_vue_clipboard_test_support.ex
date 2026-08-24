@@ -44,7 +44,7 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
   end
 
   defp clipboard_button_component(renderable, "dashboard-data-link-copy-link" = button_id) do
-    panel = LiveVue.Test.get_vue(renderable, id: "dashboard-data-link-inspector")
+    panel = LiveVue.Test.get_vue(renderable, id: "dashboard-data-link-inspector-component")
 
     assert panel.component == "DataLinkInspectorPanel"
     refute panel.ssr

@@ -23,10 +23,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
     assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
-    <.vue
+    <div
       id="dashboard-data-link-inspector"
-      v-component="DataLinkInspectorPanel"
-      presentation={@presentation}
       data-data-link-target={@presentation.root.attrs["data-data-link-target"]}
       data-data-link-target-id={@presentation.root.attrs["data-data-link-target-id"]}
       data-data-link-status={@presentation.root.attrs["data-data-link-status"]}
@@ -38,9 +36,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
       data-data-link-selected-time-mode={@presentation.root.attrs["data-data-link-selected-time-mode"]}
       data-data-link-selected-time-axis={@presentation.root.attrs["data-data-link-selected-time-axis"]}
       data-data-link-selected-replay-run-id={@presentation.root.attrs["data-data-link-selected-replay-run-id"]}
-      v-ssr={false}
       class="space-y-4"
-    />
+    >
+      <.vue
+        id="dashboard-data-link-inspector-component"
+        v-component="DataLinkInspectorPanel"
+        presentation={@presentation}
+        v-ssr={false}
+        class="space-y-4"
+      />
+    </div>
     """
   end
 end

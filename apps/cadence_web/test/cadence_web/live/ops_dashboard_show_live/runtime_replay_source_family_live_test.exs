@@ -62,9 +62,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
 
     assert has_element?(command_queue_entry_view, command_request_related_selector)
 
-    command_queue_entry_view
-    |> element(command_request_related_selector)
-    |> render_click()
+    click_data_link_inspector_element(
+      command_queue_entry_view,
+      command_request_related_selector
+    )
 
     command_request_path = assert_patch(command_queue_entry_view)
     command_request_route_id = URI.encode_www_form(queue_entry.command_request_id)

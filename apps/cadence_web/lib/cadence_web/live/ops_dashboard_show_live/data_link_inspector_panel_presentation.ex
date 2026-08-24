@@ -170,19 +170,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
   defp root_attrs(panel_attrs) do
     %{
-      id: "dashboard-data-link-inspector",
-      class: "space-y-4",
-      "data-data-link-target": panel_attrs.target,
-      "data-data-link-target-id": panel_attrs.target_id,
-      "data-data-link-status": panel_attrs.status,
-      "data-data-link-selected-link": panel_attrs.selected_link,
-      "data-data-link-selected-realm": panel_attrs.selected_realm,
-      "data-data-link-selected-data-view": panel_attrs.selected_data_view,
-      "data-data-link-selected-data-source-id": panel_attrs.selected_data_source_id,
-      "data-data-link-selected-source-binding-id": panel_attrs.selected_source_binding_id,
-      "data-data-link-selected-time-mode": panel_attrs.selected_time_mode,
-      "data-data-link-selected-time-axis": panel_attrs.selected_time_axis,
-      "data-data-link-selected-replay-run-id": panel_attrs.selected_replay_run_id
+      :id => "dashboard-data-link-inspector",
+      :class => "space-y-4",
+      "data-data-link-target" => panel_attrs.target,
+      "data-data-link-target-id" => panel_attrs.target_id,
+      "data-data-link-status" => panel_attrs.status,
+      "data-data-link-selected-link" => panel_attrs.selected_link,
+      "data-data-link-selected-realm" => panel_attrs.selected_realm,
+      "data-data-link-selected-data-view" => panel_attrs.selected_data_view,
+      "data-data-link-selected-data-source-id" => panel_attrs.selected_data_source_id,
+      "data-data-link-selected-source-binding-id" => panel_attrs.selected_source_binding_id,
+      "data-data-link-selected-time-mode" => panel_attrs.selected_time_mode,
+      "data-data-link-selected-time-axis" => panel_attrs.selected_time_axis,
+      "data-data-link-selected-replay-run-id" => panel_attrs.selected_replay_run_id
     }
   end
 
@@ -219,16 +219,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
     |> Enum.map(fn %DashboardAction{} = action ->
       %{
         attrs: %{
-          id: action.action_id,
-          href: action.route,
-          class: "btn btn-sm btn-outline w-full justify-start",
-          "data-phx-link": "redirect",
-          "data-phx-link-state": "push",
-          "data-dashboard-action": action.action_id,
-          "data-dashboard-action-kind": Atom.to_string(action.kind),
-          "data-dashboard-action-target": Atom.to_string(action.target),
-          "data-dashboard-action-source": Atom.to_string(action.source),
-          "data-dashboard-action-presentation": Atom.to_string(action.presentation)
+          :id => action.action_id,
+          :href => action.route,
+          :class => "btn btn-sm btn-outline w-full justify-start",
+          "data-phx-link" => "redirect",
+          "data-phx-link-state" => "push",
+          "data-dashboard-action" => action.action_id,
+          "data-dashboard-action-kind" => Atom.to_string(action.kind),
+          "data-dashboard-action-target" => Atom.to_string(action.target),
+          "data-dashboard-action-source" => Atom.to_string(action.source),
+          "data-dashboard-action-presentation" => Atom.to_string(action.presentation)
         },
         icon_class: "#{DashboardActionPresentation.icon(action)} h-4 w-4",
         label: action.label
@@ -277,13 +277,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   end
 
   defp rows_section_attrs(:selection),
-    do: %{class: "space-y-2", "data-data-link-selection": ""}
+    do: %{:class => "space-y-2", "data-data-link-selection" => ""}
 
   defp rows_section_attrs(_kind), do: %{class: "space-y-2"}
 
-  defp row_value_attrs(:selection, label), do: %{"data-data-link-selection-field": label}
-  defp row_value_attrs(:record, label), do: %{"data-data-link-field": label}
-  defp row_value_attrs(:runtime_context, label), do: %{"data-data-link-context": label}
+  defp row_value_attrs(:selection, label), do: %{"data-data-link-selection-field" => label}
+  defp row_value_attrs(:record, label), do: %{"data-data-link-field" => label}
+  defp row_value_attrs(:runtime_context, label), do: %{"data-data-link-context" => label}
 
   defp workflow_explanation_dto(_inspector, %{workflow_explanation?: false}), do: nil
 
@@ -293,13 +293,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
     %{
       attrs: %{
-        id: "dashboard-workflow-explanation",
-        class: "space-y-2 rounded border p-2 #{explanation.container_class}",
-        "data-workflow-explanation-event-id": context.event_id,
-        "data-workflow-explanation-event-type": context.event_type,
-        "data-workflow-explanation-run-id": context.run_id,
-        "data-workflow-explanation-state": attr_text(explanation.summary.state),
-        "data-workflow-explanation-severity": attr_text(explanation.summary.severity)
+        :id => "dashboard-workflow-explanation",
+        :class => "space-y-2 rounded border p-2 #{explanation.container_class}",
+        "data-workflow-explanation-event-id" => context.event_id,
+        "data-workflow-explanation-event-type" => context.event_type,
+        "data-workflow-explanation-run-id" => context.run_id,
+        "data-workflow-explanation-state" => attr_text(explanation.summary.state),
+        "data-workflow-explanation-severity" => attr_text(explanation.summary.severity)
       },
       header: %{
         class: "flex items-center justify-between gap-2",
@@ -325,7 +325,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
             value: %{
               class: "font-mono text-base-content break-all",
               text: attr_text(row.value),
-              attrs: %{"data-workflow-explanation-field": row.label}
+              attrs: %{"data-workflow-explanation-field" => row.label}
             }
           }
         end)
@@ -342,13 +342,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
     %{
       attrs: %{
-        id: "dashboard-late-data-policy-controls",
-        class: "space-y-2 rounded border border-info/40 bg-info/10 p-2",
-        "data-late-data-policy-source-event": context.source_event_id,
-        "data-late-data-policy-run-id": context.run_id,
-        "data-late-data-policy-execution-mode": policy.execution_mode,
-        "data-late-data-policy-accept-effect": policy.accept_effect,
-        "data-late-data-policy-reject-effect": policy.reject_effect
+        :id => "dashboard-late-data-policy-controls",
+        :class => "space-y-2 rounded border border-info/40 bg-info/10 p-2",
+        "data-late-data-policy-source-event" => context.source_event_id,
+        "data-late-data-policy-run-id" => context.run_id,
+        "data-late-data-policy-execution-mode" => policy.execution_mode,
+        "data-late-data-policy-accept-effect" => policy.accept_effect,
+        "data-late-data-policy-reject-effect" => policy.reject_effect
       },
       header: %{
         class: "flex items-center justify-between gap-2",
@@ -372,9 +372,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   defp late_data_form_dto(form, policy) do
     %{
       attrs: %{
-        id: "dashboard-late-data-policy-form",
-        "phx-submit": "record_late_data_policy_decision",
-        class: "space-y-3"
+        :id => "dashboard-late-data-policy-form",
+        "phx-submit" => "record_late_data_policy_decision",
+        :class => "space-y-3"
       },
       hidden_fields: hidden_fields_dto(form, policy.form_params, @late_data_hidden_fields),
       fields: [
@@ -430,25 +430,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   defp late_data_action_outcome_dto(outcome) do
     %{
       attrs: %{
-        id: "dashboard-late-data-policy-action-outcome",
-        class: "hidden",
-        "data-late-data-policy-action": outcome.action,
-        "data-late-data-policy-action-status": outcome.status,
-        "data-late-data-policy-action-kind": outcome.kind,
-        "data-late-data-policy-action-reason": outcome.reason,
-        "data-late-data-policy-action-decision": outcome.metadata["decision"],
-        "data-late-data-policy-action-execution-mode": outcome.metadata["execution_mode"],
-        "data-late-data-policy-action-dashboard-time-mode":
+        :id => "dashboard-late-data-policy-action-outcome",
+        :class => "hidden",
+        "data-late-data-policy-action" => outcome.action,
+        "data-late-data-policy-action-status" => outcome.status,
+        "data-late-data-policy-action-kind" => outcome.kind,
+        "data-late-data-policy-action-reason" => outcome.reason,
+        "data-late-data-policy-action-decision" => outcome.metadata["decision"],
+        "data-late-data-policy-action-execution-mode" => outcome.metadata["execution_mode"],
+        "data-late-data-policy-action-dashboard-time-mode" =>
           outcome.metadata["dashboard_time_mode"],
-        "data-late-data-policy-action-dashboard-replay-run-id":
+        "data-late-data-policy-action-dashboard-replay-run-id" =>
           outcome.metadata["dashboard_replay_run_id"],
-        "data-late-data-policy-action-dashboard-data-view":
+        "data-late-data-policy-action-dashboard-data-view" =>
           outcome.metadata["dashboard_data_view"],
-        "data-late-data-policy-action-dashboard-limit-mode":
+        "data-late-data-policy-action-dashboard-limit-mode" =>
           outcome.metadata["dashboard_limit_mode"],
-        "data-late-data-policy-action-result-event-id": outcome.metadata["result_event_id"],
-        "data-late-data-policy-action-target-event-id": outcome.metadata["target_event_id"],
-        "data-late-data-policy-action-target-run-id": outcome.metadata["target_run_id"]
+        "data-late-data-policy-action-result-event-id" => outcome.metadata["result_event_id"],
+        "data-late-data-policy-action-target-event-id" => outcome.metadata["target_event_id"],
+        "data-late-data-policy-action-target-run-id" => outcome.metadata["target_run_id"]
       },
       message: outcome.message
     }
@@ -464,11 +464,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
     %{
       attrs: %{
-        id: "dashboard-revision-decision-controls",
-        class: "space-y-2 rounded border border-warning/40 bg-warning/10 p-2",
-        "data-revision-decision-observation-identity": context.observation_identity_id,
-        "data-revision-decision-source-event": context.source_decision_event_id,
-        "data-revision-decision-default-effect": decision.default_effect
+        :id => "dashboard-revision-decision-controls",
+        :class => "space-y-2 rounded border border-warning/40 bg-warning/10 p-2",
+        "data-revision-decision-observation-identity" => context.observation_identity_id,
+        "data-revision-decision-source-event" => context.source_decision_event_id,
+        "data-revision-decision-default-effect" => decision.default_effect
       },
       action_outcome:
         revision_action_outcome_dto(
@@ -487,9 +487,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   defp revision_form_dto(form, decision) do
     %{
       attrs: %{
-        id: "dashboard-revision-decision-form",
-        "phx-submit": "apply_revision_decision",
-        class: "space-y-3"
+        :id => "dashboard-revision-decision-form",
+        "phx-submit" => "apply_revision_decision",
+        :class => "space-y-3"
       },
       hidden_fields: hidden_fields_dto(form, decision.form_params, @revision_hidden_fields),
       fields:
@@ -539,23 +539,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   defp revision_action_outcome_dto(outcome) do
     %{
       attrs: %{
-        id: "dashboard-revision-decision-action-outcome",
-        class: "hidden",
-        "data-revision-decision-action-status": outcome.status,
-        "data-revision-decision-action-kind": outcome.kind,
-        "data-revision-decision-action-reason": outcome.reason,
-        "data-revision-decision-action-decision": outcome.metadata["decision"],
-        "data-revision-decision-action-dashboard-time-mode":
+        :id => "dashboard-revision-decision-action-outcome",
+        :class => "hidden",
+        "data-revision-decision-action-status" => outcome.status,
+        "data-revision-decision-action-kind" => outcome.kind,
+        "data-revision-decision-action-reason" => outcome.reason,
+        "data-revision-decision-action-decision" => outcome.metadata["decision"],
+        "data-revision-decision-action-dashboard-time-mode" =>
           outcome.metadata["dashboard_time_mode"],
-        "data-revision-decision-action-dashboard-replay-run-id":
+        "data-revision-decision-action-dashboard-replay-run-id" =>
           outcome.metadata["dashboard_replay_run_id"],
-        "data-revision-decision-action-dashboard-data-view":
+        "data-revision-decision-action-dashboard-data-view" =>
           outcome.metadata["dashboard_data_view"],
-        "data-revision-decision-action-dashboard-limit-mode":
+        "data-revision-decision-action-dashboard-limit-mode" =>
           outcome.metadata["dashboard_limit_mode"],
-        "data-revision-decision-action-result-event-id": outcome.metadata["result_event_id"],
-        "data-revision-decision-action-target-event-id": outcome.metadata["target_event_id"],
-        "data-revision-decision-action-target-observation-identity-id":
+        "data-revision-decision-action-result-event-id" => outcome.metadata["result_event_id"],
+        "data-revision-decision-action-target-event-id" => outcome.metadata["target_event_id"],
+        "data-revision-decision-action-target-observation-identity-id" =>
           outcome.metadata["target_observation_identity_id"]
       },
       message: outcome.message
@@ -653,11 +653,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
   defp historical_workflow_navigation_dto(inspector, mission_id, _panel) do
     %{
       attrs: %{
-        id: "dashboard-workflow-open-data-operations",
-        href: data_operations_path(inspector, mission_id),
-        class: "btn btn-sm btn-outline w-full justify-start",
-        "data-phx-link": "redirect",
-        "data-phx-link-state": "push"
+        :id => "dashboard-workflow-open-data-operations",
+        :href => data_operations_path(inspector, mission_id),
+        :class => "btn btn-sm btn-outline w-full justify-start",
+        "data-phx-link" => "redirect",
+        "data-phx-link-state" => "push"
       },
       icon_class: "hero-arrow-path-rounded-square h-4 w-4",
       text: "Continue in Data Operations"
@@ -717,7 +717,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
       end)
 
     %{
-      attrs: %{class: "space-y-2", "data-data-link-navigation": ""},
+      attrs: %{:class => "space-y-2", "data-data-link-navigation" => ""},
       heading: %{class: "hud-label", text: "Navigation"},
       entries: entries
     }
@@ -727,17 +727,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
     %{
       attrs:
         Map.merge(event_attrs, %{
-          type: "button",
-          "phx-click": "open_data_link",
-          class:
+          :type => "button",
+          "phx-click" => "open_data_link",
+          :class =>
             "grid w-full grid-cols-[5rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100",
-          "data-data-link-nav-entry-index": index,
-          "data-data-link-nav-entry-target": attr_text(map_value(entry, :target)),
-          "data-data-link-nav-entry-id": attr_text(map_value(entry, :target_id)),
-          "data-data-link-nav-entry-kind": attr_text(map_value(entry, :relationship_kind)),
-          "data-data-link-nav-from-target": attr_text(map_value(entry, :target)),
-          "data-data-link-nav-from-id": attr_text(map_value(entry, :target_id)),
-          "data-data-link-nav-from-kind": attr_text(map_value(entry, :relationship_kind))
+          "data-data-link-nav-entry-index" => index,
+          "data-data-link-nav-entry-target" => attr_text(map_value(entry, :target)),
+          "data-data-link-nav-entry-id" => attr_text(map_value(entry, :target_id)),
+          "data-data-link-nav-entry-kind" => attr_text(map_value(entry, :relationship_kind)),
+          "data-data-link-nav-from-target" => attr_text(map_value(entry, :target)),
+          "data-data-link-nav-from-id" => attr_text(map_value(entry, :target_id)),
+          "data-data-link-nav-from-kind" => attr_text(map_value(entry, :relationship_kind))
         }),
       from: attr_text(map_value(entry, :target_id)),
       via:
@@ -752,7 +752,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
   defp related_dto(inspector, panel) do
     %{
-      attrs: %{class: "space-y-2", "data-data-link-related-links": ""},
+      attrs: %{:class => "space-y-2", "data-data-link-related-links" => ""},
       heading: %{class: "hud-label", text: "Related"},
       groups_class: "space-y-3",
       groups: Enum.map(panel.related_groups, &related_group_dto(&1, inspector))
@@ -761,7 +761,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
 
   defp related_group_dto(group, inspector) do
     %{
-      attrs: %{class: "space-y-1", "data-data-link-related-group": group.key},
+      attrs: %{:class => "space-y-1", "data-data-link-related-group" => group.key},
       header_class: "flex items-center justify-between gap-2",
       heading: %{
         class: "text-[0.65rem] font-semibold uppercase tracking-normal text-base-content/50",
@@ -782,14 +782,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation do
     %{
       attrs:
         Map.merge(event_attrs, %{
-          type: "button",
-          "phx-click": "open_data_link",
-          class:
+          :type => "button",
+          "phx-click" => "open_data_link",
+          :class =>
             "grid w-full grid-cols-[7rem_minmax(0,1fr)] gap-x-2 rounded border border-base-300/70 px-2 py-1 text-left text-xs hover:border-primary/60 hover:bg-base-100",
-          "data-data-link-related-target": attr_text(map_value(link, :target_text)),
-          "data-data-link-related-id": attr_text(map_value(link, :target_id)),
-          "data-data-link-related-ref": attr_text(map_value(link, :link_id)),
-          "data-data-link-related-kind":
+          "data-data-link-related-target" => attr_text(map_value(link, :target_text)),
+          "data-data-link-related-id" => attr_text(map_value(link, :target_id)),
+          "data-data-link-related-ref" => attr_text(map_value(link, :link_id)),
+          "data-data-link-related-kind" =>
             relationship_kind_text(map_value(link, :relationship_kind))
         }),
       target: attr_text(map_value(link, :target_text)),

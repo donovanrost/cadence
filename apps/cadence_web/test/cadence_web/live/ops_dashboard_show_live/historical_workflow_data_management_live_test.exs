@@ -290,9 +290,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
 
       assert has_element?(view, source_event_selector)
 
-      view
-      |> element(source_event_selector)
-      |> render_click()
+      click_data_link_inspector_element(view, source_event_selector)
 
       source_event_path = assert_patch(view)
       assert source_event_path =~ "selected_target=telemetry_backfill_lifecycle_event"
