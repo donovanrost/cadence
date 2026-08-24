@@ -229,6 +229,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% true -> %>
           <WidgetPointComponents.value_tile
             widget={@widget}
+            placement_id={@placement_id}
             data={@data}
             compare_data={@compare_data}
             point={@point}
@@ -400,7 +401,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
         <% lifecycle_blocking?(@data) -> %>
           <.widget_lifecycle_notice data={@data} />
         <% true -> %>
-        <WidgetPointComponents.constellation_health data={@data} />
+        <WidgetPointComponents.constellation_health
+          placement_id={@placement_id}
+          data={@data}
+        />
       <% end %>
     </div>
     """

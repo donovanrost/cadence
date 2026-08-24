@@ -4,172 +4,274 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents
 
-  attr :widget, :map, required: true
-  attr :data, :map, required: true
-  attr :compare_data, :any, default: nil
-  attr :point, :any, default: nil
-  attr :compare_data_view, :string, default: nil
+  attr(:widget, :map, required: true)
+  attr(:placement_id, :string, required: true)
+  attr(:data, :map, required: true)
+  attr(:compare_data, :any, default: nil)
+  attr(:point, :any, default: nil)
+  attr(:compare_data_view, :string, default: nil)
 
   def value_tile(assigns) do
+    presentation = value_tile_presentation(assigns)
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <div class="flex items-baseline gap-2">
-      <span class="font-mono text-3xl font-bold tabular-nums" data-widget-value>
-        {format_value(@data.sample, @widget.options.precision)}
-      </span>
-      <span
-        :if={show_unit?(@widget) and value_tile_unit(@data, @point)}
-        class="text-base text-base-content/70"
-      >
-        {value_tile_unit(@data, @point)}
-      </span>
-    </div>
-    <p class="mt-1 font-mono text-[0.65rem] text-base-content/60">
-      {Calendar.strftime(@data.sample.receipt_time, "%H:%M:%S UTC")}
-    </p>
-    <%= case value_tile_comparison(@data, @compare_data, @widget.options.precision) do %>
-      <% nil -> %>
-      <% comparison -> %>
-        <p
-          class="mt-1 font-mono text-[0.65rem] text-base-content/70"
-          data-widget-compare-state={comparison.state}
-          data-widget-compare-delta={comparison.delta_text}
-          data-widget-compare-value={comparison.compare_text}
-          data-widget-compare-data-view={@compare_data_view || ""}
-        >
-          {comparison_view_label(@compare_data_view)} compare {comparison.delta_text}
-        </p>
-    <% end %>
+    <.vue
+      id={@presentation.component_id}
+      v-component="WidgetPoint"
+      presentation={@presentation}
+      v-ssr={false}
+      class={@presentation.host.class}
+    />
     """
   end
 
-  attr :widget, :map, required: true
-  attr :placement_id, :string, required: true
-  attr :data, :any, default: nil
-  attr :compare_data, :any, default: nil
-  attr :point, :any, default: nil
-  attr :backfill, :any, default: nil
-  attr :compare_backfill, :any, default: nil
-  attr :limit_markers, :list, default: []
-  attr :event_markers, :list, default: []
-  attr :annotations, :list, default: []
-  attr :selected_data_ref, :any, default: nil
-  attr :time_mode, :string, default: nil
-  attr :time_from, :string, default: nil
-  attr :time_to, :string, default: nil
-  attr :time_axis, :string, default: nil
-  attr :window_seconds, :integer, default: nil
-  attr :replay_run_id, :string, default: nil
-  attr :data_realm, :string, default: nil
-  attr :data_view, :string, default: nil
-  attr :compare_data_view, :string, default: nil
-  attr :data_source_id, :string, default: nil
-  attr :source_binding_id, :string, default: nil
-  attr :context_spacecraft_id, :string, required: true
-  attr :chart_epoch, :integer, required: true
-  attr :edit_mode?, :boolean, default: false
+  attr(:widget, :map, required: true)
+  attr(:placement_id, :string, required: true)
+  attr(:data, :any, default: nil)
+  attr(:compare_data, :any, default: nil)
+  attr(:point, :any, default: nil)
+  attr(:backfill, :any, default: nil)
+  attr(:compare_backfill, :any, default: nil)
+  attr(:limit_markers, :list, default: [])
+  attr(:event_markers, :list, default: [])
+  attr(:annotations, :list, default: [])
+  attr(:selected_data_ref, :any, default: nil)
+  attr(:time_mode, :string, default: nil)
+  attr(:time_from, :string, default: nil)
+  attr(:time_to, :string, default: nil)
+  attr(:time_axis, :string, default: nil)
+  attr(:window_seconds, :integer, default: nil)
+  attr(:replay_run_id, :string, default: nil)
+  attr(:data_realm, :string, default: nil)
+  attr(:data_view, :string, default: nil)
+  attr(:compare_data_view, :string, default: nil)
+  attr(:data_source_id, :string, default: nil)
+  attr(:source_binding_id, :string, default: nil)
+  attr(:context_spacecraft_id, :string, required: true)
+  attr(:chart_epoch, :integer, required: true)
+  attr(:edit_mode?, :boolean, default: false)
 
   def time_series_chart(assigns) do
+    presentation = time_series_presentation(assigns)
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <div
-      class={[
-        "cadence-time-series-stage",
-        "relative flex min-h-0 flex-1"
-      ]}
-      data-dashboard-time-series-stage
-    >
-      <WidgetDataManagementComponents.chart_data_management_strip
-        placement_id={@placement_id}
-        data={@data}
-        backfill={@backfill}
-        compare_data={@compare_data}
-        compare_backfill={@compare_backfill}
-        data_view={@data_view}
-        compare_data_view={@compare_data_view}
-      />
-      <.vue
-        id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch) <> "-component"}
-        v-component="TelemetryChart"
-        chart_id={chart_dom_id(@widget, @context_spacecraft_id, @chart_epoch)}
-        widget_id={@widget.widget_id}
-        placement_id={@placement_id}
-        window_seconds={@window_seconds || @widget.options.window_seconds}
-        correlation_group="cadence-dashboard-time"
-        edit_mode={@edit_mode?}
-        show_min_max_band={option_value(@widget, :show_min_max_band, true)}
-        legend_mode={option_value(@widget, :legend_mode, "auto")}
-        line_width={option_value(@widget, :line_width, "normal")}
-        fill_opacity={option_value(@widget, :fill_opacity, 8)}
-        span_gaps={option_value(@widget, :span_gaps, false)}
-        show_points={option_value(@widget, :show_points, false)}
-        axis_mode={option_value(@widget, :axis_mode, "unit")}
-        shared_tooltip={option_value(@widget, :shared_tooltip, true)}
-        label={@widget.title}
-        unit={(@point && @point.unit) || ""}
-        backfill={@backfill || []}
-        compare_backfill={@compare_backfill || []}
-        limit_markers={@limit_markers || []}
-        event_markers={@event_markers || []}
-        annotations={@annotations || []}
-        selected_ref={@selected_data_ref}
-        time_mode={@time_mode || ""}
-        time_from={@time_from || ""}
-        time_to={@time_to || ""}
-        time_axis={@time_axis || ""}
-        replay_run_id={@replay_run_id || ""}
-        data_realm={@data_realm || ""}
-        data_view={@data_view || ""}
-        compare_data_view={@compare_data_view || ""}
-        data_source_id={
-          @data_source_id || chart_payload_context_value(@backfill, :data_source_id)
-        }
-        source_binding_id={
-          @source_binding_id || chart_payload_context_value(@backfill, :source_binding_id)
-        }
-        data_management_badges={
-          WidgetDataManagementComponents.widget_data_management_badge_codes([@data, @backfill])
-        }
-        compare_data_management_badges={
-          WidgetDataManagementComponents.widget_data_management_badge_codes([
-            @compare_data,
-            @compare_backfill
-          ])
-        }
-        engine_backed={engine_backed?(@data)}
-        v-ssr={false}
-        class="min-h-0 flex-1 overflow-hidden"
-      />
-    </div>
+    <.vue
+      id={@presentation.component_id}
+      v-component="WidgetPoint"
+      presentation={@presentation}
+      v-ssr={false}
+      class={@presentation.host.class}
+    />
     """
   end
 
-  attr :data, :map, required: true
+  attr(:placement_id, :string, required: true)
+  attr(:data, :map, required: true)
 
   def constellation_health(assigns) do
+    presentation = constellation_health_presentation(assigns)
+    assigns = assign(assigns, :presentation, presentation)
+
     ~H"""
-    <div class="flex flex-wrap gap-2">
-      <.severity_badge
-        :for={{state, severity} <- state_severities()}
-        severity={severity}
-        count={Map.get(@data.counts, state, 0)}
-        label={state_label(state)}
-      />
-      <.severity_badge
-        :if={Map.get(@data.counts, :no_data, 0) > 0}
-        severity={:info}
-        count={@data.counts.no_data}
-        label="No Data"
-      />
-    </div>
-    <div class="mt-2 flex flex-wrap gap-1" aria-label="Per-spacecraft worst limit state">
-      <span
-        :for={entry <- @data.spacecraft}
-        title={"#{entry.spacecraft_id}: #{state_label(entry.worst_state)}"}
-        class={["inline-block h-3 w-3 rounded-sm", state_dot_class(entry.worst_state)]}
-      >
-      </span>
-    </div>
+    <.vue
+      id={@presentation.component_id}
+      v-component="WidgetPoint"
+      presentation={@presentation}
+      v-ssr={false}
+      class={@presentation.host.class}
+    />
     """
   end
+
+  defp value_tile_presentation(assigns) do
+    unit =
+      if show_unit?(assigns.widget) do
+        value_tile_unit(assigns.data, assigns.point)
+      end
+
+    comparison =
+      case value_tile_comparison(
+             assigns.data,
+             assigns.compare_data,
+             assigns.widget.options.precision
+           ) do
+        nil ->
+          nil
+
+        comparison ->
+          %{
+            class: "mt-1 font-mono text-[0.65rem] text-base-content/70",
+            attrs: %{
+              "data-widget-compare-state" => comparison.state,
+              "data-widget-compare-delta" => comparison.delta_text,
+              "data-widget-compare-value" => comparison.compare_text,
+              "data-widget-compare-data-view" => assigns.compare_data_view || ""
+            },
+            text:
+              "#{comparison_view_label(assigns.compare_data_view)} compare #{comparison.delta_text}"
+          }
+      end
+
+    %{
+      kind: "value_tile",
+      component_id: widget_point_component_id(assigns.placement_id),
+      host: %{class: "contents"},
+      value: %{
+        container_class: "flex items-baseline gap-2",
+        text: format_value(assigns.data.sample, assigns.widget.options.precision),
+        class: "font-mono text-3xl font-bold tabular-nums",
+        attrs: %{"data-widget-value" => ""},
+        unit:
+          if(unit,
+            do: %{text: unit, class: "text-base text-base-content/70"}
+          )
+      },
+      timestamp: %{
+        text: Calendar.strftime(assigns.data.sample.receipt_time, "%H:%M:%S UTC"),
+        class: "mt-1 font-mono text-[0.65rem] text-base-content/60"
+      },
+      comparison: comparison
+    }
+  end
+
+  defp time_series_presentation(assigns) do
+    chart_id = chart_dom_id(assigns.widget, assigns.context_spacecraft_id, assigns.chart_epoch)
+
+    %{
+      kind: "time_series",
+      component_id: "widget-point-#{chart_id}-component",
+      host: %{class: "contents"},
+      stage: %{
+        class: "cadence-time-series-stage relative flex min-h-0 flex-1",
+        attrs: %{"data-dashboard-time-series-stage" => ""}
+      },
+      data_management:
+        WidgetDataManagementComponents.chart_data_management_strip_presentation(
+          assigns.placement_id,
+          assigns.data,
+          assigns.backfill,
+          assigns.compare_data,
+          assigns.compare_backfill,
+          assigns.data_view,
+          assigns.compare_data_view
+        ),
+      chart: %{
+        component_id: chart_id <> "-component",
+        class: "min-h-0 flex-1 overflow-hidden",
+        props: time_series_chart_props(assigns, chart_id)
+      }
+    }
+  end
+
+  defp time_series_chart_props(assigns, chart_id) do
+    %{
+      chart_id: chart_id,
+      widget_id: assigns.widget.widget_id,
+      placement_id: assigns.placement_id,
+      window_seconds: assigns.window_seconds || assigns.widget.options.window_seconds,
+      correlation_group: "cadence-dashboard-time",
+      edit_mode: assigns.edit_mode?,
+      show_min_max_band: option_value(assigns.widget, :show_min_max_band, true),
+      legend_mode: option_value(assigns.widget, :legend_mode, "auto"),
+      line_width: option_value(assigns.widget, :line_width, "normal"),
+      fill_opacity: option_value(assigns.widget, :fill_opacity, 8),
+      span_gaps: option_value(assigns.widget, :span_gaps, false),
+      show_points: option_value(assigns.widget, :show_points, false),
+      axis_mode: option_value(assigns.widget, :axis_mode, "unit"),
+      shared_tooltip: option_value(assigns.widget, :shared_tooltip, true),
+      label: assigns.widget.title,
+      unit: (assigns.point && assigns.point.unit) || "",
+      backfill: assigns.backfill || [],
+      compare_backfill: assigns.compare_backfill || [],
+      limit_markers: assigns.limit_markers || [],
+      event_markers: assigns.event_markers || [],
+      annotations: assigns.annotations || [],
+      selected_ref: assigns.selected_data_ref,
+      time_mode: assigns.time_mode || "",
+      time_from: assigns.time_from || "",
+      time_to: assigns.time_to || "",
+      time_axis: assigns.time_axis || "",
+      replay_run_id: assigns.replay_run_id || "",
+      data_realm: assigns.data_realm || "",
+      data_view: assigns.data_view || "",
+      compare_data_view: assigns.compare_data_view || "",
+      data_source_id:
+        assigns.data_source_id || chart_payload_context_value(assigns.backfill, :data_source_id),
+      source_binding_id:
+        assigns.source_binding_id ||
+          chart_payload_context_value(assigns.backfill, :source_binding_id),
+      data_management_badges:
+        WidgetDataManagementComponents.widget_data_management_badge_codes([
+          assigns.data,
+          assigns.backfill
+        ]),
+      compare_data_management_badges:
+        WidgetDataManagementComponents.widget_data_management_badge_codes([
+          assigns.compare_data,
+          assigns.compare_backfill
+        ]),
+      engine_backed: engine_backed?(assigns.data)
+    }
+  end
+
+  defp constellation_health_presentation(assigns) do
+    badges =
+      Enum.map(state_severities(), fn {state, severity} ->
+        severity_badge_presentation(
+          severity,
+          Map.get(assigns.data.counts, state, 0),
+          state_label(state)
+        )
+      end)
+
+    badges =
+      if Map.get(assigns.data.counts, :no_data, 0) > 0 do
+        badges ++
+          [severity_badge_presentation(:info, assigns.data.counts.no_data, "No Data")]
+      else
+        badges
+      end
+
+    %{
+      kind: "constellation_health",
+      component_id: widget_point_component_id(assigns.placement_id),
+      host: %{class: "contents"},
+      badges: %{
+        class: "flex flex-wrap gap-2",
+        items: badges
+      },
+      spacecraft: %{
+        class: "mt-2 flex flex-wrap gap-1",
+        attrs: %{"aria-label" => "Per-spacecraft worst limit state"},
+        items:
+          Enum.map(assigns.data.spacecraft, fn entry ->
+            %{
+              key: entry.spacecraft_id,
+              class: "inline-block h-3 w-3 rounded-sm #{state_dot_class(entry.worst_state)}",
+              attrs: %{
+                "title" => "#{entry.spacecraft_id}: #{state_label(entry.worst_state)}"
+              }
+            }
+          end)
+      }
+    }
+  end
+
+  defp severity_badge_presentation(severity, count, label) do
+    %{
+      class:
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium #{severity_badge_class(severity)}",
+      dot_class: "w-1.5 h-1.5 rounded-full bg-current",
+      count: count,
+      count_class: "font-mono",
+      label: label,
+      label_class: "uppercase text-[0.65rem]"
+    }
+  end
+
+  defp widget_point_component_id(placement_id), do: "widget-point-#{placement_id}-component"
 
   def chart_payload_empty?(nil), do: true
   def chart_payload_empty?([]), do: true
@@ -307,6 +409,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
   defp state_label(:blue), do: "Blue"
   defp state_label(:green), do: "Green"
   defp state_label(nil), do: "No data"
+
+  defp severity_badge_class(:critical), do: "bg-error/20 text-error"
+  defp severity_badge_class(:warning), do: "bg-warning/20 text-warning"
+  defp severity_badge_class(:info), do: "bg-info/20 text-info"
+  defp severity_badge_class(:nominal), do: "bg-success/20 text-success"
 
   defp state_dot_class(:red), do: "bg-error"
   defp state_dot_class(:yellow), do: "bg-warning"

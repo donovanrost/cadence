@@ -234,11 +234,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-decision-actions="start_resolve accept_result"][data-runtime-resolved="true"])
              )
 
-      chart_vue = LiveVue.Test.get_vue(view, name: "TelemetryChart")
-      assert chart_vue.props["engine_backed"] == true
-      assert chart_vue.component == "TelemetryChart"
+      chart_presentation = widget_point_presentation_by_kind(view, "time_series")
+      assert chart_presentation["chart"]["props"]["engine_backed"] == true
+      assert chart_presentation["kind"] == "time_series"
 
-      assert render(view) =~ "5"
+      assert widget_point_presentation_by_kind(view, "value_tile")["value"]["text"] == "5"
 
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 9, 1_700_000_110,
         dashboard_runtime_invalidation?: false
@@ -312,8 +312,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-decision-actions="start_resolve accept_result"][data-runtime-resolved="true"])
              )
 
-      assert LiveVue.Test.get_vue(view, name: "TelemetryChart").props["engine_backed"] == true
-      assert render(view) =~ "9"
+      chart_presentation = widget_point_presentation_by_kind(view, "time_series")
+      assert chart_presentation["chart"]["props"]["engine_backed"] == true
+      assert widget_point_presentation_by_kind(view, "value_tile")["value"]["text"] == "9"
     end
   end
 end

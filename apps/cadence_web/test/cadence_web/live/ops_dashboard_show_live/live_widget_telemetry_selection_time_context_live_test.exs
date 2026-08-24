@@ -136,8 +136,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
-    |> Map.fetch!(:props)
+    |> widget_point_chart_props(chart_dom_id(html, widget_id))
     |> Map.fetch!(prop)
   end
 
@@ -145,7 +144,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     case chart_dom_ids(html, widget_id) do
-      [id] -> html |> LiveVue.Test.get_vue(id: id) |> Map.fetch!(:props) |> Map.get(prop)
+      [id] -> html |> widget_point_chart_props(id) |> Map.get(prop)
       [] -> nil
     end
   end
@@ -159,7 +158,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
   defp chart_dom_ids(html, widget_id) do
     html
     |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
+    |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
     |> LazyHTML.attribute("id")
   end
 

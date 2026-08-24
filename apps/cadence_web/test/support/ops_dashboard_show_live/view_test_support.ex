@@ -61,6 +61,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     AsyncLiveViewTestSupport.stop_async_view(view, timeout)
   end
 
+  def widget_point_presentation(rendered, component_id) do
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+
+    assert vue.component == "WidgetPoint"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["component_id"] == component_id
+
+    vue.props["presentation"]
+  end
+
+  def widget_point_chart_props(rendered, component_id) do
+    rendered
+    |> widget_point_presentation(component_id)
+    |> Map.fetch!("chart")
+    |> Map.fetch!("props")
+  end
+
+  def widget_point_presentation_by_kind(rendered, kind) do
+    html = rendered_html(rendered)
+
+    Enum.find_value(widget_point_host_ids(html), fn component_id ->
+      presentation = widget_point_presentation(html, component_id)
+
+      if presentation["kind"] == kind, do: presentation
+    end)
+  end
+
+  def widget_point_value_text(rendered, placement_id) do
+    rendered
+    |> widget_point_presentation("widget-point-#{placement_id}-component")
+    |> Map.fetch!("value")
+    |> Map.fetch!("text")
+  end
+
   def widget_rows_presentation(rendered, kind, placement_id) do
     component_id = "widget-rows-#{String.replace(kind, "_", "-")}-#{placement_id}-component"
     vue = LiveVue.Test.get_vue(rendered, id: component_id)
@@ -243,6 +279,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     html
     |> LazyHTML.from_fragment()
     |> LazyHTML.query(~s([phx-hook="VueHook"][data-name="WidgetRows"]))
+    |> LazyHTML.attribute("id")
+  end
+
+  defp widget_point_host_ids(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([id^="widget-point-"][id$="-component"]))
     |> LazyHTML.attribute("id")
   end
 

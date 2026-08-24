@@ -212,7 +212,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       widget_id = placement_by_title(initial_document, "Counter").placement_id
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       await_dashboard_resolved(view)
-      assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
+      assert widget_point_value_text(view, widget_id) == "1234"
 
       assert editor_action(view, "edit-paused-note")["text"] ==
                "Live updates paused while editing"
@@ -255,8 +255,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       ingest!(mission, binding_set, spacecraft.spacecraft_id, 5678, 1_700_000_110)
       send(view.pid, :tick)
       await_dashboard_resolved(view)
-      assert has_element?(view, "#widget-#{widget_id} [data-widget-value]", "1234")
-      refute has_element?(view, "#widget-#{widget_id} [data-widget-value]", "5678")
+      assert widget_point_value_text(view, widget_id) == "1234"
+      refute widget_point_value_text(view, widget_id) == "5678"
 
       # The Editor remains paused after Save; the Viewer resumes live telemetry.
       {:ok, viewer, _html} =
@@ -267,7 +267,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       await_dashboard_resolved(viewer)
       refute has_element?(viewer, "#edit-paused-note")
-      assert has_element?(viewer, "#widget-#{widget_id} [data-widget-value]", "5678")
+      assert widget_point_value_text(viewer, widget_id) == "5678"
 
       stop_dashboard_view(viewer)
       stop_dashboard_view(view)

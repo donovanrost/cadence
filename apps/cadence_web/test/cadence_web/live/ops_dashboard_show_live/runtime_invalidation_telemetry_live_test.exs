@@ -129,7 +129,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeInvalidationTelemetryLiveTest d
     [id] =
       html
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
+      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
       |> LazyHTML.attribute("id")
 
     id

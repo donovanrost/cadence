@@ -99,33 +99,55 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
   attr(:compare_data_view, :string, default: nil)
 
   def chart_data_management_strip(assigns) do
-    primary_badges = widget_data_management_badges([assigns.data, assigns.backfill])
+    strip =
+      chart_data_management_strip_presentation(
+        assigns.placement_id,
+        assigns.data,
+        assigns.backfill,
+        assigns.compare_data,
+        assigns.compare_backfill,
+        assigns.data_view,
+        assigns.compare_data_view
+      )
 
-    compare_badges =
-      widget_data_management_badges([assigns.compare_data, assigns.compare_backfill])
-
-    presentation =
-      if primary_badges != [] or compare_badges != [] or present_text?(assigns.compare_data_view) do
-        chart_data_management_strip_dto(
-          primary_badges,
-          compare_badges,
-          assigns.data_view,
-          assigns.compare_data_view
-        )
-      end
-
-    assigns = assign(assigns, :presentation, presentation)
+    assigns = assign(assigns, :strip, strip)
 
     ~H"""
     <.vue
-      :if={@presentation}
-      id={"chart-data-management-#{@placement_id}-component"}
+      :if={@strip}
+      id={@strip.component_id}
       v-component="ChartDataManagementStrip"
-      presentation={@presentation}
+      presentation={@strip.presentation}
       v-ssr={false}
       class="contents"
     />
     """
+  end
+
+  def chart_data_management_strip_presentation(
+        placement_id,
+        data,
+        backfill,
+        compare_data,
+        compare_backfill,
+        data_view,
+        compare_data_view
+      ) do
+    primary_badges = widget_data_management_badges([data, backfill])
+    compare_badges = widget_data_management_badges([compare_data, compare_backfill])
+
+    if primary_badges != [] or compare_badges != [] or present_text?(compare_data_view) do
+      %{
+        component_id: "chart-data-management-#{placement_id}-component",
+        presentation:
+          chart_data_management_strip_dto(
+            primary_badges,
+            compare_badges,
+            data_view,
+            compare_data_view
+          )
+      }
+    end
   end
 
   defp chart_data_management_strip_dto(

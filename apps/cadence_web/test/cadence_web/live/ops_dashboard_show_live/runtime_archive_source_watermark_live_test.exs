@@ -147,7 +147,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     [id] =
       html
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
+      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
       |> LazyHTML.attribute("id")
 
     id
@@ -172,8 +172,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveSourceWatermarkLiveTest 
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
 
     html
-    |> LiveVue.Test.get_vue(id: chart_dom_id(html, widget_id))
-    |> Map.fetch!(:props)
+    |> widget_point_chart_props(chart_dom_id(html, widget_id))
     |> Map.fetch!(prop)
   end
 

@@ -189,11 +189,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
     [id] =
       html
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([id^="tlm-chart-#{widget_id}-"]))
+      |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{widget_id}-"]))
       |> LazyHTML.attribute("id")
 
     prop = attribute |> String.trim_leading("data-") |> String.replace("-", "_")
-    html |> LiveVue.Test.get_vue(id: id) |> Map.fetch!(:props) |> Map.fetch!(prop)
+    html |> widget_point_chart_props(id) |> Map.fetch!(prop)
   end
 
   defp point_meta([_timestamp, _value, metadata]) when is_map(metadata), do: metadata
@@ -264,15 +264,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
       # Grid items carry GridStack placement attributes.
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
       assert has_element?(view, ~s(.grid-stack-item[gs-x="4"][gs-w="6"][gs-h="3"]))
-      chart_vue = LiveVue.Test.get_vue(view, name: "TelemetryChart")
-      assert chart_vue.props["engine_backed"] == true
+
+      [chart_component_id] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([id^="widget-point-tlm-chart-#{trend_widget.widget_id}-"]))
+        |> LazyHTML.attribute("id")
+
+      chart_presentation = widget_point_presentation(view, chart_component_id)
+      assert chart_presentation["chart"]["props"]["engine_backed"] == true
 
       # Context widget unresolved until a spacecraft context is chosen.
       assert html =~ "Pick a spacecraft context"
 
       # Fixed time-series widget mounts its chart island with backfill data.
-      assert chart_vue.component == "TelemetryChart"
-      assert chart_vue.props["engine_backed"] == true
+      assert chart_presentation["kind"] == "time_series"
+      assert chart_presentation["chart"]["props"]["engine_backed"] == true
 
       assert has_element?(
                view,
