@@ -33,20 +33,19 @@ withDefaults(
 
 <style scoped>
 .cui-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--cadence-space-2);
-  border: 1px solid var(--cadence-color-border-strong);
-  border-radius: 0;
+  overflow: hidden;
+  border: 1px solid var(--cadence-color-border);
   color: var(--cadence-color-text);
-  background: var(--cadence-color-surface-raised);
-  font-family: var(--cadence-font-mono);
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.055em;
-  line-height: 1;
-  text-transform: uppercase;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
   cursor: pointer;
   transition:
     color var(--cadence-transition-fast),
@@ -57,34 +56,39 @@ withDefaults(
 .cui-button--sm {
   min-height: var(--cadence-control-sm);
   padding: 0 var(--cadence-space-3);
+  font-size: 0.75rem;
 }
 
 .cui-button--md {
   min-height: var(--cadence-control-md);
-  padding: 0 var(--cadence-space-4);
+  padding: 0 var(--cadence-space-5);
 }
 
 .cui-button:hover:not(:disabled) {
-  border-color: var(--cadence-color-text-muted);
+  border-color: var(--cadence-color-border-strong);
   color: var(--cadence-color-text-strong);
-  background: #20292b;
+  background: var(--cadence-color-surface-inset);
+}
+
+.cui-button:active:not(:disabled) {
+  color: var(--cadence-color-text-inverse);
+  background: var(--cadence-color-surface-inverse);
 }
 
 .cui-button--primary {
   border-color: var(--cadence-color-accent);
-  color: #17130d;
+  color: var(--cadence-color-on-accent);
   background: var(--cadence-color-accent);
 }
 
 .cui-button--primary:hover:not(:disabled) {
-  border-color: #ffb748;
-  color: #17130d;
-  background: #ffb748;
+  border-color: var(--cadence-color-accent-hover);
+  color: var(--cadence-color-on-accent);
+  background: var(--cadence-color-accent-hover);
 }
 
 .cui-button--primary :deep(.cui-spinner) {
-  border-color: rgb(23 19 13 / 35%);
-  border-top-color: #17130d;
+  color: var(--cadence-color-on-accent);
 }
 
 .cui-button--quiet {
@@ -92,16 +96,28 @@ withDefaults(
   background: transparent;
 }
 
+.cui-button--quiet:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--cadence-color-signal);
+  background: transparent;
+}
+
 .cui-button--danger {
-  border-color: color-mix(in srgb, var(--cadence-color-danger) 55%, transparent);
+  border-color: color-mix(in srgb, var(--cadence-color-danger) 45%, var(--cadence-color-border));
   color: var(--cadence-color-danger);
-  background: color-mix(in srgb, var(--cadence-color-danger) 8%, transparent);
+  background: transparent;
+}
+
+.cui-button--danger:hover:not(:disabled) {
+  border-color: var(--cadence-color-danger);
+  color: var(--cadence-color-text-inverse);
+  background: var(--cadence-color-danger);
 }
 
 .cui-button:disabled {
-  border-color: var(--cadence-color-border);
-  color: var(--cadence-color-text-muted);
-  background: var(--cadence-color-surface);
+  border-color: var(--cadence-color-border-subtle);
+  color: color-mix(in srgb, var(--cadence-color-text-muted) 58%, transparent);
+  background: transparent;
   cursor: not-allowed;
 }
 </style>

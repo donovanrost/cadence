@@ -11,7 +11,7 @@ interface TooltipArgs {
 const meta = {
   title: "Components/Overlays/Tooltip",
   component: CTooltip,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   args: {
     align: "center",
     content: "Current operator has application configuration authority.",

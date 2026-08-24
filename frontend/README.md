@@ -3,9 +3,10 @@
 This workspace proves the trusted first-party frontend application boundary with a Vue host and two
 independently built Module Federation remotes:
 
-- `apps/host` receives a host-approved release catalog and owns mission context, navigation,
-  compatibility checks, HTTP query/action dispatch, loading and render-error containment, and the
-  operator activity rail.
+- `apps/host` owns the Vue entry journey, development administrator session, system-administration
+  shell, and the downstream application workspace. The application workspace receives a
+  host-approved release catalog and owns mission context, compatibility checks, HTTP query/action
+  dispatch, loading and render-error containment, and the operator activity rail.
 - `apps/telemetry-decom` contributes a trusted Telemetry Decom renderer. Packet filtering and draft
   selection stay client-local; saving crosses the host-owned bridge.
 - `apps/contract-probe` is a deliberately small fixture on a separate release train. It proves that
@@ -46,6 +47,26 @@ application until repeated use justifies promotion into `packages/ui`.
 Vite+ is currently beta software. Vite+, Module Federation, Node, and pnpm are pinned so the PoC
 does not silently move with their release channels.
 
+## Entry journey
+
+The Vue host starts at `/sign-in`. It deliberately has no registration route while Cadence's
+account-registration mechanism is unsettled. The frontend-only session boundary reads the same
+`CADENCE_ADMIN_EMAIL`, `CADENCE_ADMIN_PASSWORD`, `CADENCE_ADMIN_DISPLAY_NAME`, and
+`CADENCE_ADMIN_MODE_TTL_SECONDS` environment contract used by local Cadence development. The
+checked-in `mise.toml` defaults are `admin@example.com` and `change-me`.
+
+A successful sign-in establishes a same-origin, HTTP-only PoC cookie and enters `/admin`. The first
+admin slice includes these routes:
+
+- `/admin` — system overview and control-surface index
+- `/admin/organizations` — organization boundary register
+- `/admin/runtime` — session authority and frontend contract evidence
+- `/applications` — the existing federated application-host PoC
+
+The session service exists only to make the Vue development loop coherent. It does not replace the
+eventual Phoenix authentication adapter, and the organization/admin data is explicitly marked as a
+frontend fixture until those read models are connected.
+
 ## Commands
 
 Run these commands from the `frontend` directory:
@@ -77,6 +98,19 @@ restrictive host CSP. Run `build` before `preview`.
 
 ## Design-system workflow
 
+The [design-system charter](docs/design-system/charter.md) defines the operator
+outcomes, semantic principles, system layers, and explicit non-goals that guide
+this clean-sheet redesign. It treats the current tokens and components as PoC
+material rather than an approved visual language. The
+[operational state model](docs/design-system/operational-state-model.md) applies
+those principles to shared state axes, aggregation rules, presentation
+contracts, and the first live-monitoring scenario matrix. The
+[symbology specification](docs/design-system/symbology.md) defines distinct icon
+classes, invariant status shapes, monitoring-symbol anatomy, accessibility, and
+the starter mission glyph vocabulary. The
+[visual foundations](docs/design-system/visual-foundations.md) establish the
+working operational-monochrome direction for both dark and light modes.
+
 `corepack pnpm storybook` starts the workshop at `http://127.0.0.1:6006`. It is intentionally not
 part of `pnpm dev`, so token and component work does not start the three federation services and
 application work does not pay for Storybook.
@@ -94,18 +128,19 @@ that cannot be proven by rendering alone. `storybook:test` renders all stories i
 
 ## Runtime proof matrix
 
-The default URL loads the current Telemetry Decom release. These URLs exercise the other evidence:
+After sign-in, `/applications` loads the current Telemetry Decom release. These URLs exercise the
+other evidence:
 
-| URL                            | Expected result                                                             |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `/?application=contract_probe` | Loads a second application through the same generic host path               |
-| `/?release=previous`           | Pins and loads the previous Telemetry Decom production artifact             |
-| `/?scenario=offline`           | Contains an unreachable approved release without losing the host shell      |
-| `/?scenario=incompatible`      | Rejects an application-version mismatch before mounting                     |
-| `/?scenario=throw`             | Contains an exception raised after the remote component mounts              |
-| `/?scenario=malformed`         | Rejects the host catalog before loading any remote code                     |
-| `/?scenario=viewer`            | Loads data but rejects configuration actions using server-owned permissions |
-| `/?scenario=stale`             | Returns a structured optimistic-concurrency conflict                        |
+| URL                                        | Expected result                                                             |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| `/applications?application=contract_probe` | Loads a second application through the same generic host path               |
+| `/applications?release=previous`           | Pins and loads the previous Telemetry Decom production artifact             |
+| `/applications?scenario=offline`           | Contains an unreachable approved release without losing the host shell      |
+| `/applications?scenario=incompatible`      | Rejects an application-version mismatch before mounting                     |
+| `/applications?scenario=throw`             | Contains an exception raised after the remote component mounts              |
+| `/applications?scenario=malformed`         | Rejects the host catalog before loading any remote code                     |
+| `/applications?scenario=viewer`            | Loads data but rejects configuration actions using server-owned permissions |
+| `/applications?scenario=stale`             | Returns a structured optimistic-concurrency conflict                        |
 
 ## Federation transport decision
 
@@ -130,13 +165,14 @@ demo service with authenticated Phoenix endpoints for catalog discovery, version
 typed actions. The server is authoritative for `current_scope`, installations, package versions,
 scope, permissions, query/action registration, validation, persistence, and audit receipts.
 
-The application page remains in the existing authenticated `:spacecraft_show` `live_session`
-because that host already owns organization, mission, spacecraft, navigation, and authorization
-context. If the bridge is implemented with controller endpoints, those routes belong in a
+When the Vue shell is connected to Phoenix, `/sign-in` belongs in a `CadenceWeb` scope using the
+`:browser` pipeline so it can establish the normal session and redirect an already authenticated
+user. `/admin`, `/applications`, and controller-backed bridge endpoints belong in a separate
 `CadenceWeb` scope using `pipe_through [:browser, :require_authenticated_user]`: the browser
 pipeline supplies the authenticated session and CSRF protection, while
-`:require_authenticated_user` prevents a remote from reaching the bridge without `current_scope`.
-Plugins do not contribute routes or authentication plugs.
+`:require_authenticated_user` prevents the SPA or a remote from reaching protected resources
+without `current_scope`. This preserves router-level authentication even though Vue owns the
+rendered interface. Plugins do not contribute routes or authentication plugs.
 
 This PoC does not add those Phoenix routes, alter Elixir code, or approve third-party browser code.
 Signed release metadata, artifact integrity enforcement, CDN failover, and the separate Extism/WIT

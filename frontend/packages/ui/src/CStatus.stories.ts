@@ -9,7 +9,7 @@ interface StatusArgs {
 const meta = {
   title: "Components/Feedback/Status",
   component: CStatus,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   args: {
     pulse: false,
     tone: "neutral",

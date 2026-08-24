@@ -11,7 +11,7 @@ interface StatePanelArgs {
 const meta = {
   title: "Components/Feedback/State Panel",
   component: CStatePanel,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   args: {
     description: "The host is resolving the application release and its compatibility contract.",
     title: "Loading application",

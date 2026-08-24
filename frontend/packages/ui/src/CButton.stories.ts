@@ -13,7 +13,7 @@ interface ButtonArgs {
 const meta = {
   title: "Components/Actions/Button",
   component: CButton,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   args: {
     disabled: false,
     loading: false,

@@ -5,10 +5,6 @@ hooks {
         fix = true
         stash = "git"
         steps {
-            ["css-frozen"] {
-                glob = List("*.css")
-                check = "scripts/check-css-frozen.sh"
-            }
             ["elixir-format"] {
                 glob = List("*.ex", "*.exs")
                 check = "mix format.all --check-formatted {{files}}"

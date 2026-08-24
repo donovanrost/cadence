@@ -53,8 +53,10 @@ function updateValue(value: boolean | "indeterminate"): void {
 .cui-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: var(--cadence-space-2);
-  color: var(--cadence-color-text-secondary);
+  gap: var(--cadence-space-3);
+  color: var(--cadence-color-text);
+  font-size: var(--cadence-type-body-md);
+  line-height: 1.4;
   cursor: pointer;
 }
 
@@ -68,13 +70,12 @@ function updateValue(value: boolean | "indeterminate"): void {
 
 .cui-checkbox__control {
   display: grid;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--cadence-color-text-muted);
-  border-radius: 0;
-  color: #16130e;
+  border: 1px solid var(--cadence-color-border-strong);
+  color: var(--cadence-color-text-inverse);
   background: transparent;
   cursor: pointer;
   place-items: center;
@@ -83,26 +84,32 @@ function updateValue(value: boolean | "indeterminate"): void {
     background var(--cadence-transition-fast);
 }
 
+.cui-checkbox__control:hover:not(:disabled) {
+  border-color: var(--cadence-color-signal);
+}
+
 .cui-checkbox__control[data-state="checked"] {
-  border-color: var(--cadence-color-accent);
-  background: var(--cadence-color-accent);
+  border-color: var(--cadence-color-signal);
+  background: var(--cadence-color-signal);
 }
 
 .cui-checkbox__indicator span {
   display: block;
-  width: 6px;
-  height: 3px;
-  border-bottom: 1.5px solid currentcolor;
-  border-left: 1.5px solid currentcolor;
+  width: 8px;
+  height: 4px;
+  border-bottom: 2px solid currentcolor;
+  border-left: 2px solid currentcolor;
   transform: translateY(-1px) rotate(-45deg);
 }
 
 .cui-checkbox__label {
   cursor: pointer;
+  user-select: none;
 }
 
 .cui-checkbox[data-disabled] {
-  opacity: 0.45;
+  color: var(--cadence-color-text-muted);
+  opacity: 0.55;
   cursor: not-allowed;
 }
 

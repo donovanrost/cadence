@@ -22,12 +22,14 @@ withDefaults(
 
 <style scoped>
 .cui-spinner {
+  position: relative;
   display: inline-block;
   flex: none;
-  border: 2px solid var(--cadence-color-border);
-  border-top-color: var(--cadence-color-signal);
-  border-radius: 50%;
-  animation: cui-spin 700ms linear infinite;
+  border: 1px solid var(--cadence-color-border-subtle);
+  border-top-color: currentcolor;
+  border-right-color: currentcolor;
+  color: var(--cadence-color-signal);
+  animation: cui-spin 640ms steps(8) infinite;
 }
 
 .cui-spinner--sm {
@@ -36,8 +38,8 @@ withDefaults(
 }
 
 .cui-spinner--md {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 @keyframes cui-spin {

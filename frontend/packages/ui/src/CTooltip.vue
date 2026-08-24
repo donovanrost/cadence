@@ -43,21 +43,19 @@ withDefaults(
 
 <style>
 .cui-tooltip {
-  z-index: 100;
-  max-width: 240px;
-  padding: 7px 9px;
-  border: 1px solid var(--cadence-color-border-strong);
+  z-index: var(--cadence-layer-tooltip);
+  max-width: 260px;
+  padding: 8px 11px;
+  border: 1px solid var(--cadence-color-border);
   color: var(--cadence-color-text);
-  background: var(--cadence-color-surface-raised);
-  box-shadow: 0 10px 30px rgb(0 0 0 / 32%);
-  font-family: var(--cadence-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.035em;
-  animation: cui-tooltip-enter 100ms ease-out;
+  background: var(--cadence-color-canvas);
+  font-size: var(--cadence-type-body-sm);
+  line-height: 1.45;
+  animation: cui-tooltip-enter var(--cadence-duration-fast) var(--cadence-ease-standard);
 }
 
 .cui-tooltip__arrow {
-  fill: var(--cadence-color-border-strong);
+  fill: var(--cadence-color-border);
 }
 
 @keyframes cui-tooltip-enter {

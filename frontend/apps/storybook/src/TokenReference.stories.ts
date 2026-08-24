@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import TokenReference from "./TokenReference.vue";
 
 const meta = {
-  title: "Foundations/Design Tokens",
+  title: "Foundations/Operational Monochrome",
   component: TokenReference,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   parameters: {
     layout: "fullscreen",
     controls: { disable: true },
@@ -14,4 +14,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const CurrentTheme: Story = {};
+export const SystemReference: Story = {};

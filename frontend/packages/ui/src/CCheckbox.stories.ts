@@ -12,7 +12,7 @@ interface CheckboxArgs {
 const meta = {
   title: "Components/Forms/Checkbox",
   component: CCheckbox,
-  tags: ["baseline"],
+  tags: ["generation-02"],
   args: {
     disabled: false,
     modelValue: false,
