@@ -653,7 +653,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
         ~s(#dashboard-evidence-copy-link[data-clipboard-text*="selected_target="])
       )
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      close_dashboard_panel(view)
       cleared_evidence_path = assert_patch(view)
       refute cleared_evidence_path =~ "panel="
       refute cleared_evidence_path =~ "selected_evidence_kind="

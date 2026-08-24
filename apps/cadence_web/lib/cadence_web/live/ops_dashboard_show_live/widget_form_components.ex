@@ -43,7 +43,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetFormComponents do
     """
   end
 
-  defp widget_form_dto(assigns) do
+  @doc "Builds the JSON-safe presentation contract for the dashboard widget form."
+  def widget_form_dto(assigns) do
     point_widget? = WidgetFormPresentation.point_widget?(assigns.form)
 
     %{

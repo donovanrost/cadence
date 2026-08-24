@@ -23,8 +23,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormLiveTest do
 
     render_hook(view, "open_rename", %{})
 
-    assert has_element?(view, "#dashboard-panel")
-    assert has_element?(view, "#rename-dashboard-form-component")
+    assert has_element?(view, "#dashboard-panel-component")
+    refute has_element?(view, "#rename-dashboard-form-component")
     refute has_element?(view, "#rename-dashboard-form")
 
     presentation = rename_form_presentation(view)
@@ -39,7 +39,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormLiveTest do
       "description" => "Primary EPS"
     })
 
-    refute has_element?(view, "#dashboard-panel")
+    refute has_element?(view, "#dashboard-panel-component")
 
     assert has_element?(
              view,
@@ -102,14 +102,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormLiveTest do
   end
 
   defp rename_form_presentation(view) do
-    vue = LiveVue.Test.get_vue(view, id: "rename-dashboard-form-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-panel-component")
 
-    assert vue.component == "RenameDashboardForm"
+    assert vue.component == "DashboardPanel"
     assert vue.ssr == false
     assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    Map.fetch!(vue.props, "presentation")
+    panel = Map.fetch!(vue.props, "presentation")
+    assert panel["child"]["kind"] == "rename_dashboard_form"
+
+    assert panel["child"]["wrapper"]["attrs"] == %{
+             "class" => "contents",
+             "id" => "rename-dashboard-form-component"
+           }
+
+    panel["child"]["presentation"]
   end
 
   defp submit_browser_form(view, presentation, overrides) do

@@ -292,7 +292,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="missing"][data-dashboard-evidence-kind="source"][data-dashboard-evidence-logical-source="telemetry"][data-dashboard-evidence-realm="missing-realm"][data-dashboard-evidence-data-source-id="missing-source"][data-dashboard-evidence-source-binding-id="missing-binding"])
              )
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      close_dashboard_panel(view)
       cleared_source_evidence_path = assert_patch(view)
       assert cleared_source_evidence_path =~ "realm=rehearsal"
       refute cleared_source_evidence_path =~ "panel="

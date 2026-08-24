@@ -10,25 +10,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormComponentsTest do
     html = render_rename_panel(%Document{name: "Power", description: "Primary EPS"})
     document = LazyHTML.from_fragment(html)
 
-    assert document |> LazyHTML.query("#dashboard-panel") |> Enum.count() == 1
+    assert document |> LazyHTML.query("#dashboard-panel-component") |> Enum.count() == 1
 
-    assert document |> LazyHTML.query("#dashboard-panel") |> LazyHTML.attribute("aria-label") ==
-             ["Rename Dashboard"]
-
-    assert document
-           |> LazyHTML.query(~s(#dashboard-panel button[aria-label="Close panel"]))
-           |> LazyHTML.attribute("phx-click") == ["close_panel"]
+    assert document |> LazyHTML.query("#dashboard-panel") |> Enum.count() == 0
 
     assert document
-           |> LazyHTML.query(~s(#dashboard-panel [phx-hook="VueHook"]))
-           |> LazyHTML.attribute("id") == ["rename-dashboard-form-component"]
+           |> LazyHTML.query(~s(#dashboard-panel-component[phx-hook="VueHook"]))
+           |> LazyHTML.attribute("id") == ["dashboard-panel-component"]
+
+    assert document |> LazyHTML.query("#rename-dashboard-form-component") |> Enum.count() == 0
 
     assert document |> LazyHTML.query("#rename-dashboard-form") |> Enum.count() == 0
 
-    vue = LiveVue.Test.get_vue(html, id: "rename-dashboard-form-component")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-panel-component")
 
-    assert vue.id == "rename-dashboard-form-component"
-    assert vue.component == "RenameDashboardForm"
+    assert vue.id == "dashboard-panel-component"
+    assert vue.component == "DashboardPanel"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}
@@ -36,7 +33,60 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormComponentsTest do
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert vue.props["presentation"] == %{
+    panel = vue.props["presentation"]
+
+    assert panel["sheet"] == %{
+             "layer" => %{
+               "attrs" => %{
+                 "class" => "cadence-sheet-layer",
+                 "id" => "dashboard-panel-layer"
+               }
+             },
+             "root" => %{
+               "attrs" => %{
+                 "aria-label" => "Rename Dashboard",
+                 "aria-modal" => "false",
+                 "class" => "cadence-sheet",
+                 "data-sheet-width" => "md",
+                 "id" => "dashboard-panel",
+                 "phx-key" => "Escape",
+                 "phx-window-keydown" => "close_panel",
+                 "role" => "dialog"
+               }
+             },
+             "header" => %{
+               "attrs" => %{"class" => "cadence-sheet-header"},
+               "title" => %{
+                 "attrs" => %{"class" => "hud-label"},
+                 "text" => "Rename Dashboard"
+               },
+               "close" => %{
+                 "attrs" => %{
+                   "aria-label" => "Close panel",
+                   "class" => "cadence-icon-button",
+                   "phx-click" => "close_panel",
+                   "type" => "button"
+                 },
+                 "icon" => %{
+                   "attrs" => %{"class" => "hero-x-mark h-4 w-4"}
+                 }
+               }
+             },
+             "body" => %{"attrs" => %{"class" => "cadence-sheet-body"}}
+           }
+
+    assert panel["child"]["kind"] == "rename_dashboard_form"
+
+    assert panel["child"]["wrapper"] == %{
+             "attrs" => %{
+               "class" => "contents",
+               "id" => "rename-dashboard-form-component"
+             }
+           }
+
+    assert panel["child"]["outer_wrapper"] == nil
+
+    assert panel["child"]["presentation"] == %{
              "root" => %{
                "attrs" => %{
                  "class" => "space-y-4",
@@ -70,8 +120,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenameDashboardFormComponentsTest do
     presentation =
       %Document{name: "Power", description: nil}
       |> render_rename_panel()
-      |> LiveVue.Test.get_vue(id: "rename-dashboard-form-component")
+      |> LiveVue.Test.get_vue(id: "dashboard-panel-component")
       |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+      |> Map.fetch!("child")
       |> Map.fetch!("presentation")
 
     assert presentation["root"]["params"] == %{

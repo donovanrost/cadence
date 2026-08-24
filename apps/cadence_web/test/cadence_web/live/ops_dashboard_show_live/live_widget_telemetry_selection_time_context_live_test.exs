@@ -379,9 +379,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTelemetrySelectionTimeContex
                "dashboard-pause-at-selection"
              )["attrs"]["disabled"] == ""
 
-      shared_view
-      |> element(~s(#dashboard-panel button[aria-label="Close panel"]))
-      |> render_click()
+      close_dashboard_panel(shared_view)
 
       refute has_element?(shared_view, "#dashboard-data-link-inspector")
 

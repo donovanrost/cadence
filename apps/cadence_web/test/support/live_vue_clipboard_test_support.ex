@@ -44,12 +44,27 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
   end
 
   defp clipboard_button_component(renderable, "dashboard-data-link-copy-link" = button_id) do
-    panel = LiveVue.Test.get_vue(renderable, id: "dashboard-data-link-inspector-component")
+    presentation =
+      case dashboard_panel_child_or_nil(renderable, "data_link_inspector_panel") do
+        nil ->
+          panel = LiveVue.Test.get_vue(renderable, id: "dashboard-data-link-inspector-component")
 
-    assert panel.component == "DataLinkInspectorPanel"
-    refute panel.ssr
+          assert panel.component == "DataLinkInspectorPanel"
+          refute panel.ssr
 
-    clipboard = get_in(panel.props, ["presentation", "clipboard"])
+          panel.props["presentation"]
+
+        child ->
+          assert child["wrapper"]["attrs"] == %{
+                   "class" => "space-y-4",
+                   "id" => "dashboard-data-link-inspector-component"
+                 }
+
+          assert child["outer_wrapper"]["attrs"] == child["presentation"]["root"]["attrs"]
+          child["presentation"]
+      end
+
+    clipboard = presentation["clipboard"]
     assert clipboard["button_id"] == button_id
 
     %{
@@ -66,12 +81,26 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
   end
 
   defp nested_evidence_clipboard_button!(renderable, "dashboard-evidence-copy-link" = button_id) do
-    parent = LiveVue.Test.get_vue(renderable, id: "dashboard-evidence-inspector-component")
+    presentation =
+      case dashboard_panel_child_or_nil(renderable, "evidence_inspector_panel") do
+        nil ->
+          parent = LiveVue.Test.get_vue(renderable, id: "dashboard-evidence-inspector-component")
 
-    assert parent.component == "EvidenceInspectorPanel"
-    assert parent.ssr == false
+          assert parent.component == "EvidenceInspectorPanel"
+          assert parent.ssr == false
+          parent.props["presentation"]
 
-    copy = get_in(parent.props, ["presentation", "actions", "copy"])
+        child ->
+          assert child["wrapper"]["attrs"] == %{
+                   "class" => "contents",
+                   "id" => "dashboard-evidence-inspector-component"
+                 }
+
+          assert child["outer_wrapper"] == nil
+          child["presentation"]
+      end
+
+    copy = get_in(presentation, ["actions", "copy"])
     assert copy["props"]["button_id"] == button_id
     assert copy["host"]["attrs"]["data-name"] == @clipboard_component
 
@@ -86,6 +115,21 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
 
   defp nested_evidence_clipboard_button!(_renderable, button_id) do
     raise RuntimeError, ~s(No Vue component found with id="#{button_id}-component")
+  end
+
+  defp dashboard_panel_child_or_nil(renderable, kind) do
+    panel = LiveVue.Test.get_vue(renderable, id: "dashboard-panel-component")
+
+    assert panel.component == "DashboardPanel"
+    assert panel.ssr == false
+    assert panel.class == "contents"
+    assert panel.props == Jason.decode!(Jason.encode!(panel.props))
+
+    child = panel.props["presentation"]["child"]
+
+    if child["kind"] == kind, do: child
+  rescue
+    RuntimeError -> nil
   end
 
   defp clipboard_text_prop!(clipboard_button) do

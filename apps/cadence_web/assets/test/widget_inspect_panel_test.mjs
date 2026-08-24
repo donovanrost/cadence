@@ -111,16 +111,21 @@ cover("frozen named behavioral ledger", () => {
       'test "widget inspect panel opens from the details popover with table and CSV"',
     ),
   )
-  assert.equal(assertionCount(liveScenarioSource), 11)
+  assert.equal(assertionCount(liveScenarioSource), 18)
 })
 
 cover("sole FormComponents caller boundary", () => {
   assert.equal(
-    (callerSource.match(/<WidgetInspectPanelComponents\.inspect_panel/g) || []).length,
+    (callerSource.match(/WidgetInspectPanelComponents\.inspect_panel_presentation/g) || []).length,
     1,
   )
-  assert.match(callerSource, /:if=\{widget_inspect_panel\?\(@panel\)\}/)
-  assert.match(callerSource, /inspect=\{@widget_inspect\}/)
+  assert.match(callerSource, /defp child_presentation\(%\{panel: \{:widget_inspect, _context\}\} = assigns\)/)
+  assert.match(callerSource, /"widget_inspect_panel"/)
+  assert.match(callerSource, /"dashboard-widget-inspector-component"/)
+  assert.match(
+    callerSource,
+    /WidgetInspectPanelComponents\.inspect_panel_presentation\(assigns\.widget_inspect\)/,
+  )
   assert.doesNotMatch(callerSource, /v-component="WidgetInspectPanel"/)
 })
 

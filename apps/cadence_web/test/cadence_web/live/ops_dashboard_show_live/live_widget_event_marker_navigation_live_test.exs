@@ -468,14 +468,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       })
 
       html = render(view)
-      document = LazyHTML.from_fragment(html)
-      inspect_vue = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspector-component")
-      inspect_presentation = inspect_vue.props["presentation"]
+      panel_vue = LiveVue.Test.get_vue(html, id: "dashboard-panel-component")
+      assert panel_vue.component == "DashboardPanel"
+      assert panel_vue.ssr == false
+      assert panel_vue.class == "contents"
+      assert panel_vue.props == Jason.decode!(Jason.encode!(panel_vue.props))
+
+      child = panel_vue.props["presentation"]["child"]
+      assert child["kind"] == "widget_inspect_panel"
+
+      assert child["wrapper"]["attrs"] == %{
+               "class" => "contents",
+               "id" => "dashboard-widget-inspector-component"
+             }
+
+      assert child["outer_wrapper"] == nil
+      inspect_presentation = child["presentation"]
 
       assert inspect_presentation["root"]["attrs"]["data-widget-inspect-state"] == "ready"
 
-      assert document |> LazyHTML.query("#dashboard-panel h2") |> LazyHTML.text() =~
-               "Inspect: Counter Trend"
+      assert dashboard_panel_title(html) == "Inspect: Counter Trend"
 
       table =
         inspect_presentation["table"]["rows"]
@@ -492,8 +504,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
       assert download["props"]["csv"] =~ "14"
       assert download["props"]["filename"] == "counter-trend-inspect.csv"
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
-      refute has_element?(view, "#dashboard-widget-inspector-component")
+      close_dashboard_panel(view)
+      refute has_element?(view, "#dashboard-panel-component")
     end
   end
 end

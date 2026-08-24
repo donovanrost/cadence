@@ -29,9 +29,9 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     assert grid_controller.props["item_ids"] == []
     assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
     refute has_element?(viewer, "#dashboard-editor-guard-controller")
-    refute has_element?(viewer, "#dashboard-panel")
+    refute has_element?(viewer, "#dashboard-panel-component")
     render_hook(viewer, "open_add_widget", %{})
-    refute has_element?(viewer, "#dashboard-panel")
+    refute has_element?(viewer, "#dashboard-panel-component")
   end
 
   test "stages multiple document changes and persists one coherent version only on Save" do
@@ -229,14 +229,24 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   end
 
   defp dashboard_section_manager_presentation(view) do
-    assert has_element?(view, "#dashboard-section-manager-component")
-    vue = LiveVue.Test.get_vue(view, id: "dashboard-section-manager-component")
-    assert vue.component == "DashboardSectionManager"
+    assert has_element?(view, "#dashboard-panel-component")
+    refute has_element?(view, "#dashboard-section-manager-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-panel-component")
+    assert vue.component == "DashboardPanel"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]
+    child = vue.props["presentation"]["child"]
+    assert child["kind"] == "dashboard_section_manager"
+
+    assert child["wrapper"]["attrs"] == %{
+             "class" => "contents",
+             "id" => "dashboard-section-manager-component"
+           }
+
+    assert child["outer_wrapper"] == nil
+    child["presentation"]
   end
 
   defp change_dashboard_section_form(view, params) do

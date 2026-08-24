@@ -125,14 +125,17 @@ for (const scenario of scenarioLedger) {
 assert.equal(
   componentSource.match(/<\.vue\b/g)?.length,
   1,
-  "FormComponents must contain one LiveVue host for the rename slice",
+  "FormComponents must contain one LiveVue host for the complete panel region",
 )
 assert.doesNotMatch(componentSource, /<\.form\b/)
-assert.match(componentSource, /<\.rename_form :if=\{@panel == :rename\}/)
-assert.match(componentSource, /id="rename-dashboard-form-component"/)
-assert.match(componentSource, /v-component="RenameDashboardForm"/)
+assert.match(componentSource, /id="dashboard-panel-component"/)
+assert.match(componentSource, /v-component="DashboardPanel"/)
 assert.match(componentSource, /v-ssr=\{false\}/)
 assert.match(componentSource, /class="contents"/)
+assert.doesNotMatch(componentSource, /v-component="RenameDashboardForm"/)
+assert.match(componentSource, /defp child_presentation\(%\{panel: :rename\} = assigns\)/)
+assert.match(componentSource, /"rename_dashboard_form"/)
+assert.match(componentSource, /"rename-dashboard-form-component"/)
 assert.match(componentSource, /"id" => "rename-dashboard-form"/)
 assert.match(componentSource, /"phx-submit" => "rename"/)
 assert.match(componentSource, /"class" => "space-y-4"/)
@@ -151,12 +154,12 @@ assert.match(componentSource, /"type" => "submit"/)
 assert.match(componentSource, /"class" => "btn btn-primary"/)
 assert.match(componentSource, /text: "Save"/)
 
-const sheetStart = componentSource.indexOf("<.sheet")
-const renameHost = componentSource.indexOf("<.rename_form :if={@panel == :rename}")
-const sheetEnd = componentSource.indexOf("</.sheet>", renameHost)
-assert.ok(sheetStart >= 0 && renameHost > sheetStart && sheetEnd > renameHost)
-assert.match(componentSource, /id="dashboard-panel"/)
-assert.match(componentSource, /close_event="close_panel"/)
+assert.doesNotMatch(componentSource, /<\.sheet\b|<\/\.sheet>/)
+assert.match(componentSource, /"id" => "dashboard-panel-layer"/)
+assert.match(componentSource, /"id" => "dashboard-panel"/)
+assert.match(componentSource, /"phx-click" => "close_panel"/)
+assert.match(componentSource, /"phx-window-keydown" => "close_panel"/)
+assert.match(componentSource, /"phx-key" => "Escape"/)
 assert.match(componentSource, /defp panel_title\(:rename\), do: "Rename Dashboard"/)
 assert.match(componentSource, /defp panel_width\(_panel\), do: :md/)
 
@@ -249,9 +252,13 @@ assert.deepEqual(
 
 assert.match(componentTestSource, /exact populated RenameDashboardForm contract/)
 assert.match(componentTestSource, /nil description presentation and browser form semantics/)
+assert.match(componentTestSource, /vue\.component == "DashboardPanel"/)
+assert.match(componentTestSource, /panel\["child"\]\["kind"\] == "rename_dashboard_form"/)
 assert.match(componentTestSource, /vue\.props == Jason\.decode!\(Jason\.encode!\(vue\.props\)\)/)
 assert.match(liveTestSource, /submits every browser form value through the authoritative rename event/)
 assert.match(liveTestSource, /submits an empty browser description so Phoenix restores nil semantics/)
+assert.match(liveTestSource, /vue\.component == "DashboardPanel"/)
+assert.match(liveTestSource, /panel\["child"\]\["kind"\] == "rename_dashboard_form"/)
 assert.match(liveTestSource, /assert browser_params == root\["params"\]/)
 assert.match(liveTestSource, /Map\.keys\(params\) \|> Enum\.sort\(\) == \["description", "name"\]/)
 assert.match(

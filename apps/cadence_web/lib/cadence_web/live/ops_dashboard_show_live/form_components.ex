@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
   use CadenceWeb, :html
 
   alias CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents
-  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
+  alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation
   alias CadenceWeb.OpsDashboardShowLive.EvidenceInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponents
   alias CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponents
@@ -11,132 +11,111 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
   alias CadenceWeb.OpsDashboardShowLive.WidgetFormComponents
   alias CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponents
 
-  attr :panel, :any, required: true
-  attr :dashboard_activity_filter, :atom, default: nil
-  attr :dashboard_activity_event_id, :string, default: nil
-  attr :dashboard_review_placement_id, :string, default: nil
-  attr :dashboard_readiness_return_intent, :string, default: nil
-  attr :dashboard_selected_publish_issue_id, :string, default: nil
-  attr :dashboard_comparison_review_action_outcome, :map, default: nil
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :binding_preview, :map, default: nil
-  attr :section_form, Phoenix.HTML.Form, required: true
-  attr :section_error, :string, default: nil
-  attr :spacecraft, :list, required: true
-  attr :operational_observables, :list, required: true
-  attr :filtered_points, :list, required: true
-  attr :filtered_operational_observables, :list, required: true
-  attr :points_empty?, :boolean, required: true
-  attr :selected_point, :any, required: true
-  attr :selected_points, :list, required: true
-  attr :selected_operational_observables, :list, required: true
-  attr :dashboard_scope_context, :any, required: true
-  attr :dashboard_editor_focus, :map, default: nil
-  attr :error, :string, required: true
-  attr :mission_id, :string, required: true
-  attr :dashboard_document, :any, required: true
-  attr :dashboard_summary, :any, required: true
-  attr :dashboard_versions, :list, required: true
-  attr :dashboard_lifecycle_events, :list, required: true
-  attr :dashboard_comparison_review_queue, :map, required: true
-  attr :dashboard_source_action_events, :list, default: []
-  attr :dashboard_recent_invalidations, :list, default: []
-  attr :dashboard_publish_readiness, :map, default: nil
-  attr :runtime_diagnostics, :map, required: true
-  attr :dashboard_current_path, :string, required: true
-  attr :historical_workflow_request_form, Phoenix.HTML.Form, required: true
-  attr :data_link_action_outcome, :map, default: nil
-  attr :widget_inspect, :map, default: nil
+  attr(:panel, :any, required: true)
+  attr(:dashboard_activity_filter, :atom, default: nil)
+  attr(:dashboard_activity_event_id, :string, default: nil)
+  attr(:dashboard_review_placement_id, :string, default: nil)
+  attr(:dashboard_readiness_return_intent, :string, default: nil)
+  attr(:dashboard_selected_publish_issue_id, :string, default: nil)
+  attr(:dashboard_comparison_review_action_outcome, :map, default: nil)
+  attr(:form, Phoenix.HTML.Form, required: true)
+  attr(:binding_preview, :map, default: nil)
+  attr(:section_form, Phoenix.HTML.Form, required: true)
+  attr(:section_error, :string, default: nil)
+  attr(:spacecraft, :list, required: true)
+  attr(:operational_observables, :list, required: true)
+  attr(:filtered_points, :list, required: true)
+  attr(:filtered_operational_observables, :list, required: true)
+  attr(:points_empty?, :boolean, required: true)
+  attr(:selected_point, :any, required: true)
+  attr(:selected_points, :list, required: true)
+  attr(:selected_operational_observables, :list, required: true)
+  attr(:dashboard_scope_context, :any, required: true)
+  attr(:dashboard_editor_focus, :map, default: nil)
+  attr(:error, :string, required: true)
+  attr(:mission_id, :string, required: true)
+  attr(:dashboard_document, :any, required: true)
+  attr(:dashboard_summary, :any, required: true)
+  attr(:dashboard_versions, :list, required: true)
+  attr(:dashboard_lifecycle_events, :list, required: true)
+  attr(:dashboard_comparison_review_queue, :map, required: true)
+  attr(:dashboard_source_action_events, :list, default: [])
+  attr(:dashboard_recent_invalidations, :list, default: [])
+  attr(:dashboard_publish_readiness, :map, default: nil)
+  attr(:runtime_diagnostics, :map, required: true)
+  attr(:dashboard_current_path, :string, required: true)
+  attr(:historical_workflow_request_form, Phoenix.HTML.Form, required: true)
+  attr(:data_link_action_outcome, :map, default: nil)
+  attr(:widget_inspect, :map, default: nil)
 
   def widget_panel(assigns) do
+    assigns = assign(assigns, :presentation, dashboard_panel_presentation(assigns))
+
     ~H"""
-    <.sheet
-      id="dashboard-panel"
-      title={panel_title(@panel)}
-      width={panel_width(@panel)}
-      close_event="close_panel"
-    >
-        <.rename_form :if={@panel == :rename} dashboard_document={@dashboard_document} />
-        <DashboardSectionComponents.section_manager
-          :if={@panel == :dashboard_sections}
-          document={@dashboard_document}
-          form={@section_form}
-          error={@section_error}
-        />
-        <HistoricalWorkflowRequestFormComponents.request_form
-          :if={@panel == :historical_workflow_request}
-          form={@historical_workflow_request_form}
-        />
-        <DataLinkInspectorPanelComponents.data_link_panel
-          :if={data_link_panel?(@panel)}
-          inspector={data_link_inspector(@panel)}
-          mission_id={@mission_id}
-          dashboard_document={@dashboard_document}
-          dashboard_current_path={@dashboard_current_path}
-          data_link_action_outcome={@data_link_action_outcome}
-        />
-        <EvidenceInspectorPanelComponents.evidence_panel
-          :if={evidence_panel?(@panel)}
-          inspector={evidence_inspector(@panel)}
-          mission_id={@mission_id}
-          dashboard_document={@dashboard_document}
-          dashboard_current_path={@dashboard_current_path}
-          dashboard_lifecycle_events={@dashboard_lifecycle_events}
-        />
-        <WidgetInspectPanelComponents.inspect_panel
-          :if={widget_inspect_panel?(@panel)}
-          inspect={@widget_inspect}
-        />
-        <RuntimeDiagnosticsPanelComponents.diagnostics_panel
-          :if={@panel == :diagnostics}
-          diagnostics={@runtime_diagnostics}
-          dashboard_lifecycle_events={@dashboard_lifecycle_events}
-          dashboard_current_path={@dashboard_current_path}
-        />
-        <VersionHistoryPanelComponents.versions_panel
-          :if={@panel == :versions}
-          dashboard_document={@dashboard_document}
-          dashboard_summary={@dashboard_summary}
-          dashboard_versions={@dashboard_versions}
-          dashboard_lifecycle_events={@dashboard_lifecycle_events}
-          dashboard_comparison_review_queue={@dashboard_comparison_review_queue}
-          dashboard_source_action_events={@dashboard_source_action_events}
-          dashboard_recent_invalidations={@dashboard_recent_invalidations}
-          dashboard_activity_filter={@dashboard_activity_filter}
-          dashboard_activity_event_id={@dashboard_activity_event_id}
-          dashboard_review_placement_id={@dashboard_review_placement_id}
-          dashboard_readiness_return_intent={@dashboard_readiness_return_intent}
-          dashboard_selected_publish_issue_id={@dashboard_selected_publish_issue_id}
-          dashboard_comparison_review_action_outcome={@dashboard_comparison_review_action_outcome}
-          dashboard_publish_readiness={@dashboard_publish_readiness}
-          dashboard_current_path={@dashboard_current_path}
-        />
-        <WidgetFormComponents.widget_form
-          :if={widget_form_panel?(@panel)}
-          panel={@panel}
-          form={@form}
-          binding_preview={@binding_preview}
-          spacecraft={@spacecraft}
-          operational_observables={@operational_observables}
-          filtered_points={@filtered_points}
-          filtered_operational_observables={@filtered_operational_observables}
-          points_empty?={@points_empty?}
-          selected_point={@selected_point}
-          selected_points={@selected_points}
-          selected_operational_observables={@selected_operational_observables}
-          dashboard_scope_context={@dashboard_scope_context}
-          dashboard_editor_focus={@dashboard_editor_focus}
-          error={@error}
-          mission_id={@mission_id}
-          dashboard_document={@dashboard_document}
-        />
-    </.sheet>
+    <.vue
+      id="dashboard-panel-component"
+      v-component="DashboardPanel"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
-  attr :dashboard_document, :any, required: true
+  @doc "Builds the server-authoritative, JSON-safe dashboard panel presentation."
+  def dashboard_panel_presentation(assigns) do
+    title = panel_title(assigns.panel)
 
-  defp rename_form(assigns) do
+    %{
+      sheet: %{
+        layer: %{
+          attrs:
+            raw_attributes(%{
+              "id" => "dashboard-panel-layer",
+              "class" => "cadence-sheet-layer"
+            })
+        },
+        root: %{
+          attrs:
+            raw_attributes(%{
+              "id" => "dashboard-panel",
+              "role" => "dialog",
+              "aria-modal" => "false",
+              "aria-label" => title,
+              "data-sheet-width" => panel_width(assigns.panel),
+              "class" => "cadence-sheet",
+              "phx-window-keydown" => "close_panel",
+              "phx-key" => "Escape"
+            })
+        },
+        header: %{
+          attrs: raw_attributes(%{"class" => "cadence-sheet-header"}),
+          title: %{
+            attrs: raw_attributes(%{"class" => "hud-label"}),
+            text: title
+          },
+          close: %{
+            attrs:
+              raw_attributes(%{
+                "type" => "button",
+                "class" => "cadence-icon-button",
+                "phx-click" => "close_panel",
+                "aria-label" => "Close panel"
+              }),
+            icon: %{
+              attrs: raw_attributes(%{"class" => "hero-x-mark h-4 w-4"})
+            }
+          }
+        },
+        body: %{
+          attrs: raw_attributes(%{"class" => "cadence-sheet-body"})
+        }
+      },
+      child: child_presentation(assigns)
+    }
+  end
+
+  defp child_presentation(%{panel: :rename} = assigns) do
     form =
       to_form(
         %{
@@ -146,17 +125,140 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
         as: :dashboard
       )
 
-    assigns = assign(assigns, :presentation, rename_form_presentation(form))
+    direct_child(
+      "rename_dashboard_form",
+      "rename-dashboard-form-component",
+      "contents",
+      rename_form_presentation(form)
+    )
+  end
 
-    ~H"""
-    <.vue
-      id="rename-dashboard-form-component"
-      v-component="RenameDashboardForm"
-      presentation={@presentation}
-      v-ssr={false}
-      class="contents"
-    />
-    """
+  defp child_presentation(%{panel: :dashboard_sections} = assigns) do
+    direct_child(
+      "dashboard_section_manager",
+      "dashboard-section-manager-component",
+      "contents",
+      DashboardSectionComponents.section_manager_presentation(%{
+        document: assigns.dashboard_document,
+        form: assigns.section_form,
+        error: assigns.section_error
+      })
+    )
+  end
+
+  defp child_presentation(%{panel: :historical_workflow_request} = assigns) do
+    direct_child(
+      "historical_workflow_request_form",
+      "historical-workflow-request-form-component",
+      "contents",
+      HistoricalWorkflowRequestFormComponents.request_form_dto(
+        assigns.historical_workflow_request_form
+      )
+    )
+  end
+
+  defp child_presentation(%{panel: {:data_link, inspector}} = assigns) do
+    presentation =
+      DataLinkInspectorPanelPresentation.for_vue(
+        inspector,
+        assigns.mission_id,
+        assigns.dashboard_document,
+        assigns.dashboard_current_path,
+        assigns.data_link_action_outcome
+      )
+
+    direct_child(
+      "data_link_inspector_panel",
+      "dashboard-data-link-inspector-component",
+      "space-y-4",
+      presentation,
+      presentation.root.attrs
+    )
+  end
+
+  defp child_presentation(%{panel: {:evidence, inspector}} = assigns) do
+    presentation =
+      EvidenceInspectorPanelComponents.presentation(%{
+        inspector: inspector,
+        mission_id: assigns.mission_id,
+        dashboard_document: assigns.dashboard_document,
+        dashboard_current_path: assigns.dashboard_current_path,
+        dashboard_lifecycle_events: assigns.dashboard_lifecycle_events
+      })
+
+    direct_child(
+      "evidence_inspector_panel",
+      presentation.component_id,
+      "contents",
+      presentation
+    )
+  end
+
+  defp child_presentation(%{panel: {:widget_inspect, _context}} = assigns) do
+    direct_child(
+      "widget_inspect_panel",
+      "dashboard-widget-inspector-component",
+      "contents",
+      WidgetInspectPanelComponents.inspect_panel_presentation(assigns.widget_inspect)
+    )
+  end
+
+  defp child_presentation(%{panel: :diagnostics} = assigns) do
+    presentation =
+      RuntimeDiagnosticsPanelComponents.presentation(%{
+        diagnostics: assigns.runtime_diagnostics,
+        dashboard_lifecycle_events: assigns.dashboard_lifecycle_events,
+        dashboard_current_path: assigns.dashboard_current_path
+      })
+
+    direct_child(
+      "runtime_diagnostics_panel",
+      "dashboard-diagnostics-panel-component",
+      "space-y-5",
+      presentation,
+      presentation.root.attrs
+    )
+  end
+
+  defp child_presentation(%{panel: :versions} = assigns) do
+    direct_child(
+      "version_history_panel",
+      "dashboard-version-history-panel-component",
+      "contents",
+      VersionHistoryPanelComponents.presentation(assigns)
+    )
+  end
+
+  defp child_presentation(%{panel: :add_widget} = assigns) do
+    widget_form_child(assigns)
+  end
+
+  defp child_presentation(%{panel: {:edit_placement, _id}} = assigns) do
+    widget_form_child(assigns)
+  end
+
+  defp widget_form_child(assigns) do
+    direct_child(
+      "widget_form",
+      "widget-form-component",
+      "contents",
+      WidgetFormComponents.widget_form_dto(assigns)
+    )
+  end
+
+  defp direct_child(kind, id, class, presentation, outer_attrs \\ nil) do
+    %{
+      kind: kind,
+      outer_wrapper: if(outer_attrs, do: %{attrs: outer_attrs}),
+      wrapper: %{
+        attrs:
+          raw_attributes(%{
+            "id" => id,
+            "class" => class
+          })
+      },
+      presentation: presentation
+    }
   end
 
   defp rename_form_presentation(form) do
@@ -214,23 +316,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponents do
       {Atom.to_string(field), rendered_body(form[field].value)}
     end)
   end
-
-  defp data_link_panel?({:data_link, _inspector}), do: true
-  defp data_link_panel?(_panel), do: false
-
-  defp data_link_inspector({:data_link, inspector}), do: inspector
-
-  defp evidence_panel?({:evidence, _inspector}), do: true
-  defp evidence_panel?(_panel), do: false
-
-  defp evidence_inspector({:evidence, inspector}), do: inspector
-
-  defp widget_form_panel?(:add_widget), do: true
-  defp widget_form_panel?({:edit_placement, _id}), do: true
-  defp widget_form_panel?(_panel), do: false
-
-  defp widget_inspect_panel?({:widget_inspect, _context}), do: true
-  defp widget_inspect_panel?(_panel), do: false
 
   defp panel_width({:widget_inspect, _context}), do: :lg
   defp panel_width(_panel), do: :md

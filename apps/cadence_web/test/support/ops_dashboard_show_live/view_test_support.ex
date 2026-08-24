@@ -87,6 +87,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     AsyncLiveViewTestSupport.stop_async_view(view, timeout)
   end
 
+  def dashboard_panel_presentation(view_or_html) do
+    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-panel-component")
+
+    assert vue.id == "dashboard-panel-component"
+    assert vue.component == "DashboardPanel"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
+  end
+
+  def dashboard_panel_child(view_or_html, kind) do
+    child = view_or_html |> dashboard_panel_presentation() |> Map.fetch!("child")
+    assert child["kind"] == kind
+    child
+  end
+
+  def dashboard_panel_title(view_or_html) do
+    view_or_html
+    |> dashboard_panel_presentation()
+    |> get_in(["sheet", "header", "title", "text"])
+  end
+
+  def close_dashboard_panel(view) do
+    sheet = view |> dashboard_panel_presentation() |> Map.fetch!("sheet")
+    click_event = get_in(sheet, ["header", "close", "attrs", "phx-click"])
+
+    assert click_event == "close_panel"
+    assert sheet["root"]["attrs"]["phx-window-keydown"] == click_event
+    assert sheet["root"]["attrs"]["phx-key"] == "Escape"
+
+    Phoenix.LiveViewTest.render_hook(view, click_event, %{})
+  end
+
   def evidence_inspector_has_element?(view, selector) do
     Phoenix.LiveViewTest.has_element?(view, selector) or
       virtual_evidence_inspector_has_element?(view, selector)
@@ -98,17 +134,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   def evidence_inspector_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-evidence-inspector-component")
+    case dashboard_panel_child_or_nil(rendered, "evidence_inspector_panel") do
+      nil ->
+        vue = LiveVue.Test.get_vue(rendered, id: "dashboard-evidence-inspector-component")
 
-    assert vue.component == "EvidenceInspectorPanel"
-    assert vue.id == "dashboard-evidence-inspector-component"
-    assert vue.ssr == false
-    assert vue.class == "contents"
-    assert vue.handlers == %{}
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props["presentation"]["component_id"] == vue.id
+        assert vue.component == "EvidenceInspectorPanel"
+        assert vue.id == "dashboard-evidence-inspector-component"
+        assert vue.ssr == false
+        assert vue.class == "contents"
+        assert vue.handlers == %{}
+        assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+        assert vue.props["presentation"]["component_id"] == vue.id
 
-    vue.props["presentation"]
+        vue.props["presentation"]
+
+      child ->
+        attrs = child["wrapper"]["attrs"]
+        assert attrs["id"] == "dashboard-evidence-inspector-component"
+        assert attrs["class"] == "contents"
+        assert child["outer_wrapper"] == nil
+        assert child["presentation"]["component_id"] == attrs["id"]
+        child["presentation"]
+    end
   end
 
   def evidence_inspector_html(rendered) do
@@ -426,15 +473,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   def data_link_inspector_presentation(view_or_html) do
-    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-data-link-inspector-component")
+    case dashboard_panel_child_or_nil(view_or_html, "data_link_inspector_panel") do
+      nil ->
+        vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-data-link-inspector-component")
 
-    assert vue.component == "DataLinkInspectorPanel"
-    assert vue.ssr == false
-    assert vue.class == "space-y-4"
-    assert vue.handlers == %{}
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+        assert vue.component == "DataLinkInspectorPanel"
+        assert vue.ssr == false
+        assert vue.class == "space-y-4"
+        assert vue.handlers == %{}
+        assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    vue.props["presentation"]
+        vue.props["presentation"]
+
+      child ->
+        assert child["wrapper"]["attrs"] == %{
+                 "class" => "space-y-4",
+                 "id" => "dashboard-data-link-inspector-component"
+               }
+
+        assert child["outer_wrapper"]["attrs"] == child["presentation"]["root"]["attrs"]
+        child["presentation"]
+    end
   end
 
   def data_link_inspector_row(presentation, section, label) do
@@ -456,9 +515,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   def has_dashboard_element?(view_or_html, selector, text \\ nil) do
     cond do
       migrated_data_link_selector?(selector) ->
-        view_or_html
-        |> data_link_inspector_presentation()
-        |> presentation_element?(selector, text)
+        try do
+          view_or_html
+          |> data_link_inspector_presentation()
+          |> presentation_element?(selector, text)
+        rescue
+          RuntimeError -> false
+        end
 
       migrated_widget_selector?(selector) ->
         view_or_html
@@ -702,7 +765,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     "data-event-timeline"
   ]
   defp migrated_data_link_selector?(selector) when is_binary(selector) do
-    String.starts_with?(selector, "#dashboard-data-link-inspector ") or
+    selector == "#dashboard-data-link-inspector" or
+      String.starts_with?(selector, "#dashboard-data-link-inspector ") or
       Enum.any?(@migrated_data_link_ids, &String.contains?(selector, &1))
   end
 
@@ -713,6 +777,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   end
 
   defp migrated_widget_selector?(_selector), do: false
+
+  defp dashboard_panel_child_or_nil(view_or_html, kind) do
+    child = view_or_html |> dashboard_panel_presentation() |> Map.fetch!("child")
+
+    if child["kind"] == kind, do: child
+  rescue
+    RuntimeError -> nil
+  end
 
   defp presentation_element?(presentation, selector, text) do
     not is_nil(presentation_element(presentation, selector, text))

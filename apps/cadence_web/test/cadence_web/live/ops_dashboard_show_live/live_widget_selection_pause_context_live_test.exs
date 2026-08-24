@@ -455,7 +455,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
                ~s(#dashboard-data-link-inspector[data-data-link-target="telemetry_sample"][data-data-link-status="resolved"])
              )
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      close_dashboard_panel(view)
 
       html = render(view)
       assert widget_point_value_text(html, context_item.placement_id) == "25"

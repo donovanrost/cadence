@@ -2,9 +2,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
   @moduledoc false
   use CadenceWeb, :html
 
-  attr :document, :any, required: true
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :error, :string, default: nil
+  attr(:document, :any, required: true)
+  attr(:form, Phoenix.HTML.Form, required: true)
+  attr(:error, :string, default: nil)
 
   def section_manager(assigns) do
     assigns = assign(assigns, :presentation, section_manager_presentation(assigns))
@@ -20,7 +20,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
     """
   end
 
-  defp section_manager_presentation(assigns) do
+  @doc "Builds the JSON-safe presentation contract for the dashboard section manager."
+  def section_manager_presentation(assigns) do
     editing? = assigns.form[:section_id].value not in [nil, ""]
 
     %{

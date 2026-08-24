@@ -249,7 +249,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
                ~s(#dashboard-evidence-inspector [data-evidence-link-target="limit event"])
              )
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      close_dashboard_panel(view)
 
       click_widget_data_link(view, counter_component_id, %{
         "data-status-matrix-row-link" => "HK.counter",
@@ -273,7 +273,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryWidgetRenderingLiveTest do
                "yellow"
              )
 
-      view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
+      close_dashboard_panel(view)
 
       voltage_component_id =
         "status-row-links-#{matrix_widget.widget_id}-HK.voltage-component"

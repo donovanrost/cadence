@@ -147,7 +147,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       await_dashboard_resolved(view)
 
       click_editor_action(view, "add-widget-button")
-      assert has_element?(view, "#dashboard-panel")
+      assert has_element?(view, "#dashboard-panel-component")
 
       click_widget_point(view, "HK.counter")
 
@@ -155,7 +155,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       await_dashboard_resolved(view)
 
-      refute has_element?(view, "#dashboard-panel")
+      refute has_element?(view, "#dashboard-panel-component")
       assert has_element?(view, ~s(.grid-stack-item[gs-auto-position="true"]))
 
       click_editor_action(view, "dashboard-editor-save")
@@ -187,7 +187,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       await_dashboard_resolved(view)
 
-      refute has_element?(view, "#dashboard-panel")
+      refute has_element?(view, "#dashboard-panel-component")
       assert has_dashboard_element?(view, ~s([data-event-timeline]))
 
       click_editor_action(view, "dashboard-editor-save")
@@ -237,7 +237,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
 
       await_dashboard_resolved(view)
 
-      refute has_element?(view, "#dashboard-panel")
+      refute has_element?(view, "#dashboard-panel-component")
       assert has_dashboard_element?(view, ~s([data-state-timeline]))
 
       click_editor_action(view, "dashboard-editor-save")
@@ -299,7 +299,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       })
 
       await_dashboard_resolved(view)
-      refute has_element?(view, "#dashboard-panel")
+      refute has_element?(view, "#dashboard-panel-component")
       click_editor_action(view, "dashboard-editor-save")
       stop_dashboard_view(view)
 
@@ -346,7 +346,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
       })
 
       await_dashboard_resolved(view)
-      refute has_element?(view, "#dashboard-panel")
+      refute has_element?(view, "#dashboard-panel-component")
       click_editor_action(view, "dashboard-editor-save")
       stop_dashboard_view(view)
 
@@ -420,16 +420,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetCreationLiveTest do
   end
 
   defp widget_form_presentation(view) do
-    assert has_element?(view, "#widget-form-component")
-    vue = LiveVue.Test.get_vue(view, id: "widget-form-component")
-    assert vue.component == "WidgetForm"
+    assert has_element?(view, "#dashboard-panel-component")
+    refute has_element?(view, "#widget-form-component")
+    vue = LiveVue.Test.get_vue(view, id: "dashboard-panel-component")
+    assert vue.component == "DashboardPanel"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}
     assert vue.slots == %{}
     assert Map.keys(vue.props) == ["presentation"]
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    Map.fetch!(vue.props, "presentation")
+    child = vue.props["presentation"]["child"]
+    assert child["kind"] == "widget_form"
+
+    assert child["wrapper"]["attrs"] == %{
+             "class" => "contents",
+             "id" => "widget-form-component"
+           }
+
+    assert child["outer_wrapper"] == nil
+    child["presentation"]
   end
 
   defp stringify_keys(params) do

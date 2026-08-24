@@ -45,7 +45,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
     """
   end
 
-  defp request_form_dto(form) do
+  @doc "Builds the JSON-safe presentation contract for the historical workflow request form."
+  def request_form_dto(form) do
     %{
       root: %{
         id: "dashboard-historical-workflow-request-form",

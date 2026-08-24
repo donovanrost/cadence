@@ -340,13 +340,19 @@ assert.match(recentInvalidationsVueSource, /:href="action\.href"/)
 assert.match(recentInvalidationsVueSource, /v-bind="action\.data_attrs"/)
 
 assert.equal(
-  formComponentsSource.match(/<RuntimeDiagnosticsPanelComponents\.diagnostics_panel\b/g)?.length,
+  formComponentsSource.match(/RuntimeDiagnosticsPanelComponents\.presentation\(/g)?.length,
   1,
-  "FormComponents must retain the sole diagnostics caller",
+  "FormComponents must retain the sole diagnostics presentation caller",
 )
-assert.match(formComponentsSource, /:if=\{@panel == :diagnostics\}/)
-assert.match(formComponentsSource, /dashboard_lifecycle_events=\{@dashboard_lifecycle_events\}/)
-assert.match(formComponentsSource, /dashboard_current_path=\{@dashboard_current_path\}/)
+assert.match(formComponentsSource, /defp child_presentation\(%\{panel: :diagnostics\} = assigns\)/)
+assert.match(formComponentsSource, /"runtime_diagnostics_panel"/)
+assert.match(formComponentsSource, /"dashboard-diagnostics-panel-component"/)
+assert.match(
+  formComponentsSource,
+  /RuntimeDiagnosticsPanelComponents\.presentation\(%\{[\s\S]*?diagnostics: assigns\.runtime_diagnostics,[\s\S]*?dashboard_lifecycle_events: assigns\.dashboard_lifecycle_events,[\s\S]*?dashboard_current_path: assigns\.dashboard_current_path[\s\S]*?\}\)/,
+)
+assert.match(formComponentsSource, /presentation\.root\.attrs/)
+assert.doesNotMatch(formComponentsSource, /v-component="RuntimeDiagnosticsPanel"/)
 
 assert.equal(
   viewportSmokeSource.split("#dashboard-diagnostics-panel").length - 1,
