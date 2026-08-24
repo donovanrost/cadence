@@ -117,7 +117,8 @@ defmodule CadenceWeb.CommsProviderLiveTest do
            }
 
     option = %{
-      "label" => "Ground Network Simulator · account v#{version.version} · grant v#{grant.version}",
+      "label" =>
+        "Ground Network Simulator · account v#{version.version} · grant v#{grant.version}",
       "value" => grant.provider_account_grant_id
     }
 
@@ -484,12 +485,16 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
     assert GroundNetworks.list_providers(organization.organization_id, mission.mission_id) == []
 
+    view = provider_new_view!(conn, mission)
+
     render_hook(view, "save", %{
       "provider" => Map.put(bounded_params, "display_name", "   ")
     })
 
     assert has_element?(view, "#flash-error[role='alert']", "Display name is required.")
     assert GroundNetworks.list_providers(organization.organization_id, mission.mission_id) == []
+
+    view = provider_new_view!(conn, mission)
 
     render_hook(view, "save", %{
       "provider" => Map.put(bounded_params, "policy_mode", "unrecognized")
@@ -503,9 +508,10 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
     assert GroundNetworks.list_providers(organization.organization_id, mission.mission_id) == []
 
+    view = provider_new_view!(conn, mission)
+
     render_hook(view, "save", %{
-      "provider" =>
-        Map.put(bounded_params, "maximum_later_start_shift_seconds", "not-a-number")
+      "provider" => Map.put(bounded_params, "maximum_later_start_shift_seconds", "not-a-number")
     })
 
     assert has_element?(
@@ -515,6 +521,8 @@ defmodule CadenceWeb.CommsProviderLiveTest do
            )
 
     assert GroundNetworks.list_providers(organization.organization_id, mission.mission_id) == []
+
+    view = provider_new_view!(conn, mission)
 
     render_hook(view, "save", %{
       "provider" => Map.put(bounded_params, "permitted_resource_refs", "station-beta")
@@ -528,6 +536,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
     assert GroundNetworks.list_providers(organization.organization_id, mission.mission_id) == []
 
+    view = provider_new_view!(conn, mission)
     render_hook(view, "save", %{"provider" => bounded_params})
 
     {target, _flash} = assert_redirect(view)
@@ -573,6 +582,11 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
   defp comms_provider_new_vue(view) do
     LiveVue.Test.get_vue(view, id: "comms-provider-new-component")
+  end
+
+  defp provider_new_view!(conn, mission) do
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers/new")
+    view
   end
 
   defp provider_params(vue, overrides) do

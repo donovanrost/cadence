@@ -231,8 +231,7 @@ defmodule CadenceWeb.CommsProviderNewLive do
 
   defp fields_dto(params, bindings) do
     %{
-      display_name:
-        field_dto(:display_name, "text", "Display Name", params, required: true),
+      display_name: field_dto(:display_name, "text", "Display Name", params, required: true),
       provider_account_grant_id:
         field_dto(
           :provider_account_grant_id,
