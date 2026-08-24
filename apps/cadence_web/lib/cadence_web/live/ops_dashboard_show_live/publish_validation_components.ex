@@ -64,8 +64,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponents do
         class: "space-y-2 border border-base-300/70 bg-base-100/40 p-2",
         attrs: %{
           "data-publish-validation-status" => dom_attr_value(publish_validation.status),
-          "data-publish-validation-selected-issue" =>
-            dom_attr_value(selected_issue_id || ""),
+          "data-publish-validation-selected-issue" => dom_attr_value(selected_issue_id || ""),
           "data-publish-validation-selected-issue-state" => selected_issue_state
         }
       },
@@ -95,8 +94,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponents do
       freshness: freshness_dto(publish_readiness_freshness(publish_validation)),
       resolved_notice: %{
         visible: selected_issue_state == "resolved",
-        class:
-          "rounded border border-success/40 bg-success/10 px-2 py-1 text-xs text-success",
+        class: "rounded border border-success/40 bg-success/10 px-2 py-1 text-xs text-success",
         text: "Selected publish issue is no longer present in this check.",
         attrs: %{"data-publish-validation-selected-issue-resolved" => ""}
       },
@@ -151,8 +149,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponents do
         "data-publish-validation-summary-draft-version" =>
           dom_attr_value(freshness.summary_draft_version),
         "data-publish-validation-latest-version" => dom_attr_value(freshness.latest_version),
-        "data-publish-validation-published-version" =>
-          dom_attr_value(freshness.published_version)
+        "data-publish-validation-published-version" => dom_attr_value(freshness.published_version)
       },
       evaluated: %{
         label: %{class: "hud-label", text: "evaluated"},

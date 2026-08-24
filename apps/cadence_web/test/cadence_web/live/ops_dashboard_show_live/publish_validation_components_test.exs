@@ -66,7 +66,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponentsTest do
              ~w(freshness header issues message resolved_notice result root)
 
     assert presentation["header"]["class"] == "flex items-center justify-between gap-3"
-    assert presentation["header"]["heading"] == %{"class" => "hud-label", "text" => "Publish Check"}
+
+    assert presentation["header"]["heading"] == %{
+             "class" => "hud-label",
+             "text" => "Publish Check"
+           }
+
     assert presentation["header"]["controls"] == %{"class" => "flex items-center gap-2"}
 
     assert presentation["header"]["badge"] == %{
@@ -131,8 +136,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponentsTest do
              "message" => %{
                "visible" => true,
                "class" => "col-span-2 text-base-content/70",
-               "text" =>
-                 "Publish readiness was evaluated against the current draft version.",
+               "text" => "Publish readiness was evaluated against the current draft version.",
                "attrs" => %{"data-publish-validation-freshness-message" => ""}
              }
            }
@@ -141,6 +145,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponentsTest do
 
     assert presentation["issues"]["visible"] == true
     assert presentation["issues"]["class"] == "space-y-1"
+
     assert Enum.map(presentation["issues"]["rows"], & &1["key"]) == [
              "publish-validation-issue-0"
            ]
