@@ -14,27 +14,26 @@ defmodule CadenceWeb.CommsRoutingShowLive do
            routing_rule_id
          ) do
       {:ok, routing_rule} ->
+        spacecraft =
+          fetch_spacecraft(scope.organization_id, mission.mission_id, routing_rule)
+
+        transport =
+          fetch_transport(scope.organization_id, mission.mission_id, routing_rule)
+
+        events =
+          RoutingRuleStore.list_routing_rule_events(
+            scope.organization_id,
+            mission.mission_id,
+            routing_rule.routing_rule_id
+          )
+
         {:ok,
          socket
          |> assign(:page_title, routing_rule.display_name)
          |> assign(:nav_item, :comms_routing)
-         |> assign(:routing_rule, routing_rule)
-         |> assign(
-           :spacecraft,
-           fetch_spacecraft(scope.organization_id, mission.mission_id, routing_rule)
-         )
-         |> assign(
-           :transport,
-           fetch_transport(scope.organization_id, mission.mission_id, routing_rule)
-         )
-         |> assign(
-           :events,
-           RoutingRuleStore.list_routing_rule_events(
-             scope.organization_id,
-             mission.mission_id,
-             routing_rule.routing_rule_id
-           )
-         )}
+         |> assign(:navigation, navigation_dto(mission, routing_rule))
+         |> assign(:rule, routing_rule_dto(routing_rule, spacecraft, transport))
+         |> assign(:events, Enum.map(events, &event_dto/1))}
 
       {:error, _reason} ->
         {:ok,
@@ -47,92 +46,72 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-routing-show-page" class="space-y-6">
-      <.page_header
-        title={@routing_rule.display_name}
-        subtitle={@routing_rule.routing_rule_id}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Routing", ~p"/missions/#{@current_mission.mission_id}/comms/routing"},
-          {@routing_rule.display_name, nil}
-        ]}
-      >
-        <:actions>
-          <.status_badge
-            status={if @routing_rule.enabled?, do: :ready, else: :info}
-            label={if @routing_rule.enabled?, do: "Enabled", else: "Disabled"}
-          />
-        </:actions>
-      </.page_header>
-
-      <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-        <.rule_card routing_rule={@routing_rule} spacecraft={@spacecraft} transport={@transport} />
-        <.events_card events={@events} />
-      </div>
-    </div>
-    """
-  end
-
-  attr :routing_rule, :map, required: true
-  attr :spacecraft, :any, required: true
-  attr :transport, :any, required: true
-
-  defp rule_card(assigns) do
-    ~H"""
-    <.card title="Routing Rule">
-      <p class="text-sm text-base-content/70">
-        Durable spacecraft use of a transport for a purpose and direction.
-      </p>
-
-      <div class="mt-6 space-y-1">
-        <.detail_row
-          label="Spacecraft"
-          value={spacecraft_name(@spacecraft, @routing_rule.spacecraft_id)}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="comms-routing-show-page">
+        <.vue
+          id="comms-routing-show-component"
+          v-component="CommsRoutingShow"
+          navigation={@navigation}
+          rule={@rule}
+          events={@events}
+          v-ssr={false}
         />
-        <.detail_row label="Purpose" value={@routing_rule.purpose_label} />
-        <.detail_row label="Direction" value={human_atom(@routing_rule.direction)} />
-        <.detail_row label="Transport" value={transport_name(@transport, @routing_rule.transport_id)} />
-        <.detail_row label="Transport Version" value={"v#{@routing_rule.transport_version}"} />
-        <.detail_row label="Role" value={human_atom(@routing_rule.role)} />
       </div>
-
-      <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-        <summary class="cursor-pointer hud-label hover:text-primary">
-          Internal Runtime Artifacts
-        </summary>
-        <div class="mt-3 space-y-1">
-          <.detail_row
-            label="Assignment artifact"
-            value={@routing_rule.materialized_link_assignment_id || "Not materialized"}
-          />
-          <.detail_row
-            label="Path artifacts"
-            value={
-              Enum.join(Map.get(@routing_rule.metadata, "materialized_path_template_ids", []), ", ")
-            }
-          />
-        </div>
-      </details>
-    </.card>
+    </Layouts.app>
     """
   end
 
-  attr :events, :list, required: true
+  defp navigation_dto(mission, routing_rule) do
+    %{
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{label: "Routing", href: ~p"/missions/#{mission.mission_id}/comms/routing"},
+        %{label: routing_rule.display_name, href: nil}
+      ]
+    }
+  end
 
-  defp events_card(assigns) do
-    ~H"""
-    <.card title="Events">
-      <div id="routing-rule-events" class="space-y-2">
-        <div :for={event <- @events} class="rounded-[2px] border border-base-300 bg-base-100/40 p-3">
-          <p class="font-mono text-xs text-base-content/70">{human_atom(event.event_type)}</p>
-          <p class="mt-1 text-xs text-base-content/60">
-            {Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")}
-          </p>
-        </div>
-      </div>
-    </.card>
-    """
+  defp routing_rule_dto(routing_rule, spacecraft, transport) do
+    %{
+      display_name: routing_rule.display_name,
+      routing_rule_id: routing_rule.routing_rule_id,
+      state: routing_rule_state_dto(routing_rule.enabled?),
+      section_title: "Routing Rule",
+      description: "Durable spacecraft use of a transport for a purpose and direction.",
+      details: [
+        %{label: "Spacecraft", value: spacecraft_name(spacecraft, routing_rule.spacecraft_id)},
+        %{label: "Purpose", value: routing_rule.purpose_label},
+        %{label: "Direction", value: human_atom(routing_rule.direction)},
+        %{label: "Transport", value: transport_name(transport, routing_rule.transport_id)},
+        %{label: "Transport Version", value: "v#{routing_rule.transport_version}"},
+        %{label: "Role", value: human_atom(routing_rule.role)}
+      ],
+      runtime_artifacts_title: "Internal Runtime Artifacts",
+      runtime_artifacts: [
+        %{
+          label: "Assignment artifact",
+          value: routing_rule.materialized_link_assignment_id || "Not materialized"
+        },
+        %{
+          label: "Path artifacts",
+          value:
+            routing_rule.metadata
+            |> Map.get("materialized_path_template_ids", [])
+            |> Enum.join(", ")
+        }
+      ]
+    }
+  end
+
+  defp routing_rule_state_dto(true), do: %{label: "Enabled", tone: "ready"}
+  defp routing_rule_state_dto(false), do: %{label: "Disabled", tone: "info"}
+
+  defp event_dto(event) do
+    %{
+      event_type: human_atom(event.event_type),
+      occurred_at: Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")
+    }
   end
 
   defp fetch_spacecraft(organization_id, mission_id, routing_rule) do
