@@ -1,0 +1,222 @@
+<script setup lang="ts">
+import {ref, watch} from "vue"
+
+type Page = {
+  id: string
+  heading: string
+  subtitle: string
+  list: {
+    card_id: string
+    id: string
+    empty: {
+      id: string
+      copy: string
+    }
+  }
+}
+
+type SelectedRequest = {
+  activation_request_id: string
+  binding_set_id: string
+  binding_set_version: number
+}
+
+type FormField = {
+  id: string
+  name: string
+  type: "hidden" | "textarea"
+  value: string
+}
+
+type DecisionAction = {
+  id: string
+  name: string
+  value: "approved" | "rejected"
+  label: string
+}
+
+type DecisionForm = {
+  panel_id: string
+  id: string
+  request_id: FormField
+  reason: FormField & {
+    label: string
+    required: boolean
+  }
+  actions: {
+    reject: DecisionAction
+    approve: DecisionAction
+  }
+}
+
+type ActivationRequest = {
+  __dom_id: string
+  activation_request_id: string
+  binding_set_id: string
+  binding_set_version: number
+  status: {
+    label: string
+  }
+  requester_display: string
+  review: {
+    id: string
+    label: string
+  }
+}
+
+type Decision = "approved" | "rejected"
+
+const props = defineProps<{
+  page: Page
+  selected: SelectedRequest | null
+  form: DecisionForm
+  activation_requests: ActivationRequest[]
+}>()
+
+const emit = defineEmits<{
+  review: [payload: {"request-id": string}]
+  decide: [payload: {
+    activation_decision: {request_id: string; reason: string}
+    decision: Decision
+  }]
+}>()
+
+const rationale = ref(props.form.reason.value)
+
+watch(
+  () => props.selected?.activation_request_id ?? null,
+  (requestId, previousRequestId) => {
+    // A new selection owns a fresh server form. Patches for the same selection
+    // must not overwrite rationale typed locally after the last server render.
+    if (requestId !== previousRequestId) rationale.value = props.form.reason.value
+  }
+)
+
+const review = (request: ActivationRequest) => {
+  emit("review", {"request-id": request.activation_request_id})
+}
+
+const decide = (event: SubmitEvent) => {
+  const decision = (event.submitter as HTMLButtonElement | null)?.value
+
+  if (decision !== "approved" && decision !== "rejected") return
+
+  emit("decide", {
+    activation_decision: {
+      request_id: props.form.request_id.value,
+      reason: rationale.value
+    },
+    decision
+  })
+}
+</script>
+
+<template>
+  <section :id="page.id" class="space-y-4">
+    <header class="border-b border-primary/20 pb-4">
+      <div>
+        <div>
+          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+            {{ page.heading }}
+          </h1>
+          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
+        </div>
+      </div>
+    </header>
+
+    <section :id="page.list.card_id" class="card bg-base-200 border border-base-300">
+      <div class="card-body p-6">
+        <div :id="page.list.id" class="divide-y divide-base-300/30">
+          <div
+            :id="page.list.empty.id"
+            class="hidden only:block py-8 text-center text-sm text-base-content/60"
+          >
+            {{ page.list.empty.copy }}
+          </div>
+          <div
+            v-for="request in activation_requests"
+            :id="request.__dom_id"
+            :key="request.activation_request_id"
+            class="flex items-center justify-between gap-4 py-3"
+          >
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs text-base-content/60">
+                  {{ request.binding_set_id }}@{{ request.binding_set_version }}
+                </span>
+                <span class="rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-warning">
+                  {{ request.status.label }}
+                </span>
+              </div>
+              <p class="mt-1 text-sm text-base-content/70">
+                Requested by {{ request.requester_display }}
+              </p>
+            </div>
+            <button
+              :id="request.review.id"
+              type="button"
+              class="btn btn-ghost btn-sm"
+              @click="review(request)"
+            >
+              {{ request.review.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="selected"
+      :id="form.panel_id"
+      class="card bg-base-200 border border-base-300"
+    >
+      <div class="card-body p-6">
+        <form :id="form.id" @submit.prevent="decide">
+          <div class="fieldset mb-3">
+            <label>
+              <input
+                :id="form.request_id.id"
+                :name="form.request_id.name"
+                :type="form.request_id.type"
+                :value="form.request_id.value"
+                class="w-full input"
+              >
+            </label>
+          </div>
+          <div class="fieldset mb-3">
+            <label>
+              <span class="hud-label block mb-1.5">{{ form.reason.label }}</span>
+              <textarea
+                :id="form.reason.id"
+                v-model="rationale"
+                :name="form.reason.name"
+                :required="form.reason.required"
+                class="w-full textarea"
+              ></textarea>
+            </label>
+          </div>
+          <div class="mt-3 flex justify-end gap-2">
+            <button
+              :id="form.actions.reject.id"
+              type="submit"
+              :name="form.actions.reject.name"
+              :value="form.actions.reject.value"
+              class="btn btn-ghost btn-sm"
+            >
+              {{ form.actions.reject.label }}
+            </button>
+            <button
+              :id="form.actions.approve.id"
+              type="submit"
+              :name="form.actions.approve.name"
+              :value="form.actions.approve.value"
+              class="btn btn-primary btn-sm"
+            >
+              {{ form.actions.approve.label }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </section>
+</template>
