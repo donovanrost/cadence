@@ -158,13 +158,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1&selected_placement=placement-stale"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
     controls = activity_controls_presentation(html)
 
-    selected_activity =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]
+    selected_activity = activity["selected_activity"]
 
     filter_badge =
       Enum.find(controls["header"]["items"], &(&1["key"] == "active-filter-badge"))
@@ -172,15 +169,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     filters = controls["controls"]["filters"]
     activity_row = activity_row_presentation(html, "dashboard-lifecycle-event-health")
 
-    assert ["health_snapshots"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-filter")
+    assert "health_snapshots" =
+             activity["root"]["attrs"]["data-dashboard-activity-filter"]
 
-    assert ["health_snapshots"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-mode")
+    assert "health_snapshots" = activity["root"]["attrs"]["data-dashboard-activity-mode"]
 
     assert "health_snapshots" =
              filter_badge["attrs"]["data-dashboard-activity-filter-badge"]
@@ -296,10 +288,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
 
     activity_row = activity_row_presentation(html, "dashboard-lifecycle-event-published")
 
-    selected_activity =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]
+    selected_activity = activity_timeline_presentation(html)["selected_activity"]
 
     assert activity_row["root"]["attrs"]["data-dashboard-activity-runtime-impact-state"] ==
              "refresh_allowed"
@@ -354,27 +343,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
   defp previous_version(_version), do: nil
 
   defp activity_controls_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
-
-    assert vue.component == "DashboardActivityControls"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-
-    vue.props["presentation"]
+    activity_timeline_presentation(rendered)["controls"]
   end
 
-  defp activity_row_presentation(rendered, event_id) do
-    vue =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event_id}-component"
-      )
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
 
-    assert vue.component == "ActivityTimelineRow"
+    assert vue.component == "ActivityTimeline"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue.props["presentation"]
+  end
+
+  defp activity_row_presentation(rendered, event_id) do
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
+
+    assert row["key"] == event_id
+    assert is_integer(row["order"])
+    assert row["presentation"]["root"]["id"] == "dashboard-activity-#{event_id}"
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+
+    row["presentation"]
   end
 
   defp version_history_summary_presentation(rendered) do
@@ -393,5 +388,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
 
     vue.props["presentation"]
   end
-
 end

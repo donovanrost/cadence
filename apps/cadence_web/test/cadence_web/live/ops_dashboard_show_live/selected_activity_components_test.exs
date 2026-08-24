@@ -42,6 +42,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
 
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
+    assert vue.props["presentation"] ==
+             summary
+             |> SelectedActivityComponents.presentation(
+               dashboard_document(),
+               "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
+             )
+             |> Jason.encode!()
+             |> Jason.decode!()
+
+    refute Enum.any?(vue.props["presentation"]["root"]["attrs"], fn {_key, value} ->
+             is_nil(value)
+           end)
+
     assert %{
              "root" => %{
                "attrs" => %{"data-dashboard-selected-activity-recovery" => "hidden"}
@@ -117,6 +130,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
            }
 
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert vue.props["presentation"] ==
+             summary
+             |> SelectedActivityComponents.presentation(
+               dashboard_document(),
+               "/missions/mission-1/ops/dashboards/dashboard-1",
+               "source_return"
+             )
+             |> Jason.encode!()
+             |> Jason.decode!()
+
+    refute Enum.any?(vue.props["presentation"]["root"]["attrs"], fn {_key, value} ->
+             is_nil(value)
+           end)
 
     presentation = vue.props["presentation"]
     readiness_return = presentation["readiness_return"]

@@ -11,9 +11,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
 
   def selected_activity_event_summary(assigns) do
     presentation =
-      if assigns.summary.render? do
-        selected_activity_event_summary_presentation(assigns)
-      end
+      presentation(
+        assigns.summary,
+        assigns.dashboard_document,
+        assigns.dashboard_current_path,
+        assigns.readiness_return_intent
+      )
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -29,9 +32,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
     """
   end
 
-  defp selected_activity_event_summary_presentation(assigns) do
-    summary = assigns.summary
+  def presentation(
+        summary,
+        dashboard_document,
+        dashboard_current_path,
+        readiness_return_intent \\ nil
+      )
 
+  def presentation(
+        %{render?: false},
+        _dashboard_document,
+        _dashboard_current_path,
+        _readiness_return_intent
+      ),
+      do: nil
+
+  def presentation(
+        summary,
+        dashboard_document,
+        dashboard_current_path,
+        readiness_return_intent
+      ) do
     %{
       root: %{
         id: "dashboard-selected-activity-event",
@@ -39,23 +60,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
           "border border-info/40 bg-info/10 px-2 py-2 text-xs",
           summary.visibility_class
         ],
-        attrs: %{
-          "data-dashboard-selected-activity-event" => dom_attr_value(summary.event_id),
-          "data-dashboard-selected-activity-event-found" => dom_attr_value(summary.found_text),
-          "data-dashboard-selected-activity-event-visible" =>
-            dom_attr_value(summary.visible_text),
-          "data-dashboard-selected-activity-event-filter" => dom_attr_value(summary.filter_value),
-          "data-dashboard-selected-activity-event-type" =>
-            dom_attr_value(summary.event_type_text),
-          "data-dashboard-selected-activity-runtime-impact-state" =>
-            dom_attr_value(summary.runtime_impact.state),
-          "data-dashboard-selected-activity-runtime-impact-invalidation" =>
-            dom_attr_value(summary.runtime_impact.invalidation_id),
-          "data-dashboard-selected-activity-runtime-impact-context" =>
-            dom_attr_value(summary.runtime_impact.context_match),
-          "data-dashboard-selected-activity-runtime-impact-refresh" =>
-            dom_attr_value(summary.runtime_impact.refresh_allowed)
-        }
+        attrs:
+          raw_attributes(%{
+            "data-dashboard-selected-activity-event" => dom_attr_value(summary.event_id),
+            "data-dashboard-selected-activity-event-found" => dom_attr_value(summary.found_text),
+            "data-dashboard-selected-activity-event-visible" =>
+              dom_attr_value(summary.visible_text),
+            "data-dashboard-selected-activity-event-filter" =>
+              dom_attr_value(summary.filter_value),
+            "data-dashboard-selected-activity-event-type" =>
+              dom_attr_value(summary.event_type_text),
+            "data-dashboard-selected-activity-runtime-impact-state" =>
+              dom_attr_value(summary.runtime_impact.state),
+            "data-dashboard-selected-activity-runtime-impact-invalidation" =>
+              dom_attr_value(summary.runtime_impact.invalidation_id),
+            "data-dashboard-selected-activity-runtime-impact-context" =>
+              dom_attr_value(summary.runtime_impact.context_match),
+            "data-dashboard-selected-activity-runtime-impact-refresh" =>
+              dom_attr_value(summary.runtime_impact.refresh_allowed)
+          })
       },
       header: %{
         class: "flex flex-wrap items-center gap-1.5",
@@ -72,13 +95,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
       readiness_return:
         SelectedActivityActionComponents.readiness_return_presentation(
           summary,
-          assigns.readiness_return_intent
+          readiness_return_intent
         ),
       source_actions: SelectedActivityActionComponents.source_actions_presentation(summary),
       recovery:
         SelectedActivityActionComponents.recovery_presentation(
           summary,
-          assigns.dashboard_current_path
+          dashboard_current_path
         ),
       fields:
         summary.fields
@@ -97,7 +120,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
       remediation:
         SelectedActivityActionComponents.remediation_presentation(
           summary,
-          assigns.dashboard_document
+          dashboard_document
         )
     }
   end
@@ -178,6 +201,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponents do
   defp readiness_comparison_badge_class(%{state: "unchanged"}), do: "badge-warning"
   defp readiness_comparison_badge_class(%{state: "first_check"}), do: "badge-outline"
   defp readiness_comparison_badge_class(_comparison), do: "badge-outline"
+
+  defp raw_attributes(attributes) do
+    Enum.reduce(attributes, %{}, fn
+      {_key, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {key, true}, rendered ->
+        Map.put(rendered, to_string(key), "")
+
+      {key, value}, rendered ->
+        Map.put(rendered, to_string(key), dom_text(value))
+    end)
+  end
 
   defp dom_attr_value(nil), do: nil
   defp dom_attr_value(value), do: dom_text(value)

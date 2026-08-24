@@ -47,26 +47,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
-    controls = activity_controls_presentation(html)
+    presentation = activity_timeline_presentation(html)
+    controls = presentation["controls"]
 
-    assert ["open_comparison_reviews"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-mode")
+    assert "open_comparison_reviews" =
+             presentation["root"]["attrs"]["data-dashboard-activity-mode"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue")
+    assert "true" =
+             presentation["root"]["attrs"]["data-dashboard-comparison-review-work-queue"]
 
     row =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-activity-row-dashboard-lifecycle-event-open-component"
-      )
+      presentation["list"]["rows"]
+      |> Enum.find(&(&1["key"] == "dashboard-lifecycle-event-open"))
+      |> Map.fetch!("presentation")
 
     assert "dashboard-lifecycle-event-open" =
-             row.props["presentation"]["root"]["attrs"][
+             row["root"]["attrs"][
                "data-dashboard-comparison-review-work-queue-item"
              ]
 
@@ -90,10 +86,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
       )
 
-    recovery =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]["recovery"]
+    recovery = activity_timeline_presentation(html)["selected_activity"]["recovery"]
 
     assert "hidden" =
              recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
@@ -121,12 +114,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
     }
   end
 
-  defp activity_controls_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
 
-    assert vue.component == "DashboardActivityControls"
+    assert vue.component == "ActivityTimeline"
     assert vue.class == "contents"
     assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue.props["presentation"]
   end

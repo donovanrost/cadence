@@ -62,10 +62,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
         dashboard_review_placement_id: "placement-open"
       )
 
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-activity-controls-component")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-activity-timeline-component")
 
-    assert vue.component == "DashboardActivityControls"
-    assert vue.id == "dashboard-activity-controls-component"
+    assert vue.component == "ActivityTimeline"
+    assert vue.id == "dashboard-activity-timeline-component"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
@@ -74,9 +74,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     presentation = vue.props["presentation"]
-    assert Map.keys(presentation) |> Enum.sort() == ["controls", "header"]
 
-    header = presentation["header"]
+    assert Map.keys(presentation) |> Enum.sort() ==
+             ~w(comparison_review_action controls empty_states list queue_message root selected_activity)
+
+    controls_presentation = presentation["controls"]
+    assert Map.keys(controls_presentation) |> Enum.sort() == ["controls", "header"]
+
+    header = controls_presentation["header"]
     assert header["class"] == "flex items-center justify-between"
     assert header["leading_class"] == "flex items-center gap-2"
 
@@ -140,7 +145,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
              "text" => "1 / 3"
            }
 
-    controls = presentation["controls"]
+    controls = controls_presentation["controls"]
     assert controls["id"] == "dashboard-activity-filter-controls"
     assert controls["class"] == "flex flex-wrap gap-1"
     assert controls["attrs"] == %{"data-dashboard-activity-filter-controls" => ""}
@@ -215,22 +220,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
              }
            ]
 
-    document = LazyHTML.from_fragment(html)
+    assert "open_comparison_reviews" =
+             presentation["root"]["attrs"]["data-dashboard-activity-mode"]
 
-    assert ["open_comparison_reviews"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-mode")
+    assert "true" =
+             presentation["root"]["attrs"]["data-dashboard-comparison-review-work-queue"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue")
+    assert "1" =
+             presentation["root"]["attrs"][
+               "data-dashboard-comparison-review-work-queue-count"
+             ]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-count")
+    refute Map.has_key?(presentation["root"]["attrs"], "data-dashboard-activity-event")
+
+    assert Enum.all?(presentation["root"]["attrs"], fn {_key, value} ->
+             is_binary(value)
+           end)
 
     assert "open_versions" = clear_filter["attrs"]["phx-click"]
 
@@ -241,13 +246,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     assert "false" = reviews["attrs"]["data-dashboard-activity-filter-selected"]
 
     row =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-activity-row-dashboard-lifecycle-event-open-component"
-      )
+      presentation["list"]["rows"]
+      |> Enum.find(&(&1["key"] == "dashboard-lifecycle-event-open"))
+      |> Map.fetch!("presentation")
 
-    assert row.component == "ActivityTimelineRow"
+    assert row["root"]["id"] == "dashboard-activity-dashboard-lifecycle-event-open"
 
-    assert row.props["presentation"]["root"]["attrs"][
+    assert row["root"]["attrs"][
              "data-dashboard-comparison-review-work-queue-item"
            ] == "dashboard-lifecycle-event-open"
   end
@@ -264,30 +269,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
         dashboard_lifecycle_events: []
       )
 
-    presentation =
-      html
-      |> LiveVue.Test.get_vue(id: "dashboard-activity-controls-component")
-      |> then(& &1.props["presentation"])
+    presentation = activity_timeline_presentation(html)
+    controls = presentation["controls"]
 
-    assert Enum.map(presentation["header"]["items"], & &1["visible"]) ==
+    assert Enum.map(controls["header"]["items"], & &1["visible"]) ==
              [true, false, false, false]
 
     assert Enum.map(
-             presentation["controls"]["filters"],
+             controls["controls"]["filters"],
              & &1["attrs"]["data-dashboard-activity-filter-selected"]
            ) == ["true", "false", "false", "false", "false", "false"]
 
-    document = LazyHTML.from_fragment(html)
+    empty_state = Enum.find(presentation["empty_states"], &(&1["key"] == "no-lifecycle"))
 
-    assert ["no_lifecycle"] =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-empty]")
-             |> LazyHTML.attribute("data-dashboard-activity-empty")
+    assert "no_lifecycle" = empty_state["attrs"]["data-dashboard-activity-empty"]
 
-    assert "No lifecycle activity." =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-empty]")
-             |> selected_text()
+    assert "No lifecycle activity." = empty_state["text"]
   end
 
   test "activity_timeline_shell renders comparison review action outcome metadata" do
@@ -325,97 +322,87 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
           )
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = activity_timeline_presentation(html)
+    action = presentation["comparison_review_action"]
+    attrs = action["root"]["attrs"]
 
-    assert ["comparison_review_bulk_decision"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-action")
+    assert "comparison_review_bulk_decision" =
+             attrs["data-dashboard-comparison-review-action"]
 
-    assert ["degraded"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-action-status")
+    assert "degraded" = attrs["data-dashboard-comparison-review-action-status"]
+    assert "warning" = attrs["data-dashboard-comparison-review-action-kind"]
 
-    assert ["warning"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-action-kind")
+    assert "comparison_review_bulk_decision_partially_applied" =
+             attrs["data-dashboard-comparison-review-action-reason"]
 
-    assert ["comparison_review_bulk_decision_partially_applied"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-action-reason")
+    assert "review-request-1" =
+             attrs["data-dashboard-comparison-review-action-source-request-id"]
 
-    action =
-      LazyHTML.query(document, "#dashboard-comparison-review-action-outcome")
+    assert "review-request-1" =
+             attrs["data-dashboard-comparison-review-action-workflow-id"]
 
-    assert ["review-request-1"] =
-             LazyHTML.attribute(
-               action,
-               "data-dashboard-comparison-review-action-source-request-id"
-             )
+    assert "2" = attrs["data-dashboard-comparison-review-action-requested"]
+    assert "1" = attrs["data-dashboard-comparison-review-action-applied"]
+    assert "1" = attrs["data-dashboard-comparison-review-action-failed"]
+    assert "transport" = attrs["data-dashboard-comparison-review-action-scope-kind"]
 
-    assert ["review-request-1"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-workflow-id")
+    assert "transport-alpha,transport-beta" =
+             attrs["data-dashboard-comparison-review-action-scope-ids"]
 
-    assert ["2"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-requested")
+    assert "contact-alpha,contact-beta" =
+             attrs["data-dashboard-comparison-review-action-contact-ids"]
 
-    assert ["1"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-applied")
+    assert "transport-alpha" =
+             attrs["data-dashboard-comparison-review-action-resource-ids"]
 
-    assert ["1"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-failed")
+    assert "transport-alpha" =
+             attrs["data-dashboard-comparison-review-action-transport-ids"]
 
-    assert ["transport"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-kind")
+    assert "endpoint-alpha" =
+             attrs["data-dashboard-comparison-review-action-source-endpoint-ids"]
 
-    assert ["transport-alpha,transport-beta"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-ids")
+    assert "dss-14" =
+             attrs["data-dashboard-comparison-review-action-ground-station-ids"]
 
-    assert ["contact-alpha,contact-beta"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-contact-ids")
+    assert "link-alpha" =
+             attrs["data-dashboard-comparison-review-action-scope-link-ids"]
 
-    assert ["transport-alpha"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-resource-ids")
+    assert "decision-event-1" =
+             attrs["data-dashboard-comparison-review-action-result-event-ids"]
 
-    assert ["transport-alpha"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-transport-ids")
+    assert "review-request-1" =
+             attrs["data-dashboard-comparison-review-action-target-event-id"]
 
-    assert ["endpoint-alpha"] =
-             LazyHTML.attribute(
-               action,
-               "data-dashboard-comparison-review-action-source-endpoint-ids"
-             )
+    assert "Partial" = action["header"]["status"]["text"]
 
-    assert ["dss-14"] =
-             LazyHTML.attribute(
-               action,
-               "data-dashboard-comparison-review-action-ground-station-ids"
-             )
+    assert action["header"]["status"]["class"] == ["badge badge-xs", "badge-warning"]
 
-    assert ["link-alpha"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-scope-link-ids")
+    assert action["header"]["status"]["attrs"] == %{
+             "data-dashboard-comparison-review-action-status-label" => "Partial"
+           }
 
-    assert ["decision-event-1"] =
-             LazyHTML.attribute(
-               action,
-               "data-dashboard-comparison-review-action-result-event-ids"
-             )
+    field_rows = action["fields"]["rows"]
 
-    assert ["review-request-1"] =
-             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-target-event-id")
+    assert Enum.map(field_rows, & &1["label"]["text"]) == [
+             "Requested",
+             "Applied",
+             "Failed",
+             "Scope",
+             "Scope IDs",
+             "Contacts",
+             "Resources",
+             "Transports",
+             "Source endpoints",
+             "Ground stations",
+             "Scope links",
+             "Workflow",
+             "Request",
+             "Results"
+           ]
 
-    assert "Partial" =
-             document
-             |> LazyHTML.query("#dashboard-comparison-review-action-outcome .badge")
-             |> selected_text()
+    assert Enum.map(field_rows, & &1["order"]) == Enum.to_list(0..13)
 
-    [metadata_json] =
-      document
-      |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-      |> LazyHTML.attribute("data-dashboard-comparison-review-action-metadata")
+    metadata_json = attrs["data-dashboard-comparison-review-action-metadata"]
 
     assert Jason.decode!(metadata_json) == %{
              "decision" => "mark_conflict",
@@ -437,9 +424,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
            }
 
     action_text =
-      document
-      |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
-      |> selected_text()
+      [
+        action["header"]["title"]["text"],
+        action["header"]["message"]["text"],
+        action["header"]["status"]["text"]
+      ] ++
+        Enum.flat_map(action["fields"]["rows"], fn row ->
+          [row["label"]["text"], row["value"]["text"]]
+        end)
+
+    action_text = Enum.join(action_text, " ")
 
     assert action_text =~ "Comparison Review Action"
     assert action_text =~ "Comparison review decisions applied to 1 findings; 1 failed."
@@ -460,6 +454,39 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     assert action_text =~ "Scope links"
     assert action_text =~ "review-request-1"
     assert action_text =~ "decision-event-1"
+  end
+
+  test "activity timeline host directly composes the preserved activity presenters" do
+    vue_source =
+      File.read!(Path.expand("../../../../assets/vue/ActivityTimeline.vue", __DIR__))
+
+    assert vue_source =~
+             ~s(import DashboardActivityControls from "./DashboardActivityControls.vue")
+
+    assert vue_source =~
+             ~s(import SelectedActivityEventSummary from "./SelectedActivityEventSummary.vue")
+
+    assert vue_source =~ ~s(import ActivityTimelineRow from "./ActivityTimelineRow.vue")
+    assert vue_source =~ "<DashboardActivityControls"
+    assert vue_source =~ "<SelectedActivityEventSummary"
+    assert vue_source =~ "<ActivityTimelineRow"
+    refute vue_source =~ "data-name"
+
+    shell_source =
+      File.read!(
+        Path.expand(
+          "../../../../lib/cadence_web/live/ops_dashboard_show_live/activity_timeline_shell_components.ex",
+          __DIR__
+        )
+      )
+
+    assert length(Regex.scan(~r/<\.vue\b/, shell_source)) == 1
+
+    browser_smoke_source =
+      File.read!(Path.expand("../../../../assets/test/dashboard_viewport_smoke.mjs", __DIR__))
+
+    assert browser_smoke_source =~
+             ~s(#dashboard-activity-list li[data-lifecycle-event-type])
   end
 
   defp render_shell(assigns) do
@@ -486,9 +513,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
     }
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
   end
 end

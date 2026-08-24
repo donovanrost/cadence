@@ -29,7 +29,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
     controls = activity_controls_presentation(html)
 
     open_badge =
@@ -40,30 +40,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
     assert activity_row["root"]["attrs"]["data-lifecycle-event-type"] ==
              "comparison_review_requested"
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
+    assert "1" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-open-count"]
 
-    assert [""] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-filter")
+    assert "" = activity["root"]["attrs"]["data-dashboard-activity-filter"]
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-review-selected-placement")
+    assert "placement-1" =
+             activity["root"]["attrs"]["data-dashboard-review-selected-placement"]
 
-    assert ["dashboard-lifecycle-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
+    assert "dashboard-lifecycle-event-1" =
+             activity["root"]["attrs"][
+               "data-dashboard-comparison-review-open-requests"
+             ]
 
-    assert ["placement-1,placement-2"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-placements")
+    assert "placement-1,placement-2" =
+             activity["root"]["attrs"][
+               "data-dashboard-comparison-review-open-placements"
+             ]
 
     assert %{"text" => "1 open reviews", "visible" => true} = open_badge
 
@@ -170,7 +163,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
     controls = activity_controls_presentation(html)
 
     open_badge =
@@ -188,15 +181,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
 
     assert "resolved" = request_attrs["data-dashboard-comparison-review-status"]
 
-    assert ["0"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
+    assert "0" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-open-count"]
 
-    assert [""] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
+    assert "" =
+             activity["root"]["attrs"][
+               "data-dashboard-comparison-review-open-requests"
+             ]
 
     assert open_badge["visible"] == false
 
@@ -250,11 +241,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
   end
 
   defp activity_controls_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+    activity_timeline_presentation(rendered)["controls"]
+  end
 
-    assert vue.component == "DashboardActivityControls"
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
     assert vue.class == "contents"
     assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue.props["presentation"]
   end
@@ -270,16 +266,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
   end
 
   defp activity_row_presentation(rendered, event_id) do
-    vue =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event_id}-component"
-      )
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
 
-    assert vue.component == "ActivityTimelineRow"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]
+    assert row["key"] == event_id
+    assert is_integer(row["order"])
+    assert row["presentation"]["root"]["id"] == "dashboard-activity-#{event_id}"
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+    row["presentation"]
   end
 
   defp detail_row(presentation, key) do
@@ -293,5 +290,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewDetailCo
     |> Enum.find(&(&1["attrs"]["name"] == name))
     |> get_in(["attrs", "value"])
   end
-
 end

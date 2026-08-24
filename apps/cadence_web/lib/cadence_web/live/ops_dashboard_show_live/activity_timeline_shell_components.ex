@@ -18,144 +18,91 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
   attr(:dashboard_current_path, :string, required: true)
 
   def activity_timeline_shell(assigns) do
+    assigns = assign(assigns, :presentation, presentation(assigns))
+
+    ~H"""
+    <.vue
+      id="dashboard-activity-timeline-component"
+      v-component="ActivityTimeline"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
+    """
+  end
+
+  def presentation(assigns) do
     action_outcome =
       DataLinkActionOutcomePresentation.for_action(
         assigns.dashboard_comparison_review_action_outcome,
         :comparison_review_bulk_decision
       )
 
-    assigns =
-      assigns
-      |> assign(:dashboard_comparison_review_action, action_outcome)
-      |> assign(
-        :dashboard_comparison_review_action_attrs,
-        DataLinkActionOutcomePresentation.stable_attrs(
-          action_outcome,
-          "data-dashboard-comparison-review-action",
-          aliases: %{"source_request_event_id" => "source-request-id"}
-        )
-      )
-      |> assign(
-        :dashboard_comparison_review_action_rows,
-        comparison_review_action_rows(action_outcome)
-      )
-      |> assign(:dashboard_activity_controls, activity_controls_dto(assigns.activity))
-
-    ~H"""
-    <section
-      id="dashboard-activity-section"
-      class="space-y-2"
-      data-dashboard-activity-mode={@activity.mode}
-      data-dashboard-activity-filter={@activity.filter_value}
-      data-dashboard-activity-event={@dashboard_activity_event_id}
-      data-dashboard-review-selected-placement={@dashboard_review_placement_id}
-      data-dashboard-comparison-review-open-count={@activity.open_summary.count_text}
-      data-dashboard-comparison-review-open-requests={@activity.open_summary.request_ids_attr}
-      data-dashboard-comparison-review-open-placements={@activity.open_summary.placements_attr}
-      data-dashboard-comparison-review-work-queue={comparison_review_work_queue?(@activity)}
-      data-dashboard-comparison-review-work-queue-count={length(@activity.open_review_queue)}
-      data-dashboard-comparison-review-queue-state={@activity.queue_state_value}
-    >
-      <.vue
-        id="dashboard-activity-controls-component"
-        v-component="DashboardActivityControls"
-        presentation={@dashboard_activity_controls}
-        v-ssr={false}
-        class="contents"
-      />
-      <SelectedActivityComponents.selected_activity_event_summary
-        summary={@selected_activity_event}
-        dashboard_document={@dashboard_document}
-        dashboard_current_path={@dashboard_current_path}
-        readiness_return_intent={@dashboard_readiness_return_intent}
-      />
-
-      <div
-        :if={@dashboard_comparison_review_action}
-        id="dashboard-comparison-review-action-outcome"
-        class="space-y-2 border border-base-300/70 bg-base-100/40 p-2"
-        {@dashboard_comparison_review_action_attrs}
-      >
-        <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h4 class="hud-label">Comparison Review Action</h4>
-            <p class="truncate text-sm text-base-content/80">
-              {@dashboard_comparison_review_action.message}
-            </p>
-          </div>
-          <span
-            class={[
-              "badge badge-xs",
-              comparison_review_action_badge_class(@dashboard_comparison_review_action.status)
-            ]}
-            data-dashboard-comparison-review-action-status-label={
-              comparison_review_action_status_label(@dashboard_comparison_review_action.status)
+    %{
+      root: %{
+        id: "dashboard-activity-section",
+        class: "space-y-2",
+        attrs:
+          raw_attributes(%{
+            "data-dashboard-activity-mode" => assigns.activity.mode,
+            "data-dashboard-activity-filter" => assigns.activity.filter_value,
+            "data-dashboard-activity-event" => assigns.dashboard_activity_event_id,
+            "data-dashboard-review-selected-placement" => assigns.dashboard_review_placement_id,
+            "data-dashboard-comparison-review-open-count" =>
+              assigns.activity.open_summary.count_text,
+            "data-dashboard-comparison-review-open-requests" =>
+              assigns.activity.open_summary.request_ids_attr,
+            "data-dashboard-comparison-review-open-placements" =>
+              assigns.activity.open_summary.placements_attr,
+            "data-dashboard-comparison-review-work-queue" =>
+              comparison_review_work_queue?(assigns.activity),
+            "data-dashboard-comparison-review-work-queue-count" =>
+              length(assigns.activity.open_review_queue),
+            "data-dashboard-comparison-review-queue-state" => assigns.activity.queue_state_value
+          })
+      },
+      controls: activity_controls_presentation(assigns.activity),
+      selected_activity:
+        SelectedActivityComponents.presentation(
+          assigns.selected_activity_event,
+          assigns.dashboard_document,
+          assigns.dashboard_current_path,
+          assigns.dashboard_readiness_return_intent
+        ),
+      comparison_review_action: comparison_review_action_presentation(action_outcome),
+      list: %{
+        id: "dashboard-activity-list",
+        class: "space-y-2",
+        attrs:
+          raw_attributes(%{
+            "data-dashboard-comparison-review-work-queue-count" =>
+              length(assigns.activity.open_review_queue)
+          }),
+        rows:
+          assigns.activity_rows
+          |> Enum.with_index()
+          |> Enum.map(fn {row, order} ->
+            %{
+              key: rendered_body(row.event_id),
+              order: order,
+              presentation:
+                ActivityTimelineRowComponents.presentation(
+                  row,
+                  assigns.activity,
+                  assigns.dashboard_lifecycle_events,
+                  assigns.dashboard_review_placement_id,
+                  assigns.dashboard_current_path
+                )
             }
-          >
-            {comparison_review_action_status_label(@dashboard_comparison_review_action.status)}
-          </span>
-        </div>
-        <dl
-          :if={@dashboard_comparison_review_action_rows != []}
-          class="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs"
-        >
-          <%= for row <- @dashboard_comparison_review_action_rows do %>
-            <dt class="text-base-content/60">{row.label}</dt>
-            <dd
-              class="break-all font-mono text-base-content/70"
-              data-dashboard-comparison-review-action-field={row.label}
-            >
-              {row.value}
-            </dd>
-          <% end %>
-        </dl>
-      </div>
-      <ol
-        id="dashboard-activity-list"
-        class="space-y-2"
-        data-dashboard-comparison-review-work-queue-count={length(@activity.open_review_queue)}
-      >
-        <ActivityTimelineRowComponents.activity_row
-          :for={row <- @activity_rows}
-          row={row}
-          activity={@activity}
-          dashboard_lifecycle_events={@dashboard_lifecycle_events}
-          dashboard_review_placement_id={@dashboard_review_placement_id}
-          dashboard_current_path={@dashboard_current_path}
-        />
-      </ol>
-
-      <p
-        :if={comparison_review_queue_message?(@activity)}
-        class="text-sm text-base-content/60"
-        data-dashboard-comparison-review-queue-state-message={@activity.queue_state_value}
-      >
-        {@activity.queue_message}
-      </p>
-
-      <p
-        :if={@dashboard_lifecycle_events == []}
-        class="text-sm text-base-content/60"
-        data-dashboard-activity-empty="no_lifecycle"
-      >
-        No lifecycle activity.
-      </p>
-      <p
-        :if={
-          @dashboard_lifecycle_events != [] and
-            @activity.visible_events == [] and
-            @activity.mode != :open_comparison_reviews
-        }
-        class="text-sm text-base-content/60"
-        data-dashboard-activity-empty-filter
-      >
-        No activity matches the current filter.
-      </p>
-    </section>
-    """
+          end)
+      },
+      queue_message: comparison_review_queue_message_presentation(assigns.activity),
+      empty_states:
+        empty_state_presentations(assigns.dashboard_lifecycle_events, assigns.activity)
+    }
   end
 
-  defp activity_controls_dto(activity) do
+  defp activity_controls_presentation(activity) do
     filtered? = activity.mode != :all
 
     %{
@@ -251,6 +198,84 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
     }
   end
 
+  defp comparison_review_action_presentation(nil), do: nil
+
+  defp comparison_review_action_presentation(action_outcome) do
+    rows = comparison_review_action_rows(action_outcome)
+
+    %{
+      root: %{
+        id: "dashboard-comparison-review-action-outcome",
+        class: "space-y-2 border border-base-300/70 bg-base-100/40 p-2",
+        attrs:
+          DataLinkActionOutcomePresentation.stable_attrs(
+            action_outcome,
+            "data-dashboard-comparison-review-action",
+            aliases: %{"source_request_event_id" => "source-request-id"}
+          )
+      },
+      header: %{
+        class: "flex items-center justify-between gap-3",
+        content_class: "min-w-0",
+        title: %{class: "hud-label", text: "Comparison Review Action"},
+        message: %{
+          class: "truncate text-sm text-base-content/80",
+          text: rendered_body(action_outcome.message)
+        },
+        status: %{
+          class: ["badge badge-xs", comparison_review_action_badge_class(action_outcome.status)],
+          attrs:
+            raw_attributes(%{
+              "data-dashboard-comparison-review-action-status-label" =>
+                comparison_review_action_status_label(action_outcome.status)
+            }),
+          text: comparison_review_action_status_label(action_outcome.status)
+        }
+      },
+      fields: %{
+        visible: rows != [],
+        class: "grid grid-cols-[6rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs",
+        rows: rows
+      }
+    }
+  end
+
+  defp comparison_review_queue_message_presentation(activity) do
+    if comparison_review_queue_message?(activity) do
+      %{
+        class: "text-sm text-base-content/60",
+        attrs:
+          raw_attributes(%{
+            "data-dashboard-comparison-review-queue-state-message" => activity.queue_state_value
+          }),
+        text: rendered_body(activity.queue_message)
+      }
+    end
+  end
+
+  defp empty_state_presentations(lifecycle_events, activity) do
+    [
+      %{
+        key: "no-lifecycle",
+        order: 0,
+        visible: lifecycle_events == [],
+        class: "text-sm text-base-content/60",
+        attrs: raw_attributes(%{"data-dashboard-activity-empty" => "no_lifecycle"}),
+        text: "No lifecycle activity."
+      },
+      %{
+        key: "empty-filter",
+        order: 1,
+        visible:
+          lifecycle_events != [] and activity.visible_events == [] and
+            activity.mode != :open_comparison_reviews,
+        class: "text-sm text-base-content/60",
+        attrs: raw_attributes(%{"data-dashboard-activity-empty-filter" => true}),
+        text: "No activity matches the current filter."
+      }
+    ]
+  end
+
   defp raw_attributes(attributes) do
     Enum.reduce(attributes, %{}, fn
       {_key, value}, rendered when value in [nil, false] ->
@@ -338,7 +363,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
       {"Reason", Map.get(metadata, "decision_reason")}
     ]
     |> Enum.reject(fn {_label, value} -> is_nil(value) or value == "" end)
-    |> Enum.map(fn {label, value} -> %{label: label, value: value} end)
+    |> Enum.with_index()
+    |> Enum.map(fn {{label, value}, order} ->
+      %{
+        key: "comparison-review-action-field-#{order}",
+        order: order,
+        label: %{class: "text-base-content/60", text: label},
+        value: %{
+          class: "break-all font-mono text-base-content/70",
+          attrs: raw_attributes(%{"data-dashboard-comparison-review-action-field" => label}),
+          text: rendered_body(value)
+        }
+      }
+    end)
   end
 
   defp comparison_review_action_rows(_action), do: []

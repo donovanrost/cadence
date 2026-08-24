@@ -86,10 +86,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
 
     activity_row = activity_row_presentation(html, readiness_event.dashboard_lifecycle_event_id)
 
-    selected_activity =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]
+    selected_activity = activity_timeline_presentation(html)["selected_activity"]
 
     remediation = selected_activity["remediation"]
     source_actions = selected_activity["source_actions"]
@@ -303,9 +300,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
       )
 
     remediation =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]["remediation"]
+      html
+      |> activity_timeline_presentation()
+      |> get_in(["selected_activity", "remediation"])
 
     assert ["Fix source connection"] =
              Enum.map(
@@ -380,9 +377,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
       )
 
     remediation =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]["remediation"]
+      html
+      |> activity_timeline_presentation()
+      |> get_in(["selected_activity", "remediation"])
 
     [row] = remediation["rows"]
 
@@ -419,15 +416,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPublishReadinessActivity
   end
 
   defp activity_row_presentation(rendered, event_id) do
-    vue =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event_id}-component"
-      )
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
 
-    assert vue.component == "ActivityTimelineRow"
+    assert row["key"] == event_id
+    assert is_integer(row["order"])
+    assert row["presentation"]["root"]["id"] == "dashboard-activity-#{event_id}"
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+    row["presentation"]
+  end
+
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
     vue.props["presentation"]
   end
 end

@@ -43,27 +43,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
+    queue_message = activity["queue_message"]
 
-    assert ["empty"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-queue-state")
+    assert "empty" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-queue-state"]
 
-    assert ["empty"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-queue-state-message]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-queue-state-message")
+    assert "empty" =
+             queue_message["attrs"]["data-dashboard-comparison-review-queue-state-message"]
 
-    assert "No open comparison reviews." =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-queue-state-message]")
-             |> selected_text()
+    assert "No open comparison reviews." = queue_message["text"]
 
-    assert [] =
-             document
-             |> LazyHTML.query("[data-dashboard-activity-empty-filter]")
-             |> LazyHTML.attribute("data-dashboard-activity-empty-filter")
+    assert false =
+             activity["empty_states"]
+             |> Enum.find(&(&1["key"] == "empty-filter"))
+             |> Map.fetch!("visible")
   end
 
   test "versions_panel renders stale selected placement queue state" do
@@ -89,22 +83,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
+    queue_message = activity["queue_message"]
 
-    assert ["selection_stale"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-queue-state")
+    assert "selection_stale" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-queue-state"]
 
-    assert ["selection_stale"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-queue-state-message]")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-queue-state-message")
+    assert "selection_stale" =
+             queue_message["attrs"]["data-dashboard-comparison-review-queue-state-message"]
 
     assert "Selected review placement is no longer part of the open review queue." =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-review-queue-state-message]")
-             |> selected_text()
+             queue_message["text"]
 
     presentation = comparison_request_presentation(html, open_request_event)
 
@@ -123,24 +112,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueSta
     }
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
   end
 
   defp comparison_request_presentation(rendered, event) do
+    event_id = event.dashboard_lifecycle_event_id
+
     row =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
-      )
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
 
-    assert row.component == "ActivityTimelineRow"
-    assert row.class == "contents"
-    assert row.ssr == false
-    assert row.props == Jason.decode!(Jason.encode!(row.props))
+    assert row["key"] == event_id
+    assert is_integer(row["order"])
+    assert row["presentation"]["root"]["id"] == "dashboard-activity-#{event_id}"
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
 
-    child = row.props["presentation"]["comparison_review"]["request"]
+    child = row["presentation"]["comparison_review"]["request"]
     assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
     child["presentation"]
   end

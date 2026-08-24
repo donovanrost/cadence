@@ -50,34 +50,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
     controls = activity_controls_presentation(html)
     header_items = controls["header"]["items"]
 
-    assert ["open_comparison_reviews"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-mode")
+    assert "open_comparison_reviews" =
+             activity["root"]["attrs"]["data-dashboard-activity-mode"]
 
-    assert ["placement-open"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-review-selected-placement")
+    assert "placement-open" =
+             activity["root"]["attrs"]["data-dashboard-review-selected-placement"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue")
+    assert "true" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-work-queue"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-work-queue-count")
+    assert "1" =
+             activity["root"]["attrs"][
+               "data-dashboard-comparison-review-work-queue-count"
+             ]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-count")
+    assert "1" =
+             activity["root"]["attrs"]["data-dashboard-comparison-review-open-count"]
 
     assert "Open reviews" =
              header_items
@@ -138,22 +130,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    activity = activity_timeline_presentation(html)
 
-    assert ["open_comparison_reviews"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-activity-mode")
+    assert "open_comparison_reviews" =
+             activity["root"]["attrs"]["data-dashboard-activity-mode"]
 
     assert "dashboard-lifecycle-event-queued" =
              activity_row_presentation(html, queue_request)["root"]["attrs"][
                "data-dashboard-comparison-review-work-queue-item"
              ]
 
-    assert ["dashboard-lifecycle-event-queued"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-section")
-             |> LazyHTML.attribute("data-dashboard-comparison-review-open-requests")
+    assert "dashboard-lifecycle-event-queued" =
+             activity["root"]["attrs"][
+               "data-dashboard-comparison-review-open-requests"
+             ]
   end
 
   defp dashboard_document do
@@ -166,11 +156,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
   end
 
   defp activity_controls_presentation(rendered) do
-    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-controls-component")
+    activity_timeline_presentation(rendered)["controls"]
+  end
 
-    assert vue.component == "DashboardActivityControls"
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
     assert vue.class == "contents"
     assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue.props["presentation"]
   end
@@ -184,16 +179,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryComparisonReviewQueueCom
   end
 
   defp activity_row_presentation(rendered, event) do
-    vue =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
-      )
+    event_id = event.dashboard_lifecycle_event_id
 
-    assert vue.component == "ActivityTimelineRow"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    vue.props["presentation"]
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
+
+    assert row["key"] == event_id
+    assert is_integer(row["order"])
+    assert row["presentation"]["root"]["id"] == "dashboard-activity-#{event_id}"
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+    row["presentation"]
   end
 
   defp placement_links(presentation) do

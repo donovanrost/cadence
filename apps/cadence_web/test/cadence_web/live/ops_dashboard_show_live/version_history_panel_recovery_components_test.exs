@@ -25,9 +25,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
       )
 
     recovery =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]["recovery"]
+      html
+      |> activity_timeline_presentation()
+      |> get_in(["selected_activity", "recovery"])
 
     assert "hidden" =
              recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
@@ -69,9 +69,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
       )
 
     presentation =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-selected-activity-event-component"
-      ).props["presentation"]
+      html
+      |> activity_timeline_presentation()
+      |> Map.fetch!("selected_activity")
 
     recovery = presentation["recovery"]
 
@@ -107,5 +107,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
       mission_id: "mission-1",
       name: "Dashboard"
     }
+  end
+
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert vue.component == "ActivityTimeline"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
   end
 end

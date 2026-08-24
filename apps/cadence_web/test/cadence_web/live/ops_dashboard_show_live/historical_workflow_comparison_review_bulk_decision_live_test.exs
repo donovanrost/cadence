@@ -221,18 +221,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
 
       assert_patch(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="ok"][data-dashboard-comparison-review-action-source-request-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-workflow-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-requested="2"][data-dashboard-comparison-review-action-applied="2"][data-dashboard-comparison-review-action-failed="0"])
-             )
+      request_event_id = request_event.dashboard_lifecycle_event_id
+      action = comparison_review_action_presentation(view)
 
-      action_html = render(view)
+      assert %{
+               "data-dashboard-comparison-review-action" => "comparison_review_bulk_decision",
+               "data-dashboard-comparison-review-action-status" => "ok",
+               "data-dashboard-comparison-review-action-source-request-id" => ^request_event_id,
+               "data-dashboard-comparison-review-action-workflow-id" => ^request_event_id,
+               "data-dashboard-comparison-review-action-requested" => "2",
+               "data-dashboard-comparison-review-action-applied" => "2",
+               "data-dashboard-comparison-review-action-failed" => "0"
+             } = action["root"]["attrs"]
 
-      assert action_html =~ "Comparison Review Action"
-      assert action_html =~ "Comparison review decisions applied to 2 findings."
-      assert action_html =~ "Requested"
-      assert action_html =~ "Applied"
-      assert action_html =~ "Failed"
+      assert action["header"]["title"]["text"] == "Comparison Review Action"
+
+      assert action["header"]["message"]["text"] ==
+               "Comparison review decisions applied to 2 findings."
+
+      assert Enum.any?(action["fields"]["rows"], &(&1["label"]["text"] == "Requested"))
+      assert Enum.any?(action["fields"]["rows"], &(&1["label"]["text"] == "Applied"))
+      assert Enum.any?(action["fields"]["rows"], &(&1["label"]["text"] == "Failed"))
 
       assert {:ok, updated_a} =
                Storage.fetch_observation_identity_state(state_a.observation_identity_id)
@@ -307,10 +316,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
       {:ok, view, _html} = live(conn, path)
       render_dashboard_async(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-activity-section[data-dashboard-comparison-review-open-count="1"][data-dashboard-comparison-review-open-placements="placement-counter,placement-untracked"])
-             )
+      assert %{
+               "data-dashboard-comparison-review-open-count" => "1",
+               "data-dashboard-comparison-review-open-placements" =>
+                 "placement-counter,placement-untracked"
+             } = activity_timeline_presentation(view)["root"]["attrs"]
 
       presentation = comparison_request_presentation(view, request_event)
       bulk_form = presentation["actions"]["bulk_form"]
@@ -367,14 +377,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
 
       assert_patch(view)
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="ok"][data-dashboard-comparison-review-action-source-request-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-workflow-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-requested="1"][data-dashboard-comparison-review-action-applied="1"][data-dashboard-comparison-review-action-failed="0"])
-             )
+      action = comparison_review_action_presentation(view)
 
-      action_html = render(view)
+      assert %{
+               "data-dashboard-comparison-review-action" => "comparison_review_bulk_decision",
+               "data-dashboard-comparison-review-action-status" => "ok",
+               "data-dashboard-comparison-review-action-source-request-id" => ^request_event_id,
+               "data-dashboard-comparison-review-action-workflow-id" => ^request_event_id,
+               "data-dashboard-comparison-review-action-requested" => "1",
+               "data-dashboard-comparison-review-action-applied" => "1",
+               "data-dashboard-comparison-review-action-failed" => "0"
+             } = action["root"]["attrs"]
 
-      assert action_html =~ "Comparison review decisions applied to 1 findings."
+      assert action["header"]["message"]["text"] ==
+               "Comparison review decisions applied to 1 findings."
 
       assert {:ok, updated} =
                Storage.fetch_observation_identity_state(state.observation_identity_id)
@@ -384,24 +400,50 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
   end
 
   defp comparison_request_presentation(rendered, event) do
-    row =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
-      )
+    event_id = event.dashboard_lifecycle_event_id
 
-    assert Map.take(row, [:component, :ssr, :class, :handlers]) == %{
-             component: "ActivityTimelineRow",
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
+
+    expected_id = "dashboard-activity-#{event_id}"
+
+    assert %{
+             "key" => ^event_id,
+             "order" => order,
+             "presentation" => %{"root" => %{"id" => ^expected_id}}
+           } = row
+
+    assert is_integer(order)
+
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+
+    child = row["presentation"]["comparison_review"]["request"]
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["presentation"]["kind"] == "request"
+    child["presentation"]
+  end
+
+  defp comparison_review_action_presentation(rendered) do
+    rendered
+    |> activity_timeline_presentation()
+    |> Map.fetch!("comparison_review_action")
+  end
+
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ActivityTimeline",
              ssr: false,
              class: "contents",
              handlers: %{}
            }
 
-    assert row.props == Jason.decode!(Jason.encode!(row.props))
-
-    child = row.props["presentation"]["comparison_review"]["request"]
-    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
-    assert child["presentation"]["kind"] == "request"
-    child["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 
   defp form_payload(form) do

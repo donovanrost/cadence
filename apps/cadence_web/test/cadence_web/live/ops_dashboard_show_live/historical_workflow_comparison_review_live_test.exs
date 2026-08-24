@@ -186,8 +186,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
       activity_controls =
         view
-        |> LiveVue.Test.get_vue(id: "dashboard-activity-controls-component")
-        |> then(& &1.props["presentation"])
+        |> activity_timeline_presentation()
+        |> Map.fetch!("controls")
 
       open_reviews_filter =
         Enum.find(
@@ -206,10 +206,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
       patched_path = assert_patch(view)
       assert patched_path =~ "activity_filter=open_comparison_reviews"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-activity-section[data-dashboard-activity-mode="open_comparison_reviews"][data-dashboard-comparison-review-open-count="1"][data-dashboard-comparison-review-work-queue-count="1"])
-             )
+      assert %{
+               "data-dashboard-activity-mode" => "open_comparison_reviews",
+               "data-dashboard-comparison-review-open-count" => "1",
+               "data-dashboard-comparison-review-work-queue-count" => "1"
+             } = activity_timeline_presentation(view)["root"]["attrs"]
 
       resolve_form = request_presentation["actions"]["resolve_form"]
 
@@ -538,24 +539,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
 
   defp comparison_presentation(rendered, kind, event_id) do
     row =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event_id}-component"
-      )
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
 
-    assert Map.take(row, [:component, :ssr, :class, :handlers]) == %{
-             component: "ActivityTimelineRow",
+    expected_id = "dashboard-activity-#{event_id}"
+
+    assert %{
+             "key" => ^event_id,
+             "order" => order,
+             "presentation" => %{"root" => %{"id" => ^expected_id}}
+           } = row
+
+    assert is_integer(order)
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+
+    child = row["presentation"]["comparison_review"][kind]
+    assert child["id"] == "dashboard-comparison-review-#{kind}-#{event_id}-component"
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["presentation"]["kind"] == kind
+    child["presentation"]
+  end
+
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ActivityTimeline",
              ssr: false,
              class: "contents",
              handlers: %{}
            }
 
-    assert row.props == Jason.decode!(Jason.encode!(row.props))
-
-    child = row.props["presentation"]["comparison_review"][kind]
-    assert child["id"] == "dashboard-comparison-review-#{kind}-#{event_id}-component"
-    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
-    assert child["presentation"]["kind"] == kind
-    child["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 
   defp form_payload(form, overrides) do

@@ -279,22 +279,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewBulk
   end
 
   defp comparison_request_presentation(rendered, event) do
-    row =
-      LiveVue.Test.get_vue(rendered,
-        id: "dashboard-activity-row-#{event.dashboard_lifecycle_event_id}-component"
-      )
+    event_id = event.dashboard_lifecycle_event_id
 
-    assert Map.take(row, [:component, :ssr, :class, :handlers]) == %{
-             component: "ActivityTimelineRow",
+    row =
+      rendered
+      |> activity_timeline_presentation()
+      |> get_in(["list", "rows"])
+      |> Enum.find(&(&1["key"] == event_id))
+
+    expected_id = "dashboard-activity-#{event_id}"
+
+    assert %{
+             "key" => ^event_id,
+             "order" => order,
+             "presentation" => %{"root" => %{"id" => ^expected_id}}
+           } = row
+
+    assert is_integer(order)
+    assert row["presentation"] == Jason.decode!(Jason.encode!(row["presentation"]))
+    child = row["presentation"]["comparison_review"]["request"]
+    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
+    assert child["presentation"]["kind"] == "request"
+    child["presentation"]
+  end
+
+  defp activity_timeline_presentation(rendered) do
+    vue = LiveVue.Test.get_vue(rendered, id: "dashboard-activity-timeline-component")
+
+    assert Map.take(vue, [:component, :ssr, :class, :handlers]) == %{
+             component: "ActivityTimeline",
              ssr: false,
              class: "contents",
              handlers: %{}
            }
 
-    assert row.props == Jason.decode!(Jason.encode!(row.props))
-    child = row.props["presentation"]["comparison_review"]["request"]
-    assert child["attrs"] == %{"data-name" => "ComparisonReviewActivityDetails"}
-    assert child["presentation"]["kind"] == "request"
-    child["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    vue.props["presentation"]
   end
 end
