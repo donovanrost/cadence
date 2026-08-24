@@ -8,6 +8,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.SpacecraftTypeListLive
   alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
@@ -19,11 +20,14 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   end
 
   defp spacecraft_profile_list_vue(view) do
-    vue = LiveVue.Test.get_vue(view, id: "spacecraft-profiles-list-component")
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-type-list-page-component")
 
-    assert vue.component == "SpacecraftTypeList"
+    assert vue.component == "SpacecraftTypeListPage"
+    assert vue.class == "contents"
     assert vue.ssr == false
+    assert Map.keys(vue.props) == ["presentation"]
     assert is_binary(Jason.encode!(vue.props))
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue
   end
@@ -150,14 +154,26 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles")
 
-      assert has_element?(view, "#spacecraft-profiles-page", "No profiles yet")
+      assert has_element?(view, "#spacecraft-type-list-page-component")
 
-      assert has_element?(
-               view,
-               "#new-spacecraft-profile-link[href='/missions/#{mission.mission_id}/spacecraft/profiles/new']"
-             )
+      presentation = spacecraft_profile_list_vue(view).props["presentation"]
 
-      refute has_element?(view, "#spacecraft-profiles-list-component")
+      assert presentation["root"] == %{
+               "attrs" => %{"class" => "space-y-6", "id" => "spacecraft-profiles-page"}
+             }
+
+      assert presentation["empty_state"]["title"]["text"] == "No profiles yet"
+
+      assert presentation["header"]["actions"]["new_profile"]["attrs"] == %{
+               "class" => "btn btn-primary btn-sm gap-1",
+               "data-phx-link" => "redirect",
+               "data-phx-link-state" => "push",
+               "href" => "/missions/#{mission.mission_id}/spacecraft/profiles/new",
+               "id" => "new-spacecraft-profile-link"
+             }
+
+      assert presentation["card"] == nil
+      refute Jason.encode!(presentation) =~ "spacecraft-profiles-list-component"
     end
 
     test "lists spacecraft profiles using profile vocabulary and JSON-safe row props" do
@@ -176,33 +192,54 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles")
 
-      assert has_element?(
-               view,
-               "#new-spacecraft-profile-link[href='/missions/#{mission.mission_id}/spacecraft/profiles/new']"
-             )
-
-      assert has_element?(view, "#spacecraft-profiles-list-component")
-      assert has_element?(view, "#spacecraft-profiles-page", "1 defined")
+      assert has_element?(view, "#spacecraft-type-list-page-component")
 
       vue = spacecraft_profile_list_vue(view)
+      presentation = vue.props["presentation"]
 
-      assert vue.props == %{
-               "rows" => [
-                 %{
-                   "id" => "spacecraft-profile-#{profile.spacecraft_type_id}",
-                   "display_name" => profile.display_name,
-                   "version" => "v1",
-                   "downlink_protocol" => "AOS",
-                   "uplink_protocol" => "USLP",
-                   "applications" => "Command Dispatch, Telemetry Decom",
-                   "href" =>
-                     "/missions/#{mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-                 }
-               ]
+      assert presentation["header"]["actions"]["new_profile"]["attrs"]["href"] ==
+               "/missions/#{mission.mission_id}/spacecraft/profiles/new"
+
+      assert presentation["card"]["list_component"] == %{
+               "attrs" => %{"id" => "spacecraft-profiles-list-component"}
              }
 
-      assert has_element?(view, "#spacecraft-profiles-page", "Spacecraft Profiles")
-      refute has_element?(view, "#spacecraft-profiles-page", "Spacecraft Types")
+      assert presentation["header"]["title"]["suffix"]["text"] == "1 defined"
+
+      assert presentation["card"]["rows"] == [
+               %{
+                 "id" => "spacecraft-profile-#{profile.spacecraft_type_id}",
+                 "display_name" => profile.display_name,
+                 "version" => "v1",
+                 "downlink_protocol" => "AOS",
+                 "uplink_protocol" => "USLP",
+                 "applications" => "Command Dispatch, Telemetry Decom",
+                 "href" =>
+                   "/missions/#{mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+               }
+             ]
+
+      assert presentation["header"]["title"]["text"] == "Spacecraft Profiles"
+      refute Jason.encode!(presentation) =~ "Spacecraft Types"
+    end
+
+    test "spacecraft profile list raw attrs preserve HEEx omission boolean string and number semantics" do
+      attrs =
+        SpacecraftTypeListLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "empty" => "",
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "empty" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
     end
 
     test "lists only profiles belonging to the current mission and organization" do
@@ -227,7 +264,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles")
 
-      rows = spacecraft_profile_list_vue(view).props["rows"]
+      rows = spacecraft_profile_list_vue(view).props["presentation"]["card"]["rows"]
 
       assert Enum.map(rows, & &1["id"]) == ["spacecraft-profile-#{mine.spacecraft_type_id}"]
 
