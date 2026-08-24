@@ -29,9 +29,20 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
 
-      assert has_element?(view, "#comms-ground-stations-page", "No ground stations")
-      assert has_element?(view, "#new-ground-station-link")
-      refute has_element?(view, "#ground-stations-list-component")
+      page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      presentation = page_vue.props["presentation"]
+
+      assert %{
+               "root" => %{"attrs" => %{"id" => "comms-ground-stations-page"}},
+               "empty_state" => %{"title" => %{"text" => "No ground stations"}}
+             } = presentation
+
+      assert presentation["header"]["actions"]["new_ground_station"]["attrs"]["id"] ==
+               "new-ground-station-link"
+
+      refute presentation["card"]
     end
 
     test "lists and shows configured ground stations" do
@@ -41,10 +52,22 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
 
-      assert has_element?(view, "#comms-ground-stations-page")
-      assert has_element?(view, "#new-ground-station-link")
-      assert has_element?(view, "#ground-stations-list-component")
-      assert has_element?(view, "#comms-ground-stations-page", "Mission-owned antenna")
+      page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      presentation = page_vue.props["presentation"]
+      list_component = presentation["card"]["list_component"]
+      list_props = list_component["props"]
+
+      assert presentation["root"]["attrs"]["id"] == "comms-ground-stations-page"
+
+      assert presentation["header"]["actions"]["new_ground_station"]["attrs"]["id"] ==
+               "new-ground-station-link"
+
+      assert list_component["attrs"]["id"] == "ground-stations-list-component"
+
+      assert presentation["header"]["subtitle"]["text"] ==
+               "Mission-owned antenna and site identities used by dashboard scope, source diagnostics, and comms setup."
 
       sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
 
@@ -61,11 +84,9 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert ground_stations["active"]
       assert ground_stations["label"] == "Ground Stations"
 
-      vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
+      assert page_vue.component == "CommsGroundStationListPage"
 
-      assert vue.component == "CommsGroundStationList"
-
-      assert vue.props == %{
+      assert list_props == %{
                "rows" => [
                  %{
                    "id" => "ground-station-#{ground_station.ground_station_id}",
@@ -93,9 +114,14 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert_patch(view, search_path)
       render_patch(view, search_path)
 
-      searched_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert searched_vue.props["search"] == "goldstone"
-      assert searched_vue.props["rows"] == vue.props["rows"]
+      searched_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      searched_list_props =
+        searched_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert searched_list_props["search"] == "goldstone"
+      assert searched_list_props["rows"] == list_props["rows"]
 
       {:ok, show_view, _show_html} =
         live(
@@ -187,10 +213,13 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
 
-      vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      alpha_row = Enum.find(vue.props["rows"], &(&1["ground_station_id"] == "alpha"))
+      page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
 
-      assert Enum.map(vue.props["rows"], & &1["ground_station_id"]) == [
+      list_props = page_vue.props["presentation"]["card"]["list_component"]["props"]
+      alpha_row = Enum.find(list_props["rows"], &(&1["ground_station_id"] == "alpha"))
+
+      assert Enum.map(list_props["rows"], & &1["ground_station_id"]) == [
                alpha.ground_station_id,
                zulu.ground_station_id
              ]
@@ -206,10 +235,15 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert_patch(view, sort_path)
       render_patch(view, sort_path)
 
-      sorted_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert sorted_vue.props["sort_dir"] == "desc"
+      sorted_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
 
-      assert Enum.map(sorted_vue.props["rows"], & &1["ground_station_id"]) == [
+      sorted_list_props =
+        sorted_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert sorted_list_props["sort_dir"] == "desc"
+
+      assert Enum.map(sorted_list_props["rows"], & &1["ground_station_id"]) == [
                zulu.ground_station_id,
                alpha.ground_station_id
              ]
@@ -222,10 +256,15 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert_patch(view, alpha_search_path)
       render_patch(view, alpha_search_path)
 
-      searched_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert searched_vue.props["search"] == "alpha"
-      assert searched_vue.props["total_count"] == 1
-      assert searched_vue.props["rows"] == [alpha_row]
+      searched_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      searched_list_props =
+        searched_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert searched_list_props["search"] == "alpha"
+      assert searched_list_props["total_count"] == 1
+      assert searched_list_props["rows"] == [alpha_row]
 
       render_hook(view, "search", %{"q" => "no-such-station"})
 
@@ -235,10 +274,15 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert_patch(view, no_match_path)
       render_patch(view, no_match_path)
 
-      no_matches_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert no_matches_vue.props["search"] == "no-such-station"
-      assert no_matches_vue.props["total_count"] == 0
-      assert no_matches_vue.props["rows"] == []
+      no_matches_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      no_matches_list_props =
+        no_matches_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert no_matches_list_props["search"] == "no-such-station"
+      assert no_matches_list_props["total_count"] == 0
+      assert no_matches_list_props["rows"] == []
     end
 
     test "paginates through the LiveView event and keeps visible rows in props" do
@@ -256,10 +300,15 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
 
-      first_page_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert first_page_vue.props["page"] == 1
-      assert first_page_vue.props["total_count"] == 51
-      assert length(first_page_vue.props["rows"]) == 50
+      first_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      first_page_props =
+        first_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert first_page_props["page"] == 1
+      assert first_page_props["total_count"] == 51
+      assert length(first_page_props["rows"]) == 50
 
       render_hook(view, "paginate", %{"page" => "2"})
 
@@ -269,10 +318,44 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert_patch(view, second_page_path)
       render_patch(view, second_page_path)
 
-      second_page_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
-      assert second_page_vue.props["page"] == 2
-      assert second_page_vue.props["total_count"] == 51
-      assert Enum.map(second_page_vue.props["rows"], & &1["ground_station_id"]) == ["station-51"]
+      second_page_vue =
+        LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      second_page_props =
+        second_page_vue.props["presentation"]["card"]["list_component"]["props"]
+
+      assert second_page_props["page"] == 2
+      assert second_page_props["total_count"] == 51
+      assert Enum.map(second_page_props["rows"], & &1["ground_station_id"]) == ["station-51"]
+    end
+
+    test "projects the complete list page through one JSON-safe LiveVue prop" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
+
+      vue = LiveVue.Test.get_vue(view, id: "comms-ground-station-list-page-component")
+
+      assert vue.component == "CommsGroundStationListPage"
+      assert vue.class == "contents"
+      assert vue.ssr == false
+      assert Map.keys(vue.props) == ["presentation"]
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    end
+
+    test "preserves HEEx raw attribute coercion in the page presentation" do
+      assert CadenceWeb.CommsGroundStationListLive.presentation_attrs(%{
+               "nil" => nil,
+               "false" => false,
+               "true" => true,
+               "string" => "kept",
+               "number" => 7
+             }) == %{
+               "true" => "",
+               "string" => "kept",
+               "number" => "7"
+             }
     end
 
     test "creates, edits, and archives ground stations" do
