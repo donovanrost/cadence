@@ -8,6 +8,9 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Events
+  alias Phoenix.LiveView.JS
+
+  @default_database_description "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."
 
   @impl true
   def mount(%{"catalog_database_id" => catalog_database_id}, _session, socket) do
@@ -23,6 +26,8 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
          |> assign(:page_title, database.name)
          |> assign(:nav_item, :catalog)
          |> assign(:database, database)
+         |> assign(:database_details, database_details_dto(database))
+         |> assign(:navigation, navigation_dto(mission, database))
          |> assign(:revision_form, empty_revision_form())
          |> assign(:show_revision_form, false)
          |> assign_database_details(organization_id, mission.mission_id, catalog_database_id)
@@ -173,53 +178,36 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     |> assign(:revisions, revisions)
     |> assign(:artifacts, artifacts)
     |> assign(:runs, runs)
+    |> assign(:revision_rows, Enum.map(revisions, &revision_dto(&1, mission_id)))
+    |> assign(:import_run_rows, Enum.map(runs, &import_run_dto(&1, mission_id)))
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title={@database.name}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
-          {@database.name, nil}
-        ]}
-      >
-        <:title_suffix>{@database.slug}</:title_suffix>
-        <:actions>
-          <.button
-            id="add-revision-toggle"
-            variant={if @show_revision_form, do: :ghost, else: :primary}
-            size={:md}
-            phx-click="toggle_revision_form"
-          >
-            {if @show_revision_form, do: "Cancel", else: "+ Add revision"}
-          </.button>
-        </:actions>
-      </.page_header>
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <.card title="Database" class="lg:col-span-2">
-          <p class="text-sm text-base-content/70 mt-2">
-            {@database.description ||
-              "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."}
-          </p>
-        </.card>
-        <.card title="Runtime usage">
-          <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
-            No runtime bindings yet.
-          </p>
-        </.card>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="catalog-database-show-page">
+        <.vue
+          id="catalog-database-show-component"
+          v-component="CatalogDatabaseShow"
+          database={@database_details}
+          navigation={@navigation}
+          revision_form_open={@show_revision_form}
+          revisions={@revision_rows}
+          import_runs={@import_run_rows}
+          v-on:toggle-revision-form={JS.push("toggle_revision_form")}
+          v-ssr={false}
+        >
+          <:revision_form>
+            <.revision_upload_card
+              :if={@show_revision_form}
+              uploads={@uploads}
+              form={@revision_form}
+            />
+          </:revision_form>
+        </.vue>
       </div>
-
-      <.revision_upload_card :if={@show_revision_form} uploads={@uploads} form={@revision_form} />
-
-      <.revision_history current_mission={@current_mission} revisions={@revisions} />
-
-      <.import_attempts current_mission={@current_mission} runs={@runs} />
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -235,7 +223,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
       )
 
     ~H"""
-    <.card title="Add revision">
+    <.card id="catalog-revision-upload-card" title="Add revision">
       <.form
         id="catalog-revision-upload-form"
         for={@form}
@@ -249,7 +237,12 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
         </div>
         <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
         <.detected_preview detected={@detected_importer} />
-        <.button type="submit" size={:md} disabled={!importer_detected?(@detected_importer)}>
+        <.button
+          id="catalog-revision-upload-submit"
+          type="submit"
+          size={:md}
+          disabled={!importer_detected?(@detected_importer)}
+        >
           Upload revision
         </.button>
       </.form>
@@ -257,72 +250,66 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :revisions, :list, required: true
-
-  defp revision_history(assigns) do
-    ~H"""
-    <.card id="catalog-revision-history" title="Revision history">
-      <%= if @revisions == [] do %>
-        <.empty_state compact title="No revisions yet." />
-      <% else %>
-        <.table id="catalog-revisions-table" rows={@revisions} row_accent={false}>
-          <:col :let={revision} label="Revision">
-            <p class="font-medium">{revision.revision_label}</p>
-            <p class="font-mono text-xs text-base-content/60">
-              {"#" <> Integer.to_string(revision.revision_number)}
-            </p>
-          </:col>
-          <:col :let={revision} label="Mission Model">
-            <span class="font-mono text-xs">{revision.mission_model_revision_id}</span>
-          </:col>
-          <:col :let={revision} label="Actions" align={:right}>
-            <.button
-              variant={:ghost}
-              size={:xs}
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
-              }
-            >
-              View revision
-            </.button>
-          </:col>
-        </.table>
-      <% end %>
-    </.card>
-    """
+  defp database_details_dto(database) do
+    %{
+      id: database.catalog_database_id,
+      name: database.name,
+      slug: database.slug,
+      description: database.description || @default_database_description,
+      runtime_usage_summary: "No runtime bindings yet."
+    }
   end
 
-  attr :current_mission, :map, required: true
-  attr :runs, :list, required: true
-
-  defp import_attempts(assigns) do
-    ~H"""
-    <.card id="catalog-import-attempts" title="Import attempts">
-      <%= if @runs == [] do %>
-        <.empty_state compact title="No import attempts yet." />
-      <% else %>
-        <.table id="catalog-import-runs-table" rows={@runs} row_accent={false}>
-          <:col :let={run} label="Status"><.import_run_status_badge status={run.status} /></:col>
-          <:col :let={run} label="Run" class="font-mono text-xs text-base-content/60">
-            {run.import_run_id}
-          </:col>
-          <:col :let={run} label="Actions" align={:right}>
-            <.button
-              variant={:ghost}
-              size={:xs}
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"
-              }
-            >
-              View run
-            </.button>
-          </:col>
-        </.table>
-      <% end %>
-    </.card>
-    """
+  defp navigation_dto(mission, database) do
+    %{
+      mission: %{
+        label: mission.display_name,
+        href: ~p"/missions/#{mission.mission_id}"
+      },
+      catalog: %{
+        label: "Catalog",
+        href: ~p"/missions/#{mission.mission_id}/catalog"
+      },
+      current: %{label: database.name}
+    }
   end
+
+  defp revision_dto(revision, mission_id) do
+    %{
+      id: "catalog-revision-row-#{revision.catalog_revision_id}",
+      revision_id: revision.catalog_revision_id,
+      label: revision.revision_label,
+      number: revision.revision_number,
+      mission_model_revision_id: revision.mission_model_revision_id,
+      href: ~p"/missions/#{mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
+    }
+  end
+
+  defp import_run_dto(run, mission_id) do
+    %{
+      id: "catalog-import-run-row-#{run.import_run_id}",
+      run_id: run.import_run_id,
+      status: import_status_dto(run.status),
+      href: ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
+    }
+  end
+
+  defp import_status_dto(status) do
+    %{
+      value: Atom.to_string(status),
+      label: import_status_label(status),
+      tone: import_status_tone(status)
+    }
+  end
+
+  defp import_status_label(:running), do: "Running"
+  defp import_status_label(:completed), do: "Completed"
+  defp import_status_label(:failed), do: "Failed"
+  defp import_status_label(status), do: status |> to_string() |> String.capitalize()
+
+  defp import_status_tone(:completed), do: "ready"
+  defp import_status_tone(:failed), do: "blocked"
+  defp import_status_tone(_status), do: "info"
 
   defp revision_metadata(form_params, fallback_label) do
     %{

@@ -1,0 +1,207 @@
+<script setup lang="ts">
+import StatusBadge from "./StatusBadge.vue"
+
+type NavigationItem = {
+  label: string
+  href: string
+}
+
+type Navigation = {
+  mission: NavigationItem
+  catalog: NavigationItem
+  current: {label: string}
+}
+
+type CatalogDatabase = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  runtime_usage_summary: string
+}
+
+type Revision = {
+  id: string
+  revision_id: string
+  label: string
+  number: number
+  mission_model_revision_id: string
+  href: string
+}
+
+type ImportRun = {
+  id: string
+  run_id: string
+  status: {
+    value: string
+    label: string
+    tone: "info" | "ready" | "blocked"
+  }
+  href: string
+}
+
+defineProps<{
+  database: CatalogDatabase
+  navigation: Navigation
+  revision_form_open: boolean
+  revisions: Revision[]
+  import_runs: ImportRun[]
+}>()
+
+const emit = defineEmits<{
+  "toggle-revision-form": [payload: Record<string, never>]
+}>()
+</script>
+
+<template>
+  <div id="catalog-database-show-surface" class="space-y-6">
+    <header class="border-b border-primary/20 pb-4">
+      <div class="flex items-end justify-between gap-4">
+        <div>
+          <nav
+            aria-label="Breadcrumb"
+            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+          >
+            <a
+              :href="navigation.mission.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="transition-colors hover:text-primary"
+              >{{ navigation.mission.label }}</a
+            >
+            <span class="text-base-content/20" aria-hidden="true">/</span>
+            <a
+              :href="navigation.catalog.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="transition-colors hover:text-primary"
+              >{{ navigation.catalog.label }}</a
+            >
+            <span class="text-base-content/20" aria-hidden="true">/</span>
+            <span class="text-primary/90">{{ navigation.current.label }}</span>
+          </nav>
+
+          <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
+            {{ database.name }}
+            <span class="ml-3 font-mono text-base text-base-content/60">{{ database.slug }}</span>
+          </h1>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            id="add-revision-toggle"
+            type="button"
+            class="btn"
+            :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
+            @click="emit('toggle-revision-form', {})"
+          >
+            {{ revision_form_open ? "Cancel" : "+ Add revision" }}
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section class="card border border-base-300 bg-base-200 lg:col-span-2">
+        <div class="card-body p-6">
+          <p class="hud-label">Database</p>
+          <p class="mt-2 text-sm text-base-content/70">{{ database.description }}</p>
+        </div>
+      </section>
+
+      <section class="card border border-base-300 bg-base-200">
+        <div class="card-body p-6">
+          <p class="hud-label">Runtime usage</p>
+          <p id="catalog-runtime-usage-summary" class="mt-2 text-sm text-base-content/60">
+            {{ database.runtime_usage_summary }}
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="revision_form_open" id="catalog-revision-upload-slot">
+      <slot name="revision_form" />
+    </div>
+
+    <section id="catalog-revision-history" class="card border border-base-300 bg-base-200">
+      <div class="card-body p-6">
+        <p class="hud-label">Revision history</p>
+        <p
+          v-if="revisions.length === 0"
+          id="catalog-revisions-empty-state"
+          class="text-sm text-base-content/60"
+        >
+          No revisions yet.
+        </p>
+        <table v-else id="catalog-revisions-table" class="table">
+          <thead>
+            <tr>
+              <th class="hud-label">Revision</th>
+              <th class="hud-label">Mission Model</th>
+              <th class="hud-label text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="catalog-revisions-table-body">
+            <tr v-for="revision in revisions" :id="revision.id" :key="revision.revision_id">
+              <td>
+                <p class="font-medium">{{ revision.label }}</p>
+                <p class="font-mono text-xs text-base-content/60">#{{ revision.number }}</p>
+              </td>
+              <td>
+                <span class="font-mono text-xs">{{ revision.mission_model_revision_id }}</span>
+              </td>
+              <td class="text-right">
+                <a
+                  :href="revision.href"
+                  data-phx-link="redirect"
+                  data-phx-link-state="push"
+                  class="btn btn-ghost btn-xs"
+                  >View revision</a
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="catalog-import-attempts" class="card border border-base-300 bg-base-200">
+      <div class="card-body p-6">
+        <p class="hud-label">Import attempts</p>
+        <p
+          v-if="import_runs.length === 0"
+          id="catalog-import-runs-empty-state"
+          class="text-sm text-base-content/60"
+        >
+          No import attempts yet.
+        </p>
+        <table v-else id="catalog-import-runs-table" class="table">
+          <thead>
+            <tr>
+              <th class="hud-label">Status</th>
+              <th class="hud-label">Run</th>
+              <th class="hud-label text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="catalog-import-runs-table-body">
+            <tr v-for="run in import_runs" :id="run.id" :key="run.run_id">
+              <td>
+                <StatusBadge :status="run.status.tone" :label="run.status.label" />
+              </td>
+              <td class="font-mono text-xs text-base-content/60">{{ run.run_id }}</td>
+              <td class="text-right">
+                <a
+                  :href="run.href"
+                  data-phx-link="redirect"
+                  data-phx-link-state="push"
+                  class="btn btn-ghost btn-xs"
+                  >View run</a
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</template>
