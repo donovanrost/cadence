@@ -229,7 +229,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       end)
 
       presentations =
-        (widget_warnings ++ standalone_warning_presentations(view))
+        (widget_warnings ++
+           get_in(dashboard_toolbar_data_health(view), ["panel", "body", "warnings"]))
         |> Enum.filter(fn warning ->
           warning["overlay"]["attrs"]["data-engine-warning-detail"] ==
             "unsupported_source_capability"
@@ -312,20 +313,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       {_name, _value} -> []
     end)
     |> Map.new()
-  end
-
-  defp standalone_warning_presentations(view) do
-    html = render(view)
-
-    html
-    |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([id^="widget-"][id*="-engine-warning-"][id$="-component"]))
-    |> LazyHTML.attribute("id")
-    |> Enum.map(fn id ->
-      html
-      |> LiveVue.Test.get_vue(id: id)
-      |> Map.fetch!(:props)
-      |> Map.fetch!("presentation")
-    end)
   end
 end

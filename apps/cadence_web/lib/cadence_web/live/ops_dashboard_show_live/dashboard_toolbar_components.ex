@@ -1137,24 +1137,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
   defp publish_readiness_issue_count(_validation), do: "0"
 
-  defp comparison_review_open_request_count(open_summary) do
-    open_summary
-    |> comparison_review_open_summary()
-    |> Map.fetch!(:count_text)
-  end
-
-  defp comparison_review_open_request_ids_attr(open_summary) do
-    open_summary
-    |> comparison_review_open_summary()
-    |> Map.fetch!(:request_ids_attr)
-  end
-
-  defp comparison_review_open_placements_attr(open_summary) do
-    open_summary
-    |> comparison_review_open_summary()
-    |> Map.fetch!(:placements_attr)
-  end
-
   defp comparison_review_open_summary(%{count: count, requests: requests} = open_summary)
        when is_integer(count) and is_list(requests) do
     open_summary

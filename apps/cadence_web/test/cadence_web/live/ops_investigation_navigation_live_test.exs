@@ -167,15 +167,6 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
     assert has_element?(diagnostics, "#dashboard-diagnostics-page")
   end
 
-  defp link_href(view, selector) do
-    view
-    |> render()
-    |> LazyHTML.from_fragment()
-    |> LazyHTML.query(selector)
-    |> LazyHTML.attribute("href")
-    |> List.first()
-  end
-
   defp action_href(actions, id) do
     actions
     |> Enum.find(&(&1["id"] == id))
