@@ -92,61 +92,163 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="catalog-artifact-show-page" class="space-y-6">
-        <.page_header
-          title={@artifact.artifact_name}
-          breadcrumbs={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
-            {@artifact.artifact_name, nil}
-          ]}
-        />
-
-        <.vue
-          id="catalog-artifact-show-component"
-          v-component="CatalogArtifactShow"
-          artifact={@artifact_show_props.artifact}
-          runs={@artifact_show_props.runs}
-          v-on:reimport={JS.push("reimport")}
-          v-ssr={false}
-        />
-      </div>
+      <.vue
+        id="catalog-artifact-show-page-component"
+        v-component="CatalogArtifactShowPage"
+        presentation={@catalog_artifact_show_presentation}
+        v-on:reimport={JS.push("reimport")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
   defp assign_runs(socket, runs) do
-    mission_id = socket.assigns.current_mission.mission_id
+    mission = socket.assigns.current_mission
     artifact = socket.assigns.artifact
 
     socket
     |> assign(:runs, runs)
-    |> assign(:artifact_show_props, artifact_show_props(artifact, runs, mission_id))
+    |> assign(
+      :catalog_artifact_show_presentation,
+      page_presentation_dto(mission, artifact, runs)
+    )
+  end
+
+  defp page_presentation_dto(mission, artifact, runs) do
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "catalog-artifact-show-page",
+            "class" => "space-y-6"
+          })
+      },
+      "header" => header_presentation(mission, artifact),
+      "child_wrapper" => %{
+        "attrs" => presentation_attrs(%{"id" => "catalog-artifact-show-component"})
+      },
+      "artifact_show" => artifact_show_props(artifact, runs, mission.mission_id)
+    }
+  end
+
+  defp header_presentation(mission, artifact) do
+    %{
+      "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+      "body" => %{"attrs" => presentation_attrs(%{"class" => false})},
+      "content" => %{"attrs" => presentation_attrs(%{})},
+      "breadcrumbs" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "aria-label" => "Breadcrumb",
+            "class" =>
+              "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+          }),
+        "items" => [
+          breadcrumb_link(
+            "mission",
+            mission.display_name,
+            ~p"/missions/#{mission.mission_id}",
+            nil
+          ),
+          breadcrumb_link(
+            "catalog",
+            "Catalog",
+            ~p"/missions/#{mission.mission_id}/catalog",
+            breadcrumb_separator()
+          ),
+          %{
+            "key" => "artifact",
+            "separator" => breadcrumb_separator(),
+            "link" => nil,
+            "current" => %{
+              "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+              "text" => artifact.artifact_name
+            }
+          }
+        ]
+      },
+      "title" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+          }),
+        "text" => artifact.artifact_name
+      }
+    }
+  end
+
+  defp breadcrumb_link(key, text, href, separator) do
+    %{
+      "key" => key,
+      "separator" => separator,
+      "link" => %{
+        "attrs" => navigate_attrs(href, %{"class" => "hover:text-primary transition-colors"}),
+        "text" => text
+      },
+      "current" => nil
+    }
+  end
+
+  defp breadcrumb_separator do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "text-base-content/20",
+          "aria-hidden" => "true"
+        }),
+      "text" => "/"
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp artifact_show_props(artifact, runs, mission_id) do
     %{
-      artifact: %{
-        format_key: artifact.format_key,
-        media_type: artifact.media_type || "—",
-        content_sha256: artifact.content_sha256,
-        uploaded_at: Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC"),
-        download_href:
+      "artifact" => %{
+        "format_key" => artifact.format_key,
+        "media_type" => artifact.media_type || "—",
+        "content_sha256" => artifact.content_sha256,
+        "uploaded_at" => Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC"),
+        "download_href" =>
           ~p"/missions/#{mission_id}/catalog/artifacts/#{artifact.artifact_id}/download"
       },
-      runs: Enum.map(runs, &run_dto(&1, mission_id))
+      "runs" => Enum.map(runs, &run_dto(&1, mission_id))
     }
   end
 
   defp run_dto(run, mission_id) do
     %{
-      id: "catalog-artifact-run-#{run.import_run_id}",
-      actions_id: "#{run.import_run_id}-actions",
-      status: status_tone(run.status),
-      status_label: status_label(run.status),
-      started_at: Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S"),
-      completed_at: completed_at(run.completed_at),
-      href: ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
+      "id" => "catalog-artifact-run-#{run.import_run_id}",
+      "actions_id" => "#{run.import_run_id}-actions",
+      "status" => status_tone(run.status),
+      "status_label" => status_label(run.status),
+      "started_at" => Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S"),
+      "completed_at" => completed_at(run.completed_at),
+      "href" => ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
     }
   end
 

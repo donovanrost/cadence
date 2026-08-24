@@ -8,7 +8,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{CatalogArtifactShowLive, TestFixtures}
   alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
@@ -20,12 +20,12 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
   end
 
   defp artifact_show_vue(view) do
-    assert has_element?(view, "#catalog-artifact-show-page")
-    assert has_element?(view, "#catalog-artifact-show-component")
+    assert has_element?(view, "#catalog-artifact-show-page-component")
+    assert has_element?(view, "#catalog-artifact-show-page-component.contents")
 
-    vue = LiveVue.Test.get_vue(view, id: "catalog-artifact-show-component")
+    vue = LiveVue.Test.get_vue(view, id: "catalog-artifact-show-page-component")
 
-    assert vue.component == "CatalogArtifactShow"
+    assert vue.component == "CatalogArtifactShowPage"
     assert vue.ssr == false
     assert is_binary(Jason.encode!(vue.props))
 
@@ -44,11 +44,11 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
         ~p"/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}"
       )
 
-    assert has_element?(view, "#catalog-artifact-show-page", "mission.yaml")
+    assert artifact_show_presentation(view)["header"]["title"]["text"] == "mission.yaml"
 
     vue = artifact_show_vue(view)
 
-    assert vue.props == %{
+    assert vue.props["presentation"]["artifact_show"] == %{
              "artifact" => %{
                "format_key" => artifact.format_key,
                "media_type" => artifact.media_type,
@@ -82,7 +82,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
         ~p"/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}"
       )
 
-    props = artifact_show_vue(view).props
+    props = artifact_show_presentation(view)["artifact_show"]
 
     assert props["artifact"]["media_type"] == "—"
     assert props["runs"] == []
@@ -101,7 +101,10 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
     vue = artifact_show_vue(view)
     assert vue.handlers == %{"reimport" => JS.push("reimport")}
 
-    result = render_click(view, "reimport", %{})
+    result =
+      view
+      |> element("#catalog-artifact-show-page-component")
+      |> render_hook("reimport", %{})
 
     assert {:error, {:live_redirect, %{to: to}}} = result
     assert to =~ ~r"/catalog/imports/"
@@ -121,12 +124,12 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
       )
 
     assert [%{"status" => "info", "status_label" => "Running"}] =
-             artifact_show_vue(view).props["runs"]
+             artifact_show_presentation(view)["artifact_show"]["runs"]
 
     completed = TestFixtures.complete_catalog_import_run!(run)
     _ = render(view)
 
-    assert [completed_props] = artifact_show_vue(view).props["runs"]
+    assert [completed_props] = artifact_show_presentation(view)["artifact_show"]["runs"]
     assert completed_props["status"] == "ready"
     assert completed_props["status_label"] == "Completed"
 
@@ -137,7 +140,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
     send(view.pid, {:import_run_started, other_run})
     _ = render(view)
 
-    assert Enum.map(artifact_show_vue(view).props["runs"], & &1["id"]) == [
+    assert Enum.map(artifact_show_presentation(view)["artifact_show"]["runs"], & &1["id"]) == [
              "catalog-artifact-run-#{completed.import_run_id}"
            ]
   end
@@ -166,4 +169,126 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
     assert to == ~p"/missions/#{mission.mission_id}/catalog"
     assert flash["error"] == "Artifact not found."
   end
+
+  test "projects the complete page through one JSON-safe non-SSR parent host" do
+    {conn, _org, mission} = signed_in_org_and_mission()
+    artifact = TestFixtures.persist_catalog_artifact!(mission, artifact_name: "mission.yaml")
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}"
+      )
+
+    vue = artifact_show_vue(view)
+
+    assert vue.class == "contents"
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.handlers == %{"reimport" => JS.push("reimport")}
+
+    presentation = vue.props["presentation"]
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
+
+    assert presentation["root"] == %{
+             "attrs" => %{
+               "class" => "space-y-6",
+               "id" => "catalog-artifact-show-page"
+             }
+           }
+
+    assert presentation["header"] == %{
+             "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
+             "body" => %{"attrs" => %{}},
+             "content" => %{"attrs" => %{}},
+             "breadcrumbs" => %{
+               "attrs" => %{
+                 "aria-label" => "Breadcrumb",
+                 "class" =>
+                   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+               },
+               "items" => [
+                 %{
+                   "key" => "mission",
+                   "separator" => nil,
+                   "link" => %{
+                     "attrs" => %{
+                       "class" => "hover:text-primary transition-colors",
+                       "data-phx-link" => "redirect",
+                       "data-phx-link-state" => "push",
+                       "href" => "/missions/#{mission.mission_id}"
+                     },
+                     "text" => mission.display_name
+                   },
+                   "current" => nil
+                 },
+                 %{
+                   "key" => "catalog",
+                   "separator" => %{
+                     "attrs" => %{
+                       "aria-hidden" => "true",
+                       "class" => "text-base-content/20"
+                     },
+                     "text" => "/"
+                   },
+                   "link" => %{
+                     "attrs" => %{
+                       "class" => "hover:text-primary transition-colors",
+                       "data-phx-link" => "redirect",
+                       "data-phx-link-state" => "push",
+                       "href" => "/missions/#{mission.mission_id}/catalog"
+                     },
+                     "text" => "Catalog"
+                   },
+                   "current" => nil
+                 },
+                 %{
+                   "key" => "artifact",
+                   "separator" => %{
+                     "attrs" => %{
+                       "aria-hidden" => "true",
+                       "class" => "text-base-content/20"
+                     },
+                     "text" => "/"
+                   },
+                   "link" => nil,
+                   "current" => %{
+                     "attrs" => %{"class" => "text-primary/90"},
+                     "text" => "mission.yaml"
+                   }
+                 }
+               ]
+             },
+             "title" => %{
+               "attrs" => %{
+                 "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+               },
+               "text" => "mission.yaml"
+             }
+           }
+
+    assert presentation["child_wrapper"] == %{
+             "attrs" => %{"id" => "catalog-artifact-show-component"}
+           }
+  end
+
+  test "raw attrs preserve HEEx nil false true empty string string and number semantics" do
+    attrs =
+      CatalogArtifactShowLive.presentation_attrs(%{
+        "nil" => nil,
+        "false" => false,
+        "true" => true,
+        "empty" => "",
+        "string" => "retained",
+        "number" => 7
+      })
+
+    assert attrs == %{
+             "true" => "",
+             "empty" => "",
+             "string" => "retained",
+             "number" => "7"
+           }
+  end
+
+  defp artifact_show_presentation(view), do: artifact_show_vue(view).props["presentation"]
 end
