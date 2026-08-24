@@ -6,12 +6,18 @@ import vm from "node:vm"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-async function loadHook(path, replacements = [], context = {}) {
+async function loadControllerSfc(path, replacements = [], context = {}, exposure = "") {
   const source = await readFile(path, "utf8")
+  const script = source.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
+  const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+  assert.ok(script, `${path} must have a script setup block`)
+  assert.ok(template, `${path} must have a template block`)
+
   const testableSource = replacements.reduce(
     (nextSource, [from, to]) => nextSource.replace(from, to),
-    source
-  )
+    script
+  ) + exposure
 
   const vmContext = {
     console,
@@ -23,7 +29,7 @@ async function loadHook(path, replacements = [], context = {}) {
 
   vm.createContext(vmContext)
   vm.runInContext(testableSource, vmContext, { filename: path })
-  return vmContext
+  return {...vmContext, template}
 }
 
 function classList(...initialClasses) {
@@ -44,8 +50,14 @@ function classList(...initialClasses) {
 }
 
 {
-  const gridPath = resolve(__dirname, "../js/hooks/dashboard_grid.js")
+  const gridPath = resolve(__dirname, "../vue/DashboardGrid.vue")
   const gridCalls = []
+  const timerCallbacks = new Map()
+  const timerDelays = new Map()
+  let nextTimerId = 0
+  let mountedCallback
+  let updatedCallback
+  let unmountedCallback
   const connectedNode = {
     x: 2,
     y: 3,
@@ -93,14 +105,34 @@ function classList(...initialClasses) {
     destroy(removeDom) {
       gridCalls.push(["destroy", removeDom])
     },
+    onResize() {
+      gridCalls.push(["onResize"])
+    },
+  }
+
+  const sectionListeners = new Map()
+  const sectionDetails = {
+    open: false,
+    addEventListener(type, listener) {
+      sectionListeners.set(type, listener)
+    },
+    removeEventListener(type, listener) {
+      assert.equal(sectionListeners.get(type), listener)
+      sectionListeners.delete(type)
+    },
   }
 
   const gridElement = {
     dataset: { editMode: "false" },
     classList: classList("grid-stack-static"),
+    gestureActive: false,
+    closest(selector) {
+      assert.equal(selector, "details[data-dashboard-section]")
+      return sectionDetails
+    },
     querySelector(selector) {
       assert.equal(selector, ".ui-draggable-dragging, .ui-resizable-resizing")
-      return null
+      return this.gestureActive ? {} : null
     },
     querySelectorAll(selector) {
       assert.equal(selector, ":scope > .grid-stack-item")
@@ -118,37 +150,86 @@ function classList(...initialClasses) {
     },
   }
 
-  const context = await loadHook(
+  const props = {target_id: "dashboard-grid-alpha", edit_mode: false, item_ids: ["widget-alpha"]}
+  const emittedEvents = []
+  const context = await loadControllerSfc(
     gridPath,
-    [[
-      'import GridStack from "../../vendor/gridstack/gridstack-all"\n',
-      "const GridStack = globalThis.GridStack\n",
-    ], ["export default DashboardGrid", "globalThis.DashboardGrid = DashboardGrid"]],
+    [
+      [
+        'import {onBeforeUnmount, onMounted, onUpdated} from "vue"\n',
+        "const {onBeforeUnmount, onMounted, onUpdated} = globalThis.Vue\n",
+      ],
+      [
+        'import GridStack from "../vendor/gridstack/gridstack-all"\n',
+        "const GridStack = globalThis.GridStack\n",
+      ],
+    ],
     {
+      defineProps(definition) {
+        assert.equal(definition.target_id.required, true)
+        assert.equal(definition.edit_mode.default, false)
+        assert.equal(definition.item_ids.type.name, "Array")
+        return props
+      },
+      defineEmits(names) {
+        assert.equal(Array.from(names).join(","), "layout_changed")
+        return (event, payload) => emittedEvents.push([event, payload])
+      },
+      document: {
+        getElementById(id) {
+          assert.equal(id, props.target_id)
+          return gridElement
+        },
+      },
       GridStack: {
         init(options, el) {
           gridCalls.push(["init", options.staticGrid, options.resizable.handles, el === gridElement])
           return fakeGrid
         },
       },
-    }
+      requestAnimationFrame: (callback) => callback(),
+      setTimeout(callback, delay) {
+        const id = ++nextTimerId
+        timerCallbacks.set(id, callback)
+        timerDelays.set(id, delay)
+        return id
+      },
+      clearTimeout(id) {
+        timerCallbacks.delete(id)
+        timerDelays.delete(id)
+      },
+      Vue: {
+        onMounted: (callback) => { mountedCallback = callback },
+        onUpdated: (callback) => { updatedCallback = callback },
+        onBeforeUnmount: (callback) => { unmountedCallback = callback },
+      },
+    },
+    "\nglobalThis.DashboardGridTest = {DashboardGridController, getController: () => controller}"
   )
 
-  const pushedEvents = []
-  const hook = Object.assign(Object.create(context.DashboardGrid), {
-    el: gridElement,
-    pushEvent: (event, payload) => pushedEvents.push([event, payload]),
-  })
+  assert.match(context.template, /data-dashboard-grid-controller/)
+  assert.equal(typeof mountedCallback, "function")
+  assert.equal(typeof updatedCallback, "function")
+  assert.equal(typeof unmountedCallback, "function")
 
-  hook.mounted()
+  mountedCallback()
+  const controller = context.DashboardGridTest.getController()
 
   assert.deepEqual(gridCalls.slice(0, 2), [
     ["init", true, "e, se, s", true],
     ["on", "change"],
   ])
+  assert.equal(typeof sectionListeners.get("toggle"), "function")
 
+  gridElement.gestureActive = true
+  const callsBeforeGestureUpdate = gridCalls.length
+  updatedCallback()
+  assert.equal(gridCalls.length, callsBeforeGestureUpdate)
+  gridElement.gestureActive = false
+
+  props.edit_mode = true
   gridElement.dataset.editMode = "true"
-  hook.updated()
+  updatedCallback()
 
   assert.deepEqual(gridCalls.slice(2, 6), [
     ["makeWidget", "widget-new"],
@@ -163,9 +244,9 @@ function classList(...initialClasses) {
     ["float", false],
   ])
 
-  hook.flushLayout()
+  controller.flushLayout()
 
-  assert.deepEqual(JSON.parse(JSON.stringify(pushedEvents)), [
+  assert.deepEqual(JSON.parse(JSON.stringify(emittedEvents)), [
     [
       "layout_changed",
       {
@@ -182,8 +263,23 @@ function classList(...initialClasses) {
     ],
   ])
 
+  fakeGrid.changeHandler()
+  const scheduledTimerId = nextTimerId
+  assert.equal(timerDelays.get(scheduledTimerId), 400)
+  timerCallbacks.get(scheduledTimerId)()
+  assert.equal(emittedEvents.length, 2)
+
+  sectionListeners.get("toggle")()
+  assert.equal(gridCalls.some(([name]) => name === "onResize"), false)
+  sectionDetails.open = true
+  fakeGrid.prevWidth = 720
+  sectionListeners.get("toggle")()
+  assert.equal(fakeGrid.prevWidth, undefined)
+  assert.deepEqual(gridCalls.at(-1), ["onResize"])
+
+  props.edit_mode = false
   gridElement.dataset.editMode = "false"
-  hook.updated()
+  updatedCallback()
 
   // Exiting edit restores float(true) before re-freezing the grid so view
   // mode keeps the server's exact gs-* positions.
@@ -192,27 +288,43 @@ function classList(...initialClasses) {
     ["setStatic", true],
   ])
 
-  hook.destroyed()
+  unmountedCallback()
   assert.deepEqual(gridCalls.at(-1), ["destroy", false])
+  assert.equal(sectionListeners.size, 0)
+  assert.equal(context.DashboardGridTest.getController(), null)
 }
 
 {
-  const editorGuardPath = resolve(__dirname, "../js/hooks/dashboard_editor_guard.js")
+  const editorGuardPath = resolve(__dirname, "../vue/DashboardEditorGuard.vue")
   const windowListeners = new Map()
   const documentListeners = new Map()
   let confirmResult = false
+  let confirmationText = null
+  let mountedCallback
+  let unmountedCallback
+  const props = {editor_dirty: false}
 
-  const context = await loadHook(
+  const context = await loadControllerSfc(
     editorGuardPath,
-    [["export default DashboardEditorGuard", "globalThis.DashboardEditorGuard = DashboardEditorGuard"]],
+    [[
+      'import {onBeforeUnmount, onMounted} from "vue"\n',
+      "const {onBeforeUnmount, onMounted} = globalThis.Vue\n",
+    ]],
     {
+      defineProps(definition) {
+        assert.equal(definition.editor_dirty.default, false)
+        return props
+      },
       window: {
         addEventListener: (type, listener) => windowListeners.set(type, listener),
         removeEventListener: (type, listener) => {
           assert.equal(windowListeners.get(type), listener)
           windowListeners.delete(type)
         },
-        confirm: () => confirmResult,
+        confirm: (text) => {
+          confirmationText = text
+          return confirmResult
+        },
       },
       document: {
         addEventListener: (type, listener, capture) => {
@@ -225,18 +337,24 @@ function classList(...initialClasses) {
           documentListeners.delete(type)
         },
       },
-    }
+      Vue: {
+        onMounted: (callback) => { mountedCallback = callback },
+        onBeforeUnmount: (callback) => { unmountedCallback = callback },
+      },
+    },
+    "\nglobalThis.DashboardEditorGuardTest = {DashboardEditorGuardController, getController: () => controller}"
   )
 
-  const el = {dataset: {editorDirty: "false"}}
-  const hook = Object.assign(Object.create(context.DashboardEditorGuard), {el})
-  hook.mounted()
+  assert.match(context.template, /data-dashboard-editor-guard/)
+  assert.equal(typeof mountedCallback, "function")
+  assert.equal(typeof unmountedCallback, "function")
+  mountedCallback()
 
   const cleanUnload = {preventDefault() { this.prevented = true }}
   windowListeners.get("beforeunload")(cleanUnload)
   assert.equal(cleanUnload.prevented, undefined)
 
-  el.dataset.editorDirty = "true"
+  props.editor_dirty = true
   const dirtyUnload = {preventDefault() { this.prevented = true }}
   windowListeners.get("beforeunload")(dirtyUnload)
   assert.equal(dirtyUnload.prevented, true)
@@ -255,6 +373,25 @@ function classList(...initialClasses) {
   documentListeners.get("click")(click)
   assert.equal(click.prevented, true)
   assert.equal(click.stopped, true)
+  assert.equal(confirmationText, "Discard unsaved dashboard changes and leave the Editor?")
+
+  for (const exemptAnchor of [
+    null,
+    {target: "", hasAttribute: (name) => name === "data-editor-discard"},
+    {target: "_blank", hasAttribute: () => false},
+    {target: "", hasAttribute: (name) => name === "download"},
+  ]) {
+    const exemptClick = {
+      target: {closest: () => exemptAnchor},
+      preventDefault() { this.prevented = true },
+      stopImmediatePropagation() { this.stopped = true },
+    }
+    confirmationText = null
+    documentListeners.get("click")(exemptClick)
+    assert.equal(exemptClick.prevented, undefined)
+    assert.equal(exemptClick.stopped, undefined)
+    assert.equal(confirmationText, null)
+  }
 
   confirmResult = true
   const confirmedClick = {
@@ -265,9 +402,10 @@ function classList(...initialClasses) {
   documentListeners.get("click")(confirmedClick)
   assert.equal(confirmedClick.prevented, undefined)
 
-  hook.destroyed()
+  unmountedCallback()
   assert.equal(windowListeners.size, 0)
   assert.equal(documentListeners.size, 0)
+  assert.equal(context.DashboardEditorGuardTest.getController(), null)
 }
 
 {

@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Assets.DashboardHooksSmokeTest do
   use ExUnit.Case, async: true
 
-  test "dashboard browser-adjacent hooks preserve copy and grid contracts" do
+  test "dashboard browser-adjacent controllers preserve guard, grid, and recents contracts" do
     app_root = Path.expand("../../..", __DIR__)
     script = Path.join(app_root, "assets/test/dashboard_hooks_smoke_test.mjs")
 

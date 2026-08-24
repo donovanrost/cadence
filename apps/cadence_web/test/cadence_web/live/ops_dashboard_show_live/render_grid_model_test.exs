@@ -14,7 +14,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModelTest do
 
     assert props == %{
              id: "dashboard-grid-dashboard-1",
-             "phx-hook": "DashboardGrid",
+             "data-dashboard-grid": "true",
              "data-edit-mode": "true",
              class: "grid-stack gs-12"
            }
@@ -71,5 +71,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModelTest do
     assert power.open?
     refute comms.open?
     assert power.grid_props.id == "dashboard-grid-dashboard-1-power"
+
+    assert power.grid_controller_props == %{
+             id: "dashboard-grid-dashboard-1-power-controller",
+             target_id: "dashboard-grid-dashboard-1-power",
+             edit_mode: false,
+             item_ids: ["power-1"]
+           }
   end
 end

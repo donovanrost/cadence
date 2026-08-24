@@ -348,12 +348,12 @@ function viewportProfile(name) {
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
           document.querySelector("[data-telemetry-chart] .uplot") &&
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
         )
       `,
       readyTimeoutMs: 20_000,
       requireLiveSocket: true,
-      requireDashboardGridHook: true,
+      requireDashboardGridController: true,
       requireCopyClick: true,
       requireSelectedDataLinkCopyPayload: true,
       requireLiveInteractions: true,
@@ -394,7 +394,7 @@ function viewportProfile(name) {
       copyClickSelector: null,
       readyExpression: null,
       requireLiveSocket: false,
-      requireDashboardGridHook: false,
+      requireDashboardGridController: false,
       requireCopyClick: false,
       requireSelectedDataLinkCopyPayload: true,
       requireLiveInteractions: false,
@@ -434,7 +434,7 @@ function viewportProfile(name) {
         )
       `,
       requireLiveSocket: true,
-      requireDashboardGridHook: false,
+      requireDashboardGridController: false,
       requireCopyClick: false,
       requireSelectedDataLinkCopyPayload: false,
       requireLiveInteractions: false,
@@ -454,7 +454,7 @@ function viewportProfile(name) {
     copyClickSelector: null,
     readyExpression: null,
     requireLiveSocket: false,
-    requireDashboardGridHook: false,
+    requireDashboardGridController: false,
     requireCopyClick: false,
     requireSelectedDataLinkCopyPayload: false,
     requireLiveInteractions: false,
@@ -1165,7 +1165,7 @@ async function profileReadinessDiagnostics(client) {
         gridStyle: document.querySelector(".grid-stack")?.getAttribute("style"),
         gridCurrentRow: document.querySelector(".grid-stack")?.getAttribute("gs-current-row"),
         gridHasInstanceClass: Boolean(
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
         )
       }))()
     `,
@@ -1186,7 +1186,7 @@ async function evaluateViewport(client, viewport, profile) {
   const textSelector = JSON.stringify(profile.textSelector)
   const checkVerticalTextOverflow = JSON.stringify(profile.checkVerticalTextOverflow)
   const requireLiveSocket = JSON.stringify(profile.requireLiveSocket)
-  const requireDashboardGridHook = JSON.stringify(profile.requireDashboardGridHook)
+  const requireDashboardGridController = JSON.stringify(profile.requireDashboardGridController)
   const requireCopyClick = JSON.stringify(profile.requireCopyClick)
   const requireSelectedDataLinkCopyPayload = JSON.stringify(profile.requireSelectedDataLinkCopyPayload)
 
@@ -1202,7 +1202,7 @@ async function evaluateViewport(client, viewport, profile) {
       const textSelector = ${textSelector}
       const checkVerticalTextOverflow = ${checkVerticalTextOverflow}
       const requireLiveSocket = ${requireLiveSocket}
-      const requireDashboardGridHook = ${requireDashboardGridHook}
+      const requireDashboardGridController = ${requireDashboardGridController}
       const requireCopyClick = ${requireCopyClick}
       const requireSelectedDataLinkCopyPayload = ${requireSelectedDataLinkCopyPayload}
 
@@ -1337,14 +1337,14 @@ async function evaluateViewport(client, viewport, profile) {
         overlapping,
         textOverflow,
         liveSocketConnected: Boolean(window.liveSocket && window.liveSocket.isConnected && window.liveSocket.isConnected()),
-        dashboardGridHookMounted: Boolean(
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+        dashboardGridControllerMounted: Boolean(
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
         ),
         copyClickSucceeded: Boolean(copyButton && copyButton.dataset.clipboardCopied === "true"),
         dataLinkCopyPayload: clipboardPayload("#dashboard-data-link-copy-link"),
         evidenceCopyPayload: clipboardPayload("#dashboard-evidence-copy-link"),
         requireLiveSocket,
-        requireDashboardGridHook,
+        requireDashboardGridController,
         requireCopyClick,
         requireSelectedDataLinkCopyPayload
       }
@@ -1381,8 +1381,8 @@ function assertViewport(result) {
     assert.equal(result.liveSocketConnected, true, `${result.name} should have a connected LiveSocket`)
   }
 
-  if (result.requireDashboardGridHook) {
-    assert.equal(result.dashboardGridHookMounted, true, `${result.name} should mount DashboardGrid`)
+  if (result.requireDashboardGridController) {
+    assert.equal(result.dashboardGridControllerMounted, true, `${result.name} should mount DashboardGrid`)
   }
 
   if (result.requireCopyClick) {
@@ -2125,10 +2125,10 @@ async function runLiveDashboardInteractions(client, url, profile) {
       Boolean(
         window.location.pathname.endsWith("/edit") &&
         document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "true" &&
-        document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "true" &&
+        document.querySelector("[data-dashboard-grid]")?.dataset.editMode === "true" &&
         (
-          document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item")?.classList.contains("ui-draggable") ||
-          document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item .ui-resizable-handle")
+          document.querySelector("[data-dashboard-grid] .grid-stack-item")?.classList.contains("ui-draggable") ||
+          document.querySelector("[data-dashboard-grid] .grid-stack-item .ui-resizable-handle")
         )
       )
     `,
@@ -2139,7 +2139,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
   const editEnteredResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const grid = document.querySelector("[phx-hook='DashboardGrid']")
+        const grid = document.querySelector("[data-dashboard-grid]")
         const firstItem = grid?.querySelector(".grid-stack-item")
 
         return {
@@ -2154,7 +2154,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
   const layoutMutationResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const gridEl = document.querySelector("[phx-hook='DashboardGrid']")
+        const gridEl = document.querySelector("[data-dashboard-grid]")
         const grid = gridEl?.gridstack
         const item = gridEl?.querySelector(".grid-stack-item")
         const node = item?.gridstackNode
@@ -2244,9 +2244,9 @@ async function runLiveDashboardInteractions(client, url, profile) {
       Boolean(
         !window.location.pathname.endsWith("/edit") &&
         document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "false" &&
-        document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "false" &&
-        !document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item")?.classList.contains("ui-draggable") &&
-        !document.querySelector("[phx-hook='DashboardGrid'] .grid-stack-item .ui-resizable-handle")
+        document.querySelector("[data-dashboard-grid]")?.dataset.editMode === "false" &&
+        !document.querySelector("[data-dashboard-grid] .grid-stack-item")?.classList.contains("ui-draggable") &&
+        !document.querySelector("[data-dashboard-grid] .grid-stack-item .ui-resizable-handle")
       )
     `,
     3_000,
@@ -2399,7 +2399,7 @@ async function runRuntimeContextBatchInspection(client, _profile, config) {
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
         document.querySelector("#context-search") &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
       )
     `,
     10_000,
@@ -2618,7 +2618,7 @@ async function inspectRepeatRenderItems(client) {
           return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
         }
 
-        const grid = document.querySelector("[phx-hook='DashboardGrid']")
+        const grid = document.querySelector("[data-dashboard-grid]")
         const items = Array.from(grid?.querySelectorAll(".grid-stack-item") || [])
         const repeatItems = items
           .filter((item) => (item.getAttribute("gs-id") || "").includes("__repeat__spacecraft__"))
@@ -2690,7 +2690,7 @@ async function runRepeatRenderInspection(client, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
   await waitForExpression(
     client,
-    `document.querySelectorAll("[phx-hook='DashboardGrid'] .grid-stack-item[gs-id*='__repeat__spacecraft__']").length >= ${expectedCount}`,
+    `document.querySelectorAll("[data-dashboard-grid] .grid-stack-item[gs-id*='__repeat__spacecraft__']").length >= ${expectedCount}`,
     5_000,
     "repeated dashboard render items"
   )
@@ -2705,7 +2705,7 @@ async function runRepeatRenderInspection(client, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
   await waitForExpression(
     client,
-    `document.querySelectorAll("[phx-hook='DashboardGrid'] .grid-stack-item[gs-id*='__repeat__spacecraft__']").length >= ${expectedCount}`,
+    `document.querySelectorAll("[data-dashboard-grid] .grid-stack-item[gs-id*='__repeat__spacecraft__']").length >= ${expectedCount}`,
     5_000,
     "repeated dashboard render items after reload"
   )
@@ -2724,8 +2724,8 @@ async function runRepeatRenderInspection(client, profile) {
       Boolean(
         window.location.pathname.endsWith("/edit") &&
         document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardEditor === "true" &&
-        document.querySelector("[phx-hook='DashboardGrid']")?.dataset.editMode === "true" &&
-        Array.from(document.querySelectorAll("[phx-hook='DashboardGrid'] .grid-stack-item[gs-id*='__repeat__spacecraft__']"))
+        document.querySelector("[data-dashboard-grid]")?.dataset.editMode === "true" &&
+        Array.from(document.querySelectorAll("[data-dashboard-grid] .grid-stack-item[gs-id*='__repeat__spacecraft__']"))
           .every((item) => item.gridstackNode && (item.classList.contains("ui-draggable") || item.querySelector(".ui-resizable-handle")))
       )
     `,
@@ -2762,7 +2762,7 @@ async function runSourceEndpointNoDataInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -3091,7 +3091,7 @@ async function runContactNoDataInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -3367,7 +3367,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -3688,7 +3688,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -4074,7 +4074,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -4365,7 +4365,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -4667,7 +4667,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -4939,7 +4939,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -5230,7 +5230,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -5532,7 +5532,7 @@ async function runSourceEndpointOperationalResourceInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -5815,7 +5815,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -6245,7 +6245,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -6685,7 +6685,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -7049,7 +7049,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -7430,7 +7430,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -7686,7 +7686,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -7987,7 +7987,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page") &&
         document.querySelector("[data-telemetry-chart][data-placement-id='${placementId}'] .uplot")
       )
@@ -8823,7 +8823,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -9496,7 +9496,7 @@ async function runStaleOperationalDataTableIngressLatencyInspection(client, prof
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -9781,7 +9781,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -10061,7 +10061,7 @@ async function runEmptyTelemetryValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -10268,7 +10268,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -10521,7 +10521,7 @@ async function runFreshTelemetryValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -10722,7 +10722,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -11002,7 +11002,7 @@ async function runSourceUnavailableTelemetryRowWidgetsInspection(client, profile
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -11250,7 +11250,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
         document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
@@ -11509,7 +11509,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)})
       )
     `,
@@ -11722,7 +11722,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
         document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
@@ -12049,7 +12049,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
         document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
@@ -12375,7 +12375,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
         document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
@@ -12726,7 +12726,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)}) &&
         document.querySelector(${JSON.stringify(widgetSelector)} + " [data-telemetry-chart]")
       )
@@ -13137,7 +13137,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)})
       )
     `,
@@ -13352,7 +13352,7 @@ async function runGroundStationOperationalResourceInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -13685,7 +13685,7 @@ async function runLinkOperationalResourceInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -14257,7 +14257,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -15267,7 +15267,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -15861,7 +15861,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -17307,7 +17307,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -17768,7 +17768,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page") &&
         document.querySelectorAll("[data-telemetry-chart]").length >= 2 &&
         document.querySelectorAll("[data-telemetry-chart] .uplot").length >= 2
@@ -19723,7 +19723,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
           window.liveSocket &&
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
           widget &&
           chart &&
           returnedSeries?.points?.length > 0 &&
@@ -20007,7 +20007,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
           window.liveSocket &&
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
           document.querySelector("#ops-dashboard-show-page") &&
           readyWidget("placement-rf-snr-history") &&
           readyWidget("placement-rf-ebn0-history") &&
@@ -20539,7 +20539,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector(${JSON.stringify(widgetSelector)})
       )
     `,
@@ -20836,7 +20836,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -22355,7 +22355,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -22770,7 +22770,7 @@ async function runOperationalUnsupportedScopeValueTileInspection(client, profile
           window.liveSocket &&
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeKind === "mission" &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeId === missionId &&
           warnings?.dataset.dashboardDataIssueCodes?.split(",").includes("unsupported_observable_scope") &&
@@ -22896,7 +22896,7 @@ async function runOperationalUnsupportedScopeTimeSeriesInspection(client, profil
           window.liveSocket &&
           window.liveSocket.isConnected &&
           window.liveSocket.isConnected() &&
-          document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+          document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeKind === "mission" &&
           document.querySelector("#ops-dashboard-show-page")?.dataset.dashboardScopeId === missionId &&
           warnings?.dataset.dashboardDataIssueCodes?.split(",").includes("unsupported_observable_scope") &&
@@ -23033,7 +23033,7 @@ async function runOperationalRfMetricValueTileInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -23373,7 +23373,7 @@ async function runOperationalMetricMissingSnapshotValueTileInspection(client, pr
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#ops-dashboard-show-page")
       )
     `,
@@ -23708,7 +23708,7 @@ async function runOperationalSourceProductReadinessInspection(client, profile) {
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
         document.querySelector("#ops-dashboard-show-page") &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
       )
     `,
     10_000,
@@ -23930,7 +23930,7 @@ async function runOperationalSourceProductRuntimeInspection(client, profile) {
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
         document.querySelector("#ops-dashboard-show-page") &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
       )
     `,
     10_000,
@@ -24011,7 +24011,7 @@ async function runLegacyOperationalSourceProductRuntimeInspection(client, profil
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
         document.querySelector("#ops-dashboard-show-page") &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']")
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']")
       )
     `,
     10_000,
@@ -24188,7 +24188,7 @@ async function runReplayControlsInspection(client, profile, options = {}) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("#runtime-context-controls")
       )
     `,
@@ -24390,7 +24390,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("[data-event-timeline]")
       )
     `,
@@ -24694,7 +24694,7 @@ async function runReplayContactIntervalInspection(client, profile) {
         window.liveSocket &&
         window.liveSocket.isConnected &&
         window.liveSocket.isConnected() &&
-        document.querySelector("[phx-hook='DashboardGrid'].grid-stack[class*='gs-id-']") &&
+        document.querySelector("[data-dashboard-grid].grid-stack[class*='gs-id-']") &&
         document.querySelector("[data-event-timeline]")
       )
     `,

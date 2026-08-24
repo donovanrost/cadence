@@ -4,16 +4,12 @@ import {LiveSocket} from "phoenix_live_view"
 import {getHooks} from "live_vue"
 import liveVueApp from "../vue"
 import {createLiveToastHook} from "../../deps/live_toast"
-import DashboardGrid from "./hooks/dashboard_grid"
-import DashboardEditorGuard from "./hooks/dashboard_editor_guard"
 import DropdownMenu from "./hooks/dropdown_menu"
 import NavRail from "./hooks/nav_rail"
 import Overlay from "./hooks/overlay"
 import ResizablePanel from "./hooks/resizable_panel"
 
 const Hooks = {
-  DashboardGrid,
-  DashboardEditorGuard,
   DropdownMenu,
   LiveToast: createLiveToastHook(),
   NavRail,

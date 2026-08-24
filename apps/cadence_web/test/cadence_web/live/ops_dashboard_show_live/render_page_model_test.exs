@@ -149,6 +149,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelTest do
     assert model.root_attrs["data-dashboard-evidence-requested-dataset"] == nil
     assert model.root_attrs["data-dashboard-evidence-requested-validity-state"] == nil
     assert model.content_attrs == %{class: "flex-1 min-w-0 min-h-0 overflow-y-auto"}
+    assert model.editor_guard.visible? == false
+    assert model.root_attrs["data-dashboard-editor"] == "false"
+  end
+
+  test "build keeps editor attrs server-rendered and exposes the guard island props" do
+    model =
+      assigns(%{editor_route?: true, editor_dirty?: true, editor_conflict: %{version: 2}})
+      |> RenderPageModel.build()
+
+    assert model.root_attrs["data-dashboard-editor"] == "true"
+    assert model.root_attrs["data-editor-dirty"] == "true"
+    assert model.root_attrs["data-editor-conflict"] == "true"
+    refute Map.has_key?(model.root_attrs, "phx-hook")
+
+    assert model.editor_guard == %{
+             visible?: true,
+             id: "dashboard-editor-guard-controller",
+             editor_dirty: true
+           }
   end
 
   test "build assembles grid and panel section props" do

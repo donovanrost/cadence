@@ -1,7 +1,9 @@
+<script setup>
+import {onBeforeUnmount, onMounted, onUpdated} from "vue"
 // gridstack-all.js is a UMD bundle whose export value is the GridStack class
 // itself (module.exports = GridStack), so it imports as a default, not a named
 // export — `import { GridStack }` resolves to undefined.
-import GridStack from "../../vendor/gridstack/gridstack-all"
+import GridStack from "../vendor/gridstack/gridstack-all"
 
 const LAYOUT_PUSH_DEBOUNCE_MS = 400
 
@@ -18,7 +20,7 @@ const LAYOUT_PUSH_DEBOUNCE_MS = 400
 //   patch that removes the placeholder from the DOM would make the node look
 //   removed — dropping it from the engine and silently disabling all future
 //   layout pushes (flushLayout reads engine.nodes).
-const DashboardGrid = {
+const DashboardGridController = {
   mounted() {
     this.grid = GridStack.init(
       {
@@ -40,7 +42,7 @@ const DashboardGrid = {
         alwaysShowResizeHandle: true,
         // Widen the grab targets: the bottom-right corner plus the right and
         // bottom edges, rather than the single hard-to-hit corner handle.
-        resizable: { handles: "e, se, s" },
+        resizable: {handles: "e, se, s"},
       },
       this.el
     )
@@ -76,7 +78,7 @@ const DashboardGrid = {
   },
 
   editMode() {
-    return this.el.dataset.editMode === "true"
+    return this.editModeValue()
   },
 
   gestureActive() {
@@ -152,9 +154,49 @@ const DashboardGrid = {
       }))
 
     if (layouts.length > 0) {
-      this.pushEvent("layout_changed", { layouts })
+      this.emit("layout_changed", {layouts})
     }
   },
 }
 
-export default DashboardGrid
+const props = defineProps({
+  target_id: {type: String, required: true},
+  edit_mode: {type: Boolean, default: false},
+  // The server-owned grid stays outside this island. Reading its stable item
+  // ids in the headless root gives Vue an update boundary whenever LiveView
+  // adds, removes, or moves a widget between grids.
+  item_ids: {type: Array, default: () => []},
+})
+
+const emit = defineEmits(["layout_changed"])
+let controller = null
+
+onMounted(() => {
+  const gridElement = document.getElementById(props.target_id)
+  if (!gridElement) return
+
+  controller = Object.create(DashboardGridController)
+  controller.el = gridElement
+  controller.editModeValue = () => props.edit_mode
+  controller.emit = emit
+  controller.mounted()
+})
+
+onUpdated(() => controller?.updated())
+
+onBeforeUnmount(() => {
+  controller?.destroyed()
+  controller = null
+})
+</script>
+
+<template>
+  <span
+    data-dashboard-grid-controller
+    :data-dashboard-grid-target="props.target_id"
+    :data-edit-mode="String(props.edit_mode)"
+    :data-dashboard-grid-item-count="String(props.item_ids.length)"
+    aria-hidden="true"
+    hidden
+  ></span>
+</template>

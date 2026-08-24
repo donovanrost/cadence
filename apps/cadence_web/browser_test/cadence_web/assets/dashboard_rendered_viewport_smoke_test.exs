@@ -26,6 +26,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias CadenceWeb.TestFixtures
   alias CadenceWeb.Assets.DashboardAuthenticatedRouteScenario
+  alias Phoenix.LiveView.JS
 
   @tag :browser_smoke
   test "dashboard viewport smoke helper times out and terminates node child", %{conn: _conn} do
@@ -137,9 +138,18 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     html = render_async(view, 5_000)
 
     assert has_element?(view, "#ops-dashboard-show-page")
-    assert has_element?(view, ~s([phx-hook="DashboardGrid"]))
+    grid_id = "dashboard-grid-#{dashboard.dashboard_id}"
+    assert has_element?(view, "##{grid_id}[data-dashboard-grid]")
     assert has_element?(view, ~s([data-name="TelemetryChart"]))
     assert has_element?(view, "#dashboard-panel")
+
+    grid_controller = LiveVue.Test.get_vue(view, id: "#{grid_id}-controller")
+    assert grid_controller.component == "DashboardGrid"
+    assert grid_controller.props["target_id"] == grid_id
+    assert grid_controller.props["edit_mode"] == false
+    assert length(grid_controller.props["item_ids"]) == 4
+    assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
+    assert grid_controller.ssr == false
 
     assert has_element?(
              view,

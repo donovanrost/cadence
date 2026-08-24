@@ -11,6 +11,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "viewer route rejects editor-only events" do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
@@ -19,6 +20,15 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     {:ok, viewer, _html} =
       await_live_result(live(conn, viewer_path(mission, dashboard)))
 
+    grid_controller =
+      LiveVue.Test.get_vue(viewer, id: "dashboard-grid-#{dashboard.dashboard_id}-controller")
+
+    assert grid_controller.component == "DashboardGrid"
+    assert grid_controller.props["target_id"] == "dashboard-grid-#{dashboard.dashboard_id}"
+    assert grid_controller.props["edit_mode"] == false
+    assert grid_controller.props["item_ids"] == []
+    assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
+    refute has_element?(viewer, "#dashboard-editor-guard-controller")
     refute has_element?(viewer, "#dashboard-panel")
     render_hook(viewer, "open_add_widget", %{})
     refute has_element?(viewer, "#dashboard-panel")
@@ -36,6 +46,12 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-editor-dirty="false"])
            )
 
+    guard = LiveVue.Test.get_vue(editor, id: "dashboard-editor-guard-controller")
+    assert guard.component == "DashboardEditorGuard"
+    assert guard.props["editor_dirty"] == false
+    assert guard.handlers == %{}
+    assert guard.ssr == false
+
     assert has_element?(editor, "#edit-paused-note")
     assert has_element?(editor, "#dashboard-editor-save[disabled]")
 
@@ -47,6 +63,10 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
              ~s(#ops-dashboard-show-page[data-editor-dirty="true"])
            )
 
+    assert LiveVue.Test.get_vue(editor, id: "dashboard-editor-guard-controller").props[
+             "editor_dirty"
+           ] == true
+
     assert 1 == version_count(org, mission, dashboard)
     assert {:ok, %Document{sections: []}} = fetch_document(org, mission, dashboard)
 
@@ -56,6 +76,10 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
              editor,
              ~s(#ops-dashboard-show-page[data-editor-dirty="false"])
            )
+
+    assert LiveVue.Test.get_vue(editor, id: "dashboard-editor-guard-controller").props[
+             "editor_dirty"
+           ] == false
 
     assert 2 == version_count(org, mission, dashboard)
 

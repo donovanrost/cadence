@@ -27,6 +27,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
   alias CadenceWeb.OpsDashboardShowLive.StagedEditor
   alias CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents
   alias CadenceWeb.OpsShellHook
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"dashboard_id" => dashboard_id}, _session, socket) do
@@ -759,6 +760,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
     <div {@render_model.page_attrs}>
+      <.vue
+        :if={@render_model.editor_guard.visible?}
+        id={@render_model.editor_guard.id}
+        v-component="DashboardEditorGuard"
+        editor_dirty={@render_model.editor_guard.editor_dirty}
+        v-ssr={false}
+        class="hidden"
+      />
       <.dashboard_toolbar
         {@render_model.toolbar_props}
         dashboard_warnings={@render_model.dashboard_warning_props.warnings}
@@ -899,6 +908,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.Controller do
         </div>
       </div>
     </div>
+    <.vue
+      id={@group.grid_controller_props.id}
+      v-component="DashboardGrid"
+      target_id={@group.grid_controller_props.target_id}
+      edit_mode={@group.grid_controller_props.edit_mode}
+      item_ids={@group.grid_controller_props.item_ids}
+      v-on:layout_changed={JS.push("layout_changed")}
+      v-ssr={false}
+      class="hidden"
+    />
     """
   end
 end

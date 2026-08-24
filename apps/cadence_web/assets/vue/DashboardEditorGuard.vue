@@ -1,4 +1,7 @@
-const DashboardEditorGuard = {
+<script setup>
+import {onBeforeUnmount, onMounted} from "vue"
+
+const DashboardEditorGuardController = {
   mounted() {
     this.beforeUnload = (event) => {
       if (!this.dirty()) return
@@ -30,8 +33,33 @@ const DashboardEditorGuard = {
   },
 
   dirty() {
-    return this.el.dataset.editorDirty === "true"
+    return this.dirtyValue()
   },
 }
 
-export default DashboardEditorGuard
+const props = defineProps({
+  editor_dirty: {type: Boolean, default: false},
+})
+
+let controller = null
+
+onMounted(() => {
+  controller = Object.create(DashboardEditorGuardController)
+  controller.dirtyValue = () => props.editor_dirty
+  controller.mounted()
+})
+
+onBeforeUnmount(() => {
+  controller?.destroyed()
+  controller = null
+})
+</script>
+
+<template>
+  <span
+    data-dashboard-editor-guard
+    :data-editor-dirty="String(props.editor_dirty)"
+    aria-hidden="true"
+    hidden
+  ></span>
+</template>

@@ -16,6 +16,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Telemetry.PacketDefinition
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -218,9 +219,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       assert has_element?(view, "#edit-paused-note")
 
       # Layout changes remain local until the staged Editor transaction is saved.
-      view
-      |> element("#dashboard-grid-#{dashboard.dashboard_id}")
-      |> render_hook("layout_changed", %{
+      grid_controller =
+        LiveVue.Test.get_vue(view, id: "dashboard-grid-#{dashboard.dashboard_id}-controller")
+
+      assert grid_controller.component == "DashboardGrid"
+      assert grid_controller.props["target_id"] == "dashboard-grid-#{dashboard.dashboard_id}"
+      assert grid_controller.props["edit_mode"] == true
+      assert grid_controller.props["item_ids"] == [widget_id]
+      assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
+
+      render_hook(view, "layout_changed", %{
         "layouts" => [%{"widget_id" => widget_id, "x" => 2, "y" => 1, "w" => 6, "h" => 3}]
       })
 

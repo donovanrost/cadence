@@ -12,7 +12,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
 
     %{
       id: "dashboard-grid-#{context.dashboard_id}",
-      "phx-hook": "DashboardGrid",
+      "data-dashboard-grid": "true",
       "data-edit-mode": context.edit_mode_text,
       class: "grid-stack gs-12"
     }
@@ -30,12 +30,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
     edit_mode? = Map.get(assigns, :edit_mode?, false)
 
     if sections == [] do
+      grid_props = grid_props(assigns)
+
       [
         %{
           id: "unsectioned",
           section: nil,
           widget_items: widget_items,
-          grid_props: grid_props(assigns),
+          grid_props: grid_props,
+          grid_controller_props: grid_controller_props(grid_props, edit_mode?, widget_items),
           open?: true,
           show_header?: false
         }
@@ -45,12 +48,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
 
       unsectioned_groups =
         if unsectioned != [] or edit_mode? do
+          grid_props = grid_props(assigns, "unsectioned")
+
           [
             %{
               id: "unsectioned",
               section: nil,
               widget_items: unsectioned,
-              grid_props: grid_props(assigns, "unsectioned"),
+              grid_props: grid_props,
+              grid_controller_props: grid_controller_props(grid_props, edit_mode?, unsectioned),
               open?: true,
               show_header?: true
             }
@@ -63,12 +69,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
         sections
         |> Enum.map(fn section ->
           items = Enum.filter(widget_items, &(widget_section_id(&1) == section.section_id))
+          grid_props = grid_props(assigns, section.section_id)
 
           %{
             id: section.section_id,
             section: section,
             widget_items: items,
-            grid_props: grid_props(assigns, section.section_id),
+            grid_props: grid_props,
+            grid_controller_props: grid_controller_props(grid_props, edit_mode?, items),
             open?: edit_mode? or not section.collapsed_by_default?,
             show_header?: true
           }
@@ -100,6 +108,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
     do: Map.get(placement, :section_id, Map.get(placement, "section_id"))
 
   defp widget_section_id(_widget_item), do: nil
+
+  defp grid_controller_props(grid_props, edit_mode?, widget_items) do
+    %{
+      id: "#{grid_props.id}-controller",
+      target_id: grid_props.id,
+      edit_mode: edit_mode?,
+      item_ids: widget_items |> Enum.map(&widget_item_id/1) |> Enum.reject(&is_nil/1)
+    }
+  end
+
+  defp widget_item_id(%{shell_attrs: %{"gs-id": placement_id}}), do: placement_id
+  defp widget_item_id(%{item: %{placement_id: placement_id}}), do: placement_id
+  defp widget_item_id(%{placement_id: placement_id}), do: placement_id
+  defp widget_item_id(_widget_item), do: nil
 
   defp dashboard_id(%{dashboard_document: document}) when is_map(document),
     do: Map.get(document, :dashboard_id, Map.get(document, "dashboard_id"))

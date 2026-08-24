@@ -48,6 +48,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModel do
     %{
       page_attrs: RenderRootAttrs.page_attrs(root_attrs),
       root_attrs: root_attrs,
+      editor_guard: editor_guard(assigns),
       content_attrs: RenderGridModel.content_attrs(),
       grid_props: RenderGridModel.grid_props(assigns),
       current_path: current_path,
@@ -74,7 +75,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModel do
 
   defp editor_root_attrs(%{editor_route?: true} = assigns) do
     %{
-      "phx-hook" => "DashboardEditorGuard",
       "data-dashboard-editor" => "true",
       "data-editor-dirty" => to_string(Map.get(assigns, :editor_dirty?, false)),
       "data-editor-conflict" => to_string(not is_nil(Map.get(assigns, :editor_conflict)))
@@ -82,4 +82,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModel do
   end
 
   defp editor_root_attrs(_assigns), do: %{"data-dashboard-editor" => "false"}
+
+  defp editor_guard(%{editor_route?: true} = assigns) do
+    %{
+      visible?: true,
+      id: "dashboard-editor-guard-controller",
+      editor_dirty: Map.get(assigns, :editor_dirty?, false)
+    }
+  end
+
+  defp editor_guard(_assigns) do
+    %{visible?: false, id: "dashboard-editor-guard-controller", editor_dirty: false}
+  end
 end
