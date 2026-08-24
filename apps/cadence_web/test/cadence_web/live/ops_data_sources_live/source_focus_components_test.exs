@@ -1,11 +1,13 @@
-defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusComponentsTest do
+defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusPageTest do
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
+  alias Phoenix.LiveView.JS
+
   alias CadenceWeb.OpsDataSourcesLive.{
-    SourceFocus,
-    SourceFocusComponents
+    Page,
+    SourceFocus
   }
 
   test "resource panel links resolved operational context to verified mission routes" do
@@ -43,24 +45,21 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusComponentsTest do
       }
     }
 
-    document =
-      render_component(&SourceFocusComponents.resource_panel/1,
-        focus: focus,
-        resources: resources,
-        mission_id: "mission-1"
-      )
-      |> LazyHTML.from_fragment()
+    page =
+      focus
+      |> render_ops_data_sources(source_focus_resources: resources)
+      |> then(& &1.props["page"])
 
-    assert resource_href(document, "transport_id") ==
+    assert resource_href(page, "transport_id") ==
              "/missions/mission-1/comms/transports/transport-1"
 
-    assert resource_href(document, "source_endpoint_id") ==
+    assert resource_href(page, "source_endpoint_id") ==
              "/missions/mission-1/comms?source_endpoint_id=endpoint-1"
 
-    assert resource_href(document, "ground_station_id") ==
+    assert resource_href(page, "ground_station_id") ==
              "/missions/mission-1/comms/ground-stations/station-1"
 
-    assert resource_href(document, "link_id") ==
+    assert resource_href(page, "link_id") ==
              "/missions/mission-1/comms/routing/routing-1"
   end
 
@@ -73,21 +72,18 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusComponentsTest do
         "source_dashboard_id" => "dashboard-1"
       })
 
-    document =
-      render_component(&SourceFocusComponents.remediation_panel/1,
-        focus: focus,
-        data_sources: [],
-        mission_id: "mission-1"
-      )
-      |> LazyHTML.from_fragment()
+    vue = render_ops_data_sources(focus, data_sources: [])
+    remediation = vue.props["page"]["focus"]["remediation"]
+    action = remediation["action"]
 
-    assert ["open_register_source"] =
-             document
-             |> LazyHTML.query("#source-focus-register-source")
-             |> LazyHTML.attribute("phx-click")
+    assert action["id"] == "source-focus-register-source"
+    assert action["event"] == "open_register_source"
+    assert action["payload"] == %{}
+    assert vue.handlers["open-register-source"] == JS.push("open_register_source")
 
-    return_link = LazyHTML.query(document, "#source-focus-dashboard-return")
-    assert [href] = LazyHTML.attribute(return_link, "href")
+    return_link = remediation["dashboard_return"]
+    assert return_link["id"] == "source-focus-dashboard-return"
+    href = return_link["href"]
     assert URI.parse(href).path == "/missions/mission-1/ops/dashboards/dashboard-1"
 
     assert URI.decode_query(URI.parse(href).query) == %{
@@ -111,34 +107,60 @@ defmodule CadenceWeb.OpsDataSourcesLive.SourceFocusComponentsTest do
         "source_return_activity_event" => "deployment-failed"
       })
 
-    document =
-      render_component(&SourceFocusComponents.evidence_panel/1,
-        focus: focus,
-        mission_id: "mission-1"
-      )
-      |> LazyHTML.from_fragment()
+    evidence =
+      focus
+      |> render_ops_data_sources()
+      |> then(& &1.props["page"]["focus"]["evidence"])
 
-    assert ["stale"] =
-             document
-             |> LazyHTML.query("#source-focus-evidence")
-             |> LazyHTML.attribute("data-source-evidence-state")
+    assert evidence["id"] == "source-focus-evidence"
+    assert evidence["state"] == "stale"
 
-    return_link = LazyHTML.query(document, "#source-focus-evidence-dashboard-return")
-
-    assert ["activity"] =
-             LazyHTML.attribute(return_link, "data-source-focus-dashboard-return-panel")
-
-    assert ["deployments"] =
-             LazyHTML.attribute(return_link, "data-source-focus-dashboard-return-activity-filter")
-
-    assert ["deployment-failed"] =
-             LazyHTML.attribute(return_link, "data-source-focus-dashboard-return-activity-event")
+    return_link = evidence["dashboard_return"]
+    assert return_link["id"] == "source-focus-evidence-dashboard-return"
+    assert return_link["panel"] == "activity"
+    assert return_link["activity_filter"] == "deployments"
+    assert return_link["activity_event"] == "deployment-failed"
   end
 
-  defp resource_href(document, key) do
-    document
-    |> LazyHTML.query(~s([data-source-resource-link="#{key}"]))
-    |> LazyHTML.attribute("href")
-    |> List.first()
+  defp render_ops_data_sources(focus, opts \\ []) do
+    render_component(&Page.render/1,
+      flash: %{},
+      current_scope: %{capabilities: MapSet.new([:organization_admin])},
+      current_mission: %{mission_id: "mission-1"},
+      source_admin?: true,
+      source_focus: focus,
+      source_focus_resources:
+        Keyword.get(opts, :source_focus_resources, %{
+          transport: nil,
+          source_endpoint: nil,
+          link_assignment: nil,
+          routing_rule: nil,
+          ground_station: nil
+        }),
+      data_sources: Keyword.get(opts, :data_sources, []),
+      data_bindings: [],
+      source_health_statuses: [],
+      source_readiness_policy: %{
+        policy_id: "test-readiness-policy",
+        block_source_health: "block",
+        block_freshness: "block",
+        block_connection_test: "ignore"
+      },
+      binding_groups: [],
+      source_rows: [],
+      deployment_run_rows: [],
+      binding_event_rows: [],
+      source_event_rows: [],
+      source_health_event_rows: [],
+      register_source?: false,
+      change_binding: nil
+    )
+    |> LiveVue.Test.get_vue(id: "ops-data-sources-component")
+  end
+
+  defp resource_href(page, key) do
+    page["focus"]["resource"]["rows"]
+    |> Enum.find(&(&1["key"] == key))
+    |> Map.fetch!("href")
   end
 end
