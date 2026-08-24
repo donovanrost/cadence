@@ -70,13 +70,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
         form,
         :event_id,
         "dashboard-historical-workflow-event-id",
-        workflow_context.event_id || ""
+        value_or_empty(workflow_context.event_id)
       ),
       hidden_field_dto(
         form,
         :correction_source_event_id,
         "dashboard-historical-workflow-correction-source-event-id",
-        workflow_context.correction_source_event_id || ""
+        value_or_empty(workflow_context.correction_source_event_id)
       ),
       hidden_field_dto(
         form,
@@ -112,169 +112,169 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
         form,
         :observable_id,
         "dashboard-historical-workflow-observable-id",
-        workflow_context.observable_id || ""
+        value_or_empty(workflow_context.observable_id)
       ),
       hidden_field_dto(
         form,
         :point_id,
         "dashboard-historical-workflow-point-id",
-        workflow_context.point_id || ""
+        value_or_empty(workflow_context.point_id)
       ),
       hidden_field_dto(
         form,
         :dashboard_id,
         "dashboard-historical-workflow-dashboard-id",
-        workflow_context.dashboard_id || ""
+        value_or_empty(workflow_context.dashboard_id)
       ),
       hidden_field_dto(
         form,
         :dashboard_version,
         "dashboard-historical-workflow-dashboard-version",
-        workflow_context.dashboard_version || ""
+        value_or_empty(workflow_context.dashboard_version)
       ),
       hidden_field_dto(
         form,
         :dashboard_time_mode,
         "dashboard-historical-workflow-dashboard-time-mode",
-        workflow_context.dashboard_time_mode || ""
+        value_or_empty(workflow_context.dashboard_time_mode)
       ),
       hidden_field_dto(
         form,
         :dashboard_replay_run_id,
         "dashboard-historical-workflow-dashboard-replay-run-id",
-        workflow_context.dashboard_replay_run_id || ""
+        value_or_empty(workflow_context.dashboard_replay_run_id)
       ),
       hidden_field_dto(
         form,
         :dashboard_data_view,
         "dashboard-historical-workflow-dashboard-data-view",
-        workflow_context.dashboard_data_view || ""
+        value_or_empty(workflow_context.dashboard_data_view)
       ),
       hidden_field_dto(
         form,
         :dashboard_limit_mode,
         "dashboard-historical-workflow-dashboard-limit-mode",
-        workflow_context.dashboard_limit_mode || ""
+        value_or_empty(workflow_context.dashboard_limit_mode)
       ),
       hidden_field_dto(
         form,
         :request_group_id,
         "dashboard-historical-workflow-request-group-id",
-        workflow_context.request_group_id || ""
+        value_or_empty(workflow_context.request_group_id)
       ),
       hidden_field_dto(
         form,
         :request_mode,
         "dashboard-historical-workflow-request-mode",
-        workflow_context.request_mode || ""
+        value_or_empty(workflow_context.request_mode)
       ),
       hidden_field_dto(
         form,
         :comparison_review_request_event_id,
         "dashboard-historical-workflow-comparison-review-request-event-id",
-        Map.get(workflow_context, :comparison_review_request_event_id) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_request_event_id))
       ),
       hidden_field_dto(
         form,
         :comparison_review_request_kind,
         "dashboard-historical-workflow-comparison-review-request-kind",
-        Map.get(workflow_context, :comparison_review_request_kind) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_request_kind))
       ),
       hidden_field_dto(
         form,
         :comparison_review_open_count,
         "dashboard-historical-workflow-comparison-review-open-count",
-        Map.get(workflow_context, :comparison_review_open_count) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_open_count))
       ),
       hidden_field_dto(
         form,
         :comparison_review_open_placement_ids,
         "dashboard-historical-workflow-comparison-review-open-placement-ids",
-        Map.get(workflow_context, :comparison_review_open_placement_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_open_placement_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_workflow_kind,
         "dashboard-historical-workflow-comparison-review-workflow-kind",
-        Map.get(workflow_context, :comparison_review_workflow_kind) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_workflow_kind))
       ),
       hidden_field_dto(
         form,
         :comparison_review_workflow_action,
         "dashboard-historical-workflow-comparison-review-workflow-action",
-        Map.get(workflow_context, :comparison_review_workflow_action) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_workflow_action))
       ),
       hidden_field_dto(
         form,
         :comparison_review_workflow_selection_kind,
         "dashboard-historical-workflow-comparison-review-workflow-selection-kind",
-        Map.get(workflow_context, :comparison_review_workflow_selection_kind) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_workflow_selection_kind))
       ),
       hidden_field_dto(
         form,
         :comparison_review_workflow_selection_count,
         "dashboard-historical-workflow-comparison-review-workflow-selection-count",
-        Map.get(workflow_context, :comparison_review_workflow_selection_count) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_workflow_selection_count))
       ),
       hidden_field_dto(
         form,
         :comparison_review_primary_data_view,
         "dashboard-historical-workflow-comparison-review-primary-data-view",
-        Map.get(workflow_context, :comparison_review_primary_data_view) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_primary_data_view))
       ),
       hidden_field_dto(
         form,
         :comparison_review_compare_data_view,
         "dashboard-historical-workflow-comparison-review-compare-data-view",
-        Map.get(workflow_context, :comparison_review_compare_data_view) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_compare_data_view))
       ),
       hidden_field_dto(
         form,
         :comparison_review_scope_kind,
         "dashboard-historical-workflow-comparison-review-scope-kind",
-        Map.get(workflow_context, :comparison_review_scope_kind) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_scope_kind))
       ),
       hidden_field_dto(
         form,
         :comparison_review_scope_ids,
         "dashboard-historical-workflow-comparison-review-scope-ids",
-        Map.get(workflow_context, :comparison_review_scope_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_scope_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_contact_ids,
         "dashboard-historical-workflow-comparison-review-contact-ids",
-        Map.get(workflow_context, :comparison_review_contact_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_contact_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_resource_ids,
         "dashboard-historical-workflow-comparison-review-resource-ids",
-        Map.get(workflow_context, :comparison_review_resource_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_resource_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_transport_ids,
         "dashboard-historical-workflow-comparison-review-transport-ids",
-        Map.get(workflow_context, :comparison_review_transport_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_transport_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_source_endpoint_ids,
         "dashboard-historical-workflow-comparison-review-source-endpoint-ids",
-        Map.get(workflow_context, :comparison_review_source_endpoint_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_source_endpoint_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_ground_station_ids,
         "dashboard-historical-workflow-comparison-review-ground-station-ids",
-        Map.get(workflow_context, :comparison_review_ground_station_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_ground_station_ids))
       ),
       hidden_field_dto(
         form,
         :comparison_review_scope_link_ids,
         "dashboard-historical-workflow-comparison-review-scope-link-ids",
-        Map.get(workflow_context, :comparison_review_scope_link_ids) || ""
+        value_or_empty(Map.get(workflow_context, :comparison_review_scope_link_ids))
       )
     ]
   end
@@ -292,6 +292,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
         })
     }
   end
+
+  defp value_or_empty(value), do: value || ""
 
   defp compact_input_dto(field, label, placeholder \\ nil) do
     errors =
@@ -379,8 +381,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStageFormComponents 
   defp class_names(values) do
     values
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&dom_text/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &dom_text/1)
   end
 
   defp raw_attrs(attrs) do

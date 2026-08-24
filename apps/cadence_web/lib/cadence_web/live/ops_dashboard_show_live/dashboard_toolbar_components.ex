@@ -387,46 +387,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
 
     items =
       [
-        if(
-          not assigns.edit_mode? and not is_nil(assigns.mission_id) and
-            not is_nil(assigns.dashboard_id),
-          do:
-            menu_item(
-              "dashboard-investigate-telemetry",
-              telemetry_explore_path(assigns),
-              "hero-chart-bar-square",
-              "Explore telemetry"
-            )
-        ),
-        if(
-          not assigns.edit_mode? and not is_nil(assigns.mission_id) and
-            not is_nil(assigns.dashboard_id),
-          do:
-            menu_item(
-              "dashboard-investigate-sources",
-              ~p"/missions/#{assigns.mission_id}/ops/data-sources?source_dashboard_id=#{assigns.dashboard_id}",
-              "hero-circle-stack",
-              "Data Sources"
-            )
-        ),
-        if(not assigns.edit_mode? and not is_nil(assigns.mission_id),
-          do:
-            menu_item(
-              "dashboard-investigate-contacts",
-              ~p"/missions/#{assigns.mission_id}/ops/contacts",
-              "hero-signal",
-              "Contacts"
-            )
-        ),
-        if(not assigns.edit_mode? and assigns.dashboard_author?,
-          do:
-            menu_item(
-              "dashboard-edit-link",
-              assigns.dashboard_edit_path,
-              "hero-pencil-square",
-              "Edit Dashboard"
-            )
-        ),
+        dashboard_telemetry_menu_item(assigns),
+        dashboard_sources_menu_item(assigns),
+        dashboard_contacts_menu_item(assigns),
+        dashboard_edit_menu_item(assigns),
         menu_item(
           "dashboard-versions-button",
           assigns.dashboard_activity_path,
@@ -437,13 +401,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
             "data-dashboard-comparison-review-open-requests": open_summary.request_ids_attr,
             "data-dashboard-comparison-review-open-placements": open_summary.placements_attr
           },
-          if(open_summary.count_text != "0",
-            do: %{
-              class: "badge badge-warning badge-xs",
-              attrs: %{"data-dashboard-comparison-review-open-toolbar-badge": ""},
-              text: open_summary.count_text
-            }
-          )
+          comparison_review_badge(open_summary)
         ),
         menu_item(
           "dashboard-historical-workflow-request-button",
@@ -457,24 +415,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
           "hero-chart-bar-square",
           "Diagnostics"
         ),
-        if(assigns.dashboard_author?,
-          do:
-            menu_item(
-              "dashboard-share-button",
-              assigns.dashboard_share_path,
-              "hero-share",
-              "Share current context"
-            )
-        ),
-        if(assigns.dashboard_author?,
-          do:
-            menu_item(
-              "dashboard-settings-button",
-              assigns.dashboard_settings_path,
-              "hero-cog-6-tooth",
-              "Settings"
-            )
-        )
+        dashboard_share_menu_item(assigns),
+        dashboard_settings_menu_item(assigns)
       ]
       |> Enum.reject(&is_nil/1)
 
@@ -511,6 +453,91 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
         items: items
       }
     }
+  end
+
+  defp dashboard_telemetry_menu_item(assigns) do
+    if dashboard_investigation_available?(assigns) do
+      menu_item(
+        "dashboard-investigate-telemetry",
+        telemetry_explore_path(assigns),
+        "hero-chart-bar-square",
+        "Explore telemetry"
+      )
+    end
+  end
+
+  defp dashboard_sources_menu_item(assigns) do
+    if dashboard_investigation_available?(assigns) do
+      menu_item(
+        "dashboard-investigate-sources",
+        ~p"/missions/#{assigns.mission_id}/ops/data-sources?source_dashboard_id=#{assigns.dashboard_id}",
+        "hero-circle-stack",
+        "Data Sources"
+      )
+    end
+  end
+
+  defp dashboard_contacts_menu_item(assigns) do
+    if dashboard_contacts_available?(assigns) do
+      menu_item(
+        "dashboard-investigate-contacts",
+        ~p"/missions/#{assigns.mission_id}/ops/contacts",
+        "hero-signal",
+        "Contacts"
+      )
+    end
+  end
+
+  defp dashboard_edit_menu_item(assigns) do
+    if not assigns.edit_mode? and assigns.dashboard_author? do
+      menu_item(
+        "dashboard-edit-link",
+        assigns.dashboard_edit_path,
+        "hero-pencil-square",
+        "Edit Dashboard"
+      )
+    end
+  end
+
+  defp dashboard_share_menu_item(assigns) do
+    if assigns.dashboard_author? do
+      menu_item(
+        "dashboard-share-button",
+        assigns.dashboard_share_path,
+        "hero-share",
+        "Share current context"
+      )
+    end
+  end
+
+  defp dashboard_settings_menu_item(assigns) do
+    if assigns.dashboard_author? do
+      menu_item(
+        "dashboard-settings-button",
+        assigns.dashboard_settings_path,
+        "hero-cog-6-tooth",
+        "Settings"
+      )
+    end
+  end
+
+  defp dashboard_investigation_available?(assigns) do
+    not assigns.edit_mode? and not is_nil(assigns.mission_id) and
+      not is_nil(assigns.dashboard_id)
+  end
+
+  defp dashboard_contacts_available?(assigns) do
+    not assigns.edit_mode? and not is_nil(assigns.mission_id)
+  end
+
+  defp comparison_review_badge(open_summary) do
+    if open_summary.count_text != "0" do
+      %{
+        class: "badge badge-warning badge-xs",
+        attrs: %{"data-dashboard-comparison-review-open-toolbar-badge": ""},
+        text: open_summary.count_text
+      }
+    end
   end
 
   defp menu_item(id, path, icon, text, extra_attrs \\ %{}, badge \\ nil) do
@@ -661,23 +688,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   defp dashboard_comparison_toggle_badge_dto(_count), do: []
 
   defp dashboard_editor_actions_dto(assigns) do
-    if assigns.edit_mode? or assigns.editor_route? do
+    if dashboard_editor_actions?(assigns) do
       %{
-        elements:
-          [
-            dashboard_publish_readiness_dto(assigns),
-            if(assigns.edit_mode?, do: edit_paused_note_dto()),
-            if(assigns.edit_mode? and not assigns.editor_route?, do: edit_layout_toggle_dto()),
-            if(assigns.editor_route?, do: editor_save_state_dto(assigns.editor_dirty?)),
-            if(assigns.editor_route?, do: editor_discard_dto()),
-            if(assigns.editor_route?, do: editor_save_dto(assigns)),
-            if(assigns.editor_route?, do: editor_review_dto(assigns.editor_conflict)),
-            if(assigns.edit_mode?, do: add_widget_dto()),
-            if(assigns.edit_mode?, do: manage_dashboard_sections_dto())
-          ]
-          |> Enum.reject(&is_nil/1)
+        elements: dashboard_editor_action_elements(assigns)
       }
     end
+  end
+
+  defp dashboard_editor_actions?(assigns), do: assigns.edit_mode? or assigns.editor_route?
+
+  defp dashboard_editor_action_elements(assigns) do
+    [
+      dashboard_publish_readiness_dto(assigns),
+      optional_editor_element(assigns.edit_mode?, &edit_paused_note_dto/0),
+      optional_editor_element(edit_layout_toggle?(assigns), &edit_layout_toggle_dto/0),
+      optional_editor_element(assigns.editor_route?, fn ->
+        editor_save_state_dto(assigns.editor_dirty?)
+      end),
+      optional_editor_element(assigns.editor_route?, &editor_discard_dto/0),
+      optional_editor_element(assigns.editor_route?, fn -> editor_save_dto(assigns) end),
+      optional_editor_element(assigns.editor_route?, fn ->
+        editor_review_dto(assigns.editor_conflict)
+      end),
+      optional_editor_element(assigns.edit_mode?, &add_widget_dto/0),
+      optional_editor_element(assigns.edit_mode?, &manage_dashboard_sections_dto/0)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp edit_layout_toggle?(assigns), do: assigns.edit_mode? and not assigns.editor_route?
+
+  defp optional_editor_element(enabled?, builder) do
+    if enabled?, do: builder.()
   end
 
   defp dashboard_publish_readiness_dto(%{
@@ -875,8 +917,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponents do
   defp editor_class_list(classes) do
     classes
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&to_string/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &to_string/1)
   end
 
   defp query_value_label(value) when is_binary(value) do

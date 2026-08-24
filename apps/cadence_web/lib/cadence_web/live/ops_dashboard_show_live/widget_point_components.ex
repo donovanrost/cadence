@@ -170,7 +170,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
       chart_id: chart_id,
       widget_id: assigns.widget.widget_id,
       placement_id: assigns.placement_id,
-      window_seconds: assigns.window_seconds || assigns.widget.options.window_seconds,
+      window_seconds: chart_window_seconds(assigns),
       correlation_group: "cadence-dashboard-time",
       edit_mode: assigns.edit_mode?,
       show_min_max_band: option_value(assigns.widget, :show_min_max_band, true),
@@ -182,26 +182,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
       axis_mode: option_value(assigns.widget, :axis_mode, "unit"),
       shared_tooltip: option_value(assigns.widget, :shared_tooltip, true),
       label: assigns.widget.title,
-      unit: (assigns.point && assigns.point.unit) || "",
-      backfill: assigns.backfill || [],
-      compare_backfill: assigns.compare_backfill || [],
-      limit_markers: assigns.limit_markers || [],
-      event_markers: assigns.event_markers || [],
-      annotations: assigns.annotations || [],
+      unit: point_unit(assigns.point),
+      backfill: value_or_default(assigns.backfill, []),
+      compare_backfill: value_or_default(assigns.compare_backfill, []),
+      limit_markers: value_or_default(assigns.limit_markers, []),
+      event_markers: value_or_default(assigns.event_markers, []),
+      annotations: value_or_default(assigns.annotations, []),
       selected_ref: assigns.selected_data_ref,
-      time_mode: assigns.time_mode || "",
-      time_from: assigns.time_from || "",
-      time_to: assigns.time_to || "",
-      time_axis: assigns.time_axis || "",
-      replay_run_id: assigns.replay_run_id || "",
-      data_realm: assigns.data_realm || "",
-      data_view: assigns.data_view || "",
-      compare_data_view: assigns.compare_data_view || "",
+      time_mode: value_or_default(assigns.time_mode, ""),
+      time_from: value_or_default(assigns.time_from, ""),
+      time_to: value_or_default(assigns.time_to, ""),
+      time_axis: value_or_default(assigns.time_axis, ""),
+      replay_run_id: value_or_default(assigns.replay_run_id, ""),
+      data_realm: value_or_default(assigns.data_realm, ""),
+      data_view: value_or_default(assigns.data_view, ""),
+      compare_data_view: value_or_default(assigns.compare_data_view, ""),
       data_source_id:
-        assigns.data_source_id || chart_payload_context_value(assigns.backfill, :data_source_id),
+        chart_context_value(assigns.data_source_id, assigns.backfill, :data_source_id),
       source_binding_id:
-        assigns.source_binding_id ||
-          chart_payload_context_value(assigns.backfill, :source_binding_id),
+        chart_context_value(assigns.source_binding_id, assigns.backfill, :source_binding_id),
       data_management_badges:
         WidgetDataManagementComponents.widget_data_management_badge_codes([
           assigns.data,
@@ -214,6 +213,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetPointComponents do
         ]),
       engine_backed: engine_backed?(assigns.data)
     }
+  end
+
+  defp value_or_default(value, default), do: value || default
+
+  defp chart_window_seconds(assigns) do
+    assigns.window_seconds || assigns.widget.options.window_seconds
+  end
+
+  defp point_unit(point), do: (point && point.unit) || ""
+
+  defp chart_context_value(value, backfill, key) do
+    value || chart_payload_context_value(backfill, key)
   end
 
   def constellation_health_presentation(assigns) do

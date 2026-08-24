@@ -220,35 +220,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   end
 
   defp widget_body_presentation(%{widget: %{type: :time_series}} = assigns) do
-    chart_payload_empty? = WidgetPointComponents.chart_payload_empty?(assigns.backfill)
-
-    {notice, content} =
-      cond do
-        assigns.data == nil or assigns.data.unresolved? ->
-          {widget_notice_presentation(unresolved_notice(assigns.widget), state: :unresolved), nil}
-
-        lifecycle_blocking?(assigns.data) and chart_payload_empty? ->
-          {widget_lifecycle_notice_presentation(assigns.data), nil}
-
-        lifecycle_state(assigns.data) == :no_data and chart_payload_empty? ->
-          {widget_lifecycle_notice_presentation(
-             assigns.data,
-             default: "No historical samples in this time range."
-           ), nil}
-
-        true ->
-          notice =
-            if lifecycle_blocking?(assigns.data) or lifecycle_body_notice?(assigns.data) do
-              widget_lifecycle_notice_presentation(assigns.data, compact: true)
-            end
-
-          content =
-            assigns
-            |> WidgetPointComponents.time_series_presentation()
-            |> widget_point_content()
-
-          {notice, content}
-      end
+    {notice, content} = time_series_body_content(assigns)
 
     widget_body_dto(
       "time_series",
@@ -257,6 +229,66 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
       notice,
       content
     )
+  end
+
+  defp time_series_body_content(assigns) do
+    chart_payload_empty? = WidgetPointComponents.chart_payload_empty?(assigns.backfill)
+    state = time_series_body_state(assigns.data, chart_payload_empty?)
+
+    time_series_body_content(assigns, state)
+  end
+
+  defp time_series_body_state(data, chart_payload_empty?) do
+    cond do
+      unresolved_data?(data) -> :unresolved
+      empty_blocking_time_series?(data, chart_payload_empty?) -> :blocking
+      empty_no_data_time_series?(data, chart_payload_empty?) -> :no_data
+      true -> :ready
+    end
+  end
+
+  defp time_series_body_content(assigns, :unresolved) do
+    {widget_notice_presentation(unresolved_notice(assigns.widget), state: :unresolved), nil}
+  end
+
+  defp time_series_body_content(assigns, :blocking) do
+    {widget_lifecycle_notice_presentation(assigns.data), nil}
+  end
+
+  defp time_series_body_content(assigns, :no_data) do
+    notice =
+      widget_lifecycle_notice_presentation(
+        assigns.data,
+        default: "No historical samples in this time range."
+      )
+
+    {notice, nil}
+  end
+
+  defp time_series_body_content(assigns, :ready) do
+    notice = compact_time_series_notice(assigns.data)
+
+    content =
+      assigns
+      |> WidgetPointComponents.time_series_presentation()
+      |> widget_point_content()
+
+    {notice, content}
+  end
+
+  defp unresolved_data?(nil), do: true
+  defp unresolved_data?(data), do: data.unresolved?
+
+  defp empty_blocking_time_series?(data, true), do: lifecycle_blocking?(data)
+  defp empty_blocking_time_series?(_data, false), do: false
+
+  defp empty_no_data_time_series?(data, true), do: lifecycle_state(data) == :no_data
+  defp empty_no_data_time_series?(_data, false), do: false
+
+  defp compact_time_series_notice(data) do
+    if lifecycle_blocking?(data) or lifecycle_body_notice?(data) do
+      widget_lifecycle_notice_presentation(data, compact: true)
+    end
   end
 
   defp widget_body_presentation(%{widget: %{type: :status_matrix}} = assigns) do

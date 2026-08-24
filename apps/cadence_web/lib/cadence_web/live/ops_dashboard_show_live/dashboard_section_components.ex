@@ -202,14 +202,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
     Map.new([:section_id, :title, :description, :collapsed_by_default], fn field ->
       value = form[field].value
 
-      active_value =
-        if field == :collapsed_by_default,
-          do: if(to_string(value) == "true", do: "true", else: "false"),
-          else: rendered_body(value)
-
-      {Atom.to_string(field), active_value}
+      {Atom.to_string(field), active_form_value(field, value)}
     end)
   end
+
+  defp active_form_value(:collapsed_by_default, value) do
+    if to_string(value) == "true", do: "true", else: "false"
+  end
+
+  defp active_form_value(_field, value), do: rendered_body(value)
 
   defp form_field_errors(form_field) do
     if Phoenix.Component.used_input?(form_field), do: form_field.errors, else: []
@@ -353,8 +354,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardSectionComponents do
   defp class_list(classes) do
     classes
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&rendered_body/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &rendered_body/1)
   end
 
   defp truthy?(value), do: value not in [nil, false]
