@@ -65,7 +65,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
       diagnostics_section_presentation(html, "dashboard-diagnostics-runtime-section-component")
 
     invalidation =
-      diagnostics_section_presentation(html, "dashboard-diagnostics-invalidation-section-component")
+      diagnostics_section_presentation(
+        html,
+        "dashboard-diagnostics-invalidation-section-component"
+      )
 
     assert "context_change" = diagnostics_row_body(engine, "Resolve")
 
@@ -96,9 +99,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
 
     assert host_ids ==
              document
-             |> LazyHTML.query(
-               ~s([id^="dashboard-diagnostics-"][id$="-section-component"])
-             )
+             |> LazyHTML.query(~s([id^="dashboard-diagnostics-"][id$="-section-component"]))
              |> LazyHTML.attribute("id")
 
     assert Enum.map(vues, & &1.id) == host_ids
