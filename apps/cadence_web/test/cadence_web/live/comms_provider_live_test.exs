@@ -24,6 +24,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
   }
 
   alias CadenceWeb.{CommsProviderListLive, TestFixtures}
+  alias Phoenix.LiveView.JS
 
   test "lists mission providers and exposes the mission-scoped setup path" do
     {conn, _organization, mission} = signed_in_org_and_mission()
@@ -228,8 +229,8 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert empty_vue.props == Jason.decode!(Jason.encode!(empty_vue.props))
 
     assert empty_vue.handlers == %{
-             "save" => Phoenix.LiveView.JS.push("save"),
-             "validate" => Phoenix.LiveView.JS.push("validate")
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
            }
 
     assert empty_vue.props["accounts"] == %{
@@ -267,8 +268,8 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     assert vue.handlers == %{
-             "save" => Phoenix.LiveView.JS.push("save"),
-             "validate" => Phoenix.LiveView.JS.push("validate")
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
            }
 
     assert Map.keys(vue.props) |> Enum.sort() == ["accounts", "form", "notes", "page"]
@@ -631,9 +632,9 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert initial_vue.ssr == false
 
     assert initial_vue.handlers == %{
-             "archive-provider" => Phoenix.LiveView.JS.push("archive-provider"),
-             "sync-provider" => Phoenix.LiveView.JS.push("sync-provider"),
-             "validate-provider" => Phoenix.LiveView.JS.push("validate-provider")
+             "archive-provider" => JS.push("archive-provider"),
+             "sync-provider" => JS.push("sync-provider"),
+             "validate-provider" => JS.push("validate-provider")
            }
 
     assert initial_vue.props ==
@@ -920,9 +921,9 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     assert vue.ssr == false
 
     assert vue.handlers == %{
-             "archive-provider" => Phoenix.LiveView.JS.push("archive-provider"),
-             "sync-provider" => Phoenix.LiveView.JS.push("sync-provider"),
-             "validate-provider" => Phoenix.LiveView.JS.push("validate-provider")
+             "archive-provider" => JS.push("archive-provider"),
+             "sync-provider" => JS.push("sync-provider"),
+             "validate-provider" => JS.push("validate-provider")
            }
 
     assert vue.props ==

@@ -9,11 +9,20 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
+  alias Cadence.Commanding.{
+    CommandQueueEntry,
+    CommandQueueEntryRow,
+    CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
+    CommandRequest,
+    CommandRequestRow
+  }
+
   alias Cadence.Limits.Event
   alias Cadence.Limits.Store
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "read-only alarm filters link each condition to evidence and its definition" do
     {conn, _org, mission} = signed_in_org_and_mission()
@@ -40,8 +49,8 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     assert initial_vue.slots == %{}
 
     assert initial_vue.handlers == %{
-             "filter" => Phoenix.LiveView.JS.push("filter"),
-             "reset_filters" => Phoenix.LiveView.JS.push("reset_filters")
+             "filter" => JS.push("filter"),
+             "reset_filters" => JS.push("reset_filters")
            }
 
     assert initial_vue.props == %{
@@ -291,10 +300,10 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     assert initial_vue.slots == %{}
 
     assert initial_vue.handlers == %{
-             "clear_command_focus" => Phoenix.LiveView.JS.push("clear_command_focus"),
-             "filter" => Phoenix.LiveView.JS.push("filter"),
-             "follow_command" => Phoenix.LiveView.JS.push("follow_command"),
-             "reset_filters" => Phoenix.LiveView.JS.push("reset_filters")
+             "clear_command_focus" => JS.push("clear_command_focus"),
+             "filter" => JS.push("filter"),
+             "follow_command" => JS.push("follow_command"),
+             "reset_filters" => JS.push("reset_filters")
            }
 
     assert initial_vue.props == command_props(initial_observed, default_command_filters(), nil)
@@ -675,7 +684,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
   end
 
   defp persist_command_evidence!(org, mission, command_request_id) do
-    queue_entry = %Cadence.Commanding.CommandQueueEntry{
+    queue_entry = %CommandQueueEntry{
       command_queue_entry_id: "queue-#{command_request_id}",
       organization_id: org.organization_id,
       mission_id: mission.mission_id,
@@ -688,10 +697,10 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     }
 
     queue_entry
-    |> Cadence.Commanding.CommandQueueEntryRow.changeset()
+    |> CommandQueueEntryRow.changeset()
     |> Repo.insert!()
 
-    release_attempt = %Cadence.Commanding.CommandReleaseAttempt{
+    release_attempt = %CommandReleaseAttempt{
       command_release_attempt_id: "release-#{command_request_id}",
       organization_id: org.organization_id,
       mission_id: mission.mission_id,
@@ -709,7 +718,7 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     }
 
     release_attempt
-    |> Cadence.Commanding.CommandReleaseAttemptRow.changeset()
+    |> CommandReleaseAttemptRow.changeset()
     |> Repo.insert!()
   end
 end

@@ -11,6 +11,7 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "exposes an exact JSON-safe empty LiveVue directory contract" do
     {conn, _user, _org, mission} = signed_in_user_org_and_mission()
@@ -30,9 +31,9 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     assert vue.slots == %{}
 
     assert vue.handlers == %{
-             "filter_dashboards" => Phoenix.LiveView.JS.push("filter_dashboards"),
-             "restore_dashboard" => Phoenix.LiveView.JS.push("restore_dashboard"),
-             "toggle_dashboard_star" => Phoenix.LiveView.JS.push("toggle_dashboard_star")
+             "filter_dashboards" => JS.push("filter_dashboards"),
+             "restore_dashboard" => JS.push("restore_dashboard"),
+             "toggle_dashboard_star" => JS.push("toggle_dashboard_star")
            }
 
     assert vue.props == directory_props(mission, 0, [], default_filters())

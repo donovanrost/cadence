@@ -13,6 +13,7 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
   alias Cadence.Comms.{RoutingRule, Transport}
   alias CadenceWeb.CommsRoutingListLive
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -197,8 +198,8 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
       assert vue.handlers == %{
-               "save" => Phoenix.LiveView.JS.push("save"),
-               "validate" => Phoenix.LiveView.JS.push("validate")
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
              }
 
       assert vue.props == %{

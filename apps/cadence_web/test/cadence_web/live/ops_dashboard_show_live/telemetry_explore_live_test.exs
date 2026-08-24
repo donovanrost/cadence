@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Dashboards.Document
+  alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Management.DataSources
@@ -20,6 +21,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   alias Cadence.TestSupport.TelemetryPersistencePolicies
   alias CadenceWeb.OpsTelemetryExploreComponents
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -110,7 +112,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
                data_source_id: data_source_id,
                owner: :cadence,
                kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
+               adapter: Telemetry,
                organization_id: mission.organization_id,
                mission_id: mission.mission_id,
                isolation_level: :mission_isolated,
@@ -213,10 +215,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert vue.slots == %{}
 
     assert vue.handlers == %{
-             "add_to_dashboard" => Phoenix.LiveView.JS.push("add_to_dashboard"),
-             "apply_filters" => Phoenix.LiveView.JS.push("apply_filters"),
-             "apply_question" => Phoenix.LiveView.JS.push("apply_question"),
-             "clear_selected_sample" => Phoenix.LiveView.JS.push("clear_selected_sample")
+             "add_to_dashboard" => JS.push("add_to_dashboard"),
+             "apply_filters" => JS.push("apply_filters"),
+             "apply_question" => JS.push("apply_question"),
+             "clear_selected_sample" => JS.push("clear_selected_sample")
            }
 
     assert vue.props["page"]["source_state"] == "matched"
