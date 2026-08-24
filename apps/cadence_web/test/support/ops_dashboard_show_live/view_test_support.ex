@@ -97,6 +97,67 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     |> Map.fetch!("text")
   end
 
+  def widget_header_presentation(rendered, placement_id) do
+    component_id = "dashboard-widget-header-#{placement_id}-component"
+    vue = LiveVue.Test.get_vue(rendered, id: component_id)
+
+    assert vue.component == "DashboardWidgetHeader"
+    assert vue.id == component_id
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.props["presentation"]["component_id"] == component_id
+
+    vue.props["presentation"]
+  end
+
+  def widget_query_presentation(rendered, placement_id) do
+    rendered
+    |> widget_header_presentation(placement_id)
+    |> get_in(["actions", "details", "body", "actions", "query"])
+  end
+
+  def widget_header_source_presentation(rendered, placement_id) do
+    rendered
+    |> widget_header_presentation(placement_id)
+    |> get_in(["actions", "details", "body", "indicators", "source"])
+  end
+
+  def widget_frame_evidence_presentation(rendered, placement_id) do
+    rendered
+    |> widget_header_presentation(placement_id)
+    |> get_in(["actions", "details", "body", "actions", "frame_evidence"])
+  end
+
+  def assert_widget_frame_evidence(rendered, placement_id, expected_attrs) do
+    presentation = widget_frame_evidence_presentation(rendered, placement_id)
+    assert presentation
+    assert attrs_match?(presentation["attrs"], expected_attrs)
+    presentation
+  end
+
+  def widget_header_action_event_params(%{"attrs" => attrs}) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
+  end
+
+  def widget_warning_presentation(rendered, placement_id, component_id) do
+    rendered
+    |> widget_header_presentation(placement_id)
+    |> find_component_presentation(component_id)
+  end
+
+  def widget_warning_presentations(rendered, placement_id) do
+    rendered
+    |> widget_header_presentation(placement_id)
+    |> get_in(["actions", "details", "body", "indicators", "warnings"])
+  end
+
   def widget_rows_presentation(rendered, kind, placement_id) do
     component_id = "widget-rows-#{String.replace(kind, "_", "-")}-#{placement_id}-component"
     vue = LiveVue.Test.get_vue(rendered, id: component_id)
@@ -153,6 +214,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     html = rendered_html(rendered)
 
     direct_widget_data_link_presentation(html, component_id) ||
+      Enum.find_value(widget_header_host_ids(html), fn host_id ->
+        html
+        |> LiveVue.Test.get_vue(id: host_id)
+        |> Map.fetch!(:props)
+        |> Map.fetch!("presentation")
+        |> find_component_presentation(component_id)
+      end) ||
       Enum.find_value(widget_rows_host_ids(html), fn host_id ->
         html
         |> LiveVue.Test.get_vue(id: host_id)
@@ -286,6 +354,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     html
     |> LazyHTML.from_fragment()
     |> LazyHTML.query(~s([id^="widget-point-"][id$="-component"]))
+    |> LazyHTML.attribute("id")
+  end
+
+  defp widget_header_host_ids(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([id^="dashboard-widget-header-"][id$="-component"]))
     |> LazyHTML.attribute("id")
   end
 

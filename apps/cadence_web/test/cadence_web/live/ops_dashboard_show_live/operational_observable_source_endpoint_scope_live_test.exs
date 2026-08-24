@@ -304,14 +304,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
                ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
              )
 
-      frame_button_selector =
-        ~s(#widget-#{latency_widget_id} [data-widget-frame-evidence][phx-value-observable-id="ingress.processing_latency_ms"][phx-value-data-source-id="managed_operational_observables"][phx-value-source-binding-id="default_flight_operational_observables"][phx-value-scope-kind="source_endpoint"][phx-value-scope-id="#{source_endpoint.source_endpoint_id}"])
+      frame_evidence =
+        assert_widget_frame_evidence(view, latency_widget_id, %{
+          "data-widget-frame-evidence" => "",
+          "phx-click" => "open_evidence",
+          "phx-value-observable-id" => "ingress.processing_latency_ms",
+          "phx-value-data-source-id" => "managed_operational_observables",
+          "phx-value-source-binding-id" => "default_flight_operational_observables",
+          "phx-value-scope-kind" => "source_endpoint",
+          "phx-value-scope-id" => source_endpoint.source_endpoint_id
+        })
 
-      assert has_element?(view, frame_button_selector)
-
-      view
-      |> element(frame_button_selector)
-      |> render_click()
+      render_hook(
+        view,
+        frame_evidence["attrs"]["phx-click"],
+        widget_header_action_event_params(frame_evidence)
+      )
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"

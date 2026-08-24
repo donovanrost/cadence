@@ -101,14 +101,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.snr_db"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, metric_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "link.snr_db",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "link",
+        "phx-value-scope-id" => "link-alpha"
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -329,14 +339,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.eb_n0_db"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, metric_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "link.eb_n0_db",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "link",
+        "phx-value-scope-id" => "link-alpha"
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -596,14 +616,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.doppler_hz"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, metric_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "link.doppler_hz",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "link",
+        "phx-value-scope-id" => "link-alpha"
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -863,14 +893,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayMetricEvidenceLiveTest do
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{metric_widget_id} [data-widget-frame-evidence][phx-value-observable-id="link.symbol_rate_sps"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="link"][phx-value-scope-id="link-alpha"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, metric_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "link.symbol_rate_sps",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "link",
+        "phx-value-scope-id" => "link-alpha"
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"

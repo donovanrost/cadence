@@ -57,6 +57,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
     render_hook(view, item["attrs"]["phx-click"], payload)
   end
 
+  defp event_params(attrs) do
+    attrs
+    |> Enum.flat_map(fn
+      {"phx-value-" <> name, value} -> [{name, value}]
+      {_name, _value} -> []
+    end)
+    |> Map.new()
+  end
+
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -522,9 +531,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetFrameEvidenceLiveTest do
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view
-      |> element(~s(#widget-#{trend_widget_id} [data-widget-frame-evidence]))
-      |> render_click()
+      frame_evidence =
+        view
+        |> widget_header_presentation(trend_widget_id)
+        |> get_in(["actions", "details", "body", "actions", "frame_evidence"])
+
+      assert frame_evidence["attrs"]["phx-click"] == "open_evidence"
+      assert frame_evidence["attrs"]["phx-value-placement-id"] == trend_widget_id
+      assert frame_evidence["attrs"]["phx-value-observable-id"] == "HK.counter"
+
+      render_hook(
+        view,
+        frame_evidence["attrs"]["phx-click"],
+        event_params(frame_evidence["attrs"])
+      )
 
       evidence_path = assert_patch(view)
       assert evidence_path =~ "panel=evidence"

@@ -453,10 +453,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
           ]
         )
 
+      document = fetch_dashboard_document!(org, mission, dashboard)
+      trend_widget = render_item_by_title(document, "Counter Trend").widget
+
       {:ok, view, _html} = live(conn, show_path(mission, dashboard))
       render_dashboard_async(view)
 
-      view |> element("[data-widget-inspect-data]") |> render_click()
+      inspector =
+        view
+        |> widget_header_presentation(trend_widget.widget_id)
+        |> get_in(["actions", "details", "body", "actions", "inspector"])
+
+      assert inspector["attrs"]["phx-click"] == "open_widget_inspector"
+      assert inspector["attrs"]["phx-value-placement-id"] == trend_widget.widget_id
+
+      render_hook(view, inspector["attrs"]["phx-click"], %{
+        "placement-id" => trend_widget.widget_id
+      })
 
       assert has_element?(
                view,

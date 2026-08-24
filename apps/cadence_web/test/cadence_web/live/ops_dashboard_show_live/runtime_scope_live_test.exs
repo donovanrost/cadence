@@ -287,10 +287,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              ~s(#{widget_selector}[data-widget-source-contact-ids=""])
            )
 
-    assert has_element?(
-             view,
-             ~s(#{widget_selector} button[data-widget-source-badge="unknown"][data-widget-source-badge-inventory-action="source_inventory"][data-widget-source-badge-inventory-href*="/ops/data-sources"][data-widget-source-badge-inventory-href*="source_endpoint_id=#{source_endpoint.source_endpoint_id}"])
-           )
+    source_badge = widget_header_source_presentation(view, trend_item.placement_id)
+
+    assert source_badge["badge"]["attrs"]["data-widget-source-badge"] == "unknown"
+
+    assert source_badge["badge"]["attrs"]["data-widget-source-badge-inventory-action"] ==
+             "source_inventory"
+
+    assert source_badge["badge"]["attrs"]["data-widget-source-badge-inventory-href"] =~
+             "/ops/data-sources"
+
+    assert source_badge["badge"]["attrs"]["data-widget-source-badge-inventory-href"] =~
+             "source_endpoint_id=#{source_endpoint.source_endpoint_id}"
 
     query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
     expected_source_endpoint_id = source_endpoint.source_endpoint_id
@@ -338,9 +346,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              ~s(#dashboard-evidence-source-inventory[href*="source_endpoint_id=#{source_endpoint.source_endpoint_id}"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
            )
 
-    view
-    |> element(~s(#{widget_selector} button[data-widget-source-badge="unknown"]))
-    |> render_click()
+    render_hook(
+      view,
+      source_badge["badge"]["attrs"]["phx-click"],
+      event_params(source_badge["badge"]["attrs"])
+    )
 
     assert has_element?(
              view,
@@ -384,13 +394,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
              mission_scope_view,
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="mission"][data-dashboard-scope-id="#{mission.mission_id}"])
            )
-  end
-
-  defp widget_query_presentation(view, placement_id) do
-    view
-    |> LiveVue.Test.get_vue(id: "widget-query-#{placement_id}-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
   end
 
   defp event_params(attrs) do

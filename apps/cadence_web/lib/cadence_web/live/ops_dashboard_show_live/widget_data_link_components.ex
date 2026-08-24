@@ -25,17 +25,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
   attr(:placement_id, :string, required: true)
 
   def widget_data_link_menu(assigns) do
-    overlay_id = "widget-data-links-#{assigns.placement_id}"
-
-    presentation =
-      popover_presentation(
-        "widget",
-        overlay_id,
-        "Inspect widget data",
-        %{"data-widget-data-links" => ""},
-        %{"data-widget-data-link-menu" => ""},
-        Enum.map(assigns.links, &widget_link_item(&1, assigns.placement_id))
-      )
+    presentation = widget_data_link_presentation(assigns.links, assigns.placement_id)
 
     assigns = assign(assigns, :presentation, presentation)
 
@@ -48,6 +38,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataLinkComponents do
       class="contents"
     />
     """
+  end
+
+  def widget_data_link_presentation(links, placement_id) do
+    overlay_id = "widget-data-links-#{placement_id}"
+
+    popover_presentation(
+      "widget",
+      overlay_id,
+      "Inspect widget data",
+      %{"data-widget-data-links" => ""},
+      %{"data-widget-data-link-menu" => ""},
+      Enum.map(links, &widget_link_item(&1, placement_id))
+    )
   end
 
   attr(:row, :map, required: true)

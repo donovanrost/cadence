@@ -109,14 +109,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{latency_widget_id} [data-widget-frame-evidence][phx-value-observable-id="ingress.processing_latency_ms"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="source_endpoint"][phx-value-scope-id="#{source_endpoint.source_endpoint_id}"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, latency_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "ingress.processing_latency_ms",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "source_endpoint",
+        "phx-value-scope-id" => source_endpoint.source_endpoint_id
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -350,14 +360,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{bitrate_widget_id} [data-widget-frame-evidence][phx-value-observable-id="comms.transport.downlink_bitrate"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="transport"][phx-value-scope-id="#{transport.transport_id}"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, bitrate_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "comms.transport.downlink_bitrate",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "transport",
+        "phx-value-scope-id" => transport.transport_id
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"
@@ -598,14 +618,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayIngressTransportEvidenceL
 
     assert has_element?(view, root_selector)
 
-    frame_button_selector =
-      ~s(#widget-#{bitrate_widget_id} [data-widget-frame-evidence][phx-value-observable-id="comms.transport.uplink_bitrate"][phx-value-data-source-id="#{replay_sources.operational_data_source_id}"][phx-value-source-binding-id="#{replay_sources.operational_binding_id}"][phx-value-replay-run-id="#{replay_run_id}"][phx-value-requested-dataset="operational_observables_replay"][phx-value-scope-kind="transport"][phx-value-scope-id="#{transport.transport_id}"])
+    frame_evidence =
+      assert_widget_frame_evidence(view, bitrate_widget_id, %{
+        "data-widget-frame-evidence" => "",
+        "phx-click" => "open_evidence",
+        "phx-value-observable-id" => "comms.transport.uplink_bitrate",
+        "phx-value-data-source-id" => replay_sources.operational_data_source_id,
+        "phx-value-source-binding-id" => replay_sources.operational_binding_id,
+        "phx-value-replay-run-id" => replay_run_id,
+        "phx-value-requested-dataset" => "operational_observables_replay",
+        "phx-value-scope-kind" => "transport",
+        "phx-value-scope-id" => transport.transport_id
+      })
 
-    assert has_element?(view, frame_button_selector)
-
-    view
-    |> element(frame_button_selector)
-    |> render_click()
+    render_hook(
+      view,
+      frame_evidence["attrs"]["phx-click"],
+      widget_header_action_event_params(frame_evidence)
+    )
 
     evidence_path = assert_patch(view)
     assert evidence_path =~ "panel=evidence"

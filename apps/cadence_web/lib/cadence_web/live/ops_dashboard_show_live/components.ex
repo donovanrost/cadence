@@ -425,202 +425,377 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :warnings, :list, default: []
 
   defp widget_header(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :comparison_summary,
-        assigns.comparison_summary || WidgetComparisonSummary.summary(assigns)
-      )
+    presentation = widget_header_presentation(assigns)
+    assigns = assign(assigns, :presentation, presentation)
 
     ~H"""
-    <div
-      class={[
-        "cadence-dashboard-widget-header",
-        "flex shrink-0 items-center gap-1.5 px-2.5 py-1"
-      ]}
-      {WidgetLifecycleAttrs.attrs(@data, @warnings)}
-      data-dashboard-widget-header
-      data-dashboard-widget-type={@widget.type}
-      data-warning-codes={WidgetWarningComponents.warning_codes(@warnings)}
-      data-data-management-badges={
-        WidgetDataManagementComponents.data_management_badge_codes(@data)
-      }
-      data-widget-comparison-state={comparison_summary_value(@comparison_summary, :state)}
-      data-widget-comparison-primary-count={comparison_summary_value(@comparison_summary, :primary_count)}
-      data-widget-comparison-compare-count={comparison_summary_value(@comparison_summary, :compare_count)}
-    >
-      <h3 class={[
-        "min-w-0 flex-1 truncate",
-        "text-[0.8rem] font-semibold leading-4 text-base-content/85"
-      ]}>
-        {@widget.title}
-      </h3>
-      <div
-        class="ml-auto flex shrink-0 items-center gap-1"
-        data-widget-status-indicators
-      >
-        <.severity_badge
-          :if={point_data?(@data) && actionable_limit_event?(@data.limit_event)}
-          severity={normalized_severity(@data.limit_event.normalized_state)}
-          label={state_label(@data.limit_event.normalized_state)}
-        />
-        <span
-          :if={@comparison_summary}
-          class={[
-            "badge badge-xs font-mono",
-            comparison_summary_badge_class(@comparison_summary)
-          ]}
-          data-widget-comparison-summary
-          data-widget-comparison-state={@comparison_summary.state}
-          data-widget-comparison-primary-view={@comparison_summary.primary_view}
-          data-widget-comparison-compare-view={@comparison_summary.compare_view}
-          data-widget-comparison-primary-count={@comparison_summary.primary_count}
-          data-widget-comparison-compare-count={@comparison_summary.compare_count}
-          data-widget-comparison-delta={Map.get(@comparison_summary, :delta)}
-          title={@comparison_summary.title}
-        >
-          {@comparison_summary.label}
-        </span>
-        <.status_badge
-          :if={point_data?(@data) && quality_status(@data)}
-          status={quality_status(@data)}
-          label={quality_label(@data)}
-        />
-        <span
-          :if={lifecycle_body_notice?(@data)}
-          class={["inline-flex", lifecycle_indicator_class(@data)]}
-          title={lifecycle_notice(@data, "Data is incomplete.")}
-          aria-label={lifecycle_notice(@data, "Data is incomplete.")}
-          data-widget-lifecycle-indicator={lifecycle_state(@data)}
-        >
-          <.icon name={lifecycle_indicator_icon(@data)} class="h-3.5 w-3.5" />
-        </span>
-      </div>
-      <div class={[
-        "cadence-dashboard-widget-actions",
-        "flex shrink-0 items-center gap-1"
-      ]}>
-        <.popover
-          id={"widget-details-#{@placement_id}"}
-          label={"#{@widget.title} widget details"}
-          width={:md}
-          data-widget-details
-        >
-          <:trigger>
-            <span
-              class="btn btn-ghost btn-xs btn-square text-base-content/55 hover:text-base-content"
-              title="Widget details"
-              data-widget-details-toggle
-            >
-              <.icon name="hero-ellipsis-vertical" class="h-4 w-4" />
-            </span>
-          </:trigger>
-          <div class="p-3 text-xs">
-            <div class="border-b border-base-300/60 pb-2">
-              <p class="font-semibold text-base-content">{@widget.title}</p>
-              <p class="mt-0.5 break-all font-mono text-[0.65rem] text-base-content/55">
-                {binding_caption(@widget, @data, @spacecraft)}
-              </p>
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-1" data-widget-detail-indicators>
-              <.status_badge
-                :if={lifecycle_status(@data)}
-                status={lifecycle_status(@data)}
-                label={lifecycle_label(@data)}
-              />
-              <WidgetSourceStatusComponents.source_status_badge
-                :if={WidgetSourceStatusComponents.source_status_badge?(@data)}
-                source_status={WidgetSourceStatusComponents.source_status(@data)}
-                mission_id={@mission_id}
-              />
-              <WidgetDataManagementComponents.data_management_badge
-                :for={badge <- WidgetDataManagementComponents.data_management_badges(@data)}
-                badge={badge}
-              />
-              <WidgetWarningComponents.engine_warning_badge
-                :for={{warning, index} <- Enum.with_index(@warnings)}
-                id={"widget-#{@placement_id}-engine-warning-#{index}"}
-                warning={warning}
-                placement_id={@placement_id}
-              />
-            </div>
-            <div
-              class="mt-2 flex items-center gap-1 border-t border-base-300/60 pt-2"
-              data-widget-detail-actions
-            >
-              <WidgetSourceStatusComponents.widget_query_diagnostics
-                :if={
-                  WidgetSourceStatusComponents.widget_query_diagnostics?(
-                    @widget,
-                    @data,
-                    @data_view,
-                    @compare_data_view
-                  )
-                }
-                widget={@widget}
-                placement_id={@placement_id}
-                data={@data}
-                data_view={@data_view}
-                compare_data_view={@compare_data_view}
-                warnings={@warnings}
-              />
-              <button
-                :if={frame_evidence?(@data)}
-                type="button"
-                phx-click="open_evidence"
-                {EvidenceAttrs.widget_frame(@placement_id, widget_evidence_observable(@data), @data)}
-                class="btn btn-ghost btn-xs btn-square"
-                title="Inspect frame evidence"
-                aria-label="Inspect frame evidence"
-                data-widget-frame-evidence
-              >
-                <.icon name="hero-document-magnifying-glass" class="h-3.5 w-3.5" />
-              </button>
-              <WidgetDataLinkComponents.widget_data_link_menu
-                :if={widget_links(@data) != []}
-                links={widget_links(@data)}
-                placement_id={@placement_id}
-              />
-              <button
-                :if={@widget.type == :time_series}
-                type="button"
-                phx-click="open_widget_inspector"
-                phx-value-placement-id={@placement_id}
-                class="btn btn-ghost btn-xs btn-square"
-                title="Inspect data"
-                aria-label="Inspect data"
-                data-widget-inspect-data
-              >
-                <.icon name="hero-table-cells" class="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </.popover>
-        <.button
-          :if={@edit_mode?}
-          variant={:ghost}
-          size={:xs}
-          phx-click="open_widget_config"
-          phx-value-widget-id={@widget.widget_id}
-          aria-label={"Configure #{@widget.title}"}
-        >
-          <.icon name="hero-cog-6-tooth" class="h-3.5 w-3.5" />
-        </.button>
-        <.button
-          :if={@edit_mode?}
-          variant={:ghost}
-          size={:xs}
-          phx-click="remove_widget"
-          phx-value-widget-id={@widget.widget_id}
-          aria-label={"Remove #{@widget.title}"}
-          data-confirm="Remove this widget?"
-        >
-          <.icon name="hero-x-mark" class="h-3.5 w-3.5" />
-        </.button>
-      </div>
-    </div>
+    <.vue
+      id={@presentation.component_id}
+      v-component="DashboardWidgetHeader"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
+
+  def widget_header_presentation(assigns) do
+    comparison_summary =
+      Map.get(assigns, :comparison_summary) || WidgetComparisonSummary.summary(assigns)
+
+    widget = assigns.widget
+    data = assigns.data
+    warnings = Map.get(assigns, :warnings, [])
+    placement_id = assigns.placement_id
+    data_view = Map.get(assigns, :data_view)
+    compare_data_view = Map.get(assigns, :compare_data_view)
+    links = widget_links(data)
+    source_status = WidgetSourceStatusComponents.source_status(data)
+
+    %{
+      component_id: "dashboard-widget-header-#{placement_id}-component",
+      root: %{
+        class: [
+          "cadence-dashboard-widget-header",
+          "flex shrink-0 items-center gap-1.5 px-2.5 py-1"
+        ],
+        attrs:
+          data
+          |> WidgetLifecycleAttrs.attrs(warnings)
+          |> Map.merge(%{
+            "data-dashboard-widget-header" => "",
+            "data-dashboard-widget-type" => widget_header_attr_value(widget.type),
+            "data-warning-codes" => WidgetWarningComponents.warning_codes(warnings),
+            "data-data-management-badges" =>
+              WidgetDataManagementComponents.data_management_badge_codes(data),
+            "data-widget-comparison-state" =>
+              widget_header_attr_value(comparison_summary_value(comparison_summary, :state)),
+            "data-widget-comparison-primary-count" =>
+              widget_header_attr_value(
+                comparison_summary_value(comparison_summary, :primary_count)
+              ),
+            "data-widget-comparison-compare-count" =>
+              widget_header_attr_value(
+                comparison_summary_value(comparison_summary, :compare_count)
+              )
+          })
+          |> compact_widget_header_attrs()
+      },
+      title: %{
+        class: [
+          "min-w-0 flex-1 truncate",
+          "text-[0.8rem] font-semibold leading-4 text-base-content/85"
+        ],
+        text: widget.title
+      },
+      status_indicators: %{
+        class: "ml-auto flex shrink-0 items-center gap-1",
+        attrs: %{"data-widget-status-indicators" => ""},
+        limit: widget_header_limit_badge(data),
+        comparison: widget_header_comparison_badge(comparison_summary),
+        quality: widget_header_quality_badge(data),
+        lifecycle: widget_header_lifecycle_indicator(data)
+      },
+      actions: %{
+        class: [
+          "cadence-dashboard-widget-actions",
+          "flex shrink-0 items-center gap-1"
+        ],
+        details:
+          widget_header_details(
+            assigns,
+            source_status,
+            links,
+            warnings,
+            data_view,
+            compare_data_view
+          ),
+        edit: widget_header_edit_actions(widget, Map.get(assigns, :edit_mode?, false))
+      }
+    }
+  end
+
+  defp widget_header_limit_badge(%{kind: :point, limit_event: limit_event}) do
+    if actionable_limit_event?(limit_event) do
+      severity = normalized_severity(limit_event.normalized_state)
+
+      %{
+        class: [
+          "inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium",
+          widget_header_severity_class(severity)
+        ],
+        dot_class: "w-1.5 h-1.5 rounded-full bg-current",
+        label_class: "uppercase text-[0.65rem]",
+        text: state_label(limit_event.normalized_state)
+      }
+    end
+  end
+
+  defp widget_header_limit_badge(_data), do: nil
+
+  defp widget_header_comparison_badge(nil), do: nil
+
+  defp widget_header_comparison_badge(summary) do
+    %{
+      class: ["badge badge-xs font-mono", comparison_summary_badge_class(summary)],
+      attrs:
+        compact_widget_header_attrs(%{
+          "data-widget-comparison-summary" => "",
+          "data-widget-comparison-state" => widget_header_attr_value(summary.state),
+          "data-widget-comparison-primary-view" => widget_header_attr_value(summary.primary_view),
+          "data-widget-comparison-compare-view" => widget_header_attr_value(summary.compare_view),
+          "data-widget-comparison-primary-count" =>
+            widget_header_attr_value(summary.primary_count),
+          "data-widget-comparison-compare-count" =>
+            widget_header_attr_value(summary.compare_count),
+          "data-widget-comparison-delta" => widget_header_attr_value(Map.get(summary, :delta)),
+          "title" => widget_header_attr_value(summary.title)
+        }),
+      text: summary.label
+    }
+  end
+
+  defp widget_header_quality_badge(data) do
+    if point_data?(data) && quality_status(data) do
+      widget_header_status_badge(quality_status(data), quality_label(data))
+    end
+  end
+
+  defp widget_header_lifecycle_indicator(data) do
+    if lifecycle_body_notice?(data) do
+      notice = lifecycle_notice(data, "Data is incomplete.")
+
+      %{
+        class: ["inline-flex", lifecycle_indicator_class(data)],
+        attrs: %{
+          "title" => notice,
+          "aria-label" => notice,
+          "data-widget-lifecycle-indicator" => widget_header_attr_value(lifecycle_state(data))
+        },
+        icon: %{name: lifecycle_indicator_icon(data), class: "h-3.5 w-3.5"}
+      }
+    end
+  end
+
+  defp widget_header_details(
+         assigns,
+         source_status,
+         links,
+         warnings,
+         data_view,
+         compare_data_view
+       ) do
+    widget = assigns.widget
+    data = assigns.data
+    placement_id = assigns.placement_id
+    overlay_id = "widget-details-#{placement_id}"
+    label = "#{widget.title} widget details"
+
+    %{
+      overlay: %{
+        id: overlay_id,
+        class: "cadence-overlay",
+        attrs: %{
+          "data-overlay-kind" => "popover",
+          "data-overlay-placement" => "bottom-end",
+          "data-widget-details" => ""
+        }
+      },
+      trigger: %{
+        id: "#{overlay_id}-trigger",
+        type: "button",
+        class: "cadence-overlay-trigger",
+        attrs: %{
+          "data-overlay-trigger" => "",
+          "aria-haspopup" => "dialog",
+          "aria-expanded" => "false",
+          "aria-controls" => "#{overlay_id}-panel",
+          "aria-label" => label
+        },
+        content: %{
+          class: "btn btn-ghost btn-xs btn-square text-base-content/55 hover:text-base-content",
+          attrs: %{"title" => "Widget details", "data-widget-details-toggle" => ""},
+          icon: %{name: "hero-ellipsis-vertical", class: "h-4 w-4"}
+        }
+      },
+      panel: %{
+        id: "#{overlay_id}-panel",
+        class: "cadence-overlay-panel cadence-popover-panel",
+        hidden: true,
+        attrs: %{
+          "data-overlay-panel" => "",
+          "data-overlay-width" => "md",
+          "aria-label" => label
+        }
+      },
+      body: %{
+        class: "p-3 text-xs",
+        heading: %{
+          class: "border-b border-base-300/60 pb-2",
+          title: %{class: "font-semibold text-base-content", text: widget.title},
+          binding: %{
+            class: "mt-0.5 break-all font-mono text-[0.65rem] text-base-content/55",
+            text: binding_caption(widget, data, Map.get(assigns, :spacecraft, []))
+          }
+        },
+        indicators: %{
+          class: "mt-2 flex flex-wrap items-center gap-1",
+          attrs: %{"data-widget-detail-indicators" => ""},
+          lifecycle:
+            if(lifecycle_status(data),
+              do: widget_header_status_badge(lifecycle_status(data), lifecycle_label(data))
+            ),
+          source:
+            if(WidgetSourceStatusComponents.source_status_badge?(data),
+              do:
+                WidgetSourceStatusComponents.source_status_badge_presentation(
+                  source_status,
+                  Map.get(assigns, :mission_id)
+                )
+            ),
+          data_management:
+            Enum.map(
+              WidgetDataManagementComponents.data_management_badges(data),
+              &WidgetDataManagementComponents.data_management_badge_presentation/1
+            ),
+          warnings:
+            warnings
+            |> Enum.with_index()
+            |> Enum.map(fn {warning, index} ->
+              WidgetWarningComponents.warning_presentation(
+                "widget-#{placement_id}-engine-warning-#{index}",
+                warning,
+                placement_id
+              )
+            end)
+        },
+        actions: %{
+          class: "mt-2 flex items-center gap-1 border-t border-base-300/60 pt-2",
+          attrs: %{"data-widget-detail-actions" => ""},
+          query:
+            if(
+              WidgetSourceStatusComponents.widget_query_diagnostics?(
+                widget,
+                data,
+                data_view,
+                compare_data_view
+              ),
+              do:
+                WidgetSourceStatusComponents.widget_query_diagnostics_presentation(
+                  placement_id,
+                  widget,
+                  data,
+                  data_view,
+                  compare_data_view,
+                  warnings
+                )
+            ),
+          frame_evidence: widget_header_frame_evidence(data, placement_id),
+          data_links:
+            if(links != [],
+              do: WidgetDataLinkComponents.widget_data_link_presentation(links, placement_id)
+            ),
+          inspector: widget_header_inspector_action(widget, placement_id)
+        }
+      }
+    }
+  end
+
+  defp widget_header_frame_evidence(data, placement_id) do
+    if frame_evidence?(data) do
+      %{
+        type: "button",
+        class: "btn btn-ghost btn-xs btn-square",
+        attrs:
+          placement_id
+          |> EvidenceAttrs.widget_frame(widget_evidence_observable(data), data)
+          |> Map.merge(%{
+            "phx-click" => "open_evidence",
+            "title" => "Inspect frame evidence",
+            "aria-label" => "Inspect frame evidence",
+            "data-widget-frame-evidence" => ""
+          }),
+        icon: %{name: "hero-document-magnifying-glass", class: "h-3.5 w-3.5"}
+      }
+    end
+  end
+
+  defp widget_header_inspector_action(%{type: :time_series}, placement_id) do
+    %{
+      type: "button",
+      class: "btn btn-ghost btn-xs btn-square",
+      attrs: %{
+        "phx-click" => "open_widget_inspector",
+        "phx-value-placement-id" => placement_id,
+        "title" => "Inspect data",
+        "aria-label" => "Inspect data",
+        "data-widget-inspect-data" => ""
+      },
+      icon: %{name: "hero-table-cells", class: "h-3.5 w-3.5"}
+    }
+  end
+
+  defp widget_header_inspector_action(_widget, _placement_id), do: nil
+
+  defp widget_header_edit_actions(_widget, false), do: []
+
+  defp widget_header_edit_actions(widget, true) do
+    [
+      %{
+        key: "configure",
+        type: "button",
+        class: "btn btn-ghost btn-xs",
+        attrs: %{
+          "phx-click" => "open_widget_config",
+          "phx-value-widget-id" => widget.widget_id,
+          "aria-label" => "Configure #{widget.title}"
+        },
+        icon: %{name: "hero-cog-6-tooth", class: "h-3.5 w-3.5"}
+      },
+      %{
+        key: "remove",
+        type: "button",
+        class: "btn btn-ghost btn-xs",
+        attrs: %{
+          "phx-click" => "remove_widget",
+          "phx-value-widget-id" => widget.widget_id,
+          "aria-label" => "Remove #{widget.title}",
+          "data-confirm" => "Remove this widget?"
+        },
+        icon: %{name: "hero-x-mark", class: "h-3.5 w-3.5"}
+      }
+    ]
+  end
+
+  defp widget_header_status_badge(status, label) do
+    %{
+      class: [
+        "inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
+        widget_header_status_class(status)
+      ],
+      text: label
+    }
+  end
+
+  defp widget_header_status_class(:ready), do: "bg-success/20 text-success"
+  defp widget_header_status_class(:attention), do: "bg-warning/20 text-warning"
+  defp widget_header_status_class(:blocked), do: "bg-error/20 text-error"
+  defp widget_header_status_class(:info), do: "bg-info/20 text-info"
+
+  defp widget_header_severity_class(:critical), do: "bg-error/20 text-error"
+  defp widget_header_severity_class(:warning), do: "bg-warning/20 text-warning"
+  defp widget_header_severity_class(:info), do: "bg-info/20 text-info"
+
+  defp compact_widget_header_attrs(attrs) do
+    attrs
+    |> Enum.reject(fn {_name, value} -> is_nil(value) end)
+    |> Map.new()
+  end
+
+  defp widget_header_attr_value(nil), do: nil
+  defp widget_header_attr_value(value) when is_binary(value), do: value
+  defp widget_header_attr_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp widget_header_attr_value(value), do: to_string(value)
 
   attr :notice, :string, required: true
   attr :status, :atom, default: :info

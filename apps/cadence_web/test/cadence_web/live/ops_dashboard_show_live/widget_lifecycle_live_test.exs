@@ -296,11 +296,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
       await_dashboard_resolved(view)
 
       # Reconfigure: prefilled form, save preserves placement identity and layout.
-      view
-      |> element(
-        ~s(button[phx-click="open_widget_config"][phx-value-widget-id="#{tile.placement_id}"])
-      )
-      |> render_click()
+      configure =
+        view
+        |> widget_header_presentation(tile.placement_id)
+        |> get_in(["actions", "edit"])
+        |> Enum.find(&(&1["key"] == "configure"))
+
+      assert configure["attrs"]["phx-click"] == "open_widget_config"
+      assert configure["attrs"]["phx-value-widget-id"] == tile.placement_id
+      render_hook(view, configure["attrs"]["phx-click"], %{"widget-id" => tile.placement_id})
 
       assert widget_form_field(view, "title")["control"]["attrs"] == %{
                "id" => "widget_title",
@@ -318,15 +322,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleLiveTest do
 
       await_dashboard_resolved(view)
 
-      assert has_element?(view, ~s(button[aria-label="Configure Renamed Tile"]))
+      renamed_configure =
+        view
+        |> widget_header_presentation(tile.placement_id)
+        |> get_in(["actions", "edit"])
+        |> Enum.find(&(&1["key"] == "configure"))
+
+      assert renamed_configure["attrs"]["aria-label"] == "Configure Renamed Tile"
       assert Document.version(fetch_dashboard_document!(org, mission, dashboard)) == 1
 
       # Remove the constellation widget.
-      view
-      |> element(
-        ~s(button[phx-click="remove_widget"][phx-value-widget-id="#{fleet.placement_id}"])
-      )
-      |> render_click()
+      remove =
+        view
+        |> widget_header_presentation(fleet.placement_id)
+        |> get_in(["actions", "edit"])
+        |> Enum.find(&(&1["key"] == "remove"))
+
+      assert remove["attrs"]["phx-click"] == "remove_widget"
+      assert remove["attrs"]["phx-value-widget-id"] == fleet.placement_id
+      assert remove["attrs"]["data-confirm"] == "Remove this widget?"
+      render_hook(view, remove["attrs"]["phx-click"], %{"widget-id" => fleet.placement_id})
 
       await_dashboard_resolved(view)
 

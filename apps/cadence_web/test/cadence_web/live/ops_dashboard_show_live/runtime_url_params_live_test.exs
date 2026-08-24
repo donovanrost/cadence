@@ -62,12 +62,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
     warning_component_id =
       "widget-#{runtime_item.widget.widget_id}-engine-warning-0-component"
 
-    warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
-    assert warning_vue.component == "WidgetWarning"
-    assert warning_vue.id == warning_component_id
-    assert warning_vue.ssr == false
+    warning =
+      widget_warning_presentation(view, runtime_item.widget.widget_id, warning_component_id)
 
-    assert warning_vue.props["presentation"]["trigger"]["badge"] == %{
+    assert warning["component_id"] == warning_component_id
+
+    assert warning["trigger"]["badge"] == %{
              "attrs" => %{
                "data-engine-warning" => "all_revisions_view",
                "title" => "Telemetry source is showing all observation revisions"

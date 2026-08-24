@@ -44,7 +44,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetWarningComponents do
 
   def warning_codes(_warnings), do: ""
 
-  defp warning_presentation(id, warning, placement_id) do
+  def warning_presentation(id, warning, placement_id) do
     label = text_value(warning.label)
 
     %{

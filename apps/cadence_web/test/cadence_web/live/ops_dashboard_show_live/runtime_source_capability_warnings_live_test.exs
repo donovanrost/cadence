@@ -206,20 +206,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
 
       warnings =
         view
-        |> warning_vues()
-        |> Enum.filter(fn vue ->
-          vue.props["presentation"]["overlay"]["attrs"]["data-engine-warning-detail"] ==
+        |> widget_warning_presentations(widget.widget_id)
+        |> Enum.filter(fn warning ->
+          warning["overlay"]["attrs"]["data-engine-warning-detail"] ==
             "unsupported_source_capability"
         end)
 
       assert warnings != []
 
-      Enum.each(warnings, fn vue ->
-        assert vue.component == "WidgetWarning"
-        assert vue.ssr == false
+      Enum.each(warnings, fn warning ->
+        assert String.starts_with?(
+                 warning["component_id"],
+                 "widget-#{widget.widget_id}-engine-warning-"
+               )
+
+        assert String.ends_with?(warning["component_id"], "-component")
       end)
 
-      presentations = Enum.map(warnings, & &1.props["presentation"])
+      presentations = warnings
 
       assert Enum.any?(
                presentations,
@@ -298,15 +302,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       {_name, _value} -> []
     end)
     |> Map.new()
-  end
-
-  defp warning_vues(view) do
-    html = render(view)
-
-    html
-    |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s([data-name="WidgetWarning"]))
-    |> LazyHTML.attribute("id")
-    |> Enum.map(&LiveVue.Test.get_vue(html, id: &1))
   end
 end

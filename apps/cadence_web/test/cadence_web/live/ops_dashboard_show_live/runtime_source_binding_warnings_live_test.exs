@@ -193,11 +193,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
              )
 
       warning_component_id = "widget-#{widget.widget_id}-engine-warning-0-component"
-      warning_vue = LiveVue.Test.get_vue(view, id: warning_component_id)
-      assert warning_vue.component == "WidgetWarning"
-      assert warning_vue.id == warning_component_id
-      assert warning_vue.ssr == false
-      warning = warning_vue.props["presentation"]
+      warning = widget_warning_presentation(view, widget.widget_id, warning_component_id)
+      assert warning["component_id"] == warning_component_id
       evidence_button = warning["body"]["evidence_button"]
 
       assert evidence_button["attrs"]["data-warning-evidence-open"] == ""

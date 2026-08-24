@@ -172,25 +172,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#dashboard-historical-workflow-request-button[href*="/ops/data-operations"][href*="dashboard_time_mode=replay_run"][href*="dashboard_replay_run_id=replay_run_001"][href*="dashboard_limit_mode=observed"])
            )
 
-    warning_vue =
+    warning =
       view
-      |> widget_warning_vues(replay_widget.widget_id)
-      |> Enum.find(fn vue ->
-        vue.props["presentation"]["overlay"]["attrs"]["data-engine-warning-detail"] ==
+      |> widget_warning_presentations(replay_widget.widget_id)
+      |> Enum.find(fn warning ->
+        warning["overlay"]["attrs"]["data-engine-warning-detail"] ==
           "capability_fallback"
       end)
 
-    assert warning_vue
-    assert warning_vue.component == "WidgetWarning"
+    assert warning
 
     assert String.starts_with?(
-             warning_vue.id,
+             warning["component_id"],
              "widget-#{replay_widget.widget_id}-engine-warning-"
            )
 
-    assert String.ends_with?(warning_vue.id, "-component")
-    assert warning_vue.ssr == false
-    warning = warning_vue.props["presentation"]
+    assert String.ends_with?(warning["component_id"], "-component")
 
     assert warning["overlay"]["attrs"]["data-engine-warning-detail"] == "capability_fallback"
 
@@ -265,15 +262,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
       {_name, _value} -> []
     end)
     |> Map.new()
-  end
-
-  defp widget_warning_vues(view, widget_id) do
-    html = render(view)
-
-    html
-    |> LazyHTML.from_fragment()
-    |> LazyHTML.query(~s(#widget-#{widget_id} [data-name="WidgetWarning"]))
-    |> LazyHTML.attribute("id")
-    |> Enum.map(&LiveVue.Test.get_vue(html, id: &1))
   end
 end

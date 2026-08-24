@@ -188,18 +188,114 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
     end
   end
 
+  def source_status_badge_presentation(source_status, mission_id \\ nil) do
+    inventory_query = source_status_inventory_query(source_status)
+    inventory_query_text = source_status_inventory_query_text(inventory_query)
+    inventory_href = source_status_inventory_href(mission_id, inventory_query)
+    actionable? = source_status_evidence?(source_status)
+    label = source_status_label(source_status)
+
+    badge_attrs =
+      %{
+        "title" => source_status_title(source_status),
+        "data-widget-source-badge" => source_status_text(source_status, :state),
+        "data-widget-source-badge-action" => if(actionable?, do: "open_evidence", else: "none"),
+        "data-widget-source-badge-inventory-action" =>
+          source_status_inventory_action(inventory_query),
+        "data-widget-source-badge-inventory-query" => inventory_query_text,
+        "data-widget-source-badge-inventory-href" => inventory_href || "",
+        "data-widget-source-badge-severity" => source_status_text(source_status, :severity),
+        "data-widget-source-badge-label" => label,
+        "data-widget-source-badge-source" =>
+          source_status_list_text(source_status, :logical_sources),
+        "data-widget-source-badge-data-source" =>
+          source_status_list_text(source_status, :data_source_ids),
+        "data-widget-source-badge-binding" =>
+          source_status_list_text(source_status, :source_binding_ids),
+        "data-widget-source-badge-time-mode" =>
+          source_status_list_text(source_status, :time_modes),
+        "data-widget-source-badge-scope-kind" =>
+          source_status_list_text(source_status, :scope_kinds),
+        "data-widget-source-badge-scope-id" => source_status_list_text(source_status, :scope_ids),
+        "data-widget-source-badge-contact-id" =>
+          source_status_list_text(source_status, :contact_ids),
+        "data-widget-source-badge-source-endpoint-id" =>
+          source_status_list_text(source_status, :source_endpoint_ids),
+        "data-widget-source-badge-health-state" =>
+          source_status_list_text(source_status, :source_health_states),
+        "data-widget-source-badge-health-reason" =>
+          source_status_list_text(source_status, :source_health_reasons),
+        "data-widget-source-badge-health-event-id" =>
+          source_status_list_text(source_status, :source_health_event_ids),
+        "data-widget-source-badge-empty-reason" => source_status_empty_reason_text(source_status)
+      }
+
+    badge_attrs =
+      if actionable? do
+        source_status
+        |> EvidenceAttrs.source_status()
+        |> Map.merge(badge_attrs)
+        |> Map.merge(%{
+          "type" => "button",
+          "phx-click" => "open_evidence",
+          "aria-label" => "Inspect #{label} evidence"
+        })
+      else
+        badge_attrs
+      end
+
+    %{
+      wrapper: if(actionable?, do: %{tag: "span", class: "join"}),
+      badge: %{
+        tag: if(actionable?, do: "button", else: "span"),
+        class:
+          Enum.join(
+            [
+              if(actionable?,
+                do: "badge badge-xs gap-1 cursor-pointer join-item",
+                else: "badge badge-xs gap-1"
+              ),
+              source_status_badge_class(source_status)
+            ],
+            " "
+          ),
+        attrs: badge_attrs,
+        icon: %{name: "hero-signal", class: "h-3 w-3"},
+        text: label
+      },
+      inventory_link:
+        if(actionable? and not is_nil(inventory_href),
+          do: %{
+            tag: "a",
+            class: "badge badge-xs badge-outline join-item px-1",
+            attrs: %{
+              "href" => inventory_href,
+              "title" => "Open source inventory",
+              "aria-label" => "Open #{label} source inventory",
+              "data-phx-link" => "redirect",
+              "data-phx-link-state" => "push",
+              "data-widget-source-badge-inventory-open" =>
+                source_status_text(source_status, :state),
+              "data-widget-source-badge-inventory-query" => inventory_query_text
+            },
+            icon: %{name: "hero-circle-stack", class: "h-3 w-3"}
+          }
+        )
+    }
+  end
+
   def widget_query_diagnostics?(widget, data, data_view, compare_data_view) do
     widget_query_diagnostic_rows(widget, data, data_view, compare_data_view) != []
   end
 
-  defp widget_query_diagnostics_presentation(
-         placement_id,
-         widget,
-         data,
-         data_view,
-         compare_data_view,
-         warnings
-       ) do
+  def widget_query_diagnostics_presentation(
+        placement_id,
+        widget,
+        data,
+        data_view,
+        compare_data_view,
+        warnings
+      ) do
     overlay_id = "widget-query-#{placement_id}"
     rows = widget_query_diagnostic_rows(widget, data, data_view, compare_data_view)
     source_status = source_status(data)

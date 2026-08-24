@@ -2,7 +2,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
   use ExUnit.Case, async: true
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport, only: [assert_widget_row: 4]
+
+  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport,
+    only: [assert_widget_row: 4, widget_header_presentation: 2]
 
   alias Cadence.Dashboards.RenderWidget
   alias CadenceWeb.OpsDashboardShowLive.Components
@@ -34,32 +36,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
           warnings: []
         )
 
-      document = LazyHTML.from_fragment(html)
-      selector = ~s([data-widget-lifecycle-state="#{state}"])
       expected_severity = Atom.to_string(severity)
       expected_state = Atom.to_string(state)
+      header = widget_header_presentation(html, "placement-1")
 
-      assert [^expected_severity] =
-               document
-               |> LazyHTML.query(selector)
-               |> LazyHTML.attribute("data-widget-lifecycle-severity")
+      assert header["root"]["attrs"]["data-widget-lifecycle-severity"] == expected_severity
+      assert header["root"]["attrs"]["data-widget-lifecycle-reasons"] == expected_state
 
-      assert [^expected_state] =
-               document
-               |> LazyHTML.query(selector)
-               |> LazyHTML.attribute("data-widget-lifecycle-reasons")
+      details = header["actions"]["details"]
+      assert details["overlay"]["id"] == "widget-details-placement-1"
+      assert details["body"]["indicators"]["attrs"]["data-widget-detail-indicators"] == ""
 
-      assert ["widget-details-placement-1"] =
-               document
-               |> LazyHTML.query("#widget-details-placement-1")
-               |> LazyHTML.attribute("id")
-
-      assert [""] =
-               document
-               |> LazyHTML.query("#widget-details-placement-1 [data-widget-detail-indicators]")
-               |> LazyHTML.attribute("data-widget-detail-indicators")
-
-      assert html =~ label
+      assert details["body"]["indicators"]["lifecycle"]["text"] == label
     end
   end
 
@@ -231,10 +219,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleComponentsTest do
              |> LazyHTML.query("[data-widget-body-notice]")
              |> LazyHTML.attribute("data-widget-body-notice")
 
-    assert ["partial"] =
-             document
-             |> LazyHTML.query("[data-widget-lifecycle-indicator]")
-             |> LazyHTML.attribute("data-widget-lifecycle-indicator")
+    assert "partial" ==
+             html
+             |> widget_header_presentation("placement-1")
+             |> get_in([
+               "status_indicators",
+               "lifecycle",
+               "attrs",
+               "data-widget-lifecycle-indicator"
+             ])
 
     assert_widget_row(html, "data_table", "placement-1", %{
       "data-data-table-row" => "tlm.hk.battery_voltage"

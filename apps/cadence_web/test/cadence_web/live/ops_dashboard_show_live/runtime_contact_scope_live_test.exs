@@ -210,15 +210,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
       refute has_element?(view, ~s([data-ops-context-section="source_status"]))
       refute has_element?(view, ~s([data-ops-context-section="source_selection"]))
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} button[data-widget-source-badge="unknown"][data-widget-source-badge-inventory-action="source_inventory"][data-widget-source-badge-inventory-href*="/ops/data-sources"][data-widget-source-badge-inventory-href*="contact_id=dashboard-runtime-empty-contact"][data-widget-source-badge-inventory-href*="source_endpoint_id=source-endpoint-alpha"])
-             )
+      source_badge = widget_header_source_presentation(view, trend_item.placement_id)
+      source_badge_attrs = source_badge["badge"]["attrs"]
+      inventory_attrs = source_badge["inventory_link"]["attrs"]
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} a[data-widget-source-badge-inventory-open="unknown"][href*="/ops/data-sources"][href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"])
-             )
+      assert source_badge_attrs["data-widget-source-badge"] == "unknown"
+      assert source_badge_attrs["data-widget-source-badge-inventory-action"] == "source_inventory"
+      assert source_badge_attrs["data-widget-source-badge-inventory-href"] =~ "/ops/data-sources"
+
+      assert source_badge_attrs["data-widget-source-badge-inventory-href"] =~
+               "contact_id=dashboard-runtime-empty-contact"
+
+      assert source_badge_attrs["data-widget-source-badge-inventory-href"] =~
+               "source_endpoint_id=source-endpoint-alpha"
+
+      assert inventory_attrs["data-widget-source-badge-inventory-open"] == "unknown"
+      assert inventory_attrs["data-phx-link"] == "redirect"
+      assert inventory_attrs["data-phx-link-state"] == "push"
+      assert inventory_attrs["href"] =~ "/ops/data-sources"
+      assert inventory_attrs["href"] =~ "contact_id=dashboard-runtime-empty-contact"
+      assert inventory_attrs["href"] =~ "source_endpoint_id=source-endpoint-alpha"
 
       query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
 
@@ -275,9 +286,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                ~s(#dashboard-evidence-source-inventory[href*="contact_id=dashboard-runtime-empty-contact"][href*="source_endpoint_id=source-endpoint-alpha"][href*="source_dashboard_id=#{dashboard.dashboard_id}"])
              )
 
-      view
-      |> element(~s(#{widget_selector} button[data-widget-source-badge="unknown"]))
-      |> render_click()
+      render_hook(view, source_badge_attrs["phx-click"], event_params(source_badge_attrs))
 
       assert has_element?(
                view,
@@ -403,10 +412,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
                  "source-endpoint-alpha,source-endpoint-gamma"
              } = query_diagnostics["overlay"]["attrs"]
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector} button[data-widget-source-badge="unknown"][phx-value-contact-id="#{contact_alpha.scheduled_contact_id}"][phx-value-contact-ids="#{scope_ids}"][phx-value-source-endpoint-id="source-endpoint-alpha"])
-             )
+      source_badge = widget_header_source_presentation(view, trend_item.placement_id)
+      source_badge_attrs = source_badge["badge"]["attrs"]
+
+      assert source_badge_attrs["data-widget-source-badge"] == "unknown"
+      assert source_badge_attrs["phx-value-contact-id"] == contact_alpha.scheduled_contact_id
+      assert source_badge_attrs["phx-value-contact-ids"] == scope_ids
+      assert source_badge_attrs["phx-value-source-endpoint-id"] == "source-endpoint-alpha"
 
       evidence_attrs = query_diagnostics["body"]["evidence_button"]["attrs"]
       render_hook(view, evidence_attrs["phx-click"], event_params(evidence_attrs))
@@ -442,13 +454,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
 
       stop_dashboard_view(view)
     end
-  end
-
-  defp widget_query_presentation(view, placement_id) do
-    view
-    |> LiveVue.Test.get_vue(id: "widget-query-#{placement_id}-component")
-    |> Map.fetch!(:props)
-    |> Map.fetch!("presentation")
   end
 
   defp event_params(attrs) do
