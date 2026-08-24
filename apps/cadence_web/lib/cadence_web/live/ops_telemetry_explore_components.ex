@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
   use CadenceWeb, :html
 
   alias Cadence.Telemetry.SelectionPolicy
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @filter_fields ~w(
@@ -318,7 +319,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
 
   defp form_string_value(form, field) do
     form
-    |> Phoenix.HTML.Form.input_value(field)
+    |> Form.input_value(field)
     |> string_value()
   end
 

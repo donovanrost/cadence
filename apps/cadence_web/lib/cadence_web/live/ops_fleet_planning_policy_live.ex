@@ -661,7 +661,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
       lifecycle_state: Atom.to_string(grant.lifecycle_state),
       lifecycle_state_class: grant_state_class(grant.lifecycle_state),
       policy_evidence:
-        "policy v#{grant.fleet_planning_policy_version} · #{Enum.join(Enum.map(grant.allowed_actions, &Atom.to_string/1), ", ")}",
+        "policy v#{grant.fleet_planning_policy_version} · #{Enum.map_join(grant.allowed_actions, ", ", &Atom.to_string/1)}",
       boundary:
         "≤ #{grant.maximum_contacts} contacts · ≤ #{hours(grant.maximum_horizon_seconds)}",
       expiry: "expires #{format_time(grant.valid_until)}"

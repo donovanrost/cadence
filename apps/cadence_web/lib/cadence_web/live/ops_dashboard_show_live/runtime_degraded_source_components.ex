@@ -461,8 +461,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
   defp joined_values(values, separator) do
     values
     |> Enum.reject(&blank?/1)
-    |> Enum.map(&value_text/1)
-    |> Enum.join(separator)
+    |> Enum.map_join(separator, &value_text/1)
   end
 
   defp attribute_value(nil), do: nil

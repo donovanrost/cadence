@@ -3,6 +3,9 @@ defmodule CadenceWeb.UserSessionLive do
 
   use CadenceWeb, :live_view
 
+  alias Phoenix.HTML.Form
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(_params, _session, socket) do
     params = %{"email" => "", "password" => ""}
@@ -27,7 +30,7 @@ defmodule CadenceWeb.UserSessionLive do
       v-component="UserSession"
       page={page_dto()}
       form={form_dto(@form, @csrf_token)}
-      v-on:validate={Phoenix.LiveView.JS.push("validate")}
+      v-on:validate={JS.push("validate")}
       v-ssr={false}
     />
     """
@@ -77,5 +80,5 @@ defmodule CadenceWeb.UserSessionLive do
     }
   end
 
-  defp form_value(form, field), do: Phoenix.HTML.Form.input_value(form, field) || ""
+  defp form_value(form, field), do: Form.input_value(form, field) || ""
 end

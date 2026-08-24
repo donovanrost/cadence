@@ -449,8 +449,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
   defp class_names(values) do
     values
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&dom_text/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &dom_text/1)
   end
 
   defp nullable_attribute_text(nil), do: nil

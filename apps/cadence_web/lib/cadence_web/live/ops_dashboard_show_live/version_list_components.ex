@@ -255,8 +255,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponents do
   defp class_list(classes) do
     classes
     |> Enum.reject(&(&1 in [nil, false]))
-    |> Enum.map(&rendered_body/1)
-    |> Enum.join(" ")
+    |> Enum.map_join(" ", &rendered_body/1)
   end
 
   defp truthy?(value), do: value not in [nil, false]
