@@ -142,7 +142,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
     %{
       id: "catalog-artifact-run-#{run.import_run_id}",
       actions_id: "#{run.import_run_id}-actions",
-      status: status_badge(run.status),
+      status: status_tone(run.status),
       status_label: status_label(run.status),
       started_at: Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S"),
       completed_at: completed_at(run.completed_at),
@@ -153,10 +153,10 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   defp completed_at(nil), do: "—"
   defp completed_at(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
 
-  defp status_badge(:running), do: "info"
-  defp status_badge(:completed), do: "ready"
-  defp status_badge(:failed), do: "blocked"
-  defp status_badge(_status), do: "info"
+  defp status_tone(:running), do: "info"
+  defp status_tone(:completed), do: "ready"
+  defp status_tone(:failed), do: "blocked"
+  defp status_tone(_status), do: "info"
 
   defp status_label(:running), do: "Running"
   defp status_label(:completed), do: "Completed"
