@@ -146,17 +146,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#dashboard-active-time-range[data-dashboard-time-mode="replay_run"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-replay-run-selector option[value="replay_run_001"][selected])
-           )
+    replay_vue = LiveVue.Test.get_vue(view, id: "dashboard-time-replay-component")
+    assert replay_vue.component == "DashboardTimeReplay"
+    assert replay_vue.ssr == false
+    assert replay_vue.props == Jason.decode!(Jason.encode!(replay_vue.props))
+    replay_presentation = replay_vue.props["presentation"]
+    replay_selector = replay_presentation["body"]["form"]["replay_run"]
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-replay-progress-clock[data-dashboard-replay-run-id="replay_run_001"][data-dashboard-replay-run-known="true"][data-dashboard-replay-run-status="completed"][data-dashboard-replay-run-sample-count="2"])
-           )
+    selected_replay_option =
+      Enum.find(replay_selector["options"], &(&1["value"] == "replay_run_001"))
 
-    refute has_element?(view, "#dashboard-replay-metadata-warning")
+    assert selected_replay_option["selected"]
+
+    replay_clock_attrs = replay_presentation["body"]["clock"]["attrs"]
+    assert replay_clock_attrs["data-dashboard-replay-run-id"] == "replay_run_001"
+    assert replay_clock_attrs["data-dashboard-replay-run-known"] == "true"
+    assert replay_clock_attrs["data-dashboard-replay-run-status"] == "completed"
+    assert replay_clock_attrs["data-dashboard-replay-run-sample-count"] == "2"
+
+    assert replay_presentation["warning"] == nil
 
     assert has_element?(
              view,

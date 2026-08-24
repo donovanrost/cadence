@@ -18,63 +18,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
   attr(:selected_replay_run, :any, default: nil)
 
   def replay_section(assigns) do
-    assigns = assign(assigns, :replay_form, to_form(replay_form_params(assigns)))
+    replay_form = to_form(replay_form_params(assigns))
+    assigns = assign(assigns, :replay_presentation, replay_presentation(assigns, replay_form))
 
     ~H"""
-    <section class="cadence-dashboard-query-section" aria-labelledby="dashboard-replay-heading">
-      <p id="dashboard-replay-heading" class="text-xs font-semibold text-base-content/85">
-        Replay
-      </p>
-      <div class="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <.form for={@replay_form} id="runtime-replay-form" phx-change="set_runtime_context">
-          <.input field={@replay_form[:time_mode]} id="dashboard-replay-time-mode" type="hidden" compact />
-          <.input field={@replay_form[:time_axis]} id="dashboard-replay-time-axis" type="hidden" compact />
-          <.input field={@replay_form[:from]} id="dashboard-replay-from" type="hidden" compact />
-          <.input field={@replay_form[:to]} id="dashboard-replay-to" type="hidden" compact />
-          <.input field={@replay_form[:realm]} id="dashboard-replay-realm" type="hidden" compact />
-          <.input field={@replay_form[:data_view]} id="dashboard-replay-data-view" type="hidden" compact />
-          <.input field={@replay_form[:compare_data_view]} id="dashboard-replay-compare-data-view" type="hidden" compact />
-          <.input field={@replay_form[:limit_mode]} id="dashboard-replay-limit-mode" type="hidden" compact />
-          <.input field={@replay_form[:source_binding_id]} id="dashboard-replay-source-binding" type="hidden" compact />
-          <.input
-            field={@replay_form[:replay_run_id]}
-            id="dashboard-replay-run-selector"
-            type="select"
-            label="Replay run"
-            options={replay_run_options(@replay_runs, @replay_run_id)}
-            disabled={@replay_runs == [] and @time_mode != "replay_run"}
-            compact
-            class="select-xs font-mono"
-          />
-        </.form>
-        <span
-          :if={@time_mode == "replay_run"}
-          id="dashboard-replay-progress-clock"
-          data-dashboard-replay-run-id={@replay_run_id || ""}
-          data-dashboard-replay-run-known={replay_run_known_text(@selected_replay_run)}
-          data-dashboard-replay-run-status={replay_run_attr(@selected_replay_run, :status)}
-          data-dashboard-replay-run-started-at={replay_run_datetime(@selected_replay_run, :started_at)}
-          data-dashboard-replay-run-completed-at={replay_run_datetime(@selected_replay_run, :completed_at)}
-          data-dashboard-replay-run-sample-count={replay_run_integer(@selected_replay_run, :replayed_sample_count)}
-          data-dashboard-replay-window-from={@time_from || ""}
-          data-dashboard-replay-window-to={@time_to || ""}
-          data-dashboard-replay-window-bounded={replay_window_bounded_text(@time_from, @time_to)}
-          class="badge badge-info badge-outline badge-xs mb-1 max-w-64 truncate font-mono"
-          title={replay_clock_title(@selected_replay_run, @replay_run_id, @time_from, @time_to)}
-        >
-          {replay_clock_label(@selected_replay_run, @replay_run_id, @time_from, @time_to)}
-        </span>
-      </div>
-      <span
-        :if={@time_mode == "replay_run" and present_text?(@replay_run_id) and is_nil(@selected_replay_run)}
-        id="dashboard-replay-metadata-warning"
-        data-dashboard-replay-run-id={@replay_run_id}
-        class="badge badge-warning badge-xs mt-2 max-w-64 truncate font-mono"
-        title="This replay run is not present in the persisted mission replay-run inventory."
-      >
-        <.icon name="hero-exclamation-triangle" class="h-3 w-3" /> Unlisted replay
-      </span>
-    </section>
+    <.vue
+      id="dashboard-time-replay-component"
+      v-component="DashboardTimeReplay"
+      presentation={@replay_presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
@@ -238,6 +192,165 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimeReplayComponents do
 
   defp selected_datum_body(nil), do: ""
   defp selected_datum_body(value), do: to_string(value)
+
+  defp replay_presentation(assigns, replay_form) do
+    %{
+      root: %{
+        attrs: %{
+          class: "cadence-dashboard-query-section",
+          "aria-labelledby": "dashboard-replay-heading"
+        }
+      },
+      heading: %{
+        attrs: %{
+          id: "dashboard-replay-heading",
+          class: "text-xs font-semibold text-base-content/85"
+        },
+        text: "Replay"
+      },
+      body: %{
+        class: "mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end",
+        form: replay_form_dto(assigns, replay_form),
+        clock: replay_clock_dto(assigns)
+      },
+      warning: replay_warning_dto(assigns)
+    }
+  end
+
+  defp replay_form_dto(assigns, replay_form) do
+    %{
+      attrs: %{
+        id: "runtime-replay-form",
+        "phx-change": "set_runtime_context"
+      },
+      hidden_fields: [
+        replay_hidden_field_dto(replay_form[:time_mode], "dashboard-replay-time-mode"),
+        replay_hidden_field_dto(replay_form[:time_axis], "dashboard-replay-time-axis"),
+        replay_hidden_field_dto(replay_form[:from], "dashboard-replay-from"),
+        replay_hidden_field_dto(replay_form[:to], "dashboard-replay-to"),
+        replay_hidden_field_dto(replay_form[:realm], "dashboard-replay-realm"),
+        replay_hidden_field_dto(replay_form[:data_view], "dashboard-replay-data-view"),
+        replay_hidden_field_dto(
+          replay_form[:compare_data_view],
+          "dashboard-replay-compare-data-view"
+        ),
+        replay_hidden_field_dto(replay_form[:limit_mode], "dashboard-replay-limit-mode"),
+        replay_hidden_field_dto(
+          replay_form[:source_binding_id],
+          "dashboard-replay-source-binding"
+        )
+      ],
+      replay_run:
+        replay_select_field_dto(
+          replay_form[:replay_run_id],
+          replay_run_options(assigns.replay_runs, assigns.replay_run_id),
+          assigns.replay_runs == [] and assigns.time_mode != "replay_run"
+        )
+    }
+  end
+
+  defp replay_hidden_field_dto(field, id) do
+    %{
+      wrapper_class: "fieldset",
+      attrs: %{
+        id: id,
+        name: field.name,
+        type: "hidden",
+        value: field.value,
+        required: false,
+        disabled: false,
+        class: "w-full input"
+      }
+    }
+  end
+
+  defp replay_select_field_dto(field, options, disabled?) do
+    %{
+      wrapper_class: "fieldset",
+      label: %{
+        class: "hud-label block mb-1.5",
+        text: "Replay run"
+      },
+      attrs: %{
+        id: "dashboard-replay-run-selector",
+        name: field.name,
+        required: false,
+        multiple: false,
+        disabled: disabled?,
+        class: "w-full select select-xs font-mono"
+      },
+      options: Enum.map(options, &replay_select_option_dto(&1, field.value))
+    }
+  end
+
+  defp replay_select_option_dto({label, value}, selected_value) do
+    %{
+      label: label,
+      value: to_string(value),
+      selected: to_string(selected_value) == to_string(value),
+      disabled: false,
+      title: nil
+    }
+  end
+
+  defp replay_clock_dto(%{time_mode: "replay_run"} = assigns) do
+    %{
+      attrs: %{
+        id: "dashboard-replay-progress-clock",
+        "data-dashboard-replay-run-id": assigns.replay_run_id || "",
+        "data-dashboard-replay-run-known": replay_run_known_text(assigns.selected_replay_run),
+        "data-dashboard-replay-run-status": replay_run_attr(assigns.selected_replay_run, :status),
+        "data-dashboard-replay-run-started-at":
+          replay_run_datetime(assigns.selected_replay_run, :started_at),
+        "data-dashboard-replay-run-completed-at":
+          replay_run_datetime(assigns.selected_replay_run, :completed_at),
+        "data-dashboard-replay-run-sample-count":
+          replay_run_integer(assigns.selected_replay_run, :replayed_sample_count),
+        "data-dashboard-replay-window-from": assigns.time_from || "",
+        "data-dashboard-replay-window-to": assigns.time_to || "",
+        "data-dashboard-replay-window-bounded":
+          replay_window_bounded_text(assigns.time_from, assigns.time_to),
+        class: "badge badge-info badge-outline badge-xs mb-1 max-w-64 truncate font-mono",
+        title:
+          replay_clock_title(
+            assigns.selected_replay_run,
+            assigns.replay_run_id,
+            assigns.time_from,
+            assigns.time_to
+          )
+      },
+      text:
+        replay_clock_label(
+          assigns.selected_replay_run,
+          assigns.replay_run_id,
+          assigns.time_from,
+          assigns.time_to
+        )
+    }
+  end
+
+  defp replay_clock_dto(_assigns), do: nil
+
+  defp replay_warning_dto(%{
+         time_mode: "replay_run",
+         replay_run_id: replay_run_id,
+         selected_replay_run: nil
+       }) do
+    if present_text?(replay_run_id) do
+      %{
+        attrs: %{
+          id: "dashboard-replay-metadata-warning",
+          "data-dashboard-replay-run-id": replay_run_id,
+          class: "badge badge-warning badge-xs mt-2 max-w-64 truncate font-mono",
+          title: "This replay run is not present in the persisted mission replay-run inventory."
+        },
+        icon_class: "hero-exclamation-triangle h-3 w-3",
+        text: "Unlisted replay"
+      }
+    end
+  end
+
+  defp replay_warning_dto(_assigns), do: nil
 
   defp replay_form_params(assigns) do
     %{

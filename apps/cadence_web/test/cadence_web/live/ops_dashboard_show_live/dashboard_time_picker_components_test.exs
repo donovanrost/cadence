@@ -33,6 +33,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     render_component(&DashboardTimePickerComponents.time_toolbar_cluster/1, attrs)
   end
 
+  defp replay_vue(html) do
+    LiveVue.Test.get_vue(html, id: "dashboard-time-replay-component")
+  end
+
+  defp replay_presentation(html) do
+    html
+    |> replay_vue()
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp replay_control(presentation, id) do
+    form = presentation["body"]["form"]
+
+    Enum.find(
+      form["hidden_fields"] ++ [form["replay_run"]],
+      &(&1["attrs"]["id"] == id)
+    )
+  end
+
+  defp replay_option(presentation, value) do
+    presentation
+    |> replay_control("dashboard-replay-run-selector")
+    |> Map.fetch!("options")
+    |> Enum.find(&(&1["value"] == value))
+  end
+
   defp selected_datum_vue(html) do
     LiveVue.Test.get_vue(html, id: "dashboard-selected-datum-actions-component")
   end
@@ -469,35 +496,234 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
       )
 
     document = LazyHTML.from_fragment(html)
+    vue = replay_vue(html)
 
-    assert ["replay-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-replay-run-selector option[selected]")
-             |> LazyHTML.attribute("value")
+    assert document
+           |> LazyHTML.query("#dashboard-time-replay-component")
+           |> Enum.count() == 1
 
-    clock = LazyHTML.query(document, "#dashboard-replay-progress-clock")
-    assert ["replay-run-1"] = LazyHTML.attribute(clock, "data-dashboard-replay-run-id")
-    assert ["true"] = LazyHTML.attribute(clock, "data-dashboard-replay-run-known")
-    assert ["completed"] = LazyHTML.attribute(clock, "data-dashboard-replay-run-status")
+    assert document
+           |> LazyHTML.query(
+             "#dashboard-time-replay-component .cadence-dashboard-query-section"
+           )
+           |> Enum.empty?()
 
-    assert ["2026-06-17T11:59:00Z"] =
-             LazyHTML.attribute(clock, "data-dashboard-replay-run-started-at")
+    assert vue.id == "dashboard-time-replay-component"
+    assert vue.component == "DashboardTimeReplay"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert ["42"] = LazyHTML.attribute(clock, "data-dashboard-replay-run-sample-count")
+    presentation = vue.props["presentation"]
 
-    assert ["2026-06-17T12:00:00Z"] =
-             LazyHTML.attribute(clock, "data-dashboard-replay-window-from")
+    assert presentation["root"] == %{
+             "attrs" => %{
+               "class" => "cadence-dashboard-query-section",
+               "aria-labelledby" => "dashboard-replay-heading"
+             }
+           }
 
-    assert ["true"] = LazyHTML.attribute(clock, "data-dashboard-replay-window-bounded")
+    assert presentation["heading"] == %{
+             "attrs" => %{
+               "id" => "dashboard-replay-heading",
+               "class" => "text-xs font-semibold text-base-content/85"
+             },
+             "text" => "Replay"
+           }
+
+    assert presentation["body"]["class"] ==
+             "mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+
+    form = presentation["body"]["form"]
+
+    assert form["attrs"] == %{
+             "id" => "runtime-replay-form",
+             "phx-change" => "set_runtime_context"
+           }
+
+    assert form["hidden_fields"] == [
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-time-mode",
+                 "name" => "time_mode",
+                 "type" => "hidden",
+                 "value" => "replay_run",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-time-axis",
+                 "name" => "time_axis",
+                 "type" => "hidden",
+                 "value" => "generation_time",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-from",
+                 "name" => "from",
+                 "type" => "hidden",
+                 "value" => "2026-06-17T12:00:00Z",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-to",
+                 "name" => "to",
+                 "type" => "hidden",
+                 "value" => "2026-06-17T12:05:00Z",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-realm",
+                 "name" => "realm",
+                 "type" => "hidden",
+                 "value" => "replay",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-data-view",
+                 "name" => "data_view",
+                 "type" => "hidden",
+                 "value" => "as_recorded",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-compare-data-view",
+                 "name" => "compare_data_view",
+                 "type" => "hidden",
+                 "value" => "",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-limit-mode",
+                 "name" => "limit_mode",
+                 "type" => "hidden",
+                 "value" => "current",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             },
+             %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-replay-source-binding",
+                 "name" => "source_binding_id",
+                 "type" => "hidden",
+                 "value" => "replay-binding",
+                 "required" => false,
+                 "disabled" => false,
+                 "class" => "w-full input"
+               }
+             }
+           ]
+
+    assert form["replay_run"] == %{
+             "wrapper_class" => "fieldset",
+             "label" => %{
+               "class" => "hud-label block mb-1.5",
+               "text" => "Replay run"
+             },
+             "attrs" => %{
+               "id" => "dashboard-replay-run-selector",
+               "name" => "replay_run_id",
+               "required" => false,
+               "multiple" => false,
+               "disabled" => false,
+               "class" => "w-full select select-xs font-mono"
+             },
+             "options" => [
+               %{
+                 "label" => "Select replay run",
+                 "value" => "",
+                 "selected" => false,
+                 "disabled" => false,
+                 "title" => nil
+               },
+               %{
+                 "label" => "running replay-run-2 / 7 samples",
+                 "value" => "replay-run-2",
+                 "selected" => false,
+                 "disabled" => false,
+                 "title" => nil
+               },
+               %{
+                 "label" => "completed replay-run-1 / 42 samples",
+                 "value" => "replay-run-1",
+                 "selected" => true,
+                 "disabled" => false,
+                 "title" => nil
+               }
+             ]
+           }
+
+    assert replay_option(presentation, "replay-run-1")["selected"]
+
+    clock = presentation["body"]["clock"]
+
+    assert clock == %{
+             "attrs" => %{
+               "id" => "dashboard-replay-progress-clock",
+               "data-dashboard-replay-run-id" => "replay-run-1",
+               "data-dashboard-replay-run-known" => "true",
+               "data-dashboard-replay-run-status" => "completed",
+               "data-dashboard-replay-run-started-at" => "2026-06-17T11:59:00Z",
+               "data-dashboard-replay-run-completed-at" => "2026-06-17T12:06:00Z",
+               "data-dashboard-replay-run-sample-count" => "42",
+               "data-dashboard-replay-window-from" => "2026-06-17T12:00:00Z",
+               "data-dashboard-replay-window-to" => "2026-06-17T12:05:00Z",
+               "data-dashboard-replay-window-bounded" => "true",
+               "class" =>
+                 "badge badge-info badge-outline badge-xs mb-1 max-w-64 truncate font-mono",
+               "title" =>
+                 "Replay completed replay-run-1, started 2026-06-17T11:59:00Z, completed 2026-06-17T12:06:00Z, generation window 2026-06-17T12:00:00Z to 2026-06-17T12:05:00Z"
+             },
+             "text" =>
+               "completed replay-run-1 / 2026-06-17T12:00:00Z -> 2026-06-17T12:05:00Z"
+           }
 
     scrub = selected_datum_action(html, "dashboard-replay-scrub-to-selection")
     assert scrub["attrs"]["data-dashboard-replay-scrub-available"] == "true"
     refute Map.has_key?(scrub["attrs"], "disabled")
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-replay-metadata-warning")
-             |> LazyHTML.attribute("id")
+    assert presentation["warning"] == nil
 
     assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~
              "Replay · replay-run-1"
@@ -506,6 +732,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
              document
              |> LazyHTML.query("#dashboard-time-shift-back")
              |> LazyHTML.attribute("id")
+  end
+
+  test "keeps inactive replay presentation disabled without runtime-only badges" do
+    presentation = render_cluster([]) |> replay_presentation()
+    replay_run = replay_control(presentation, "dashboard-replay-run-selector")
+
+    assert replay_run["attrs"]["disabled"]
+
+    assert replay_run["options"] == [
+             %{
+               "label" => "Select replay run",
+               "value" => "",
+               "selected" => true,
+               "disabled" => false,
+               "title" => nil
+             }
+           ]
+
+    assert presentation["body"]["clock"] == nil
+    assert presentation["warning"] == nil
   end
 
   test "disables replay scrub when no timestamp is selected" do
@@ -517,47 +763,45 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
         data_view: "as_recorded"
       )
 
-    document = LazyHTML.from_fragment(html)
-
     scrub = selected_datum_action(html, "dashboard-replay-scrub-to-selection")
     assert scrub["attrs"]["data-dashboard-replay-scrub-available"] == "false"
     assert scrub["attrs"]["disabled"] == ""
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-replay-progress-clock")
-             |> LazyHTML.attribute("data-dashboard-replay-window-bounded")
+    clock_attrs = replay_presentation(html)["body"]["clock"]["attrs"]
+    assert clock_attrs["data-dashboard-replay-window-bounded"] == "false"
   end
 
   test "preserves unlisted replay deep links with metadata warning" do
-    document =
-      LazyHTML.from_fragment(
-        render_cluster(
-          time_mode: "replay_run",
-          time_from: "2026-06-17T12:00:00Z",
-          time_to: "2026-06-17T12:05:00Z",
-          replay_run_id: "replay-run-unlisted",
-          data_realm: "replay",
-          data_view: "as_recorded",
-          selected_data_ref: %{
-            "timestamp_ms" => DateTime.to_unix(~U[2026-06-17 12:02:00Z], :millisecond)
-          }
-        )
+    html =
+      render_cluster(
+        time_mode: "replay_run",
+        time_from: "2026-06-17T12:00:00Z",
+        time_to: "2026-06-17T12:05:00Z",
+        replay_run_id: "replay-run-unlisted",
+        data_realm: "replay",
+        data_view: "as_recorded",
+        selected_data_ref: %{
+          "timestamp_ms" => DateTime.to_unix(~U[2026-06-17 12:02:00Z], :millisecond)
+        }
       )
 
-    assert ["replay-run-unlisted"] =
-             document
-             |> LazyHTML.query("#dashboard-replay-run-selector option[selected]")
-             |> LazyHTML.attribute("value")
+    presentation = replay_presentation(html)
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-replay-progress-clock")
-             |> LazyHTML.attribute("data-dashboard-replay-run-known")
+    assert replay_option(presentation, "replay-run-unlisted")["selected"]
 
-    assert ["replay-run-unlisted"] =
-             document
-             |> LazyHTML.query("#dashboard-replay-metadata-warning")
-             |> LazyHTML.attribute("data-dashboard-replay-run-id")
+    assert presentation["body"]["clock"]["attrs"]["data-dashboard-replay-run-known"] ==
+             "false"
+
+    assert presentation["warning"] == %{
+             "attrs" => %{
+               "id" => "dashboard-replay-metadata-warning",
+               "data-dashboard-replay-run-id" => "replay-run-unlisted",
+               "class" => "badge badge-warning badge-xs mt-2 max-w-64 truncate font-mono",
+               "title" =>
+                 "This replay run is not present in the persisted mission replay-run inventory."
+             },
+             "icon_class" => "hero-exclamation-triangle h-3 w-3",
+             "text" => "Unlisted replay"
+           }
   end
 end
