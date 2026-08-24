@@ -9,6 +9,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -37,9 +38,68 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 
-      view
-      |> form("#dashboard-form", dashboard: %{name: "Power Overview", description: "EPS"})
-      |> render_submit()
+      assert has_element?(view, "#ops-dashboard-new-component.contents")
+      refute has_element?(view, "#ops-dashboard-new-page")
+      refute has_element?(view, "#dashboard-form")
+
+      new_vue = LiveVue.Test.get_vue(view, id: "ops-dashboard-new-component")
+
+      assert new_vue.component == "OpsDashboardNew"
+      assert new_vue.class == "contents"
+      assert new_vue.ssr == false
+
+      assert new_vue.handlers == %{
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
+             }
+
+      assert new_vue.props == %{
+               "page" => %{
+                 "id" => "ops-dashboard-new-page",
+                 "mode" => "new",
+                 "eyebrow" => "Dashboard authoring / Create",
+                 "heading" => "New Dashboard",
+                 "description" =>
+                   "Create a mission-shared telemetry workspace, then compose it in the staged Editor.",
+                 "source" => nil,
+                 "import_guidance" => nil,
+                 "cancel" => %{
+                   "id" => "dashboard-cancel",
+                   "label" => "Cancel",
+                   "href" => "/missions/#{mission.mission_id}/ops/dashboards"
+                 }
+               },
+               "form" => %{
+                 "id" => "dashboard-form",
+                 "name" => %{
+                   "id" => "dashboard_name",
+                   "name" => "dashboard[name]",
+                   "type" => "text",
+                   "label" => "Name",
+                   "value" => "",
+                   "required" => true
+                 },
+                 "description" => %{
+                   "id" => "dashboard_description",
+                   "name" => "dashboard[description]",
+                   "type" => "text",
+                   "label" => "Description (what operators use this screen for)",
+                   "value" => "",
+                   "required" => false
+                 },
+                 "document_json" => nil,
+                 "submit" => %{
+                   "id" => "dashboard-submit",
+                   "label" => "Create in Editor"
+                 }
+               }
+             }
+
+      assert new_vue.props == Jason.decode!(Jason.encode!(new_vue.props))
+
+      render_hook(view, "save", %{
+        "dashboard" => %{"name" => "Power Overview", "description" => "EPS"}
+      })
 
       assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
                Cadence.Dashboards.list_dashboard_summaries(
