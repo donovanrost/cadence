@@ -264,25 +264,134 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
     test "creates, edits, and archives ground stations" do
       {conn, org, mission} = signed_in_org_and_mission()
 
-      {:ok, view, html} =
+      {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
 
-      assert has_element?(view, "#comms-ground-station-form-page")
-      assert has_element?(view, "#ground-station-form")
-      assert html =~ "New Ground Station"
+      assert has_element?(view, "#comms-ground-station-form-component")
+      refute has_element?(view, "#comms-ground-station-form-page")
+      refute has_element?(view, "#ground-station-form")
 
-      assert {:error, {:live_redirect, %{to: show_path}}} =
-               view
-               |> form("#ground-station-form",
-                 ground_station: %{
-                   ground_station_id: "dss-25",
-                   display_name: "Goldstone DSS-25",
-                   provider: "DSN",
-                   region: "goldstone",
-                   metadata_json: ~s({"antenna_diameter_m":34})
+      new_vue = ground_station_form_vue(view)
+
+      assert new_vue.props == %{
+               "mode" => "new",
+               "page" => %{
+                 "id" => "comms-ground-station-form-page",
+                 "heading" => "New Ground Station",
+                 "subtitle" =>
+                   "Define a stable mission setup identity for an antenna, site, or provider station.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Comms",
+                     "href" => "/missions/#{mission.mission_id}/comms"
+                   },
+                   %{
+                     "label" => "Ground Stations",
+                     "href" => "/missions/#{mission.mission_id}/comms/ground-stations"
+                   },
+                   %{"label" => "New Ground Station", "href" => nil}
+                 ]
+               },
+               "form" => %{
+                 "id" => "ground-station-form",
+                 "sections" => %{
+                   "identity" => %{
+                     "id" => "ground-station-identity-section",
+                     "number" => "01",
+                     "title" => "Identity"
+                   },
+                   "network" => %{
+                     "id" => "ground-station-network-section",
+                     "number" => "02",
+                     "title" => "Network Context"
+                   },
+                   "metadata" => %{
+                     "id" => "ground-station-metadata-section",
+                     "number" => "03",
+                     "title" => "Metadata"
+                   }
+                 },
+                 "fields" => %{
+                   "ground_station_id" => %{
+                     "id" => "ground_station_ground_station_id",
+                     "name" => "ground_station[ground_station_id]",
+                     "type" => "text",
+                     "label" => "Station ID",
+                     "required" => true,
+                     "disabled" => false,
+                     "placeholder" => "dss-14",
+                     "value" => ""
+                   },
+                   "display_name" => %{
+                     "id" => "ground_station_display_name",
+                     "name" => "ground_station[display_name]",
+                     "type" => "text",
+                     "label" => "Display Name",
+                     "required" => true,
+                     "disabled" => false,
+                     "placeholder" => nil,
+                     "value" => ""
+                   },
+                   "provider" => %{
+                     "id" => "ground_station_provider",
+                     "name" => "ground_station[provider]",
+                     "type" => "text",
+                     "label" => "Provider",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => "DSN",
+                     "value" => ""
+                   },
+                   "region" => %{
+                     "id" => "ground_station_region",
+                     "name" => "ground_station[region]",
+                     "type" => "text",
+                     "label" => "Region",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => "goldstone",
+                     "value" => ""
+                   },
+                   "metadata_json" => %{
+                     "id" => "ground_station_metadata_json",
+                     "name" => "ground_station[metadata_json]",
+                     "type" => "textarea",
+                     "label" => "Metadata JSON",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => ~s({"antenna_diameter_m":70}),
+                     "value" => "{}"
+                   }
+                 },
+                 "actions" => %{
+                   "submit" => %{
+                     "id" => "create-ground-station-button",
+                     "label" => "Create Ground Station"
+                   },
+                   "cancel" => %{
+                     "id" => "cancel-ground-station-link",
+                     "label" => "Cancel",
+                     "href" => "/missions/#{mission.mission_id}/comms/ground-stations"
+                   }
                  }
-               )
-               |> render_submit()
+               }
+             }
+
+      render_hook(view, "save", %{
+        "ground_station" => %{
+          "ground_station_id" => "dss-25",
+          "display_name" => "Goldstone DSS-25",
+          "provider" => "DSN",
+          "region" => "goldstone",
+          "metadata_json" => ~s({"antenna_diameter_m":34})
+        }
+      })
+
+      {show_path, _flash} = assert_redirect(view)
 
       assert show_path ==
                "/missions/#{mission.mission_id}/comms/ground-stations/dss-25"
@@ -297,22 +406,130 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
       assert persisted.display_name == "Goldstone DSS-25"
       assert persisted.metadata["antenna_diameter_m"] == 34
 
-      {:ok, edit_view, edit_html} = live(conn, "#{show_path}/edit")
+      {:ok, edit_view, _edit_html} = live(conn, "#{show_path}/edit")
 
-      assert has_element?(edit_view, "#ground-station-form")
-      assert edit_html =~ "Edit Ground Station"
+      assert has_element?(edit_view, "#comms-ground-station-form-component")
+      refute has_element?(edit_view, "#comms-ground-station-form-page")
+      refute has_element?(edit_view, "#ground-station-form")
 
-      assert {:error, {:live_redirect, %{to: ^show_path}}} =
-               edit_view
-               |> form("#ground-station-form",
-                 ground_station: %{
-                   display_name: "Goldstone DSS-25 Prime",
-                   provider: "DSN",
-                   region: "california",
-                   metadata_json: ~s({"antenna_diameter_m":34,"azimuth_drive":"upgraded"})
+      edit_vue = ground_station_form_vue(edit_view)
+
+      assert edit_vue.props == %{
+               "mode" => "edit",
+               "page" => %{
+                 "id" => "comms-ground-station-form-page",
+                 "heading" => "Edit Ground Station",
+                 "subtitle" =>
+                   "Define a stable mission setup identity for an antenna, site, or provider station.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Comms",
+                     "href" => "/missions/#{mission.mission_id}/comms"
+                   },
+                   %{"label" => "Ground Stations", "href" => show_path},
+                   %{"label" => "Edit Ground Station", "href" => nil}
+                 ]
+               },
+               "form" => %{
+                 "id" => "ground-station-form",
+                 "sections" => %{
+                   "identity" => %{
+                     "id" => "ground-station-identity-section",
+                     "number" => "01",
+                     "title" => "Identity"
+                   },
+                   "network" => %{
+                     "id" => "ground-station-network-section",
+                     "number" => "02",
+                     "title" => "Network Context"
+                   },
+                   "metadata" => %{
+                     "id" => "ground-station-metadata-section",
+                     "number" => "03",
+                     "title" => "Metadata"
+                   }
+                 },
+                 "fields" => %{
+                   "ground_station_id" => %{
+                     "id" => "ground_station_ground_station_id",
+                     "name" => "ground_station[ground_station_id]",
+                     "type" => "text",
+                     "label" => "Station ID",
+                     "required" => false,
+                     "disabled" => true,
+                     "placeholder" => "dss-14",
+                     "value" => "dss-25"
+                   },
+                   "display_name" => %{
+                     "id" => "ground_station_display_name",
+                     "name" => "ground_station[display_name]",
+                     "type" => "text",
+                     "label" => "Display Name",
+                     "required" => true,
+                     "disabled" => false,
+                     "placeholder" => nil,
+                     "value" => "Goldstone DSS-25"
+                   },
+                   "provider" => %{
+                     "id" => "ground_station_provider",
+                     "name" => "ground_station[provider]",
+                     "type" => "text",
+                     "label" => "Provider",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => "DSN",
+                     "value" => "DSN"
+                   },
+                   "region" => %{
+                     "id" => "ground_station_region",
+                     "name" => "ground_station[region]",
+                     "type" => "text",
+                     "label" => "Region",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => "goldstone",
+                     "value" => "goldstone"
+                   },
+                   "metadata_json" => %{
+                     "id" => "ground_station_metadata_json",
+                     "name" => "ground_station[metadata_json]",
+                     "type" => "textarea",
+                     "label" => "Metadata JSON",
+                     "required" => false,
+                     "disabled" => false,
+                     "placeholder" => ~s({"antenna_diameter_m":70}),
+                     "value" => "{\n  \"antenna_diameter_m\": 34\n}"
+                   }
+                 },
+                 "actions" => %{
+                   "submit" => %{
+                     "id" => "save-ground-station-button",
+                     "label" => "Save Ground Station"
+                   },
+                   "cancel" => %{
+                     "id" => "cancel-ground-station-link",
+                     "label" => "Cancel",
+                     "href" => show_path
+                   }
                  }
-               )
-               |> render_submit()
+               }
+             }
+
+      render_hook(edit_view, "save", %{
+        "ground_station" => %{
+          "ground_station_id" => "dss-25",
+          "display_name" => "Goldstone DSS-25 Prime",
+          "provider" => "DSN",
+          "region" => "california",
+          "metadata_json" => ~s({"antenna_diameter_m":34,"azimuth_drive":"upgraded"})
+        }
+      })
+
+      assert {^show_path, _flash} = assert_redirect(edit_view)
 
       assert {:ok, updated} =
                GroundStationStore.fetch_ground_station(
@@ -339,26 +556,67 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
                )
     end
 
+    test "keeps Vue-owned values synchronized through validation" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
+
+      render_hook(view, "validate", %{
+        "ground_station" => %{
+          "ground_station_id" => "dss-26",
+          "display_name" => "Goldstone DSS-26",
+          "provider" => "DSN",
+          "region" => "goldstone",
+          "metadata_json" => "{\n  \"antenna_diameter_m\": 34\n}"
+        }
+      })
+
+      fields = ground_station_form_vue(view).props["form"]["fields"]
+
+      assert %{
+               "ground_station_id" => %{"value" => "dss-26"},
+               "display_name" => %{"value" => "Goldstone DSS-26"},
+               "provider" => %{"value" => "DSN"},
+               "region" => %{"value" => "goldstone"},
+               "metadata_json" => %{"value" => "{\n  \"antenna_diameter_m\": 34\n}"}
+             } = fields
+    end
+
+    test "redirects edit mode when the ground station is not found" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+      list_path = "/missions/#{mission.mission_id}/comms/ground-stations"
+
+      assert {:error,
+              {:live_redirect,
+               %{to: ^list_path, flash: %{"error" => "Ground station not found."}}}} =
+               live(conn, "#{list_path}/missing/edit")
+    end
+
     test "rejects invalid metadata JSON" do
       {conn, org, mission} = signed_in_org_and_mission()
 
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
 
-      html =
-        view
-        |> form("#ground-station-form",
-          ground_station: %{
-            ground_station_id: "dss-26",
-            display_name: "Goldstone DSS-26",
-            provider: "DSN",
-            region: "goldstone",
-            metadata_json: "not json"
-          }
-        )
-        |> render_submit()
+      render_hook(view, "save", %{
+        "ground_station" => %{
+          "ground_station_id" => "dss-26",
+          "display_name" => "Goldstone DSS-26",
+          "provider" => "DSN",
+          "region" => "goldstone",
+          "metadata_json" => "not json"
+        }
+      })
 
-      assert html =~ "Metadata JSON must be an object."
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Metadata JSON must be an object."
+             )
+
+      assert ground_station_form_vue(view).props["form"]["fields"]["metadata_json"]["value"] ==
+               "not json"
 
       assert [] =
                GroundStationStore.list_ground_stations(
@@ -392,5 +650,20 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
              )
 
     persisted
+  end
+
+  defp ground_station_form_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "comms-ground-station-form-component")
+
+    assert vue.component == "CommsGroundStationForm"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert vue.handlers == %{
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
+           }
+
+    vue
   end
 end

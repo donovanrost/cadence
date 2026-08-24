@@ -6,6 +6,7 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
   alias Cadence.Comms.GroundStation
   alias CadenceWeb.CommsComponents
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(params, _session, socket) do
@@ -13,14 +14,17 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
     case socket.assigns.live_action do
       :new ->
+        return_to = ~p"/missions/#{mission.mission_id}/comms/ground-stations"
+
         {:ok,
          socket
          |> assign(:page_title, "New Ground Station")
          |> assign(:nav_item, :comms_ground_stations)
          |> assign(:mode, :new)
          |> assign(:ground_station, nil)
-         |> assign(:return_to, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
-         |> assign(:form, to_form(empty_form_params(), as: :ground_station))}
+         |> assign(:return_to, return_to)
+         |> assign(:page, page_dto(mission, :new, return_to))
+         |> assign_form(empty_form_params())}
 
       :edit ->
         ground_station_id = params["ground_station_id"]
@@ -31,17 +35,18 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
                ground_station_id
              ) do
           {:ok, ground_station} ->
+            return_to =
+              ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
+
             {:ok,
              socket
              |> assign(:page_title, "Edit #{ground_station.display_name}")
              |> assign(:nav_item, :comms_ground_stations)
              |> assign(:mode, :edit)
              |> assign(:ground_station, ground_station)
-             |> assign(
-               :return_to,
-               ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
-             )
-             |> assign(:form, to_form(form_params(ground_station), as: :ground_station))}
+             |> assign(:return_to, return_to)
+             |> assign(:page, page_dto(mission, :edit, return_to))
+             |> assign_form(form_params(ground_station))}
 
           {:error, _reason} ->
             {:ok,
@@ -54,12 +59,13 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
   @impl true
   def handle_event("validate", %{"ground_station" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :ground_station))}
+    {:noreply, assign_form(socket, params)}
   end
 
   @impl true
   def handle_event("save", %{"ground_station" => params}, %{assigns: %{mode: :new}} = socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    socket = assign_form(socket, params)
 
     case form_attrs(params, require_id?: true) do
       {:ok, attrs} ->
@@ -96,6 +102,8 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
     %{current_scope: scope, current_mission: mission, ground_station: ground_station} =
       socket.assigns
 
+    socket = assign_form(socket, params)
+
     case form_attrs(params, require_id?: false) do
       {:ok, attrs} ->
         case GroundStationStore.update_ground_station(
@@ -123,57 +131,123 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-ground-station-form-page" class="space-y-6 max-w-2xl">
-      <.page_header
-        title={form_title(@mode)}
-        subtitle="Define a stable mission setup identity for an antenna, site, or provider station."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Ground Stations", @return_to},
-          {form_title(@mode), nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="comms-ground-station-form-component"
+        v-component="CommsGroundStationForm"
+        page={@page}
+        mode={Atom.to_string(@mode)}
+        form={@form_props}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
       />
-
-      <.form
-        for={@form}
-        id="ground-station-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section number="01" title="Identity">
-          <.input
-            field={@form[:ground_station_id]}
-            type="text"
-            label="Station ID"
-            required={@mode == :new}
-            disabled={@mode == :edit}
-            placeholder="dss-14"
-          />
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        </.form_section>
-
-        <.form_section number="02" title="Network Context">
-          <.input field={@form[:provider]} type="text" label="Provider" placeholder="DSN" />
-          <.input field={@form[:region]} type="text" label="Region" placeholder="goldstone" />
-        </.form_section>
-
-        <.form_section number="03" title="Metadata">
-          <.input
-            field={@form[:metadata_json]}
-            type="textarea"
-            label="Metadata JSON"
-            class="min-h-40 font-mono text-xs"
-            placeholder={~s({"antenna_diameter_m":70})}
-          />
-        </.form_section>
-
-        <.form_actions submit={submit_label(@mode)} cancel_navigate={@return_to} />
-      </.form>
-    </div>
+    </Layouts.app>
     """
   end
+
+  defp page_dto(mission, mode, return_to) do
+    %{
+      id: "comms-ground-station-form-page",
+      heading: form_title(mode),
+      subtitle:
+        "Define a stable mission setup identity for an antenna, site, or provider station.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{label: "Ground Stations", href: return_to},
+        %{label: form_title(mode), href: nil}
+      ]
+    }
+  end
+
+  defp assign_form(socket, params) do
+    form = to_form(params, as: :ground_station)
+
+    socket
+    |> assign(:form, form)
+    |> assign(:form_props, form_dto(form.params, socket.assigns.mode, socket.assigns.return_to))
+  end
+
+  defp form_dto(params, mode, return_to) do
+    %{
+      id: "ground-station-form",
+      sections: %{
+        identity: %{id: "ground-station-identity-section", number: "01", title: "Identity"},
+        network: %{
+          id: "ground-station-network-section",
+          number: "02",
+          title: "Network Context"
+        },
+        metadata: %{id: "ground-station-metadata-section", number: "03", title: "Metadata"}
+      },
+      fields: %{
+        ground_station_id: %{
+          id: "ground_station_ground_station_id",
+          name: "ground_station[ground_station_id]",
+          type: "text",
+          label: "Station ID",
+          required: mode == :new,
+          disabled: mode == :edit,
+          placeholder: "dss-14",
+          value: string_param(params, "ground_station_id")
+        },
+        display_name: %{
+          id: "ground_station_display_name",
+          name: "ground_station[display_name]",
+          type: "text",
+          label: "Display Name",
+          required: true,
+          disabled: false,
+          placeholder: nil,
+          value: string_param(params, "display_name")
+        },
+        provider: %{
+          id: "ground_station_provider",
+          name: "ground_station[provider]",
+          type: "text",
+          label: "Provider",
+          required: false,
+          disabled: false,
+          placeholder: "DSN",
+          value: string_param(params, "provider")
+        },
+        region: %{
+          id: "ground_station_region",
+          name: "ground_station[region]",
+          type: "text",
+          label: "Region",
+          required: false,
+          disabled: false,
+          placeholder: "goldstone",
+          value: string_param(params, "region")
+        },
+        metadata_json: %{
+          id: "ground_station_metadata_json",
+          name: "ground_station[metadata_json]",
+          type: "textarea",
+          label: "Metadata JSON",
+          required: false,
+          disabled: false,
+          placeholder: ~s({"antenna_diameter_m":70}),
+          value: string_param(params, "metadata_json")
+        }
+      },
+      actions: %{
+        submit: %{id: submit_id(mode), label: submit_label(mode)},
+        cancel: %{id: "cancel-ground-station-link", label: "Cancel", href: return_to}
+      }
+    }
+  end
+
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
+  end
+
+  defp string_param(_params, _key), do: ""
 
   defp empty_form_params do
     %{
@@ -248,6 +322,9 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
   defp submit_label(:new), do: "Create Ground Station"
   defp submit_label(:edit), do: "Save Ground Station"
+
+  defp submit_id(:new), do: "create-ground-station-button"
+  defp submit_id(:edit), do: "save-ground-station-button"
 
   defp format_error(%Ecto.Changeset{} = changeset), do: CommsComponents.format_error(changeset)
   defp format_error(reason), do: "Failed to save ground station: #{inspect(reason)}"
