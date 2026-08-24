@@ -365,6 +365,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponentsTest do
                "phx-value-source-binding-id" => "binding-flight",
                "phx-value-time-mode" => "archive",
                "phx-value-time-axis" => "receipt_time",
+               "phx-value-replay-run-id" => "nil",
                "phx-value-scope-kind" => "spacecraft",
                "phx-value-scope-id" => "spacecraft-1",
                "phx-value-scope-ids" => "spacecraft-1",
