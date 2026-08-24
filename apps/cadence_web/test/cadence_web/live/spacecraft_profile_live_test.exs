@@ -255,7 +255,8 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     test "provides exact JSON-safe profile detail and version history props" do
       {conn, org, mission} = signed_in_org_and_mission()
 
-      profile_v1 =
+      %Cadence.SpacecraftType{} =
+        profile_v1 =
         TestFixtures.persist_spacecraft_profile!(mission,
           display_name: "Aurora Bus",
           downlink_protocol: :aos,
@@ -370,16 +371,14 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
                "versions" => [
                  %{
                    "downlink_protocol" => "USLP",
-                   "id" =>
-                     "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-2",
+                   "id" => "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-2",
                    "lifecycle" => "active",
                    "uplink_protocol" => "USLP",
                    "version" => "v2"
                  },
                  %{
                    "downlink_protocol" => "AOS",
-                   "id" =>
-                     "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-1",
+                   "id" => "spacecraft-profile-version-#{profile_v1.spacecraft_type_id}-1",
                    "lifecycle" => "active",
                    "uplink_protocol" => "TC",
                    "version" => "v1"
