@@ -8,6 +8,9 @@ defmodule CadenceWeb.UserSessionLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias LiveVue.Test
+  alias Phoenix.LiveView.JS
+
   describe "GET /sign-in" do
     test "renders the sign-in form with title and brand", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sign-in")
@@ -108,13 +111,13 @@ defmodule CadenceWeb.UserSessionLiveTest do
   end
 
   defp user_session_vue(view) do
-    vue = LiveVue.Test.get_vue(view, id: "user-session-component")
+    vue = Test.get_vue(view, id: "user-session-component")
 
     assert vue.component == "UserSession"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
     assert vue.props |> Map.keys() |> Enum.sort() == ["form", "page"]
-    assert vue.handlers == %{"validate" => Phoenix.LiveView.JS.push("validate")}
+    assert vue.handlers == %{"validate" => JS.push("validate")}
 
     vue
   end
