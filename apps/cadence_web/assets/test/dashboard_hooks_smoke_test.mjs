@@ -271,36 +271,91 @@ function classList(...initialClasses) {
 }
 
 {
-  const recentsPath = resolve(__dirname, "../js/hooks/time_range_recents.js")
-  const storage = new Map()
-  const context = await loadHook(
-    recentsPath,
-    [["export default {", "globalThis.TimeRangeRecents = {"]],
-    {
-      localStorage: {
-        getItem: (key) => (storage.has(key) ? storage.get(key) : null),
-        setItem: (key, value) => storage.set(key, value),
-      },
-    }
+  const recentsPath = resolve(__dirname, "../vue/TimeRangeRecents.vue")
+  const source = await readFile(recentsPath, "utf8")
+  const script = source.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
+  const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+  assert.ok(script, "TimeRangeRecents.vue must have a script setup block")
+  assert.ok(template, "TimeRangeRecents.vue must have a template block")
+  assert.match(
+    template,
+    /<p class="text-xs font-semibold text-base-content\/85">Recently used absolute ranges<\/p>/
+  )
+  assert.match(
+    template,
+    /<p v-if="props\.ranges\.length === 0" class="mt-1 text-\[0\.68rem\] text-base-content\/60">\s*Apply an absolute range and it will appear here for quick reuse\.\s*<\/p>/
+  )
+  assert.match(template, /<ul v-else class="mt-1" role="presentation">/)
+  assert.match(template, /v-for="range in props\.ranges"/)
+  assert.match(
+    template,
+    /<button\s+type="button"\s+data-dashboard-time-recent-range\s+class="w-full truncate px-1 py-0\.5 text-left font-mono text-\[0\.68rem\] text-base-content\/70 hover:bg-base-300\/40 hover:text-base-content"\s+:title="`Apply \$\{range\.from\} to \$\{range\.to\}`"\s+@click="selectRange\(range\)"\s*>\s*\{\{ range\.label \}\}\s*<\/button>/
   )
 
-  const makeHook = () => {
+  const storage = new Map()
+  const storageKey = "cadence:dashboard-time-recents"
+  const serverRanges = [{
+    from: "2026-08-01T10:00:00Z",
+    to: "2026-08-01T12:00:00Z",
+    label: "2026-08-01 10:00:00 to 2026-08-01 12:00:00 UTC",
+  }]
+
+  const makeComponent = ({getItem, setItem} = {}) => {
     const events = []
     const handlers = new Map()
-    const hook = Object.assign(Object.create(context.TimeRangeRecents), {
-      pushEvent: (name, payload) => events.push({name, payload}),
-      handleEvent: (name, handler) => handlers.set(name, handler),
-    })
-    return {hook, events, handlers}
+    let mountedCallback
+
+    const context = {
+      localStorage: {
+        getItem: getItem || ((key) => (storage.has(key) ? storage.get(key) : null)),
+        setItem: setItem || ((key, value) => storage.set(key, value)),
+      },
+      defineProps: () => ({ranges: serverRanges}),
+      defineEmits: (names) => {
+        assert.equal(Array.from(names).join(","), "recents-loaded,select-range")
+        return (name, payload) => events.push({name, payload})
+      },
+      Vue: {
+        onMounted: (callback) => {
+          mountedCallback = callback
+        },
+      },
+      LiveVue: {
+        useLiveEvent: (name, callback) => handlers.set(name, callback),
+      },
+    }
+
+    const testableScript = script
+      .replace(
+        'import {onMounted} from "vue"',
+        "const {onMounted} = globalThis.Vue"
+      )
+      .replace(
+        'import {useLiveEvent} from "live_vue"',
+        "const {useLiveEvent} = globalThis.LiveVue"
+      ) + "\nglobalThis.TimeRangeRecents = {readRecents, storeRecent, selectRange}"
+
+    vm.createContext(context)
+    vm.runInContext(testableScript, context, {filename: recentsPath})
+
+    return {
+      events,
+      handlers,
+      mount: mountedCallback,
+      state: context.TimeRangeRecents,
+    }
   }
 
   // First mount: nothing stored yet -> pushes an empty list.
-  const first = makeHook()
-  first.hook.mounted()
+  const first = makeComponent()
+  assert.equal(typeof first.mount, "function")
+  assert.equal(typeof first.handlers.get("cadence:store-time-recent"), "function")
+  first.mount()
 
   assert.equal(
     JSON.stringify(first.events),
-    JSON.stringify([{name: "time_recents_loaded", payload: {ranges: []}}])
+    JSON.stringify([{name: "recents-loaded", payload: {ranges: []}}])
   )
 
   // Applying an absolute range stores it, dedupes, and caps at four entries.
@@ -313,7 +368,7 @@ function classList(...initialClasses) {
   store({from: "2026-08-01T19:00:00Z", to: "2026-08-01T20:00:00Z"})
 
   const lastPush = first.events.at(-1)
-  assert.equal(lastPush.name, "time_recents_loaded")
+  assert.equal(lastPush.name, "recents-loaded")
   assert.equal(
     lastPush.payload.ranges.map((range) => range.from).join(","),
     [
@@ -325,21 +380,60 @@ function classList(...initialClasses) {
   )
 
   // Remount (fresh session): stored ranges hydrate the pushed list.
-  const second = makeHook()
-  second.hook.mounted()
+  const second = makeComponent()
+  second.mount()
   assert.equal(second.events[0].payload.ranges.length, 4)
   assert.equal(second.events[0].payload.ranges[0].from, "2026-08-01T19:00:00Z")
 
+  // Stored entries without string bounds are filtered out.
+  storage.set(storageKey, JSON.stringify([
+    {from: "2026-08-01T21:00:00Z", to: "2026-08-01T22:00:00Z"},
+    {from: 42, to: "2026-08-01T23:00:00Z"},
+    {from: "2026-08-02T00:00:00Z", to: null},
+  ]))
+  const filtered = makeComponent()
+  filtered.mount()
+  assert.equal(filtered.events[0].payload.ranges.length, 1)
+  assert.equal(filtered.events[0].payload.ranges[0].from, "2026-08-01T21:00:00Z")
+
   // Corrupt storage degrades to an empty list instead of throwing.
-  storage.set("cadence:dashboard-time-recents", "{not json")
-  const third = makeHook()
-  third.hook.mounted()
+  storage.set(storageKey, "{not json")
+  const third = makeComponent()
+  third.mount()
   assert.equal(third.events[0].payload.ranges.length, 0)
+
+  // Unavailable reads degrade to an empty list instead of throwing.
+  const readFailure = makeComponent({
+    getItem: () => {
+      throw new Error("storage unavailable")
+    },
+  })
+  readFailure.mount()
+  assert.equal(readFailure.events[0].payload.ranges.length, 0)
+
+  // Unavailable writes still update the current LiveView session.
+  const writeFailure = makeComponent({
+    setItem: () => {
+      throw new Error("storage unavailable")
+    },
+  })
+  writeFailure.handlers.get("cadence:store-time-recent")({
+    from: "2026-08-02T01:00:00Z",
+    to: "2026-08-02T02:00:00Z",
+  })
+  assert.equal(writeFailure.events[0].name, "recents-loaded")
+  assert.equal(writeFailure.events[0].payload.ranges[0].from, "2026-08-02T01:00:00Z")
 
   // Malformed pushes are ignored.
   const before = first.events.length
   store({from: 42, to: "2026-08-01T20:00:00Z"})
   assert.equal(first.events.length, before)
+
+  // Selecting a mounted recent range preserves the existing server event payload.
+  first.state.selectRange(serverRanges[0])
+  assert.equal(first.events.at(-1).name, "select-range")
+  assert.equal(first.events.at(-1).payload.from, "2026-08-01T10:00:00Z")
+  assert.equal(first.events.at(-1).payload.to, "2026-08-01T12:00:00Z")
 }
 
 console.log("dashboard_hooks_smoke_test passed")
