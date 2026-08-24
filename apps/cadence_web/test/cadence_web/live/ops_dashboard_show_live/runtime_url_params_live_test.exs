@@ -76,10 +76,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeUrlParamsLiveTest do
              "text" => "All revisions"
            }
 
-    assert has_element?(
-             view,
-             ~s(#widget-#{runtime_item.widget.widget_id} [data-data-management-badges*="all_revisions"])
-           )
+    header = widget_header_presentation(view, runtime_item.widget.widget_id)
+    assert header["root"]["attrs"]["data-data-management-badges"] =~ "all_revisions"
 
     refute dashboard_runtime_option(runtime_controls, "dashboard-limit-mode", "observed")[
              "disabled"

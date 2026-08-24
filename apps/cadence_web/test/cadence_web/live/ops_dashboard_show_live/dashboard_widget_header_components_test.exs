@@ -29,17 +29,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWidgetHeaderComponentsTest do
 
       assert presentation["root"]["attrs"]["data-dashboard-widget-type"] == placement_id
       assert presentation["title"]["text"] == widget_title(type)
+
       assert length(presentation["actions"]["edit"]) ==
                if(@widget_edit_mode?, do: 2, else: 0)
 
       document = LazyHTML.from_fragment(html)
+      expected_header_id = "dashboard-widget-header-#{placement_id}-component"
 
-      assert ["dashboard-widget-header-#{placement_id}-component"] =
+      assert [^expected_header_id] =
                document
                |> LazyHTML.query("#dashboard-widget-header-#{placement_id}-component")
                |> LazyHTML.attribute("id")
 
-      assert ["no_data"] =
+      assert expected_body_notice(type) ==
                document
                |> LazyHTML.query("[data-widget-body-notice]")
                |> LazyHTML.attribute("data-widget-body-notice")
@@ -478,4 +480,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardWidgetHeaderComponentsTest do
   defp lifecycle_severity(:retention_gap), do: :error
   defp lifecycle_severity(:error), do: :error
   defp lifecycle_severity(:unsupported), do: :error
+
+  defp expected_body_notice(:value_tile), do: []
+  defp expected_body_notice(:constellation_health), do: ["no_data"]
+  defp expected_body_notice(_type), do: ["unresolved"]
 end

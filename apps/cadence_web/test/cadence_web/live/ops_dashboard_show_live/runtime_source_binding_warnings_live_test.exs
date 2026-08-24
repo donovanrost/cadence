@@ -187,10 +187,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
 
       refute has_element?(view, "#dashboard-source-health-component")
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{widget.widget_id} [data-warning-codes*="missing_source_binding"])
-             )
+      header = widget_header_presentation(view, widget.widget_id)
+      assert header["root"]["attrs"]["data-warning-codes"] =~ "missing_source_binding"
 
       warning_component_id = "widget-#{widget.widget_id}-engine-warning-0-component"
       warning = widget_warning_presentation(view, widget.widget_id, warning_component_id)

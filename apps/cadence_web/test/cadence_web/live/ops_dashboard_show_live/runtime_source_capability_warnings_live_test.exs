@@ -199,12 +199,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
 
       assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
 
-      assert has_element?(
-               view,
-               ~s(#widget-#{widget.widget_id} [data-warning-codes*="unsupported_source_capability"])
-             )
+      header = widget_header_presentation(view, widget.widget_id)
+      assert header["root"]["attrs"]["data-warning-codes"] =~ "unsupported_source_capability"
 
-      warnings =
+      widget_warnings =
         view
         |> widget_warning_presentations(widget.widget_id)
         |> Enum.filter(fn warning ->
@@ -212,9 +210,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
             "unsupported_source_capability"
         end)
 
-      assert warnings != []
+      assert widget_warnings != []
 
-      Enum.each(warnings, fn warning ->
+      Enum.each(widget_warnings, fn warning ->
         assert String.starts_with?(
                  warning["component_id"],
                  "widget-#{widget.widget_id}-engine-warning-"
@@ -223,7 +221,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
         assert String.ends_with?(warning["component_id"], "-component")
       end)
 
-      presentations = warnings
+      presentations =
+        (widget_warnings ++ standalone_warning_presentations(view))
+        |> Enum.filter(fn warning ->
+          warning["overlay"]["attrs"]["data-engine-warning-detail"] ==
+            "unsupported_source_capability"
+        end)
 
       assert Enum.any?(
                presentations,
@@ -302,5 +305,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityWarningsLiveTes
       {_name, _value} -> []
     end)
     |> Map.new()
+  end
+
+  defp standalone_warning_presentations(view) do
+    html = render(view)
+
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s([data-name="WidgetWarning"]))
+    |> LazyHTML.attribute("id")
+    |> Enum.map(fn id ->
+      html
+      |> LiveVue.Test.get_vue(id: id)
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+    end)
   end
 end
