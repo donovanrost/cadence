@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @source "../../lib/cadence_web";
 @source "../js";
+@source "../vue";
 @source "../css";
 @source "../../deps/live_toast/lib";
 

@@ -22,6 +22,16 @@ config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 config :cadence_web, dashboard_live_refresh_ms: 1_000
 config :cadence_web, :admin_mode_ttl_seconds, 3_600
 
+config :live_vue, ssr: false, shared_props: []
+
+config :phoenix_vite, PhoenixVite.Npm,
+  assets: [args: [], cd: Path.expand("..", __DIR__)],
+  vite: [
+    args: ~w(exec -- vite),
+    cd: Path.expand("..", __DIR__),
+    env: %{"MIX_BUILD_PATH" => Mix.Project.build_path()}
+  ]
+
 config :tailwind,
   version: "4.1.12",
   cadence_web: [

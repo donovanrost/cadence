@@ -70,6 +70,12 @@ defmodule CadenceWeb do
 
       alias CadenceWeb.Layouts
 
+      use LiveVue
+      use LiveVue.Components, vue_root: ["./assets/vue", "./lib/cadence_web"]
+
+      import Phoenix.Component, except: [sigil_H: 2]
+      import LiveVue.SharedPropsView, only: [sigil_H: 2]
+
       unquote(verified_routes())
     end
   end

@@ -34,39 +34,70 @@ defmodule CadenceWeb.MissionListLiveTest do
     test "renders empty state when there are no missions" do
       {conn, _org} = signed_in_conn()
 
-      {:ok, _view, html} = live(conn, ~p"/missions")
+      {:ok, view, _html} = live(conn, ~p"/missions")
 
-      assert html =~ "No missions"
+      assert has_element?(view, "#mission-list-empty-state")
     end
 
-    test "renders missions in a table" do
+    test "renders missions through the Vue table host and JSON-safe row props" do
       {conn, org} = signed_in_conn()
       m1 = persist_mission!(org, "alpha", "Alpha Mission")
-      _m2 = persist_mission!(org, "beta", "Beta Mission")
+      m2 = persist_mission!(org, "beta", "Beta Mission")
 
-      {:ok, view, html} = live(conn, ~p"/missions")
+      {:ok, view, _html} = live(conn, ~p"/missions")
 
-      assert html =~ "Alpha Mission"
-      assert html =~ "alpha"
-      assert html =~ "Beta Mission"
-      assert html =~ "beta"
-      assert html =~ "New Mission"
-      assert has_element?(view, "#mission-list-table")
-      assert has_element?(view, "#mission-row-#{m1.mission_id}")
-      assert html =~ "Spacecraft"
-      assert html =~ "No spacecraft"
+      assert has_element?(view, "#mission-list-table-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "mission-list-table-component")
+
+      assert vue.component == "MissionTable"
+
+      assert vue.props["rows"] == [
+               %{
+                 "id" => "mission-row-#{m1.mission_id}",
+                 "display_name" => "Alpha Mission",
+                 "slug" => "alpha",
+                 "spacecraft_count" => 0,
+                 "status" => "info",
+                 "status_label" => "No spacecraft",
+                 "href" => "/missions/#{m1.mission_id}"
+               },
+               %{
+                 "id" => "mission-row-#{m2.mission_id}",
+                 "display_name" => "Beta Mission",
+                 "slug" => "beta",
+                 "spacecraft_count" => 0,
+                 "status" => "info",
+                 "status_label" => "No spacecraft",
+                 "href" => "/missions/#{m2.mission_id}"
+               }
+             ]
     end
 
     test "shows only missions belonging to the current organization" do
       {conn, org} = signed_in_conn()
       other_org = TestFixtures.persist_org!(display_name: "Other", slug: "other-org")
-      _mine = persist_mission!(org, "mine", "My Mission")
-      _theirs = persist_mission!(other_org, "theirs", "Their Mission")
+      mine = persist_mission!(org, "mine", "My Mission")
+      theirs = persist_mission!(other_org, "theirs", "Their Mission")
 
-      {:ok, _view, html} = live(conn, ~p"/missions")
+      {:ok, view, _html} = live(conn, ~p"/missions")
 
-      assert html =~ "My Mission"
-      refute html =~ "Their Mission"
+      vue = LiveVue.Test.get_vue(view, id: "mission-list-table-component")
+
+      assert vue.props["rows"] == [
+               %{
+                 "id" => "mission-row-#{mine.mission_id}",
+                 "display_name" => "My Mission",
+                 "slug" => "mine",
+                 "spacecraft_count" => 0,
+                 "status" => "info",
+                 "status_label" => "No spacecraft",
+                 "href" => "/missions/#{mine.mission_id}"
+               }
+             ]
+
+      refute Enum.any?(vue.props["rows"], &(&1["id"] == "mission-row-#{theirs.mission_id}"))
+      refute Enum.any?(vue.props["rows"], &(&1["display_name"] == "Their Mission"))
     end
   end
 end

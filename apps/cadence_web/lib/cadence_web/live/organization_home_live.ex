@@ -14,7 +14,8 @@ defmodule CadenceWeb.OrganizationHomeLive do
      |> assign(:page_title, org.display_name)
      |> assign(:nav_item, :organization_home)
      |> assign(:organization, org)
-     |> assign(summary)}
+     |> assign(summary)
+     |> assign(:recent_mission_rows, Enum.map(summary.recent_missions, &recent_mission_row/1))}
   end
 
   @impl true
@@ -23,31 +24,25 @@ defmodule CadenceWeb.OrganizationHomeLive do
     <div class="space-y-6">
       <.page_header title={@organization.display_name} subtitle={@organization.slug} />
 
-      <div id="organization-stats" class="grid gap-4 md:grid-cols-3">
-        <.stat_card id="organization-stat-missions" label="Missions" value={@mission_count} />
-        <.stat_card id="organization-stat-spacecraft" label="Spacecraft" value={@spacecraft_count} />
-        <.stat_card id="organization-stat-members" label="Members" value={@member_count} />
-      </div>
+      <.vue
+        id="organization-stats-component"
+        v-component="OrganizationStats"
+        mission_count={@mission_count}
+        spacecraft_count={@spacecraft_count}
+        member_count={@member_count}
+        v-ssr={false}
+      />
 
-      <.recent_missions_card recent_missions={@recent_missions} />
+      <.recent_missions_card
+        recent_missions={@recent_missions}
+        recent_mission_rows={@recent_mission_rows}
+      />
     </div>
     """
   end
 
-  attr :id, :string, required: true
-  attr :label, :string, required: true
-  attr :value, :integer, required: true
-
-  defp stat_card(assigns) do
-    ~H"""
-    <.card id={@id} hover_glow>
-      <p class="hud-label">{@label}</p>
-      <p class="mt-2 font-mono text-3xl font-bold">{@value}</p>
-    </.card>
-    """
-  end
-
-  attr :recent_missions, :list, required: true
+  attr(:recent_missions, :list, required: true)
+  attr(:recent_mission_rows, :list, required: true)
 
   defp recent_missions_card(assigns) do
     ~H"""
@@ -69,20 +64,12 @@ defmodule CadenceWeb.OrganizationHomeLive do
           />
         </div>
       <% else %>
-        <ul class="mt-5 divide-y divide-base-300">
-          <li :for={summary <- @recent_missions} class="py-3">
-            <.link
-              navigate={~p"/missions/#{summary.mission.mission_id}"}
-              class="flex items-center justify-between gap-4 hover:text-primary"
-            >
-              <div>
-                <p class="font-medium">{summary.mission.display_name}</p>
-                <p class="font-mono text-xs text-base-content/60">{summary.mission.slug}</p>
-              </div>
-              <.status_badge status={summary.status} label={summary.status_label} />
-            </.link>
-          </li>
-        </ul>
+        <.vue
+          id="organization-recent-missions-component"
+          v-component="RecentMissions"
+          rows={@recent_mission_rows}
+          v-ssr={false}
+        />
       <% end %>
     </.card>
     """
@@ -117,5 +104,16 @@ defmodule CadenceWeb.OrganizationHomeLive do
       true ->
         %{spacecraft_count: length(spacecraft), status: :attention, status_label: "Needs setup"}
     end
+  end
+
+  defp recent_mission_row(row) do
+    %{
+      id: "organization-recent-mission-#{row.mission.mission_id}",
+      display_name: row.mission.display_name,
+      slug: row.mission.slug,
+      status: Atom.to_string(row.status),
+      status_label: row.status_label,
+      href: ~p"/missions/#{row.mission.mission_id}"
+    }
   end
 end

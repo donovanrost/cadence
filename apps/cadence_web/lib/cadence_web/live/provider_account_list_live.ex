@@ -32,6 +32,15 @@ defmodule CadenceWeb.ProviderAccountListLive do
         {account.provider_account_id, credential}
       end)
 
+    card_rows =
+      Enum.map(accounts, fn account ->
+        provider_account_card(
+          account,
+          Map.fetch!(versions, account.provider_account_id),
+          credentials[account.provider_account_id]
+        )
+      end)
+
     {:ok,
      socket
      |> assign(:page_title, "Provider Accounts")
@@ -41,9 +50,9 @@ defmodule CadenceWeb.ProviderAccountListLive do
      |> assign(:account_versions, versions)
      |> assign(:account_credentials, credentials)
      |> stream_configure(:provider_accounts,
-       dom_id: &"provider-account-#{&1.provider_account_id}"
+       dom_id: &"provider-account-#{&1.id}"
      )
-     |> stream(:provider_accounts, accounts)}
+     |> stream(:provider_accounts, card_rows)}
   end
 
   @impl true
@@ -79,69 +88,38 @@ defmodule CadenceWeb.ProviderAccountListLive do
           class="grid gap-4 xl:grid-cols-2"
         >
           <div id="provider-accounts-empty" class="hidden only:block"></div>
-          <.link
-            :for={{dom_id, account} <- @streams.provider_accounts}
+          <div
+            :for={{dom_id, card} <- @streams.provider_accounts}
             id={dom_id}
-            navigate={~p"/provider-accounts/#{account.provider_account_id}"}
-            class="group block border border-base-300 bg-base-200 transition-colors hover:border-primary/50"
           >
-            <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-4">
-              <div class="min-w-0">
-                <p class="hud-label">Ground Network Control Plane</p>
-                <h2 class="mt-1 truncate text-lg font-semibold group-hover:text-primary">
-                  {account.display_name}
-                </h2>
-                <p class="mt-1 truncate font-mono text-xs text-base-content/50">
-                  {account.provider_account_id}
-                </p>
-              </div>
-              <.status_badge
-                status={account_health_status(account)}
-                label={account_health_label(account)}
-              />
-            </div>
-
-            <div class="grid grid-cols-2 gap-px bg-base-300 sm:grid-cols-4">
-              <.account_metric label="Provider" value={provider_label(version(@account_versions, account))} />
-              <.account_metric label="Config" value={"v#{account.active_version}"} />
-              <.account_metric
-                label="Credential"
-                value={credential_label(@account_credentials[account.provider_account_id])}
-              />
-              <.account_metric
-                label="Events"
-                value={ingestion_label(version(@account_versions, account))}
-              />
-            </div>
-
-            <div class="flex items-center justify-between gap-4 px-5 py-3 text-xs text-base-content/60">
-              <span class="font-mono">
-                {endpoint_summary(version(@account_versions, account))}
-              </span>
-              <span class="inline-flex items-center gap-1 text-primary">
-                Inspect <.icon name="hero-arrow-right" class="h-3.5 w-3.5" />
-              </span>
-            </div>
-          </.link>
+            <.vue
+              id={"#{dom_id}-component"}
+              v-component="ProviderAccountCards"
+              card={card}
+              v-ssr={false}
+            />
+          </div>
         </div>
       </div>
     </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
-
-  defp account_metric(assigns) do
-    ~H"""
-    <div class="bg-base-200 px-4 py-3">
-      <p class="hud-label">{@label}</p>
-      <p class="mt-1 truncate font-mono text-sm">{@value}</p>
-    </div>
-    """
+  defp provider_account_card(account, version, credential) do
+    %{
+      id: "provider-account-#{account.provider_account_id}",
+      display_name: account.display_name,
+      provider_account_id: account.provider_account_id,
+      status: account_health_status(account) |> Atom.to_string(),
+      status_label: account_health_label(account),
+      provider: provider_label(version),
+      config: "v#{account.active_version}",
+      credential: credential_label(credential),
+      events: ingestion_label(version),
+      endpoint: endpoint_summary(version),
+      href: ~p"/provider-accounts/#{account.provider_account_id}"
+    }
   end
-
-  defp version(versions, account), do: Map.fetch!(versions, account.provider_account_id)
 
   defp account_health_status(%{credential_status: :revoked}), do: :blocked
   defp account_health_status(%{event_ingestion_status: :degraded}), do: :attention

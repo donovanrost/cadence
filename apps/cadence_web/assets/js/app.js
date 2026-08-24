@@ -1,6 +1,8 @@
 import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
+import {getHooks} from "live_vue"
+import liveVueApp from "../vue"
 import {createLiveToastHook} from "../../deps/live_toast"
 import ClipboardButton from "./hooks/clipboard_button"
 import CsvDownload from "./hooks/csv_download"
@@ -36,7 +38,7 @@ const csrfToken = document
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: Hooks,
+  hooks: {...Hooks, ...getHooks(liveVueApp)},
   dom: {
     // GridStack adds client-only state morphdom would otherwise strip:
     // the generated gs-id-* class scopes the generated row stylesheet (losing

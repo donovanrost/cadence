@@ -7,11 +7,12 @@ config :cadence_web,
   ]
 
 config :cadence_web, CadenceWeb.Endpoint,
-  url: [host: "localhost"],
+  url: [host: "127.0.0.1"],
+  check_origin: ["//localhost:4001", "//127.0.0.1:4001"],
   http: [ip: {127, 0, 0, 1}, port: 4001],
   code_reloader: true,
   debug_errors: true,
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:cadence_web, ~w(--sourcemap=inline --watch)]},
+    vite: {PhoenixVite.Npm, :run, [:vite, ~w(dev)]},
     tailwind: {Tailwind, :install_and_run, [:cadence_web, ~w(--watch)]}
   ]

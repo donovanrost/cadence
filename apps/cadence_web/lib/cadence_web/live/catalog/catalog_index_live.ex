@@ -3,8 +3,6 @@ defmodule CadenceWeb.CatalogIndexLive do
 
   use CadenceWeb, :live_view
 
-  import CadenceWeb.Catalog.Components
-
   alias Cadence.Catalog
   alias Cadence.Catalog.Events
 
@@ -45,6 +43,10 @@ defmodule CadenceWeb.CatalogIndexLive do
     |> assign(:databases, databases)
     |> assign(:latest_revisions, latest_revisions)
     |> assign(:latest_runs, latest_runs)
+    |> assign(
+      :database_table_rows,
+      Enum.map(databases, &database_table_row(&1, mission_id, latest_revisions, latest_runs))
+    )
   end
 
   @impl true
@@ -75,15 +77,17 @@ defmodule CadenceWeb.CatalogIndexLive do
         databases={@databases}
         latest_revisions={@latest_revisions}
         latest_runs={@latest_runs}
+        database_table_rows={@database_table_rows}
       />
     </div>
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :databases, :list, required: true
-  attr :latest_revisions, :map, required: true
-  attr :latest_runs, :map, required: true
+  attr(:current_mission, :map, required: true)
+  attr(:databases, :list, required: true)
+  attr(:latest_revisions, :map, required: true)
+  attr(:latest_runs, :map, required: true)
+  attr(:database_table_rows, :list, required: true)
 
   defp databases_table(assigns) do
     ~H"""
@@ -96,91 +100,59 @@ defmodule CadenceWeb.CatalogIndexLive do
       </div>
     <% else %>
       <.card id="catalog-database-list" padding={:none}>
-        <.table id="catalog-databases-table" rows={@databases} row_accent={false}>
-          <:col :let={database} label="Database">
-            <.link
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
-              }
-              class="font-medium hover:underline"
-            >
-              {database.name}
-            </.link>
-            <p class="font-mono text-xs text-base-content/60">{database.slug}</p>
-          </:col>
-          <:col :let={database} label="Latest revision">
-            <.latest_revision_cell
-              revision={Map.get(@latest_revisions, database.catalog_database_id)}
-              current_mission={@current_mission}
-            />
-          </:col>
-          <:col :let={database} label="Latest import">
-            <.latest_run_cell
-              run={Map.get(@latest_runs, database.catalog_database_id)}
-              current_mission={@current_mission}
-            />
-          </:col>
-          <:col :let={_database} label="Runtime usage">
-            <span class="text-xs text-base-content/60" id="catalog-runtime-usage-summary">
-              No runtime bindings yet
-            </span>
-          </:col>
-          <:col :let={database} label="Actions" align={:right}>
-            <.action_menu id={"#{database.catalog_database_id}-actions"}>
-              <:action>
-                <.link navigate={
-                  ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
-                }>
-                  View database
-                </.link>
-              </:action>
-            </.action_menu>
-          </:col>
-        </.table>
+        <.vue
+          id="catalog-databases-table-component"
+          v-component="CatalogDatabaseTable"
+          rows={@database_table_rows}
+          v-ssr={false}
+        />
       </.card>
     <% end %>
     """
   end
 
-  attr :revision, :map, default: nil
-  attr :current_mission, :map, required: true
+  defp database_table_row(database, mission_id, latest_revisions, latest_runs) do
+    database_id = database.catalog_database_id
+    revision = Map.get(latest_revisions, database_id)
+    run = Map.get(latest_runs, database_id)
 
-  defp latest_revision_cell(%{revision: nil} = assigns) do
-    ~H"""
-    <span class="text-base-content/50 text-xs">No revisions</span>
-    """
+    %{
+      id: "catalog-database-row-#{database_id}",
+      actions_id: "#{database_id}-actions",
+      name: database.name,
+      slug: database.slug,
+      href: ~p"/missions/#{mission_id}/catalog/databases/#{database_id}",
+      latest_revision: latest_revision_dto(revision, mission_id),
+      latest_import: latest_import_dto(run, mission_id)
+    }
   end
 
-  defp latest_revision_cell(assigns) do
-    ~H"""
-    <.link
-      navigate={
-        ~p"/missions/#{@current_mission.mission_id}/catalog/revisions/#{@revision.catalog_revision_id}"
-      }
-      class="font-mono text-sm hover:underline"
-    >
-      {@revision.revision_label}
-    </.link>
-    """
+  defp latest_revision_dto(nil, _mission_id), do: nil
+
+  defp latest_revision_dto(revision, mission_id) do
+    %{
+      label: revision.revision_label,
+      href: ~p"/missions/#{mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
+    }
   end
 
-  attr :run, :map, default: nil
-  attr :current_mission, :map, required: true
+  defp latest_import_dto(nil, _mission_id), do: nil
 
-  defp latest_run_cell(%{run: nil} = assigns) do
-    ~H"""
-    <span class="text-base-content/50 text-xs">—</span>
-    """
+  defp latest_import_dto(run, mission_id) do
+    %{
+      status: import_status_badge(run.status),
+      status_label: import_status_label(run.status),
+      href: ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
+    }
   end
 
-  defp latest_run_cell(assigns) do
-    ~H"""
-    <.link
-      navigate={~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@run.import_run_id}"}
-      class="inline-flex"
-    >
-      <.import_run_status_badge status={@run.status} />
-    </.link>
-    """
-  end
+  defp import_status_badge(:running), do: "info"
+  defp import_status_badge(:completed), do: "ready"
+  defp import_status_badge(:failed), do: "blocked"
+  defp import_status_badge(_status), do: "info"
+
+  defp import_status_label(:running), do: "Running"
+  defp import_status_label(:completed), do: "Completed"
+  defp import_status_label(:failed), do: "Failed"
+  defp import_status_label(status), do: status |> to_string() |> String.capitalize()
 end

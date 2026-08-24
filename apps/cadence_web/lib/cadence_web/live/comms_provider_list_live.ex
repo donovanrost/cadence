@@ -8,6 +8,7 @@ defmodule CadenceWeb.CommsProviderListLive do
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
     providers = Providers.list_providers(scope.organization_id, mission.mission_id)
+    provider_table_rows = Enum.map(providers, &provider_table_row(&1, mission.mission_id))
 
     {:ok,
      socket
@@ -15,6 +16,7 @@ defmodule CadenceWeb.CommsProviderListLive do
      |> assign(:nav_item, :comms_providers)
      |> assign(:provider_count, length(providers))
      |> assign(:providers_empty?, providers == [])
+     |> assign(:provider_table_rows, provider_table_rows)
      |> stream_configure(:providers, dom_id: &"mission-provider-#{&1.provider_id}")
      |> stream(:providers, providers)}
   end
@@ -53,37 +55,12 @@ defmodule CadenceWeb.CommsProviderListLive do
       />
 
       <.card :if={!@providers_empty?} padding={:none}>
-        <.table id="mission-providers-table" rows={@streams.providers}>
-          <:col :let={provider} label="Provider" class="font-medium">
-            <.link
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/comms/providers/#{provider.provider_id}"
-              }
-              class="text-primary hover:underline"
-            >
-              {provider.display_name}
-            </.link>
-            <span class="ml-2 font-mono text-[0.65rem] uppercase tracking-wide text-info">
-              Simulated
-            </span>
-          </:col>
-          <:col :let={provider} label="Control Plane">
-            <.status_badge
-              status={control_plane_status(provider)}
-              label={control_plane_label(provider)}
-            />
-          </:col>
-          <:col :let={provider} label="Provider Account" mono>
-            {account_binding_label(provider)}
-          </:col>
-          <:col :let={provider} label="Mission Grant" mono>
-            {grant_binding_label(provider)}
-          </:col>
-          <:col :let={provider} label="Inventory Sync" mono>
-            {timestamp_label(provider.last_synced_at)}
-          </:col>
-          <:col :let={provider} label="Version" mono>v{provider.version}</:col>
-        </.table>
+        <.vue
+          id="mission-providers-table-component"
+          v-component="CommsProviderTable"
+          rows={@provider_table_rows}
+          v-ssr={false}
+        />
       </.card>
     </div>
     """
@@ -119,4 +96,23 @@ defmodule CadenceWeb.CommsProviderListLive do
 
   defp grant_binding_label(provider),
     do: "#{provider.provider_account_grant_id} · v#{provider.provider_account_grant_version}"
+
+  defp provider_table_row(provider, mission_id) do
+    %{
+      id: "mission-provider-#{provider.provider_id}",
+      display_name: provider.display_name,
+      provider_type: provider_type_label(provider),
+      server_url: provider.base_url,
+      status: Atom.to_string(control_plane_status(provider)),
+      status_label: control_plane_label(provider),
+      account_binding: account_binding_label(provider),
+      grant_binding: grant_binding_label(provider),
+      last_synced_at: timestamp_label(provider.last_synced_at),
+      version: "v#{provider.version}",
+      href: ~p"/missions/#{mission_id}/comms/providers/#{provider.provider_id}"
+    }
+  end
+
+  defp provider_type_label(%{provider_type: :simulator}), do: "Simulated"
+  defp provider_type_label(provider), do: Atom.to_string(provider.provider_type)
 end

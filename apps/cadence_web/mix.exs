@@ -45,6 +45,7 @@ defmodule CadenceWeb.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:live_vue, "== 1.2.2"},
       {:bandit, "~> 1.5"},
       {:cadence, path: "../cadence", env: Mix.env()},
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
@@ -64,6 +65,7 @@ defmodule CadenceWeb.MixProject do
       {:phoenix, "~> 1.8.12"},
       {:phoenix_html, "~> 4.3"},
       {:phoenix_live_view, "~> 1.2"},
+      {:phoenix_vite, "~> 0.5"},
       {:swoosh, "~> 1.17"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       {:tidewave, "~> 0.5", only: [:dev]}
@@ -72,11 +74,15 @@ defmodule CadenceWeb.MixProject do
 
   defp aliases do
     [
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["tailwind cadence_web", "esbuild cadence_web"],
+      "assets.setup": [
+        "tailwind.install --if-missing",
+        "esbuild.install --if-missing",
+        "phoenix_vite.npm assets install"
+      ],
+      "assets.build": ["tailwind cadence_web", "phoenix_vite.npm vite build"],
       "assets.deploy": [
         "tailwind cadence_web --minify",
-        "esbuild cadence_web --minify",
+        "phoenix_vite.npm vite build",
         "phx.digest"
       ],
       "test.browser": [

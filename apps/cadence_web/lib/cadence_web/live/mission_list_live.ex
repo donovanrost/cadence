@@ -6,12 +6,14 @@ defmodule CadenceWeb.MissionListLive do
   def mount(_params, _session, socket) do
     organization_id = socket.assigns.current_scope.organization_id
     mission_rows = load_mission_rows(organization_id)
+    mission_table_rows = Enum.map(mission_rows, &mission_table_row/1)
 
     {:ok,
      socket
      |> assign(:page_title, "Missions")
      |> assign(:nav_item, :missions)
-     |> assign(:mission_rows, mission_rows)}
+     |> assign(:mission_rows, mission_rows)
+     |> assign(:mission_table_rows, mission_table_rows)}
   end
 
   @impl true
@@ -28,35 +30,23 @@ defmodule CadenceWeb.MissionListLive do
       </.page_header>
 
       <%= if @mission_rows == [] do %>
-        <.empty_state
-          icon="hero-rocket-launch"
-          title="No missions yet"
-          description="Create your first mission to get started."
-          action_label="New Mission"
-          action_navigate={~p"/missions/new"}
-        />
+        <div id="mission-list-empty-state">
+          <.empty_state
+            icon="hero-rocket-launch"
+            title="No missions yet"
+            description="Create your first mission to get started."
+            action_label="New Mission"
+            action_navigate={~p"/missions/new"}
+          />
+        </div>
       <% else %>
         <.card padding={:none}>
-          <.table
-            id="mission-list-table"
-            rows={@mission_rows}
-            row_id={fn row -> "mission-row-#{row.mission.mission_id}" end}
-          >
-            <:col :let={row} label="Mission" class="font-medium">
-              <.link navigate={~p"/missions/#{row.mission.mission_id}"} class="text-primary hover:underline">
-                {row.mission.display_name}
-              </.link>
-            </:col>
-            <:col :let={row} label="Slug" mono class="text-primary/80">
-              {row.mission.slug}
-            </:col>
-            <:col :let={row} label="Spacecraft" align={:right} mono>
-              {row.spacecraft_count}
-            </:col>
-            <:col :let={row} label="Status">
-              <.status_badge status={row.status} label={row.status_label} />
-            </:col>
-          </.table>
+          <.vue
+            id="mission-list-table-component"
+            v-component="MissionTable"
+            rows={@mission_table_rows}
+            v-ssr={false}
+          />
         </.card>
       <% end %>
     </div>
@@ -83,5 +73,17 @@ defmodule CadenceWeb.MissionListLive do
       true ->
         %{spacecraft_count: length(spacecraft), status: :attention, status_label: "Needs setup"}
     end
+  end
+
+  defp mission_table_row(row) do
+    %{
+      id: "mission-row-#{row.mission.mission_id}",
+      display_name: row.mission.display_name,
+      slug: row.mission.slug,
+      spacecraft_count: row.spacecraft_count,
+      status: Atom.to_string(row.status),
+      status_label: row.status_label,
+      href: ~p"/missions/#{row.mission.mission_id}"
+    }
   end
 end

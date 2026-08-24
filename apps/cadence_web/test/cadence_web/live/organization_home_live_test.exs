@@ -53,7 +53,9 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
 
       assert html =~ "All missions"
       assert html =~ ~s(href="/missions")
-      assert has_element?(view, "#organization-stat-missions", "1")
+
+      stats = LiveVue.Test.get_vue(view, id: "organization-stats-component")
+      assert stats.props["mission_count"] == 1
     end
 
     test "lists recent missions with status badges" do
@@ -70,11 +72,22 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
 
       assert {:ok, _} = Cadence.Missions.persist_mission(mission)
 
-      {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
+      {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/")
 
       assert has_element?(view, "#organization-recent-missions")
-      assert html =~ "Alpha Mission"
-      assert html =~ "No spacecraft"
+
+      recent = LiveVue.Test.get_vue(view, id: "organization-recent-missions-component")
+
+      assert recent.props["rows"] == [
+               %{
+                 "id" => "organization-recent-mission-#{mission.mission_id}",
+                 "display_name" => "Alpha Mission",
+                 "slug" => "alpha",
+                 "status" => "info",
+                 "status_label" => "No spacecraft",
+                 "href" => "/missions/#{mission.mission_id}"
+               }
+             ]
     end
   end
 
