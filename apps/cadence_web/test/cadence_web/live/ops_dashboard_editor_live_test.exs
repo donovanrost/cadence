@@ -144,7 +144,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
              ~s(#dashboard-editor-conflict[data-editor-starting-version="1"][data-editor-current-version="2"])
            )
 
-    assert has_element?(editor, "[data-dashboard-section]")
+    assert [_section] = dashboard_section_list(editor)
 
     assert {:ok, %Document{name: "External Change", sections: []}} =
              fetch_document(org, mission, dashboard)
@@ -152,7 +152,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     editor |> element("#dashboard-editor-reload") |> render_click()
 
     refute has_element?(editor, "#dashboard-editor-conflict")
-    refute has_element?(editor, "[data-dashboard-section]")
+    assert [] = dashboard_section_list(editor)
   end
 
   defp add_section(view, title) do
@@ -163,6 +163,14 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
       section: %{title: title, description: "", collapsed_by_default: "false"}
     )
     |> render_submit()
+  end
+
+  defp dashboard_section_list(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-section-list-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+    |> Map.fetch!("sections")
   end
 
   defp version_count(org, mission, dashboard) do
