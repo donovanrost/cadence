@@ -109,11 +109,9 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
                    "action" => %{
                      "id" => "create-spacecraft-profile-link",
                      "label" => "Create one",
-                     "href" =>
-                       "/missions/#{mission.mission_id}/spacecraft/profiles/new"
+                     "href" => "/missions/#{mission.mission_id}/spacecraft/profiles/new"
                    },
-                   "suffix" =>
-                     "to give this spacecraft a reusable interpretation profile."
+                   "suffix" => "to give this spacecraft a reusable interpretation profile."
                  }
                }
              }
@@ -161,6 +159,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
     test "resyncs all current form values from the nested spacecraft payload" do
       {conn, _org, mission} = signed_in_org_and_mission()
       profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
+      profile_id = profile.spacecraft_type_id
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
 
@@ -168,7 +167,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
         "spacecraft" => %{
           "display_name" => "Orbital-7",
           "scid" => "7",
-          "spacecraft_type_id" => profile.spacecraft_type_id
+          "spacecraft_type_id" => profile_id
         }
       })
 
@@ -177,7 +176,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
       assert %{
                "display_name" => %{"value" => "Orbital-7"},
                "scid" => %{"value" => "7"},
-               "spacecraft_type_id" => %{"value" => profile.spacecraft_type_id}
+               "spacecraft_type_id" => %{"value" => ^profile_id}
              } = fields
     end
   end
@@ -249,6 +248,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
     test "resolves a selected profile to its latest version at save time" do
       {conn, org, mission} = signed_in_org_and_mission()
       profile_v1 = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
+      %Cadence.SpacecraftType{} = profile_v1
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
 
@@ -322,7 +322,8 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
                "SCID must be an integer from 0 to 1023."
              )
 
-      assert Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) == []
+      assert Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) ==
+               []
     end
 
     test "unavailable profile selection shows the exact error without persisting" do
@@ -355,7 +356,8 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
                "Selected spacecraft profile is not available."
              )
 
-      assert Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) == []
+      assert Cadence.SpacecraftStore.list_spacecraft(org.organization_id, mission.mission_id) ==
+               []
     end
   end
 
