@@ -12,6 +12,7 @@ defmodule CadenceWeb.Layouts do
   @nav_item_base_class "flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all"
   @nav_item_active_class "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
   @nav_item_inactive_class "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+  @nav_section_summary_prefix "list-none cursor-pointer"
   @nav_child_base_class "flex items-center gap-2 px-3 py-1.5 text-xs tracking-wide uppercase border-l-2 border-transparent transition-all"
 
   defp mission_sidebar_navigation_presentation(assigns) do
@@ -192,7 +193,7 @@ defmodule CadenceWeb.Layouts do
       "key" => key,
       "details_class" => "group",
       "expanded" => active?,
-      "summary_class" => nav_item_class(active?),
+      "summary_class" => nav_section_summary_class(active?),
       "icon_class" => "#{icon} h-4 w-4 opacity-80 flex-shrink-0",
       "label_class" => "sidebar-label flex-1",
       "label" => label,
@@ -220,6 +221,9 @@ defmodule CadenceWeb.Layouts do
 
   defp nav_item_class(true), do: "#{@nav_item_base_class} #{@nav_item_active_class}"
   defp nav_item_class(false), do: "#{@nav_item_base_class} #{@nav_item_inactive_class}"
+
+  defp nav_section_summary_class(active?),
+    do: "#{@nav_section_summary_prefix} #{nav_item_class(active?)}"
 
   defp nav_child_class(true), do: "#{@nav_child_base_class} text-primary"
 

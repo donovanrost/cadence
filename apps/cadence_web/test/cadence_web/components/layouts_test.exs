@@ -128,8 +128,16 @@ defmodule CadenceWeb.LayoutsTest do
 
     refute ops["active"]
     refute ops["expanded"]
+
+    assert ops["summary_class"] ==
+             "list-none cursor-pointer flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+
     assert comms["active"]
     assert comms["expanded"]
+
+    assert comms["summary_class"] ==
+             "list-none cursor-pointer flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+
     assert routing["active"]
     assert routing["class"] =~ "text-primary"
     assert routing["icon_class"] =~ "bg-primary"

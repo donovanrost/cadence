@@ -42,6 +42,29 @@ const [componentSource, layoutTemplate, layoutsSource, sidebarPrimitives, sideba
     readFile(routerPath, "utf8"),
   ])
 
+const capture = (source, pattern, label) => {
+  const match = source.match(pattern)
+
+  assert.ok(match, `${label} must remain source-auditable`)
+  return match[1]
+}
+
+const sourceSlice = (source, start, end, label) => {
+  const startIndex = source.indexOf(start)
+  const endIndex = source.indexOf(end, startIndex + start.length)
+
+  assert.ok(startIndex >= 0 && endIndex > startIndex, `${label} must remain source-auditable`)
+  return source.slice(startIndex, endIndex)
+}
+
+const moduleAttribute = (name) =>
+  capture(layoutsSource, new RegExp(`@${name} "([^"]+)"`), `@${name}`)
+
+const classTokens = (className) => className.trim().split(/\s+/).sort()
+
+const assertSameClassTokens = (actual, expected, label) =>
+  assert.deepEqual(classTokens(actual), classTokens(expected), `${label} class tokens match sidebar.ex`)
+
 const script = componentSource.match(/<script setup>\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = componentSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
@@ -186,16 +209,255 @@ assert.match(sidebarPrimitives, /def nav_item\(assigns\) do/)
 assert.match(sidebarPrimitives, /def nav_section\(assigns\) do/)
 assert.match(sidebarPrimitives, /def section_active\?\(:ops_dashboards, :ops\), do: true/)
 assert.match(sidebarPrimitives, /def section_active\?\(:comms_providers, :comms\), do: true/)
-assert.ok(
-  layoutsSource.includes(
-    "flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all",
-  ),
+
+const primitiveNavItem = sourceSlice(
+  sidebarPrimitives,
+  "  def nav_item(assigns) do",
+  "  defp item_classes(true)",
+  "nav_item primitive",
 )
-assert.ok(
-  sidebarPrimitives.includes(
-    "flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all",
-  ),
+const primitiveNavSection = sourceSlice(
+  sidebarPrimitives,
+  "  def nav_section(assigns) do",
+  "  defp child_classes(true)",
+  "nav_section primitive",
 )
+const presentationNavItem = sourceSlice(
+  layoutsSource,
+  "  defp nav_link(key, label, href, icon, active?) do",
+  "  defp nav_section(key, label, icon, active?, children) do",
+  "nav item presentation",
+)
+const presentationNavSection = sourceSlice(
+  layoutsSource,
+  "  defp nav_section(key, label, icon, active?, children) do",
+  "  defp nav_child(key, label, href, active?) do",
+  "nav section presentation",
+)
+const presentationNavChild = sourceSlice(
+  layoutsSource,
+  "  defp nav_child(key, label, href, active?) do",
+  "  defp nav_item_class(true)",
+  "nav child presentation",
+)
+
+const primitiveItemActive = capture(
+  sidebarPrimitives,
+  /defp item_classes\(true\),\s+do: "([^"]+)"/,
+  "active item classes",
+)
+const primitiveItemInactive = capture(
+  sidebarPrimitives,
+  /defp item_classes\(false\),\s+do:\s+"([^"]+)"/,
+  "inactive item classes",
+)
+const primitiveChildActive = capture(
+  sidebarPrimitives,
+  /defp child_classes\(true\), do: "([^"]+)"/,
+  "active child classes",
+)
+const primitiveChildInactive = capture(
+  sidebarPrimitives,
+  /defp child_classes\(false\), do: "([^"]+)"/,
+  "inactive child classes",
+)
+const primitiveDotActive = capture(
+  sidebarPrimitives,
+  /defp child_dot_classes\(true\), do: "([^"]+)"/,
+  "active child dot classes",
+)
+const primitiveDotInactive = capture(
+  sidebarPrimitives,
+  /defp child_dot_classes\(false\), do: "([^"]+)"/,
+  "inactive child dot classes",
+)
+const primitiveNavBase = capture(
+  primitiveNavItem,
+  /class=\{\["([^"]+)", item_classes/,
+  "nav item base classes",
+)
+const primitiveSummaryBase = capture(
+  primitiveNavSection,
+  /<summary class=\{\["([^"]+)", item_classes/,
+  "nav section summary base classes",
+)
+const primitiveIconBase = capture(
+  primitiveNavItem,
+  /class=\{\[@icon, "([^"]+)"\]\}/,
+  "nav item icon classes",
+)
+const primitiveChildBase = capture(
+  primitiveNavSection,
+  /<\.link navigate=\{item\.navigate\} class=\{\["([^"]+)", child_classes/,
+  "nav child base classes",
+)
+const primitiveDotBase = capture(
+  primitiveNavSection,
+  /class=\{\["([^"]+)", child_dot_classes/,
+  "nav child dot base classes",
+)
+
+const canonicalClassContract = {
+  "nav item active": `${primitiveNavBase} ${primitiveItemActive}`,
+  "nav item inactive": `${primitiveNavBase} ${primitiveItemInactive}`,
+  "nav item icon": primitiveIconBase,
+  "nav item label": capture(primitiveNavItem, /<span class="([^"]+)">\{@label\}/, "nav item label"),
+  "nav section details": capture(primitiveNavSection, /<details class="([^"]+)"/, "nav section details"),
+  "nav section summary active": `${primitiveSummaryBase} ${primitiveItemActive}`,
+  "nav section summary inactive": `${primitiveSummaryBase} ${primitiveItemInactive}`,
+  "nav section icon": capture(
+    primitiveNavSection,
+    /class=\{\[@icon, "([^"]+)"\]\}/,
+    "nav section icon",
+  ),
+  "nav section label": capture(
+    primitiveNavSection,
+    /<span class="([^"]*flex-1[^"]*)">\{@label\}/,
+    "nav section label",
+  ),
+  "nav section chevron": capture(
+    primitiveNavSection,
+    /<span class="([^"]*group-open:rotate-90[^"]*)"><\/span>/,
+    "nav section chevron",
+  ),
+  "nav section child list": capture(
+    primitiveNavSection,
+    /<ul class="([^"]+)"/,
+    "nav section child list",
+  ),
+  "nav child active": `${primitiveChildBase} ${primitiveChildActive}`,
+  "nav child inactive": `${primitiveChildBase} ${primitiveChildInactive}`,
+  "nav child icon container": capture(
+    primitiveNavSection,
+    /<span class="([^"]*items-center justify-center[^"]*)">/,
+    "nav child icon container",
+  ),
+  "nav child dot active": `${primitiveDotBase} ${primitiveDotActive}`,
+  "nav child dot inactive": `${primitiveDotBase} ${primitiveDotInactive}`,
+  "nav child label": capture(
+    primitiveNavSection,
+    /<span class="([^"]+)">\{render_slot\(item\)\}/,
+    "nav child label",
+  ),
+}
+
+const presentationNavBase = moduleAttribute("nav_item_base_class")
+const presentationSummaryBase = `${moduleAttribute("nav_section_summary_prefix")} ${presentationNavBase}`
+const presentationItemActive = moduleAttribute("nav_item_active_class")
+const presentationItemInactive = moduleAttribute("nav_item_inactive_class")
+const presentationChildBase = moduleAttribute("nav_child_base_class")
+const presentationIconBase = capture(
+  presentationNavItem,
+  /"icon_class" => "#\{icon\} ([^"]+)"/,
+  "presentation nav icon",
+)
+const presentationDotBase = capture(
+  presentationNavChild,
+  /"icon_class" =>\s+"([^"]+) #\{if/,
+  "presentation child dot",
+)
+const presentationChildActive = capture(
+  layoutsSource,
+  /defp nav_child_class\(true\), do: "#\{@nav_child_base_class\} ([^"]+)"/,
+  "presentation active child classes",
+)
+const presentationChildInactive = capture(
+  layoutsSource,
+  /defp nav_child_class\(false\),\s+do: "#\{@nav_child_base_class\} ([^"]+)"/,
+  "presentation inactive child classes",
+)
+const presentationDotStates = presentationNavChild.match(
+  /if\(active\?, do: "([^"]+)", else: "([^"]+)"\)/,
+)
+
+assert.ok(presentationDotStates, "presentation child dot states must remain source-auditable")
+
+const presentationClassContract = {
+  "nav item active": `${presentationNavBase} ${presentationItemActive}`,
+  "nav item inactive": `${presentationNavBase} ${presentationItemInactive}`,
+  "nav item icon": presentationIconBase,
+  "nav item label": capture(
+    presentationNavItem,
+    /"label_class" => "([^"]+)"/,
+    "presentation nav label",
+  ),
+  "nav section details": capture(
+    presentationNavSection,
+    /"details_class" => "([^"]+)"/,
+    "presentation section details",
+  ),
+  "nav section summary active": `${presentationSummaryBase} ${presentationItemActive}`,
+  "nav section summary inactive": `${presentationSummaryBase} ${presentationItemInactive}`,
+  "nav section icon": capture(
+    presentationNavSection,
+    /"icon_class" => "#\{icon\} ([^"]+)"/,
+    "presentation section icon",
+  ),
+  "nav section label": capture(
+    presentationNavSection,
+    /"label_class" => "([^"]+)"/,
+    "presentation section label",
+  ),
+  "nav section chevron": capture(
+    presentationNavSection,
+    /"chevron_class" =>\s+"([^"]+)"/,
+    "presentation section chevron",
+  ),
+  "nav section child list": capture(
+    presentationNavSection,
+    /"list_class" => "([^"]+)"/,
+    "presentation section child list",
+  ),
+  "nav child active": `${presentationChildBase} ${presentationChildActive}`,
+  "nav child inactive": `${presentationChildBase} ${presentationChildInactive}`,
+  "nav child icon container": capture(
+    presentationNavChild,
+    /"icon_container_class" => "([^"]+)"/,
+    "presentation child icon container",
+  ),
+  "nav child dot active": `${presentationDotBase} ${presentationDotStates[1]}`,
+  "nav child dot inactive": `${presentationDotBase} ${presentationDotStates[2]}`,
+  "nav child label": capture(
+    presentationNavChild,
+    /"label_class" => "([^"]+)"/,
+    "presentation child label",
+  ),
+}
+
+assert.deepEqual(Object.keys(presentationClassContract), Object.keys(canonicalClassContract))
+
+for (const [surface, expected] of Object.entries(canonicalClassContract)) {
+  assertSameClassTokens(presentationClassContract[surface], expected, surface)
+}
+
+const expectedSummaryBase =
+  "list-none cursor-pointer flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all"
+const expectedActiveSummary =
+  `${expectedSummaryBase} bg-primary/10 text-primary border-primary ` +
+  "shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+const expectedInactiveSummary =
+  `${expectedSummaryBase} text-base-content/60 border-transparent ` +
+  "hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+
+assert.equal(
+  presentationSummaryBase,
+  expectedSummaryBase,
+  "summary preserves the exact canonical class order, including its leading tokens",
+)
+assert.equal(primitiveSummaryBase, expectedSummaryBase, "sidebar.ex retains the frozen summary base")
+assert.equal(
+  presentationClassContract["nav section summary active"],
+  expectedActiveSummary,
+  "active summary preserves the exact canonical class contract",
+)
+assert.equal(
+  presentationClassContract["nav section summary inactive"],
+  expectedInactiveSummary,
+  "inactive summary preserves the exact canonical class contract",
+)
+assert.equal(canonicalClassContract["nav section summary active"], expectedActiveSummary)
+assert.equal(canonicalClassContract["nav section summary inactive"], expectedInactiveSummary)
+assert.match(layoutsSource, /"summary_class" => nav_section_summary_class\(active\?\)/)
 
 for (const selector of [
   ".sidebar-collapsible.sidebar-expanded",
