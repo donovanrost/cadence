@@ -27,24 +27,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    recovery =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-recovery-component"
+      ).props["presentation"]
 
-    assert ["hidden"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-recovery")
+    assert "hidden" =
+             recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
 
     assert "This event exists but is hidden by the current activity filter." =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> selected_text()
-             |> String.replace("Show all activity", "")
-             |> String.trim()
+             recovery["message"]["text"]
 
-    assert [href] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery-link")
-             |> LazyHTML.attribute("href")
+    href = recovery["action"]["href"]
+    assert is_binary(href)
 
     assert URI.decode_query(URI.parse(href).query) == %{
              "scope_kind" => "mission",
@@ -99,30 +94,41 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    readiness_return =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-readiness-return-component"
+      ).props["presentation"]
+
+    remediation =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-remediation-component"
+      ).props["presentation"]
+
     assert ["refresh_publish_readiness"] =
              document
              |> LazyHTML.query("#dashboard-selected-activity-refresh-readiness")
              |> LazyHTML.attribute("phx-click")
 
-    assert ["source_return"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-readiness-return")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-readiness-return")
+    assert "source_return" =
+             readiness_return["root"]["attrs"][
+               "data-dashboard-selected-activity-readiness-return"
+             ]
 
     assert ["Fix source connection"] =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-remediation]")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-remediation")
+             Enum.map(
+               remediation["rows"],
+               & &1["attrs"]["data-dashboard-selected-activity-remediation"]
+             )
 
     assert ["data_sources"] =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-remediation]")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-remediation-target")
+             Enum.map(
+               remediation["rows"],
+               & &1["attrs"]["data-dashboard-selected-activity-remediation-target"]
+             )
 
-    assert [href] =
-             document
-             |> LazyHTML.query("[data-dashboard-selected-activity-remediation-link]")
-             |> LazyHTML.attribute("href")
+    [row] = remediation["rows"]
+    href = row["action"]["href"]
+    assert row["action"]["attrs"]["data-dashboard-selected-activity-remediation-href"] == href
 
     assert String.starts_with?(href, "/missions/mission-1/ops/data-sources?")
 
@@ -146,11 +152,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectedActivityComponentsTest do
       mission_id: "mission-1",
       name: "Dashboard"
     }
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
   end
 end

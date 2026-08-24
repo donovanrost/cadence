@@ -84,24 +84,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineComponentsTest do
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    recovery =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-recovery-component"
+      ).props["presentation"]
 
-    assert ["hidden"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-recovery")
+    assert "hidden" =
+             recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
 
     assert "This event exists but is hidden by the current activity filter." =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> selected_text()
-             |> String.replace("Show all activity", "")
-             |> String.trim()
+             recovery["message"]["text"]
 
-    assert [href] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery-link")
-             |> LazyHTML.attribute("href")
+    href = recovery["action"]["href"]
+    assert is_binary(href)
 
     assert URI.decode_query(URI.parse(href).query) == %{
              "scope_kind" => "mission",

@@ -24,24 +24,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
           "/missions/mission-1/ops/dashboards/dashboard-1?scope_kind=mission&scope_id=mission-1"
       )
 
-    document = LazyHTML.from_fragment(html)
+    recovery =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-recovery-component"
+      ).props["presentation"]
 
-    assert ["hidden"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-recovery")
+    assert "hidden" =
+             recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
 
     assert "This event exists but is hidden by the current activity filter." =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> selected_text()
-             |> String.replace("Show all activity", "")
-             |> String.trim()
+             recovery["message"]["text"]
 
-    assert [href] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery-link")
-             |> LazyHTML.attribute("href")
+    href = recovery["action"]["href"]
+    assert is_binary(href)
 
     query =
       href
@@ -75,27 +70,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
 
     document = LazyHTML.from_fragment(html)
 
+    recovery =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-selected-activity-recovery-component"
+      ).props["presentation"]
+
     assert ["false"] =
              document
              |> LazyHTML.query("#dashboard-selected-activity-event")
              |> LazyHTML.attribute("data-dashboard-selected-activity-event-found")
 
-    assert ["missing"] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> LazyHTML.attribute("data-dashboard-selected-activity-recovery")
+    assert "missing" =
+             recovery["root"]["attrs"]["data-dashboard-selected-activity-recovery"]
 
     assert "This event is no longer available in the dashboard activity log." =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery")
-             |> selected_text()
-             |> String.replace("Clear selection", "")
-             |> String.trim()
+             recovery["message"]["text"]
 
-    assert [href] =
-             document
-             |> LazyHTML.query("#dashboard-selected-activity-recovery-link")
-             |> LazyHTML.attribute("href")
+    href = recovery["action"]["href"]
+    assert is_binary(href)
 
     query =
       href
@@ -117,11 +109,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelRecoveryComponentsT
       mission_id: "mission-1",
       name: "Dashboard"
     }
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
   end
 end
