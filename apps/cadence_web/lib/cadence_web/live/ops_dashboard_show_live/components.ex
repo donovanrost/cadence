@@ -63,25 +63,55 @@ defmodule CadenceWeb.OpsDashboardShowLive.Components do
   attr :degraded?, :boolean, required: true
 
   def dashboard_warnings(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :presentation,
+        dashboard_warnings_presentation(assigns.warnings, assigns.degraded?)
+      )
+
     ~H"""
-    <div
-      :if={@degraded? or @warnings != []}
-      id="dashboard-engine-warnings"
-      data-engine-degraded={if @degraded?, do: "true", else: "false"}
-      data-warning-codes={WidgetWarningComponents.warning_codes(@warnings)}
-      class="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-warning/30 bg-warning/10 text-xs"
-    >
-      <span class="font-semibold text-warning">Dashboard degraded</span>
-      <span :if={@warnings == []} class="text-base-content/70">
-        One or more sources returned degraded data.
-      </span>
-      <WidgetWarningComponents.engine_warning_badge
-        :for={{warning, index} <- Enum.with_index(@warnings)}
-        id={"dashboard-engine-warning-#{index}"}
-        warning={warning}
-      />
-    </div>
+    <.vue
+      :if={@presentation}
+      id="dashboard-engine-warnings-component"
+      v-component="DashboardWarnings"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
+  end
+
+  defp dashboard_warnings_presentation([], false), do: nil
+
+  defp dashboard_warnings_presentation(warnings, degraded?) do
+    %{
+      root: %{
+        id: "dashboard-engine-warnings",
+        class:
+          "shrink-0 flex items-center gap-2 px-2 py-1 border-b border-warning/30 bg-warning/10 text-xs",
+        attrs: %{
+          "data-engine-degraded" => if(degraded?, do: "true", else: "false"),
+          "data-warning-codes" => WidgetWarningComponents.warning_codes(warnings)
+        }
+      },
+      label: %{class: "font-semibold text-warning", text: "Dashboard degraded"},
+      fallback: %{
+        visible: warnings == [],
+        class: "text-base-content/70",
+        text: "One or more sources returned degraded data."
+      },
+      warnings:
+        warnings
+        |> Enum.with_index()
+        |> Enum.map(fn {warning, index} ->
+          WidgetWarningComponents.warning_presentation(
+            "dashboard-engine-warning-#{index}",
+            warning,
+            nil
+          )
+        end)
+    }
   end
 
   attr :health, :map, required: true
