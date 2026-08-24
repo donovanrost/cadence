@@ -285,6 +285,60 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       end
     end
 
+    test "spacecraft routing page exposes the client-only empty state DTO" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
+        )
+
+      assert has_element?(view, "#spacecraft-routing-page")
+      refute has_element?(view, "#new-spacecraft-routing-rule-link")
+      refute has_element?(view, "#spacecraft-routing-rules")
+
+      vue = spacecraft_routing_vue(view)
+
+      assert vue.props == %{
+               "page" => %{
+                 "title" => "Comms Routing",
+                 "subtitle" =>
+                   "Durable routing rules that describe how this spacecraft uses mission transports.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Spacecraft",
+                     "href" => "/missions/#{mission.mission_id}/spacecraft"
+                   },
+                   %{
+                     "label" => spacecraft.display_name,
+                     "href" =>
+                       "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+                   },
+                   %{"label" => "Routing", "href" => nil}
+                 ],
+                 "new_rule" => %{
+                   "id" => "new-spacecraft-routing-rule-link",
+                   "label" => "New Routing Rule",
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/routing/new?spacecraft_id=#{spacecraft.spacecraft_id}"
+                 },
+                 "empty_state" => %{
+                   "title" => "No routing rules",
+                   "description" =>
+                     "Create a routing rule to declare how this spacecraft should use a transport."
+                 },
+                 "rules_id" => "spacecraft-routing-rules",
+                 "rows" => []
+               }
+             }
+    end
+
     test "spacecraft routing page lists rules for current spacecraft" do
       {conn, org, mission} = signed_in_org_and_mission()
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
@@ -298,11 +352,209 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
         )
 
       assert has_element?(view, "#spacecraft-routing-page")
-      assert has_element?(view, "#new-spacecraft-routing-rule-link")
+      refute has_element?(view, "#new-spacecraft-routing-rule-link")
+      refute has_element?(view, "#spacecraft-routing-rules")
       assert html =~ "Comms Routing"
       assert html =~ rule.display_name
       assert html =~ "mission transports"
+
+      vue = spacecraft_routing_vue(view)
+
+      assert vue.props == %{
+               "page" => %{
+                 "title" => "Comms Routing",
+                 "subtitle" =>
+                   "Durable routing rules that describe how this spacecraft uses mission transports.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Spacecraft",
+                     "href" => "/missions/#{mission.mission_id}/spacecraft"
+                   },
+                   %{
+                     "label" => spacecraft.display_name,
+                     "href" =>
+                       "/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+                   },
+                   %{"label" => "Routing", "href" => nil}
+                 ],
+                 "new_rule" => %{
+                   "id" => "new-spacecraft-routing-rule-link",
+                   "label" => "New Routing Rule",
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/routing/new?spacecraft_id=#{spacecraft.spacecraft_id}"
+                 },
+                 "empty_state" => %{
+                   "title" => "No routing rules",
+                   "description" =>
+                     "Create a routing rule to declare how this spacecraft should use a transport."
+                 },
+                 "rules_id" => "spacecraft-routing-rules",
+                 "rows" => [
+                   %{
+                     "id" => "spacecraft-routing-rule-#{rule.routing_rule_id}",
+                     "purpose_label" => rule.purpose_label,
+                     "display_name" => rule.display_name,
+                     "direction" => "INBOUND",
+                     "transport_name" => transport.display_name,
+                     "role" => "PRIMARY",
+                     "state" => "ENABLED",
+                     "href" =>
+                       "/missions/#{mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
+                   }
+                 ]
+               }
+             }
     end
+
+    test "spacecraft routing page preserves rule ordering, vocabulary, ids, and state" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+
+      live_rule =
+        persist_routing_rule!(org.organization_id, mission.mission_id, spacecraft, transport)
+
+      disabled_rule =
+        RoutingRule.new(%{
+          mission_id: mission.mission_id,
+          spacecraft_id: spacecraft.spacecraft_id,
+          display_name: "Alpha command relay via Lab TCP",
+          purpose_label: "Command relay",
+          direction: :inbound,
+          transport_id: transport.transport_id,
+          transport_version: transport.version,
+          role: :candidate,
+          enabled?: false
+        })
+
+      assert {:ok, disabled_rule} =
+               RoutingRuleStore.create_routing_rule(org.organization_id, disabled_rule)
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
+        )
+
+      rows = spacecraft_routing_vue(view).props["page"]["rows"]
+
+      assert rows == [
+               %{
+                 "id" => "spacecraft-routing-rule-#{disabled_rule.routing_rule_id}",
+                 "purpose_label" => "Command relay",
+                 "display_name" => "Alpha command relay via Lab TCP",
+                 "direction" => "INBOUND",
+                 "transport_name" => transport.display_name,
+                 "role" => "CANDIDATE",
+                 "state" => "DISABLED",
+                 "href" =>
+                   "/missions/#{mission.mission_id}/comms/routing/#{disabled_rule.routing_rule_id}"
+               },
+               %{
+                 "id" => "spacecraft-routing-rule-#{live_rule.routing_rule_id}",
+                 "purpose_label" => live_rule.purpose_label,
+                 "display_name" => live_rule.display_name,
+                 "direction" => "INBOUND",
+                 "transport_name" => transport.display_name,
+                 "role" => "PRIMARY",
+                 "state" => "ENABLED",
+                 "href" =>
+                   "/missions/#{mission.mission_id}/comms/routing/#{live_rule.routing_rule_id}"
+               }
+             ]
+    end
+
+    test "spacecraft routing page preserves scope and falls back to the transport id" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      sibling = TestFixtures.persist_spacecraft!(mission, display_name: "Bravo", scid: 43)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+      mine = persist_routing_rule!(org.organization_id, mission.mission_id, spacecraft, transport)
+
+      sibling_rule =
+        persist_routing_rule!(org.organization_id, mission.mission_id, sibling, transport)
+
+      other_mission =
+        TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary Mission")
+
+      other_spacecraft =
+        TestFixtures.persist_spacecraft!(other_mission, display_name: "Secondary Alpha", scid: 44)
+
+      other_transport =
+        persist_transport!(org.organization_id, other_mission.mission_id, "Secondary TCP")
+
+      other_mission_rule =
+        persist_routing_rule!(
+          org.organization_id,
+          other_mission.mission_id,
+          other_spacecraft,
+          other_transport
+        )
+
+      other_org = TestFixtures.persist_org!(display_name: "Remote Org", slug: "remote-org")
+      remote_mission = TestFixtures.persist_mission!(other_org, slug: "remote")
+      remote_spacecraft = TestFixtures.persist_spacecraft!(remote_mission, display_name: "Remote")
+
+      remote_transport =
+        persist_transport!(other_org.organization_id, remote_mission.mission_id, "Remote TCP")
+
+      other_org_rule =
+        persist_routing_rule!(
+          other_org.organization_id,
+          remote_mission.mission_id,
+          remote_spacecraft,
+          remote_transport
+        )
+
+      assert {:ok, _archived_transport} =
+               TransportStore.archive_transport(
+                 org.organization_id,
+                 mission.mission_id,
+                 transport.transport_id
+               )
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
+        )
+
+      rows = spacecraft_routing_vue(view).props["page"]["rows"]
+
+      assert rows == [
+               %{
+                 "id" => "spacecraft-routing-rule-#{mine.routing_rule_id}",
+                 "purpose_label" => mine.purpose_label,
+                 "display_name" => mine.display_name,
+                 "direction" => "INBOUND",
+                 "transport_name" => transport.transport_id,
+                 "role" => "PRIMARY",
+                 "state" => "ENABLED",
+                 "href" => "/missions/#{mission.mission_id}/comms/routing/#{mine.routing_rule_id}"
+               }
+             ]
+
+      foreign_ids =
+        Enum.map([sibling_rule, other_mission_rule, other_org_rule], fn rule ->
+          "spacecraft-routing-rule-#{rule.routing_rule_id}"
+        end)
+
+      refute Enum.any?(rows, &(&1["id"] in foreign_ids))
+    end
+  end
+
+  defp spacecraft_routing_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-routing-page")
+
+    assert vue.component == "SpacecraftRouting"
+    assert vue.ssr == false
+    assert is_binary(Jason.encode!(vue.props))
+
+    vue
   end
 
   defp persist_transport!(organization_id, mission_id, display_name) do
