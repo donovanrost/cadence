@@ -48,8 +48,7 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
                "mode" => "clone",
                "eyebrow" => "Dashboard authoring / Clone",
                "heading" => "Clone Dashboard",
-               "description" =>
-                 "Create an independent draft from an existing mission dashboard.",
+               "description" => "Create an independent draft from an existing mission dashboard.",
                "source" => %{
                  "id" => "dashboard-clone-source",
                  "dashboard_id" => source.dashboard_id,
