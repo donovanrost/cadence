@@ -62,7 +62,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     |> Map.new(fn {name, field} -> {name, field["value"]} end)
   end
 
-  defp valid_spacecraft_profile_params(overrides \\ %{}) do
+  defp valid_spacecraft_profile_params(overrides) do
     Map.merge(
       %{
         "display_name" => "Lab TM/TC",
@@ -514,8 +514,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
            "insert_zone_length" => "16",
            "truncated_primary_header" => "true",
            "ocf_length" => "4"
-         },
-         %{"frame_size" => 2048, "insert_zone_length" => 16, "ocf_length" => 4}},
+         }, %{"frame_size" => 2048, "insert_zone_length" => 16, "ocf_length" => 4}},
         {"USLP Lab", "uslp", :uslp,
          %{
            "frame_size" => "4096",
@@ -523,8 +522,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
            "insert_zone_length" => "99",
            "truncated_primary_header" => "true",
            "ocf_length" => "0"
-         },
-         %{"frame_size" => 4096, "truncated_primary_header" => true, "ocf_length" => 0}}
+         }, %{"frame_size" => 4096, "truncated_primary_header" => true, "ocf_length" => 0}}
       ]
 
       for {display_name, protocol, expected_protocol, frame_values, expected_frame_parameters} <-
@@ -576,8 +574,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
          "Insert zone length must be a non-negative integer."},
         {%{"downlink_protocol" => "uslp", "truncated_primary_header" => "sometimes"},
          "Truncated primary header must be Yes or No."},
-        {%{"ocf_length" => "2"},
-         "Operational Control Field must be 0 (absent) or 4 (present)."}
+        {%{"ocf_length" => "2"}, "Operational Control Field must be 0 (absent) or 4 (present)."}
       ]
 
       for {overrides, message} <- cases do

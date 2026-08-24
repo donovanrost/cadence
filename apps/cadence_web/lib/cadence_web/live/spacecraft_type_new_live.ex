@@ -245,7 +245,8 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
     }
   end
 
-  defp options_dto(options), do: Enum.map(options, fn {label, value} -> option_dto(label, value) end)
+  defp options_dto(options),
+    do: Enum.map(options, fn {label, value} -> option_dto(label, value) end)
 
   defp option_dto(label, value), do: %{label: label, value: value}
 
