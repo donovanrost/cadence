@@ -162,8 +162,9 @@ defmodule CadenceWeb.CommsRoutingNewLive do
         role: field_dto(:role, "select", "Role", string_param(params, "role"))
       },
       actions: %{
-        submit: %{label: "Create Routing Rule"},
+        submit: %{id: "create-routing-rule-button", label: "Create Routing Rule"},
         cancel: %{
+          id: "cancel-routing-rule-link",
           label: "Cancel",
           href: ~p"/missions/#{mission.mission_id}/comms/routing"
         }

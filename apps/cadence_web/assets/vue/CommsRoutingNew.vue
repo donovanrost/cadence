@@ -43,8 +43,8 @@ type RoutingRuleForm = {
     role: FormField
   }
   actions: {
-    submit: {label: string}
-    cancel: {label: string; href: string}
+    submit: {id: string; label: string}
+    cancel: {id: string; label: string; href: string}
   }
 }
 
@@ -335,8 +335,11 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
       </section>
 
       <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-        <button type="submit" class="btn btn-primary">{{ form.actions.submit.label }}</button>
+        <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
+          {{ form.actions.submit.label }}
+        </button>
         <a
+          :id="form.actions.cancel.id"
           :href="form.actions.cancel.href"
           data-phx-link="redirect"
           data-phx-link-state="push"
