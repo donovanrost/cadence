@@ -119,34 +119,88 @@ defmodule CadenceWeb.AdminLiveTest do
 
     test "admin can view organization detail with no members", %{admin_conn: admin_conn} do
       org = create_test_org!("Cadence Ops", "cadence-ops")
-      {:ok, view, html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
-      assert html =~ "Cadence Ops"
-      assert html =~ "No members yet"
-      assert has_element?(view, "#admin-service-identities")
-      assert has_element?(view, "#service-identity-form")
-      assert has_element?(view, ~s(form[action="/session/organization"]))
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
+
+      assert has_element?(view, "#admin-organization-show-page")
+      assert has_element?(view, "#admin-organization-show-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-show-component")
+
+      assert vue.component == "AdminOrganizationShow"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "invitations" => [],
+               "issued_service_token" => nil,
+               "members" => [],
+               "navigation" => %{
+                 "invite_href" => "/admin/organizations/#{org.organization_id}/invite",
+                 "open_organization_action" => "/session/organization",
+                 "organizations_href" => "/admin/organizations",
+                 "platform_admin_href" => "/admin"
+               },
+               "organization" => %{
+                 "display_name" => "Cadence Ops",
+                 "organization_id" => org.organization_id,
+                 "slug" => "cadence-ops"
+               },
+               "service_identities" => [],
+               "service_identity_form" => %{
+                 "display_name" => "",
+                 "service_identity_id" => ""
+               }
+             }
+
+      assert vue.handlers == %{
+               "dismiss-service-token" => JS.push("dismiss-service-token"),
+               "issue-service-identity" => JS.push("issue-service-identity")
+             }
     end
 
     test "admin can issue the first product API service credential", %{admin_conn: admin_conn} do
       org = create_test_org!("Cadence Ops", "cadence-ops")
       {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
 
-      view
-      |> form("#service-identity-form",
-        service_identity: %{
-          display_name: "Operations Automation",
-          service_identity_id: "svc-operations"
+      render_click(view, "issue-service-identity", %{
+        "service_identity" => %{
+          "display_name" => "Operations Automation",
+          "service_identity_id" => "svc-operations"
         }
-      )
-      |> render_submit()
+      })
 
-      assert has_element?(view, "#issued-service-token code")
-      assert has_element?(view, "#service-identities-table", "Operations Automation")
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-show-component")
+
+      assert %{
+               "api_token" => api_token,
+               "display_name" => "Operations Automation",
+               "service_identity_id" => "svc-operations"
+             } = vue.props["issued_service_token"]
+
+      assert is_binary(api_token)
 
       assert {:ok, identity} =
                Cadence.Auth.fetch_service_identity(org.organization_id, "svc-operations")
 
+      assert [identity_prop] = vue.props["service_identities"]
+
+      assert identity_prop == %{
+               "display_name" => "Operations Automation",
+               "id" => "service-identity-svc-operations",
+               "lifecycle_state" => "active",
+               "lifecycle_state_label" => "Active",
+               "service_identity_id" => "svc-operations",
+               "token_hint" => identity.token_hint
+             }
+
+      assert is_binary(Jason.encode!(vue.props))
+
       assert identity.capabilities == [:organization_admin]
+
+      render_click(view, "dismiss-service-token", %{})
+
+      dismissed_vue = LiveVue.Test.get_vue(view, id: "admin-organization-show-component")
+      assert dismissed_vue.props["issued_service_token"] == nil
     end
   end
 
@@ -174,6 +228,25 @@ defmodule CadenceWeb.AdminLiveTest do
       # Verify invitation email was delivered
       assert_received {:email, email}
       assert email.to == [{"", "new-user@example.com"}]
+
+      assert [invitation] = Cadence.Accounts.list_pending_invitations(org.organization_id)
+
+      {:ok, detail_view, _html} =
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
+
+      vue = LiveVue.Test.get_vue(detail_view, id: "admin-organization-show-component")
+
+      assert vue.props["invitations"] == [
+               %{
+                 "email" => "new-user@example.com",
+                 "expires_on" => Calendar.strftime(invitation.expires_at, "%Y-%m-%d"),
+                 "grant_platform_admin" => false,
+                 "id" => "organization-invitation-#{invitation.organization_invitation_id}",
+                 "invitation_id" => invitation.organization_invitation_id,
+                 "role" => "organization_admin",
+                 "role_label" => "Organization admin"
+               }
+             ]
     end
 
     test "admin can grant an existing durable user directly", %{admin_conn: admin_conn} do
@@ -196,8 +269,17 @@ defmodule CadenceWeb.AdminLiveTest do
       assert_redirect(view, ~p"/admin/organizations/#{org.organization_id}")
 
       # Verify the member appears on the org detail page
-      {:ok, _view, html} = live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
-      assert html =~ "existing@example.com"
+      {:ok, detail_view, _html} =
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}")
+
+      vue = LiveVue.Test.get_vue(detail_view, id: "admin-organization-show-component")
+
+      assert [member_prop] = vue.props["members"]
+      assert member_prop["display_name"] == "Durable User"
+      assert member_prop["email"] == "existing@example.com"
+      assert member_prop["role"] == "member"
+      assert member_prop["role_label"] == "Member"
+      assert String.starts_with?(member_prop["id"], "organization-member-")
     end
   end
 
