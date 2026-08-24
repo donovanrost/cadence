@@ -89,6 +89,7 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
 
     assert record["id"] == "ops-contact-record-page"
     assert record["header"]["canonical_id"] == realized_contact.realized_contact_id
+
     assert Enum.map(record["paths"]["rows"], & &1["id"]) == [
              "contact-path-contact-path-alpha"
            ]
@@ -220,7 +221,7 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
            }
   end
 
-  test "scheduled-only record exposes its exact planned window and empty evidence contract" do
+  test "scheduled-only record exposes its exact planned window and path evidence contract" do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, organization)
@@ -231,7 +232,17 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
         scheduled_contact_id: "scheduled-contact-record-only",
         mission_id: mission.mission_id,
         starts_at: ~U[2026-08-02 09:30:00Z],
-        ends_at: ~U[2026-08-02 09:45:00Z]
+        ends_at: ~U[2026-08-02 09:45:00Z],
+        source_endpoint_refs: ["scheduled-source-endpoint"],
+        contact_intents: [:telemetry_downlink],
+        paths: [
+          Path.new(%{
+            path_id: "scheduled-contact-path",
+            direction: :downlink,
+            selection_role: :selected,
+            source_endpoint_ref: "scheduled-source-endpoint"
+          })
+        ]
       })
 
     assert {:ok, _scheduled_contact} =
@@ -302,12 +313,20 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
                "list_id" => "contact-path-list",
                "eyebrow" => "Data paths",
                "title" => "Contact transport evidence",
-               "empty" => true,
+               "empty" => false,
                "empty_state" => %{
                  "id" => "contact-paths-empty",
                  "message" => "No path evidence is attached to this contact record."
                },
-               "rows" => []
+               "rows" => [
+                 %{
+                   "id" => "contact-path-scheduled-contact-path",
+                   "path_id" => "scheduled-contact-path",
+                   "source_endpoint_ref" => "scheduled-source-endpoint",
+                   "direction" => %{"label" => "Direction", "value" => "downlink"},
+                   "selection" => %{"label" => "Selection", "value" => "selected"}
+                 }
+               ]
              },
              "lineage" => %{
                "id" => "contact-identities",
@@ -343,15 +362,15 @@ defmodule CadenceWeb.OpsContactRecordLiveTest do
                "title" => "Intent and sources",
                "intents" => %{
                  "label" => "Contact intents",
-                 "empty" => true,
+                 "empty" => false,
                  "empty_state" => "No declared intent",
-                 "values" => []
+                 "values" => ["telemetry downlink"]
                },
                "sources" => %{
                  "label" => "Source endpoints",
-                 "empty" => true,
+                 "empty" => false,
                  "empty_state" => "No source endpoint references",
-                 "values" => []
+                 "values" => ["scheduled-source-endpoint"]
                }
              }
            }
