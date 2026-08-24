@@ -9,178 +9,32 @@ defmodule CadenceWeb.CommsOverviewLive do
   @impl true
   def mount(_params, _session, socket) do
     summary = load_summary(socket.assigns)
+    overview = overview_dto(socket.assigns.current_mission.mission_id, summary)
 
     {:ok,
      socket
      |> assign(:page_title, "Comms")
      |> assign(:nav_item, :comms_overview)
-     |> assign(summary)}
+     |> assign(:overview, overview)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-    <div id="comms-overview-page" class="space-y-6">
-      <.page_header title={@current_mission.display_name} eyebrow="Communications">
-        <:title_suffix>&middot; Mission Comms</:title_suffix>
-      </.page_header>
+      <div id="comms-overview-page" class="space-y-6">
+        <.page_header title={@current_mission.display_name} eyebrow="Communications">
+          <:title_suffix>&middot; Mission Comms</:title_suffix>
+        </.page_header>
 
-      <.transports_card
-        current_mission={@current_mission}
-        transports={@transports}
-        transport_count={@transport_count}
-      />
-
-      <.setup_checks_card
-        findings={@findings}
-        finding_groups={@finding_groups}
-      />
-    </div>
-    </Layouts.app>
-    """
-  end
-
-  attr :current_mission, :map, required: true
-  attr :transports, :list, required: true
-  attr :transport_count, :integer, required: true
-
-  defp transports_card(assigns) do
-    ~H"""
-    <.card id="comms-transports">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Transport</p>
-          <div class="flex items-baseline gap-4">
-            <span class="mc-value-large text-base-content">{@transport_count}</span>
-            <span class="text-sm text-base-content/60">
-              transport<%= if @transport_count == 1, do: "", else: "s" %> configured
-            </span>
-          </div>
-          <p class="mt-3 max-w-2xl text-sm text-base-content/70">
-            Transports describe durable capabilities for moving bytes. Routing rules will decide how spacecraft use those capabilities.
-          </p>
-        </div>
-        <.status_badge status={if @transport_count > 0, do: :ready, else: :attention} />
-      </div>
-
-      <%= if @transports == [] do %>
-        <div class="mt-6">
-          <.empty_state
-            title="No transports configured"
-            description="Add a transport to describe a byte-moving capability for this mission."
-            action_label="Add a transport"
-            action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
-          />
-        </div>
-      <% else %>
-        <.transport_links current_mission={@current_mission} transports={@transports} />
-      <% end %>
-    </.card>
-    """
-  end
-
-  attr :current_mission, :map, required: true
-  attr :transports, :list, required: true
-
-  defp transport_links(assigns) do
-    ~H"""
-    <ul class="mt-6 grid gap-3 md:grid-cols-2">
-      <li :for={transport <- @transports}>
-        <.link
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
-          }
-          class="block rounded border border-base-300 bg-base-100/40 p-4 border-l-2 border-l-transparent hover:border-l-primary/60 hover-glow-cyan transition-glow"
-        >
-          <p class="font-medium">{transport.display_name}</p>
-          <p class="mt-1 font-mono text-xs text-base-content/60">
-            {transport.transport_kind} · {transport.direction_capability} · v{transport.version}
-          </p>
-        </.link>
-      </li>
-    </ul>
-
-    <div class="mt-5 flex gap-4 text-sm">
-      <.link
-        navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports"}
-        class="text-primary hover:underline"
-      >
-        Manage transports &rarr;
-      </.link>
-      <.link
-        navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
-        class="text-primary hover:underline"
-      >
-        + Add a transport
-      </.link>
-    </div>
-    """
-  end
-
-  attr :findings, :list, required: true
-  attr :finding_groups, :list, required: true
-
-  defp setup_checks_card(assigns) do
-    ~H"""
-    <.card id="comms-validation-page">
-      <.section_header
-        eyebrow="Setup Checks"
-        title="What's missing or broken"
-        description="Checks on saved configuration for spacecraft on this mission."
-      >
-        <:actions>
-          <.status_badge
-            status={if @findings == [], do: :ready, else: :attention}
-            label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
-          />
-        </:actions>
-      </.section_header>
-
-      <%= if @findings == [] do %>
-        <div class="mt-6">
-          <.empty_state title="All clear" description="The saved configuration looks consistent." />
-        </div>
-      <% else %>
-        <div id="comms-validation-findings" class="mt-6 space-y-5">
-          <section :for={group <- @finding_groups} id={group.id} class="space-y-3">
-            <div>
-              <p class="hud-label mb-1">{group.title}</p>
-              <p class="text-sm text-base-content/70">{group.description}</p>
-            </div>
-
-            <.finding_row :for={finding <- group.findings} finding={finding} />
-          </section>
-        </div>
-      <% end %>
-    </.card>
-    """
-  end
-
-  attr :finding, :map, required: true
-
-  defp finding_row(assigns) do
-    ~H"""
-    <div id={Map.get(@finding, :id)} class="border border-base-300 bg-base-100/40 p-4">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h3 class="font-semibold">{@finding.title}</h3>
-          <p class="mt-1 text-sm text-base-content/70">{@finding.body}</p>
-          <.button
-            :if={Map.get(@finding, :action_navigate)}
-            size={:xs}
-            navigate={@finding.action_navigate}
-            class="mt-3"
-          >
-            {Map.get(@finding, :action_label, "Review")}
-          </.button>
-        </div>
-        <.status_badge
-          status={@finding.severity}
-          label={CommsValidation.finding_label(@finding.severity)}
+        <.vue
+          id="comms-overview-component"
+          v-component="CommsOverview"
+          overview={@overview}
+          v-ssr={false}
         />
       </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -227,5 +81,101 @@ defmodule CadenceWeb.CommsOverviewLive do
       findings: findings,
       finding_groups: CommsValidation.finding_groups(findings)
     }
+  end
+
+  defp overview_dto(mission_id, summary) do
+    %{
+      transport: transport_summary_dto(mission_id, summary),
+      validation: validation_summary_dto(summary)
+    }
+  end
+
+  defp transport_summary_dto(mission_id, summary) do
+    count = summary.transport_count
+
+    %{
+      id: "comms-transports",
+      eyebrow: "Transport",
+      count: count,
+      count_label: if(count == 1, do: "transport configured", else: "transports configured"),
+      description:
+        "Transports describe durable capabilities for moving bytes. Routing rules will decide how spacecraft use those capabilities.",
+      status: transport_status_dto(count),
+      empty: summary.transports == [],
+      empty_state: %{
+        title: "No transports configured",
+        description: "Add a transport to describe a byte-moving capability for this mission.",
+        action_label: "Add a transport",
+        action_href: ~p"/missions/#{mission_id}/comms/transports/new"
+      },
+      rows: Enum.map(summary.transports, &transport_dto(&1, mission_id)),
+      manage_label: "Manage transports →",
+      manage_href: ~p"/missions/#{mission_id}/comms/transports",
+      add_label: "+ Add a transport",
+      add_href: ~p"/missions/#{mission_id}/comms/transports/new"
+    }
+  end
+
+  defp transport_status_dto(0), do: status_dto(:attention, "Needs Work")
+  defp transport_status_dto(_count), do: status_dto(:ready, "Ready")
+
+  defp transport_dto(transport, mission_id) do
+    %{
+      id: "comms-transport-#{transport.transport_id}",
+      display_name: transport.display_name,
+      metadata:
+        "#{transport.transport_kind} · #{transport.direction_capability} · v#{transport.version}",
+      href: ~p"/missions/#{mission_id}/comms/transports/#{transport.transport_id}"
+    }
+  end
+
+  defp validation_summary_dto(summary) do
+    finding_count = length(summary.findings)
+
+    %{
+      id: "comms-validation-page",
+      eyebrow: "Setup Checks",
+      title: "What's missing or broken",
+      description: "Checks on saved configuration for spacecraft on this mission.",
+      status: validation_status_dto(finding_count),
+      empty: summary.findings == [],
+      empty_state: %{
+        title: "All clear",
+        description: "The saved configuration looks consistent."
+      },
+      findings_id: "comms-validation-findings",
+      finding_groups: Enum.map(summary.finding_groups, &finding_group_dto/1)
+    }
+  end
+
+  defp validation_status_dto(0), do: status_dto(:ready, "No Findings")
+
+  defp validation_status_dto(finding_count),
+    do: status_dto(:attention, "#{finding_count} Findings")
+
+  defp finding_group_dto(group) do
+    %{
+      id: group.id,
+      title: group.title,
+      description: group.description,
+      findings: Enum.map(group.findings, &finding_dto/1)
+    }
+  end
+
+  defp finding_dto(finding) do
+    action_href = Map.get(finding, :action_navigate)
+
+    %{
+      id: Map.get(finding, :id),
+      title: finding.title,
+      body: finding.body,
+      action_label: action_href && Map.get(finding, :action_label, "Review"),
+      action_href: action_href,
+      status: status_dto(finding.severity, CommsValidation.finding_label(finding.severity))
+    }
+  end
+
+  defp status_dto(tone, label) do
+    %{tone: Atom.to_string(tone), label: label}
   end
 end
