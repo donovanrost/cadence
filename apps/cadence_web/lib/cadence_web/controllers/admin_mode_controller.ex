@@ -1,17 +1,20 @@
 defmodule CadenceWeb.AdminModeController do
   use CadenceWeb, :controller
 
-  import Phoenix.Component, only: [to_form: 2]
+  import Phoenix.LiveView.Controller, only: [live_render: 3]
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.AdminMode
+  alias CadenceWeb.AdminModeLive.Presentation
 
   def new(conn, _params) do
     if Scope.platform_admin_eligible?(conn.assigns.current_scope) do
       conn
       |> put_layout(html: {CadenceWeb.Layouts, :auth})
-      |> assign(:form, to_form(%{"password" => ""}, as: :admin_mode))
-      |> render(:new)
+      |> live_render(CadenceWeb.AdminModeLive,
+        session: live_session(conn, Presentation.build()),
+        container: {:div, class: "contents"}
+      )
     else
       conn
       |> put_flash(:error, "Your account is not eligible for platform administration.")
@@ -53,5 +56,14 @@ defmodule CadenceWeb.AdminModeController do
     |> delete_session(:admin_mode_expires_at)
     |> put_flash(:info, "Admin mode disabled.")
     |> redirect(to: ~p"/")
+  end
+
+  defp live_session(conn, presentation) do
+    %{
+      "admin_mode_expires_at" => get_session(conn, :admin_mode_expires_at),
+      "current_organization_id" => get_session(conn, :current_organization_id),
+      "user_session_token" => get_session(conn, :user_session_token),
+      "presentation" => presentation
+    }
   end
 end
