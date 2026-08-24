@@ -44,76 +44,129 @@ defmodule CadenceWeb.UITest do
     ]
     |> Keyword.merge(opts)
     |> then(fn assigns -> render_component(&UI.user_menu/1, assigns) end)
-    |> LazyHTML.from_fragment()
+    |> LiveVue.Test.get_vue(id: "user-menu")
   end
 
-  defp organization_block(document) do
-    document
-    |> LazyHTML.query("#user-menu-menu .hud-label")
-    |> LazyHTML.parent_node()
+  defp render_notifications_bell(opts \\ []) do
+    [id: "notifications-bell", count: 0, notifications: []]
+    |> Keyword.merge(opts)
+    |> then(fn assigns -> render_component(&UI.notifications_bell/1, assigns) end)
+    |> LiveVue.Test.get_vue(id: "notifications-bell")
+  end
+
+  defp menu(vue), do: vue.props["presentation"]["menu"]
+
+  defp hidden_fields(form) do
+    Map.new(form["hidden_fields"], fn %{"attrs" => attrs} -> {attrs["name"], attrs} end)
+  end
+
+  describe "notifications_bell/1" do
+    test "emits one JSON-safe LiveVue host with the empty-state contract" do
+      vue = render_notifications_bell()
+      presentation = vue.props["presentation"]
+
+      assert vue.component == "NotificationsBell"
+      assert vue.class == "contents"
+      refute vue.ssr
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+      assert presentation["root"]["class"] == "dropdown dropdown-end"
+
+      assert presentation["trigger"]["attrs"] == %{
+               "aria-controls" => "notifications-bell-menu",
+               "aria-expanded" => "false",
+               "aria-haspopup" => "menu",
+               "aria-label" => "Notifications",
+               "data-dropdown-trigger" => "",
+               "type" => "button"
+             }
+
+      assert presentation["trigger"]["badge"] == nil
+      assert presentation["menu"]["empty_state"]["label"] == "No notifications"
+      assert presentation["menu"]["notifications"] == []
+      assert presentation["menu"]["title"]["unread_label"] == nil
+    end
+
+    test "preserves count truncation, unread dot, body, and Phoenix navigation attrs" do
+      unread = %{title: "Invitation ready", body: "As Operator", read_at: nil}
+      read = %{title: "Access granted", body: nil, read_at: ~U[2026-08-24 12:00:00Z]}
+
+      vue = render_notifications_bell(count: 14, notifications: [unread, read])
+      presentation = vue.props["presentation"]
+      [unread_prop, read_prop] = presentation["menu"]["notifications"]
+
+      assert presentation["trigger"]["badge"]["text"] == "9+"
+      assert presentation["menu"]["title"]["unread_label"] == "(14 unread)"
+      assert presentation["menu"]["empty_state"] == nil
+      assert unread_prop["dot_class"] =~ "rounded-full bg-primary"
+      assert unread_prop["title"]["text"] == "Invitation ready"
+      assert unread_prop["body"]["text"] == "As Operator"
+      assert read_prop["dot_class"] == "mt-1.5 w-1.5 h-1.5 flex-shrink-0"
+      assert read_prop["body"] == nil
+
+      assert unread_prop["link"]["attrs"] == %{
+               "data-phx-link" => "redirect",
+               "data-phx-link-state" => "push",
+               "href" => "/notifications"
+             }
+
+      assert presentation["menu"]["footer"]["attrs"] == unread_prop["link"]["attrs"]
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+    end
   end
 
   describe "user_menu/1" do
     test "renders display_name as trigger text" do
-      trigger =
-        render_user_menu()
-        |> LazyHTML.query("#user-menu > button[data-dropdown-trigger]")
+      trigger = render_user_menu().props["presentation"]["trigger"]
 
-      assert LazyHTML.text(trigger) =~ "Jane Rost"
+      assert trigger["label"]["text"] == "Jane Rost"
+      assert trigger["attrs"]["data-dropdown-trigger"] == ""
+      assert trigger["attrs"]["aria-expanded"] == "false"
     end
 
     test "renders identity block with name and email" do
-      identity =
-        render_user_menu()
-        |> LazyHTML.query("#user-menu-menu > div[role='presentation']")
+      identity = render_user_menu() |> menu() |> Map.fetch!("identity")
 
-      assert LazyHTML.text(identity) =~ "Jane Rost"
-      assert LazyHTML.text(identity) =~ "jane@example.com"
+      assert identity["label"]["text"] == "Jane Rost"
+      assert identity["email"]["text"] == "jane@example.com"
     end
 
     test "always renders sign-out form targeting DELETE /session" do
-      document = render_user_menu()
-      sign_out_form = LazyHTML.query(document, "#user-menu-menu form[action='/session']")
+      sign_out = render_user_menu() |> menu() |> Map.fetch!("sign_out")
+      fields = hidden_fields(sign_out)
 
-      assert Enum.count(sign_out_form) == 1
-
-      assert sign_out_form
-             |> LazyHTML.query("input[name='_method'][value='delete']")
-             |> Enum.count() == 1
-
-      assert sign_out_form
-             |> LazyHTML.query("button[type='submit'][role='menuitem']")
-             |> LazyHTML.text() =~ "Sign out"
+      assert sign_out["attrs"] == %{"action" => "/session", "method" => "post"}
+      assert fields["_method"]["type"] == "hidden"
+      assert fields["_method"]["value"] == "delete"
+      assert fields["_csrf_token"]["hidden"] == ""
+      assert is_binary(fields["_csrf_token"]["value"])
+      assert fields["_csrf_token"]["value"] != ""
+      assert sign_out["button"]["attrs"] == %{"role" => "menuitem", "type" => "submit"}
+      assert sign_out["button"]["label"] == "Sign out"
     end
 
     test "omits the organization block entirely when scope.organization is nil" do
-      assert render_user_menu()
-             |> LazyHTML.query("#user-menu-menu .hud-label")
-             |> Enum.empty?()
+      assert render_user_menu() |> menu() |> Map.fetch!("organization") == nil
     end
 
     test "renders label-only org row for single-membership users" do
       org = org_fixture(%{display_name: "Acme Space"})
       membership_map = %{membership: %{}, organization: org}
 
-      org_block =
+      organization =
         render_user_menu(scope: scope(user_fixture(), org), memberships: [membership_map])
-        |> organization_block()
+        |> menu()
+        |> Map.fetch!("organization")
 
-      assert LazyHTML.text(org_block) =~ "ORGANIZATION"
-      assert LazyHTML.text(org_block) =~ "Acme Space"
-      assert org_block |> LazyHTML.query("details") |> Enum.empty?()
-
-      assert org_block
-             |> LazyHTML.query("form[action='/session/organization']")
-             |> Enum.empty?()
+      assert organization["label"]["text"] == "ORGANIZATION"
+      assert organization["current"]["text"] == "Acme Space"
+      assert organization["switcher"] == nil
     end
 
     test "renders expandable switcher for multi-membership users" do
       current_org = org_fixture(%{display_name: "Acme Space"})
       other_org = org_fixture(%{display_name: "Beta Labs"})
 
-      org_block =
+      organization =
         render_user_menu(
           scope: scope(user_fixture(), current_org),
           memberships: [
@@ -121,103 +174,124 @@ defmodule CadenceWeb.UITest do
             %{membership: %{}, organization: other_org}
           ]
         )
-        |> organization_block()
+        |> menu()
+        |> Map.fetch!("organization")
 
-      assert LazyHTML.text(org_block) =~ "ORGANIZATION"
-      assert LazyHTML.text(org_block) =~ "Acme Space"
-      assert LazyHTML.text(org_block) =~ "Beta Labs"
-      assert org_block |> LazyHTML.query("details") |> Enum.count() == 1
+      switcher = organization["switcher"]
+      assert organization["label"]["text"] == "ORGANIZATION"
+      assert switcher["summary"]["label"] == "Acme Space"
 
-      switch_form = LazyHTML.query(org_block, "form[action='/session/organization']")
+      assert [%{"key" => other_org_id, "label" => "Beta Labs", "form" => form}] =
+               switcher["organizations"]
 
-      assert switch_form
-             |> LazyHTML.query("input[name='_method'][value='put']")
-             |> Enum.count() == 1
+      assert other_org_id == other_org.organization_id
+      fields = hidden_fields(form)
+      assert form["attrs"] == %{"action" => "/session/organization", "method" => "post"}
+      assert fields["_method"]["value"] == "put"
+      assert fields["organization_id"]["value"] == other_org.organization_id
+      refute fields["organization_id"]["value"] == current_org.organization_id
+      assert is_binary(fields["_csrf_token"]["value"])
+      assert fields["_csrf_token"]["value"] != ""
+    end
 
-      assert switch_form
-             |> LazyHTML.query(
-               ~s|input[name="organization_id"][value="#{other_org.organization_id}"]|
-             )
-             |> Enum.count() == 1
+    test "preserves switcher option filtering and membership order" do
+      current_org = org_fixture(%{display_name: "Acme Space"})
+      beta_org = org_fixture(%{display_name: "Beta Labs"})
+      gamma_org = org_fixture(%{display_name: "Gamma Flight"})
 
-      assert switch_form
-             |> LazyHTML.query(
-               ~s|input[name="organization_id"][value="#{current_org.organization_id}"]|
-             )
-             |> Enum.empty?()
+      organizations =
+        render_user_menu(
+          scope: scope(user_fixture(), current_org),
+          memberships: [
+            %{membership: %{}, organization: beta_org},
+            %{membership: %{}, organization: current_org},
+            %{membership: %{}, organization: gamma_org}
+          ]
+        )
+        |> menu()
+        |> get_in(["organization", "switcher", "organizations"])
+
+      assert Enum.map(organizations, & &1["key"]) == [
+               beta_org.organization_id,
+               gamma_org.organization_id
+             ]
     end
 
     test "does not render the system administration link when platform_admin? is false" do
-      document = render_user_menu()
+      menu = render_user_menu() |> menu()
 
-      assert document
-             |> LazyHTML.query("#user-menu-menu a[href='/admin']")
-             |> Enum.empty?()
-
-      assert document
-             |> LazyHTML.query("#user-menu-menu a[href='/admin-mode']")
-             |> Enum.empty?()
+      assert menu["admin_action"] == nil
+      assert menu["leave_admin_mode"] == nil
     end
 
     test "renders the admin-mode entry link for an eligible user" do
-      document = render_user_menu(platform_admin?: true)
-      admin_mode_link = LazyHTML.query(document, "#user-menu-menu a[href='/admin-mode']")
+      menu = render_user_menu(platform_admin?: true) |> menu()
+      admin_action = menu["admin_action"]
 
-      assert LazyHTML.text(admin_mode_link) =~ "Enter admin mode"
-
-      assert document
-             |> LazyHTML.query("#user-menu-menu form[action='/admin-mode']")
-             |> Enum.empty?()
+      assert admin_action["label"] == "Enter admin mode"
+      assert admin_action["attrs"]["href"] == "/admin-mode"
+      assert admin_action["attrs"]["role"] == "menuitem"
+      assert admin_action["attrs"]["data-phx-link"] == "redirect"
+      assert admin_action["attrs"]["data-phx-link-state"] == "push"
+      assert menu["leave_admin_mode"] == nil
     end
 
     test "renders administration and exit actions while admin mode is active" do
       admin_scope = %{scope(user_fixture()) | admin_mode?: true}
+      menu = render_user_menu(scope: admin_scope, platform_admin?: true) |> menu()
+      exit_form = menu["leave_admin_mode"]
+      fields = hidden_fields(exit_form)
 
-      document = render_user_menu(scope: admin_scope, platform_admin?: true)
-      administration_link = LazyHTML.query(document, "#user-menu-menu a[href='/admin']")
-      exit_form = LazyHTML.query(document, "#user-menu-menu form[action='/admin-mode']")
-
-      assert LazyHTML.text(administration_link) =~ "System administration"
-      assert LazyHTML.text(exit_form) =~ "Leave admin mode"
-
-      assert exit_form
-             |> LazyHTML.query("input[name='_method'][value='delete']")
-             |> Enum.count() == 1
+      assert menu["admin_action"]["label"] == "System administration"
+      assert menu["admin_action"]["attrs"]["href"] == "/admin"
+      assert exit_form["attrs"] == %{"action" => "/admin-mode", "method" => "post"}
+      assert exit_form["button"]["label"] == "Leave admin mode"
+      assert fields["_method"]["value"] == "delete"
+      assert is_binary(fields["_csrf_token"]["value"])
+      assert fields["_csrf_token"]["value"] != ""
     end
 
     test "identity block wrapper is a div so it doesn't trigger menu hover" do
-      identity_name =
-        render_user_menu()
-        |> LazyHTML.query("#user-menu-menu > div[role='presentation'] > p:first-child")
+      identity = render_user_menu() |> menu() |> Map.fetch!("identity")
 
-      assert LazyHTML.text(identity_name) =~ "Jane Rost"
+      assert identity["element"] == "div"
+      assert identity["attrs"] == %{"role" => "presentation"}
+      assert identity["label"]["text"] == "Jane Rost"
     end
 
     test "organization block wrapper is a div so it doesn't trigger menu hover" do
       org = org_fixture(%{display_name: "Acme Space"})
 
-      org_label =
+      organization =
         render_user_menu(
           scope: scope(user_fixture(), org),
           memberships: [%{membership: %{}, organization: org}]
         )
-        |> LazyHTML.query("#user-menu-menu > div[role='presentation'] > span.hud-label")
+        |> menu()
+        |> Map.fetch!("organization")
 
-      assert LazyHTML.text(org_label) =~ "ORGANIZATION"
+      assert organization["element"] == "div"
+      assert organization["attrs"] == %{"role" => "presentation"}
+      assert organization["label"]["text"] == "ORGANIZATION"
     end
 
     test "identity block falls back to email when display_name is blank" do
-      document = render_user_menu(scope: scope(user_fixture(%{display_name: ""})))
+      vue = render_user_menu(scope: scope(user_fixture(%{display_name: ""})))
+      presentation = vue.props["presentation"]
+      identity = presentation["menu"]["identity"]
 
-      trigger_label =
-        LazyHTML.query(document, "#user-menu > button[data-dropdown-trigger] > span:first-child")
+      assert presentation["trigger"]["label"]["text"] == "jane@example.com"
+      assert identity["label"]["text"] == "jane@example.com"
+      assert identity["email"] == nil
+    end
 
-      identity_lines =
-        LazyHTML.query(document, "#user-menu-menu > div[role='presentation'] > p")
+    test "emits a JSON-safe LiveVue host and presentation DTO" do
+      vue = render_user_menu()
 
-      assert LazyHTML.text(trigger_label) =~ "jane@example.com"
-      assert Enum.count(identity_lines) == 1
-      assert LazyHTML.text(identity_lines) =~ "jane@example.com"
+      assert vue.component == "UserMenu"
+      assert vue.class == "contents"
+      refute vue.ssr
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
     end
   end
 end

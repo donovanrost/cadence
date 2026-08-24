@@ -18,12 +18,20 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
       user = TestFixtures.persist_user!(display_name: "Shell User")
       conn = TestFixtures.member_conn(user)
 
-      {:ok, _view, html} = live(conn, ~p"/notifications")
+      {:ok, view, _html} = live(conn, ~p"/notifications")
 
-      # Trigger renders display_name as the header control.
-      assert html =~ "Shell User"
-      # The user-menu popover is present (sign-out form is part of the panel).
-      assert html =~ ~s|action="/session"|
+      user_menu = LiveVue.Test.get_vue(view, id: "user-menu")
+      notifications_bell = LiveVue.Test.get_vue(view, id: "notifications-bell")
+
+      assert user_menu.component == "UserMenu"
+      assert user_menu.props["presentation"]["trigger"]["label"]["text"] == "Shell User"
+
+      assert user_menu.props["presentation"]["menu"]["sign_out"]["attrs"] == %{
+               "action" => "/session",
+               "method" => "post"
+             }
+
+      assert notifications_bell.component == "NotificationsBell"
     end
 
     test "renders trigger and organization block in sidebar (/)" do
@@ -32,11 +40,20 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
       _ = TestFixtures.grant_membership!(user, org)
       conn = TestFixtures.member_conn(user)
 
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/")
 
-      assert html =~ "Org User"
-      assert html =~ "ORGANIZATION"
-      assert html =~ "Integration Co"
+      mobile = LiveVue.Test.get_vue(view, id: "user-menu-mobile")
+      desktop = LiveVue.Test.get_vue(view, id: "user-menu-desktop")
+
+      assert mobile.component == "UserMenu"
+      assert desktop.component == "UserMenu"
+      assert desktop.props["presentation"]["trigger"]["label"]["text"] == "Org User"
+
+      assert desktop.props["presentation"]["menu"]["organization"]["label"]["text"] ==
+               "ORGANIZATION"
+
+      assert desktop.props["presentation"]["menu"]["organization"]["current"]["text"] ==
+               "Integration Co"
     end
 
     test "renders trigger and organization block in mission_sidebar (/missions/:id)" do
@@ -55,11 +72,20 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
 
       conn = TestFixtures.member_conn(user)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{persisted.mission_id}")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{persisted.mission_id}")
 
-      assert html =~ "Mission User"
-      assert html =~ "ORGANIZATION"
-      assert html =~ "Mission Org"
+      mobile = LiveVue.Test.get_vue(view, id: "user-menu-mobile")
+      desktop = LiveVue.Test.get_vue(view, id: "user-menu-desktop")
+
+      assert mobile.component == "UserMenu"
+      assert desktop.component == "UserMenu"
+      assert desktop.props["presentation"]["trigger"]["label"]["text"] == "Mission User"
+
+      assert desktop.props["presentation"]["menu"]["organization"]["label"]["text"] ==
+               "ORGANIZATION"
+
+      assert desktop.props["presentation"]["menu"]["organization"]["current"]["text"] ==
+               "Mission Org"
     end
   end
 end

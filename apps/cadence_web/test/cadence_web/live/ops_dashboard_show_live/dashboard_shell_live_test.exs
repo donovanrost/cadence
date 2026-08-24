@@ -164,6 +164,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardShellLiveTest do
       assert utc_clock.component == "UtcClock"
       assert utc_clock.class == "font-mono text-xs text-base-content/70 tabular-nums"
       refute utc_clock.ssr
+
+      notifications_bell = LiveVue.Test.get_vue(view, id: "notifications-bell-ops")
+      user_menu = LiveVue.Test.get_vue(view, id: "user-menu-ops")
+
+      assert notifications_bell.component == "NotificationsBell"
+      assert notifications_bell.class == "contents"
+      refute notifications_bell.ssr
+      assert user_menu.component == "UserMenu"
+      assert user_menu.class == "contents"
+      refute user_menu.ssr
+
+      assert user_menu.props["presentation"]["menu"]["sign_out"]["attrs"]["action"] ==
+               "/session"
     end
 
     test "the shared Ops shell renders exactly one context rail across representative routes" do
