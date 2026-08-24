@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type NavigationItem = {
@@ -40,16 +41,24 @@ type ImportRun = {
   href: string
 }
 
+type CatalogUploadFormProps = InstanceType<typeof CatalogUploadForm>["$props"]
+
 defineProps<{
   database: CatalogDatabase
   navigation: Navigation
   revision_form_open: boolean
+  revision_form: CatalogUploadFormProps["form"]
+  upload: CatalogUploadFormProps["upload"]
+  detected_importer: CatalogUploadFormProps["detected_importer"]
+  submit_disabled: boolean
   revisions: Revision[]
   import_runs: ImportRun[]
 }>()
 
 const emit = defineEmits<{
   "toggle-revision-form": [payload: Record<string, never>]
+  validate: [payload: Record<string, Record<string, string>>]
+  "cancel-upload": [payload: {ref: string}]
 }>()
 </script>
 
@@ -120,7 +129,14 @@ const emit = defineEmits<{
     </div>
 
     <div v-if="revision_form_open" id="catalog-revision-upload-slot">
-      <slot name="revision_form" />
+      <CatalogUploadForm
+        :form="revision_form"
+        :upload="upload"
+        :detected_importer="detected_importer"
+        :submit_disabled="submit_disabled"
+        @validate="emit('validate', $event)"
+        @cancel-upload="emit('cancel-upload', $event)"
+      />
     </div>
 
     <section id="catalog-revision-history" class="card border border-base-300 bg-base-200">

@@ -92,108 +92,32 @@ defmodule CadenceWeb.Catalog.Components do
 
   alias Cadence.ExtensionCatalog
 
-  @doc "Upload card with importer auto-detection."
-  attr :uploads, :map, required: true
-  attr :form, Phoenix.HTML.Form, required: true
-
-  def upload_card(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :detected_importer,
-        detect_importer_from_entries(assigns.uploads.artifact.entries)
-      )
-
-    ~H"""
-    <.card title="Create catalog database revision">
-      <div class="space-y-4 mt-2">
-        <p class="text-sm text-base-content/70">
-          Save the upload as an immutable revision in the mission catalog library. Runtime
-          usage is chosen separately.
-        </p>
-
-        <.form
-          id="catalog-upload-form"
-          for={@form}
-          phx-change="validate"
-          phx-submit="save"
-          class="space-y-4"
-        >
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <.input field={@form[:name]} type="text" label="Catalog database name" />
-            <.input field={@form[:revision_label]} type="text" label="Revision label" />
-          </div>
-          <.input field={@form[:revision_notes]} type="textarea" label="Revision notes" />
-
-          <label class="block">
-            <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
-          </label>
-
-          <ul :if={@uploads.artifact.entries != []} class="space-y-1">
-            <li
-              :for={entry <- @uploads.artifact.entries}
-              class="flex items-center justify-between text-sm"
-            >
-              <span class="font-mono">{entry.client_name} ({entry.client_type || "unknown"})</span>
-              <.button
-                variant={:ghost}
-                size={:xs}
-                phx-click="cancel_upload"
-                phx-value-ref={entry.ref}
-              >
-                Remove
-              </.button>
-            </li>
-          </ul>
-
-          <.upload_error_alert :for={err <- upload_errors(@uploads.artifact)} error={err} />
-
-          <.detected_preview detected={@detected_importer} />
-
-          <div class="flex items-center gap-3">
-            <.button type="submit" size={:md} disabled={!importer_detected?(@detected_importer)}>
-              Upload &amp; import
-            </.button>
-          </div>
-        </.form>
-      </div>
-    </.card>
-    """
+  @doc "JSON-safe upload configuration and server-mapped validation errors for LiveVue."
+  def upload_dto(upload) do
+    %{
+      ref: upload.ref,
+      name: to_string(upload.name),
+      accept: upload_accept_dto(upload.accept),
+      max_entries: upload.max_entries,
+      max_file_size: upload.max_file_size,
+      auto_upload: upload.auto_upload?,
+      entries: Enum.map(upload.entries, &upload_entry_dto(upload, &1)),
+      errors: Enum.map(upload.errors, fn {ref, error} -> upload_error_dto(ref, error) end)
+    }
   end
 
-  @doc "Error alert for a LiveView upload entry error."
-  attr :error, :atom, required: true
+  @doc "JSON-safe presentation of the server-authoritative importer detection result."
+  def detected_importer_dto(entries) do
+    case detect_importer_from_entries(entries) do
+      {:ok, %{descriptor: descriptor}} ->
+        %{status: "detected", display_name: descriptor.display_name}
 
-  def upload_error_alert(assigns) do
-    ~H"""
-    <.callout variant={:error}>
-      {upload_error_message(@error)}
-    </.callout>
-    """
-  end
+      {:error, :no_matching_importer} ->
+        %{status: "unsupported", display_name: nil}
 
-  @doc "Preview of a detected importer or a no-match error message."
-  attr :detected, :any, required: true
-
-  def detected_preview(assigns) do
-    ~H"""
-    <%= case @detected do %>
-      <% {:ok, %{descriptor: descriptor}} -> %>
-        <div class="flex items-center gap-2 text-sm text-base-content/80">
-          <span class="hero-check-circle h-4 w-4 text-success"></span>
-          Detected importer:
-          <span class="font-medium">{descriptor.display_name}</span>
-        </div>
-      <% {:error, :no_matching_importer} -> %>
-        <.callout variant={:error}>
-          No importer supports this file. Accepted formats: YAML (<code>.yaml</code>, <code>.yml</code>).
-        </.callout>
-      <% _ -> %>
-        <div class="text-xs text-base-content/60">
-          Select a file to see the detected importer.
-        </div>
-    <% end %>
-    """
+      _other ->
+        %{status: "empty", display_name: nil}
+    end
   end
 
   @doc "Returns true when a detected importer result is `{:ok, _}`."
@@ -212,6 +136,36 @@ defmodule CadenceWeb.Catalog.Components do
   def upload_error_message(:not_accepted), do: "File type is not accepted."
   def upload_error_message(:too_many_files), do: "Only one file at a time."
   def upload_error_message(other), do: "Upload failed: #{inspect(other)}"
+
+  defp upload_accept_dto(:any), do: false
+  defp upload_accept_dto(accept) when is_binary(accept), do: accept
+  defp upload_accept_dto(_accept), do: false
+
+  defp upload_entry_dto(upload, entry) do
+    %{
+      ref: entry.ref,
+      client_name: entry.client_name,
+      client_size: entry.client_size,
+      client_type: entry.client_type,
+      progress: entry.progress,
+      done: entry.done?,
+      valid: entry.valid?,
+      preflighted: entry.preflighted?,
+      errors: Enum.map(upload_errors(upload, entry), &upload_error_code/1)
+    }
+  end
+
+  defp upload_error_dto(ref, error) do
+    %{
+      ref: ref,
+      error: upload_error_code(error),
+      code: upload_error_code(error),
+      message: upload_error_message(error)
+    }
+  end
+
+  defp upload_error_code(error) when is_atom(error), do: Atom.to_string(error)
+  defp upload_error_code(error), do: inspect(error)
 
   @doc "Summary count card for a snapshot (telemetry or command)."
   attr :title, :string, required: true
