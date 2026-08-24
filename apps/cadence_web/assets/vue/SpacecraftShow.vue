@@ -1,0 +1,329 @@
+<script setup lang="ts">
+import StatusBadge from "./StatusBadge.vue"
+
+type StatusTone = "ready" | "attention" | "blocked" | "info"
+
+type Status = {
+  tone: StatusTone
+  label: string
+}
+
+type NavigationItem = {
+  label: string
+  href: string | null
+}
+
+type NavigationLink = {
+  label: string
+  href: string
+}
+
+type Page = {
+  id: string
+  header: {
+    title: string
+    breadcrumbs: NavigationItem[]
+    title_suffix: {
+      set: boolean
+      label: string
+    }
+  }
+}
+
+type ProfileBinding = {
+  id: string
+  eyebrow: string
+  bound: boolean
+  title: string
+  description: string | null
+  version: string | null
+  protocols: Array<{
+    label: string
+    value: string
+  }>
+  status: Status
+  view_profile_href: string | null
+  profile_action: NavigationLink
+}
+
+type ApplicationRow = {
+  id: string
+  application_key: string
+  display_name: string
+  status: Status
+  manage_href: string | null
+}
+
+type ApplicationInventory = {
+  id: string
+  list_id: string
+  visible: boolean
+  title: string
+  description: string
+  empty: boolean
+  empty_state: string
+  rows: ApplicationRow[]
+  view_action: NavigationLink
+}
+
+type WorkflowCard = {
+  id: string
+  title: string
+  value: string
+  description: string
+  status: Status
+  action: NavigationLink
+}
+
+type DetailValue = {
+  label: string
+  value: string
+}
+
+type Overview = {
+  title: string
+  scid: DetailValue
+  display_name: DetailValue
+  spacecraft_id: DetailValue
+  mission: DetailValue & {href: string}
+  organization_id: DetailValue
+  metadata_json: string | null
+}
+
+defineProps<{
+  page: Page
+  profile_binding: ProfileBinding
+  applications: ApplicationInventory
+  workflow_cards: WorkflowCard[]
+  overview: Overview
+}>()
+</script>
+
+<template>
+  <div :id="page.id" class="space-y-6">
+    <header class="border-b border-primary/20 pb-4">
+      <div>
+        <div>
+          <nav
+            aria-label="Breadcrumb"
+            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+          >
+            <template
+              v-for="(breadcrumb, index) in page.header.breadcrumbs"
+              :key="breadcrumb.label + '-' + index"
+            >
+              <span
+                v-if="index > 0"
+                class="text-base-content/20"
+                aria-hidden="true"
+              >/</span>
+              <a
+                v-if="breadcrumb.href"
+                :href="breadcrumb.href"
+                data-phx-link="redirect"
+                data-phx-link-state="push"
+                class="hover:text-primary transition-colors"
+              >{{ breadcrumb.label }}</a>
+              <span v-else class="text-primary/90">{{ breadcrumb.label }}</span>
+            </template>
+          </nav>
+          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+            {{ page.header.title }}
+            <span class="ml-3 font-mono text-base text-base-content/60">
+              <span
+                v-if="page.header.title_suffix.set"
+                class="mc-value-small text-base-content"
+              >{{ page.header.title_suffix.label }}</span>
+              <span v-else class="hud-label text-warning/70">
+                {{ page.header.title_suffix.label }}
+              </span>
+            </span>
+          </h1>
+        </div>
+      </div>
+    </header>
+
+    <section
+      :id="profile_binding.id"
+      class="card bg-base-200 border border-base-300"
+    >
+      <div class="card-body p-6">
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-2">
+            <p class="hud-label">{{ profile_binding.eyebrow }}</p>
+            <template v-if="profile_binding.bound">
+              <div class="flex items-baseline gap-3">
+                <h2 class="text-lg font-semibold">{{ profile_binding.title }}</h2>
+                <span class="mc-value-small text-base-content">
+                  {{ profile_binding.version }}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <template
+                  v-for="(protocol, index) in profile_binding.protocols"
+                  :key="protocol.label"
+                >
+                  <span class="hud-label">{{ protocol.label }}</span>
+                  <span class="font-mono uppercase text-primary/80">
+                    {{ protocol.value }}
+                  </span>
+                  <span
+                    v-if="index < profile_binding.protocols.length - 1"
+                    class="text-base-content/30"
+                  >·</span>
+                </template>
+              </div>
+            </template>
+            <template v-else>
+              <h2 class="text-lg font-semibold text-base-content/70">
+                {{ profile_binding.title }}
+              </h2>
+              <p class="text-sm text-base-content/70">
+                {{ profile_binding.description }}
+              </p>
+            </template>
+          </div>
+          <StatusBadge
+            :status="profile_binding.status.tone"
+            :label="profile_binding.status.label"
+          />
+        </div>
+
+        <div class="mt-5 flex gap-4 text-sm border-t border-base-300/50 pt-4">
+          <a
+            v-if="profile_binding.view_profile_href"
+            :href="profile_binding.view_profile_href"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="text-primary hover:underline"
+          >View profile →</a>
+          <a
+            :href="profile_binding.profile_action.href"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="text-primary hover:underline"
+          >{{ profile_binding.profile_action.label }}</a>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="applications.visible"
+      :id="applications.id"
+      class="card bg-base-200 border border-base-300"
+    >
+      <div class="card-body p-6">
+        <p class="hud-label">{{ applications.title }}</p>
+        <div class="mt-3 space-y-3">
+          <p class="text-sm text-base-content/70">{{ applications.description }}</p>
+          <p v-if="applications.empty" class="text-sm text-base-content/60">
+            {{ applications.empty_state }}
+          </p>
+          <div
+            v-else
+            :id="applications.list_id"
+            class="grid gap-3 md:grid-cols-2"
+          >
+            <div
+              v-for="application in applications.rows"
+              :id="application.id"
+              :key="application.application_key"
+              class="rounded border border-base-300 bg-base-100/40 p-4"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <p class="font-medium">{{ application.display_name }}</p>
+                <a
+                  v-if="application.manage_href"
+                  :href="application.manage_href"
+                  data-phx-link="redirect"
+                  data-phx-link-state="push"
+                  class="text-xs text-primary hover:underline"
+                >Manage</a>
+              </div>
+              <div class="mt-2">
+                <StatusBadge
+                  :status="application.status.tone"
+                  :label="application.status.label"
+                />
+              </div>
+            </div>
+          </div>
+          <a
+            :href="applications.view_action.href"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="mt-3 inline-flex text-sm text-primary hover:underline"
+          >{{ applications.view_action.label }} →</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-3">
+      <section
+        v-for="card in workflow_cards"
+        :id="card.id"
+        :key="card.id"
+        class="card bg-base-200 border border-base-300"
+      >
+        <div class="card-body p-6">
+          <div class="flex items-start justify-between gap-3">
+            <p class="hud-label">{{ card.title }}</p>
+            <StatusBadge :status="card.status.tone" :label="card.status.label" />
+          </div>
+          <h2 class="mt-3 text-base font-semibold">{{ card.value }}</h2>
+          <p class="mt-2 text-sm text-base-content/70">{{ card.description }}</p>
+          <a
+            :href="card.action.href"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="mt-4 inline-flex text-sm text-primary hover:underline"
+          >{{ card.action.label }} →</a>
+        </div>
+      </section>
+    </section>
+
+    <section class="card bg-base-200 border border-base-300">
+      <div class="card-body p-6">
+        <p class="hud-label">{{ overview.title }}</p>
+        <div class="mt-3 grid gap-x-8 gap-y-1 md:grid-cols-2">
+          <div class="hud-data-row">
+            <span class="hud-data-label">{{ overview.scid.label }}</span>
+            <span class="hud-data-value">{{ overview.scid.value }}</span>
+          </div>
+          <div class="hud-data-row">
+            <span class="hud-data-label">{{ overview.display_name.label }}</span>
+            <span class="hud-data-value">{{ overview.display_name.value }}</span>
+          </div>
+          <div class="hud-data-row">
+            <span class="hud-data-label">{{ overview.spacecraft_id.label }}</span>
+            <span class="hud-data-value">
+              <span class="text-xs">{{ overview.spacecraft_id.value }}</span>
+            </span>
+          </div>
+          <div class="hud-data-row">
+            <span class="hud-data-label">{{ overview.mission.label }}</span>
+            <a
+              :href="overview.mission.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="hud-data-value text-primary hover:underline"
+            >{{ overview.mission.value }}</a>
+          </div>
+          <div class="hud-data-row md:col-span-2">
+            <span class="hud-data-label">{{ overview.organization_id.label }}</span>
+            <span class="hud-data-value text-xs">{{ overview.organization_id.value }}</span>
+          </div>
+        </div>
+
+        <div v-if="overview.metadata_json !== null" class="pt-2">
+          <details class="text-sm">
+            <summary class="cursor-pointer hud-label hover:text-primary">
+              Metadata
+            </summary>
+            <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{{ overview.metadata_json }}</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
