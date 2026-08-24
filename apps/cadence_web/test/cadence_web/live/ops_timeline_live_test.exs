@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
   alias Cadence.OperationalEvents.Event
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "renders canonical mission events and round-trips originating dashboard context" do
     user = TestFixtures.persist_user!()
@@ -110,75 +111,237 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/timeline?#{%{event_id: historical_mission_event_id, source_dashboard_id: dashboard.dashboard_id, time_mode: "archive", from: "2026-08-01T11:00:00Z", to: "2026-08-01T13:00:00Z", replay_run_id: "replay-1", data_view: "all_revisions", data_source_id: "flight-telemetry", source_binding_id: "flight-binding", selected_id: historical_mission_event_id}}"
       )
 
-    assert has_element?(view, "#ops-timeline-page")
+    assert has_element?(view, "#ops-timeline-page-component.contents")
+    refute has_element?(view, "#ops-timeline-page")
     assert has_element?(view, "#ops-context-rail-component")
-    assert has_element?(view, "#mission-event-mission_event-operational-event-source-health-1")
 
-    assert has_element?(
-             view,
-             ~s(#mission-event-mission_event-operational-event-backfill-1[data-mission-event-kind="telemetry_backfill_failed"][data-mission-event-severity="error"])
-           )
+    vue = timeline_vue(view)
 
-    assert has_element?(view, "#timeline-selected-event-title")
+    assert vue.component == "OpsTimeline"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
 
-    copy = LiveVue.Test.get_vue(view, id: "timeline-copy-event-link-component")
+    assert vue.handlers == %{
+             "apply_timeline_filters" => JS.push("apply_timeline_filters"),
+             "clear_timeline_selection" => JS.push("clear_timeline_selection")
+           }
 
-    assert copy.component == "ClipboardButton"
-    assert copy.props["button_id"] == "timeline-copy-event-link"
-    assert copy.props["clipboard_text"] =~ "/missions/#{mission.mission_id}/ops/timeline?"
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
 
-    assert copy.props["clipboard_text"] =~
+    presentation = vue.props["presentation"]
+    assert presentation["root"]["attrs"]["id"] == "ops-timeline-page"
+    assert presentation["filters"]["attrs"]["id"] == "timeline-filter-form"
+
+    assert presentation["body"]["timeline"]["stream"]["attrs"]["id"] ==
+             "mission-timeline-events"
+
+    assert presentation["body"]["timeline"]["stream"]["empty"] == %{
+             "attrs" => %{
+               "id" => "mission-timeline-events-empty",
+               "class" => "hidden only:block p-8 text-center text-sm text-base-content/50"
+             },
+             "text" => "No canonical mission events match this context."
+           }
+
+    fields = Map.new(presentation["filters"]["fields"], &{&1["key"], &1})
+
+    assert presentation["filters"]["values"] == %{
+             "category" => "",
+             "kind" => "",
+             "severity" => "",
+             "spacecraft_id" => "",
+             "from" => "2026-08-01T11:00:00Z",
+             "to" => "2026-08-01T13:00:00Z"
+           }
+
+    assert fields["category"]["control"]["attrs"] == %{
+             "id" => "timeline_category",
+             "name" => "timeline[category]",
+             "class" => "w-full select"
+           }
+
+    assert fields["category"]["options"] == [
+             %{"label" => "All", "value" => ""},
+             %{"label" => "Operations", "value" => "operations"},
+             %{"label" => "Health", "value" => "health"},
+             %{"label" => "Runtime", "value" => "runtime"},
+             %{"label" => "Transport", "value" => "transport"}
+           ]
+
+    assert fields["kind"]["control"]["attrs"] == %{
+             "id" => "timeline_kind",
+             "name" => "timeline[kind]",
+             "type" => "text",
+             "placeholder" => "telemetry_backfill_failed",
+             "class" => "w-full input"
+           }
+
+    assert fields["severity"]["options"] == [
+             %{"label" => "All", "value" => ""},
+             %{"label" => "Info", "value" => "info"},
+             %{"label" => "Warning", "value" => "warning"},
+             %{"label" => "Error", "value" => "error"},
+             %{"label" => "Critical", "value" => "critical"}
+           ]
+
+    source_health =
+      timeline_row!(
+        vue,
+        "mission-event-mission_event-operational-event-source-health-1"
+      )
+
+    assert source_health["attrs"]["data-mission-event-kind"] == "source_health_degraded"
+
+    historical =
+      timeline_row!(
+        vue,
+        "mission-event-mission_event-operational-event-backfill-1"
+      )
+
+    assert historical["attrs"]["data-mission-event-kind"] == "telemetry_backfill_failed"
+    assert historical["attrs"]["data-mission-event-severity"] == "error"
+    assert historical["attrs"]["data-phx-link"] == "patch"
+    assert historical["attrs"]["data-phx-link-state"] == "push"
+    assert historical["attrs"]["class"] =~ "border-l-2 border-primary bg-primary/10"
+
+    selected = presentation["body"]["detail"]["selected"]
+    assert selected["header"]["title"]["attrs"]["id"] == "timeline-selected-event-title"
+
+    copy = selected["copy"]
+
+    assert copy["host_attrs"] == %{
+             "id" => "timeline-copy-event-link-component",
+             "class" => "contents"
+           }
+
+    assert copy["button_id"] == "timeline-copy-event-link"
+    assert copy["clipboard_text"] =~ "/missions/#{mission.mission_id}/ops/timeline?"
+
+    assert copy["clipboard_text"] =~
              "event_id=#{URI.encode_www_form(historical_mission_event_id)}"
 
-    assert copy.props["button_class"] == "btn btn-xs btn-outline w-full justify-start"
-    assert copy.props["icon"] == "hero-link"
-    assert copy.props["icon_class"] == "h-3.5 w-3.5"
-    assert copy.props["label"] == "Copy canonical event link"
-    assert copy.class == "contents"
-    refute copy.ssr
+    assert copy["button_class"] == "btn btn-xs btn-outline w-full justify-start"
+    assert copy["icon"] == "hero-link"
+    assert copy["icon_class"] == "h-3.5 w-3.5"
+    assert copy["label"] == "Copy canonical event link"
 
-    assert has_element?(
-             view,
-             ~s(#timeline-open-event-owner[href*="/ops/data-operations"][href*="group=historical-group-1"])
-           )
+    owner = selected["investigation"]["links"]["owner"]["attrs"]
 
-    assert has_element?(
-             view,
-             ~s(#timeline-explore-event[href*="/ops/explore"][href*="point_id=HK.counter"])
-           )
+    assert owner["id"] == "timeline-open-event-owner"
+    assert owner["data-phx-link"] == "redirect"
+    assert owner["data-phx-link-state"] == "push"
+    assert owner["href"] =~ "/ops/data-operations"
+    assert owner["href"] =~ "group=historical-group-1"
 
-    assert has_element?(
-             view,
-             ~s(#timeline-return-to-origin[href*="/ops/dashboards/#{dashboard.dashboard_id}"][href*="replay_run_id=replay-1"][href*="selected_data_view=all_revisions"][href*="source_binding_id=flight-binding"])
-           )
+    explore = selected["investigation"]["links"]["explore"]["attrs"]
 
-    view
-    |> form("#timeline-filter-form", timeline: %{category: "health"})
-    |> render_submit()
+    assert explore["id"] == "timeline-explore-event"
+    assert explore["data-phx-link"] == "redirect"
+    assert explore["href"] =~ "/ops/explore"
+    assert explore["href"] =~ "point_id=HK.counter"
 
-    assert has_element?(view, "#mission-event-mission_event-operational-event-source-health-1")
-    refute has_element?(view, "#mission-event-mission_event-operational-event-backfill-1")
+    return_link = presentation["header"]["return_link"]["attrs"]
 
-    view
-    |> form("#timeline-filter-form",
-      timeline: %{
-        category: "operations",
-        kind: "scheduled_contact_interval",
-        spacecraft_id: spacecraft.spacecraft_id
+    assert return_link["id"] == "timeline-return-to-origin"
+    assert return_link["data-phx-link"] == "redirect"
+    assert return_link["href"] =~ "/ops/dashboards/#{dashboard.dashboard_id}"
+    assert return_link["href"] =~ "replay_run_id=replay-1"
+    assert return_link["href"] =~ "selected_data_view=all_revisions"
+    assert return_link["href"] =~ "source_binding_id=flight-binding"
+
+    render_hook(view, "apply_timeline_filters", %{
+      "timeline" => %{
+        "category" => "health",
+        "kind" => "",
+        "severity" => "",
+        "spacecraft_id" => "",
+        "from" => "2026-08-01T11:00:00Z",
+        "to" => "2026-08-01T13:00:00Z"
       }
-    )
-    |> render_submit()
+    })
 
-    contact_event_selector =
+    health_vue = timeline_vue(view)
+
+    assert timeline_row(
+             health_vue,
+             "mission-event-mission_event-operational-event-source-health-1"
+           )
+
+    refute timeline_row(
+             health_vue,
+             "mission-event-mission_event-operational-event-backfill-1"
+           )
+
+    render_hook(view, "apply_timeline_filters", %{
+      "timeline" => %{
+        "category" => "operations",
+        "kind" => "scheduled_contact_interval",
+        "severity" => "",
+        "spacecraft_id" => spacecraft.spacecraft_id,
+        "from" => "2026-08-01T11:00:00Z",
+        "to" => "2026-08-01T13:00:00Z"
+      }
+    })
+
+    contact_event_dom_id =
       "#mission-event-mission_event-operational_event-scheduled_contact_interval-timeline-scheduled-contact"
 
-    assert has_element?(view, contact_event_selector)
+    contact_event_dom_id = String.trim_leading(contact_event_dom_id, "#")
+    contact_vue = timeline_vue(view)
+    contact_event = timeline_row!(contact_vue, contact_event_dom_id)
 
-    view |> element(contact_event_selector) |> render_click()
+    assert contact_event["attrs"]["data-phx-link"] == "patch"
+    render_patch(view, contact_event["attrs"]["href"])
 
-    assert has_element?(
-             view,
-             ~s(#timeline-open-event-owner[href="/missions/#{mission.mission_id}/ops/contacts/records/#{scheduled_contact.scheduled_contact_id}"])
-           )
+    selected_contact =
+      view
+      |> timeline_vue()
+      |> then(& &1.props["presentation"]["body"]["detail"]["selected"])
+
+    contact_owner = selected_contact["investigation"]["links"]["owner"]["attrs"]
+
+    assert contact_owner["id"] == "timeline-open-event-owner"
+
+    assert contact_owner["href"] ==
+             "/missions/#{mission.mission_id}/ops/contacts/records/#{scheduled_contact.scheduled_contact_id}"
+
+    assert CadenceWeb.OpsTimelineLive.presentation_attrs(%{
+             "nil" => nil,
+             "false" => false,
+             "true" => true,
+             "empty" => "",
+             "string_false" => "false",
+             "string" => "value",
+             "number" => 7
+           }) == %{
+             "true" => "",
+             "empty" => "",
+             "string_false" => "false",
+             "string" => "value",
+             "number" => "7"
+           }
+  end
+
+  defp timeline_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-timeline-page-component")
+  end
+
+  defp timeline_row(vue, dom_id) do
+    Enum.find(timeline_rows(vue), &(&1["__dom_id"] == dom_id))
+  end
+
+  defp timeline_row!(vue, dom_id) do
+    timeline_row(vue, dom_id) || flunk("missing timeline stream row #{dom_id}")
+  end
+
+  defp timeline_rows(vue) do
+    vue.streams_diff
+    |> Enum.flat_map(fn
+      ["upsert", "/timeline_events/" <> _index, event] -> [event]
+      _operation -> []
+    end)
   end
 end
