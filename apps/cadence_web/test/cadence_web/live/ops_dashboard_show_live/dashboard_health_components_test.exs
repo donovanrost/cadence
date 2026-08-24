@@ -442,6 +442,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponentsTest do
     assert group["overlay"]["attrs"]["data-dashboard-health-group-count"] == "1"
     refute Map.has_key?(item["attrs"], "data-dashboard-health-item-warnings")
     refute Map.has_key?(item["attrs"], "data-dashboard-health-item-source")
+
     refute Map.has_key?(
              presentation["evidence"]["attrs"],
              "phx-value-dashboard-health-states"
