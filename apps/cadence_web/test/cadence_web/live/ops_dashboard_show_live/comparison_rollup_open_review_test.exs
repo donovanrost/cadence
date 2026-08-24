@@ -142,7 +142,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupOpenReviewTest do
 
     assert preset_copy.component == "ClipboardButton"
     assert preset_copy.props["button_id"] == "dashboard-comparison-preset-copy"
-    assert preset_copy.props["clipboard_text"] =~ "comparison_mode="
+    assert preset_copy.props["clipboard_text"] =~ "data_view=all_revisions"
+    assert preset_copy.props["clipboard_text"] =~ "compare_data_view=canonical"
     assert preset_copy.props["button_class"] == "btn btn-ghost btn-xs gap-1"
     assert preset_copy.props["icon"] == "hero-bookmark-square"
     assert preset_copy.props["icon_class"] == "h-3.5 w-3.5"
