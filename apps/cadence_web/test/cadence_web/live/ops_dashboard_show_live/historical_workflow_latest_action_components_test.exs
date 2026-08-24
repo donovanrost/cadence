@@ -93,13 +93,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
                  "failed-event-nonretryable",
                "data-workflow-latest-action-retry-nonretryable-items" =>
                  "run=run-nonretryable event=failed-event-nonretryable action=correct_workflow_request reason=correction_required",
-               "data-workflow-latest-action-retry-nonretryable-run-ids" =>
-                 "run-nonretryable",
+               "data-workflow-latest-action-retry-nonretryable-run-ids" => "run-nonretryable",
                "data-workflow-latest-action-retry-run-ids" => "run-004-corrected",
                "data-workflow-latest-action-retry-scope" => "replacement_jobs",
                "data-workflow-latest-action-retry-skipped" => "1",
-               "data-workflow-latest-action-retry-skipped-event-ids" =>
-                 "failed-event-skipped",
+               "data-workflow-latest-action-retry-skipped-event-ids" => "failed-event-skipped",
                "data-workflow-latest-action-retry-skipped-items" =>
                  "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed",
                "data-workflow-latest-action-retry-skipped-run-ids" => "run-skipped",
@@ -174,8 +172,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
     assert Map.drop(handoffs_presentation, ["links"]) == %{
              "visible" => true,
              "id" => "dashboard-historical-workflow-latest-action-handoffs",
-             "class" =>
-               "mt-2 space-y-2 rounded border border-base-300/60 bg-base-100/70 p-2",
+             "class" => "mt-2 space-y-2 rounded border border-base-300/60 bg-base-100/70 p-2",
              "attrs" => %{
                "data-workflow-latest-action-handoff-count" => "2",
                "data-workflow-latest-action-handoff-primary-event" => "source-event-1"
@@ -366,8 +363,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
     assert presentation["handoffs"] == %{
              "visible" => false,
              "id" => "dashboard-historical-workflow-latest-action-handoffs",
-             "class" =>
-               "mt-2 space-y-2 rounded border border-base-300/60 bg-base-100/70 p-2",
+             "class" => "mt-2 space-y-2 rounded border border-base-300/60 bg-base-100/70 p-2",
              "attrs" => %{"data-workflow-latest-action-handoff-count" => "0"},
              "header" => %{
                "class" => "flex items-center justify-between gap-2",

@@ -9,7 +9,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
   attr :latest_action_outcome, :map, default: nil
   attr :dashboard_current_path, :string, default: nil
 
-  def latest_action(%{latest_action_outcome: latest_action_outcome})
+  def latest_action(%{latest_action_outcome: latest_action_outcome} = assigns)
       when latest_action_outcome in [nil, false],
       do: ~H""
 
@@ -152,7 +152,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
             "Skipped items",
             retry_disposition(latest_action_outcome, :skipped_items)
           ),
-          optional_latest_action_detail_row("errors", "Errors", latest_action_outcome.retry_errors),
+          optional_latest_action_detail_row(
+            "errors",
+            "Errors",
+            latest_action_outcome.retry_errors
+          ),
           optional_latest_action_detail_row(
             "error-runs",
             "Error runs",
@@ -174,7 +178,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
             "Retry runs",
             latest_action_outcome.retry_run_ids
           ),
-          optional_latest_action_detail_row("queued", "Queued", latest_action_outcome.queued_jobs),
+          optional_latest_action_detail_row(
+            "queued",
+            "Queued",
+            latest_action_outcome.queued_jobs
+          ),
           optional_latest_action_detail_row("failed", "Failed", latest_action_outcome.failed_jobs)
         ]
         |> Enum.reject(&is_nil/1)
@@ -274,6 +282,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
   defp latest_action_value(latest_action_outcome, key) when is_map(latest_action_outcome) do
     Map.get(latest_action_outcome, key)
   end
-
-  defp latest_action_value(_latest_action_outcome, _key), do: nil
 end
