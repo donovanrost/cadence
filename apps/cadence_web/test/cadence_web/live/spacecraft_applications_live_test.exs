@@ -17,6 +17,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     membership = TestFixtures.grant_membership!(user, organization)
+
     mission =
       TestFixtures.persist_mission!(organization, slug: "primary", display_name: "Primary")
 
@@ -38,6 +39,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
   test "projects the page, pinned profile, and application card through exact LiveVue props" do
     context = setup_session()
+
     profile =
       TestFixtures.persist_spacecraft_profile!(context.mission, display_name: "Aurora Bus")
 
@@ -179,6 +181,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
         }
       )
 
+    %Cadence.SpacecraftType{} = profile
+
     latest_profile = %Cadence.SpacecraftType{
       profile
       | version: profile.version + 1,
@@ -225,6 +229,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     assert custom["display_name"] == "Thermal Alerting"
     assert custom["description"] == "Mission-owned temperature monitoring."
     assert custom["scope_label"] == "Application"
+
     assert custom["status"] == %{
              "state" => "unavailable",
              "label" => "Unavailable",
@@ -244,6 +249,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
   test "refreshes manage, disable, uninstall, and reinstall lifecycle DTOs after each hook" do
     context = setup_session()
+
     profile =
       TestFixtures.persist_spacecraft_profile!(context.mission, display_name: "Aurora Bus")
 
@@ -308,6 +314,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "Application is available in the host workspace."
            )
 
+    {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
+
     render_hook(view, "disable_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
@@ -336,6 +344,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "Application workspace disabled. Active runtime state is unchanged."
            )
 
+    {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
+
     render_hook(view, "uninstall_application", %{"key" => "telemetry_decom"})
 
     application = application_prop(view, "telemetry_decom")
@@ -348,6 +358,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              "#flash-info[role='alert']",
              "Application uninstalled. Its configuration and runtime state were preserved."
            )
+
+    {:ok, view, _html} = live(context.conn, inventory_path(context.mission, spacecraft))
 
     render_hook(view, "install_application", %{"key" => "telemetry_decom"})
 
@@ -471,6 +483,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
   test "unknown application detail redirects back to the applications list" do
     context = setup_session()
+
     profile =
       TestFixtures.persist_spacecraft_profile!(context.mission, display_name: "Aurora Bus")
 
@@ -481,9 +494,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
         spacecraft_type_version: profile.version
       )
 
-    assert {:error,
-            {:live_redirect,
-             %{to: path, flash: %{"error" => "Application not found."}}}} =
+    assert {:error, {:live_redirect, %{to: path, flash: %{"error" => "Application not found."}}}} =
              live(
                context.conn,
                ~p"/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/not_real"
@@ -494,6 +505,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
 
   test "known but uninstalled application detail redirects to the inventory" do
     context = setup_session()
+
     profile =
       TestFixtures.persist_spacecraft_profile!(context.mission, display_name: "Aurora Bus")
 
