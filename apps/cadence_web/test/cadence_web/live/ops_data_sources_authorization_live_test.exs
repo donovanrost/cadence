@@ -41,17 +41,33 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
     {:ok, inventory, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
 
-    assert has_element?(inventory, "#ops-data-sources-page")
+    assert has_element?(inventory, "#ops-data-sources-component.contents")
 
-    assert has_element?(
-             inventory,
-             ~s(#data-source-mission-telemetry a[href="/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry"])
-           )
+    inventory_page = ops_data_sources_page(inventory)
+    source = source_row(inventory_page, "mission-telemetry")
 
-    refute has_element?(inventory, "#register-source-button")
-    refute has_element?(inventory, "#source-settings-mission-telemetry")
-    refute has_element?(inventory, "#probe-source-mission-telemetry")
-    refute has_element?(inventory, "#disable-source-mission-telemetry")
+    assert inventory_page["mode"] == "reader"
+    refute Map.has_key?(inventory_page, "admin")
+    assert inventory_page["header"]["register_link"] == nil
+
+    assert source["detail_link"]["href"] ==
+             "/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry"
+
+    refute Map.has_key?(source, "settings_link")
+    refute Map.has_key?(source, "actions")
+
+    render_hook(inventory, "disable_source", %{"data-source-id" => "mission-telemetry"})
+    assert {:ok, persisted_source} = DataSources.fetch_data_source("mission-telemetry")
+    assert persisted_source.status == :active
+
+    render_patch(
+      inventory,
+      ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{logical_source: "telemetry", realm: "rehearsal", source_empty_reason: "missing_source_binding"}}"
+    )
+
+    reader_remediation = ops_data_sources_page(inventory)["focus"]["remediation"]
+    assert reader_remediation["kind"] == "missing_source_binding"
+    refute Map.has_key?(reader_remediation, "action")
 
     {:ok, detail, _html} =
       live(
@@ -59,10 +75,11 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry"
       )
 
-    assert has_element?(
-             detail,
-             ~s(#ops-data-sources-page[data-source-focus-state="matched"][data-source-focus-data-source="mission-telemetry"])
-           )
+    detail_page = ops_data_sources_page(detail)
+    assert detail_page["focus"]["state"] == "matched"
+    assert detail_page["focus"]["data_source_id"] == "mission-telemetry"
+    refute Map.has_key?(detail_page, "admin")
+    refute Map.has_key?(source_row(detail_page, "mission-telemetry"), "actions")
 
     assert {:error, {:redirect, %{to: "/"}}} =
              live(
@@ -83,9 +100,12 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
     {:ok, inventory, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
 
-    assert has_element?(inventory, "#register-source-button")
-    assert has_element?(inventory, "#source-settings-mission-telemetry")
-    refute has_element?(inventory, "#probe-source-mission-telemetry")
+    inventory_page = ops_data_sources_page(inventory)
+    inventory_source = source_row(inventory_page, "mission-telemetry")
+
+    assert inventory_page["header"]["register_link"]["id"] == "register-source-button"
+    assert inventory_source["settings_link"]["id"] == "source-settings-mission-telemetry"
+    refute Map.has_key?(inventory_source, "actions")
 
     {:ok, settings, _html} =
       live(
@@ -93,8 +113,16 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry/settings"
       )
 
-    assert has_element?(settings, "#probe-source-mission-telemetry")
-    assert has_element?(settings, "#disable-source-mission-telemetry")
+    settings_page = ops_data_sources_page(settings)
+    settings_source = source_row(settings_page, "mission-telemetry")
+
+    assert settings_page["mode"] == "admin"
+    assert Map.has_key?(settings_page, "admin")
+
+    assert Enum.map(settings_source["actions"], & &1["id"]) == [
+             "probe-source-mission-telemetry",
+             "disable-source-mission-telemetry"
+           ]
 
     {:ok, registration, _html} =
       live(
@@ -102,7 +130,41 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new"
       )
 
-    assert has_element?(registration, "#register-source-panel")
-    assert has_element?(registration, "#register-source-form")
+    registration_page = ops_data_sources_page(registration)
+    registration_dto = registration_page["admin"]["registration"]
+
+    assert registration_dto["id"] == "register-source-panel"
+    assert registration_dto["form"]["id"] == "register-source-form"
+    assert registration_dto["form"]["values"]["kind"] == "byo_tsdb"
+
+    invalid_values = %{
+      "data_source_id" => "",
+      "logical_source" => "telemetry",
+      "kind" => "byo_tsdb",
+      "isolation_level" => "customer_owned",
+      "credentials_ref" => "cred-resync",
+      "credential_provider" => "questdb",
+      "endpoint_ref" => "endpoint://customer/resync",
+      "material_env_profile" => "resync-profile",
+      "http_endpoint_env" => "RESYNC_HTTP_ENDPOINT",
+      "storage" => "questdb"
+    }
+
+    render_hook(registration, "register_source", %{"source" => invalid_values})
+
+    resynced_form = ops_data_sources_page(registration)["admin"]["registration"]["form"]
+    assert resynced_form["values"] == invalid_values
+    assert resynced_form["error"] == "Source ID is required."
+    assert registration_page == Jason.decode!(Jason.encode!(registration_page))
+  end
+
+  defp ops_data_sources_page(view_or_html) do
+    view_or_html
+    |> LiveVue.Test.get_vue(id: "ops-data-sources-component")
+    |> then(& &1.props["page"])
+  end
+
+  defp source_row(page, data_source_id) do
+    Enum.find(page["sources"]["rows"], &(&1["data_source_id"] == data_source_id))
   end
 end

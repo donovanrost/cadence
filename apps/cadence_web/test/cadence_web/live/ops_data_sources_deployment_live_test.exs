@@ -63,11 +63,12 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-managed-mission-questdb[data-source-deployment-status="ready"][data-source-deployment-mode="managed_questdb"][data-source-deployment-backend="questdb"][data-source-deployment-boundary="mission"][data-source-deployment-remediation="probe_source_health"]),
-             "deploy fix"
-           )
+    source = source_row(view, "managed-mission-questdb")
+    assert source["deployment_status_text"] == "ready"
+    assert source["deployment_mode_text"] == "managed_questdb"
+    assert source["deployment_backend_text"] == "questdb"
+    assert source["deployment_boundary_text"] == "mission"
+    assert source["deployment_remediation_text"] == "probe_source_health"
   end
 
   test "registers dedicated mission BYO TSDB sources with deployment posture" do
@@ -76,26 +77,29 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
 
-    view
-    |> form("#register-source-form",
-      source: %{
-        data_source_id: "dedicated-mission-questdb",
-        logical_source: "telemetry",
-        kind: "byo_tsdb",
-        isolation_level: "mission_isolated",
-        credentials_ref: "cred-dedicated-mission-questdb",
-        credential_provider: "questdb",
-        endpoint_ref: "endpoint://customer/dedicated-mission",
-        storage: "questdb"
+    render_hook(view, "register_source", %{
+      "source" => %{
+        "data_source_id" => "dedicated-mission-questdb",
+        "logical_source" => "telemetry",
+        "kind" => "byo_tsdb",
+        "isolation_level" => "mission_isolated",
+        "credentials_ref" => "cred-dedicated-mission-questdb",
+        "credential_provider" => "questdb",
+        "endpoint_ref" => "endpoint://customer/dedicated-mission",
+        "material_env_profile" => "",
+        "http_endpoint_env" => "",
+        "storage" => "questdb"
       }
-    )
-    |> render_submit()
+    })
 
-    assert has_element?(
-             view,
-             ~s(#data-source-dedicated-mission-questdb[data-source-deployment-status="external"][data-source-deployment-mode="byo_tsdb"][data-source-deployment-backend="questdb"][data-source-deployment-boundary="mission"][data-source-deployment-remediation="monitor_customer_dedicated_mission_backend"]),
-             "dedicated-mission-questdb"
-           )
+    source = source_row(view, "dedicated-mission-questdb")
+    assert source["deployment_status_text"] == "external"
+    assert source["deployment_mode_text"] == "byo_tsdb"
+    assert source["deployment_backend_text"] == "questdb"
+    assert source["deployment_boundary_text"] == "mission"
+
+    assert source["deployment_remediation_text"] ==
+             "monitor_customer_dedicated_mission_backend"
 
     assert {:ok, source} = DataSources.fetch_data_source("dedicated-mission-questdb")
     assert source.owner == :customer
@@ -112,33 +116,29 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     assert reference.data_source_id == "dedicated-mission-questdb"
     assert reference.kind == :byo_tsdb_connection
 
-    view
-    |> element("#provision-backend-dedicated-mission-questdb")
-    |> render_click()
+    provision = source_action(view, "dedicated-mission-questdb", "provision_tsdb_backend")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-dedicated-mission-questdb[data-source-deployment-lifecycle-operation="provision"][data-source-deployment-lifecycle-status="provision_requested"]),
-             "provision_requested"
-           )
+    assert provision["payload"] == %{"data-source-id" => "dedicated-mission-questdb"}
+    render_hook(view, "provision_tsdb_backend", provision["payload"])
 
-    refute has_element?(view, "#provision-backend-dedicated-mission-questdb")
+    source = source_row(view, "dedicated-mission-questdb")
+    assert source["deployment_lifecycle_operation_text"] == "provision"
+    assert source["deployment_lifecycle_status_text"] == "provision_requested"
+    refute source_action(view, "dedicated-mission-questdb", "provision_tsdb_backend")
 
-    assert has_element?(
-             view,
-             ~s([data-deployment-run-data-source-id="dedicated-mission-questdb"][data-deployment-run-status="queued"][data-deployment-run-mode="byo_tsdb"][data-deployment-run-boundary="mission"][data-deployment-run-remediation="wait_for_tsdb_lifecycle_worker"]),
-             "dedicated-mission-questdb"
-           )
+    provision_run = deployment_run_for_source(view, "dedicated-mission-questdb")
+    assert provision_run["status_text"] == "queued"
+    assert provision_run["mode_text"] == "byo_tsdb"
+    assert provision_run["physical_boundary_text"] == "mission"
+    assert provision_run["remediation"] == "wait_for_tsdb_lifecycle_worker"
 
-    view
-    |> element("#reconcile-backend-dedicated-mission-questdb")
-    |> render_click()
+    reconcile = source_action(view, "dedicated-mission-questdb", "reconcile_tsdb_backend")
+    assert reconcile["payload"] == %{"data-source-id" => "dedicated-mission-questdb"}
+    render_hook(view, "reconcile_tsdb_backend", reconcile["payload"])
 
-    assert has_element?(
-             view,
-             ~s(#data-source-dedicated-mission-questdb[data-source-deployment-lifecycle-operation="reconcile"][data-source-deployment-lifecycle-status="reconciled"]),
-             "reconciled"
-           )
+    source = source_row(view, "dedicated-mission-questdb")
+    assert source["deployment_lifecycle_operation_text"] == "reconcile"
+    assert source["deployment_lifecycle_status_text"] == "reconciled"
 
     assert {:ok, reconciled_source} =
              DataSources.fetch_data_source("dedicated-mission-questdb")
@@ -160,23 +160,26 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     assert changed_event.payload["deployment_boundary"] == "mission"
     assert changed_event.current_metadata["tsdb_backend_lifecycle"]["status"] == "reconciled"
 
-    view
-    |> element("#deprovision-backend-dedicated-mission-questdb")
-    |> render_click()
+    deprovision = source_action(view, "dedicated-mission-questdb", "deprovision_tsdb_backend")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-dedicated-mission-questdb[data-source-status="disabled"][data-source-deployment-lifecycle-operation="deprovision"][data-source-deployment-lifecycle-status="deprovision_requested"]),
-             "deprovision_requested"
-           )
+    assert deprovision["payload"] == %{"data-source-id" => "dedicated-mission-questdb"}
 
-    refute has_element?(view, "#enable-source-dedicated-mission-questdb")
+    assert deprovision["confirm"] ==
+             "Request deprovisioning for this dedicated TSDB backend?"
 
-    assert has_element?(
-             view,
-             ~s([data-deployment-run-data-source-id="dedicated-mission-questdb"][data-deployment-run-status="queued"][data-deployment-run-mode="byo_tsdb"][data-deployment-run-boundary="mission"][data-deployment-run-remediation="wait_for_tsdb_lifecycle_worker"]),
-             "dedicated-mission-questdb"
-           )
+    render_hook(view, "deprovision_tsdb_backend", deprovision["payload"])
+
+    source = source_row(view, "dedicated-mission-questdb")
+    assert source["status_text"] == "disabled"
+    assert source["deployment_lifecycle_operation_text"] == "deprovision"
+    assert source["deployment_lifecycle_status_text"] == "deprovision_requested"
+    refute source_action(view, "dedicated-mission-questdb", "enable_source")
+
+    deprovision_run = deployment_run_for_source(view, "dedicated-mission-questdb")
+    assert deprovision_run["status_text"] == "queued"
+    assert deprovision_run["mode_text"] == "byo_tsdb"
+    assert deprovision_run["physical_boundary_text"] == "mission"
+    assert deprovision_run["remediation"] == "wait_for_tsdb_lifecycle_worker"
 
     assert {:ok, deprovisioned_source} =
              DataSources.fetch_data_source("dedicated-mission-questdb")
@@ -237,11 +240,9 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-policy-customer-questdb[data-source-probe-policy="customer-policy"][data-source-probe-stale-after-ms="30000"]),
-             "customer-policy"
-           )
+    source = source_row(view, "policy-customer-questdb")
+    assert source["probe_policy_text"] == "customer-policy"
+    assert source["probe_stale_after_ms_text"] == "30000"
   end
 
   test "renders scheduled probe timeout evidence for BYO source rows" do
@@ -302,17 +303,29 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/failed-managed-questdb/settings"
       )
 
-    assert has_element?(
-             view,
-             ~s(#data-source-timeout-customer-questdb[data-source-health="unavailable"][data-source-readiness="blocked"][data-source-readiness-reasons*="source_unavailable"][data-source-readiness-reasons*="connection_test_blocked"][data-source-probe-kind="scheduler"][data-source-probe-message="Source probe exceeded scheduler timeout."][data-source-probe-metadata*="probe_timeout_ms=25"][data-source-connection-test-result="blocked"][data-source-connection-test-kind="scheduler_timeout"]),
-             "Scheduled source probe timed out before completion."
-           )
+    source = source_row(view, "timeout-customer-questdb")
+    assert source["health_status"] == "unavailable"
+    assert source["source_readiness_status"] == "blocked"
+    assert source["source_readiness_reason_text"] =~ "source_unavailable"
+    assert source["source_readiness_reason_text"] =~ "connection_test_blocked"
+    assert source["probe_kind_text"] == "scheduler"
+    assert source["probe_message_text"] == "Source probe exceeded scheduler timeout."
+    assert source["probe_metadata_text"] =~ "probe_timeout_ms=25"
+    assert source["connection_test_result_text"] == "blocked"
+    assert source["connection_test_kind_text"] == "scheduler_timeout"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="unavailable"][data-event-probe-kind="scheduler"][data-event-connection-test-result="blocked"][data-event-connection-test-kind="scheduler_timeout"]),
-             "source_probe_timeout"
-           )
+    event =
+      Enum.find(ops_data_sources_page(view)["activity"]["health_events"]["rows"], fn row ->
+        row["event_type"] == "unavailable"
+      end)
+
+    assert event["subtitle"] =~ "source_probe_timeout"
+    assert event["probe_kind"] == "scheduler"
+    assert event["connection_test_result"] == "blocked"
+    assert event["connection_test_kind"] == "scheduler_timeout"
+
+    assert event["connection_test_message"] ==
+             "Scheduled source probe timed out before completion."
   end
 
   test "renders managed TSDB deployment runs before sources exist" do
@@ -382,52 +395,102 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/failed-managed-questdb/settings"
       )
 
-    assert has_element?(
-             view,
-             ~s(#deployment-run-failed-managed-questdb-run[data-deployment-run-job-id="#{failed_job.job_id}"][data-deployment-run-data-source-id="failed-managed-questdb"][data-deployment-run-status="failed"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="questdb_unavailable"][data-deployment-run-remediation="inspect_provisioning_job_and_retry"]),
-             "failed-managed-questdb"
-           )
+    failed_run = deployment_run(view, "failed-managed-questdb-run")
+    assert failed_run["job_id"] == failed_job.job_id
+    assert failed_run["data_source_id"] == "failed-managed-questdb"
+    assert failed_run["status_text"] == "failed"
+    assert failed_run["backend_text"] == "questdb"
+    assert failed_run["physical_boundary_text"] == "mission"
+    assert failed_run["failure_summary"] == "questdb_unavailable"
+    assert failed_run["remediation"] == "inspect_provisioning_job_and_retry"
 
-    assert has_element?(
-             view,
-             ~s(#deployment-run-queued-managed-questdb-run[data-deployment-run-job-id="#{queued_job.job_id}"][data-deployment-run-data-source-id="queued-managed-questdb"][data-deployment-run-status="queued"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="wait_for_provisioning_worker"]),
-             "queued-managed-questdb"
-           )
+    assert failed_run["action"] == %{
+             "id" => "retry-deployment-run-failed-managed-questdb-run",
+             "event" => "retry_deployment_run",
+             "payload" => %{"job-id" => failed_job.job_id},
+             "label" => "Retry",
+             "icon" => "hero-arrow-path"
+           }
 
-    assert has_element?(
-             view,
-             ~s(#deployment-run-running-managed-questdb-run[data-deployment-run-job-id="#{running_job.job_id}"][data-deployment-run-data-source-id="running-managed-questdb"][data-deployment-run-status="provisioning"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="monitor_schema_migration_job"]),
-             "running-managed-questdb"
-           )
+    queued_run = deployment_run(view, "queued-managed-questdb-run")
+    assert queued_run["job_id"] == queued_job.job_id
+    assert queued_run["data_source_id"] == "queued-managed-questdb"
+    assert queued_run["status_text"] == "queued"
+    assert queued_run["backend_text"] == "questdb"
+    assert queued_run["physical_boundary_text"] == "mission"
+    assert queued_run["failure_summary"] == "none"
+    assert queued_run["remediation"] == "wait_for_provisioning_worker"
 
-    view
-    |> element("#retry-deployment-run-failed-managed-questdb-run")
-    |> render_click()
+    running_run = deployment_run(view, "running-managed-questdb-run")
+    assert running_run["job_id"] == running_job.job_id
+    assert running_run["data_source_id"] == "running-managed-questdb"
+    assert running_run["status_text"] == "provisioning"
+    assert running_run["backend_text"] == "questdb"
+    assert running_run["physical_boundary_text"] == "mission"
+    assert running_run["failure_summary"] == "none"
+    assert running_run["remediation"] == "monitor_schema_migration_job"
 
-    assert has_element?(
-             view,
-             ~s(#deployment-run-failed-managed-questdb-run[data-deployment-run-job-id="#{failed_job.job_id}"][data-deployment-run-status="queued"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="wait_for_provisioning_worker"])
-           )
+    render_hook(view, "retry_deployment_run", failed_run["action"]["payload"])
 
-    refute has_element?(view, "#retry-deployment-run-failed-managed-questdb-run")
+    failed_run = deployment_run(view, "failed-managed-questdb-run")
+    assert failed_run["job_id"] == failed_job.job_id
+    assert failed_run["status_text"] == "queued"
+    assert failed_run["failure_summary"] == "none"
+    assert failed_run["remediation"] == "wait_for_provisioning_worker"
+    refute Map.has_key?(failed_run, "action")
 
     assert {:ok, retried_job} = Cadence.Jobs.fetch_job(failed_job.job_id)
     assert retried_job.status == :queued
     assert retried_job.failure_reason == nil
 
-    view
-    |> element("#requeue-deployment-run-running-managed-questdb-run")
-    |> render_click()
+    running_action = deployment_run(view, "running-managed-questdb-run")["action"]
+    assert running_action["event"] == "requeue_deployment_run"
+    assert running_action["payload"] == %{"job-id" => running_job.job_id}
+    render_hook(view, "requeue_deployment_run", running_action["payload"])
 
-    assert has_element?(
-             view,
-             ~s(#deployment-run-running-managed-questdb-run[data-deployment-run-job-id="#{running_job.job_id}"][data-deployment-run-status="queued"][data-deployment-run-failure-summary="managed_questdb_provisioning_requeued"][data-deployment-run-remediation="wait_for_provisioning_worker"])
-           )
-
-    refute has_element?(view, "#requeue-deployment-run-running-managed-questdb-run")
+    running_run = deployment_run(view, "running-managed-questdb-run")
+    assert running_run["job_id"] == running_job.job_id
+    assert running_run["status_text"] == "queued"
+    assert running_run["failure_summary"] == "managed_questdb_provisioning_requeued"
+    assert running_run["remediation"] == "wait_for_provisioning_worker"
+    refute Map.has_key?(running_run, "action")
 
     assert {:ok, requeued_job} = Cadence.Jobs.fetch_job(running_job.job_id)
     assert requeued_job.status == :queued
     assert requeued_job.failure_reason == %{"reason" => "managed_questdb_provisioning_requeued"}
+  end
+
+  defp ops_data_sources_page(view_or_html) do
+    view_or_html
+    |> LiveVue.Test.get_vue(id: "ops-data-sources-component")
+    |> then(& &1.props["page"])
+  end
+
+  defp source_row(view_or_html, data_source_id) do
+    Enum.find(
+      ops_data_sources_page(view_or_html)["sources"]["rows"],
+      &(&1["data_source_id"] == data_source_id)
+    )
+  end
+
+  defp source_action(view_or_html, data_source_id, event) do
+    view_or_html
+    |> source_row(data_source_id)
+    |> Map.get("actions", [])
+    |> Enum.find(&(&1["event"] == event))
+  end
+
+  defp deployment_run(view_or_html, run_id) do
+    Enum.find(
+      ops_data_sources_page(view_or_html)["deployment_runs"]["rows"],
+      &(&1["run_id"] == run_id)
+    )
+  end
+
+  defp deployment_run_for_source(view_or_html, data_source_id) do
+    Enum.find(
+      ops_data_sources_page(view_or_html)["deployment_runs"]["rows"],
+      &(&1["data_source_id"] == data_source_id)
+    )
   end
 end

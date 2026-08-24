@@ -31,22 +31,24 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
   end
 
   defp change_binding_to_managed!(view, user) do
-    view
-    |> element("#change-binding-rehearsal-telemetry-binding")
-    |> render_click()
+    render_hook(view, "open_change_binding", %{
+      "binding-id" => "rehearsal-telemetry-binding"
+    })
 
-    assert has_element?(view, "#change-binding-form-rehearsal-telemetry-binding")
+    binding_form = ops_data_sources_page(view)["admin"]["binding_form"]
 
-    view
-    |> form("#change-binding-form-rehearsal-telemetry-binding",
-      binding: %{data_source_id: "managed-rehearsal-telemetry"}
-    )
-    |> render_submit()
+    assert binding_form["binding_id"] == "rehearsal-telemetry-binding"
+    assert binding_form["form_id"] == "change-binding-form-rehearsal-telemetry-binding"
+    assert binding_form["data_source_id"] == "rehearsal-questdb"
 
-    assert has_element?(
-             view,
-             ~s(#source-binding-rehearsal-telemetry-binding[data-data-source-id="managed-rehearsal-telemetry"])
-           )
+    render_hook(view, "change_binding", %{
+      "binding" => %{"data_source_id" => "managed-rehearsal-telemetry"}
+    })
+
+    assert binding_row(ops_data_sources_page(view), "rehearsal-telemetry-binding")[
+             "data_source_id"
+           ] ==
+             "managed-rehearsal-telemetry"
 
     assert {:ok, updated_binding} = DataSources.fetch_data_binding("rehearsal-telemetry-binding")
     assert updated_binding.data_source_id == "managed-rehearsal-telemetry"
@@ -246,95 +248,113 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
     track_dashboard_view(view)
 
-    assert has_element?(view, "#ops-data-sources-page")
+    assert has_element?(view, "#ops-data-sources-component.contents")
+    refute has_element?(view, "#ops-data-sources-page")
+
+    vue = ops_data_sources_vue(view)
+    page = vue.props["page"]
+
+    assert vue.component == "OpsDataSources"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert Map.keys(vue.props) == ["page"]
+
+    assert vue.handlers == %{
+             "cancel-change-binding" => Phoenix.LiveView.JS.push("cancel_change_binding"),
+             "cancel-register-source" => Phoenix.LiveView.JS.push("cancel_register_source"),
+             "change-binding" => Phoenix.LiveView.JS.push("change_binding"),
+             "deprovision-tsdb-backend" => Phoenix.LiveView.JS.push("deprovision_tsdb_backend"),
+             "disable-source" => Phoenix.LiveView.JS.push("disable_source"),
+             "enable-source" => Phoenix.LiveView.JS.push("enable_source"),
+             "open-change-binding" => Phoenix.LiveView.JS.push("open_change_binding"),
+             "open-register-source" => Phoenix.LiveView.JS.push("open_register_source"),
+             "probe-source" => Phoenix.LiveView.JS.push("probe_source"),
+             "provision-tsdb-backend" => Phoenix.LiveView.JS.push("provision_tsdb_backend"),
+             "reconcile-tsdb-backend" => Phoenix.LiveView.JS.push("reconcile_tsdb_backend"),
+             "register-source" => Phoenix.LiveView.JS.push("register_source"),
+             "requeue-deployment-run" => Phoenix.LiveView.JS.push("requeue_deployment_run"),
+             "retry-deployment-run" => Phoenix.LiveView.JS.push("retry_deployment_run"),
+             "rotate-source-credential" => Phoenix.LiveView.JS.push("rotate_source_credential")
+           }
+
+    assert page["id"] == "ops-data-sources-page"
+    assert page["mode"] == "reader"
+    refute Map.has_key?(page, "admin")
 
     assert has_element?(
              view,
              ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/data-sources"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#source-readiness-policy[data-source-readiness-policy-id="default"][data-source-readiness-block-health="unavailable"][data-source-readiness-block-freshness="fresh"][data-source-readiness-block-connection-test="failed blocked"])
-           )
+    assert page["header"]["readiness_policy"] == %{
+             "id" => "source-readiness-policy",
+             "label" => "readiness policy",
+             "policy_id" => "default",
+             "block_source_health" => "unavailable",
+             "block_freshness" => "fresh",
+             "block_connection_test" => "failed blocked",
+             "connection_summary" => "conn failed blocked"
+           }
 
-    assert has_element?(
-             view,
-             ~s(#source-binding-rehearsal-telemetry-binding[data-logical-source="telemetry"][data-source-realm="rehearsal"][data-data-source-id="rehearsal-questdb"][data-source-health="unknown"][data-source-readiness="ready"][data-source-readiness-policy="default"]),
-             "source_health_stale"
-           )
+    binding = binding_row(page, "rehearsal-telemetry-binding")
+    assert binding["logical_source_text"] == "telemetry"
+    assert binding["realm_text"] == "rehearsal"
+    assert binding["data_source_id"] == "rehearsal-questdb"
+    assert binding["health_status"] == "unknown"
+    assert binding["source_readiness_status"] == "ready"
+    assert binding["source_readiness_policy_id"] == "default"
+    assert binding["health_reason_text"] == "source_health_stale"
+    assert binding["credential_ref_text"] == "cred-rehearsal-questdb / active v1"
+    refute Map.has_key?(binding, "change_action")
 
-    assert has_element?(
-             view,
-             ~s(#source-binding-rehearsal-telemetry-binding),
-             "cred-rehearsal-questdb / active v1"
-           )
+    source = source_row(page, "rehearsal-questdb")
+    assert source["kind_text"] == "byo_tsdb"
+    assert source["credential_state_text"] == "active"
+    assert source["credential_provider_text"] == "questdb"
+    assert source["credential_version_text"] == "1"
+    assert source["credential_material_state_text"] == "resolved"
+    assert source["credential_endpoint_text"] == "http://customer-rehearsal-questdb:9000"
+    assert source["credential_secret_fields_text"] == "bearer_token headers"
+    assert source["watermark_text"] == "2026-06-21T12:04:00.000000Z"
+    assert source["watermark_confidence_text"] == "best_effort"
+    refute Map.has_key?(source, "actions")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-rehearsal-questdb[data-data-source-row="rehearsal-questdb"][data-source-credential-state="active"][data-source-credential-provider="questdb"][data-source-credential-version="1"][data-source-credential-material-state="resolved"][data-source-credential-endpoint="http://customer-rehearsal-questdb:9000"][data-source-credential-secret-fields="bearer_token headers"]),
-             "byo_tsdb"
-           )
+    encoded_page = Jason.encode!(page)
+    refute encoded_page =~ "cadence/rehearsal/questdb"
+    refute encoded_page =~ user.user_id
+    assert page == Jason.decode!(encoded_page)
 
-    assert has_element?(
-             view,
-             ~s(#data-source-rehearsal-questdb),
-             "cred material"
-           )
+    managed_source = source_row(page, "managed-rehearsal-telemetry")
+    assert managed_source["health_status"] == "unavailable"
+    assert managed_source["source_readiness_status"] == "blocked"
+    assert managed_source["source_readiness_reason_text"] == "source_unavailable"
+    assert managed_source["source_readiness_policy_id"] == "default"
+    assert managed_source["health_reason_text"] == "source_connection_failed"
 
-    assert has_element?(
-             view,
-             ~s(#data-source-rehearsal-questdb),
-             "bearer_token headers"
-           )
+    failed_source = source_row(page, "failed-connection-telemetry")
+    assert failed_source["health_status"] == "healthy"
+    assert failed_source["source_readiness_status"] == "blocked"
+    assert failed_source["source_readiness_reason_text"] == "connection_test_failed"
+    assert failed_source["connection_test_result_text"] == "failed"
+    assert failed_source["connection_test_kind_text"] == "adapter_io"
+    assert failed_source["probe_diagnostic_kind_text"] == "connection_unreachable"
+    assert failed_source["probe_diagnostic_stage_text"] == "connection_test"
+    assert failed_source["probe_remediation_text"] == "check_questdb_endpoint"
 
-    refute render(view) =~ "customer-secret-token"
+    assert Enum.any?(page["activity"]["binding_events"]["rows"], fn event ->
+             event["event_type"] == "registered" and
+               String.contains?(event["title"], "rehearsal-telemetry-binding")
+           end)
 
-    assert has_element?(
-             view,
-             ~s(#data-source-rehearsal-questdb[data-data-source-row="rehearsal-questdb"]),
-             "2026-06-21T12:04:00.000000Z"
-           )
+    assert degraded_event =
+             Enum.find(page["activity"]["health_events"]["rows"], fn event ->
+               event["event_type"] == "degraded" and
+                 String.contains?(event["subtitle"], "source_probe_failed")
+             end)
 
-    assert has_element?(
-             view,
-             ~s(#data-source-rehearsal-questdb[data-data-source-row="rehearsal-questdb"]),
-             "best_effort"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-managed-rehearsal-telemetry[data-source-health="unavailable"][data-source-readiness="blocked"][data-source-readiness-reasons="source_unavailable"][data-source-readiness-policy="default"]),
-             "source_connection_failed"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-failed-connection-telemetry[data-source-health="healthy"][data-source-readiness="blocked"][data-source-readiness-reasons="connection_test_failed"][data-source-connection-test-result="failed"][data-source-connection-test-kind="adapter_io"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-failed-connection-telemetry[data-source-probe-diagnostic-kind="connection_unreachable"][data-source-probe-diagnostic-stage="connection_test"][data-source-probe-remediation="check_questdb_endpoint"]),
-             "check_questdb_endpoint"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-binding-events [data-event-type="registered"]),
-             "rehearsal-telemetry-binding"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="degraded"]),
-             "source_probe_failed"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-probe-diagnostic-kind="connection_unreachable"][data-event-probe-diagnostic-stage="connection_test"][data-event-probe-remediation="check_questdb_endpoint"])
-           )
+    assert degraded_event["probe_diagnostic_kind"] == "connection_unreachable"
+    assert degraded_event["probe_diagnostic_stage"] == "connection_test"
+    assert degraded_event["probe_remediation"] == "check_questdb_endpoint"
 
     {:ok, settings_view, _html} =
       live(
@@ -351,5 +371,23 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              dashboard_view,
              ~s(#ops-dashboard-show-page[data-runtime-last-invalidation-boundary="data_source_binding_changed"][data-runtime-last-invalidation-refresh-reason="runtime_invalidation"])
            )
+  end
+
+  defp ops_data_sources_vue(view_or_html) do
+    LiveVue.Test.get_vue(view_or_html, id: "ops-data-sources-component")
+  end
+
+  defp ops_data_sources_page(view_or_html) do
+    ops_data_sources_vue(view_or_html).props["page"]
+  end
+
+  defp binding_row(page, binding_id) do
+    page["bindings"]["groups"]
+    |> Enum.flat_map(& &1["rows"])
+    |> Enum.find(&(&1["binding_id"] == binding_id))
+  end
+
+  defp source_row(page, data_source_id) do
+    Enum.find(page["sources"]["rows"], &(&1["data_source_id"] == data_source_id))
   end
 end

@@ -71,22 +71,20 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
   end
 
   defp register_customer_source(view) do
-    view
-    |> form("#register-source-form",
-      source: %{
-        data_source_id: "customer-telemetry-questdb",
-        logical_source: "telemetry",
-        kind: "byo_tsdb",
-        isolation_level: "customer_owned",
-        credentials_ref: "cred-customer-telemetry",
-        credential_provider: "questdb",
-        endpoint_ref: "endpoint://customer/ops",
-        material_env_profile: "ops-customer-questdb",
-        http_endpoint_env: "OPS_CUSTOMER_QUESTDB_HTTP",
-        storage: "questdb"
+    render_hook(view, "register_source", %{
+      "source" => %{
+        "data_source_id" => "customer-telemetry-questdb",
+        "logical_source" => "telemetry",
+        "kind" => "byo_tsdb",
+        "isolation_level" => "customer_owned",
+        "credentials_ref" => "cred-customer-telemetry",
+        "credential_provider" => "questdb",
+        "endpoint_ref" => "endpoint://customer/ops",
+        "material_env_profile" => "ops-customer-questdb",
+        "http_endpoint_env" => "OPS_CUSTOMER_QUESTDB_HTTP",
+        "storage" => "questdb"
       }
-    )
-    |> render_submit()
+    })
   end
 
   test "registers a BYO mission data source and exposes it to binding changes" do
@@ -97,21 +95,14 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
 
-    assert has_element?(view, "#register-source-panel")
+    assert ops_data_sources_page(view)["admin"]["registration"]["id"] ==
+             "register-source-panel"
 
     register_customer_source(view)
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-data-source-row="customer-telemetry-questdb"]),
-             "byo_tsdb"
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb),
-             "cred-customer-telemetry / active v1"
-           )
+    source_dto = source_row(view, "customer-telemetry-questdb")
+    assert source_dto["kind_text"] == "byo_tsdb"
+    assert source_dto["credential_ref_text"] == "cred-customer-telemetry / active v1"
 
     assert {:ok, reference} = SourceCredentials.fetch_reference("cred-customer-telemetry")
     assert reference.organization_id == org.organization_id
@@ -128,15 +119,19 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     assert credential_event.actor_id == user.user_id
     assert credential_event.payload["source"] == "ops_data_sources_live"
 
-    view
-    |> element("#rotate-credential-customer-telemetry-questdb")
-    |> render_click()
+    rotate = source_action(view, "customer-telemetry-questdb", "rotate_source_credential")
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-credential-version="2"]),
-             "cred-customer-telemetry / active v2"
-           )
+    assert rotate["payload"] == %{
+             "data-source-id" => "customer-telemetry-questdb",
+             "credentials-ref" => "cred-customer-telemetry"
+           }
+
+    assert rotate["confirm"] == "Rotate this credential reference?"
+    render_hook(view, "rotate_source_credential", rotate["payload"])
+
+    source_dto = source_row(view, "customer-telemetry-questdb")
+    assert source_dto["credential_version_text"] == "2"
+    assert source_dto["credential_ref_text"] == "cred-customer-telemetry / active v2"
 
     assert {:ok, rotated_reference} =
              SourceCredentials.fetch_reference("cred-customer-telemetry")
@@ -180,11 +175,10 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     assert source_event.payload["source"] == "ops_data_sources_live"
     assert source_event.payload["storage"] == "questdb"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-source-events [data-event-type="registered"]),
-             "customer-telemetry-questdb"
-           )
+    assert Enum.any?(source_events(view), fn event ->
+             event["event_type"] == "registered" and
+               String.contains?(event["title"], "customer-telemetry-questdb")
+           end)
 
     probe_customer_source!(user, mission, probe_policy, credential_configuration)
 
@@ -201,36 +195,21 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     assert schema_sql =~ "FROM telemetry_observations LIMIT 0"
     assert schema_probe_opts[:http_endpoint] == "http://ops-customer-questdb:9000"
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-health="healthy"])
-           )
+    source_dto = source_row(view, "customer-telemetry-questdb")
+    assert source_dto["health_status"] == "healthy"
+    assert source_dto["probe_kind_text"] == "adapter"
+    assert source_dto["probe_metadata_text"] =~ "storage=questdb"
+    assert source_dto["connection_test_result_text"] == "succeeded"
+    assert source_dto["connection_test_kind_text"] == "adapter_io"
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-probe-kind="adapter"][data-source-probe-metadata*="storage=questdb"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-connection-test-result="succeeded"][data-source-connection-test-kind="adapter_io"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb),
+    assert source_dto["connection_test_message_text"] ==
              "Adapter connection test succeeded."
-           )
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-credential-material-state="resolved"][data-source-credential-endpoint="http://ops-customer-questdb:9000"])
-           )
+    assert source_dto["credential_material_state_text"] == "resolved"
+    assert source_dto["credential_endpoint_text"] == "http://ops-customer-questdb:9000"
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-probe-metadata*="source_capability_fingerprint=source-capability:"])
-           )
+    assert source_dto["probe_metadata_text"] =~
+             "source_capability_fingerprint=source-capability:"
 
     assert {:ok, %DataSource{} = materialized_source} =
              DataSources.fetch_data_source("customer-telemetry-questdb")
@@ -275,11 +254,10 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
 
     assert materialized_event.current_capabilities["native_decimation?"] == true
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-source-events [data-event-type="changed"]),
-             "customer-telemetry-questdb"
-           )
+    assert Enum.any?(source_events(view), fn event ->
+             event["event_type"] == "changed" and
+               String.contains?(event["title"], "customer-telemetry-questdb")
+           end)
 
     assert {:ok, _updated_source} =
              DataSources.persist_data_source(%DataSource{
@@ -295,40 +273,25 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/customer-telemetry-questdb/settings"
       )
 
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-probe-metadata*="source_capability_drift?=true"])
-           )
+    source_dto = source_row(view, "customer-telemetry-questdb")
+    assert source_dto["probe_metadata_text"] =~ "source_capability_drift?=true"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="recovered"]),
-             "source_probe_succeeded"
-           )
+    recovered =
+      Enum.find(health_events(view), fn event -> event["event_type"] == "recovered" end)
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="recovered"][data-event-probe-kind="adapter"][data-event-probe-metadata*="storage=questdb"])
-           )
+    assert recovered["subtitle"] =~ "source_probe_succeeded"
+    assert recovered["probe_kind"] == "adapter"
+    assert recovered["probe_metadata"] =~ "storage=questdb"
+    assert recovered["connection_test_result"] == "succeeded"
+    assert recovered["connection_test_kind"] == "adapter_io"
+    assert recovered["probe_metadata"] =~ "source_capability_fingerprint=source-capability:"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="recovered"][data-event-connection-test-result="succeeded"][data-event-connection-test-kind="adapter_io"])
-           )
+    disable = source_action(view, "customer-telemetry-questdb", "disable_source")
+    assert disable["payload"] == %{"data-source-id" => "customer-telemetry-questdb"}
+    assert disable["confirm"] == "Disable this data source?"
+    render_hook(view, "disable_source", disable["payload"])
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-source-health-events [data-event-type="recovered"][data-event-probe-metadata*="source_capability_fingerprint=source-capability:"])
-           )
-
-    view
-    |> element("#disable-source-customer-telemetry-questdb")
-    |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-status="disabled"])
-           )
+    assert source_row(view, "customer-telemetry-questdb")["status_text"] == "disabled"
 
     assert {:ok, disabled_source} = DataSources.fetch_data_source("customer-telemetry-questdb")
     assert disabled_source.status == :disabled
@@ -343,27 +306,17 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     assert disabled_event.actor_id == user.user_id
     assert disabled_event.payload["source"] == "ops_data_sources_live"
 
-    view
-    |> element("#change-binding-flight-telemetry-binding")
-    |> render_click()
+    render_hook(view, "open_change_binding", %{"binding-id" => "flight-telemetry-binding"})
+    refute "customer-telemetry-questdb" in binding_option_values(view)
 
-    refute has_element?(
-             view,
-             ~s(#change-binding-form-flight-telemetry-binding option[value="customer-telemetry-questdb"])
-           )
+    render_hook(view, "cancel_change_binding", %{})
+    assert ops_data_sources_page(view)["admin"]["binding_form"] == nil
 
-    view
-    |> element("#cancel-change-binding-flight-telemetry-binding")
-    |> render_click()
+    enable = source_action(view, "customer-telemetry-questdb", "enable_source")
+    assert enable["payload"] == %{"data-source-id" => "customer-telemetry-questdb"}
+    render_hook(view, "enable_source", enable["payload"])
 
-    view
-    |> element("#enable-source-customer-telemetry-questdb")
-    |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#data-source-customer-telemetry-questdb[data-source-status="active"])
-           )
+    assert source_row(view, "customer-telemetry-questdb")["status_text"] == "active"
 
     assert {:ok, enabled_source} = DataSources.fetch_data_source("customer-telemetry-questdb")
     assert enabled_source.status == :active
@@ -378,14 +331,8 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     assert enabled_event.actor_id == user.user_id
     assert enabled_event.payload["source"] == "ops_data_sources_live"
 
-    view
-    |> element("#change-binding-flight-telemetry-binding")
-    |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#change-binding-form-flight-telemetry-binding option[value="customer-telemetry-questdb"])
-           )
+    render_hook(view, "open_change_binding", %{"binding-id" => "flight-telemetry-binding"})
+    assert "customer-telemetry-questdb" in binding_option_values(view)
   end
 
   defp questdb_probe_exec_fun(test_pid) do
@@ -431,5 +378,40 @@ defmodule CadenceWeb.OpsDataSourcesByoLifecycleLiveTest do
     (ObservationReader.select_columns() ++ writer_columns)
     |> Enum.uniq()
     |> Enum.map(&%{"name" => &1})
+  end
+
+  defp ops_data_sources_page(view_or_html) do
+    view_or_html
+    |> LiveVue.Test.get_vue(id: "ops-data-sources-component")
+    |> then(& &1.props["page"])
+  end
+
+  defp source_row(view_or_html, data_source_id) do
+    Enum.find(
+      ops_data_sources_page(view_or_html)["sources"]["rows"],
+      &(&1["data_source_id"] == data_source_id)
+    )
+  end
+
+  defp source_action(view_or_html, data_source_id, event) do
+    view_or_html
+    |> source_row(data_source_id)
+    |> Map.get("actions", [])
+    |> Enum.find(&(&1["event"] == event))
+  end
+
+  defp source_events(view_or_html) do
+    ops_data_sources_page(view_or_html)["activity"]["source_events"]["rows"]
+  end
+
+  defp health_events(view_or_html) do
+    ops_data_sources_page(view_or_html)["activity"]["health_events"]["rows"]
+  end
+
+  defp binding_option_values(view_or_html) do
+    view_or_html
+    |> ops_data_sources_page()
+    |> get_in(["admin", "binding_form", "source_options"])
+    |> Enum.map(& &1["value"])
   end
 end

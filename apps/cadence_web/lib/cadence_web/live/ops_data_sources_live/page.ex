@@ -3,789 +3,686 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
 
   use CadenceWeb, :html
 
-  alias Cadence.DataSources.DataBinding
+  alias Phoenix.LiveView.JS
 
   alias CadenceWeb.OpsDataSourcesLive.{
     SourceFocus,
-    SourceFocusComponents,
+    SourceFocusPresentation,
+    SourceFocusResources,
     SourceRegistration
   }
 
+  @binding_row_fields ~w(
+    logical_source_text realm_text binding_status data_source_id dataset_text priority_text
+    version_text active_from_text active_to_text current_event_id_text source_status_text
+    source_kind_text source_owner_text source_isolation_text source_adapter_text
+    credential_ref_text health_status health_reason_text health_observed_at_text
+    health_event_type_text source_readiness_status source_readiness_policy_id
+    source_readiness_reason_text
+  )a
+
+  @source_row_fields ~w(
+    data_source_id status_text kind_text owner_text isolation_text adapter_text
+    credential_ref_text credential_state_text credential_provider_text credential_version_text
+    credential_material_state_text credential_endpoint_text credential_secret_fields_text
+    deployment_status_text deployment_mode_text deployment_backend_text deployment_boundary_text
+    deployment_job_id_text deployment_run_id_text deployment_remediation_text
+    deployment_lifecycle_operation_text deployment_lifecycle_status_text
+    deployment_lifecycle_observed_at_text capability_text supported_sampling_text
+    supported_products_text supported_metric_history_products_text supported_product_families_text
+    health_status health_reason_text probe_policy_text probe_stale_after_ms_text
+    source_readiness_status source_readiness_policy_id source_readiness_reason_text probe_kind_text
+    probe_message_text probe_metadata_text probe_diagnostic_kind_text probe_diagnostic_stage_text
+    probe_remediation_text connection_test_result_text connection_test_kind_text
+    connection_test_message_text watermark_text watermark_confidence_text
+  )a
+
+  @deployment_run_fields ~w(
+    job_id run_id data_source_id status_text mode_text backend_text physical_boundary_text
+    attempt_count_text failure_summary started_at_text completed_at_text remediation
+  )a
+
+  @event_row_fields ~w(
+    id event_type title subtitle occurred_at probe_kind probe_message probe_metadata
+    probe_diagnostic_kind probe_diagnostic_stage probe_remediation connection_test_result
+    connection_test_kind connection_test_message
+  )a
+
   def render(assigns) do
+    assigns = assign(assigns, :ops_data_sources_page, page_dto(assigns))
+
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-    <div
-      id="ops-data-sources-page"
-      class="flex flex-1 min-h-0"
-      data-source-focus-state={@source_focus.state}
-      data-source-focus-data-source={@source_focus.data_source_id || ""}
-      data-source-focus-binding={@source_focus.source_binding_id || ""}
-      data-source-focus-logical-source={@source_focus.logical_source || ""}
-      data-source-focus-realm={@source_focus.realm || ""}
-      data-source-focus-scope-kind={@source_focus.scope_kind || ""}
-      data-source-focus-scope-id={@source_focus.scope_id || ""}
-      data-source-focus-contact-id={@source_focus.contact_id || ""}
-      data-source-focus-selected-target={@source_focus.selected_target || ""}
-      data-source-focus-selected-id={@source_focus.selected_id || ""}
-      data-source-focus-transport-id={@source_focus.transport_id || ""}
-      data-source-focus-source-endpoint-id={@source_focus.source_endpoint_id || ""}
-      data-source-focus-ground-station-id={@source_focus.ground_station_id || ""}
-      data-source-focus-link-id={@source_focus.link_id || ""}
-      data-source-focus-empty-reason={@source_focus.source_empty_reason || ""}
-      data-source-focus-requested-source-products={@source_focus.requested_source_products || ""}
-      data-source-focus-requested-product-families={
-        @source_focus.requested_product_families || ""
-      }
-      data-source-focus-dashboard={@source_focus.source_dashboard_id || ""}
-      data-source-focus-evidence-kind={@source_focus.selected_evidence_kind || ""}
-      data-source-focus-evidence-mode={@source_focus.selected_source_evidence_mode || ""}
-      data-source-focus-evidence-state={@source_focus.selected_source_evidence_state || ""}
-    >
-      <div class="flex-1 min-w-0 overflow-y-auto">
-        <div class="mx-auto max-w-6xl px-6 py-8">
-        <div class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 class="text-lg font-semibold text-base-content">
-              {if @source_admin?, do: "Data Source Settings", else: "Data Sources"}
-            </h1>
-            <p class="mt-1 font-mono text-xs text-base-content/60">
-              {@current_mission.mission_id}
-            </p>
-          </div>
-          <div class="flex flex-col items-stretch gap-3 md:items-end">
-            <.link
-              :if={source_admin_eligible?(@current_scope)}
-              id="register-source-button"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/registration/new"}
-              class="btn btn-primary btn-sm"
-            >
-              <.icon name="hero-plus" class="h-4 w-4" /> Register Source
-            </.link>
-            <div class="grid grid-cols-3 gap-2 text-right">
-              <.stat_tile label="sources" value={length(@data_sources)} />
-              <.stat_tile label="bindings" value={length(@data_bindings)} />
-              <.stat_tile label="health" value={length(@source_health_statuses)} />
-            </div>
-            <div
-              id="source-readiness-policy"
-              class="border border-base-300 bg-base-200 px-3 py-2 text-right"
-              data-source-readiness-policy-id={@source_readiness_policy.policy_id}
-              data-source-readiness-block-health={@source_readiness_policy.block_source_health}
-              data-source-readiness-block-freshness={@source_readiness_policy.block_freshness}
-              data-source-readiness-block-connection-test={
-                @source_readiness_policy.block_connection_test
-              }
-            >
-              <p class="hud-label">readiness policy</p>
-              <p class="font-mono text-xs text-base-content">
-                {@source_readiness_policy.policy_id}
-              </p>
-              <p class="mt-1 font-mono text-[0.65rem] text-base-content/60">
-                conn {@source_readiness_policy.block_connection_test}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div
-          :if={@source_focus.state != "none"}
-          id="source-focus-status"
-          class={[
-            "mt-5 flex items-start gap-3 border px-4 py-3 text-sm",
-            @source_focus.state == "matched" && "border-primary/30 bg-primary/5 text-base-content",
-            @source_focus.state == "missing" && "border-warning/30 bg-warning/10 text-base-content"
-          ]}
-          data-source-focus-state={@source_focus.state}
-          data-source-focus-data-source={@source_focus.data_source_id || ""}
-          data-source-focus-binding={@source_focus.source_binding_id || ""}
-          data-source-focus-logical-source={@source_focus.logical_source || ""}
-          data-source-focus-realm={@source_focus.realm || ""}
-          data-source-focus-scope-kind={@source_focus.scope_kind || ""}
-          data-source-focus-scope-id={@source_focus.scope_id || ""}
-          data-source-focus-contact-id={@source_focus.contact_id || ""}
-          data-source-focus-selected-target={@source_focus.selected_target || ""}
-          data-source-focus-selected-id={@source_focus.selected_id || ""}
-          data-source-focus-transport-id={@source_focus.transport_id || ""}
-          data-source-focus-source-endpoint-id={@source_focus.source_endpoint_id || ""}
-          data-source-focus-ground-station-id={@source_focus.ground_station_id || ""}
-          data-source-focus-link-id={@source_focus.link_id || ""}
-          data-source-focus-empty-reason={@source_focus.source_empty_reason || ""}
-          data-source-focus-requested-source-products={
-            @source_focus.requested_source_products || ""
-          }
-          data-source-focus-requested-product-families={
-            @source_focus.requested_product_families || ""
-          }
-          data-source-focus-dashboard={@source_focus.source_dashboard_id || ""}
-          data-source-focus-evidence-kind={@source_focus.selected_evidence_kind || ""}
-          data-source-focus-evidence-mode={@source_focus.selected_source_evidence_mode || ""}
-          data-source-focus-evidence-state={@source_focus.selected_source_evidence_state || ""}
-        >
-          <.icon name={SourceFocus.icon(@source_focus)} class="mt-0.5 h-4 w-4 shrink-0" />
-          <div class="min-w-0">
-            <p class="font-semibold">{SourceFocus.title(@source_focus)}</p>
-            <p class="mt-1 break-all font-mono text-xs text-base-content/60">
-              {SourceFocus.detail(@source_focus)}
-            </p>
-            <SourceFocusComponents.remediation_panel
-              focus={@source_focus}
-              data_sources={@data_sources}
-              mission_id={@current_mission.mission_id}
-            />
-            <SourceFocusComponents.resource_panel
-              focus={@source_focus}
-              resources={@source_focus_resources}
-              mission_id={@current_mission.mission_id}
-            />
-            <SourceFocusComponents.evidence_panel
-              focus={@source_focus}
-              mission_id={@current_mission.mission_id}
-            />
-          </div>
-        </div>
-
-        <section
-          :if={@register_source? and @source_admin?}
-          id="register-source-panel"
-          class="mt-5 border border-primary/20 bg-base-200/60 p-4"
-        >
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-base-content">Register Source</h2>
-              <p class="mt-1 text-xs text-base-content/60">
-                Source descriptors are scoped to this mission. BYO sources store only a non-secret credential reference.
-              </p>
-            </div>
-            <.button id="cancel-register-source-top" variant={:ghost} size={:xs} phx-click="cancel_register_source">
-              <.icon name="hero-x-mark" class="h-4 w-4" />
-            </.button>
-          </div>
-
-          <.form
-            for={@register_source_form}
-            id="register-source-form"
-            phx-submit="register_source"
-            class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
-          >
-            <.input
-              field={@register_source_form[:data_source_id]}
-              label="Source ID"
-              placeholder="rehearsal-questdb"
-              required
-            />
-            <.input
-              field={@register_source_form[:logical_source]}
-              type="select"
-              label="Logical source"
-              options={SourceRegistration.logical_source_options()}
-              required
-            />
-            <.input
-              field={@register_source_form[:kind]}
-              type="select"
-              label="Ownership"
-              options={SourceRegistration.source_kind_options()}
-              required
-            />
-            <.input
-              field={@register_source_form[:isolation_level]}
-              type="select"
-              label="Isolation"
-              options={SourceRegistration.source_isolation_options()}
-              required
-            />
-            <.input
-              field={@register_source_form[:credentials_ref]}
-              label="Credential ref"
-              placeholder="cred-rehearsal-questdb"
-            />
-            <.input
-              field={@register_source_form[:credential_provider]}
-              type="select"
-              label="Credential provider"
-              options={SourceRegistration.credential_provider_options()}
-            />
-            <.input
-              field={@register_source_form[:endpoint_ref]}
-              label="Endpoint ref"
-              placeholder="endpoint://customer/rehearsal"
-            />
-            <.input
-              field={@register_source_form[:material_env_profile]}
-              label="Env material profile"
-              placeholder="customer-rehearsal-questdb"
-            />
-            <.input
-              field={@register_source_form[:http_endpoint_env]}
-              label="HTTP endpoint env"
-              placeholder="CADENCE_CUSTOMER_QUESTDB_HTTP_ENDPOINT"
-            />
-            <.input
-              field={@register_source_form[:storage]}
-              type="select"
-              label="Storage"
-              options={SourceRegistration.source_storage_options()}
-              required
-            />
-            <div class="flex items-end gap-2">
-              <.button id="submit-register-source" type="submit" size={:sm}>
-                Register
-              </.button>
-              <.button id="cancel-register-source" variant={:ghost} size={:sm} phx-click="cancel_register_source">
-                Cancel
-              </.button>
-            </div>
-          </.form>
-
-          <p :if={@register_source_error} id="register-source-error" class="mt-2 text-xs text-error">
-            {@register_source_error}
-          </p>
-        </section>
-
-        <div class="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <section class="space-y-4">
-            <div class="flex items-center justify-between gap-3">
-              <h2 class="hud-label">Bindings</h2>
-              <span class="font-mono text-xs text-base-content/50">
-                grouped by logical source and realm
-              </span>
-            </div>
-
-            <div :if={@binding_groups == []} class="border border-dashed border-base-300 p-6">
-              <p class="text-sm text-base-content/70">No dashboard source bindings registered.</p>
-            </div>
-
-            <div
-              :for={group <- @binding_groups}
-              id={"source-binding-group-#{group.id}"}
-              class="border border-base-300 bg-base-200/50"
-              data-source-binding-group={group.id}
-            >
-              <div class="flex items-center justify-between gap-3 border-b border-base-300 px-3 py-2">
-                <div class="min-w-0">
-                  <h3 class="text-sm font-semibold text-base-content">
-                    {group.logical_source_text}
-                    <span class="text-base-content/40">/</span>
-                    {group.realm_text}
-                  </h3>
-                  <p class="font-mono text-xs text-base-content/50">
-                    {length(group.rows)} bindings
-                  </p>
-                </div>
-                <.status_pill status={group.group_status} />
-              </div>
-
-              <div class="divide-y divide-base-300/70">
-                <div
-                  :for={row <- group.rows}
-                  id={"source-binding-#{row.binding.binding_id}"}
-                  class={[
-                    "grid gap-3 px-3 py-3 xl:grid-cols-[minmax(13rem,1fr)_minmax(16rem,1.1fr)_minmax(11rem,.7fr)]",
-                    SourceFocus.binding_focused?(@source_focus, row) &&
-                      "ring-1 ring-inset ring-primary/40 bg-primary/5"
-                  ]}
-                  data-source-focus={SourceFocus.binding_focused?(@source_focus, row)}
-                  data-source-binding-id={row.binding.binding_id}
-                  data-logical-source={row.logical_source_text}
-                  data-source-realm={row.realm_text}
-                  data-data-source-id={row.data_source_id}
-                  data-source-health={row.health_status}
-                  data-source-readiness={row.source_readiness_status}
-                  data-source-readiness-reasons={row.source_readiness_reason_text}
-                  data-source-readiness-policy={row.source_readiness_policy_id}
-                >
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="truncate font-mono text-xs font-semibold text-base-content">
-                        {row.binding.binding_id}
-                      </p>
-                      <.status_pill status={row.binding_status} />
-                      <.button
-                        :if={@source_admin?}
-                        id={"change-binding-#{row.binding.binding_id}"}
-                        variant={:ghost}
-                        size={:xs}
-                        phx-click="open_change_binding"
-                        phx-value-binding-id={row.binding.binding_id}
-                      >
-                        <.icon name="hero-arrows-right-left" class="h-3.5 w-3.5" /> Change
-                      </.button>
-                    </div>
-                    <dl class="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-                      <.kv label="dataset" value={row.dataset_text} />
-                      <.kv label="priority" value={row.priority_text} />
-                      <.kv label="version" value={row.version_text} />
-                      <.kv label="active from" value={row.active_from_text} />
-                      <.kv label="active to" value={row.active_to_text} />
-                    </dl>
-                  </div>
-
-                  <div class="min-w-0">
-                    <p class="hud-label">Physical source</p>
-                    <p class="mt-1 truncate font-mono text-xs text-base-content">
-                      {row.data_source_id}
-                    </p>
-                  <dl class="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-                      <.kv label="status" value={row.source_status_text} />
-                      <.kv label="kind" value={row.source_kind_text} />
-                      <.kv label="owner" value={row.source_owner_text} />
-                      <.kv label="isolation" value={row.source_isolation_text} />
-                      <.kv label="adapter" value={row.source_adapter_text} />
-                      <.kv label="credential" value={row.credential_ref_text} />
-                    </dl>
-                  </div>
-
-                  <div class="min-w-0">
-                    <p class="hud-label">Health</p>
-                    <div class="mt-1 flex items-center gap-2">
-                      <.status_pill status={row.health_status} />
-                      <span class="font-mono text-xs text-base-content/60">
-                        {row.health_reason_text}
-                      </span>
-                    </div>
-                    <dl class="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-                      <.kv label="observed" value={row.health_observed_at_text} />
-                      <.kv label="event" value={row.health_event_type_text} />
-                      <.kv label="current event" value={row.current_event_id_text} />
-                      <.kv label="readiness" value={row.source_readiness_status} />
-                      <.kv label="policy" value={row.source_readiness_policy_id} />
-                      <.kv label="reason" value={row.source_readiness_reason_text} />
-                    </dl>
-                  </div>
-
-                  <div
-                    :if={@source_admin? and change_binding_open?(@change_binding, row.binding.binding_id)}
-                    id={"change-binding-form-panel-#{row.binding.binding_id}"}
-                    class="border-t border-primary/20 bg-base-100/80 px-3 py-3 xl:col-span-3"
-                  >
-                    <.form
-                      for={@change_binding_form}
-                      id={"change-binding-form-#{row.binding.binding_id}"}
-                      phx-submit="change_binding"
-                      class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]"
-                    >
-                      <div>
-                        <.input
-                          field={@change_binding_form[:data_source_id]}
-                          type="select"
-                          label="Data source"
-                          options={@change_binding.source_options}
-                          required
-                        />
-                        <p
-                          :if={@change_binding_error}
-                          id={"change-binding-error-#{row.binding.binding_id}"}
-                          class="mt-2 text-xs text-error"
-                        >
-                          {@change_binding_error}
-                        </p>
-                      </div>
-                      <div class="flex items-end gap-2">
-                        <.button
-                          id={"submit-change-binding-#{row.binding.binding_id}"}
-                          type="submit"
-                          size={:sm}
-                        >
-                          Apply
-                        </.button>
-                        <.button
-                          id={"cancel-change-binding-#{row.binding.binding_id}"}
-                          variant={:ghost}
-                          size={:sm}
-                          phx-click="cancel_change_binding"
-                        >
-                          Cancel
-                        </.button>
-                      </div>
-                    </.form>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <aside class="space-y-4">
-            <.card heading="Physical Sources" subtitle="Registered adapter-backed stores" padding={:none}>
-              <div
-                :if={@source_rows == []}
-                class="px-4 py-5 text-sm text-base-content/70"
-              >
-                No data sources registered.
-              </div>
-              <div class="divide-y divide-base-300/70">
-                <div
-                  :for={source <- @source_rows}
-                  id={"data-source-#{source.data_source_id}"}
-                  class={[
-                    "px-4 py-3",
-                    SourceFocus.source_focused?(@source_focus, source) &&
-                      "ring-1 ring-inset ring-primary/40 bg-primary/5"
-                  ]}
-                  data-source-focus={SourceFocus.source_focused?(@source_focus, source)}
-                  data-data-source-row={source.data_source_id}
-                  data-source-status={source.status_text}
-                  data-source-health={source.health_status}
-                  data-source-readiness={source.source_readiness_status}
-                  data-source-readiness-reasons={source.source_readiness_reason_text}
-                  data-source-readiness-policy={source.source_readiness_policy_id}
-                  data-source-probe-kind={source.probe_kind_text}
-                  data-source-probe-policy={source.probe_policy_text}
-                  data-source-probe-stale-after-ms={source.probe_stale_after_ms_text}
-                  data-source-probe-message={source.probe_message_text}
-                  data-source-probe-metadata={source.probe_metadata_text}
-                  data-source-probe-diagnostic-kind={source.probe_diagnostic_kind_text}
-                  data-source-probe-diagnostic-stage={source.probe_diagnostic_stage_text}
-                  data-source-probe-remediation={source.probe_remediation_text}
-                  data-source-connection-test-result={source.connection_test_result_text}
-                  data-source-connection-test-kind={source.connection_test_kind_text}
-                  data-source-connection-test-message={source.connection_test_message_text}
-                  data-source-credential-state={source.credential_state_text}
-                  data-source-credential-provider={source.credential_provider_text}
-                  data-source-credential-version={source.credential_version_text}
-                  data-source-credential-material-state={source.credential_material_state_text}
-                  data-source-credential-endpoint={source.credential_endpoint_text}
-                  data-source-credential-secret-fields={source.credential_secret_fields_text}
-                  data-source-deployment-status={source.deployment_status_text}
-                  data-source-deployment-mode={source.deployment_mode_text}
-                  data-source-deployment-backend={source.deployment_backend_text}
-                  data-source-deployment-boundary={source.deployment_boundary_text}
-                  data-source-deployment-job-id={source.deployment_job_id_text}
-                  data-source-deployment-run-id={source.deployment_run_id_text}
-                  data-source-deployment-remediation={source.deployment_remediation_text}
-                  data-source-deployment-lifecycle-operation={
-                    source.deployment_lifecycle_operation_text
-                  }
-                  data-source-deployment-lifecycle-status={source.deployment_lifecycle_status_text}
-                  data-source-deployment-lifecycle-observed-at={
-                    source.deployment_lifecycle_observed_at_text
-                  }
-                  data-source-supported-sampling={source.supported_sampling_text}
-                  data-source-supported-products={source.supported_products_text}
-                  data-source-supported-metric-history-products={
-                    source.supported_metric_history_products_text
-                  }
-                  data-source-supported-product-families={source.supported_product_families_text}
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <.link
-                        navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/#{source.data_source_id}"}
-                        class="truncate font-mono text-xs font-semibold text-primary hover:underline"
-                      >
-                        {source.data_source_id}
-                      </.link>
-                      <p class="mt-1 text-xs text-base-content/60">
-                        {source.kind_text} · {source.owner_text} · {source.isolation_text}
-                      </p>
-                    </div>
-                    <div class="flex shrink-0 flex-col items-end gap-2">
-                      <div class="flex flex-wrap justify-end gap-1">
-                        <.status_pill status={source.status_text} />
-                        <.status_pill status={source.health_status} />
-                      </div>
-                      <.link
-                        :if={source_admin_eligible?(@current_scope) and not @source_admin?}
-                        id={"source-settings-#{source.data_source_id}"}
-                        navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources/#{source.data_source_id}/settings"}
-                        class="btn btn-ghost btn-xs"
-                      >
-                        <.icon name="hero-cog-6-tooth" class="h-3.5 w-3.5" /> Settings
-                      </.link>
-                      <.button
-                        :if={@source_admin? and source.credential_action?}
-                        id={"rotate-credential-#{source.data_source_id}"}
-                        variant={:ghost}
-                        size={:xs}
-                        phx-click="rotate_source_credential"
-                        phx-value-data-source-id={source.data_source_id}
-                        phx-value-credentials-ref={source.credentials_ref}
-                        data-confirm="Rotate this credential reference?"
-                      >
-                        <.icon name="hero-key" class="h-3.5 w-3.5" /> Rotate Credential
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.backend_reconcile_action?}
-                        id={"reconcile-backend-#{source.data_source_id}"}
-                        variant={:ghost}
-                        size={:xs}
-                        phx-click="reconcile_tsdb_backend"
-                        phx-value-data-source-id={source.data_source_id}
-                      >
-                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Reconcile Backend
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.backend_provision_action?}
-                        id={"provision-backend-#{source.data_source_id}"}
-                        variant={:secondary}
-                        size={:xs}
-                        phx-click="provision_tsdb_backend"
-                        phx-value-data-source-id={source.data_source_id}
-                      >
-                        <.icon name="hero-server-stack" class="h-3.5 w-3.5" /> Provision Backend
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.backend_deprovision_action?}
-                        id={"deprovision-backend-#{source.data_source_id}"}
-                        variant={:danger}
-                        size={:xs}
-                        phx-click="deprovision_tsdb_backend"
-                        phx-value-data-source-id={source.data_source_id}
-                        data-confirm="Request deprovisioning for this dedicated TSDB backend?"
-                      >
-                        <.icon name="hero-trash" class="h-3.5 w-3.5" /> Deprovision Backend
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.status_text == "active"}
-                        id={"probe-source-#{source.data_source_id}"}
-                        variant={:ghost}
-                        size={:xs}
-                        phx-click="probe_source"
-                        phx-value-data-source-id={source.data_source_id}
-                      >
-                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Probe
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.status_text == "active"}
-                        id={"disable-source-#{source.data_source_id}"}
-                        variant={:danger}
-                        size={:xs}
-                        phx-click="disable_source"
-                        phx-value-data-source-id={source.data_source_id}
-                        data-confirm="Disable this data source?"
-                      >
-                        <.icon name="hero-pause" class="h-3.5 w-3.5" /> Disable
-                      </.button>
-                      <.button
-                        :if={@source_admin? and source.enable_action?}
-                        id={"enable-source-#{source.data_source_id}"}
-                        variant={:secondary}
-                        size={:xs}
-                        phx-click="enable_source"
-                        phx-value-data-source-id={source.data_source_id}
-                      >
-                        <.icon name="hero-play" class="h-3.5 w-3.5" /> Enable
-                      </.button>
-                    </div>
-                  </div>
-                  <dl class="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-                    <.kv label="status" value={source.status_text} />
-                    <.kv label="readiness" value={source.source_readiness_status} />
-                    <.kv label="policy" value={source.source_readiness_policy_id} />
-                    <.kv label="ready reason" value={source.source_readiness_reason_text} />
-                    <.kv label="health reason" value={source.health_reason_text} />
-                    <.kv label="probe kind" value={source.probe_kind_text} />
-                    <.kv label="probe policy" value={source.probe_policy_text} />
-                    <.kv label="probe stale" value={source.probe_stale_after_ms_text} />
-                    <.kv label="probe message" value={source.probe_message_text} />
-                    <.kv label="probe metadata" value={source.probe_metadata_text} />
-                    <.kv label="diagnostic" value={source.probe_diagnostic_kind_text} />
-                    <.kv label="diag stage" value={source.probe_diagnostic_stage_text} />
-                    <.kv label="remediation" value={source.probe_remediation_text} />
-                    <.kv label="connection" value={source.connection_test_result_text} />
-                    <.kv label="conn kind" value={source.connection_test_kind_text} />
-                    <.kv label="conn detail" value={source.connection_test_message_text} />
-                    <.kv label="watermark" value={source.watermark_text} />
-                    <.kv label="confidence" value={source.watermark_confidence_text} />
-                    <.kv label="adapter" value={source.adapter_text} />
-                    <.kv label="credential" value={source.credential_ref_text} />
-                    <.kv label="cred state" value={source.credential_state_text} />
-                    <.kv label="cred provider" value={source.credential_provider_text} />
-                    <.kv label="cred material" value={source.credential_material_state_text} />
-                    <.kv label="cred endpoint" value={source.credential_endpoint_text} />
-                    <.kv label="cred fields" value={source.credential_secret_fields_text} />
-                    <.kv label="deploy" value={source.deployment_status_text} />
-                    <.kv label="deploy mode" value={source.deployment_mode_text} />
-                    <.kv label="backend" value={source.deployment_backend_text} />
-                    <.kv label="boundary" value={source.deployment_boundary_text} />
-                    <.kv label="deploy job" value={source.deployment_job_id_text} />
-                    <.kv label="deploy run" value={source.deployment_run_id_text} />
-                    <.kv label="deploy fix" value={source.deployment_remediation_text} />
-                    <.kv label="backend op" value={source.deployment_lifecycle_operation_text} />
-                    <.kv label="backend state" value={source.deployment_lifecycle_status_text} />
-                    <.kv label="backend seen" value={source.deployment_lifecycle_observed_at_text} />
-                    <.kv label="capability" value={source.capability_text} />
-                    <.kv label="sampling" value={source.supported_sampling_text} />
-                    <.kv label="products" value={source.supported_products_text} />
-                    <.kv label="history" value={source.supported_metric_history_products_text} />
-                    <.kv label="families" value={source.supported_product_families_text} />
-                  </dl>
-                </div>
-              </div>
-            </.card>
-
-            <.card heading="Deployment Runs" subtitle="TSDB backend lifecycle jobs" padding={:none}>
-              <div
-                :if={@deployment_run_rows == []}
-                class="px-4 py-5 text-sm text-base-content/70"
-              >
-                No deployment runs recorded.
-              </div>
-              <div class="divide-y divide-base-300/70">
-                <div
-                  :for={run <- @deployment_run_rows}
-                  id={"deployment-run-#{run.run_id}"}
-                  class="px-4 py-3"
-                  data-deployment-run-row={run.run_id}
-                  data-deployment-run-job-id={run.job_id}
-                  data-deployment-run-data-source-id={run.data_source_id}
-                  data-deployment-run-status={run.status_text}
-                  data-deployment-run-mode={run.mode_text}
-                  data-deployment-run-backend={run.backend_text}
-                  data-deployment-run-boundary={run.physical_boundary_text}
-                  data-deployment-run-attempt-count={run.attempt_count_text}
-                  data-deployment-run-failure-summary={run.failure_summary}
-                  data-deployment-run-remediation={run.remediation}
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="truncate font-mono text-xs font-semibold text-base-content">
-                        {run.data_source_id}
-                      </p>
-                      <p class="mt-1 truncate font-mono text-xs text-base-content/60">
-                        {run.run_id}
-                      </p>
-                    </div>
-                    <div class="flex shrink-0 flex-col items-end gap-2">
-                      <.status_pill status={run.status_text} />
-                      <.button
-                        :if={@source_admin? and run.status_text == "failed"}
-                        id={"retry-deployment-run-#{run.run_id}"}
-                        variant={:secondary}
-                        size={:xs}
-                        phx-click="retry_deployment_run"
-                        phx-value-job-id={run.job_id}
-                      >
-                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Retry
-                      </.button>
-                      <.button
-                        :if={@source_admin? and run.status_text == "provisioning"}
-                        id={"requeue-deployment-run-#{run.run_id}"}
-                        variant={:secondary}
-                        size={:xs}
-                        phx-click="requeue_deployment_run"
-                        phx-value-job-id={run.job_id}
-                      >
-                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Requeue
-                      </.button>
-                    </div>
-                  </div>
-                  <dl class="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-                    <.kv label="job" value={run.job_id} />
-                    <.kv label="mode" value={run.mode_text} />
-                    <.kv label="backend" value={run.backend_text} />
-                    <.kv label="boundary" value={run.physical_boundary_text} />
-                    <.kv label="attempts" value={run.attempt_count_text} />
-                    <.kv label="started" value={run.started_at_text} />
-                    <.kv label="completed" value={run.completed_at_text} />
-                    <.kv label="failure" value={run.failure_summary} />
-                    <.kv label="fix" value={run.remediation} />
-                  </dl>
-                </div>
-              </div>
-            </.card>
-
-            <.card heading="Recent Binding Events" subtitle="Current projection changes" padding={:none}>
-              <.event_list
-                id="dashboard-data-binding-events"
-                rows={@binding_event_rows}
-                empty="No binding events recorded."
-              />
-            </.card>
-
-            <.card heading="Recent Source Events" subtitle="Physical source descriptor changes" padding={:none}>
-              <.event_list
-                id="dashboard-data-source-events"
-                rows={@source_event_rows}
-                empty="No source events recorded."
-              />
-            </.card>
-
-            <.card heading="Recent Source Health" subtitle="Source subsystem transitions" padding={:none}>
-              <.event_list
-                id="dashboard-source-health-events"
-                rows={@source_health_event_rows}
-                empty="No source health events recorded."
-              />
-            </.card>
-          </aside>
-        </div>
-        </div>
-      </div>
-    </div>
+      <.vue
+        id="ops-data-sources-component"
+        v-component="OpsDataSources"
+        page={@ops_data_sources_page}
+        v-on:open-register-source={JS.push("open_register_source")}
+        v-on:cancel-register-source={JS.push("cancel_register_source")}
+        v-on:register-source={JS.push("register_source")}
+        v-on:open-change-binding={JS.push("open_change_binding")}
+        v-on:cancel-change-binding={JS.push("cancel_change_binding")}
+        v-on:change-binding={JS.push("change_binding")}
+        v-on:disable-source={JS.push("disable_source")}
+        v-on:enable-source={JS.push("enable_source")}
+        v-on:reconcile-tsdb-backend={JS.push("reconcile_tsdb_backend")}
+        v-on:deprovision-tsdb-backend={JS.push("deprovision_tsdb_backend")}
+        v-on:provision-tsdb-backend={JS.push("provision_tsdb_backend")}
+        v-on:probe-source={JS.push("probe_source")}
+        v-on:rotate-source-credential={JS.push("rotate_source_credential")}
+        v-on:retry-deployment-run={JS.push("retry_deployment_run")}
+        v-on:requeue-deployment-run={JS.push("requeue_deployment_run")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
+  defp page_dto(assigns) do
+    mission_id = assigns.current_mission.mission_id
 
-  defp kv(assigns) do
-    ~H"""
-    <dt class="text-base-content/50">{@label}</dt>
-    <dd class="break-all font-mono text-base-content">{@value}</dd>
-    """
+    %{
+      id: "ops-data-sources-page",
+      mode: if(assigns.source_admin?, do: "admin", else: "reader"),
+      focus: focus_dto(assigns, mission_id),
+      header: header_dto(assigns, mission_id),
+      bindings: %{
+        heading: "Bindings",
+        description: "grouped by logical source and realm",
+        empty: "No dashboard source bindings registered.",
+        groups: Enum.map(assigns.binding_groups, &binding_group_dto(&1, assigns))
+      },
+      sources: %{
+        heading: "Physical Sources",
+        subtitle: "Registered adapter-backed stores",
+        empty: "No data sources registered.",
+        rows: Enum.map(assigns.source_rows, &source_row_dto(&1, assigns, mission_id))
+      },
+      deployment_runs: %{
+        heading: "Deployment Runs",
+        subtitle: "TSDB backend lifecycle jobs",
+        empty: "No deployment runs recorded.",
+        rows: Enum.map(assigns.deployment_run_rows, &deployment_run_dto(&1, assigns))
+      },
+      activity: %{
+        binding_events:
+          event_list_dto(
+            "dashboard-data-binding-events",
+            "Recent Binding Events",
+            "Current projection changes",
+            "No binding events recorded.",
+            assigns.binding_event_rows
+          ),
+        source_events:
+          event_list_dto(
+            "dashboard-data-source-events",
+            "Recent Source Events",
+            "Physical source descriptor changes",
+            "No source events recorded.",
+            assigns.source_event_rows
+          ),
+        health_events:
+          event_list_dto(
+            "dashboard-source-health-events",
+            "Recent Source Health",
+            "Source subsystem transitions",
+            "No source health events recorded.",
+            assigns.source_health_event_rows
+          )
+      }
+    }
+    |> maybe_put_admin(assigns)
   end
 
-  attr :status, :string, required: true
-
-  defp status_pill(assigns) do
-    ~H"""
-    <.status_badge status={pill_status(@status)} label={@status} data-status-pill={@status} />
-    """
+  defp header_dto(assigns, mission_id) do
+    %{
+      heading: if(assigns.source_admin?, do: "Data Source Settings", else: "Data Sources"),
+      mission_id: mission_id,
+      register_link: register_link_dto(assigns.current_scope, mission_id),
+      stats: [
+        %{label: "sources", value: length(assigns.data_sources)},
+        %{label: "bindings", value: length(assigns.data_bindings)},
+        %{label: "health", value: length(assigns.source_health_statuses)}
+      ],
+      readiness_policy: %{
+        id: "source-readiness-policy",
+        label: "readiness policy",
+        policy_id: assigns.source_readiness_policy.policy_id,
+        block_source_health: assigns.source_readiness_policy.block_source_health,
+        block_freshness: assigns.source_readiness_policy.block_freshness,
+        block_connection_test: assigns.source_readiness_policy.block_connection_test,
+        connection_summary: "conn #{assigns.source_readiness_policy.block_connection_test}"
+      }
+    }
   end
 
-  attr :id, :string, required: true
-  attr :rows, :list, required: true
-  attr :empty, :string, required: true
-
-  defp event_list(assigns) do
-    ~H"""
-    <div id={@id} class="divide-y divide-base-300/70">
-      <div :if={@rows == []} class="px-4 py-5 text-sm text-base-content/70">
-        {@empty}
-      </div>
-      <div
-        :for={row <- @rows}
-        id={row.id}
-        class="px-4 py-3"
-        data-event-type={row.event_type}
-        data-event-probe-kind={Map.get(row, :probe_kind, "")}
-        data-event-probe-message={Map.get(row, :probe_message, "")}
-        data-event-probe-metadata={Map.get(row, :probe_metadata, "")}
-        data-event-probe-diagnostic-kind={Map.get(row, :probe_diagnostic_kind, "")}
-        data-event-probe-diagnostic-stage={Map.get(row, :probe_diagnostic_stage, "")}
-        data-event-probe-remediation={Map.get(row, :probe_remediation, "")}
-        data-event-connection-test-result={Map.get(row, :connection_test_result, "")}
-        data-event-connection-test-kind={Map.get(row, :connection_test_kind, "")}
-        data-event-connection-test-message={Map.get(row, :connection_test_message, "")}
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="text-xs font-semibold text-base-content">{row.title}</p>
-            <p class="mt-1 truncate font-mono text-xs text-base-content/60">{row.subtitle}</p>
-          </div>
-          <span class="shrink-0 font-mono text-[0.65rem] text-base-content/50">
-            {row.occurred_at}
-          </span>
-        </div>
-      </div>
-    </div>
-    """
+  defp register_link_dto(scope, mission_id) do
+    if source_admin_eligible?(scope) do
+      %{
+        id: "register-source-button",
+        href: ~p"/missions/#{mission_id}/ops/data-sources/registration/new",
+        label: "Register Source",
+        icon: "hero-plus"
+      }
+    end
   end
 
-  defp change_binding_open?(%{binding: %DataBinding{binding_id: binding_id}}, binding_id),
-    do: true
+  defp focus_dto(assigns, mission_id) do
+    focus = assigns.source_focus
 
-  defp change_binding_open?(_change_binding, _binding_id), do: false
+    %{
+      state: focus.state,
+      data_source_id: empty(focus.data_source_id),
+      source_binding_id: empty(focus.source_binding_id),
+      logical_source: empty(focus.logical_source),
+      realm: empty(focus.realm),
+      scope_kind: empty(focus.scope_kind),
+      scope_id: empty(focus.scope_id),
+      contact_id: empty(focus.contact_id),
+      selected_target: empty(focus.selected_target),
+      selected_id: empty(focus.selected_id),
+      transport_id: empty(focus.transport_id),
+      source_endpoint_id: empty(focus.source_endpoint_id),
+      ground_station_id: empty(focus.ground_station_id),
+      link_id: empty(focus.link_id),
+      source_empty_reason: empty(focus.source_empty_reason),
+      requested_source_products: empty(focus.requested_source_products),
+      requested_product_families: empty(focus.requested_product_families),
+      source_dashboard_id: empty(focus.source_dashboard_id),
+      selected_evidence_kind: empty(focus.selected_evidence_kind),
+      selected_source_evidence_mode: empty(focus.selected_source_evidence_mode),
+      selected_source_evidence_state: empty(focus.selected_source_evidence_state),
+      notice: focus_notice_dto(focus),
+      remediation:
+        remediation_dto(focus, assigns.data_sources, assigns.source_admin?, mission_id),
+      resource: resource_dto(focus, assigns.source_focus_resources, mission_id),
+      evidence: evidence_dto(focus, mission_id)
+    }
+  end
 
-  defp pill_status(status) when status in ["active", "healthy", "recovered", "ready"], do: :ready
+  defp focus_notice_dto(%{state: "none"}), do: nil
 
-  defp pill_status(status) when status in ["degraded", "disabled", "unknown"], do: :attention
+  defp focus_notice_dto(focus) do
+    %{
+      id: "source-focus-status",
+      icon: SourceFocus.icon(focus),
+      title: SourceFocus.title(focus),
+      detail: SourceFocus.detail(focus)
+    }
+  end
 
-  defp pill_status(status) when status in ["unavailable", "superseded", "missing", "blocked"],
-    do: :blocked
+  defp remediation_dto(focus, sources, source_admin?, mission_id) do
+    case SourceFocusPresentation.remediation(focus, sources) do
+      nil ->
+        nil
 
-  defp pill_status(_status), do: :info
+      remediation ->
+        %{
+          id: "source-focus-remediation",
+          kind: remediation.kind,
+          title: remediation.title,
+          detail: remediation.detail,
+          target: remediation.target,
+          target_id: empty(remediation.target_id),
+          capability_rows:
+            Enum.map(remediation.capability_rows, fn row ->
+              %{
+                key: row.key,
+                label: row.label,
+                requested: row.requested,
+                supported: row.supported
+              }
+            end),
+          candidate_rows:
+            Enum.map(remediation.candidate_rows, fn candidate ->
+              %{
+                data_source_id: candidate.data_source_id,
+                compatible: candidate.compatible?,
+                status_text: candidate.status_text,
+                missing_text: candidate.missing_text,
+                reason_text: candidate.reason_text
+              }
+            end),
+          dashboard_return:
+            dashboard_return_dto(focus, mission_id, "source-focus-dashboard-return")
+        }
+        |> maybe_put_optional(:action, remediation_action_dto(remediation, source_admin?))
+    end
+  end
+
+  defp remediation_action_dto(%{action: :register_source}, true) do
+    %{
+      kind: "event",
+      id: "source-focus-register-source",
+      event: "open_register_source",
+      payload: %{},
+      label: "Register Source",
+      icon: "hero-plus"
+    }
+  end
+
+  defp remediation_action_dto(%{action: :register_source}, false), do: nil
+
+  defp remediation_action_dto(%{action: :review_binding, target_id: target_id}, _source_admin?) do
+    %{
+      kind: "anchor",
+      id: "source-focus-review-binding",
+      href: "#source-binding-#{target_id}",
+      label: "Review Binding",
+      icon: "hero-arrows-right-left"
+    }
+  end
+
+  defp remediation_action_dto(%{action: :review_source, target_id: target_id}, _source_admin?) do
+    %{
+      kind: "anchor",
+      id: "source-focus-review-source",
+      href: "#data-source-#{target_id}",
+      label: "Review Source",
+      icon: "hero-server-stack"
+    }
+  end
+
+  defp remediation_action_dto(_remediation, _source_admin?), do: nil
+
+  defp resource_dto(focus, resources, mission_id) do
+    focus
+    |> SourceFocusResources.build(resources, fn key, value ->
+      resource_href(resources, mission_id, key, value)
+    end)
+    |> case do
+      nil ->
+        nil
+
+      resource ->
+        %{
+          id: "source-focus-resource",
+          selected_target: empty(resource.selected_target),
+          selected_id: empty(resource.selected_id),
+          transport_id: empty(resource.transport_id),
+          source_endpoint_id: empty(resource.source_endpoint_id),
+          ground_station_id: empty(resource.ground_station_id),
+          link_id: empty(resource.link_id),
+          heading: "Operational resource context",
+          rows:
+            Enum.map(resource.rows, fn row ->
+              %{
+                key: row.key,
+                label: row.label,
+                value: row.value,
+                display_value: row.display_value,
+                status: row.status,
+                status_text: row.status_text,
+                href: row.href
+              }
+            end)
+        }
+    end
+  end
+
+  defp evidence_dto(focus, mission_id) do
+    case SourceFocusPresentation.evidence(focus) do
+      nil ->
+        nil
+
+      evidence ->
+        %{
+          id: "source-focus-evidence",
+          kind: evidence.kind,
+          mode: evidence.mode,
+          state: evidence.state,
+          reason: evidence.reason,
+          title: evidence.title,
+          detail: evidence.detail,
+          dashboard_return:
+            dashboard_return_dto(
+              focus,
+              mission_id,
+              "source-focus-evidence-dashboard-return"
+            )
+        }
+    end
+  end
+
+  defp dashboard_return_dto(%{source_dashboard_id: dashboard_id} = focus, mission_id, id)
+       when is_binary(dashboard_id) and dashboard_id != "" do
+    params =
+      %{
+        "panel" => SourceFocus.return_panel(focus),
+        "activity_filter" => SourceFocus.return_activity_filter(focus),
+        "activity_event" => SourceFocus.return_activity_event(focus),
+        "refresh_readiness" => SourceFocus.return_refresh_readiness(focus)
+      }
+      |> compact()
+
+    %{
+      id: id,
+      href: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}?#{params}",
+      label: "Return to dashboard readiness",
+      icon: "hero-arrow-uturn-left",
+      dashboard_id: dashboard_id,
+      panel: SourceFocus.return_panel(focus),
+      activity_filter: SourceFocus.return_activity_filter(focus),
+      activity_event: empty(SourceFocus.return_activity_event(focus))
+    }
+  end
+
+  defp dashboard_return_dto(_focus, _mission_id, _id), do: nil
+
+  defp resource_href(_resources, mission_id, :transport_id, transport_id) do
+    ~p"/missions/#{mission_id}/comms/transports/#{transport_id}"
+  end
+
+  defp resource_href(_resources, mission_id, :source_endpoint_id, source_endpoint_id) do
+    ~p"/missions/#{mission_id}/comms?#{%{source_endpoint_id: source_endpoint_id}}"
+  end
+
+  defp resource_href(
+         %{routing_rule: %{routing_rule_id: routing_rule_id}},
+         mission_id,
+         :link_id,
+         _link_id
+       ) do
+    ~p"/missions/#{mission_id}/comms/routing/#{routing_rule_id}"
+  end
+
+  defp resource_href(
+         %{ground_station: %{ground_station_id: ground_station_id}},
+         mission_id,
+         :ground_station_id,
+         _ground_station_id
+       ) do
+    ~p"/missions/#{mission_id}/comms/ground-stations/#{ground_station_id}"
+  end
+
+  defp resource_href(_resources, _mission_id, _key, _value), do: nil
+
+  defp binding_group_dto(group, assigns) do
+    %{
+      id: group.id,
+      logical_source_text: group.logical_source_text,
+      realm_text: group.realm_text,
+      group_status: group.group_status,
+      count_label: "#{length(group.rows)} bindings",
+      rows: Enum.map(group.rows, &binding_row_dto(&1, assigns))
+    }
+  end
+
+  defp binding_row_dto(row, assigns) do
+    row
+    |> Map.take(@binding_row_fields)
+    |> Map.put(:binding_id, row.binding.binding_id)
+    |> Map.put(:focused, SourceFocus.binding_focused?(assigns.source_focus, row))
+    |> maybe_put_change_action(assigns.source_admin?)
+  end
+
+  defp maybe_put_change_action(row, false), do: row
+
+  defp maybe_put_change_action(row, true) do
+    Map.put(row, :change_action, %{
+      id: "change-binding-#{row.binding_id}",
+      event: "open_change_binding",
+      payload: %{"binding-id" => row.binding_id},
+      label: "Change",
+      icon: "hero-arrows-right-left"
+    })
+  end
+
+  defp source_row_dto(row, assigns, mission_id) do
+    row
+    |> Map.take(@source_row_fields)
+    |> Map.put(:focused, SourceFocus.source_focused?(assigns.source_focus, row))
+    |> Map.put(:detail_link, %{
+      href: ~p"/missions/#{mission_id}/ops/data-sources/#{row.data_source_id}",
+      label: row.data_source_id
+    })
+    |> maybe_put_settings_link(row, assigns, mission_id)
+    |> maybe_put_source_actions(row, assigns.source_admin?)
+  end
+
+  defp maybe_put_settings_link(dto, row, assigns, mission_id) do
+    if source_admin_eligible?(assigns.current_scope) and not assigns.source_admin? do
+      Map.put(dto, :settings_link, %{
+        id: "source-settings-#{row.data_source_id}",
+        href: ~p"/missions/#{mission_id}/ops/data-sources/#{row.data_source_id}/settings",
+        label: "Settings",
+        icon: "hero-cog-6-tooth"
+      })
+    else
+      dto
+    end
+  end
+
+  defp maybe_put_source_actions(dto, _row, false), do: dto
+
+  defp maybe_put_source_actions(dto, row, true) do
+    actions =
+      []
+      |> maybe_add_action(
+        row.credential_action?,
+        source_action(
+          "rotate-credential-#{row.data_source_id}",
+          "rotate_source_credential",
+          %{
+            "data-source-id" => row.data_source_id,
+            "credentials-ref" => row.credentials_ref
+          },
+          "Rotate Credential",
+          "hero-key",
+          "ghost",
+          "Rotate this credential reference?"
+        )
+      )
+      |> maybe_add_action(
+        row.backend_reconcile_action?,
+        source_action(
+          "reconcile-backend-#{row.data_source_id}",
+          "reconcile_tsdb_backend",
+          %{"data-source-id" => row.data_source_id},
+          "Reconcile Backend",
+          "hero-arrow-path",
+          "ghost"
+        )
+      )
+      |> maybe_add_action(
+        row.backend_provision_action?,
+        source_action(
+          "provision-backend-#{row.data_source_id}",
+          "provision_tsdb_backend",
+          %{"data-source-id" => row.data_source_id},
+          "Provision Backend",
+          "hero-server-stack",
+          "secondary"
+        )
+      )
+      |> maybe_add_action(
+        row.backend_deprovision_action?,
+        source_action(
+          "deprovision-backend-#{row.data_source_id}",
+          "deprovision_tsdb_backend",
+          %{"data-source-id" => row.data_source_id},
+          "Deprovision Backend",
+          "hero-trash",
+          "danger",
+          "Request deprovisioning for this dedicated TSDB backend?"
+        )
+      )
+      |> maybe_add_action(
+        row.status_text == "active",
+        source_action(
+          "probe-source-#{row.data_source_id}",
+          "probe_source",
+          %{"data-source-id" => row.data_source_id},
+          "Probe",
+          "hero-arrow-path",
+          "ghost"
+        )
+      )
+      |> maybe_add_action(
+        row.status_text == "active",
+        source_action(
+          "disable-source-#{row.data_source_id}",
+          "disable_source",
+          %{"data-source-id" => row.data_source_id},
+          "Disable",
+          "hero-pause",
+          "danger",
+          "Disable this data source?"
+        )
+      )
+      |> maybe_add_action(
+        row.enable_action?,
+        source_action(
+          "enable-source-#{row.data_source_id}",
+          "enable_source",
+          %{"data-source-id" => row.data_source_id},
+          "Enable",
+          "hero-play",
+          "secondary"
+        )
+      )
+
+    Map.put(dto, :actions, actions)
+  end
+
+  defp source_action(id, event, payload, label, icon, variant, confirm \\ nil) do
+    %{
+      id: id,
+      event: event,
+      payload: payload,
+      label: label,
+      icon: icon,
+      variant: variant,
+      confirm: confirm
+    }
+  end
+
+  defp maybe_add_action(actions, true, action), do: actions ++ [action]
+  defp maybe_add_action(actions, false, _action), do: actions
+
+  defp deployment_run_dto(row, assigns) do
+    row
+    |> Map.take(@deployment_run_fields)
+    |> maybe_put_deployment_action(assigns.source_admin?)
+  end
+
+  defp maybe_put_deployment_action(row, false), do: row
+
+  defp maybe_put_deployment_action(%{status_text: "failed"} = row, true) do
+    Map.put(row, :action, %{
+      id: "retry-deployment-run-#{row.run_id}",
+      event: "retry_deployment_run",
+      payload: %{"job-id" => row.job_id},
+      label: "Retry",
+      icon: "hero-arrow-path"
+    })
+  end
+
+  defp maybe_put_deployment_action(%{status_text: "provisioning"} = row, true) do
+    Map.put(row, :action, %{
+      id: "requeue-deployment-run-#{row.run_id}",
+      event: "requeue_deployment_run",
+      payload: %{"job-id" => row.job_id},
+      label: "Requeue",
+      icon: "hero-arrow-path"
+    })
+  end
+
+  defp maybe_put_deployment_action(row, true), do: row
+
+  defp event_list_dto(id, heading, subtitle, empty_message, rows) do
+    %{
+      id: id,
+      heading: heading,
+      subtitle: subtitle,
+      empty: empty_message,
+      rows: Enum.map(rows, &Map.take(&1, @event_row_fields))
+    }
+  end
+
+  defp maybe_put_admin(page, %{source_admin?: false}), do: page
+
+  defp maybe_put_admin(page, assigns) do
+    Map.put(page, :admin, %{
+      registration: registration_dto(assigns),
+      binding_form: binding_form_dto(assigns)
+    })
+  end
+
+  defp registration_dto(%{register_source?: false}), do: nil
+
+  defp registration_dto(assigns) do
+    %{
+      id: "register-source-panel",
+      heading: "Register Source",
+      description:
+        "Source descriptors are scoped to this mission. BYO sources store only a non-secret credential reference.",
+      form: %{
+        id: "register-source-form",
+        values: %{
+          data_source_id: form_value(assigns.register_source_form, "data_source_id"),
+          logical_source: form_value(assigns.register_source_form, "logical_source"),
+          kind: form_value(assigns.register_source_form, "kind"),
+          isolation_level: form_value(assigns.register_source_form, "isolation_level"),
+          credentials_ref: form_value(assigns.register_source_form, "credentials_ref"),
+          credential_provider: form_value(assigns.register_source_form, "credential_provider"),
+          endpoint_ref: form_value(assigns.register_source_form, "endpoint_ref"),
+          material_env_profile: form_value(assigns.register_source_form, "material_env_profile"),
+          http_endpoint_env: form_value(assigns.register_source_form, "http_endpoint_env"),
+          storage: form_value(assigns.register_source_form, "storage")
+        },
+        options: %{
+          logical_source: options_dto(SourceRegistration.logical_source_options()),
+          kind: options_dto(SourceRegistration.source_kind_options()),
+          isolation_level: options_dto(SourceRegistration.source_isolation_options()),
+          credential_provider: options_dto(SourceRegistration.credential_provider_options()),
+          storage: options_dto(SourceRegistration.source_storage_options())
+        },
+        error: assigns.register_source_error
+      }
+    }
+  end
+
+  defp binding_form_dto(%{change_binding: nil}), do: nil
+
+  defp binding_form_dto(assigns) do
+    %{
+      binding_id: assigns.change_binding.binding.binding_id,
+      form_id: "change-binding-form-#{assigns.change_binding.binding.binding_id}",
+      panel_id: "change-binding-form-panel-#{assigns.change_binding.binding.binding_id}",
+      data_source_id: form_value(assigns.change_binding_form, "data_source_id"),
+      source_options: options_dto(assigns.change_binding.source_options),
+      error: assigns.change_binding_error
+    }
+  end
+
+  defp options_dto(options) do
+    Enum.map(options, fn {label, value} -> %{label: label, value: value} end)
+  end
+
+  defp form_value(%Phoenix.HTML.Form{params: params}, key) do
+    params
+    |> Map.get(key, "")
+    |> string_value()
+  end
+
+  defp string_value(nil), do: ""
+  defp string_value(value) when is_binary(value), do: value
+  defp string_value(value), do: to_string(value)
+
+  defp compact(params) do
+    params
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+  end
+
+  defp maybe_put_optional(map, _key, nil), do: map
+  defp maybe_put_optional(map, key, value), do: Map.put(map, key, value)
+
+  defp empty(nil), do: ""
+  defp empty(value) when is_binary(value), do: value
+  defp empty(value), do: to_string(value)
 
   defp source_admin_eligible?(scope) do
     MapSet.member?(scope.capabilities, :organization_admin) or

@@ -182,90 +182,41 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-rehearsal-questdb", source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "bounded_history", supported_sampling: "latest", requested_products: "bounded_receipt_time_history", supported_products: "latest_value", requested_value_kinds: "engineering", supported_value_kinds: "raw"}}"
       )
 
-    assert has_element?(
-             view,
-             ~s(#source-focus-remediation[data-source-remediation-kind="unsupported_source_capability"][data-source-remediation-target="binding"][data-source-remediation-target-id="focus-rehearsal-telemetry-binding"])
-           )
+    page = ops_data_sources_page(view)
+    remediation = page["focus"]["remediation"]
 
-    assert has_element?(
-             view,
-             ~s(#source-focus-review-binding[href="#source-binding-focus-rehearsal-telemetry-binding"])
-           )
+    assert remediation["kind"] == "unsupported_source_capability"
+    assert remediation["target"] == "binding"
+    assert remediation["target_id"] == "focus-rehearsal-telemetry-binding"
+    assert remediation["action"]["id"] == "source-focus-review-binding"
 
-    assert has_element?(
-             view,
-             ~s(#source-focus-dashboard-return[data-source-focus-dashboard-return="dashboard-return-1"][href*="/ops/dashboards/dashboard-return-1"][href*="activity_filter=publish_readiness"])
-           )
+    assert remediation["action"]["href"] ==
+             "#source-binding-focus-rehearsal-telemetry-binding"
 
-    assert has_element?(
-             view,
-             ~s(#source-binding-focus-rehearsal-telemetry-binding[data-source-focus])
-           )
+    assert remediation["dashboard_return"]["dashboard_id"] == "dashboard-return-1"
+    assert remediation["dashboard_return"]["href"] =~ "/ops/dashboards/dashboard-return-1"
+    assert remediation["dashboard_return"]["href"] =~ "activity_filter=publish_readiness"
+    assert binding_row(page, "focus-rehearsal-telemetry-binding")["focused"] == true
 
-    assert has_element?(view, "#source-focus-capability-mismatch")
+    sampling = capability_row(remediation, "sampling")
+    assert sampling["requested"] == "bounded_history"
+    assert sampling["supported"] == "latest"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-field="sampling"])
-           )
+    products = capability_row(remediation, "products")
+    assert products["requested"] == "bounded_receipt_time_history"
+    assert products["supported"] == "latest_value"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-requested="sampling"]),
-             "bounded_history"
-           )
+    value_kinds = capability_row(remediation, "value_kinds")
+    assert value_kinds["requested"] == "engineering"
+    assert value_kinds["supported"] == "raw"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-supported="sampling"]),
-             "latest"
-           )
+    compatible = candidate_row(remediation, "focus-history-telemetry-alt")
+    assert compatible["compatible"] == true
+    assert compatible["missing_text"] == "none"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-field="products"])
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-requested="products"]),
-             "bounded_receipt_time_history"
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-supported="products"]),
-             "latest_value"
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-field="value_kinds"])
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-requested="value_kinds"]),
-             "engineering"
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-supported="value_kinds"]),
-             "raw"
-           )
-
-    assert has_element?(view, "#source-focus-capability-candidates")
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-history-telemetry-alt"][data-source-capability-compatible="true"][data-source-capability-missing="none"])
-           )
-
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-latest-only-telemetry"][data-source-capability-compatible="false"][data-source-capability-missing*="sampling=bounded_history"])
-           )
+    blocked = candidate_row(remediation, "focus-latest-only-telemetry")
+    assert blocked["compatible"] == false
+    assert blocked["missing_text"] =~ "sampling=bounded_history"
   end
 
   test "shows operational metric history capability products in source remediation" do
@@ -278,76 +229,51 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-operational-latest-rf-history/settings?#{%{source_binding_id: "focus-operational-observables-binding", logical_source: "operational_observables", realm: "flight", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "raw_series", supported_sampling: "latest,event_history", requested_products: "link_rf", requested_source_products: "link_rf_metric_history", supported_products: "link_rf_metric_history", requested_product_families: "link_rf", supported_product_families: "link_rf"}}"
       )
 
-    assert has_element?(
-             view,
-             ~s(#ops-data-sources-page[data-source-focus-requested-source-products="link_rf_metric_history"][data-source-focus-requested-product-families="link_rf"])
-           )
+    page = ops_data_sources_page(view)
+    focus = page["focus"]
+    remediation = focus["remediation"]
 
-    assert has_element?(
-             view,
-             ~s(#data-source-focus-operational-rf-history[data-source-supported-sampling*="raw_series"][data-source-supported-metric-history-products="link_rf_metric_history"][data-source-supported-product-families="link_rf"])
-           )
+    assert focus["requested_source_products"] == "link_rf_metric_history"
+    assert focus["requested_product_families"] == "link_rf"
 
-    assert has_element?(
-             view,
-             ~s(#data-source-focus-operational-bitrate-history[data-source-supported-metric-history-products="transport_bitrate_history"][data-source-supported-product-families="transport_bitrate"])
-           )
+    history_source = source_row(page, "focus-operational-rf-history")
+    assert history_source["supported_sampling_text"] =~ "raw_series"
+    assert history_source["supported_metric_history_products_text"] == "link_rf_metric_history"
+    assert history_source["supported_product_families_text"] == "link_rf"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-field="source_products"])
-           )
+    bitrate_source = source_row(page, "focus-operational-bitrate-history")
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-requested="source_products"]),
+    assert bitrate_source["supported_metric_history_products_text"] ==
+             "transport_bitrate_history"
+
+    assert bitrate_source["supported_product_families_text"] == "transport_bitrate"
+
+    assert capability_row(remediation, "source_products")["requested"] ==
              "link_rf_metric_history"
-           )
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-field="product_families"])
-           )
+    assert capability_row(remediation, "product_families")["requested"] == "link_rf"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-mismatch-requested="product_families"]),
-             "link_rf"
-           )
+    compatible = candidate_row(remediation, "focus-operational-rf-history")
+    assert compatible["compatible"] == true
+    assert compatible["missing_text"] == "none"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-operational-rf-history"][data-source-capability-compatible="true"][data-source-capability-missing="none"])
-           )
+    latest = candidate_row(remediation, "focus-operational-latest-rf-history")
+    assert latest["compatible"] == false
+    assert latest["missing_text"] =~ "sampling=raw_series"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-operational-latest-rf-history"][data-source-capability-compatible="false"][data-source-capability-missing*="sampling=raw_series"])
-           )
+    bitrate = candidate_row(remediation, "focus-operational-bitrate-history")
+    assert bitrate["compatible"] == false
+    assert bitrate["missing_text"] =~ "source_products=link_rf_metric_history"
+    assert bitrate["missing_text"] =~ "product_families=link_rf"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-operational-bitrate-history"][data-source-capability-compatible="false"][data-source-capability-missing*="source_products=link_rf_metric_history"][data-source-capability-missing*="product_families=link_rf"])
-           )
+    render_hook(view, "open_change_binding", %{
+      "binding-id" => "focus-operational-observables-binding"
+    })
 
-    view
-    |> element("#change-binding-focus-operational-observables-binding")
-    |> render_click()
-
-    assert has_element?(
-             view,
-             ~s(#change-binding-form-focus-operational-observables-binding option[value="focus-operational-rf-history"])
-           )
-
-    refute has_element?(
-             view,
-             ~s(#change-binding-form-focus-operational-observables-binding option[value="focus-operational-latest-rf-history"])
-           )
-
-    refute has_element?(
-             view,
-             ~s(#change-binding-form-focus-operational-observables-binding option[value="focus-operational-bitrate-history"])
-           )
+    option_values = binding_option_values(view)
+    assert "focus-operational-rf-history" in option_values
+    refute "focus-operational-latest-rf-history" in option_values
+    refute "focus-operational-bitrate-history" in option_values
   end
 
   test "shows operational latest aggregate capability products in source remediation" do
@@ -360,20 +286,20 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-operational-rf-history", source_binding_id: "focus-operational-observables-binding", logical_source: "operational_observables", realm: "flight", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "latest", supported_sampling: "raw_series", requested_products: "link_rf", requested_source_products: "link_rf_metric", supported_products: "link_rf_metric_history", requested_product_families: "link_rf", supported_product_families: "link_rf"}}"
       )
 
-    assert has_element?(
-             view,
-             ~s(#data-source-focus-operational-latest-aggregate[data-source-supported-products="operational_latest"][data-source-supported-product-families*="link_rf"])
-           )
+    page = ops_data_sources_page(view)
+    latest = source_row(page, "focus-operational-latest-aggregate")
+    remediation = page["focus"]["remediation"]
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-operational-latest-aggregate"][data-source-capability-compatible="true"][data-source-capability-missing="none"])
-           )
+    assert latest["supported_products_text"] == "operational_latest"
+    assert latest["supported_product_families_text"] =~ "link_rf"
 
-    assert has_element?(
-             view,
-             ~s([data-source-capability-candidate="focus-operational-rf-history"][data-source-capability-compatible="false"][data-source-capability-missing*="source_products=link_rf_metric"])
-           )
+    compatible = candidate_row(remediation, "focus-operational-latest-aggregate")
+    assert compatible["compatible"] == true
+    assert compatible["missing_text"] == "none"
+
+    blocked = candidate_row(remediation, "focus-operational-rf-history")
+    assert blocked["compatible"] == false
+    assert blocked["missing_text"] =~ "source_products=link_rf_metric"
   end
 
   test "filters focused capability blocker binding changes to sources that satisfy the request" do
@@ -386,35 +312,22 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-rehearsal-questdb/settings?#{%{source_binding_id: "focus-rehearsal-telemetry-binding", logical_source: "telemetry", realm: "rehearsal", source_dashboard_id: "dashboard-return-1", source_empty_reason: "unsupported_source_capability", source_return_activity_event: "dashboard-readiness-event-2", source_return_activity_filter: "publish_readiness", source_return_panel: "versions", requested_sampling: "bounded_history", supported_sampling: "latest", requested_products: "bounded_receipt_time_history", supported_products: "latest_value", requested_value_kinds: "engineering", supported_value_kinds: "raw"}}"
       )
 
-    view
-    |> element("#change-binding-focus-rehearsal-telemetry-binding")
-    |> render_click()
+    render_hook(view, "open_change_binding", %{
+      "binding-id" => "focus-rehearsal-telemetry-binding"
+    })
 
-    assert has_element?(
-             view,
-             ~s(#change-binding-form-focus-rehearsal-telemetry-binding option[value="focus-history-telemetry-alt"])
-           )
+    option_values = binding_option_values(view)
+    assert "focus-history-telemetry-alt" in option_values
+    assert "focus-rehearsal-questdb" in option_values
+    refute "focus-latest-only-telemetry" in option_values
 
-    assert has_element?(
-             view,
-             ~s(#change-binding-form-focus-rehearsal-telemetry-binding option[value="focus-rehearsal-questdb"])
-           )
+    render_hook(view, "change_binding", %{
+      "binding" => %{"data_source_id" => "focus-history-telemetry-alt"}
+    })
 
-    refute has_element?(
-             view,
-             ~s(#change-binding-form-focus-rehearsal-telemetry-binding option[value="focus-latest-only-telemetry"])
-           )
-
-    view
-    |> form("#change-binding-form-focus-rehearsal-telemetry-binding",
-      binding: %{data_source_id: "focus-history-telemetry-alt"}
-    )
-    |> render_submit()
-
-    assert has_element?(
-             view,
-             ~s(#source-binding-focus-rehearsal-telemetry-binding[data-data-source-id="focus-history-telemetry-alt"])
-           )
+    assert binding_row(ops_data_sources_page(view), "focus-rehearsal-telemetry-binding")[
+             "data_source_id"
+           ] == "focus-history-telemetry-alt"
 
     assert [changed_event | _events] =
              DataSources.list_data_binding_events("focus-rehearsal-telemetry-binding")
@@ -427,5 +340,36 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     assert changed_event.payload["source_focus_binding_id"] == "focus-rehearsal-telemetry-binding"
     assert changed_event.payload["previous_data_source_id"] == "focus-rehearsal-questdb"
     assert changed_event.payload["current_data_source_id"] == "focus-history-telemetry-alt"
+  end
+
+  defp ops_data_sources_page(view_or_html) do
+    view_or_html
+    |> LiveVue.Test.get_vue(id: "ops-data-sources-component")
+    |> then(& &1.props["page"])
+  end
+
+  defp source_row(page, data_source_id) do
+    Enum.find(page["sources"]["rows"], &(&1["data_source_id"] == data_source_id))
+  end
+
+  defp binding_row(page, binding_id) do
+    page["bindings"]["groups"]
+    |> Enum.flat_map(& &1["rows"])
+    |> Enum.find(&(&1["binding_id"] == binding_id))
+  end
+
+  defp capability_row(remediation, key) do
+    Enum.find(remediation["capability_rows"], &(&1["key"] == key))
+  end
+
+  defp candidate_row(remediation, data_source_id) do
+    Enum.find(remediation["candidate_rows"], &(&1["data_source_id"] == data_source_id))
+  end
+
+  defp binding_option_values(view_or_html) do
+    view_or_html
+    |> ops_data_sources_page()
+    |> get_in(["admin", "binding_form", "source_options"])
+    |> Enum.map(& &1["value"])
   end
 end
