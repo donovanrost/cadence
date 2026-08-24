@@ -264,8 +264,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              %{
                "key" => "primary-0",
                "tag" => "span",
-               "class" =>
-                 "badge badge-xs badge-info badge-outline data-management-primary",
+               "class" => "badge badge-xs badge-info badge-outline data-management-primary",
                "attrs" => %{
                  "data-data-management-badge" => "all_revisions",
                  "data-data-management-kind" => "data_view",
@@ -282,8 +281,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              %{
                "key" => "primary-1",
                "tag" => "span",
-               "class" =>
-                 "badge badge-xs badge-info badge-outline data-management-primary",
+               "class" => "badge badge-xs badge-info badge-outline data-management-primary",
                "attrs" => %{
                  "data-data-management-badge" => "corrected",
                  "data-data-management-kind" => "data_view",
@@ -300,8 +298,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              %{
                "key" => "primary-2",
                "tag" => "button",
-               "class" =>
-                 "badge badge-xs cursor-pointer badge-warning data-management-primary",
+               "class" => "badge badge-xs cursor-pointer badge-warning data-management-primary",
                "attrs" => %{
                  "type" => "button",
                  "phx-click" => "open_data_link",
@@ -344,8 +341,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              %{
                "key" => "compare-0",
                "tag" => "span",
-               "class" =>
-                 "badge badge-xs badge-info badge-outline data-management-compare",
+               "class" => "badge badge-xs badge-info badge-outline data-management-compare",
                "attrs" => %{
                  "data-data-management-badge" => "recomputed",
                  "data-data-management-kind" => "data_view",
@@ -362,8 +358,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
              %{
                "key" => "compare-1",
                "tag" => "span",
-               "class" =>
-                 "badge badge-xs badge-info badge-outline data-management-compare",
+               "class" => "badge badge-xs badge-info badge-outline data-management-compare",
                "attrs" => %{
                  "data-data-management-badge" => "backfill",
                  "data-data-management-kind" => "data_view",

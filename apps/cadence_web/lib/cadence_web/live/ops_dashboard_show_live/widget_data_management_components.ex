@@ -100,7 +100,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
 
   def chart_data_management_strip(assigns) do
     primary_badges = widget_data_management_badges([assigns.data, assigns.backfill])
-    compare_badges = widget_data_management_badges([assigns.compare_data, assigns.compare_backfill])
+
+    compare_badges =
+      widget_data_management_badges([assigns.compare_data, assigns.compare_backfill])
 
     presentation =
       if primary_badges != [] or compare_badges != [] or present_text?(assigns.compare_data_view) do
@@ -252,7 +254,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
       "data-data-management-workflow-job-status" =>
         fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_status)),
       "data-data-management-workflow-job-failure" =>
-        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_failure)),
+        fallback_empty_attr_value(
+          data_management_badge_context_attr(badge, :workflow_job_failure)
+        ),
       "data-data-management-summary" => fallback_empty_attr_value(summary),
       "title" => direct_attr_value(title)
     })
@@ -279,7 +283,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
       "data-data-management-workflow-job-status" =>
         fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_status)),
       "data-data-management-workflow-job-failure" =>
-        fallback_empty_attr_value(data_management_badge_context_attr(badge, :workflow_job_failure)),
+        fallback_empty_attr_value(
+          data_management_badge_context_attr(badge, :workflow_job_failure)
+        ),
       "data-data-management-summary" => fallback_empty_attr_value(summary),
       "title" => direct_attr_value(title)
     })
