@@ -657,38 +657,60 @@ defmodule CadenceWeb.AdminLiveTest do
 
       {:ok, view, _html} = live(admin_conn, ~p"/admin/runtime")
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-page[data-runtime-decision-count="1"][data-runtime-decision-status-summary="filtered:1"][data-runtime-decision-refresh-summary="stale_for_context:1"])
-             )
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
 
-      assert has_element?(view, "#runtime-decision-count", "1")
-      assert has_element?(view, "#runtime-refresh-suppressed", "1")
-      assert has_element?(view, "#runtime-filtered", "1")
+      assert vue.component == "AdminRuntime"
+      assert vue.class == "contents"
+      assert vue.ssr == false
+      assert vue.slots == %{}
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="dashboard"]),
-               "dashboard-admin-runtime"
-             )
+      assert vue.handlers == %{
+               "filter_decisions" => JS.push("filter_decisions"),
+               "refresh" => JS.push("refresh")
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="context"]),
-               "replay_run_mismatch"
-             )
+      assert %{
+               "decision_count" => 1,
+               "refresh_summary" => "stale_for_context:1",
+               "selected_decision_state" => "none",
+               "source_summary" => "runtime_health:1",
+               "status_summary" => "filtered:1",
+               "stats" => stats
+             } = vue.props["summary"]
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="refresh"]),
-               "stale_for_context"
-             )
+      assert Map.new(stats, &{&1["id"], &1["value"]}) == %{
+               "runtime-decision-count" => 1,
+               "runtime-filtered" => 1,
+               "runtime-refresh-allowed" => 0,
+               "runtime-refresh-suppressed" => 1
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="source"]),
-               "runtime_health"
-             )
+      assert vue.props["filters"]["values"] == %{
+               "affected_placement_id" => "",
+               "boundary" => "",
+               "context_reason" => "",
+               "dashboard_id" => "",
+               "mission_id" => "",
+               "replay_run_id" => ""
+             }
+
+      assert [decision] =
+               vue.streams_diff
+               |> Enum.filter(fn
+                 ["upsert", "/decisions/" <> _index, _row] -> true
+                 _operation -> false
+               end)
+               |> Enum.map(fn ["upsert", _path, row] -> row end)
+
+      assert Map.take(decision, ["dashboard", "context", "refresh", "source"]) == %{
+               "context" => "replay_run_mismatch",
+               "dashboard" => "dashboard-admin-runtime",
+               "refresh" => "stale_for_context",
+               "source" => "runtime_health"
+             }
+
+      contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+      assert contract == Jason.decode!(Jason.encode!(contract))
     end
 
     test "admin can filter durable runtime invalidation decisions by impact metadata", %{
@@ -714,7 +736,8 @@ defmodule CadenceWeb.AdminLiveTest do
             mission_id: mission.mission_id,
             logical_source: :telemetry,
             observable: "HK.counter",
-            replay_run_id: "replay-admin-run-1"
+            replay_run_id: "replay-admin-run-1",
+            access_token: "runtime-token-sentinel"
           },
           %{},
           %{source_results: 2, frames: 1, total: 3},
@@ -738,6 +761,7 @@ defmodule CadenceWeb.AdminLiveTest do
                    affected_placement_ids: ["placement-admin-counter"],
                    affected_widget_type_ids: ["cadence.value_tile"],
                    affected_impact_reasons: [:primary_source],
+                   api_secret: "runtime-secret-sentinel",
                    decision_status: :filtered
                  },
                  invalidation_event_id: Event.id(matching_invalidation),
@@ -789,81 +813,133 @@ defmodule CadenceWeb.AdminLiveTest do
           ~p"/admin/runtime?#{%{dashboard_id: dashboard.dashboard_id, boundary: "source_watermark_changed", context_reason: "replay_run_mismatch", replay_run_id: "replay-admin-run-1", affected_placement_id: "placement-admin-counter", decision: matching_decision_event.dashboard_runtime_invalidation_decision_event_id}}"
         )
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-page[data-runtime-decision-count="1"][data-runtime-decision-source-summary="durable_projection:1"][data-runtime-decision-filter-dashboard="#{dashboard.dashboard_id}"][data-runtime-decision-filter-replay-run="replay-admin-run-1"][data-runtime-decision-filter-affected-placement="placement-admin-counter"][data-runtime-selected-decision-state="visible"])
-             )
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="source"]),
-               "durable_projection"
-             )
+      assert Map.take(vue.props["summary"], [
+               "decision_count",
+               "selected_decision_state",
+               "source_summary"
+             ]) == %{
+               "decision_count" => 1,
+               "selected_decision_state" => "visible",
+               "source_summary" => "durable_projection:1"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-placements"]),
-               "placement-admin-counter"
-             )
+      assert Map.take(vue.props["filters"]["values"], [
+               "affected_placement_id",
+               "dashboard_id",
+               "replay_run_id"
+             ]) == %{
+               "affected_placement_id" => "placement-admin-counter",
+               "dashboard_id" => dashboard.dashboard_id,
+               "replay_run_id" => "replay-admin-run-1"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-impact"]),
-               "primary_source"
-             )
+      assert [decision] =
+               vue.streams_diff
+               |> Enum.filter(fn
+                 ["upsert", "/decisions/" <> _index, _row] -> true
+                 _operation -> false
+               end)
+               |> Enum.map(fn ["upsert", _path, row] -> row end)
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="replay-run"]),
-               "replay-admin-run-1"
-             )
+      assert Map.take(decision, [
+               "affected_impact",
+               "affected_placements",
+               "replay_run",
+               "source"
+             ]) == %{
+               "affected_impact" => "primary_source",
+               "affected_placements" => "placement-admin-counter",
+               "replay_run" => "replay-admin-run-1",
+               "source" => "durable_projection"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail-evidence[data-runtime-decision-detail-key="#{matching_decision_event.dashboard_runtime_invalidation_decision_event_id}"][data-runtime-decision-detail-source="durable_projection"])
-             )
+      refute decision["affected_placements"] =~ "placement-admin-voltage"
+      refute decision["replay_run"] =~ "replay-admin-run-2"
+      assert decision["inspect_action"]["selected"] == true
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Decision-ID"]),
+      assert URI.decode_query(URI.parse(decision["inspect_action"]["href"]).query) == %{
+               "affected_placement_id" => "placement-admin-counter",
+               "boundary" => "source_watermark_changed",
+               "context_reason" => "replay_run_mismatch",
+               "dashboard_id" => dashboard.dashboard_id,
+               "decision" =>
+                 matching_decision_event.dashboard_runtime_invalidation_decision_event_id,
+               "replay_run_id" => "replay-admin-run-1"
+             }
+
+      selection = vue.props["selection"]
+      assert selection["state"] == "visible"
+      assert selection["missing"] == false
+      assert selection["outside_results"] == false
+      assert selection["context_href"] == nil
+
+      detail = selection["detail"]
+
+      assert Map.take(detail["evidence"], ["decision_key", "source"]) == %{
+               "decision_key" =>
+                 matching_decision_event.dashboard_runtime_invalidation_decision_event_id,
+               "source" => "durable_projection"
+             }
+
+      facts =
+        detail["evidence"]["groups"]
+        |> Enum.flat_map(& &1["facts"])
+        |> Map.new(&{&1["label"], &1["value"]})
+
+      assert facts["Decision ID"] ==
                matching_decision_event.dashboard_runtime_invalidation_decision_event_id
-             )
 
-      assert has_element?(
-               view,
-               "#admin-runtime-decision-detail-filters",
-               "HK.counter"
-             )
+      assert facts["Replay Run"] == "replay-admin-run-1"
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Replay-Run"]),
-               "replay-admin-run-1"
-             )
+      sections = Map.new(detail["sections"], &{&1["label"], &1})
+      filter_pairs = Map.new(sections["Filters"]["pairs"], &{&1["label"], &1["value"]})
 
-      assert has_element?(
-               view,
-               "#admin-runtime-decision-detail-measurements",
-               "source_results"
-             )
+      measurement_pairs =
+        Map.new(sections["Measurements"]["pairs"], &{&1["label"], &1["value"]})
 
-      assert has_element?(
-               view,
-               "#admin-runtime-decision-detail-decision",
-               "dashboard_matches?"
-             )
+      decision_pairs =
+        Map.new(sections["Decision Payload"]["pairs"], &{&1["label"], &1["value"]})
 
-      refute has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-placements"]),
-               "placement-admin-voltage"
-             )
+      assert filter_pairs["observable"] == "HK.counter"
+      assert measurement_pairs["source_results"] == "2"
+      assert decision_pairs["dashboard_matches?"] == "true"
 
-      refute has_element?(
-               view,
-               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="replay-run"]),
-               "replay-admin-run-2"
-             )
+      assert URI.decode_query(URI.parse(detail["close_action"]["href"]).query) == %{
+               "affected_placement_id" => "placement-admin-counter",
+               "boundary" => "source_watermark_changed",
+               "context_reason" => "replay_run_mismatch",
+               "dashboard_id" => dashboard.dashboard_id,
+               "replay_run_id" => "replay-admin-run-1"
+             }
+
+      encoded_contract =
+        Jason.encode!(%{"props" => vue.props, "streams_diff" => vue.streams_diff})
+
+      refute encoded_contract =~ "runtime-token-sentinel"
+      refute encoded_contract =~ "runtime-secret-sentinel"
+      refute encoded_contract =~ "access_token"
+      refute encoded_contract =~ "api_secret"
+
+      render_hook(view, "refresh", %{})
+      refreshed_vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
+
+      assert refreshed_vue.props == vue.props
+
+      assert refreshed_vue.streams_diff
+             |> Enum.filter(fn
+               ["upsert", "/decisions/" <> _index, _row] -> true
+               _operation -> false
+             end)
+             |> Enum.map(fn ["upsert", _path, row] -> row end) == [decision]
+
+      refreshed_contract = %{
+        "props" => refreshed_vue.props,
+        "streams_diff" => refreshed_vue.streams_diff
+      }
+
+      assert refreshed_contract == Jason.decode!(Jason.encode!(refreshed_contract))
     end
 
     test "admin deep links render selected decision detail outside filtered results", %{
@@ -925,34 +1001,36 @@ defmodule CadenceWeb.AdminLiveTest do
           ~p"/admin/runtime?#{%{dashboard_id: "dashboard-filter-miss", decision: decision_event.dashboard_runtime_invalidation_decision_event_id}}"
         )
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-page[data-runtime-decision-count="0"][data-runtime-decision-filter-dashboard="dashboard-filter-miss"][data-runtime-selected-decision-state="outside_results"])
-             )
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
 
-      assert has_element?(view, "#admin-runtime-decisions-empty")
-      refute has_element?(view, "#admin-runtime-decision-detail-missing")
+      assert Map.take(vue.props["summary"], ["decision_count", "selected_decision_state"]) == %{
+               "decision_count" => 0,
+               "selected_decision_state" => "outside_results"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail-outside-results[data-runtime-selected-decision-key="#{decision_event.dashboard_runtime_invalidation_decision_event_id}"]),
-               "outside the current filtered result set"
-             )
+      assert vue.props["filters"]["values"]["dashboard_id"] == "dashboard-filter-miss"
 
-      assert has_element?(
-               view,
-               "#admin-runtime-show-selected-context",
-               "Show in table context"
-             )
+      assert vue.streams_diff
+             |> Enum.filter(fn
+               ["upsert", "/decisions/" <> _index, _row] -> true
+               _operation -> false
+             end) == []
 
-      context_link =
-        view
-        |> element("#admin-runtime-decision-detail-outside-results")
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#admin-runtime-decision-detail-outside-results")
-        |> LazyHTML.attribute("data-runtime-selected-decision-context-link")
-        |> List.first()
+      selection = vue.props["selection"]
+
+      assert Map.take(selection, [
+               "decision_key",
+               "missing",
+               "outside_results",
+               "state"
+             ]) == %{
+               "decision_key" => decision_event.dashboard_runtime_invalidation_decision_event_id,
+               "missing" => false,
+               "outside_results" => true,
+               "state" => "outside_results"
+             }
+
+      context_link = selection["context_href"]
 
       assert URI.parse(context_link).path == "/admin/runtime"
 
@@ -966,30 +1044,44 @@ defmodule CadenceWeb.AdminLiveTest do
                "replay_run_id" => "replay-admin-deep-link"
              }
 
-      assert [^context_link] =
-               view
-               |> element("#admin-runtime-decision-detail-outside-results")
-               |> render()
-               |> LazyHTML.from_fragment()
-               |> LazyHTML.query("#admin-runtime-show-selected-context")
-               |> LazyHTML.attribute("href")
+      detail = selection["detail"]
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail-evidence[data-runtime-decision-detail-key="#{decision_event.dashboard_runtime_invalidation_decision_event_id}"][data-runtime-decision-detail-source="durable_projection"])
-             )
+      assert Map.take(detail["evidence"], ["decision_key", "source"]) == %{
+               "decision_key" => decision_event.dashboard_runtime_invalidation_decision_event_id,
+               "source" => "durable_projection"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Decision-ID"]),
+      facts =
+        detail["evidence"]["groups"]
+        |> Enum.flat_map(& &1["facts"])
+        |> Map.new(&{&1["label"], &1["value"]})
+
+      assert facts["Decision ID"] ==
                decision_event.dashboard_runtime_invalidation_decision_event_id
-             )
 
-      assert has_element?(
-               view,
-               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Replay-Run"]),
-               "replay-admin-deep-link"
-             )
+      assert facts["Replay Run"] == "replay-admin-deep-link"
+
+      render_patch(view, context_link)
+      context_vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
+
+      assert Map.take(context_vue.props["summary"], [
+               "decision_count",
+               "selected_decision_state"
+             ]) == %{
+               "decision_count" => 1,
+               "selected_decision_state" => "visible"
+             }
+
+      assert [context_row] =
+               context_vue.streams_diff
+               |> Enum.filter(fn
+                 ["upsert", "/decisions/" <> _index, _row] -> true
+                 _operation -> false
+               end)
+               |> Enum.map(fn ["upsert", _path, row] -> row end)
+
+      assert context_row["key"] ==
+               decision_event.dashboard_runtime_invalidation_decision_event_id
     end
 
     test "admin runtime diagnostics show an empty decision state", %{admin_conn: admin_conn} do
@@ -997,8 +1089,94 @@ defmodule CadenceWeb.AdminLiveTest do
 
       {:ok, view, _html} = live(admin_conn, ~p"/admin/runtime")
 
-      assert has_element?(view, "#admin-runtime-page[data-runtime-decision-count=\"0\"]")
-      assert has_element?(view, "#admin-runtime-decisions-empty")
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
+
+      assert vue.props["summary"]["decision_count"] == 0
+
+      assert vue.props["summary"]["empty_state"] == %{
+               "copy" => "No dashboard runtime invalidation decisions have been recorded.",
+               "id" => "admin-runtime-decisions-empty"
+             }
+
+      assert vue.streams_diff
+             |> Enum.filter(fn
+               ["upsert", "/decisions/" <> _index, _row] -> true
+               _operation -> false
+             end) == []
+    end
+
+    test "runtime filter events normalize string values and keep the URL canonical", %{
+      admin_conn: admin_conn
+    } do
+      reset_runtime_health!()
+
+      {:ok, view, _html} = live(admin_conn, ~p"/admin/runtime")
+
+      render_hook(view, "filter_decisions", %{
+        "runtime_decision_filters" => %{
+          "affected_placement_id" => "",
+          "boundary" => " source_watermark_changed ",
+          "context_reason" => "",
+          "dashboard_id" => " dashboard-canonical ",
+          "ignored" => "not-projected",
+          "mission_id" => "",
+          "replay_run_id" => " replay-canonical "
+        }
+      })
+
+      patched_path = assert_patch(view)
+      assert URI.parse(patched_path).path == "/admin/runtime"
+
+      assert URI.decode_query(URI.parse(patched_path).query) == %{
+               "boundary" => "source_watermark_changed",
+               "dashboard_id" => "dashboard-canonical",
+               "replay_run_id" => "replay-canonical"
+             }
+
+      render_patch(view, patched_path)
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
+
+      assert vue.props["filters"]["values"] == %{
+               "affected_placement_id" => "",
+               "boundary" => "source_watermark_changed",
+               "context_reason" => "",
+               "dashboard_id" => "dashboard-canonical",
+               "mission_id" => "",
+               "replay_run_id" => "replay-canonical"
+             }
+
+      assert vue.props["filters"]["clear_href"] == "/admin/runtime"
+
+      assert Enum.map(vue.props["filters"]["fields"], & &1["key"]) == [
+               "dashboard_id",
+               "mission_id",
+               "boundary",
+               "context_reason",
+               "replay_run_id",
+               "affected_placement_id"
+             ]
+    end
+
+    test "missing selected decisions remain an explicit server-owned state", %{
+      admin_conn: admin_conn
+    } do
+      reset_runtime_health!()
+
+      {:ok, view, _html} =
+        live(admin_conn, ~p"/admin/runtime?decision=missing-runtime-decision")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-runtime-component")
+
+      assert vue.props["summary"]["selected_decision_state"] == "missing"
+
+      assert vue.props["selection"] == %{
+               "context_href" => nil,
+               "decision_key" => "missing-runtime-decision",
+               "detail" => nil,
+               "missing" => true,
+               "outside_results" => false,
+               "state" => "missing"
+             }
     end
   end
 
