@@ -80,26 +80,154 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
       transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
 
-      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
 
-      assert has_element?(view, "#comms-routing-new-page")
-      assert has_element?(view, "#routing-rule-form")
-      assert html =~ "New Routing Rule"
-      assert html =~ "Contacts and runtime Links are handled later."
+      assert has_element?(view, "#comms-routing-new-component")
+      refute has_element?(view, "#comms-routing-new-page")
+      refute has_element?(view, "#routing-rule-form")
+      assert has_element?(view, "details[open] a", "Routing")
+      assert has_element?(view, ".drawer-side", org.display_name)
+      assert has_element?(view, ".drawer-side", mission.display_name)
 
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#routing-rule-form",
-                 routing_rule: %{
-                   display_name: "Alpha live telemetry via Lab TCP",
-                   purpose_label: "Live telemetry",
-                   spacecraft_id: spacecraft.spacecraft_id,
-                   transport_ref: "#{transport.transport_id}:#{transport.version}",
-                   direction: "inbound",
-                   role: "primary"
+      vue = comms_routing_new_vue(view)
+
+      assert vue.component == "CommsRoutingNew"
+      assert vue.class == "space-y-6 max-w-2xl"
+      assert vue.ssr == false
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+      assert vue.handlers == %{
+               "save" => Phoenix.LiveView.JS.push("save"),
+               "validate" => Phoenix.LiveView.JS.push("validate")
+             }
+
+      assert vue.props == %{
+               "page" => %{
+                 "id" => "comms-routing-new-page",
+                 "title" => "New Routing Rule",
+                 "subtitle" =>
+                   "Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Comms",
+                     "href" => "/missions/#{mission.mission_id}/comms"
+                   },
+                   %{
+                     "label" => "Routing",
+                     "href" => "/missions/#{mission.mission_id}/comms/routing"
+                   },
+                   %{"label" => "New Routing Rule", "href" => nil}
+                 ]
+               },
+               "form" => %{
+                 "id" => "routing-rule-form",
+                 "sections" => %{
+                   "intent" => %{"number" => "01", "title" => "Intent"},
+                   "transport" => %{
+                     "number" => "02",
+                     "title" => "Spacecraft And Transport"
+                   },
+                   "policy" => %{"number" => "03", "title" => "Routing Policy"}
+                 },
+                 "fields" => %{
+                   "display_name" => %{
+                     "id" => "routing_rule_display_name",
+                     "name" => "routing_rule[display_name]",
+                     "type" => "text",
+                     "label" => "Display Name",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "purpose_label" => %{
+                     "id" => "routing_rule_purpose_label",
+                     "name" => "routing_rule[purpose_label]",
+                     "type" => "text",
+                     "label" => "Purpose",
+                     "required" => true,
+                     "value" => "Live telemetry"
+                   },
+                   "spacecraft_id" => %{
+                     "id" => "routing_rule_spacecraft_id",
+                     "name" => "routing_rule[spacecraft_id]",
+                     "type" => "select",
+                     "label" => "Spacecraft",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "transport_ref" => %{
+                     "id" => "routing_rule_transport_ref",
+                     "name" => "routing_rule[transport_ref]",
+                     "type" => "select",
+                     "label" => "Transport",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "direction" => %{
+                     "id" => "routing_rule_direction",
+                     "name" => "routing_rule[direction]",
+                     "type" => "select",
+                     "label" => "Direction",
+                     "required" => true,
+                     "value" => "inbound"
+                   },
+                   "role" => %{
+                     "id" => "routing_rule_role",
+                     "name" => "routing_rule[role]",
+                     "type" => "select",
+                     "label" => "Role",
+                     "required" => true,
+                     "value" => "primary"
+                   }
+                 },
+                 "actions" => %{
+                   "submit" => %{"label" => "Create Routing Rule"},
+                   "cancel" => %{
+                     "label" => "Cancel",
+                     "href" => "/missions/#{mission.mission_id}/comms/routing"
+                   }
                  }
-               )
-               |> render_submit()
+               },
+               "options" => %{
+                 "spacecraft" => [
+                   %{"label" => "Select spacecraft", "value" => ""},
+                   %{"label" => spacecraft.display_name, "value" => spacecraft.spacecraft_id}
+                 ],
+                 "transports" => [
+                   %{"label" => "Select transport", "value" => ""},
+                   %{
+                     "label" => "#{transport.display_name} (v#{transport.version})",
+                     "value" => "#{transport.transport_id}:#{transport.version}"
+                   }
+                 ],
+                 "directions" => [
+                   %{"label" => "Inbound", "value" => "inbound"},
+                   %{"label" => "Outbound", "value" => "outbound"},
+                   %{"label" => "Bidirectional", "value" => "bidirectional"}
+                 ],
+                 "roles" => [
+                   %{"label" => "Primary", "value" => "primary"},
+                   %{"label" => "Candidate", "value" => "candidate"},
+                   %{"label" => "Contributing", "value" => "contributing"}
+                 ]
+               }
+             }
+
+      render_hook(view, "save", %{
+        "routing_rule" => %{
+          "display_name" => "Alpha live telemetry via Lab TCP",
+          "purpose_label" => "Live telemetry",
+          "spacecraft_id" => spacecraft.spacecraft_id,
+          "transport_ref" => "#{transport.transport_id}:#{transport.version}",
+          "direction" => "inbound",
+          "role" => "primary"
+        }
+      })
+
+      {target, _flash} = assert_redirect(view)
 
       assert target =~ "/missions/#{mission.mission_id}/comms/routing/"
 
@@ -187,6 +315,192 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       refute Enum.any?(
                vue.props["rule"]["details"] ++ vue.props["rule"]["runtime_artifacts"],
                &(&1["label"] == "Link Template")
+             )
+    end
+
+    test "preserves nested validate values in the Vue form DTO" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
+
+      params = %{
+        "display_name" => "Alpha outbound command",
+        "purpose_label" => "Command relay",
+        "spacecraft_id" => spacecraft.spacecraft_id,
+        "transport_ref" => "#{transport.transport_id}:#{transport.version}",
+        "direction" => "outbound",
+        "role" => "candidate"
+      }
+
+      render_hook(view, "validate", %{"routing_rule" => params})
+
+      values =
+        view
+        |> comms_routing_new_vue()
+        |> Map.fetch!(:props)
+        |> get_in(["form", "fields"])
+        |> Map.new(fn {name, field} -> {name, field["value"]} end)
+
+      assert values == params
+    end
+
+    test "preserves exact required and invalid save errors" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+      valid_params = valid_routing_rule_params(spacecraft, transport)
+
+      cases = [
+        {%{"display_name" => "   "}, "Display name is required."},
+        {%{"purpose_label" => "   "}, "Purpose is required."},
+        {%{"spacecraft_id" => ""}, "Spacecraft is required."},
+        {%{"transport_ref" => ""}, "Transport is required."},
+        {%{"transport_ref" => "#{transport.transport_id}:0"}, "Transport is invalid."},
+        {%{"direction" => "sideways"}, "Direction is invalid."},
+        {%{"role" => "backup"}, "Role is invalid."}
+      ]
+
+      for {overrides, message} <- cases do
+        {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
+
+        render_hook(view, "save", %{
+          "routing_rule" => Map.merge(valid_params, overrides)
+        })
+
+        assert has_element?(view, "#flash-error[role='alert']", message)
+      end
+
+      assert RoutingRuleStore.list_routing_rules(org.organization_id, mission.mission_id) == []
+    end
+
+    test "trims text and preserves the parsed transport version when saving" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
+
+      params =
+        spacecraft
+        |> valid_routing_rule_params(transport)
+        |> Map.merge(%{
+          "display_name" => "  Alpha trimmed routing rule  ",
+          "purpose_label" => "  Live telemetry  "
+        })
+
+      render_hook(view, "save", %{"routing_rule" => params})
+
+      {_target, _flash} = assert_redirect(view)
+      assert [rule] = RoutingRuleStore.list_routing_rules(org.organization_id, mission.mission_id)
+      assert rule.display_name == "Alpha trimmed routing rule"
+      assert rule.purpose_label == "Live telemetry"
+      assert rule.transport_id == transport.transport_id
+      assert rule.transport_version == transport.version
+    end
+
+    test "preselects local spacecraft, preserves option order, and excludes foreign scope" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      bravo = TestFixtures.persist_spacecraft!(mission, display_name: "Bravo", scid: 43)
+      alpha = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      zulu_transport = persist_transport!(org.organization_id, mission.mission_id, "Zulu TCP")
+      alpha_transport = persist_transport!(org.organization_id, mission.mission_id, "Alpha TCP")
+
+      other_mission =
+        TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary Mission")
+
+      sibling_spacecraft =
+        TestFixtures.persist_spacecraft!(other_mission, display_name: "Sibling", scid: 44)
+
+      sibling_transport =
+        persist_transport!(org.organization_id, other_mission.mission_id, "Sibling TCP")
+
+      other_org = TestFixtures.persist_org!(display_name: "Remote Org", slug: "remote-org")
+      remote_mission = TestFixtures.persist_mission!(other_org, slug: "remote")
+      remote_spacecraft = TestFixtures.persist_spacecraft!(remote_mission, display_name: "Remote")
+
+      remote_transport =
+        persist_transport!(other_org.organization_id, remote_mission.mission_id, "Remote TCP")
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/missions/#{mission.mission_id}/comms/routing/new?spacecraft_id=#{bravo.spacecraft_id}"
+        )
+
+      props = comms_routing_new_vue(view).props
+
+      assert props["form"]["fields"]["spacecraft_id"]["value"] == bravo.spacecraft_id
+
+      local_spacecraft =
+        [bravo, alpha]
+        |> Enum.sort_by(& &1.spacecraft_id)
+        |> Enum.map(&%{"label" => &1.display_name, "value" => &1.spacecraft_id})
+
+      assert props["options"]["spacecraft"] ==
+               [%{"label" => "Select spacecraft", "value" => ""} | local_spacecraft]
+
+      assert props["options"]["transports"] == [
+               %{"label" => "Select transport", "value" => ""},
+               %{
+                 "label" => "Alpha TCP (v#{alpha_transport.version})",
+                 "value" => "#{alpha_transport.transport_id}:#{alpha_transport.version}"
+               },
+               %{
+                 "label" => "Zulu TCP (v#{zulu_transport.version})",
+                 "value" => "#{zulu_transport.transport_id}:#{zulu_transport.version}"
+               }
+             ]
+
+      foreign_values = [
+        sibling_spacecraft.spacecraft_id,
+        remote_spacecraft.spacecraft_id,
+        "#{sibling_transport.transport_id}:#{sibling_transport.version}",
+        "#{remote_transport.transport_id}:#{remote_transport.version}"
+      ]
+
+      option_values =
+        Enum.flat_map(
+          [props["options"]["spacecraft"], props["options"]["transports"]],
+          &Enum.map(&1, fn option -> option["value"] end)
+        )
+
+      refute Enum.any?(foreign_values, &(&1 in option_values))
+
+      params =
+        valid_routing_rule_params(bravo, alpha_transport)
+        |> Map.put("spacecraft_id", sibling_spacecraft.spacecraft_id)
+
+      render_hook(view, "save", %{"routing_rule" => params})
+
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Failed to create routing rule: :spacecraft_not_found"
+             )
+
+      assert RoutingRuleStore.list_routing_rules(org.organization_id, mission.mission_id) == []
+    end
+
+    test "preserves humanized changeset error formatting" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+      transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/new")
+
+      params =
+        spacecraft
+        |> valid_routing_rule_params(transport)
+        |> Map.put("display_name", String.duplicate("x", 201))
+
+      render_hook(view, "save", %{"routing_rule" => params})
+
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Display name should be at most 200 character(s)"
              )
     end
 
@@ -555,6 +869,21 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
     assert is_binary(Jason.encode!(vue.props))
 
     vue
+  end
+
+  defp comms_routing_new_vue(view) do
+    LiveVue.Test.get_vue(view, id: "comms-routing-new-component")
+  end
+
+  defp valid_routing_rule_params(spacecraft, transport) do
+    %{
+      "display_name" => "Alpha live telemetry via Lab TCP",
+      "purpose_label" => "Live telemetry",
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "transport_ref" => "#{transport.transport_id}:#{transport.version}",
+      "direction" => "inbound",
+      "role" => "primary"
+    }
   end
 
   defp persist_transport!(organization_id, mission_id, display_name) do
