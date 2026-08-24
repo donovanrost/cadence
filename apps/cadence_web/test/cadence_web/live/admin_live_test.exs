@@ -573,6 +573,17 @@ defmodule CadenceWeb.AdminLiveTest do
                "grant_platform_admin" => true
              }
 
+      assert Cadence.Accounts.list_pending_invitations(org.organization_id) == []
+    end
+
+    test "unknown invitation roles preserve the existing member fallback", %{
+      admin_conn: admin_conn
+    } do
+      org = create_test_org!("Cadence Ops", "cadence-ops")
+
+      {:ok, view, _html} =
+        live(admin_conn, ~p"/admin/organizations/#{org.organization_id}/invite")
+
       render_hook(view, "save", %{
         "invite" => %{
           "email" => "operator@example.com",
@@ -582,26 +593,22 @@ defmodule CadenceWeb.AdminLiveTest do
         }
       })
 
-      assert has_element?(view, "#flash-error[role='alert']", "Select a valid role.")
+      {redirect_path, flash} = assert_redirect(view)
+      assert redirect_path == ~p"/admin/organizations/#{org.organization_id}"
+      assert flash["info"] == "Invitation sent to operator@example.com."
 
-      vue = LiveVue.Test.get_vue(view, id: "admin-organization-invite-component")
+      assert_received {:email, email}
+      assert email.to == [{"", "operator@example.com"}]
 
-      assert vue.props["form"] == %{
-               "email" => "operator@example.com",
-               "display_name" => "Pending Operator",
-               "membership_role" => "invalid-role",
-               "grant_platform_admin" => false
-             }
-
-      assert Cadence.Accounts.list_pending_invitations(org.organization_id) == []
+      assert [invitation] = Cadence.Accounts.list_pending_invitations(org.organization_id)
+      assert invitation.membership_role == :member
+      assert invitation.grant_platform_admin == false
     end
 
     test "missing organization flashes and redirects to the organization list", %{
       admin_conn: admin_conn
     } do
-      assert {:error,
-              {:live_redirect,
-               %{to: to, flash: %{"error" => "Organization not found."}}}} =
+      assert {:error, {:live_redirect, %{to: to, flash: %{"error" => "Organization not found."}}}} =
                live(admin_conn, ~p"/admin/organizations/missing/invite")
 
       assert to == ~p"/admin/organizations"
