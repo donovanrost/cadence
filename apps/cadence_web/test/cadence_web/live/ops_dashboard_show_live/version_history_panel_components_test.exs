@@ -35,13 +35,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
       )
 
-    version_list =
-      LiveVue.Test.get_vue(html, id: "dashboard-version-overview-component")
+    summary = version_history_summary_presentation(html)
+    version_list = summary["version_list"]
 
-    [draft, published] = version_list.props["presentation"]["versions"]["list"]["rows"]
+    [draft, published] = version_list["versions"]["list"]["rows"]
 
     assert ["2"] =
-             version_list.props["presentation"]["versions"]["list"]["rows"]
+             version_list["versions"]["list"]["rows"]
              |> Enum.map(& &1["attrs"]["id"])
              |> Enum.map(&String.replace_prefix(&1, "dashboard-version-", ""))
              |> Enum.take(1)
@@ -66,6 +66,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              draft["details"]["rows"]
              |> Enum.find(&(&1["key"] == "origin"))
              |> get_in(["value", "text"])
+
+    assert summary["publish_validation"] == nil
+    assert summary["publish_impact"] == nil
+    assert summary["runtime_defaults"] == nil
+
+    assert [] =
+             html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#dashboard-version-overview-component")
+             |> LazyHTML.attribute("id")
   end
 
   test "versions_panel filters and selects health snapshot activity" do
@@ -328,6 +338,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
     assert vue.component == "DashboardActivityControls"
     assert vue.class == "contents"
     assert vue.ssr == false
+
+    vue.props["presentation"]
+  end
+
+  defp version_history_summary_presentation(rendered) do
+    vue =
+      LiveVue.Test.get_vue(rendered,
+        id: "dashboard-version-history-summary-component"
+      )
+
+    assert vue.component == "VersionHistorySummary"
+    assert vue.id == "dashboard-version-history-summary-component"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
     vue.props["presentation"]
   end

@@ -12,13 +12,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponents do
   def publish_validation(%{publish_readiness: nil} = assigns), do: ~H""
 
   def publish_validation(assigns) do
-    selected_issue_state = selected_publish_issue_state(assigns)
-
     presentation =
-      publish_validation_dto(
+      publish_validation_presentation(
         assigns.publish_readiness,
         assigns.selected_publish_issue_id,
-        selected_issue_state,
         assigns.dashboard_document,
         assigns.dashboard_current_path
       )
@@ -36,14 +33,38 @@ defmodule CadenceWeb.OpsDashboardShowLive.PublishValidationComponents do
     """
   end
 
-  defp selected_publish_issue_state(assigns) do
-    selected_id = assigns.selected_publish_issue_id
+  def publish_validation_presentation(
+        nil,
+        _selected_publish_issue_id,
+        _dashboard_document,
+        _dashboard_current_path
+      ),
+      do: nil
 
+  def publish_validation_presentation(
+        publish_readiness,
+        selected_publish_issue_id,
+        dashboard_document,
+        dashboard_current_path
+      ) do
+    selected_issue_state =
+      selected_publish_issue_state(publish_readiness, selected_publish_issue_id)
+
+    publish_validation_dto(
+      publish_readiness,
+      selected_publish_issue_id,
+      selected_issue_state,
+      dashboard_document,
+      dashboard_current_path
+    )
+  end
+
+  defp selected_publish_issue_state(publish_readiness, selected_id) do
     cond do
       is_nil(selected_id) or selected_id == "" ->
         "none"
 
-      Enum.any?(assigns.publish_readiness.issues, &(&1.id == selected_id)) ->
+      Enum.any?(publish_readiness.issues, &(&1.id == selected_id)) ->
         "selected"
 
       true ->

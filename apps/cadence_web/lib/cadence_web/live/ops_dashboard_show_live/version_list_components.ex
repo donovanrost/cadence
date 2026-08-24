@@ -5,7 +5,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponents do
   attr :version_history, :map, required: true
 
   def version_overview(assigns) do
-    assigns = assign(assigns, :presentation, version_overview_dto(assigns.version_history))
+    assigns =
+      assign(assigns, :presentation, version_overview_presentation(assigns.version_history))
 
     ~H"""
     <.vue
@@ -18,7 +19,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionListComponents do
     """
   end
 
-  defp version_overview_dto(version_history) do
+  def version_overview_presentation(version_history) do
     %{
       root: %{
         attrs: raw_attributes(%{"class" => "space-y-5"})
