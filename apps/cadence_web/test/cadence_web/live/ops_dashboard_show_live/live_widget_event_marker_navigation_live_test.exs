@@ -470,31 +470,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
         "placement-id" => trend_widget.widget_id
       })
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-widget-inspector[data-widget-inspect-state="ready"])
-             )
-
       html = render(view)
       document = LazyHTML.from_fragment(html)
+      inspect_vue = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspector-component")
+      inspect_presentation = inspect_vue.props["presentation"]
+
+      assert inspect_presentation["root"]["attrs"]["data-widget-inspect-state"] == "ready"
 
       assert document |> LazyHTML.query("#dashboard-panel h2") |> LazyHTML.text() =~
                "Inspect: Counter Trend"
 
-      table = document |> LazyHTML.query("[data-widget-inspect-table]") |> LazyHTML.text()
+      table =
+        inspect_presentation["table"]["rows"]
+        |> Enum.flat_map(fn row -> Enum.map(row["values"], & &1["text"]) end)
+        |> Enum.join(" ")
+
       assert table =~ "14"
       assert table =~ "15"
 
-      download =
-        LiveVue.Test.get_vue(view, id: "dashboard-widget-inspect-download-component")
+      download = inspect_presentation["download"]
 
-      assert download.component == "CsvDownloadButton"
-      assert download.props["csv"] =~ "time_utc"
-      assert download.props["csv"] =~ "14"
-      assert download.props["filename"] == "counter-trend-inspect.csv"
+      assert download["component"] == "CsvDownloadButton"
+      assert download["props"]["csv"] =~ "time_utc"
+      assert download["props"]["csv"] =~ "14"
+      assert download["props"]["filename"] == "counter-trend-inspect.csv"
 
       view |> element(~s(#dashboard-panel button[aria-label="Close panel"])) |> render_click()
-      refute has_element?(view, "#dashboard-widget-inspector")
+      refute has_element?(view, "#dashboard-widget-inspector-component")
     end
   end
 end

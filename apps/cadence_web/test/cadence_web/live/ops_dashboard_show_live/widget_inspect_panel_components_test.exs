@@ -23,70 +23,98 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetInspectPanelComponentsTest do
 
   test "renders header badges, stats, table rows, and the download payload" do
     html = render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model())
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspector-component")
+    presentation = vue.props["presentation"]
 
     assert ["ready"] =
-             document
-             |> LazyHTML.query("#dashboard-widget-inspector")
-             |> LazyHTML.attribute("data-widget-inspect-state")
+             presentation["root"]["attrs"]
+             |> attribute("data-widget-inspect-state")
 
     assert ["1"] =
-             document
-             |> LazyHTML.query("[data-widget-inspect-series-count]")
-             |> LazyHTML.attribute("data-widget-inspect-series-count")
+             presentation["header"]["series_badge"]["attrs"]
+             |> attribute("data-widget-inspect-series-count")
 
     assert ["2"] =
-             document
-             |> LazyHTML.query("[data-widget-inspect-row-total]")
-             |> LazyHTML.attribute("data-widget-inspect-row-total")
+             presentation["header"]["rows_badge"]["attrs"]
+             |> attribute("data-widget-inspect-row-total")
 
-    stats = document |> LazyHTML.query(~s([data-widget-inspect-stat="volts"])) |> LazyHTML.text()
-    assert stats =~ "volts"
-    assert stats =~ "1.5"
+    stats =
+      Enum.find(
+        presentation["stats"]["rows"],
+        &(&1["attrs"]["data-widget-inspect-stat"] == "volts")
+      )
 
-    table = document |> LazyHTML.query("[data-widget-inspect-table]") |> LazyHTML.text()
+    assert stats["label"]["text"] =~ "volts"
+    assert Enum.any?(stats["values"], &(&1["value"]["text"] == "1.5"))
+
+    table = table_text(presentation["table"])
     assert table =~ "2023-11-14T22:13:20.000Z"
     assert table =~ "volts (V)"
 
-    download = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspect-download-component")
+    download = presentation["download"]
 
-    assert download.component == "CsvDownloadButton"
-    assert download.props["csv"] =~ "time_utc,volts (V)"
-    assert download.props["filename"] == "bus-voltage-inspect.csv"
-    refute download.props["disabled"]
-    refute download.ssr
+    assert download["component"] == "CsvDownloadButton"
+    assert download["props"]["csv"] =~ "time_utc,volts (V)"
+    assert download["props"]["filename"] == "bus-voltage-inspect.csv"
+    refute download["props"]["disabled"]
+    refute vue.ssr
   end
 
   test "disables the download component when there are no rows" do
     html = render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model(0))
 
-    download = LiveVue.Test.get_vue(html, id: "dashboard-widget-inspect-download-component")
+    download = inspect_presentation(html)["download"]
 
-    assert download.props["disabled"]
+    assert download["props"]["disabled"]
   end
 
   test "shows the cap notice when rows exceed the display limit" do
-    document =
-      LazyHTML.from_fragment(
-        render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model(600))
-      )
+    presentation =
+      render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: model(600))
+      |> inspect_presentation()
 
-    assert document |> LazyHTML.query("#dashboard-widget-inspect-capped") |> LazyHTML.text() =~
+    assert presentation["header"]["capped"]["text"] =~
              "Showing latest 500 of 600 rows"
   end
 
   test "renders a fallback when the widget is gone" do
-    document =
-      LazyHTML.from_fragment(
-        render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: nil)
-      )
+    presentation =
+      render_component(&WidgetInspectPanelComponents.inspect_panel/1, inspect: nil)
+      |> inspect_presentation()
 
     assert ["missing"] =
-             document
-             |> LazyHTML.query("#dashboard-widget-inspector")
-             |> LazyHTML.attribute("data-widget-inspect-state")
+             presentation["root"]["attrs"]
+             |> attribute("data-widget-inspect-state")
 
-    assert document |> LazyHTML.query("#dashboard-widget-inspector") |> LazyHTML.text() =~
+    assert presentation["missing"]["text"] =~
              "no longer on the dashboard"
+  end
+
+  defp inspect_presentation(html) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-widget-inspector-component")
+    |> then(& &1.props["presentation"])
+  end
+
+  defp attribute(attrs, name) do
+    case Map.fetch(attrs, name) do
+      {:ok, value} -> [to_string(value)]
+      :error -> []
+    end
+  end
+
+  defp table_text(table) do
+    headers =
+      table["series_headers"]
+      |> Enum.map_join(" ", &(&1["text"] <> (&1["unit"] || "")))
+
+    rows =
+      table["rows"]
+      |> Enum.map_join(" ", fn row ->
+        values = Enum.map_join(row["values"], " ", & &1["text"])
+        row["timestamp"]["text"] <> " " <> values
+      end)
+
+    headers <> " " <> rows
   end
 end
