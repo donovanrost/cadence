@@ -263,27 +263,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeScopeLiveTest do
 
     render_dashboard_async(view)
 
-    widget_selector = "#widget-#{trend_item.placement_id}"
+    widget_attrs = dashboard_widget_shell_attrs(view, trend_item.placement_id)
 
     assert has_element?(
              view,
              ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="source_endpoint"][data-dashboard-scope-id="#{source_endpoint.source_endpoint_id}"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#{widget_selector}[data-widget-source-data-state="no_data"][data-widget-source-empty-reason="source_endpoint_scope_no_data"])
-           )
+    assert Map.take(
+             widget_attrs,
+             ~w(data-widget-source-data-state data-widget-source-empty-reason)
+           ) == %{
+             "data-widget-source-data-state" => "no_data",
+             "data-widget-source-empty-reason" => "source_endpoint_scope_no_data"
+           }
 
-    assert has_element?(
-             view,
-             ~s(#{widget_selector}[data-widget-source-scope-kinds="spacecraft"][data-widget-source-source-endpoint-ids="#{source_endpoint.source_endpoint_id}"])
-           )
+    assert Map.take(
+             widget_attrs,
+             ~w(data-widget-source-scope-kinds data-widget-source-source-endpoint-ids)
+           ) == %{
+             "data-widget-source-scope-kinds" => "spacecraft",
+             "data-widget-source-source-endpoint-ids" => source_endpoint.source_endpoint_id
+           }
 
-    assert has_element?(
-             view,
-             ~s(#{widget_selector}[data-widget-source-contact-ids=""])
-           )
+    assert widget_attrs["data-widget-source-contact-ids"] == ""
 
     source_badge = widget_header_source_presentation(view, trend_item.placement_id)
 

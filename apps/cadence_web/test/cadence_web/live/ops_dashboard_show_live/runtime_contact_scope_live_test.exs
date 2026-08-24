@@ -182,22 +182,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
 
       render_dashboard_async(view)
 
-      widget_selector = "#widget-#{trend_item.placement_id}"
+      widget_attrs = dashboard_widget_shell_attrs(view, trend_item.placement_id)
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector}[data-widget-source-data-state="no_data"][data-widget-source-empty-reason="contact_scope_no_data"])
-             )
+      assert Map.take(
+               widget_attrs,
+               ~w(data-widget-source-data-state data-widget-source-empty-reason)
+             ) == %{
+               "data-widget-source-data-state" => "no_data",
+               "data-widget-source-empty-reason" => "contact_scope_no_data"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector}[data-widget-source-scope-kinds="spacecraft"][data-widget-source-contact-ids="dashboard-runtime-empty-contact"])
-             )
+      assert Map.take(
+               widget_attrs,
+               ~w(data-widget-source-scope-kinds data-widget-source-contact-ids)
+             ) == %{
+               "data-widget-source-scope-kinds" => "spacecraft",
+               "data-widget-source-contact-ids" => "dashboard-runtime-empty-contact"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector}[data-widget-source-source-endpoint-ids="source-endpoint-alpha"])
-             )
+      assert widget_attrs["data-widget-source-source-endpoint-ids"] == "source-endpoint-alpha"
 
       assert has_element?(
                view,
@@ -386,22 +389,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeContactScopeLiveTest do
 
       render_dashboard_async(view)
 
-      widget_selector = "#widget-#{trend_item.placement_id}"
+      widget_attrs = dashboard_widget_shell_attrs(view, trend_item.placement_id)
 
       assert has_element?(
                view,
                ~s(#ops-dashboard-show-page[data-dashboard-scope-kind="contact"][data-dashboard-scope-id="#{contact_alpha.scheduled_contact_id}"][data-dashboard-scope-ids="#{scope_ids}"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector}[data-widget-source-data-state="no_data"][data-widget-source-empty-reason="contact_scope_no_data"])
-             )
+      assert Map.take(
+               widget_attrs,
+               ~w(data-widget-source-data-state data-widget-source-empty-reason)
+             ) == %{
+               "data-widget-source-data-state" => "no_data",
+               "data-widget-source-empty-reason" => "contact_scope_no_data"
+             }
 
-      assert has_element?(
-               view,
-               ~s(#{widget_selector}[data-widget-source-contact-ids="#{scope_ids}"][data-widget-source-source-endpoint-ids="source-endpoint-alpha,source-endpoint-gamma"])
-             )
+      assert Map.take(
+               widget_attrs,
+               ~w(data-widget-source-contact-ids data-widget-source-source-endpoint-ids)
+             ) == %{
+               "data-widget-source-contact-ids" => scope_ids,
+               "data-widget-source-source-endpoint-ids" =>
+                 "source-endpoint-alpha,source-endpoint-gamma"
+             }
 
       query_diagnostics = widget_query_presentation(view, trend_item.placement_id)
 
