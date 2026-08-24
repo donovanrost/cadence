@@ -185,7 +185,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#dashboard-data-issues[data-dashboard-data-issue-codes*="missing_source_binding"])
              )
 
-      refute has_element?(view, "#dashboard-source-health")
+      refute has_element?(view, "#dashboard-source-health-component")
 
       assert has_element?(
                view,
@@ -241,7 +241,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceBindingWarningsLiveTest d
                ~s(#ops-dashboard-show-page[data-dashboard-evidence-state="none"])
              )
 
-      refute has_element?(view, "#dashboard-source-health")
+      refute has_element?(view, "#dashboard-source-health-component")
 
       missing_warning_path =
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "evidence", selected_evidence_kind: "warning", selected_placement: widget.widget_id, selected_warning_code: "missing_warning", selected_source_request: "stale-source-request", selected_logical_source: "limits", selected_realm: "rehearsal"}}"

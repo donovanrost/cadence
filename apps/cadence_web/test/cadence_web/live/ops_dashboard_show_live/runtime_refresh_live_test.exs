@@ -267,7 +267,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRefreshLiveTest do
                ~s(#ops-dashboard-show-page[data-engine-source-cache-statuses*="stale"][data-engine-frame-cache-statuses*="refresh"])
              )
 
-      refute has_element?(view, "#dashboard-source-health")
+      refute has_element?(view, "#dashboard-source-health-component")
 
       assert has_element?(view, ~s(#dashboard-diagnostics-button[href*="/diagnostics"]))
 

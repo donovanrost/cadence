@@ -281,7 +281,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRenderingLiveTest do
                ~s(#ops-dashboard-show-page[data-engine-source-cache-statuses*="miss"])
              )
 
-      refute has_element?(view, "#dashboard-source-health")
+      refute has_element?(view, "#dashboard-source-health-component")
 
       backfill = chart_backfill(html, trend_widget.widget_id)
       older_meta = point_meta(Enum.at(backfill, 0))
