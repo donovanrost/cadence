@@ -55,14 +55,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
       comparison_toggle.props["presentation"]["root"]["attrs"]["phx-click"]
     )
 
-    assert has_element?(view, "#dashboard-comparison-inspector")
-    assert has_element?(view, "#dashboard-comparison-preset-form")
+    comparison_inspector =
+      LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
 
-    view
-    |> form("#dashboard-comparison-preset-form", %{
+    comparison_presentation = comparison_inspector.props["presentation"]
+
+    assert comparison_presentation["inspector"]["root"]["attrs"]["id"] ==
+             "dashboard-comparison-inspector"
+
+    assert comparison_presentation["rollup"]["preset_form"]["root"]["attrs"][
+             "phx-submit"
+           ] == "save_comparison_preset"
+
+    render_submit(view, "save_comparison_preset", %{
       "preset" => %{"name" => "All revisions vs canonical"}
     })
-    |> render_submit()
 
     [preset] =
       Cadence.Dashboards.list_dashboard_investigation_presets(
@@ -76,10 +83,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
     assert preset.runtime_query["data_view"] == "all_revisions"
     assert preset.runtime_query["compare_data_view"] == "canonical"
 
-    assert has_element?(
-             view,
-             ~s([data-dashboard-comparison-saved-preset="#{preset.dashboard_investigation_preset_id}"])
-           )
+    saved_presentation = comparison_saved_preset(view, preset.dashboard_investigation_preset_id)
+
+    assert saved_presentation["root"]["attrs"]["data-dashboard-comparison-saved-preset"] ==
+             preset.dashboard_investigation_preset_id
 
     runtime_controls = dashboard_runtime_controls(view)
 
@@ -96,16 +103,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
     assert_patch(view, show_path(mission, dashboard))
     render_dashboard_async(view)
 
-    assert has_element?(
-             view,
-             ~s([data-dashboard-comparison-saved-preset-apply="#{preset.dashboard_investigation_preset_id}"])
-           )
+    saved_presentation = comparison_saved_preset(view, preset.dashboard_investigation_preset_id)
+    apply_attrs = saved_presentation["actions"]["apply"]["attrs"]
 
-    view
-    |> element(
-      ~s([data-dashboard-comparison-saved-preset-apply="#{preset.dashboard_investigation_preset_id}"])
-    )
-    |> render_click()
+    assert apply_attrs["data-dashboard-comparison-saved-preset-apply"] ==
+             preset.dashboard_investigation_preset_id
+
+    render_click(view, apply_attrs["phx-click"], %{
+      "preset-id" => apply_attrs["phx-value-preset-id"]
+    })
 
     patched_path = assert_patch(view)
     assert patched_path =~ "data_view=all_revisions"
@@ -113,11 +119,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
 
     render_dashboard_async(view)
 
-    view
-    |> element(
-      ~s([data-dashboard-comparison-saved-preset-delete="#{preset.dashboard_investigation_preset_id}"])
-    )
-    |> render_click()
+    saved_presentation = comparison_saved_preset(view, preset.dashboard_investigation_preset_id)
+    delete_attrs = saved_presentation["actions"]["delete"]["attrs"]
+
+    render_click(view, delete_attrs["phx-click"], %{
+      "preset-id" => delete_attrs["phx-value-preset-id"]
+    })
 
     assert [] =
              Cadence.Dashboards.list_dashboard_investigation_presets(
@@ -125,6 +132,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeComparisonPresetLiveTest do
                mission.mission_id,
                dashboard.dashboard_id
              )
+  end
+
+  defp comparison_saved_preset(view, preset_id) do
+    inspector = LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
+
+    inspector.props["presentation"]["rollup"]["saved_presets"]["body"]["items"]
+    |> Enum.find(fn preset ->
+      preset["root"]["attrs"]["data-dashboard-comparison-saved-preset"] == preset_id
+    end)
   end
 
   defp signed_in_user_org_and_mission do

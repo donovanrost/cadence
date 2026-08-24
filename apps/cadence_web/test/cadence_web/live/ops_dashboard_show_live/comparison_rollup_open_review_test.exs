@@ -12,12 +12,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupOpenReviewTest do
         preset: preset()
       )
 
-    document = LazyHTML.from_fragment(html)
-
-    assert [encoded_open_findings] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-findings")
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-rollup-component")
+    rollup = vue.props["presentation"]["rollup"]
+    encoded_open_findings = rollup["root"]["attrs"]["data-dashboard-comparison-open-findings"]
 
     decoded_open_findings = Jason.decode!(encoded_open_findings)
 
@@ -118,54 +115,53 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupOpenReviewTest do
     assert selection_path =~ "selected_scope_ids=endpoint-alpha%2Cendpoint-beta"
     assert selection_path =~ "selected_contact_ids=contact-alpha%2Ccontact-beta"
 
-    open_copy =
-      LiveVue.Test.get_vue(html, id: "dashboard-comparison-open-findings-copy-component")
+    open_copy = rollup["open_findings_copy"]
 
-    assert open_copy.component == "ClipboardButton"
-    assert open_copy.props["button_id"] == "dashboard-comparison-open-findings-copy"
-    assert open_copy.props["clipboard_text"] == encoded_open_findings
-    assert open_copy.props["button_class"] == "btn btn-ghost btn-xs gap-1"
-    assert open_copy.props["icon"] == "hero-clipboard-document-list"
-    assert open_copy.props["icon_class"] == "h-3.5 w-3.5"
-    assert open_copy.props["label"] == "Open"
-    assert open_copy.props["title"] == "Copy open comparison findings"
+    assert open_copy["props"]["button_id"] == "dashboard-comparison-open-findings-copy"
+    assert open_copy["props"]["clipboard_text"] == encoded_open_findings
+    assert open_copy["props"]["button_class"] == "btn btn-ghost btn-xs gap-1"
+    assert open_copy["props"]["icon"] == "hero-clipboard-document-list"
+    assert open_copy["props"]["icon_class"] == "h-3.5 w-3.5"
+    assert open_copy["props"]["label"] == "Open"
+    assert open_copy["props"]["title"] == "Copy open comparison findings"
 
-    assert open_copy.props["data_attrs"] == %{
+    assert open_copy["props"]["data_attrs"] == %{
              "data-dashboard-comparison-open-findings-copy" => ""
            }
 
-    assert open_copy.class == "contents"
-    refute open_copy.ssr
+    assert open_copy["host"]["attrs"] == %{
+             "class" => "contents",
+             "id" => "dashboard-comparison-open-findings-copy-component"
+           }
 
-    preset_copy =
-      LiveVue.Test.get_vue(html, id: "dashboard-comparison-preset-copy-component")
+    preset_copy = rollup["preset_copy"]
 
-    assert preset_copy.component == "ClipboardButton"
-    assert preset_copy.props["button_id"] == "dashboard-comparison-preset-copy"
-    assert preset_copy.props["clipboard_text"] =~ "data_view=all_revisions"
-    assert preset_copy.props["clipboard_text"] =~ "compare_data_view=canonical"
-    assert preset_copy.props["button_class"] == "btn btn-ghost btn-xs gap-1"
-    assert preset_copy.props["icon"] == "hero-bookmark-square"
-    assert preset_copy.props["icon_class"] == "h-3.5 w-3.5"
-    assert preset_copy.props["label"] == "Preset"
-    assert preset_copy.props["title"] == "Copy comparison investigation preset link"
+    assert preset_copy["props"]["button_id"] == "dashboard-comparison-preset-copy"
+    assert preset_copy["props"]["clipboard_text"] =~ "data_view=all_revisions"
+    assert preset_copy["props"]["clipboard_text"] =~ "compare_data_view=canonical"
+    assert preset_copy["props"]["button_class"] == "btn btn-ghost btn-xs gap-1"
+    assert preset_copy["props"]["icon"] == "hero-bookmark-square"
+    assert preset_copy["props"]["icon_class"] == "h-3.5 w-3.5"
+    assert preset_copy["props"]["label"] == "Preset"
+    assert preset_copy["props"]["title"] == "Copy comparison investigation preset link"
 
-    assert preset_copy.props["data_attrs"] == %{
+    assert preset_copy["props"]["data_attrs"] == %{
              "data-dashboard-comparison-preset-copy" => ""
            }
 
-    assert preset_copy.class == "contents"
-    refute preset_copy.ssr
+    assert preset_copy["host"]["attrs"] == %{
+             "class" => "contents",
+             "id" => "dashboard-comparison-preset-copy-component"
+           }
 
-    assert ["request_comparison_review"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-review-form")
-             |> LazyHTML.attribute("phx-submit")
+    assert rollup["review_form"]["root"]["attrs"]["phx-submit"] ==
+             "request_comparison_review"
 
-    assert ["available"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-review")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-findings-review-state")
+    assert rollup["review_form"]["button"]["attrs"][
+             "data-dashboard-comparison-open-findings-review-state"
+           ] == "available"
+
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
   end
 
   test "comparison rollup strip disables duplicate open review requests" do
@@ -179,32 +175,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupOpenReviewTest do
         }
       )
 
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-rollup-component")
+    rollup = vue.props["presentation"]["rollup"]
+    root_attrs = rollup["root"]["attrs"]
+    button_attrs = rollup["review_form"]["button"]["attrs"]
 
-    assert ["requested"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-findings-review-state")
+    assert root_attrs["data-dashboard-comparison-open-findings-review-state"] == "requested"
 
-    assert ["dashboard-lifecycle-event-review"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-findings-review-request-ids")
+    assert root_attrs["data-dashboard-comparison-open-findings-review-request-ids"] ==
+             "dashboard-lifecycle-event-review"
 
-    assert ["requested"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-review")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-findings-review-state")
-
-    assert ["Comparison review already requested"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-review")
-             |> LazyHTML.attribute("title")
-
-    assert [""] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-review")
-             |> LazyHTML.attribute("disabled")
+    assert button_attrs["data-dashboard-comparison-open-findings-review-state"] == "requested"
+    assert button_attrs["title"] == "Comparison review already requested"
+    assert button_attrs["disabled"] == true
   end
 
   defp rollup do

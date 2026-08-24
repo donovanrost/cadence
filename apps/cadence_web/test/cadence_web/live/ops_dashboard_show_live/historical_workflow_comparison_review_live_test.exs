@@ -142,21 +142,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowComparisonReviewLive
         comparison_toggle.props["presentation"]["root"]["attrs"]["phx-click"]
       )
 
-      assert has_element?(
-               view,
-               "#dashboard-comparison-inspector"
-             )
+      comparison_inspector =
+        LiveVue.Test.get_vue(view, id: "dashboard-comparison-inspector-component")
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-comparison-rollup[data-dashboard-comparison-open="1"])
-             )
+      comparison_presentation = comparison_inspector.props["presentation"]
 
-      assert has_element?(view, "#dashboard-comparison-open-findings-review-form")
+      assert comparison_presentation["inspector"]["root"]["attrs"]["id"] ==
+               "dashboard-comparison-inspector"
 
-      view
-      |> form("#dashboard-comparison-open-findings-review-form")
-      |> render_submit()
+      assert comparison_presentation["rollup"]["root"]["attrs"][
+               "data-dashboard-comparison-open"
+             ] == "1"
+
+      review_form = comparison_presentation["rollup"]["review_form"]
+      assert review_form["root"]["attrs"]["phx-submit"] == "request_comparison_review"
+
+      render_submit(view, "request_comparison_review", %{
+        "review" => %{"open_findings" => review_form["payload"]["attrs"]["value"]}
+      })
 
       patched_path = assert_patch(view)
       assert patched_path =~ "panel=versions"

@@ -12,28 +12,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
         rollup: rollup()
       )
 
-    document = LazyHTML.from_fragment(html)
-
-    assert ["Dashboard comparison inspector"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-inspector")
-             |> LazyHTML.attribute("aria-label")
-
     vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-comparison-inspector-header-component"
+        id: "dashboard-comparison-inspector-component"
       )
 
-    assert vue.props["presentation"]["close"]["attrs"]["phx-click"] ==
+    presentation = vue.props["presentation"]
+
+    assert presentation["inspector"]["root"]["attrs"]["aria-label"] ==
+             "Dashboard comparison inspector"
+
+    assert presentation["inspector"]["header"]["close"]["attrs"]["phx-click"] ==
              "close_comparison_inspector"
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open")
+    assert presentation["rollup"]["root"]["attrs"]["data-dashboard-comparison-open"] ==
+             "1"
 
     assert [] =
-             document
+             html
+             |> LazyHTML.from_fragment()
              |> LazyHTML.query("#ops-context-rail")
              |> LazyHTML.attribute("id")
   end
@@ -47,17 +44,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
 
     vue =
       LiveVue.Test.get_vue(html,
-        id: "dashboard-comparison-inspector-header-component"
+        id: "dashboard-comparison-inspector-component"
       )
 
-    assert vue.component == "DashboardComparisonInspectorHeader"
-    assert vue.id == "dashboard-comparison-inspector-header-component"
+    assert vue.component == "DashboardComparisonInspector"
+    assert vue.id == "dashboard-comparison-inspector-component"
     assert vue.ssr == false
     assert vue.class == "contents"
     assert vue.handlers == %{}
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    assert vue.props["presentation"] == %{
+    assert vue.props["presentation"]["inspector"]["header"] == %{
              "root" => %{
                "tag" => "header",
                "class" =>
@@ -123,13 +120,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
         rollup: empty_rollup()
       )
 
-    for html <- [closed, unavailable] do
+    closed_with_saved =
+      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
+        open?: false,
+        rollup: empty_rollup(),
+        saved_presets: [%{dashboard_investigation_preset_id: "preset-1"}]
+      )
+
+    for html <- [closed, unavailable, closed_with_saved] do
       assert [] =
                html
                |> LazyHTML.from_fragment()
-               |> LazyHTML.query("#dashboard-comparison-inspector")
+               |> LazyHTML.query("#dashboard-comparison-inspector-component")
                |> LazyHTML.attribute("id")
     end
+
+    saved_only =
+      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
+        open?: true,
+        rollup: empty_rollup(),
+        saved_presets: [%{dashboard_investigation_preset_id: "preset-1"}]
+      )
+
+    vue = LiveVue.Test.get_vue(saved_only, id: "dashboard-comparison-inspector-component")
+
+    assert vue.props["presentation"]["inspector"]["root"]["attrs"]["id"] ==
+             "dashboard-comparison-inspector"
+
+    assert vue.props["presentation"]["rollup"]["root"]["attrs"][
+             "data-dashboard-comparison-saved-presets"
+           ] == "1"
   end
 
   defp rollup do

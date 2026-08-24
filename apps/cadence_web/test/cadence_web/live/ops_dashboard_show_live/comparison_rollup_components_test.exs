@@ -11,107 +11,63 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponentsTest do
         rollup: rollup()
       )
 
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-rollup-component")
+    presentation = vue.props["presentation"]["rollup"]
+    root_attrs = presentation["root"]["attrs"]
 
-    assert ["4"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-widgets")
+    assert vue.component == "DashboardComparisonInspector"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert root_attrs["data-dashboard-comparison-widgets"] == "4"
+    assert root_attrs["data-dashboard-comparison-open"] == "1"
+    assert root_attrs["data-dashboard-comparison-open-placements"] == "placement-2"
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open")
+    workflow_badges =
+      presentation["badges"]
+      |> Enum.map(& &1["attrs"]["data-dashboard-comparison-workflow-badge"])
+      |> Enum.reject(&is_nil/1)
 
-    assert ["placement-2"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-open-placements")
+    assert workflow_badges == ["open", "handled"]
 
-    assert ["open", "handled"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-workflow-badge]")
-             |> LazyHTML.attribute("data-dashboard-comparison-workflow-badge")
+    groups = presentation["details"]["body"]["groups"]
 
-    assert ["deltas", "missing"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-rollup-group]")
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-group")
+    assert Enum.map(groups, & &1["root"]["attrs"]["data-dashboard-comparison-rollup-group"]) ==
+             ["deltas", "missing"]
 
-    assert ["placement-1", "placement-2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-rollup-item]")
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-item")
+    items = Enum.flat_map(groups, & &1["items"])
 
-    assert ["applied"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-decision-status")
+    assert Enum.map(items, & &1["root"]["attrs"]["data-dashboard-comparison-rollup-item"]) ==
+             ["placement-1", "placement-2"]
 
-    assert ["recomputed_analysis"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-primary-data-management")
+    placement =
+      Enum.find(items, fn item ->
+        item["root"]["attrs"]["data-dashboard-comparison-rollup-item"] == "placement-1"
+      end)
 
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-widget-type")
+    attrs = placement["root"]["attrs"]
 
-    assert ["operational_observables"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-widget-source")
+    assert attrs["data-dashboard-comparison-rollup-decision-status"] == "applied"
 
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-primary-kind")
+    assert attrs["data-dashboard-comparison-rollup-primary-data-management"] ==
+             "recomputed_analysis"
 
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-compare-kind")
+    assert attrs["data-dashboard-comparison-rollup-widget-type"] == "status_matrix"
+    assert attrs["data-dashboard-comparison-rollup-widget-source"] == "operational_observables"
+    assert attrs["data-dashboard-comparison-rollup-primary-kind"] == "status_matrix"
+    assert attrs["data-dashboard-comparison-rollup-compare-kind"] == "status_matrix"
 
-    assert ["comms.transport.connection_state:transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-primary-observables")
+    assert attrs["data-dashboard-comparison-rollup-primary-observables"] ==
+             "comms.transport.connection_state:transport-alpha"
 
-    assert ["comms.transport.connection_state:transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-compare-observables")
+    assert attrs["data-dashboard-comparison-rollup-compare-observables"] ==
+             "comms.transport.connection_state:transport-alpha"
 
-    assert ["degraded"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-compare-data-management")
-
-    assert ["transport"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-scope-kind")
-
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-scope-id")
-
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-scope-ids")
-
-    assert ["contact-alpha,contact-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-contact-ids")
-
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-item="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-source-endpoint-id")
+    assert attrs["data-dashboard-comparison-rollup-compare-data-management"] == "degraded"
+    assert attrs["data-dashboard-comparison-rollup-scope-kind"] == "transport"
+    assert attrs["data-dashboard-comparison-rollup-scope-id"] == "transport-alpha"
+    assert attrs["data-dashboard-comparison-rollup-scope-ids"] == "transport-alpha,transport-beta"
+    assert attrs["data-dashboard-comparison-rollup-contact-ids"] == "contact-alpha,contact-beta"
+    assert attrs["data-dashboard-comparison-rollup-source-endpoint-id"] == "endpoint-alpha"
   end
 
   test "comparison rollup strip is hidden when no comparison is active" do
@@ -131,7 +87,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponentsTest do
     assert [] =
              html
              |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#dashboard-comparison-rollup")
+             |> LazyHTML.query("#dashboard-comparison-rollup-component")
              |> LazyHTML.attribute("id")
   end
 

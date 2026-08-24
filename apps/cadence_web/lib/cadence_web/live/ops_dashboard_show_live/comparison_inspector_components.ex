@@ -6,8 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents do
 
   use CadenceWeb, :html
 
-  import CadenceWeb.OpsDashboardShowLive.Components,
-    only: [comparison_rollup_strip: 1]
+  alias CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents
 
   attr(:open?, :boolean, required: true)
   attr(:rollup, :map, required: true)
@@ -15,36 +14,54 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents do
   attr(:open_review_summary, :map, default: %{})
   attr(:saved_presets, :list, default: [])
 
-  def comparison_inspector(assigns) do
-    assigns = assign(assigns, :header, comparison_inspector_header_dto())
+  def comparison_inspector(%{open?: true, rollup: rollup, saved_presets: saved_presets} = assigns) do
+    if available?(rollup, saved_presets) do
+      assigns = assign(assigns, :inspector, comparison_inspector_dto())
 
-    ~H"""
-    <aside
-      :if={@open? and available?(@rollup, @saved_presets)}
-      id="dashboard-comparison-inspector"
-      aria-label="Dashboard comparison inspector"
-      data-dashboard-comparison-inspector
-      class="relative flex w-[22rem] max-w-[42vw] shrink-0 flex-col overflow-hidden border-l border-info/35 bg-base-200/95 shadow-[-12px_0_28px_-20px_rgba(0,0,0,0.65)] backdrop-blur"
-    >
-      <div class="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-info/80 via-info/20 to-transparent">
-      </div>
-      <.vue
-        id="dashboard-comparison-inspector-header-component"
-        v-component="DashboardComparisonInspectorHeader"
-        presentation={@header}
-        v-ssr={false}
-        class="contents"
+      ~H"""
+      <ComparisonRollupComponents.comparison_rollup_strip
+        inspector={@inspector}
+        rollup={@rollup}
+        preset={@preset}
+        open_review_summary={@open_review_summary}
+        saved_presets={@saved_presets}
       />
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <.comparison_rollup_strip
-          rollup={@rollup}
-          preset={@preset}
-          open_review_summary={@open_review_summary}
-          saved_presets={@saved_presets}
-        />
-      </div>
-    </aside>
-    """
+      """
+    else
+      ~H""
+    end
+  end
+
+  def comparison_inspector(assigns), do: ~H""
+
+  defp comparison_inspector_dto do
+    %{
+      root: %{
+        attrs: %{
+          "id" => "dashboard-comparison-inspector",
+          "aria-label" => "Dashboard comparison inspector",
+          "data-dashboard-comparison-inspector" => "",
+          "class" =>
+            "relative flex w-[22rem] max-w-[42vw] shrink-0 flex-col overflow-hidden border-l border-info/35 bg-base-200/95 shadow-[-12px_0_28px_-20px_rgba(0,0,0,0.65)] backdrop-blur"
+        }
+      },
+      accent: %{
+        attrs: %{
+          "class" =>
+            "absolute inset-y-0 left-0 w-px bg-gradient-to-b from-info/80 via-info/20 to-transparent"
+        }
+      },
+      header_host: %{
+        attrs: %{
+          "id" => "dashboard-comparison-inspector-header-component",
+          "class" => "contents"
+        }
+      },
+      header: comparison_inspector_header_dto(),
+      body: %{
+        attrs: %{"class" => "min-h-0 flex-1 overflow-y-auto"}
+      }
+    }
   end
 
   defp available?(rollup, saved_presets) do

@@ -13,67 +13,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupSavedPresetsTest do
         saved_presets: [saved_preset()]
       )
 
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-rollup-component")
+    rollup = vue.props["presentation"]["rollup"]
+    saved = rollup["saved_presets"]
+    [preset] = saved["body"]["items"]
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-rollup")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-presets")
+    assert rollup["root"]["attrs"]["data-dashboard-comparison-saved-presets"] == "1"
+    assert saved["root"]["attrs"]["data-dashboard-comparison-saved-presets"] == "1"
+    assert preset["root"]["attrs"]["data-dashboard-comparison-saved-preset"] == "preset-1"
 
-    assert ["1"] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-saved-presets")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-presets")
+    assert preset["root"]["attrs"]["data-dashboard-comparison-saved-preset-name"] ==
+             "All revisions vs canonical"
 
-    assert ["preset-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset]")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-preset")
+    assert preset["root"]["attrs"]["data-dashboard-comparison-saved-preset-primary-view"] ==
+             "all_revisions"
 
-    assert ["All revisions vs canonical"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset]")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-preset-name")
+    assert preset["root"]["attrs"]["data-dashboard-comparison-saved-preset-compare-view"] ==
+             "canonical"
 
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset]")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-preset-primary-view")
+    assert preset["root"]["attrs"]["data-dashboard-comparison-saved-preset-affected"] == "2"
 
-    assert ["canonical"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset]")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-preset-compare-view")
+    assert preset["actions"]["apply"]["attrs"]["phx-click"] == "apply_comparison_preset"
+    assert preset["actions"]["apply"]["attrs"]["phx-value-preset-id"] == "preset-1"
+    assert preset["actions"]["delete"]["attrs"]["phx-click"] == "delete_comparison_preset"
+    assert preset["actions"]["delete"]["attrs"]["phx-value-preset-id"] == "preset-1"
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset]")
-             |> LazyHTML.attribute("data-dashboard-comparison-saved-preset-affected")
+    assert preset["actions"]["delete"]["attrs"]["data-confirm"] ==
+             "Delete this comparison preset?"
 
-    assert ["apply_comparison_preset"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset-apply]")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["preset-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset-apply]")
-             |> LazyHTML.attribute("phx-value-preset-id")
-
-    assert ["delete_comparison_preset"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset-delete]")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["preset-1"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset-delete]")
-             |> LazyHTML.attribute("phx-value-preset-id")
-
-    assert ["Delete this comparison preset?"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-saved-preset-delete]")
-             |> LazyHTML.attribute("data-confirm")
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
   end
 
   defp inactive_rollup do

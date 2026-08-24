@@ -11,162 +11,72 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupHandoffComponentsTest 
         rollup: rollup()
       )
 
-    document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-comparison-rollup-component")
 
-    assert ["decision-event-1"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-target-id")
+    [group] = vue.props["presentation"]["rollup"]["details"]["body"]["groups"]
+    [item] = group["items"]
 
-    assert ["flight"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-realm")
+    decision =
+      Enum.find(item["actions"], fn action ->
+        action["attrs"]["data-dashboard-comparison-rollup-decision-link"] == "placement-1"
+      end)
 
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-data-view")
+    decision_attrs = decision["attrs"]
 
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-data-source-id")
+    assert decision_attrs["phx-value-target-id"] == "decision-event-1"
+    assert decision_attrs["phx-value-realm"] == "flight"
+    assert decision_attrs["phx-value-data-view"] == "all_revisions"
+    assert decision_attrs["phx-value-data-source-id"] == "questdb-flight"
+    assert decision_attrs["phx-value-source-binding-id"] == "binding-flight"
+    assert decision_attrs["phx-value-time-mode"] == "archive"
+    assert decision_attrs["phx-value-time-axis"] == "receipt_time"
+    assert decision_attrs["phx-value-replay-run-id"] == "replay-run-1"
+    assert decision_attrs["phx-value-scope-kind"] == "transport"
+    assert decision_attrs["phx-value-scope-id"] == "transport-alpha"
+    assert decision_attrs["phx-value-scope-ids"] == "transport-alpha,transport-beta"
+    assert decision_attrs["phx-value-contact-ids"] == "contact-alpha,contact-beta"
+    assert decision_attrs["phx-value-source-endpoint-id"] == "endpoint-alpha"
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-source-binding-id")
+    handoff =
+      Enum.find(item["actions"], fn action ->
+        action["attrs"]["data-dashboard-comparison-rollup-handoff"] == "placement-1"
+      end)
 
-    assert ["archive"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-time-mode")
+    handoff_attrs = handoff["attrs"]
 
-    assert ["receipt_time"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-time-axis")
+    assert handoff_attrs["data-dashboard-comparison-rollup-handoff"] == "placement-1"
+    assert handoff_attrs["phx-value-target"] == "comparison_finding"
+    assert handoff_attrs["phx-value-primary-data-management"] == "recomputed_analysis"
+    assert handoff_attrs["phx-value-compare-data-management"] == "degraded"
+    assert handoff_attrs["phx-value-scope-kind"] == "transport"
+    assert handoff_attrs["phx-value-scope-id"] == "transport-alpha"
+    assert handoff_attrs["phx-value-scope-ids"] == "transport-alpha,transport-beta"
+    assert handoff_attrs["phx-value-contact-ids"] == "contact-alpha,contact-beta"
+    assert handoff_attrs["phx-value-source-endpoint-id"] == "endpoint-alpha"
+    assert handoff_attrs["phx-value-widget-type"] == "status_matrix"
+    assert handoff_attrs["phx-value-widget-source"] == "operational_observables"
+    assert handoff_attrs["phx-value-primary-kind"] == "status_matrix"
+    assert handoff_attrs["phx-value-compare-kind"] == "status_matrix"
 
-    assert ["replay-run-1"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-replay-run-id")
+    assert handoff_attrs["phx-value-primary-observables"] ==
+             "comms.transport.connection_state:transport-alpha"
 
-    assert ["transport"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-kind")
+    assert handoff_attrs["phx-value-compare-observables"] ==
+             "comms.transport.connection_state:transport-alpha"
 
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-id")
+    sample_actions =
+      Enum.filter(
+        item["actions"],
+        &Map.has_key?(&1["attrs"], "data-dashboard-comparison-rollup-link")
+      )
 
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-ids")
+    assert Enum.map(sample_actions, & &1["attrs"]["data-dashboard-comparison-rollup-link"]) ==
+             ["primary", "compare"]
 
-    assert ["contact-alpha,contact-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-contact-ids")
-
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-decision-link="placement-1"]))
-             |> LazyHTML.attribute("phx-value-source-endpoint-id")
-
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-handoff")
-
-    assert ["comparison_finding"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-target")
-
-    assert ["recomputed_analysis"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-primary-data-management")
-
-    assert ["degraded"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-compare-data-management")
-
-    assert ["transport"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-kind")
-
-    assert ["transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-id")
-
-    assert ["transport-alpha,transport-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-scope-ids")
-
-    assert ["contact-alpha,contact-beta"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-contact-ids")
-
-    assert ["endpoint-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-source-endpoint-id")
-
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-widget-type")
-
-    assert ["operational_observables"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-widget-source")
-
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-primary-kind")
-
-    assert ["status_matrix"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-compare-kind")
-
-    assert ["comms.transport.connection_state:transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-primary-observables")
-
-    assert ["comms.transport.connection_state:transport-alpha"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-handoff="placement-1"]))
-             |> LazyHTML.attribute("phx-value-compare-observables")
-
-    assert ["primary", "compare"] =
-             document
-             |> LazyHTML.query("[data-dashboard-comparison-rollup-link]")
-             |> LazyHTML.attribute("data-dashboard-comparison-rollup-link")
-
-    assert ["flight"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-link="primary"]))
-             |> LazyHTML.attribute("phx-value-realm")
-
-    assert ["questdb-sim"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-comparison-rollup-link="compare"]))
-             |> LazyHTML.attribute("phx-value-data-source-id")
+    [primary, compare] = sample_actions
+    assert primary["attrs"]["phx-value-realm"] == "flight"
+    assert compare["attrs"]["phx-value-data-source-id"] == "questdb-sim"
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
   end
 
   defp rollup do
