@@ -425,6 +425,12 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     render_async(view, @async_timeout)
 
     [reservation] = ProviderReservations.list_for_mission(org.organization_id, mission.mission_id)
+
+    {:ok, view, _html} =
+      live_with_deps(conn, ~p"/missions/#{mission.mission_id}/ops/contacts", live_deps)
+
+    track_async_view(view)
+
     [reservation_row] = view |> contact_schedule_vue() |> stream_upserts("provider_reservations")
     cancel_action = reservation_row["cancel_action"]
 
