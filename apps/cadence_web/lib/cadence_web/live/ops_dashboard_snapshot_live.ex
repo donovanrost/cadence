@@ -18,7 +18,8 @@ defmodule CadenceWeb.OpsDashboardSnapshotLive do
          |> assign(:ops_nav_item, :dashboards)
          |> assign(:active_dashboard_id, snapshot.dashboard_id)
          |> assign(:dashboard_snapshot, snapshot)
-         |> assign(:snapshot_document, document)}
+         |> assign(:snapshot_document, document)
+         |> assign(:dashboard_snapshot_props, dashboard_snapshot_dto(mission, snapshot, document))}
 
       {:error, reason} ->
         {:ok,
@@ -32,30 +33,42 @@ defmodule CadenceWeb.OpsDashboardSnapshotLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-snapshot-page" class="h-full overflow-y-auto bg-base-100 p-6">
-        <div class="mx-auto max-w-4xl space-y-5">
-          <header class="border border-primary/30 bg-base-200/30 p-6">
-            <p class="hud-label">Read-only snapshot</p>
-            <h1 class="mt-2 text-2xl font-semibold">{@snapshot_document.name}</h1>
-            <p id="dashboard-snapshot-policy" class="mt-2 text-sm text-base-content/60">
-              Definition version {@dashboard_snapshot.dashboard_version} · {@dashboard_snapshot.data_semantics} · {@dashboard_snapshot.data_visibility}
-            </p>
-            <p class="mt-3 text-xs text-warning">
-              The definition and selectors are immutable. Runtime values are only visible through
-              the declared data policy and may still reflect current data when the time window was not frozen.
-            </p>
-          </header>
-          <section id="dashboard-snapshot-definition" class="grid gap-3 sm:grid-cols-3">
-            <div class="border border-base-300 p-4"><p class="hud-label">Widgets</p><p class="mt-2 text-xl font-semibold">{length(@snapshot_document.placements)}</p></div>
-            <div class="border border-base-300 p-4"><p class="hud-label">Captured selectors</p><p class="mt-2 text-xl font-semibold">{map_size(@dashboard_snapshot.runtime_context)}</p></div>
-            <div class="border border-base-300 p-4"><p class="hud-label">Schema</p><p class="mt-2 text-xl font-semibold">v{@snapshot_document.schema_version}</p></div>
-          </section>
-          <.link id="dashboard-snapshot-open-current" navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_snapshot.dashboard_id}"} class="btn btn-outline">
-            Open current dashboard
-          </.link>
-        </div>
-      </section>
+      <.vue
+        id="ops-dashboard-snapshot-component"
+        v-component="OpsDashboardSnapshot"
+        snapshot={@dashboard_snapshot_props}
+        v-ssr={false}
+        class="h-full"
+      />
     </Layouts.app>
     """
+  end
+
+  defp dashboard_snapshot_dto(mission, snapshot, document) do
+    %{
+      id: "dashboard-snapshot-page",
+      eyebrow: "Read-only snapshot",
+      name: document.name,
+      policy: %{
+        id: "dashboard-snapshot-policy",
+        text:
+          "Definition version #{snapshot.dashboard_version} · #{snapshot.data_semantics} · #{snapshot.data_visibility}"
+      },
+      warning:
+        "The definition and selectors are immutable. Runtime values are only visible through the declared data policy and may still reflect current data when the time window was not frozen.",
+      definition: %{
+        id: "dashboard-snapshot-definition",
+        items: [
+          %{label: "Widgets", value: length(document.placements)},
+          %{label: "Captured selectors", value: map_size(snapshot.runtime_context)},
+          %{label: "Schema", value: "v#{document.schema_version}"}
+        ]
+      },
+      action: %{
+        id: "dashboard-snapshot-open-current",
+        label: "Open current dashboard",
+        href: ~p"/missions/#{mission.mission_id}/ops/dashboards/#{snapshot.dashboard_id}"
+      }
+    }
   end
 end
