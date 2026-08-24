@@ -359,6 +359,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert version.priority == :high
     assert version.provider_constraints_document["allowed"] == ["provider-a"]
     assert version.provider_constraints_document["excluded"] == []
+
     assert version.station_constraints_document == %{
              "allowed" => [],
              "excluded" => ["station-c"]
@@ -599,9 +600,12 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   end
 
   defp parsed_form_datetime(value) do
-    value
-    |> NaiveDateTime.from_iso8601!()
-    |> DateTime.from_naive!("Etc/UTC")
+    datetime =
+      value
+      |> NaiveDateTime.from_iso8601!()
+      |> DateTime.from_naive!("Etc/UTC")
+
+    %{datetime | microsecond: {0, 6}}
   end
 
   test "Requirement detail preserves no-route readiness as evidence rather than no availability" do

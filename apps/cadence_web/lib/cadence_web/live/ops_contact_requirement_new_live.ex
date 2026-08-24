@@ -156,8 +156,7 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
           label: "Spacecraft",
           required: true,
           value: string_form_value(form, :spacecraft_id),
-          options:
-            Enum.map(spacecraft, &%{label: &1.display_name, value: &1.spacecraft_id})
+          options: Enum.map(spacecraft, &%{label: &1.display_name, value: &1.spacecraft_id})
         },
         contact_intent: %{
           id: "requirement-intent",
@@ -298,10 +297,11 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
         }
       },
       error:
-        form_error && %{
-          id: "contact-requirement-form-error",
-          message: form_error
-        }
+        form_error &&
+          %{
+            id: "contact-requirement-form-error",
+            message: form_error
+          }
     }
   end
 
