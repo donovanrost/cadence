@@ -34,12 +34,17 @@ defmodule CadenceWeb.CommsTransportListLive do
   def handle_params(params, _uri, socket) do
     list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
     {visible, total} = filter_transports(socket.assigns.transports, list)
+    mission_id = socket.assigns.current_mission.mission_id
 
     {:noreply,
      socket
      |> assign(:list, list)
+     |> assign(:transport_sort_dir, Atom.to_string(list.dir))
      |> assign(:filtered_count, total)
-     |> stream(:transports, visible, reset: true, dom_id: &"transport-#{&1.transport_id}")}
+     |> assign(
+       :transport_table_rows,
+       Enum.map(visible, &transport_table_row(&1, mission_id))
+     )}
   end
 
   @impl true
@@ -116,61 +121,17 @@ defmodule CadenceWeb.CommsTransportListLive do
         />
       <% else %>
         <.card padding={:none}>
-          <.toolbar id="transports-toolbar" search={@list.q} placeholder="Search transports" />
-          <.table
-            id="transports-table"
-            body_id="transports"
-            rows={@streams.transports}
-            sort_by={@list.sort}
-            sort_dir={@list.dir}
-          >
-            <:col :let={transport} label="Name" sort="display_name" class="font-medium">
-              <.link
-                navigate={
-                  ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
-                }
-                class="text-primary hover:underline"
-              >
-                {transport.display_name}
-              </.link>
-            </:col>
-            <:col :let={transport} label="Origin">
-              <span id={"transport-origin-#{transport.transport_id}"} class="font-mono text-xs uppercase">
-                {origin_label(transport.origin)}
-              </span>
-            </:col>
-            <:col :let={transport} label="Provider">
-              <span id={"transport-provider-#{transport.transport_id}"}>
-                {provider_label(transport)}
-              </span>
-            </:col>
-            <:col :let={transport} label="Delivery">
-              <div id={"transport-operator-summary-#{transport.transport_id}"}>
-                {operator_summary(transport)}
-              </div>
-              <div class="mt-1 font-mono text-xs text-base-content/50">
-                {transport_summary(transport).endpoint}
-              </div>
-            </:col>
-            <:col :let={transport} label="Readiness">
-              <.status_badge
-                status={readiness_status(transport)}
-                label={readiness_label(transport)}
-                id={"transport-readiness-#{transport.transport_id}"}
-              />
-            </:col>
-            <:col :let={transport} label="Version" mono class="text-base-content/70">
-              v{transport.version}
-            </:col>
-          </.table>
-          <p :if={@filtered_count == 0} class="py-6 text-center text-sm text-base-content/70">
-            No transports match the current search.
-          </p>
-          <.pagination
-            id="transports-pagination"
+          <.vue
+            id="transports-list-component"
+            v-component="CommsTransportList"
+            rows={@transport_table_rows}
+            search={@list.q}
+            sort={@list.sort}
+            sort_dir={@transport_sort_dir}
             page={@list.page}
             page_size={50}
             total_count={@filtered_count}
+            v-ssr={false}
           />
         </.card>
       <% end %>
@@ -181,6 +142,28 @@ defmodule CadenceWeb.CommsTransportListLive do
   defp transport_summary(transport) do
     {:ok, entry} = TransportKind.fetch(transport.transport_kind)
     entry.module.display_summary(transport.configuration)
+  end
+
+  defp transport_table_row(transport, mission_id) do
+    transport_id = transport.transport_id
+
+    %{
+      id: "transport-#{transport_id}",
+      transport_id: transport_id,
+      display_name: transport.display_name,
+      origin: origin_label(transport.origin),
+      origin_id: "transport-origin-#{transport_id}",
+      provider: provider_label(transport),
+      provider_dom_id: "transport-provider-#{transport_id}",
+      operator_summary: operator_summary(transport),
+      operator_summary_id: "transport-operator-summary-#{transport_id}",
+      endpoint: transport_summary(transport).endpoint,
+      readiness_status: transport |> readiness_status() |> Atom.to_string(),
+      readiness_label: readiness_label(transport),
+      readiness_id: "transport-readiness-#{transport_id}",
+      version: "v#{transport.version}",
+      href: ~p"/missions/#{mission_id}/comms/transports/#{transport_id}"
+    }
   end
 
   defp human_atom(value) when is_atom(value) do
