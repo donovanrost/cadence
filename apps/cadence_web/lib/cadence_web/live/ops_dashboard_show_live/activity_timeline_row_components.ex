@@ -72,7 +72,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponents do
             "data-dashboard-activity-runtime-impact-invalidation" =>
               row.runtime_impact.invalidation_id,
             "data-dashboard-activity-runtime-impact-context" => row.runtime_impact.context_match,
-            "data-dashboard-activity-runtime-impact-refresh" => row.runtime_impact.refresh_allowed,
+            "data-dashboard-activity-runtime-impact-refresh" =>
+              row.runtime_impact.refresh_allowed,
             "data-dashboard-activity-selected" => row.selected_text,
             "data-dashboard-comparison-review-work-queue-item" =>
               comparison_review_work_queue_item_id(row.event, activity)
@@ -161,8 +162,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponents do
           icon: "hero-link",
           icon_class: "h-3.5 w-3.5",
           label: "Copy link",
-          data_attrs:
-            raw_attributes(%{"data-dashboard-activity-link-copy" => row.event_id})
+          data_attrs: raw_attributes(%{"data-dashboard-activity-link-copy" => row.event_id})
         }
       },
       comparison_review: %{
@@ -211,8 +211,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponents do
       attrs:
         raw_attributes(%{
           "data-dashboard-activity-readiness-trend" => readiness_comparison.state,
-          "data-dashboard-activity-readiness-previous" =>
-            readiness_comparison.previous_event_id
+          "data-dashboard-activity-readiness-previous" => readiness_comparison.previous_event_id
         }),
       text: rendered_body(readiness_comparison.label)
     }

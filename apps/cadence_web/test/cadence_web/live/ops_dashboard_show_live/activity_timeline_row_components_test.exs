@@ -85,6 +85,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponentsTest do
     root = presentation["root"]
 
     assert root["id"] == "dashboard-activity-dashboard-lifecycle-event-readiness"
+
     assert root["class"] == [
              "border-l-2 bg-base-100/40 px-2 py-2",
              "border-info bg-info/10"
@@ -122,8 +123,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponentsTest do
     assert copy_host == %{
              "attrs" => %{"data-name" => "ClipboardButton"},
              "class" => "contents",
-             "id" =>
-               "dashboard-activity-link-copy-dashboard-lifecycle-event-readiness-component"
+             "id" => "dashboard-activity-link-copy-dashboard-lifecycle-event-readiness-component"
            }
 
     assert copy["button_id"] ==
@@ -209,6 +209,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponentsTest do
            ]
 
     assert Enum.map(fields, & &1["value"]["text"]) == ["", "false", "true", "", "7"]
+
     assert ActivityTimelineRowComponents.component_id(row) ==
              "dashboard-activity-row-attribute-semantics-component"
   end

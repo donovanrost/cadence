@@ -100,6 +100,7 @@ defmodule CadenceWeb.Components.OpsContextRailTest do
     assert vue.class == "contents"
     assert vue.handlers == %{}
     assert vue.slots == %{}
+
     assert Enum.map(vue.props["sections"], & &1["key"]) == [
              "alarms",
              "commands",
@@ -108,6 +109,7 @@ defmodule CadenceWeb.Components.OpsContextRailTest do
 
     assert alarms["freshness_label"] == "Live"
     assert alarms["observed_at_label"] == "12:00:00 UTC"
+
     assert Enum.map(alarms["content"]["badges"], & &1["label"]) == [
              "Critical",
              "Warning",
