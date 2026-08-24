@@ -13,7 +13,7 @@ defmodule CadenceWeb.CommsTransportLiveTest do
   alias Cadence.Comms.Transport
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{CommsTransportListLive, TestFixtures}
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -35,9 +35,19 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      assert has_element?(view, "#comms-transports-page", "No transports")
-      assert has_element?(view, "#new-transport-link")
-      refute has_element?(view, "#transports-list-component")
+      assert has_element?(view, "#comms-transport-list-page-component")
+
+      presentation = transport_list_presentation(view)
+
+      assert presentation["root"]["attrs"]["id"] == "comms-transports-page"
+
+      assert presentation["header"]["actions"]["new_transport"]["attrs"]["id"] ==
+               "new-transport-link"
+
+      assert presentation["empty_state"]["title"]["text"] == "No transports"
+      assert presentation["card"] == nil
+
+      refute Jason.encode!(presentation) =~ "transports-list-component"
     end
 
     test "lists transports with origin, operator summary, and readiness" do
@@ -46,11 +56,20 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      assert has_element?(view, "#comms-transports-page")
-      assert has_element?(view, "#new-transport-link")
-      assert has_element?(view, "#transports-list-component")
-      refute has_element?(view, "#comms-transports-page", "Link Assignment")
-      refute has_element?(view, "#comms-transports-page", "Link Template")
+      assert has_element?(view, "#comms-transport-list-page-component")
+
+      presentation = transport_list_presentation(view)
+
+      assert presentation["root"]["attrs"]["id"] == "comms-transports-page"
+
+      assert presentation["header"]["actions"]["new_transport"]["attrs"]["id"] ==
+               "new-transport-link"
+
+      assert presentation["card"]["list_component"]["attrs"]["id"] ==
+               "transports-list-component"
+
+      refute Jason.encode!(presentation) =~ "Link Assignment"
+      refute Jason.encode!(presentation) =~ "Link Template"
 
       sidebar = LiveVue.Test.get_vue(view, id: "mission-sidebar-navigation")
 
@@ -66,13 +85,12 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert transports["active"]
       assert transports["label"] == "Transports"
 
-      vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      vue = transport_list_vue(view)
+      props = presentation["card"]["list_component"]["props"]
 
-      assert vue.component == "CommsTransportList"
-      assert vue.ssr == false
       assert is_binary(Jason.encode!(vue.props))
 
-      assert vue.props == %{
+      assert props == %{
                "rows" => [
                  %{
                    "id" => "transport-#{transport.transport_id}",
@@ -112,9 +130,9 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      initial_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      initial_props = transport_list_props(view)
 
-      assert Enum.map(initial_vue.props["rows"], & &1["display_name"]) == [
+      assert Enum.map(initial_props["rows"], & &1["display_name"]) == [
                "Ground Uplink",
                "Lab TCP"
              ]
@@ -126,11 +144,11 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert_patch(view, search_path)
       render_patch(view, search_path)
 
-      searched_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      searched_props = transport_list_props(view)
 
-      assert searched_vue.props["search"] == "ground"
-      assert searched_vue.props["total_count"] == 1
-      assert Enum.map(searched_vue.props["rows"], & &1["display_name"]) == ["Ground Uplink"]
+      assert searched_props["search"] == "ground"
+      assert searched_props["total_count"] == 1
+      assert Enum.map(searched_props["rows"], & &1["display_name"]) == ["Ground Uplink"]
 
       render_hook(view, "search", %{"q" => "no-such-transport"})
 
@@ -140,10 +158,10 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert_patch(view, no_match_path)
       render_patch(view, no_match_path)
 
-      no_matches_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
-      assert no_matches_vue.props["search"] == "no-such-transport"
-      assert no_matches_vue.props["total_count"] == 0
-      assert no_matches_vue.props["rows"] == []
+      no_matches_props = transport_list_props(view)
+      assert no_matches_props["search"] == "no-such-transport"
+      assert no_matches_props["total_count"] == 0
+      assert no_matches_props["rows"] == []
     end
 
     test "sorts through the LiveView-owned list event" do
@@ -153,9 +171,9 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      initial_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
+      initial_props = transport_list_props(view)
 
-      assert Enum.map(initial_vue.props["rows"], & &1["transport_id"]) == [
+      assert Enum.map(initial_props["rows"], & &1["transport_id"]) == [
                alpha.transport_id,
                zulu.transport_id
              ]
@@ -168,11 +186,11 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert_patch(view, sort_path)
       render_patch(view, sort_path)
 
-      sorted_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
-      assert sorted_vue.props["sort"] == "display_name"
-      assert sorted_vue.props["sort_dir"] == "desc"
+      sorted_props = transport_list_props(view)
+      assert sorted_props["sort"] == "display_name"
+      assert sorted_props["sort_dir"] == "desc"
 
-      assert Enum.map(sorted_vue.props["rows"], & &1["transport_id"]) == [
+      assert Enum.map(sorted_props["rows"], & &1["transport_id"]) == [
                zulu.transport_id,
                alpha.transport_id
              ]
@@ -193,10 +211,10 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      first_page_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
-      assert first_page_vue.props["page"] == 1
-      assert first_page_vue.props["total_count"] == 51
-      assert length(first_page_vue.props["rows"]) == 50
+      first_page_props = transport_list_props(view)
+      assert first_page_props["page"] == 1
+      assert first_page_props["total_count"] == 51
+      assert length(first_page_props["rows"]) == 50
 
       render_hook(view, "paginate", %{"page" => "2"})
 
@@ -205,10 +223,183 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert_patch(view, second_page_path)
       render_patch(view, second_page_path)
 
-      second_page_vue = LiveVue.Test.get_vue(view, id: "transports-list-component")
-      assert second_page_vue.props["page"] == 2
-      assert second_page_vue.props["total_count"] == 51
-      assert Enum.map(second_page_vue.props["rows"], & &1["display_name"]) == ["Transport 51"]
+      second_page_props = transport_list_props(view)
+      assert second_page_props["page"] == 2
+      assert second_page_props["total_count"] == 51
+      assert Enum.map(second_page_props["rows"], & &1["display_name"]) == ["Transport 51"]
+    end
+
+    test "projects the complete empty list page through one JSON-safe non-SSR parent" do
+      {conn, _organization, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
+
+      vue = transport_list_vue(view)
+      presentation = vue.props["presentation"]
+
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+      assert Map.keys(presentation) == ["card", "empty_state", "header", "root"]
+
+      assert presentation["root"] == %{
+               "attrs" => %{"class" => "space-y-6", "id" => "comms-transports-page"}
+             }
+
+      header = presentation["header"]
+
+      assert header["attrs"] == %{"class" => "border-b border-primary/20 pb-4"}
+
+      assert header["body"] == %{
+               "attrs" => %{"class" => "flex items-end justify-between gap-4"}
+             }
+
+      assert header["content"] == %{"attrs" => %{}}
+
+      assert header["breadcrumbs"] == %{
+               "attrs" => %{
+                 "aria-label" => "Breadcrumb",
+                 "class" =>
+                   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+               },
+               "items" => [
+                 %{
+                   "key" => "mission",
+                   "separator" => nil,
+                   "link" => %{
+                     "attrs" => %{
+                       "class" => "hover:text-primary transition-colors",
+                       "data-phx-link" => "redirect",
+                       "data-phx-link-state" => "push",
+                       "href" => "/missions/#{mission.mission_id}"
+                     },
+                     "text" => mission.display_name
+                   },
+                   "current" => nil
+                 },
+                 %{
+                   "key" => "comms",
+                   "separator" => %{
+                     "attrs" => %{
+                       "aria-hidden" => "true",
+                       "class" => "text-base-content/20"
+                     },
+                     "text" => "/"
+                   },
+                   "link" => %{
+                     "attrs" => %{
+                       "class" => "hover:text-primary transition-colors",
+                       "data-phx-link" => "redirect",
+                       "data-phx-link-state" => "push",
+                       "href" => "/missions/#{mission.mission_id}/comms"
+                     },
+                     "text" => "Comms"
+                   },
+                   "current" => nil
+                 },
+                 %{
+                   "key" => "transports",
+                   "separator" => %{
+                     "attrs" => %{
+                       "aria-hidden" => "true",
+                       "class" => "text-base-content/20"
+                     },
+                     "text" => "/"
+                   },
+                   "link" => nil,
+                   "current" => %{
+                     "attrs" => %{"class" => "text-primary/90"},
+                     "text" => "Transports"
+                   }
+                 }
+               ]
+             }
+
+      assert header["title"] == %{
+               "attrs" => %{
+                 "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+               },
+               "text" => "Transports",
+               "suffix" => %{
+                 "attrs" => %{
+                   "class" => "ml-3 font-mono text-base text-base-content/60"
+                 },
+                 "text" => "0 configured"
+               }
+             }
+
+      assert header["subtitle"] == %{
+               "attrs" => %{
+                 "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+               },
+               "text" =>
+                 "Durable byte-moving capabilities Cadence can use for inbound, outbound, or bidirectional spacecraft traffic."
+             }
+
+      new_transport_path = "/missions/#{mission.mission_id}/comms/transports/new"
+
+      assert header["actions"] == %{
+               "attrs" => %{"class" => "flex items-center gap-2"},
+               "new_transport" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-primary btn-sm gap-1",
+                   "data-phx-link" => "redirect",
+                   "data-phx-link-state" => "push",
+                   "href" => new_transport_path,
+                   "id" => "new-transport-link"
+                 },
+                 "icon" => %{"attrs" => %{"class" => "hero-plus h-4 w-4"}},
+                 "text" => "New Transport"
+               }
+             }
+
+      assert presentation["empty_state"] == %{
+               "attrs" => %{
+                 "class" =>
+                   "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+               },
+               "title" => %{
+                 "attrs" => %{"class" => "hud-label"},
+                 "text" => "No transports"
+               },
+               "description" => %{
+                 "attrs" => %{
+                   "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+                 },
+                 "text" =>
+                   "Create a transport to describe an external capability for moving bytes."
+               },
+               "action_container" => %{"attrs" => %{"class" => "mt-5"}},
+               "action" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-primary btn-sm",
+                   "data-phx-link" => "redirect",
+                   "data-phx-link-state" => "push",
+                   "href" => new_transport_path
+                 },
+                 "icon" => %{
+                   "attrs" => %{"class" => "hero-plus -ml-0.5 mr-1 h-4 w-4"}
+                 },
+                 "text" => "Create the first transport"
+               }
+             }
+
+      assert presentation["card"] == nil
+    end
+
+    test "raw attrs preserve HEEx nil, false, true, string, and number semantics" do
+      attrs =
+        CommsTransportListLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
     end
 
     test "progressively configures and shows a direct TCP transport" do
@@ -663,8 +854,8 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, list_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
 
-      list_vue = LiveVue.Test.get_vue(list_view, id: "transports-list-component")
-      assert [transport_row] = list_vue.props["rows"]
+      list_props = transport_list_props(list_view)
+      assert [transport_row] = list_props["rows"]
       assert transport_row["id"] == "transport-#{transport.transport_id}"
       assert transport_row["origin"] == "Provider managed"
       assert transport_row["origin_id"] == "transport-origin-#{transport.transport_id}"
@@ -891,6 +1082,26 @@ defmodule CadenceWeb.CommsTransportLiveTest do
                mission.mission_id
              ) == []
     end
+  end
+
+  defp transport_list_props(view) do
+    presentation = transport_list_presentation(view)
+    presentation["card"]["list_component"]["props"]
+  end
+
+  defp transport_list_presentation(view) do
+    transport_list_vue(view).props["presentation"]
+  end
+
+  defp transport_list_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "comms-transport-list-page-component")
+
+    assert vue.component == "CommsTransportListPage"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert Map.keys(vue.props) == ["presentation"]
+
+    vue
   end
 
   defp transport_show_vue(view) do
