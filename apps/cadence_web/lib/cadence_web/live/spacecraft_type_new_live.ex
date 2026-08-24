@@ -5,26 +5,32 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   alias Cadence.Applications.ApplicationDefinition
   alias Cadence.ExtensionCatalog
   alias Cadence.SpacecraftType
-  alias Phoenix.HTML.Form
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
+    mission = socket.assigns.current_mission
+    applications = ExtensionCatalog.applications_for_scope(:spacecraft)
+
     {:ok,
      socket
      |> assign(:page_title, "New Spacecraft Profile")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:applications, ExtensionCatalog.applications_for_scope(:spacecraft))
-     |> assign(:form, to_form(empty_form_params(), as: :spacecraft_type))}
+     |> assign(:page, page_dto(mission))
+     |> assign(:form, form_dto(empty_form_params(), mission))
+     |> assign(:options, options_dto())
+     |> assign(:applications, applications_dto(applications))}
   end
 
   @impl true
   def handle_event("validate", %{"spacecraft_type" => params}, socket) do
-    {:noreply, assign(socket, :form, to_form(params, as: :spacecraft_type))}
+    {:noreply, assign(socket, :form, form_dto(params, socket.assigns.current_mission))}
   end
 
   @impl true
   def handle_event("save", %{"spacecraft_type" => params}, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    socket = assign(socket, :form, form_dto(params, mission))
 
     with {:ok, display_name} <- required_text(params["display_name"], "Display name is required."),
          {:ok, downlink_protocol} <- protocol(params["downlink_protocol"], :downlink),
@@ -62,153 +68,227 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="spacecraft-profile-new-page" class="space-y-6 max-w-2xl">
-      <.page_header
-        title="New Spacecraft Profile"
-        subtitle="Captures the byte-interpretation contract shared across spacecraft of the same kind — downlink and uplink protocols, frame parameters, and which platform applications run."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {"Spacecraft Profiles", ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"},
-          {"New Spacecraft Profile", nil}
-        ]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="spacecraft-profile-new-component"
+        v-component="SpacecraftTypeNew"
+        page={@page}
+        form={@form}
+        options={@options}
+        applications={@applications}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="space-y-6 max-w-2xl"
       />
-
-      <.form
-        for={@form}
-        id="spacecraft-profile-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section number="01" title="Identity">
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        </.form_section>
-
-        <.form_section number="02" title="Data Link Protocols">
-          <.input
-            field={@form[:downlink_protocol]}
-            type="select"
-            label="Downlink Protocol"
-            options={downlink_protocol_options()}
-            required
-          />
-          <.input
-            field={@form[:uplink_protocol]}
-            type="select"
-            label="Uplink Protocol"
-            options={uplink_protocol_options()}
-            required
-          />
-        </.form_section>
-
-        <.frame_parameters_section form={@form} />
-
-        <.applications_section form={@form} applications={@applications} />
-
-        <.form_actions
-          submit="Create Profile"
-          cancel_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-        />
-      </.form>
-    </div>
+    </Layouts.app>
     """
   end
 
-  attr :form, Phoenix.HTML.Form, required: true
-
-  defp frame_parameters_section(assigns) do
-    ~H"""
-    <.form_section number="03" title="Downlink Frame Parameters">
-      <p class="text-sm text-base-content/70">
-        How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol.
-      </p>
-
-      <.input
-        field={@form[:frame_size]}
-        type="number"
-        label="Transfer Frame Size (bytes)"
-        required
-      />
-
-      <.input
-        :if={frame_field_visible?(@form, :secondary_header_length)}
-        field={@form[:secondary_header_length]}
-        type="number"
-        label="Secondary Header Length (bytes, 0 if absent)"
-      />
-
-      <.input
-        :if={frame_field_visible?(@form, :insert_zone_length)}
-        field={@form[:insert_zone_length]}
-        type="number"
-        label="Insert Zone Length (bytes, 0 if absent)"
-      />
-
-      <.input
-        :if={frame_field_visible?(@form, :truncated_primary_header)}
-        field={@form[:truncated_primary_header]}
-        type="select"
-        label="Truncated Primary Header"
-        options={[{"No", "false"}, {"Yes", "true"}]}
-      />
-
-      <.input
-        field={@form[:ocf_length]}
-        type="select"
-        label="Operational Control Field"
-        options={[{"Not present", "0"}, {"Present (4 bytes)", "4"}]}
-      />
-    </.form_section>
-    """
+  defp page_dto(mission) do
+    %{
+      id: "spacecraft-profile-new-page",
+      title: "New Spacecraft Profile",
+      subtitle:
+        "Captures the byte-interpretation contract shared across spacecraft of the same kind — downlink and uplink protocols, frame parameters, and which platform applications run.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Spacecraft", href: ~p"/missions/#{mission.mission_id}/spacecraft"},
+        %{
+          label: "Spacecraft Profiles",
+          href: ~p"/missions/#{mission.mission_id}/spacecraft/profiles"
+        },
+        %{label: "New Spacecraft Profile", href: nil}
+      ]
+    }
   end
 
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :applications, :list, required: true
+  defp form_dto(params, mission) do
+    %{
+      id: "spacecraft-profile-form",
+      sections: %{
+        identity: section_dto("spacecraft-profile-identity-section", "01", "Identity"),
+        protocols:
+          section_dto(
+            "spacecraft-profile-protocols-section",
+            "02",
+            "Data Link Protocols"
+          ),
+        frame_parameters:
+          section_dto(
+            "spacecraft-profile-frame-parameters-section",
+            "03",
+            "Downlink Frame Parameters",
+            "How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol."
+          ),
+        applications:
+          section_dto(
+            "spacecraft-profile-applications-section",
+            "04",
+            "Applications",
+            "Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft."
+          )
+      },
+      fields: %{
+        display_name:
+          field_dto(
+            :display_name,
+            "text",
+            "Display Name",
+            true,
+            string_param(params, "display_name")
+          ),
+        downlink_protocol:
+          field_dto(
+            :downlink_protocol,
+            "select",
+            "Downlink Protocol",
+            true,
+            string_param(params, "downlink_protocol")
+          ),
+        uplink_protocol:
+          field_dto(
+            :uplink_protocol,
+            "select",
+            "Uplink Protocol",
+            true,
+            string_param(params, "uplink_protocol")
+          ),
+        frame_size:
+          field_dto(
+            :frame_size,
+            "number",
+            "Transfer Frame Size (bytes)",
+            true,
+            string_param(params, "frame_size")
+          ),
+        secondary_header_length:
+          field_dto(
+            :secondary_header_length,
+            "number",
+            "Secondary Header Length (bytes, 0 if absent)",
+            false,
+            string_param(params, "secondary_header_length")
+          ),
+        insert_zone_length:
+          field_dto(
+            :insert_zone_length,
+            "number",
+            "Insert Zone Length (bytes, 0 if absent)",
+            false,
+            string_param(params, "insert_zone_length")
+          ),
+        truncated_primary_header:
+          field_dto(
+            :truncated_primary_header,
+            "select",
+            "Truncated Primary Header",
+            false,
+            string_param(params, "truncated_primary_header")
+          ),
+        ocf_length:
+          field_dto(
+            :ocf_length,
+            "select",
+            "Operational Control Field",
+            false,
+            string_param(params, "ocf_length")
+          ),
+        applications: %{
+          id: "spacecraft-profile-application-options",
+          name: "spacecraft_type[applications]",
+          value: application_values(params)
+        }
+      },
+      actions: %{
+        submit: %{id: "create-spacecraft-profile-button", label: "Create Profile"},
+        cancel: %{
+          id: "cancel-spacecraft-profile-link",
+          label: "Cancel",
+          href: ~p"/missions/#{mission.mission_id}/spacecraft/profiles"
+        }
+      }
+    }
+  end
 
-  defp applications_section(assigns) do
-    ~H"""
-    <.form_section number="04" title="Applications">
-      <p class="text-sm text-base-content/70">
-        Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft.
-      </p>
+  defp section_dto(id, number, title, description \\ nil) do
+    %{id: id, number: number, title: title, description: description}
+  end
 
-      <div class="space-y-3">
-        <%!-- bespoke layout: selectable application cards with a raw checkbox (dynamic
-        name/checked/disabled that <.input> does not support) --%>
-        <label
-          :for={app <- @applications}
-          class={[
-            "flex items-start gap-3 rounded border p-3 transition-colors",
-            if(application_available?(app),
-              do:
-                "border-base-300 bg-base-100/40 border-l-2 border-l-primary/40 hover:border-l-primary cursor-pointer",
-              else: "border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed"
-            )
-          ]}
-        >
-          <input
-            id={"spacecraft-profile-application-#{app.application_key}"}
-            type="checkbox"
-            name={"spacecraft_type[applications][#{app.application_key}]"}
-            value="1"
-            checked={application_checked?(@form, app.application_key)}
-            disabled={not application_available?(app)}
-            class="checkbox checkbox-primary mt-0.5"
-          />
-          <div>
-            <div class="font-medium text-base-content">
-              {app.display_name}
-              <span :if={not application_available?(app)} class="hud-label ml-2">
-                Roadmap
-              </span>
-            </div>
-            <p class="mt-0.5 text-sm text-base-content/70">{app.description}</p>
-          </div>
-        </label>
-      </div>
-    </.form_section>
-    """
+  defp field_dto(field, type, label, required, value) do
+    field_name = Atom.to_string(field)
+
+    %{
+      id: "spacecraft_type_#{field_name}",
+      name: "spacecraft_type[#{field_name}]",
+      type: type,
+      label: label,
+      required: required,
+      value: value
+    }
+  end
+
+  defp options_dto do
+    %{
+      downlink_protocols: options_dto(downlink_protocol_options()),
+      uplink_protocols: options_dto(uplink_protocol_options()),
+      truncated_primary_headers: [option_dto("No", "false"), option_dto("Yes", "true")],
+      operational_control_fields: [
+        option_dto("Not present", "0"),
+        option_dto("Present (4 bytes)", "4")
+      ],
+      frame_fields: %{
+        secondary_header_length: visible_downlink_protocols(:secondary_header_length),
+        insert_zone_length: visible_downlink_protocols(:insert_zone_length),
+        truncated_primary_header: visible_downlink_protocols(:truncated_primary_header)
+      }
+    }
+  end
+
+  defp options_dto(options), do: Enum.map(options, fn {label, value} -> option_dto(label, value) end)
+
+  defp option_dto(label, value), do: %{label: label, value: value}
+
+  defp downlink_protocol_options do
+    [{"TM", "tm"}, {"AOS", "aos"}, {"USLP", "uslp"}]
+  end
+
+  defp uplink_protocol_options do
+    [{"TC", "tc"}, {"USLP", "uslp"}]
+  end
+
+  defp visible_downlink_protocols(field) do
+    Enum.filter(["tm", "aos", "uslp"], &frame_field_visible?(&1, field))
+  end
+
+  defp frame_field_visible?(downlink_protocol, :secondary_header_length) do
+    downlink_protocol in ["tm", :tm]
+  end
+
+  defp frame_field_visible?(downlink_protocol, :insert_zone_length) do
+    downlink_protocol in ["aos", :aos]
+  end
+
+  defp frame_field_visible?(downlink_protocol, :truncated_primary_header) do
+    downlink_protocol in ["uslp", :uslp]
+  end
+
+  defp applications_dto(applications) do
+    Enum.map(applications, fn application ->
+      key = application.application_key
+      available? = application_available?(application)
+
+      %{
+        id: "spacecraft-profile-application-#{key}",
+        key: key,
+        name: "spacecraft_type[applications][#{key}]",
+        value: "1",
+        label: application.display_name,
+        description: application.description,
+        available: available?,
+        availability_label: if(available?, do: nil, else: "Roadmap")
+      }
+    end)
   end
 
   defp empty_form_params do
@@ -225,30 +305,34 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
     }
   end
 
-  defp downlink_protocol_options do
-    [{"TM", "tm"}, {"AOS", "aos"}, {"USLP", "uslp"}]
+  defp string_param(params, key) when is_map(params) do
+    case Map.get(params, key) do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 
-  defp uplink_protocol_options do
-    [{"TC", "tc"}, {"USLP", "uslp"}]
+  defp string_param(_params, _key), do: ""
+
+  defp application_values(params) when is_map(params) do
+    case Map.get(params, "applications") do
+      applications when is_map(applications) ->
+        applications
+        |> Map.keys()
+        |> Enum.filter(&(is_binary(&1) and application_checked?(params, &1)))
+        |> Map.new(&{&1, "1"})
+
+      _other ->
+        %{}
+    end
   end
 
-  defp frame_field_visible?(form, :secondary_header_length) do
-    Form.input_value(form, :downlink_protocol) in ["tm", :tm]
-  end
+  defp application_values(_params), do: %{}
 
-  defp frame_field_visible?(form, :insert_zone_length) do
-    Form.input_value(form, :downlink_protocol) in ["aos", :aos]
-  end
-
-  defp frame_field_visible?(form, :truncated_primary_header) do
-    Form.input_value(form, :downlink_protocol) in ["uslp", :uslp]
-  end
-
-  defp application_checked?(form, key) do
-    case Form.input_value(form, :applications) do
+  defp application_checked?(params, key) do
+    case Map.get(params, "applications") do
       %{} = applications -> Map.has_key?(applications, key)
-      _ -> false
+      _other -> false
     end
   end
 
@@ -310,7 +394,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
     applications =
       params
-      |> Map.get("applications", %{})
+      |> application_values()
       |> Enum.reduce(%{}, fn {key, _value}, acc ->
         case Map.fetch(available_by_param, key) do
           {:ok, application_key} -> Map.put(acc, application_key, %{})

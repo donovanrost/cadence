@@ -38,6 +38,47 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     vue
   end
 
+  defp spacecraft_profile_new_vue(view) do
+    vue = LiveVue.Test.get_vue(view, id: "spacecraft-profile-new-component")
+
+    assert vue.component == "SpacecraftTypeNew"
+    assert vue.class == "space-y-6 max-w-2xl"
+    assert vue.ssr == false
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    assert vue.handlers == %{
+             "save" => Phoenix.LiveView.JS.push("save"),
+             "validate" => Phoenix.LiveView.JS.push("validate")
+           }
+
+    vue
+  end
+
+  defp spacecraft_profile_form_values(view) do
+    view
+    |> spacecraft_profile_new_vue()
+    |> Map.fetch!(:props)
+    |> get_in(["form", "fields"])
+    |> Map.new(fn {name, field} -> {name, field["value"]} end)
+  end
+
+  defp valid_spacecraft_profile_params(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "display_name" => "Lab TM/TC",
+        "downlink_protocol" => "tm",
+        "uplink_protocol" => "tc",
+        "frame_size" => "1024",
+        "secondary_header_length" => "0",
+        "insert_zone_length" => "0",
+        "truncated_primary_header" => "false",
+        "ocf_length" => "0",
+        "applications" => %{"telemetry_decom" => "1"}
+      },
+      overrides
+    )
+  end
+
   describe "profile routes" do
     test "spacecraft management page exposes vehicle and profile cards with scoped actions" do
       {conn, _org, mission} = signed_in_org_and_mission()
@@ -197,28 +238,208 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     test "creates a spacecraft profile and redirects to the profile show page" do
       {conn, org, mission} = signed_in_org_and_mission()
 
+      other_mission =
+        TestFixtures.persist_mission!(org,
+          slug: "secondary",
+          display_name: "Secondary Mission"
+        )
+
       {:ok, view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
 
-      assert has_element?(view, "#spacecraft-profile-new-page")
-      assert has_element?(view, "#spacecraft-profile-form")
-      assert has_element?(view, "#spacecraft-profile-application-telemetry_decom")
-      refute has_element?(view, "#spacecraft-profile-application-cfdp")
+      assert has_element?(view, "#spacecraft-profile-new-component")
+      refute has_element?(view, "#spacecraft-profile-new-page")
+      refute has_element?(view, "#spacecraft-profile-form")
 
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#spacecraft-profile-form",
-                 spacecraft_type: %{
-                   display_name: "Lab TM/TC",
-                   downlink_protocol: "tm",
-                   uplink_protocol: "tc",
-                   frame_size: "1024",
-                   secondary_header_length: "0",
-                   ocf_length: "0",
-                   applications: %{"telemetry_decom" => "1"}
+      vue = spacecraft_profile_new_vue(view)
+
+      assert vue.props == %{
+               "page" => %{
+                 "id" => "spacecraft-profile-new-page",
+                 "title" => "New Spacecraft Profile",
+                 "subtitle" =>
+                   "Captures the byte-interpretation contract shared across spacecraft of the same kind — downlink and uplink protocols, frame parameters, and which platform applications run.",
+                 "breadcrumbs" => [
+                   %{
+                     "label" => mission.display_name,
+                     "href" => "/missions/#{mission.mission_id}"
+                   },
+                   %{
+                     "label" => "Spacecraft",
+                     "href" => "/missions/#{mission.mission_id}/spacecraft"
+                   },
+                   %{
+                     "label" => "Spacecraft Profiles",
+                     "href" => "/missions/#{mission.mission_id}/spacecraft/profiles"
+                   },
+                   %{"label" => "New Spacecraft Profile", "href" => nil}
+                 ]
+               },
+               "form" => %{
+                 "id" => "spacecraft-profile-form",
+                 "sections" => %{
+                   "identity" => %{
+                     "id" => "spacecraft-profile-identity-section",
+                     "number" => "01",
+                     "title" => "Identity",
+                     "description" => nil
+                   },
+                   "protocols" => %{
+                     "id" => "spacecraft-profile-protocols-section",
+                     "number" => "02",
+                     "title" => "Data Link Protocols",
+                     "description" => nil
+                   },
+                   "frame_parameters" => %{
+                     "id" => "spacecraft-profile-frame-parameters-section",
+                     "number" => "03",
+                     "title" => "Downlink Frame Parameters",
+                     "description" =>
+                       "How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol."
+                   },
+                   "applications" => %{
+                     "id" => "spacecraft-profile-applications-section",
+                     "number" => "04",
+                     "title" => "Applications",
+                     "description" =>
+                       "Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft."
+                   }
+                 },
+                 "fields" => %{
+                   "display_name" => %{
+                     "id" => "spacecraft_type_display_name",
+                     "name" => "spacecraft_type[display_name]",
+                     "type" => "text",
+                     "label" => "Display Name",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "downlink_protocol" => %{
+                     "id" => "spacecraft_type_downlink_protocol",
+                     "name" => "spacecraft_type[downlink_protocol]",
+                     "type" => "select",
+                     "label" => "Downlink Protocol",
+                     "required" => true,
+                     "value" => "tm"
+                   },
+                   "uplink_protocol" => %{
+                     "id" => "spacecraft_type_uplink_protocol",
+                     "name" => "spacecraft_type[uplink_protocol]",
+                     "type" => "select",
+                     "label" => "Uplink Protocol",
+                     "required" => true,
+                     "value" => "tc"
+                   },
+                   "frame_size" => %{
+                     "id" => "spacecraft_type_frame_size",
+                     "name" => "spacecraft_type[frame_size]",
+                     "type" => "number",
+                     "label" => "Transfer Frame Size (bytes)",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "secondary_header_length" => %{
+                     "id" => "spacecraft_type_secondary_header_length",
+                     "name" => "spacecraft_type[secondary_header_length]",
+                     "type" => "number",
+                     "label" => "Secondary Header Length (bytes, 0 if absent)",
+                     "required" => false,
+                     "value" => "0"
+                   },
+                   "insert_zone_length" => %{
+                     "id" => "spacecraft_type_insert_zone_length",
+                     "name" => "spacecraft_type[insert_zone_length]",
+                     "type" => "number",
+                     "label" => "Insert Zone Length (bytes, 0 if absent)",
+                     "required" => false,
+                     "value" => "0"
+                   },
+                   "truncated_primary_header" => %{
+                     "id" => "spacecraft_type_truncated_primary_header",
+                     "name" => "spacecraft_type[truncated_primary_header]",
+                     "type" => "select",
+                     "label" => "Truncated Primary Header",
+                     "required" => false,
+                     "value" => "false"
+                   },
+                   "ocf_length" => %{
+                     "id" => "spacecraft_type_ocf_length",
+                     "name" => "spacecraft_type[ocf_length]",
+                     "type" => "select",
+                     "label" => "Operational Control Field",
+                     "required" => false,
+                     "value" => "0"
+                   },
+                   "applications" => %{
+                     "id" => "spacecraft-profile-application-options",
+                     "name" => "spacecraft_type[applications]",
+                     "value" => %{}
+                   }
+                 },
+                 "actions" => %{
+                   "submit" => %{
+                     "id" => "create-spacecraft-profile-button",
+                     "label" => "Create Profile"
+                   },
+                   "cancel" => %{
+                     "id" => "cancel-spacecraft-profile-link",
+                     "label" => "Cancel",
+                     "href" => "/missions/#{mission.mission_id}/spacecraft/profiles"
+                   }
                  }
-               )
-               |> render_submit()
+               },
+               "options" => %{
+                 "downlink_protocols" => [
+                   %{"label" => "TM", "value" => "tm"},
+                   %{"label" => "AOS", "value" => "aos"},
+                   %{"label" => "USLP", "value" => "uslp"}
+                 ],
+                 "uplink_protocols" => [
+                   %{"label" => "TC", "value" => "tc"},
+                   %{"label" => "USLP", "value" => "uslp"}
+                 ],
+                 "truncated_primary_headers" => [
+                   %{"label" => "No", "value" => "false"},
+                   %{"label" => "Yes", "value" => "true"}
+                 ],
+                 "operational_control_fields" => [
+                   %{"label" => "Not present", "value" => "0"},
+                   %{"label" => "Present (4 bytes)", "value" => "4"}
+                 ],
+                 "frame_fields" => %{
+                   "secondary_header_length" => ["tm"],
+                   "insert_zone_length" => ["aos"],
+                   "truncated_primary_header" => ["uslp"]
+                 }
+               },
+               "applications" => [
+                 %{
+                   "id" => "spacecraft-profile-application-telemetry_decom",
+                   "key" => "telemetry_decom",
+                   "name" => "spacecraft_type[applications][telemetry_decom]",
+                   "value" => "1",
+                   "label" => "Telemetry Decom",
+                   "description" =>
+                     "Bind packet fields and decode selected inputs into named telemetry points.",
+                   "available" => true,
+                   "availability_label" => nil
+                 }
+               ]
+             }
+
+      assert Enum.any?(
+               vue.props["applications"],
+               &(&1["id"] == "spacecraft-profile-application-telemetry_decom")
+             )
+
+      refute Enum.any?(vue.props["applications"], &(&1["key"] == "cfdp"))
+
+      render_hook(view, "save", %{
+        "spacecraft_type" =>
+          valid_spacecraft_profile_params(%{"mission_id" => other_mission.mission_id})
+      })
+
+      {target, _flash} = assert_redirect(view)
 
       assert target =~ "/missions/#{mission.mission_id}/spacecraft/profiles/"
 
@@ -226,7 +447,154 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
         Cadence.SpacecraftTypeStore.list_spacecraft_types(org.organization_id, mission.mission_id)
 
       assert persisted.display_name == "Lab TM/TC"
+      assert persisted.mission_id == mission.mission_id
+      assert persisted.downlink_protocol == :tm
+      assert persisted.uplink_protocol == :tc
+      assert persisted.packet_protocol == :space_packet
+
+      assert persisted.frame_parameters == %{
+               "frame_size" => 1024,
+               "secondary_header_length" => 0,
+               "ocf_length" => 0
+             }
+
+      assert persisted.applications == %{"telemetry_decom" => %{}}
       assert target =~ persisted.spacecraft_type_id
+
+      assert Cadence.SpacecraftTypeStore.list_spacecraft_types(
+               org.organization_id,
+               other_mission.mission_id
+             ) == []
+    end
+
+    test "resyncs every conditional frame value and application selection from validate hooks" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
+
+      aos_params =
+        valid_spacecraft_profile_params(%{
+          "display_name" => "AOS Lab",
+          "downlink_protocol" => "aos",
+          "uplink_protocol" => "uslp",
+          "frame_size" => "2048",
+          "secondary_header_length" => "7",
+          "insert_zone_length" => "16",
+          "truncated_primary_header" => "true",
+          "ocf_length" => "4"
+        })
+
+      render_hook(view, "validate", %{"spacecraft_type" => aos_params})
+      assert spacecraft_profile_form_values(view) == aos_params
+
+      uslp_params =
+        valid_spacecraft_profile_params(%{
+          "display_name" => "USLP Lab",
+          "downlink_protocol" => "uslp",
+          "frame_size" => "4096",
+          "secondary_header_length" => "9",
+          "insert_zone_length" => "24",
+          "truncated_primary_header" => "false",
+          "applications" => %{}
+        })
+
+      render_hook(view, "validate", %{"spacecraft_type" => uslp_params})
+      assert spacecraft_profile_form_values(view) == uslp_params
+    end
+
+    test "persists active AOS and USLP frame branches and filters unsupported applications" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      cases = [
+        {"AOS Lab", "aos", :aos,
+         %{
+           "frame_size" => "2048",
+           "secondary_header_length" => "99",
+           "insert_zone_length" => "16",
+           "truncated_primary_header" => "true",
+           "ocf_length" => "4"
+         },
+         %{"frame_size" => 2048, "insert_zone_length" => 16, "ocf_length" => 4}},
+        {"USLP Lab", "uslp", :uslp,
+         %{
+           "frame_size" => "4096",
+           "secondary_header_length" => "99",
+           "insert_zone_length" => "99",
+           "truncated_primary_header" => "true",
+           "ocf_length" => "0"
+         },
+         %{"frame_size" => 4096, "truncated_primary_header" => true, "ocf_length" => 0}}
+      ]
+
+      for {display_name, protocol, expected_protocol, frame_values, expected_frame_parameters} <-
+            cases do
+        {:ok, view, _html} =
+          live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
+
+        params =
+          valid_spacecraft_profile_params(
+            Map.merge(frame_values, %{
+              "display_name" => display_name,
+              "downlink_protocol" => protocol,
+              "applications" => %{
+                "telemetry_decom" => "1",
+                "cfdp" => "1",
+                "unknown_application" => "1"
+              }
+            })
+          )
+
+        render_hook(view, "save", %{"spacecraft_type" => params})
+        {_target, _flash} = assert_redirect(view)
+
+        assert %Cadence.SpacecraftType{} =
+                 persisted =
+                 Cadence.SpacecraftTypeStore.list_spacecraft_types(
+                   org.organization_id,
+                   mission.mission_id
+                 )
+                 |> Enum.find(&(&1.display_name == display_name))
+
+        assert persisted.downlink_protocol == expected_protocol
+        assert persisted.frame_parameters == expected_frame_parameters
+        assert persisted.applications == %{"telemetry_decom" => %{}}
+      end
+    end
+
+    test "preserves exact create errors and submitted form values without persistence" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      cases = [
+        {%{"display_name" => "   "}, "Display name is required."},
+        {%{"downlink_protocol" => "invalid"}, "Downlink protocol is invalid."},
+        {%{"uplink_protocol" => "invalid"}, "Uplink protocol is invalid."},
+        {%{"frame_size" => "0"}, "Frame size must be a positive integer."},
+        {%{"secondary_header_length" => "-1"},
+         "Secondary header length must be a non-negative integer."},
+        {%{"downlink_protocol" => "aos", "insert_zone_length" => "-1"},
+         "Insert zone length must be a non-negative integer."},
+        {%{"downlink_protocol" => "uslp", "truncated_primary_header" => "sometimes"},
+         "Truncated primary header must be Yes or No."},
+        {%{"ocf_length" => "2"},
+         "Operational Control Field must be 0 (absent) or 4 (present)."}
+      ]
+
+      for {overrides, message} <- cases do
+        {:ok, view, _html} =
+          live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
+
+        params = valid_spacecraft_profile_params(overrides)
+        render_hook(view, "save", %{"spacecraft_type" => params})
+
+        assert has_element?(view, "#flash-error[role='alert']", message)
+        assert spacecraft_profile_form_values(view) == params
+      end
+
+      assert Cadence.SpacecraftTypeStore.list_spacecraft_types(
+               org.organization_id,
+               mission.mission_id
+             ) == []
     end
 
     test "shows a spacecraft profile" do
