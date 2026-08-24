@@ -73,7 +73,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleRestoreHistoryLiveTe
              ~s(#ops-dashboard-show-page[data-dashboard-publication-state="published_current"][data-dashboard-published-current="true"])
            )
 
-    assert has_element?(view, "h1", "Published Power")
+    assert get_in(dashboard_toolbar_presentation(view), ["title", "text"]) == "Published Power"
 
     {:ok, activity, _html} =
       live(
@@ -103,7 +103,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleRestoreHistoryLiveTe
              ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="3"])
            )
 
-    assert has_element?(restored_view, "h1", "Published Power")
+    assert get_in(dashboard_toolbar_presentation(restored_view), ["title", "text"]) ==
+             "Published Power"
 
     assert {:ok, %Document{} = latest_document} =
              Cadence.Dashboards.fetch_document(

@@ -129,7 +129,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardLifecycleVersionActionsLiveTe
              ~s(#ops-dashboard-show-page[data-dashboard-document-mode="published"][data-dashboard-publication-state="draft_ahead"][data-dashboard-publishable-version="2"])
            )
 
-    assert has_element?(viewer, "h1", "Original Power")
+    assert get_in(dashboard_toolbar_presentation(viewer), ["title", "text"]) == "Original Power"
 
     assert [%Cadence.Dashboards.DashboardSummary{} = summary] =
              Cadence.Dashboards.list_dashboard_summaries(
