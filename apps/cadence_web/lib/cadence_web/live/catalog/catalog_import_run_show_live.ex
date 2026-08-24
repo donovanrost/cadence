@@ -2,8 +2,6 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.Catalog.Components
-
   alias Cadence.Catalog
   alias Cadence.Catalog.Events
 
@@ -21,7 +19,8 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
           socket
           |> assign(:page_title, "Import run")
           |> assign(:nav_item, :catalog)
-          |> assign(:run, run)
+          |> assign(:navigation, navigation_dto(mission, run))
+          |> assign_import_run(run)
 
         {:ok, socket}
 
@@ -42,7 +41,7 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
              :import_run_failed
            ] do
     if run.import_run_id == socket.assigns.run.import_run_id do
-      {:noreply, assign(socket, :run, run)}
+      {:noreply, assign_import_run(socket, run)}
     else
       {:noreply, socket}
     end
@@ -51,89 +50,166 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title="Import run"
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
-          {"Artifact",
-           ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@run.artifact_id}"},
-          {"Import run", nil}
-        ]}
-      >
-        <:title_suffix><.import_run_status_badge status={@run.status} /></:title_suffix>
-      </.page_header>
-
-      <.run_header run={@run} />
-
-      <.mission_model_summary_card
-        :if={mission_model_summary(@run)}
-        summary={mission_model_summary(@run)}
-      />
-
-      <.diagnostic_list diagnostics={@run.diagnostics} />
-
-      <.failure_block :if={@run.status == :failed} failure_reason={@run.failure_reason} />
-
-    </div>
-    """
-  end
-
-  attr :run, :map, required: true
-
-  defp run_header(assigns) do
-    ~H"""
-    <.card>
-      <div class="text-sm space-y-1">
-        <div class="flex items-center gap-2">
-          <span class="text-base-content/60">Importer</span>
-          <span id="catalog-importer-version" class="font-mono">
-            {@run.importer_key} v{@run.importer_version}
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-base-content/60">Started</span>
-          <span>{Calendar.strftime(@run.started_at, "%Y-%m-%d %H:%M:%S UTC")}</span>
-        </div>
-        <div :if={@run.completed_at} class="flex items-center gap-2">
-          <span class="text-base-content/60">Completed</span>
-          <span>{Calendar.strftime(@run.completed_at, "%Y-%m-%d %H:%M:%S UTC")}</span>
-        </div>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="catalog-import-run-show-page">
+        <.vue
+          id="catalog-import-run-show-component"
+          v-component="CatalogImportRunShow"
+          navigation={@navigation}
+          status={@status}
+          run_details={@run_details}
+          mission_model={@mission_model}
+          diagnostic_groups={@diagnostic_groups}
+          failure_reason={@failure_reason}
+          v-ssr={false}
+        />
       </div>
-    </.card>
+    </Layouts.app>
     """
   end
 
-  attr :summary, :map, required: true
-
-  defp mission_model_summary_card(assigns) do
-    ~H"""
-    <.card id="catalog-import-mission-model" title="Mission Model">
-      <div class="divide-y divide-base-300">
-        <.detail_row label="Revision" mono>
-          {@summary["revision_id"]}
-        </.detail_row>
-        <.detail_row label="Declarations" mono>
-          {@summary["declaration_count"]}
-        </.detail_row>
-        <.detail_row label="Plans" mono>
-          {map_size(@summary["plans"] || %{})}
-        </.detail_row>
-      </div>
-    </.card>
-    """
+  defp assign_import_run(socket, run) do
+    socket
+    |> assign(:run, run)
+    |> assign(:status, status_dto(run.status))
+    |> assign(:run_details, run_details_dto(run))
+    |> assign(:mission_model, mission_model_dto(run))
+    |> assign(:diagnostic_groups, diagnostic_groups_dto(run.diagnostics))
+    |> assign(:failure_reason, failure_reason_dto(run))
   end
 
-  attr :failure_reason, :any, required: true
-
-  defp failure_block(assigns) do
-    ~H"""
-    <.callout variant={:error}>
-      <p class="font-mono text-sm">{format_failure_reason(@failure_reason)}</p>
-    </.callout>
-    """
+  defp navigation_dto(mission, run) do
+    %{
+      breadcrumbs: [
+        %{
+          label: mission.display_name,
+          href: ~p"/missions/#{mission.mission_id}"
+        },
+        %{
+          label: "Catalog",
+          href: ~p"/missions/#{mission.mission_id}/catalog"
+        },
+        %{
+          label: "Artifact",
+          href: ~p"/missions/#{mission.mission_id}/catalog/artifacts/#{run.artifact_id}"
+        },
+        %{label: "Import run", href: nil}
+      ]
+    }
   end
+
+  defp status_dto(status) do
+    %{
+      label: status_label(status),
+      tone: status_tone(status)
+    }
+  end
+
+  defp status_label(:running), do: "Running"
+  defp status_label(:completed), do: "Completed"
+  defp status_label(:failed), do: "Failed"
+  defp status_label(status), do: status |> to_string() |> String.capitalize()
+
+  defp status_tone(:completed), do: "ready"
+  defp status_tone(:failed), do: "blocked"
+  defp status_tone(_status), do: "info"
+
+  defp run_details_dto(run) do
+    %{
+      importer: %{
+        id: "catalog-importer-version",
+        label: "#{run.importer_key} v#{run.importer_version}"
+      },
+      started_at: format_timestamp(run.started_at),
+      completed_at: format_timestamp(run.completed_at)
+    }
+  end
+
+  defp format_timestamp(nil), do: nil
+  defp format_timestamp(timestamp), do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%S UTC")
+
+  defp mission_model_dto(run) do
+    case mission_model_summary(run) do
+      nil ->
+        nil
+
+      summary ->
+        %{
+          id: "catalog-import-mission-model",
+          revision_id: summary["revision_id"],
+          declaration_count: summary["declaration_count"],
+          plan_count: map_size(summary["plans"] || %{})
+        }
+    end
+  end
+
+  defp diagnostic_groups_dto(diagnostics) do
+    [:error, :warning, :info]
+    |> Enum.flat_map(fn severity ->
+      items = Enum.filter(diagnostics, &(&1.severity == severity))
+
+      if items == [] do
+        []
+      else
+        [
+          %{
+            title: "#{severity_heading(severity)} (#{length(items)})",
+            items: Enum.map(items, &diagnostic_dto/1)
+          }
+        ]
+      end
+    end)
+  end
+
+  defp diagnostic_dto(diagnostic) do
+    %{
+      code: diagnostic.code,
+      message: diagnostic.message,
+      detail: diagnostic_detail(diagnostic),
+      path: diagnostic_path(diagnostic.path)
+    }
+  end
+
+  defp severity_heading(:error), do: "Errors"
+  defp severity_heading(:warning), do: "Warnings"
+  defp severity_heading(:info), do: "Info"
+
+  defp diagnostic_detail(diagnostic) do
+    metadata = Map.get(diagnostic, :metadata, %{}) || %{}
+
+    [
+      metadata_value(metadata, "consumption_summary", "Built-in telemetry"),
+      metadata_value(metadata, "consumption_status", "Status"),
+      metadata_value(metadata, "packet_name", "Packet"),
+      metadata_value(metadata, "entry_name", "Entry"),
+      metadata_value(metadata, "point_name", "Point"),
+      metadata_value(metadata, "type_name", "Type"),
+      metadata_value(metadata, "base_type", "Base type"),
+      metadata_value(metadata, "point_id", "Point ID"),
+      metadata_value(metadata, "type_id", "Type ID")
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      parts -> Enum.join(parts, " | ")
+    end
+  end
+
+  defp metadata_value(metadata, key, label) do
+    case Map.get(metadata, key) do
+      value when is_binary(value) and value != "" -> "#{label}: #{value}"
+      _ -> nil
+    end
+  end
+
+  defp diagnostic_path([]), do: nil
+  defp diagnostic_path(path), do: Enum.join(path, " / ")
+
+  defp failure_reason_dto(%{status: :failed, failure_reason: reason}) do
+    format_failure_reason(reason)
+  end
+
+  defp failure_reason_dto(_run), do: nil
 
   defp format_failure_reason({:exception, message}) when is_binary(message), do: message
 
