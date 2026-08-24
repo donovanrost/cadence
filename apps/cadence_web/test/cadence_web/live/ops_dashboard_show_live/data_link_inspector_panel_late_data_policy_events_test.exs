@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel marks late-data policy decisions event-only without source sample identity" do
     html =
@@ -37,17 +38,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    policy =
+      html
+      |> ViewTestSupport.data_link_inspector_presentation()
+      |> Map.fetch!("late_data_policy")
 
-    assert ["event_only"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("data-late-data-policy-execution-mode")
-
-    assert "Event only" =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls .badge-warning")
-             |> selected_text()
+    assert policy["attrs"]["data-late-data-policy-execution-mode"] == "event_only"
+    assert policy["header"]["execution_badge"]["text"] == "Event only"
   end
 
   test "data_link_panel does not render late-data policy controls for policy events" do
@@ -89,47 +86,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyEv
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    workflow = presentation["workflow_explanation"]
 
-    assert ["late_data_accepted"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-state")
+    assert workflow["attrs"]["data-workflow-explanation-state"] == "late_data_accepted"
 
-    assert "backfill-event-1" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Policy source"]))
-             |> selected_text()
+    workflow_rows =
+      Map.new(workflow["rows"], fn row ->
+        {row["label"]["text"], row["value"]["text"]}
+      end)
 
-    assert "accept" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Policy"]))
-             |> selected_text()
+    assert workflow_rows["Policy source"] == "backfill-event-1"
+    assert workflow_rows["Policy"] == "accept"
+    assert workflow_rows["Selected samples"] == "2"
+    assert workflow_rows["Projection"] == "canonical_history_and_current_projection"
+    assert workflow_rows["Write validity"] == "canonical"
 
-    assert "2" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Selected samples"]))
-             |> selected_text()
-
-    assert "canonical_history_and_current_projection" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Projection"]))
-             |> selected_text()
-
-    assert "canonical" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Write validity"]))
-             |> selected_text()
-
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("id")
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+    refute presentation["late_data_policy"]
   end
 end

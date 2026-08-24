@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
   alias Cadence.Dashboards.Document
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcome
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel presents degraded workflow dispatch with retry controls" do
     html =
@@ -98,29 +99,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
           )
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    workflow = presentation["workflow_explanation"]
+    action_attrs = presentation["action_outcome"]["attrs"]
 
-    assert_outcome_metadata(document)
+    assert_outcome_metadata(action_attrs["data-data-link-action-outcome-metadata"])
 
-    assert ["dispatch_failed"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-state")
+    assert workflow["attrs"]["data-workflow-explanation-state"] == "dispatch_failed"
+    assert workflow["attrs"]["data-workflow-explanation-severity"] == "warning"
 
-    assert ["warning"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-severity")
+    assert workflow["summary"]["text"] ==
+             "This workflow was started, but the backing job failed before completion."
 
-    assert "This workflow was started, but the backing job failed before completion." =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation-summary")
-             |> selected_text()
+    data_operations_path = presentation["historical_workflow_navigation"]["attrs"]["href"]
+    assert presentation["historical_workflow_navigation"]["attrs"]["data-phx-link"] == "redirect"
 
-    assert [data_operations_path] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-open-data-operations")
-             |> LazyHTML.attribute("href")
+    assert presentation["historical_workflow_navigation"]["attrs"]["data-phx-link-state"] ==
+             "push"
 
     uri = URI.parse(data_operations_path)
     query = URI.decode_query(uri.query)
@@ -131,25 +126,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
     assert query["dashboard_limit_mode"] == "observed"
     assert query["run_id"] == "backfill-run-1"
 
-    assert ["retry_job"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-action")
-
-    assert ["retry-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-ids")
-
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
-
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-run-id")
+    assert action_attrs["data-data-link-action-outcome-action"] == "retry_job"
+    assert action_attrs["data-data-link-action-outcome-result-event-ids"] == "retry-event-1"
+    assert action_attrs["data-data-link-action-outcome-target-event-id"] == "backfill-event-1"
+    assert action_attrs["data-data-link-action-outcome-target-run-id"] == "backfill-run-1"
 
     assert %{
              "job_id" => "job-1",
@@ -157,19 +137,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
              "target_event_id" => "backfill-event-1",
              "target_run_id" => "backfill-run-1"
            } =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
-             |> List.first()
+             action_attrs["data-data-link-action-outcome-metadata"]
              |> Jason.decode!()
   end
 
-  defp assert_outcome_metadata(document) do
-    [metadata_json] =
-      document
-      |> LazyHTML.query("#dashboard-data-link-action-outcome")
-      |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
-
+  defp assert_outcome_metadata(metadata_json) do
     metadata =
       metadata_json
       |> Jason.decode!()
@@ -219,11 +191,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelWorkflowDispatch
                "run=run-skipped event=failed-event-skipped job=job-skipped status=running reason=job_not_failed",
              "retry_skipped_run_ids" => "run-skipped"
            }
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
   end
 end

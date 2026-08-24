@@ -379,7 +379,7 @@ function viewportProfile(name) {
       gridItemSelector: ".grid-stack-item",
       chartSelector: "[data-name='TelemetryChart']",
       panelSelector: "#dashboard-panel, #dashboard-data-link-inspector, #dashboard-evidence-inspector",
-      copySelector: "[data-name='ClipboardButton']",
+      copySelector: "[data-clipboard-button]",
       allowedOverlapSelector: "#dashboard-panel",
       textSelector: [
         "#ops-dashboard-show-page h1",
@@ -1264,14 +1264,13 @@ async function evaluateViewport(client, viewport, profile) {
       const clipboardPayload = (selector) => {
         const el = document.querySelector(selector)
         const componentId = selector.startsWith("#") ? selector.slice(1) + "-component" : ""
-        const component =
-          el?.closest("[data-name='ClipboardButton']") ||
-          (componentId ? document.getElementById(componentId) : null)
+        const directButton = el?.matches("[data-clipboard-button]") ? el : null
+        const component = componentId ? document.getElementById(componentId) : null
         const props = decodeLiveVueProps(component)
 
         return {
           present: Boolean(el || component),
-          component: component?.dataset.name || "",
+          component: component?.dataset.name || (directButton ? "ClipboardButton" : ""),
           raw: el?.dataset.clipboardText || props.clipboard_text || "",
           copied: el?.dataset.clipboardCopied || ""
         }
@@ -3557,7 +3556,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -3934,7 +3933,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
           replayRunId: url.searchParams.get("replay_run_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -4240,7 +4239,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -4533,7 +4532,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -4831,7 +4830,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -5117,7 +5116,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -5407,7 +5406,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -5693,7 +5692,7 @@ async function runSourceEndpointOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : ""
         }
       })()
     `,
@@ -6022,7 +6021,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
             dataSourceId: url.searchParams.get("data_source_id") || "",
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -6467,7 +6466,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
             dataSourceId: url.searchParams.get("data_source_id") || "",
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -6895,7 +6894,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -7243,7 +7242,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : ""
         }
       })()
     `,
@@ -7570,7 +7569,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : ""
         }
       })()
     `,
@@ -7837,7 +7836,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
           scopeId: url.searchParams.get("scope_id") || "",
           scopeIds: url.searchParams.get("scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -8520,7 +8519,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -9132,7 +9131,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
             selectedId: url.searchParams.get("selected_id") || "",
             dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
           }
@@ -9198,7 +9197,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           detailHasEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -9257,7 +9256,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           detailHasEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -9950,7 +9949,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -10426,7 +10425,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10891,7 +10890,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -11455,7 +11454,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -11941,7 +11940,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -12267,7 +12266,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -12616,7 +12615,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -13010,7 +13009,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -13534,7 +13533,7 @@ async function runGroundStationOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : ""
         }
       })()
     `,
@@ -13962,7 +13961,7 @@ async function runLinkOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : ""
         }
       })()
     `,
@@ -14640,7 +14639,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -14774,7 +14773,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
             inspectorSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -15106,7 +15105,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -15504,7 +15503,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           displayName: fieldText("Display name"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -15688,7 +15687,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -16588,7 +16587,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -17147,7 +17146,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -17490,7 +17489,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -18384,7 +18383,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
           selectedReplayRunId: inspector?.dataset.dataLinkSelectedReplayRunId || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -19228,7 +19227,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19381,7 +19380,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19571,7 +19570,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19921,7 +19920,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
           selectedTarget: url.searchParams.get("selected_target") || "",
           selectedId: url.searchParams.get("selected_id") || "",
           selectedPlacement: url.searchParams.get("selected_placement") || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -21477,7 +21476,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           }
@@ -21751,7 +21750,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -21899,7 +21898,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -22257,7 +22256,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
           }
         })()
       `,
@@ -22522,7 +22521,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -23267,7 +23266,7 @@ async function runOperationalRfMetricValueTileInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -23554,7 +23553,7 @@ async function runOperationalMetricMissingSnapshotValueTileInspection(client, pr
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -24514,7 +24513,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           related,
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -24621,7 +24620,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
           inspectorSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -25319,7 +25318,7 @@ async function inspectLatestOperationalStateRowEvidence(
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+          copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
         }
       })()
     `,
@@ -31594,7 +31593,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
             selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
             selectedReplayRunId: inspector?.dataset.dataLinkSelectedReplayRunId || "",
-            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
+            copyComponent: copy?.matches("[data-clipboard-button]") ? "ClipboardButton" : "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
           }

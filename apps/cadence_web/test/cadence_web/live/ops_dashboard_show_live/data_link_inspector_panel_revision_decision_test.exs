@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
   alias Cadence.Dashboards.Document
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.RevisionDecisionActionOutcome
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders revision decision controls for revision decision events" do
     html =
@@ -54,155 +55,91 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    revision = presentation["revision_decision"]
+    revision_outcome_attrs = revision["action_outcome"]["attrs"]
+    action_attrs = presentation["action_outcome"]["attrs"]
 
-    assert ["identity-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-controls")
-             |> LazyHTML.attribute("data-revision-decision-observation-identity")
+    assert revision["attrs"]["data-revision-decision-observation-identity"] == "identity-1"
+    assert revision_outcome_attrs["data-revision-decision-action-status"] == "ok"
+    assert action_attrs["data-data-link-action-outcome-action"] == "revision_decision"
+    assert action_attrs["data-data-link-action-outcome-decision"] == "mark_conflict"
+    assert action_attrs["data-data-link-action-outcome-dashboard-limit-mode"] == "compare"
 
-    assert ["ok"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-action-outcome")
-             |> LazyHTML.attribute("data-revision-decision-action-status")
+    assert action_attrs["data-data-link-action-outcome-result-event-id"] ==
+             "decision-event-applied"
 
-    assert ["revision_decision"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-action")
+    assert action_attrs["data-data-link-action-outcome-target-event-id"] ==
+             "decision-event-applied"
 
-    assert ["mark_conflict"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-decision")
+    assert action_attrs["data-data-link-action-outcome-target-observation-identity-id"] ==
+             "identity-1"
 
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-limit-mode")
-
-    assert ["decision-event-applied"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-id")
-
-    assert ["decision-event-applied"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
-
-    assert ["identity-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-observation-identity-id")
-
-    assert %{
+    assert Jason.decode!(action_attrs["data-data-link-action-outcome-metadata"]) == %{
              "decision" => "mark_conflict",
              "dashboard_limit_mode" => "compare",
              "result_event_id" => "decision-event-applied",
              "target_event_id" => "decision-event-applied",
              "target_observation_identity_id" => "identity-1"
-           } =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
-             |> List.first()
-             |> Jason.decode!()
+           }
 
-    assert ["mark_conflict"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-action-outcome")
-             |> LazyHTML.attribute("data-revision-decision-action-decision")
+    assert revision_outcome_attrs["data-revision-decision-action-decision"] == "mark_conflict"
 
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-action-outcome")
-             |> LazyHTML.attribute("data-revision-decision-action-dashboard-limit-mode")
+    assert revision_outcome_attrs["data-revision-decision-action-dashboard-limit-mode"] ==
+             "compare"
 
-    assert ["decision-event-applied"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-action-outcome")
-             |> LazyHTML.attribute("data-revision-decision-action-result-event-id")
+    assert revision_outcome_attrs["data-revision-decision-action-result-event-id"] ==
+             "decision-event-applied"
 
-    assert ["removes this identity from canonical reads until resolved"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-controls")
-             |> LazyHTML.attribute("data-revision-decision-default-effect")
+    assert revision["attrs"]["data-revision-decision-default-effect"] ==
+             "removes this identity from canonical reads until resolved"
 
-    assert ["apply_revision_decision"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-form")
-             |> LazyHTML.attribute("phx-submit")
+    assert revision["form"]["attrs"]["phx-submit"] == "apply_revision_decision"
 
-    assert "removes this identity from canonical reads until resolved" =
-             document
-             |> LazyHTML.query(~s([data-revision-decision-effect-summary="mark_conflict"]))
-             |> selected_text()
+    effects = Map.new(revision["effects"], &{&1["attrs"]["data-revision-decision-effect"], &1})
 
-    assert "sets this identity canonical for default dashboard reads" =
-             document
-             |> LazyHTML.query(~s([data-revision-decision-effect-summary="mark_canonical"]))
-             |> selected_text()
+    assert effects["mark_conflict"]["summary"]["text"] ==
+             "removes this identity from canonical reads until resolved"
 
-    assert "marks this identity superseded by a correction" =
-             document
-             |> LazyHTML.query(~s([data-revision-decision-effect-summary="mark_superseded"]))
-             |> selected_text()
+    assert effects["mark_canonical"]["summary"]["text"] ==
+             "sets this identity canonical for default dashboard reads"
 
-    assert "keeps this identity as advisory history only" =
-             document
-             |> LazyHTML.query(~s([data-revision-decision-effect-summary="mark_advisory"]))
-             |> selected_text()
+    assert effects["mark_superseded"]["summary"]["text"] ==
+             "marks this identity superseded by a correction"
 
-    assert "Apply revision decision" =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-submit")
-             |> selected_text()
+    assert effects["mark_advisory"]["summary"]["text"] ==
+             "keeps this identity as advisory history only"
 
-    assert ["identity-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-observation-identity-id")
-             |> LazyHTML.attribute("value")
+    assert revision["form"]["submit"]["text"] == "Apply revision decision"
 
-    assert ["decision-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-source-event-id")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(
+             presentation,
+             "dashboard-revision-decision-observation-identity-id"
+           ) == "identity-1"
 
-    assert ["flight"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[realm]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-source-event-id") ==
+             "decision-event-1"
 
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[data_source_id]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_realm") == "flight"
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[source_binding_id]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_data_source_id") ==
+             "questdb-flight"
 
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-dashboard-limit-mode")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_source_binding_id") ==
+             "binding-flight"
 
-    assert ["observation-2"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[canonical_observation_id]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(
+             presentation,
+             "dashboard-revision-decision-dashboard-limit-mode"
+           ) == "compare"
 
-    assert ["sample-2"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[canonical_sample_id]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_canonical_observation_id") ==
+             "observation-2"
 
-    assert ["2"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[canonical_revision]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_canonical_sample_id") ==
+             "sample-2"
+
+    assert revision_form_value(presentation, "revision_decision_canonical_revision") == "2"
   end
 
   test "data_link_panel renders revision decision controls for comparison findings with identity context" do
@@ -246,72 +183,50 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelRevisionDecision
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    revision = presentation["revision_decision"]
 
-    assert ["identity-primary-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-controls")
-             |> LazyHTML.attribute("data-revision-decision-observation-identity")
+    assert revision["attrs"]["data-revision-decision-observation-identity"] ==
+             "identity-primary-1"
 
-    assert ["identity-primary-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-observation-identity-id")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(
+             presentation,
+             "dashboard-revision-decision-observation-identity-id"
+           ) == "identity-primary-1"
 
-    assert ["comparison"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[authority]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_authority") == "comparison"
 
-    assert ["dashboard_comparison_finding"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[decision_reason]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_decision_reason") ==
+             "dashboard_comparison_finding"
 
-    assert ["sample-primary-1"] =
-             document
-             |> LazyHTML.query(~s(input[name="revision_decision[canonical_sample_id]"]))
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "revision_decision_canonical_sample_id") ==
+             "sample-primary-1"
 
-    assert ["comparison_finding"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-source-target")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-source-target") ==
+             "comparison_finding"
 
-    assert ["placement-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-source-target-id")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-source-target-id") ==
+             "placement-1"
 
-    assert ["Comparison finding"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-source-link-label")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-source-link-label") ==
+             "Comparison finding"
 
-    assert ["increased"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-comparison-state")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-comparison-state") ==
+             "increased"
 
-    assert ["+2"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-comparison-delta")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-comparison-delta") ==
+             "+2"
 
-    assert ["sample-primary-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-primary-sample")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-primary-sample") ==
+             "sample-primary-1"
 
-    assert ["sample-compare-1"] =
-             document
-             |> LazyHTML.query("#dashboard-revision-decision-compare-sample")
-             |> LazyHTML.attribute("value")
+    assert revision_form_value(presentation, "dashboard-revision-decision-compare-sample") ==
+             "sample-compare-1"
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp revision_form_value(presentation, id) do
+    presentation
+    |> ViewTestSupport.data_link_inspector_form_field("revision_decision", id)
+    |> Map.fetch!("value")
   end
 end

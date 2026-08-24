@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointSco
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
 
   use Phoenix.VerifiedRoutes,

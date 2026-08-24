@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
   @moduletag :config
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -218,11 +218,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetLimitEventNavigationLiveTest
                ~s(#dashboard-data-link-inspector [data-data-link-related-target="limit definition"])
              )
 
-      view
-      |> element(
+      click_data_link_inspector_element(
+        view,
         ~s(#dashboard-data-link-inspector [data-data-link-related-target="limit definition"])
       )
-      |> render_click()
 
       assert has_element?(
                view,

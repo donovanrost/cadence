@@ -66,6 +66,49 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentationTest
     assert presentation.action_outcome.metadata["job_id"] == "job-1"
   end
 
+  test "for_vue emits the complete JSON-safe panel presentation contract" do
+    presentation =
+      DataLinkInspectorPanelPresentation.for_vue(
+        %{
+          status: :resolved,
+          status_text: "resolved",
+          title: "Telemetry point",
+          target: :telemetry_point,
+          target_id: "HK.counter",
+          link_id: "telemetry_point:HK.counter:request-1",
+          link_label: "Telemetry point",
+          target_text: "telemetry point",
+          source: :frame,
+          source_text: "frame",
+          message: nil,
+          rows: [%{label: "Point", value: "HK.counter"}],
+          context_rows: [%{label: "Data realm", value: "flight"}],
+          related_links: [],
+          actions: [telemetry_explore_action()]
+        },
+        "mission-1",
+        %Document{dashboard_id: "dashboard-1", name: "Dashboard"},
+        "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
+      )
+
+    decoded = presentation |> Jason.encode!() |> Jason.decode!()
+    assert decoded["root"]["attrs"]["id"] == "dashboard-data-link-inspector"
+    assert presentation.root.attrs.id == "dashboard-data-link-inspector"
+    assert presentation.clipboard.button_id == "dashboard-data-link-copy-link"
+    assert presentation.clipboard.clipboard_text =~ "panel=data_link"
+    assert [%{attrs: action_attrs}] = presentation.actions
+    assert action_attrs.id == "dashboard-data-link-explore"
+    assert action_attrs["data-phx-link"] == "redirect"
+    assert action_attrs["data-phx-link-state"] == "push"
+
+    assert presentation.record.rows |> hd() |> get_in([:value, :attrs, "data-data-link-field"]) ==
+             "Point"
+
+    assert presentation.runtime_context.rows
+           |> hd()
+           |> get_in([:value, :attrs, "data-data-link-context"]) == "Data realm"
+  end
+
   test "panel_attrs tolerates non-map inputs" do
     assert DataLinkInspectorPanelPresentation.panel_attrs(nil, nil) == %{
              target: "",

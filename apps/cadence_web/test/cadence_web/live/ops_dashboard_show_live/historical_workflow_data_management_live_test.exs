@@ -6,7 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -46,13 +46,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
   end
 
   defp element_attribute(html, selector, attribute) do
-    [value] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(selector)
-      |> LazyHTML.attribute(attribute)
+    if String.starts_with?(selector, "#dashboard-data-link-") do
+      data_link_inspector_element_attribute(html, selector, attribute)
+    else
+      [value] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(selector)
+        |> LazyHTML.attribute(attribute)
 
-    value
+      value
+    end
   end
 
   defp persist_sample_scope!(%Sample{} = sample) do
@@ -198,15 +202,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
                ~s(#dashboard-late-data-policy-dashboard-data-view[value="all_revisions"])
              )
 
-      view
-      |> form("#dashboard-late-data-policy-form", %{
+      submit_data_link_inspector_form(view, "late_data_policy", %{
         "late_data_policy" => %{
           "decision" => "accept",
           "reason" => "operator_accepts_late_data",
           "confirmed" => "confirmed"
         }
       })
-      |> render_submit()
 
       assert_patch(view)
 
@@ -361,15 +363,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowDataManagementLiveTe
                ~s(#dashboard-late-data-policy-dashboard-limit-mode[value="compare"])
              )
 
-      view
-      |> form("#dashboard-late-data-policy-form", %{
+      submit_data_link_inspector_form(view, "late_data_policy", %{
         "late_data_policy" => %{
           "decision" => "accept",
           "reason" => "operator_accepts_replay_late_data",
           "confirmed" => "confirmed"
         }
       })
-      |> render_submit()
 
       result_path = assert_patch(view)
 

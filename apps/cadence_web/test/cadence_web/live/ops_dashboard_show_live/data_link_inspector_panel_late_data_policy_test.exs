@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyTe
   alias Cadence.Dashboards.Document
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
   alias CadenceWeb.OpsDashboardShowLive.LateDataPolicyActionOutcome
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders late-data policy controls for lifecycle events" do
     html =
@@ -69,177 +70,91 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyTe
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    workflow = presentation["workflow_explanation"]
+    policy = presentation["late_data_policy"]
+    action = presentation["action_outcome"]
 
-    assert ["backfill_completed"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-event-type")
+    assert workflow["attrs"]["data-workflow-explanation-event-type"] == "backfill_completed"
+    assert workflow["attrs"]["data-workflow-explanation-state"] == "completed"
 
-    assert ["completed"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-state")
+    assert workflow["rows"]
+           |> Enum.find(&(&1["label"]["text"] == "Run"))
+           |> get_in(["value", "text"]) == "backfill-run-1"
 
-    assert "backfill-run-1" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Run"]))
-             |> selected_text()
+    assert policy["attrs"]["data-late-data-policy-source-event"] == "backfill-event-1"
+    assert policy["attrs"]["data-late-data-policy-execution-mode"] == "event_only"
 
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("data-late-data-policy-source-event")
+    assert policy["attrs"]["data-late-data-policy-accept-effect"] ==
+             "auditable policy decision; telemetry projections unchanged"
 
-    assert ["event_only"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("data-late-data-policy-execution-mode")
+    assert policy["attrs"]["data-late-data-policy-reject-effect"] ==
+             "advisory history only; current/latest projections unchanged"
 
-    assert ["auditable policy decision; telemetry projections unchanged"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("data-late-data-policy-accept-effect")
+    assert policy["form"]["attrs"]["phx-submit"] == "record_late_data_policy_decision"
+    assert policy["header"]["execution_badge"]["text"] == "Event only"
 
-    assert ["advisory history only; current/latest projections unchanged"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls")
-             |> LazyHTML.attribute("data-late-data-policy-reject-effect")
+    assert Enum.at(policy["effects"], 0)["summary"]["text"] ==
+             "auditable policy decision; telemetry projections unchanged"
 
-    assert ["record_late_data_policy_decision"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-form")
-             |> LazyHTML.attribute("phx-submit")
+    assert Enum.at(policy["effects"], 1)["summary"]["text"] ==
+             "advisory history only; current/latest projections unchanged"
 
-    assert "Event only" =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-controls .badge-warning")
-             |> selected_text()
+    assert policy["form"]["submit"]["text"] == "Apply late-data policy"
 
-    assert "auditable policy decision; telemetry projections unchanged" =
-             document
-             |> LazyHTML.query(~s([data-late-data-policy-effect-summary="accept"]))
-             |> selected_text()
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-source-event-id") ==
+             "backfill-event-1"
 
-    assert "advisory history only; current/latest projections unchanged" =
-             document
-             |> LazyHTML.query(~s([data-late-data-policy-effect-summary="reject"]))
-             |> selected_text()
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-source-event-type") ==
+             "backfill_completed"
 
-    assert "Apply late-data policy" =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-submit")
-             |> selected_text()
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-run-id") ==
+             "backfill-run-1"
 
-    assert ["backfill-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-source-event-id")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(
+             presentation,
+             "dashboard-late-data-policy-dashboard-limit-mode"
+           ) == "compare"
 
-    assert ["backfill_completed"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-source-event-type")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-dashboard-time-mode") ==
+             "replay_run"
 
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-run-id")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(
+             presentation,
+             "dashboard-late-data-policy-dashboard-replay-run-id"
+           ) == "replay-1"
 
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-dashboard-limit-mode")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-data-source-id") ==
+             "questdb-flight"
 
-    assert ["replay_run"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-dashboard-time-mode")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-source-binding-id") ==
+             "binding-flight"
 
-    assert ["replay-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-dashboard-replay-run-id")
-             |> LazyHTML.attribute("value")
+    assert late_data_form_value(presentation, "dashboard-late-data-policy-sample-count") == "3"
 
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-data-source-id")
-             |> LazyHTML.attribute("value")
+    policy_outcome_attrs = policy["action_outcome"]["attrs"]
+    assert policy_outcome_attrs["data-late-data-policy-action-status"] == "ok"
+    assert policy_outcome_attrs["data-late-data-policy-action-dashboard-limit-mode"] == "compare"
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-source-binding-id")
-             |> LazyHTML.attribute("value")
+    assert policy_outcome_attrs["data-late-data-policy-action-dashboard-time-mode"] ==
+             "replay_run"
 
-    assert ["3"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-sample-count")
-             |> LazyHTML.attribute("value")
+    assert policy_outcome_attrs["data-late-data-policy-action-dashboard-replay-run-id"] ==
+             "replay-1"
 
-    assert ["ok"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-status")
+    action_attrs = action["attrs"]
+    assert action_attrs["data-data-link-action-outcome-action"] == "late_data_policy"
+    assert action_attrs["data-data-link-action-outcome-decision"] == "accept"
+    assert action_attrs["data-data-link-action-outcome-execution-mode"] == "event_only"
+    assert action_attrs["data-data-link-action-outcome-dashboard-time-mode"] == "replay_run"
 
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-dashboard-limit-mode")
+    assert action_attrs["data-data-link-action-outcome-dashboard-replay-run-id"] ==
+             "replay-1"
 
-    assert ["replay_run"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-dashboard-time-mode")
-
-    assert ["replay-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-dashboard-replay-run-id")
-
-    assert ["late_data_policy"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-action")
-
-    assert ["accept"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-decision")
-
-    assert ["event_only"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-execution-mode")
-
-    assert ["replay_run"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-time-mode")
-
-    assert ["replay-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-replay-run-id")
-
-    assert ["compare"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-limit-mode")
-
-    assert ["late-data-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-id")
-
-    assert ["late-data-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
-
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-target-run-id")
+    assert action_attrs["data-data-link-action-outcome-dashboard-limit-mode"] == "compare"
+    assert action_attrs["data-data-link-action-outcome-result-event-id"] == "late-data-event-1"
+    assert action_attrs["data-data-link-action-outcome-target-event-id"] == "late-data-event-1"
+    assert action_attrs["data-data-link-action-outcome-target-run-id"] == "backfill-run-1"
 
     assert %{
              "decision" => "accept",
@@ -251,26 +166,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLateDataPolicyTe
              "target_event_id" => "late-data-event-1",
              "target_run_id" => "backfill-run-1"
            } =
-             document
-             |> LazyHTML.query("#dashboard-data-link-action-outcome")
-             |> LazyHTML.attribute("data-data-link-action-outcome-metadata")
-             |> List.first()
+             action_attrs["data-data-link-action-outcome-metadata"]
              |> Jason.decode!()
 
-    assert ["accept"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-decision")
+    assert policy_outcome_attrs["data-late-data-policy-action-decision"] == "accept"
 
-    assert ["late-data-event-1"] =
-             document
-             |> LazyHTML.query("#dashboard-late-data-policy-action-outcome")
-             |> LazyHTML.attribute("data-late-data-policy-action-result-event-id")
+    assert policy_outcome_attrs["data-late-data-policy-action-result-event-id"] ==
+             "late-data-event-1"
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+  defp late_data_form_value(presentation, id) do
+    presentation
+    |> ViewTestSupport.data_link_inspector_form_field("late_data_policy", id)
+    |> Map.fetch!("value")
   end
 end

@@ -9,18 +9,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   @default_timeout 5_000
   @resolved_runtime_selector ~s(#ops-dashboard-show-page[data-runtime-status="idle"][data-runtime-resolved="true"])
 
-  defmacro __using__(_opts) do
-    quote do
-      alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport, as: DashboardViewTestSupport
+  defmacro __using__(opts) do
+    if Keyword.get(opts, :data_link_selectors_only, false) do
+      quote do
+        alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport, as: DashboardViewTestSupport
+        import Phoenix.LiveViewTest, except: [has_element?: 2, has_element?: 3]
+        import DashboardViewTestSupport
 
-      import Phoenix.LiveViewTest, except: [live: 2]
-      import DashboardViewTestSupport
+        defp has_element?(view_or_html, selector) do
+          DashboardViewTestSupport.has_dashboard_element?(view_or_html, selector)
+        end
 
-      defmacrop live(conn, path) do
-        quote do
-          DashboardViewTestSupport.await_live_result(
-            Phoenix.LiveViewTest.live(unquote(conn), unquote(path))
-          )
+        defp has_element?(view_or_html, selector, text) do
+          DashboardViewTestSupport.has_dashboard_element?(view_or_html, selector, text)
+        end
+      end
+    else
+      quote do
+        alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport, as: DashboardViewTestSupport
+
+        import Phoenix.LiveViewTest, except: [live: 2, has_element?: 2, has_element?: 3]
+        import DashboardViewTestSupport
+
+        defp has_element?(view_or_html, selector) do
+          DashboardViewTestSupport.has_dashboard_element?(view_or_html, selector)
+        end
+
+        defp has_element?(view_or_html, selector, text) do
+          DashboardViewTestSupport.has_dashboard_element?(view_or_html, selector, text)
+        end
+
+        defmacrop live(conn, path) do
+          quote do
+            DashboardViewTestSupport.await_live_result(
+              Phoenix.LiveViewTest.live(unquote(conn), unquote(path))
+            )
+          end
         end
       end
     end
@@ -292,6 +316,87 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
     |> Enum.find(&(&1["key"] == id))
   end
 
+  def data_link_inspector_presentation(view_or_html) do
+    vue = LiveVue.Test.get_vue(view_or_html, id: "dashboard-data-link-inspector")
+
+    assert vue.component == "DataLinkInspectorPanel"
+    assert vue.ssr == false
+    assert vue.class == "space-y-4"
+    assert vue.handlers == %{}
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    vue.props["presentation"]
+  end
+
+  def data_link_inspector_row(presentation, section, label) do
+    presentation
+    |> get_in([section, "rows"])
+    |> List.wrap()
+    |> Enum.find(&(&1["label"]["text"] == label))
+  end
+
+  def data_link_inspector_form_field(presentation, control, id) do
+    form = get_in(presentation, [control, "form"])
+
+    (form["hidden_fields"] ++
+       Enum.map(form["fields"], & &1["attrs"]) ++
+       [form["confirmation"]["input"]["attrs"], form["submit"]["attrs"]])
+    |> Enum.find(&(&1["id"] == id))
+  end
+
+  def has_dashboard_element?(view_or_html, selector, text \\ nil) do
+    if migrated_data_link_selector?(selector) do
+      view_or_html
+      |> data_link_inspector_presentation()
+      |> presentation_element?(selector, text)
+    else
+      if is_nil(text) do
+        Phoenix.LiveViewTest.has_element?(view_or_html, selector)
+      else
+        Phoenix.LiveViewTest.has_element?(view_or_html, selector, text)
+      end
+    end
+  end
+
+  def click_data_link_inspector_element(view, selector) do
+    node =
+      view
+      |> data_link_inspector_presentation()
+      |> presentation_element(selector)
+
+    assert node
+
+    attrs = presentation_element_attrs(node)
+    event = Map.fetch!(attrs, "phx-click")
+
+    params =
+      attrs
+      |> Enum.flat_map(fn
+        {"phx-value-" <> name, value} -> [{name, value}]
+        {_name, _value} -> []
+      end)
+      |> Map.new()
+
+    Phoenix.LiveViewTest.render_hook(view, event, params)
+  end
+
+  def data_link_inspector_element_attribute(view_or_html, selector, attribute) do
+    node =
+      view_or_html
+      |> data_link_inspector_presentation()
+      |> presentation_element(selector)
+
+    assert node
+    node |> presentation_element_attrs() |> Map.fetch!(attribute)
+  end
+
+  def submit_data_link_inspector_form(view, control, params) do
+    presentation = data_link_inspector_presentation(view)
+    event = get_in(presentation, [control, "form", "attrs", "phx-submit"])
+    assert is_binary(event)
+    Phoenix.LiveViewTest.render_submit(view, event, params)
+  end
+
   def dashboard_runtime_control(runtime_controls, id) do
     form = Map.fetch!(runtime_controls, "form")
 
@@ -394,6 +499,118 @@ defmodule CadenceWeb.OpsDashboardShowLive.ViewTestSupport do
   defp attrs_match?(attrs, expected_attrs) do
     Enum.all?(expected_attrs, fn {name, value} -> attrs[name] == value end)
   end
+
+  @migrated_data_link_ids [
+    "dashboard-data-link-action-outcome",
+    "dashboard-data-link-explore",
+    "dashboard-late-data-policy-",
+    "dashboard-revision-decision-",
+    "dashboard-workflow-"
+  ]
+
+  @presentation_attribute_pattern ~r/\[(?<name>[A-Za-z][A-Za-z0-9_-]*)(?:(?<operator>\*=|=)\"(?<value>[^\"]*)\")?\]/
+  @presentation_id_pattern ~r/#(?<id>[A-Za-z][A-Za-z0-9_-]*)/
+
+  defp migrated_data_link_selector?(selector) when is_binary(selector) do
+    String.starts_with?(selector, "#dashboard-data-link-inspector ") or
+      Enum.any?(@migrated_data_link_ids, &String.contains?(selector, &1))
+  end
+
+  defp migrated_data_link_selector?(_selector), do: false
+
+  defp presentation_element?(presentation, selector, text) do
+    not is_nil(presentation_element(presentation, selector, text))
+  end
+
+  defp presentation_element(presentation, selector, text \\ nil) do
+    selector =
+      ~r/(?:#[A-Za-z][A-Za-z0-9_-]*)?(?:\[[^\]]+\])+|#[A-Za-z][A-Za-z0-9_-]*/
+      |> Regex.scan(selector)
+      |> List.last()
+      |> List.first()
+
+    id = @presentation_id_pattern |> Regex.named_captures(selector) |> capture_value("id")
+
+    attributes =
+      Enum.map(Regex.scan(@presentation_attribute_pattern, selector), fn [match | _captures] ->
+        captures = Regex.named_captures(@presentation_attribute_pattern, match)
+        {captures["name"], captures["operator"], captures["value"]}
+      end)
+
+    presentation
+    |> presentation_nodes()
+    |> Enum.find(fn node ->
+      attrs = presentation_element_attrs(node)
+
+      (is_nil(id) or attr_text(attrs["id"]) == id) and
+        Enum.all?(attributes, &presentation_attribute_match?(attrs, &1)) and
+        presentation_text_match?(node, text)
+    end)
+  end
+
+  defp presentation_nodes(value) when is_list(value) do
+    Enum.flat_map(value, &presentation_nodes/1)
+  end
+
+  defp presentation_nodes(value) when is_map(value) do
+    children = value |> Map.values() |> Enum.flat_map(&presentation_nodes/1)
+
+    if is_map(value["attrs"]) or presentation_attrs?(value) do
+      [value | children]
+    else
+      children
+    end
+  end
+
+  defp presentation_nodes(_value), do: []
+
+  defp presentation_attrs?(value) do
+    Enum.any?(Map.keys(value), fn key ->
+      key == "id" or key == "href" or key == "class" or String.starts_with?(key, "data-") or
+        String.starts_with?(key, "phx-")
+    end)
+  end
+
+  defp presentation_element_attrs(%{"attrs" => attrs}) when is_map(attrs), do: attrs
+  defp presentation_element_attrs(attrs) when is_map(attrs), do: attrs
+
+  defp presentation_attribute_match?(attrs, {name, "", ""}), do: Map.has_key?(attrs, name)
+
+  defp presentation_attribute_match?(attrs, {name, "=", expected}) do
+    attr_text(attrs[name]) == expected
+  end
+
+  defp presentation_attribute_match?(attrs, {name, "*=", expected}) do
+    String.contains?(attr_text(attrs[name]), expected)
+  end
+
+  defp presentation_text_match?(_node, nil), do: true
+
+  defp presentation_text_match?(node, expected) do
+    node
+    |> presentation_texts()
+    |> Enum.join(" ")
+    |> String.contains?(to_string(expected))
+  end
+
+  defp presentation_texts(value) when is_list(value),
+    do: Enum.flat_map(value, &presentation_texts/1)
+
+  defp presentation_texts(value) when is_map(value) do
+    value
+    |> Enum.reject(fn {key, _nested} -> key == "attrs" end)
+    |> Enum.flat_map(fn {_key, nested} -> presentation_texts(nested) end)
+  end
+
+  defp presentation_texts(value) when is_binary(value), do: [value]
+  defp presentation_texts(_value), do: []
+
+  defp capture_value(nil, _key), do: nil
+  defp capture_value(captures, key), do: captures[key]
+
+  defp attr_text(nil), do: ""
+  defp attr_text(value) when is_binary(value), do: value
+  defp attr_text(value), do: to_string(value)
 
   defp rendered_html(rendered) when is_binary(rendered), do: rendered
   defp rendered_html(view), do: render(view)

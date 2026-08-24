@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
   @moduletag :config
 
   import Phoenix.LiveViewTest
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -315,11 +315,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetEventMarkerNavigationLiveTes
                ~s(#dashboard-data-link-inspector [data-data-link-related-target="operational event"][data-data-link-related-id="#{persisted_event.event_id}"][data-data-link-related-kind="source_event"])
              )
 
-      view
-      |> element(
+      click_data_link_inspector_element(
+        view,
         ~s(#dashboard-data-link-inspector [data-data-link-related-target="operational event"][data-data-link-related-id="#{persisted_event.event_id}"])
       )
-      |> render_click()
 
       operational_event_path = assert_patch(view)
       assert operational_event_path =~ "panel=data_link"

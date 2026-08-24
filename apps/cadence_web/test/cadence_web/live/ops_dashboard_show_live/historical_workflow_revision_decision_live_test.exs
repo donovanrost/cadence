@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -43,13 +43,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
   end
 
   defp element_attribute(html, selector, attribute) do
-    [value] =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(selector)
-      |> LazyHTML.attribute(attribute)
+    if String.starts_with?(selector, "#dashboard-data-link-") do
+      data_link_inspector_element_attribute(html, selector, attribute)
+    else
+      [value] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(selector)
+        |> LazyHTML.attribute(attribute)
 
-    value
+      value
+    end
   end
 
   defp persist_revision_sample_identity!(org, mission, sample_id, opts \\ []) do
@@ -262,15 +266,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRevisionDecisionLive
                ~s(#dashboard-revision-decision-dashboard-data-view[value="all_revisions"])
              )
 
-      view
-      |> form("#dashboard-revision-decision-form", %{
+      submit_data_link_inspector_form(view, "revision_decision", %{
         "revision_decision" => %{
           "decision" => "mark_conflict",
           "decision_reason" => "operator_marked_conflict_from_dashboard",
           "confirmed" => "confirmed"
         }
       })
-      |> render_submit()
 
       result_path = assert_patch(view)
       assert result_path =~ "selected_target=telemetry_revision_decision_event"

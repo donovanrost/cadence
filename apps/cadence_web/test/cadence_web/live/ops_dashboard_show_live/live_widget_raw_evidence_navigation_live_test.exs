@@ -6,7 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
@@ -241,11 +241,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
                ~s(#dashboard-data-link-inspector [data-data-link-related-target="raw evidence"])
              )
 
-      view
-      |> element(
+      click_data_link_inspector_element(
+        view,
         ~s(#dashboard-data-link-inspector [data-data-link-related-target="raw evidence"])
       )
-      |> render_click()
 
       raw_evidence_path = assert_patch(view)
       assert raw_evidence_path =~ "panel=data_link"
@@ -324,11 +323,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetRawEvidenceNavigationLiveTes
                ~s(#dashboard-data-link-inspector [data-data-link-navigation] [data-data-link-nav-entry-id="#{latest_sample.sample_id}"])
              )
 
-      view
-      |> element(
+      click_data_link_inspector_element(
+        view,
         ~s(#dashboard-data-link-inspector [data-data-link-navigation] [data-data-link-nav-entry-id="#{latest_sample.sample_id}"])
       )
-      |> render_click()
 
       sample_back_path = assert_patch(view)
       assert sample_back_path =~ "panel=data_link"

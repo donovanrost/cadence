@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,

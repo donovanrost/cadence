@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
 
   alias Cadence.Dashboards.{DashboardAction, DataLink, Document}
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders inspector identity, rows, related links, and actions" do
     related_link = data_link(:telemetry_sample, "sample-1", "Telemetry sample")
@@ -44,6 +45,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
       )
 
     document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
 
     assert ["telemetry_point"] =
              document
@@ -90,102 +92,79 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-data-link-inspector")
              |> LazyHTML.attribute("data-data-link-selected-replay-run-id")
 
-    copy = LiveVue.Test.get_vue(html, id: "dashboard-data-link-copy-link-component")
+    assert presentation["clipboard"]["button_id"] == "dashboard-data-link-copy-link"
 
-    assert copy.component == "ClipboardButton"
-    assert copy.props["button_id"] == "dashboard-data-link-copy-link"
-
-    assert copy.props["clipboard_text"] ==
+    assert presentation["clipboard"]["clipboard_text"] ==
              "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
 
-    assert copy.props["button_class"] == "btn btn-sm btn-outline w-full justify-start"
-    assert copy.props["icon"] == "hero-link"
-    assert copy.props["icon_class"] == "h-4 w-4"
-    assert copy.props["label"] == "Copy link"
-    assert copy.class == "contents"
-    refute copy.ssr
+    assert presentation["clipboard"]["button_class"] ==
+             "btn btn-sm btn-outline w-full justify-start"
+
+    assert presentation["clipboard"]["icon"] == "hero-link"
+    assert presentation["clipboard"]["icon_class"] == "h-4 w-4"
+    assert presentation["clipboard"]["label"] == "Copy link"
 
     assert "context_only" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="State"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "State")
+             |> get_in(["value", "text"])
 
     assert "telemetry point" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Target"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Target")
+             |> get_in(["value", "text"])
 
     assert "telemetry_point:HK.counter:request-1" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Link"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Link")
+             |> get_in(["value", "text"])
 
     assert "all_revisions" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Data view"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Data view")
+             |> get_in(["value", "text"])
 
     assert "replay_run" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Time mode"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Time mode")
+             |> get_in(["value", "text"])
 
     assert "replay-run-1" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Replay run"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Replay run")
+             |> get_in(["value", "text"])
 
     assert "HK.counter" =
-             document
-             |> LazyHTML.query(~s([data-data-link-field="Point"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("record", "Point")
+             |> get_in(["value", "text"])
 
     assert "questdb-flight" =
-             document
-             |> LazyHTML.query(~s([data-data-link-context="Data source"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("runtime_context", "Data source")
+             |> get_in(["value", "text"])
 
-    assert ["telemetry sample"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-target]")
-             |> LazyHTML.attribute("data-data-link-related-target")
+    assert [related] = get_in(presentation, ["related", "groups", Access.at(0), "links"])
+    assert related["attrs"]["data-data-link-related-target"] == "telemetry sample"
 
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-ref]")
-             |> LazyHTML.attribute("phx-value-data-source-id")
+    assert related["attrs"]["phx-value-data-source-id"] == "questdb-flight"
 
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-ref]")
-             |> LazyHTML.attribute("phx-value-source-binding-id")
+    assert related["attrs"]["phx-value-source-binding-id"] == "binding-flight"
 
-    assert ["telemetry_point"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-ref]")
-             |> LazyHTML.attribute("phx-value-nav-from-target")
+    assert related["attrs"]["phx-value-nav-from-target"] == "telemetry_point"
 
-    assert ["HK.counter"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-ref]")
-             |> LazyHTML.attribute("phx-value-nav-from-target-id")
+    assert related["attrs"]["phx-value-nav-from-target-id"] == "HK.counter"
 
     assert [%{"target_id" => "HK.counter"}] =
-             document
-             |> LazyHTML.query("[data-data-link-related-ref]")
-             |> LazyHTML.attribute("phx-value-nav-trail")
-             |> List.first()
+             related["attrs"]["phx-value-nav-trail"]
              |> Jason.decode!()
 
-    assert ["data_link_panel"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-explore")
-             |> LazyHTML.attribute("data-dashboard-action-source")
+    assert [action] = presentation["actions"]
+    assert action["attrs"]["data-dashboard-action-source"] == "data_link_panel"
+    assert action["attrs"]["data-phx-link"] == "redirect"
+    assert action["attrs"]["data-phx-link-state"] == "push"
 
-    assert [explore_href] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-explore")
-             |> LazyHTML.attribute("href")
+    explore_href = action["attrs"]["href"]
 
     assert explore_href =~ "/missions/mission-1/ops/explore"
     assert explore_href =~ "point_id=HK.counter"
@@ -228,11 +207,5 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
       },
       source: :frame
     }
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
   end
 end

@@ -3,7 +3,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
 
   import Phoenix.LiveViewTest
   import CadenceWeb.LiveVueClipboardTestSupport
-  import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
+  use CadenceWeb.OpsDashboardShowLive.ViewTestSupport, data_link_selectors_only: true
 
   alias Cadence.Comms.{GroundStationStore, TransportStore}
 

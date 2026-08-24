@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
 
   alias Cadence.Dashboards.{DataLink, Document}
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel explains failed lifecycle events that require correction" do
     html =
@@ -59,36 +60,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    workflow = presentation["workflow_explanation"]
 
-    assert ["failed_correction_required"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-state")
+    assert workflow["attrs"]["data-workflow-explanation-state"] ==
+             "failed_correction_required"
 
-    assert ["error"] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-explanation")
-             |> LazyHTML.attribute("data-workflow-explanation-severity")
+    assert workflow["attrs"]["data-workflow-explanation-severity"] == "error"
+    assert workflow["summary"]["text"] =~ "needs a corrected request"
 
-    assert document
-           |> LazyHTML.query("#dashboard-workflow-explanation-summary")
-           |> selected_text() =~ "needs a corrected request"
+    workflow_rows = Map.new(workflow["rows"], &{&1["label"]["text"], &1["value"]["text"]})
+    assert workflow_rows["Recovery"] == "correct_workflow_request"
+    assert workflow_rows["Group"] == "group-1 failed"
 
-    assert "correct_workflow_request" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Recovery"]))
-             |> selected_text()
+    data_operations_path = presentation["historical_workflow_navigation"]["attrs"]["href"]
+    assert presentation["historical_workflow_navigation"]["attrs"]["data-phx-link"] == "redirect"
 
-    assert "group-1 failed" =
-             document
-             |> LazyHTML.query(~s([data-workflow-explanation-field="Group"]))
-             |> selected_text()
-
-    assert [data_operations_path] =
-             document
-             |> LazyHTML.query("#dashboard-workflow-open-data-operations")
-             |> LazyHTML.attribute("href")
+    assert presentation["historical_workflow_navigation"]["attrs"]["data-phx-link-state"] ==
+             "push"
 
     uri = URI.parse(data_operations_path)
     query = URI.decode_query(uri.query)
@@ -181,27 +170,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
         dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
       )
 
-    document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
+    navigation_entries = presentation["navigation"]["entries"]
+    navigation_attrs = Enum.map(navigation_entries, & &1["attrs"])
 
-    assert ["root-event-1", "previous-event-1"] =
-             document
-             |> LazyHTML.query("[data-data-link-navigation] [data-data-link-nav-entry-id]")
-             |> LazyHTML.attribute("data-data-link-nav-entry-id")
+    assert Enum.map(navigation_attrs, & &1["data-data-link-nav-entry-id"]) == [
+             "root-event-1",
+             "previous-event-1"
+           ]
 
-    assert ["telemetry_backfill_lifecycle_event", "telemetry_backfill_lifecycle_event"] =
-             document
-             |> LazyHTML.query("[data-data-link-navigation] [phx-value-target]")
-             |> LazyHTML.attribute("phx-value-target")
+    assert Enum.map(navigation_attrs, & &1["phx-value-target"]) == [
+             "telemetry_backfill_lifecycle_event",
+             "telemetry_backfill_lifecycle_event"
+           ]
 
-    assert ["source-event-1", "source-event-1"] =
-             document
-             |> LazyHTML.query("[data-data-link-navigation] [phx-value-nav-from-target-id]")
-             |> LazyHTML.attribute("phx-value-nav-from-target-id")
+    assert Enum.map(navigation_attrs, & &1["phx-value-nav-from-target-id"]) == [
+             "source-event-1",
+             "source-event-1"
+           ]
 
-    assert [breadcrumb_trail | _] =
-             document
-             |> LazyHTML.query("[data-data-link-navigation] [phx-value-nav-trail]")
-             |> LazyHTML.attribute("phx-value-nav-trail")
+    assert [breadcrumb_trail | _remaining_trails] =
+             Enum.map(navigation_attrs, & &1["phx-value-nav-trail"])
 
     assert [
              %{"target_id" => "root-event-1"},
@@ -212,10 +201,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
              }
            ] = Jason.decode!(breadcrumb_trail)
 
-    assert ["source", "recovery", "follow-up", "evidence"] =
-             document
-             |> LazyHTML.query("[data-data-link-related-group]")
-             |> LazyHTML.attribute("data-data-link-related-group")
+    groups = presentation["related"]["groups"]
+
+    assert Enum.map(groups, & &1["attrs"]["data-data-link-related-group"]) == [
+             "source",
+             "recovery",
+             "follow-up",
+             "evidence"
+           ]
+
+    links = Enum.flat_map(groups, & &1["links"])
 
     assert [
              "source_event",
@@ -223,29 +218,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
              "correction_request",
              "correction_transition",
              "evidence"
-           ] =
-             document
-             |> LazyHTML.query("[data-data-link-related-kind]")
-             |> LazyHTML.attribute("data-data-link-related-kind")
+           ] == Enum.map(links, & &1["attrs"]["data-data-link-related-kind"])
 
-    assert ["failed-event-1"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-data-link-related-group="source"] [data-data-link-related-id])
-             )
-             |> LazyHTML.attribute("data-data-link-related-id")
-
-    assert ["source-event-1"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-data-link-related-group="source"] [phx-value-nav-from-target-id])
-             )
-             |> LazyHTML.attribute("phx-value-nav-from-target-id")
-
-    assert [source_related_trail] =
-             document
-             |> LazyHTML.query(~s([data-data-link-related-group="source"] [phx-value-nav-trail]))
-             |> LazyHTML.attribute("phx-value-nav-trail")
+    source_link = groups |> Enum.at(0) |> Map.fetch!("links") |> List.first()
+    assert source_link["attrs"]["data-data-link-related-id"] == "failed-event-1"
+    assert source_link["attrs"]["phx-value-nav-from-target-id"] == "source-event-1"
+    source_related_trail = source_link["attrs"]["phx-value-nav-trail"]
 
     assert [
              %{"target_id" => "root-event-1"},
@@ -261,26 +239,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
              }
            ] = Jason.decode!(source_related_trail)
 
-    assert ["retry-event-1", "correction-event-1"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-data-link-related-group="recovery"] [data-data-link-related-id])
-             )
-             |> LazyHTML.attribute("data-data-link-related-id")
-
-    assert ["transition-event-1"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-data-link-related-group="follow-up"] [data-data-link-related-id])
-             )
-             |> LazyHTML.attribute("data-data-link-related-id")
-
-    assert ["sample-1"] =
-             document
-             |> LazyHTML.query(
-               ~s([data-data-link-related-group="evidence"] [data-data-link-related-id])
-             )
-             |> LazyHTML.attribute("data-data-link-related-id")
+    assert related_ids(Enum.at(groups, 1)) == ["retry-event-1", "correction-event-1"]
+    assert related_ids(Enum.at(groups, 2)) == ["transition-event-1"]
+    assert related_ids(Enum.at(groups, 3)) == ["sample-1"]
   end
 
   defp data_link(target, target_id, label, opts) do
@@ -304,9 +265,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelLifecycleRecover
     }
   end
 
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
-  end
+  defp related_ids(group),
+    do: Enum.map(group["links"], & &1["attrs"]["data-data-link-related-id"])
 end

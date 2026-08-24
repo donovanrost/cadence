@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelSourceWatermarkT
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents
+  alias CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   test "data_link_panel renders source watermark event inspector rows" do
     html =
@@ -48,6 +49,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelSourceWatermarkT
       )
 
     document = LazyHTML.from_fragment(html)
+    presentation = ViewTestSupport.data_link_inspector_presentation(html)
 
     assert ["source_watermark_event"] =
              document
@@ -65,34 +67,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelSourceWatermarkT
              |> LazyHTML.attribute("data-data-link-selected-link")
 
     assert "source watermark event" =
-             document
-             |> LazyHTML.query(~s([data-data-link-selection-field="Target"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("selection", "Target")
+             |> get_in(["value", "text"])
 
     assert "watermark-event-1" =
-             document
-             |> LazyHTML.query(~s([data-data-link-field="Source watermark event"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("record", "Source watermark event")
+             |> get_in(["value", "text"])
 
     assert "source_watermark:mission-1:telemetry" =
-             document
-             |> LazyHTML.query(~s([data-data-link-field="Source watermark key"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("record", "Source watermark key")
+             |> get_in(["value", "text"])
 
     assert "telemetry_storage_write" =
-             document
-             |> LazyHTML.query(~s([data-data-link-field="Reason"]))
-             |> selected_text()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("record", "Reason")
+             |> get_in(["value", "text"])
 
     assert "events-questdb" =
-             document
-             |> LazyHTML.query(~s([data-data-link-context="Data source"]))
-             |> selected_text()
-  end
-
-  defp selected_text(lazy_html) do
-    lazy_html
-    |> LazyHTML.text()
-    |> String.trim()
+             presentation
+             |> ViewTestSupport.data_link_inspector_row("runtime_context", "Data source")
+             |> get_in(["value", "text"])
   end
 end

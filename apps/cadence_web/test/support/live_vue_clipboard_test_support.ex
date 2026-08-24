@@ -33,8 +33,7 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
   end
 
   defp clipboard_button!(renderable, button_id) do
-    clipboard_button =
-      LiveVue.Test.get_vue(renderable, id: button_id <> "-component")
+    clipboard_button = clipboard_button_component(renderable, button_id)
 
     assert clipboard_button.component == @clipboard_component
     assert clipboard_button.props["button_id"] == button_id
@@ -42,6 +41,26 @@ defmodule CadenceWeb.LiveVueClipboardTestSupport do
 
     clipboard_text_prop!(clipboard_button)
     clipboard_button
+  end
+
+  defp clipboard_button_component(renderable, "dashboard-data-link-copy-link" = button_id) do
+    panel = LiveVue.Test.get_vue(renderable, id: "dashboard-data-link-inspector")
+
+    assert panel.component == "DataLinkInspectorPanel"
+    refute panel.ssr
+
+    clipboard = get_in(panel.props, ["presentation", "clipboard"])
+    assert clipboard["button_id"] == button_id
+
+    %{
+      component: @clipboard_component,
+      props: clipboard,
+      ssr: false
+    }
+  end
+
+  defp clipboard_button_component(renderable, button_id) do
+    LiveVue.Test.get_vue(renderable, id: button_id <> "-component")
   end
 
   defp clipboard_text_prop!(clipboard_button) do
