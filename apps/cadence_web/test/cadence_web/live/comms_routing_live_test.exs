@@ -22,7 +22,17 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
   end
 
   describe "routing routes" do
-    test "lists routing rules with routing vocabulary" do
+    test "renders the empty state when the mission has no routing rules" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/routing")
+
+      assert has_element?(view, "#comms-routing-page", "No routing rules")
+      assert has_element?(view, "#new-routing-rule-link")
+      refute has_element?(view, "#routing-rules-list-component")
+    end
+
+    test "lists routing rules with routing vocabulary and JSON-safe row props" do
       {conn, org, mission} = signed_in_org_and_mission()
       spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
       transport = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
@@ -32,9 +42,31 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
 
       assert has_element?(view, "#comms-routing-page")
       assert has_element?(view, "#new-routing-rule-link")
-      assert has_element?(view, "td", rule.display_name)
+      assert has_element?(view, "#routing-rules-list-component")
       assert has_element?(view, "details[open] a", "Routing")
-      assert has_element?(view, "#routing-rules[phx-update='stream']")
+      assert has_element?(view, "#comms-routing-page", "Durable rules")
+
+      vue = LiveVue.Test.get_vue(view, id: "routing-rules-list-component")
+
+      assert vue.component == "CommsRoutingList"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "rows" => [
+                 %{
+                   "id" => "routing-rule-#{rule.routing_rule_id}",
+                   "display_name" => rule.display_name,
+                   "spacecraft_name" => spacecraft.display_name,
+                   "purpose_label" => rule.purpose_label,
+                   "direction" => "INBOUND",
+                   "transport_name" => transport.display_name,
+                   "role" => "PRIMARY",
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
+                 }
+               ]
+             }
 
       page = render(view)
       assert page =~ "Routing"
