@@ -23,16 +23,195 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     ProviderCredentials
   }
 
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{CommsProviderListLive, TestFixtures}
 
   test "lists mission providers and exposes the mission-scoped setup path" do
     {conn, _organization, mission} = signed_in_org_and_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers")
 
-    assert has_element?(view, "#comms-providers-page")
-    assert has_element?(view, "#new-provider-link")
-    assert has_element?(view, "#comms-providers-page", "No ground network providers")
+    presentation = comms_provider_list_presentation(view)
+
+    assert presentation["root"]["attrs"]["id"] == "comms-providers-page"
+
+    assert presentation["header"]["actions"]["new_provider"]["attrs"]["id"] ==
+             "new-provider-link"
+
+    assert presentation["empty_state"]["title"]["text"] == "No ground network providers"
+  end
+
+  describe "provider list presentation" do
+    test "projects the complete empty page through one JSON-safe non-SSR parent" do
+      {conn, _organization, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers")
+
+      vue = LiveVue.Test.get_vue(view, id: "comms-provider-list-component")
+      assert vue.component == "CommsProviderList"
+      assert vue.class == "contents"
+      refute vue.ssr
+      assert Map.keys(vue.props) == ["presentation"]
+
+      presentation = vue.props["presentation"]
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+
+      assert presentation["root"] == %{
+               "attrs" => %{"class" => "space-y-6", "id" => "comms-providers-page"}
+             }
+
+      header = presentation["header"]
+
+      assert header["attrs"] == %{"class" => "border-b border-primary/20 pb-4"}
+
+      assert header["body"] == %{
+               "attrs" => %{"class" => "flex items-end justify-between gap-4"}
+             }
+
+      assert header["content"] == %{"attrs" => %{}}
+
+      assert header["title"] == %{
+               "attrs" => %{
+                 "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+               },
+               "text" => "Ground Network Providers",
+               "suffix" => %{
+                 "attrs" => %{
+                   "class" => "ml-3 font-mono text-base text-base-content/60"
+                 },
+                 "text" => "0 configured"
+               }
+             }
+
+      assert header["subtitle"] == %{
+               "attrs" => %{
+                 "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+               },
+               "text" =>
+                 "Provider control planes for scheduling, inventory discovery, and delivery profile negotiation."
+             }
+
+      assert header["breadcrumbs"]["attrs"] == %{
+               "aria-label" => "Breadcrumb",
+               "class" =>
+                 "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+             }
+
+      assert Enum.map(header["breadcrumbs"]["items"], fn item ->
+               (item["link"] && item["link"]["text"]) || item["current"]["text"]
+             end) == [mission.display_name, "Comms", "Providers"]
+
+      assert Enum.map(header["breadcrumbs"]["items"], fn item ->
+               item["link"] && item["link"]["attrs"]["href"]
+             end) == [
+               "/missions/#{mission.mission_id}",
+               "/missions/#{mission.mission_id}/comms",
+               nil
+             ]
+
+      assert header["actions"] == %{
+               "attrs" => %{"class" => "flex items-center gap-2"},
+               "new_provider" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-primary btn-sm gap-1",
+                   "data-phx-link" => "redirect",
+                   "data-phx-link-state" => "push",
+                   "href" => "/missions/#{mission.mission_id}/comms/providers/new",
+                   "id" => "new-provider-link"
+                 },
+                 "icon" => %{"attrs" => %{"class" => "hero-plus h-4 w-4"}},
+                 "text" => "New Provider"
+               }
+             }
+
+      assert presentation["empty_state"] == %{
+               "attrs" => %{
+                 "class" =>
+                   "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+               },
+               "title" => %{
+                 "attrs" => %{"class" => "hud-label"},
+                 "text" => "No ground network providers"
+               },
+               "description" => %{
+                 "attrs" => %{
+                   "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+                 },
+                 "text" =>
+                   "Connect this mission to a simulator or commercial ground network control plane."
+               },
+               "action_container" => %{"attrs" => %{"class" => "mt-5"}},
+               "action" => %{
+                 "attrs" => %{
+                   "class" => "btn btn-primary btn-sm",
+                   "data-phx-link" => "redirect",
+                   "data-phx-link-state" => "push",
+                   "href" => "/missions/#{mission.mission_id}/comms/providers/new"
+                 },
+                 "icon" => %{
+                   "attrs" => %{"class" => "hero-plus -ml-0.5 mr-1 h-4 w-4"}
+                 },
+                 "text" => "Configure the first provider"
+               }
+             }
+
+      assert presentation["card"] == nil
+    end
+
+    test "keeps the existing child row props and derived provider decisions server-owned" do
+      {conn, organization, mission} = signed_in_org_and_mission()
+      provider = persist_provider!(organization.organization_id, mission.mission_id)
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers")
+      presentation = comms_provider_list_presentation(view)
+
+      assert presentation["header"]["title"]["suffix"]["text"] == "1 configured"
+      assert presentation["empty_state"] == nil
+
+      assert presentation["card"] == %{
+               "attrs" => %{
+                 "class" => "card bg-base-200 border border-base-300"
+               },
+               "body" => %{"attrs" => %{"class" => "card-body p-0"}},
+               "table_component" => %{
+                 "attrs" => %{"id" => "mission-providers-table-component"}
+               },
+               "rows" => [
+                 %{
+                   "id" => "mission-provider-#{provider.provider_id}",
+                   "display_name" => provider.display_name,
+                   "provider_type" => "Simulated",
+                   "server_url" => provider.base_url,
+                   "status" => "blocked",
+                   "status_label" => "Not validated",
+                   "account_binding" =>
+                     "#{provider.provider_account_id} · v#{provider.provider_account_version}",
+                   "grant_binding" =>
+                     "#{provider.provider_account_grant_id} · v#{provider.provider_account_grant_version}",
+                   "last_synced_at" => "Never",
+                   "version" => "v#{provider.version}",
+                   "href" =>
+                     "/missions/#{mission.mission_id}/comms/providers/#{provider.provider_id}"
+                 }
+               ]
+             }
+    end
+
+    test "raw attrs preserve HEEx nil, false, true, string, and number semantics" do
+      attrs =
+        CommsProviderListLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
+    end
   end
 
   test "creates a simulator provider using references rather than transport or secret fields" do
@@ -1079,6 +1258,17 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
   defp comms_provider_new_vue(view) do
     LiveVue.Test.get_vue(view, id: "comms-provider-new-component")
+  end
+
+  defp comms_provider_list_presentation(view) do
+    vue = LiveVue.Test.get_vue(view, id: "comms-provider-list-component")
+
+    assert vue.component == "CommsProviderList"
+    assert vue.class == "contents"
+    refute vue.ssr
+    assert Map.keys(vue.props) == ["presentation"]
+
+    vue.props["presentation"]
   end
 
   defp provider_new_view!(conn, mission) do
