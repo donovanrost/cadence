@@ -27,7 +27,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponents do
     """
   end
 
-  def source_health_strip(_assigns), do: ~H""
+  def source_health_strip(assigns), do: ~H""
 
   defp source_health_dto(health) do
     %{

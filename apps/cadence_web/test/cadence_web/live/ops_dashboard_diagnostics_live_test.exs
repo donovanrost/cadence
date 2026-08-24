@@ -23,6 +23,7 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
 
     assert has_element?(view, "#dashboard-diagnostic-collection-cache.text-primary")
     assert has_element?(view, "#dashboard-diagnostic-row-cache-contract")
+
     copy =
       LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
 
@@ -127,6 +128,7 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
 
     assert has_element?(view, "#dashboard-diagnostic-detail", "replay_run_mismatch")
     assert has_element?(view, "#dashboard-diagnostic-detail", "stale_for_context")
+
     copy =
       LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
 
