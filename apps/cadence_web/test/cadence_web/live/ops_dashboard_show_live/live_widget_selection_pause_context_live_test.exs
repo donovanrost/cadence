@@ -190,6 +190,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
     end)
   end
 
+  defp context_selector_presentation(view) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-runtime-context-selector-component")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp find_context_node(%{"attrs" => attrs} = node, attribute, value) do
+    if attrs[attribute] == value do
+      node
+    else
+      Enum.find_value(node["children"], fn
+        child when is_map(child) -> find_context_node(child, attribute, value)
+        _text -> nil
+      end)
+    end
+  end
+
+  defp context_event_params(%{"attrs" => attrs}) do
+    attrs
+    |> Enum.filter(fn {attribute, _value} -> String.starts_with?(attribute, "phx-value-") end)
+    |> Map.new(fn {attribute, value} ->
+      {String.replace_prefix(attribute, "phx-value-", ""), value}
+    end)
+  end
+
   describe "live widget telemetry selection pause context" do
     test "pauses a selected telemetry sample into archive context and resumes live" do
       disable_telemetry_storage_runtime_invalidation!()
@@ -336,11 +362,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       paused_markers = chart_limit_markers(render(view), trend_widget.widget_id)
       refute Enum.any?(paused_markers, &(&1["sample_id"] == future_sample_id))
 
-      view |> element("#context-search-form") |> render_change(%{"q" => "alpha"})
+      render_hook(view, "context_search", %{"q" => "alpha"})
 
-      view
-      |> element(~s(button[phx-value-spacecraft-id="#{spacecraft.spacecraft_id}"]))
-      |> render_click()
+      context_presentation = context_selector_presentation(view)
+
+      assert find_context_node(context_presentation, "id", "context-search")["attrs"][
+               "value"
+             ] == "alpha"
+
+      spacecraft_button =
+        find_context_node(
+          context_presentation,
+          "phx-value-spacecraft-id",
+          spacecraft.spacecraft_id
+        )
+
+      assert spacecraft_button["attrs"] == %{
+               "type" => "button",
+               "phx-click" => "set_context",
+               "phx-value-scope-kind" => "spacecraft",
+               "phx-value-scope-id" => spacecraft.spacecraft_id,
+               "phx-value-spacecraft-id" => spacecraft.spacecraft_id,
+               "class" => "w-full rounded px-2 py-1 text-left text-sm hover:bg-base-300"
+             }
+
+      render_hook(
+        view,
+        spacecraft_button["attrs"]["phx-click"],
+        context_event_params(spacecraft_button)
+      )
 
       assert_patch(view)
       render_dashboard_async(view)
