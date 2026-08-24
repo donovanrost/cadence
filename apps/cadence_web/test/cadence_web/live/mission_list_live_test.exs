@@ -36,7 +36,13 @@ defmodule CadenceWeb.MissionListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions")
 
-      assert has_element?(view, "#mission-list-empty-state")
+      assert has_element?(view, "#mission-list-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "mission-list-component")
+
+      assert vue.component == "MissionList"
+      assert vue.props["presentation"]["empty_state"]["visible"]
+      assert vue.props["presentation"]["empty_state"]["id"] == "mission-list-empty-state"
     end
 
     test "renders missions through the Vue table host and JSON-safe row props" do
@@ -46,13 +52,16 @@ defmodule CadenceWeb.MissionListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions")
 
-      assert has_element?(view, "#mission-list-table-component")
+      assert has_element?(view, "#mission-list-component")
 
-      vue = LiveVue.Test.get_vue(view, id: "mission-list-table-component")
+      vue = LiveVue.Test.get_vue(view, id: "mission-list-component")
 
-      assert vue.component == "MissionTable"
+      assert vue.component == "MissionList"
+      assert vue.ssr == false
+      assert Map.keys(vue.props) == ["presentation"]
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-      assert vue.props["rows"] == [
+      assert vue.props["presentation"]["card"]["rows"] == [
                %{
                  "id" => "mission-row-#{m1.mission_id}",
                  "display_name" => "Alpha Mission",
@@ -82,9 +91,10 @@ defmodule CadenceWeb.MissionListLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions")
 
-      vue = LiveVue.Test.get_vue(view, id: "mission-list-table-component")
+      vue = LiveVue.Test.get_vue(view, id: "mission-list-component")
+      rows = vue.props["presentation"]["card"]["rows"]
 
-      assert vue.props["rows"] == [
+      assert rows == [
                %{
                  "id" => "mission-row-#{mine.mission_id}",
                  "display_name" => "My Mission",
@@ -96,8 +106,8 @@ defmodule CadenceWeb.MissionListLiveTest do
                }
              ]
 
-      refute Enum.any?(vue.props["rows"], &(&1["id"] == "mission-row-#{theirs.mission_id}"))
-      refute Enum.any?(vue.props["rows"], &(&1["display_name"] == "Their Mission"))
+      refute Enum.any?(rows, &(&1["id"] == "mission-row-#{theirs.mission_id}"))
+      refute Enum.any?(rows, &(&1["display_name"] == "Their Mission"))
     end
   end
 end
