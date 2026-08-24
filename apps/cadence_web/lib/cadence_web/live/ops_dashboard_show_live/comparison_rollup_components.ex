@@ -926,8 +926,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
     |> Enum.join(",")
   end
 
-  defp comparison_rollup_open_review_request_ids(_open_review_summary), do: ""
-
   defp open_findings_placement_ids(%{} = open_findings) do
     placement_ids =
       open_findings
@@ -1019,15 +1017,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents do
     |> list_text()
   end
 
-  defp comparison_rollup_item_list_text(_item, _key), do: nil
-
   defp comparison_rollup_item_data_management_codes(item, key) when is_map(item) do
     item
     |> Map.get(key)
     |> data_management_codes()
   end
-
-  defp comparison_rollup_item_data_management_codes(_item, _key), do: nil
 
   defp data_management_codes(%{badges: badges}) when is_list(badges) do
     badges
