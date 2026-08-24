@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   alias Cadence.Comms.{GroundStationStore, TransportStore}
@@ -291,10 +292,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{ground_station_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=ground.station.connection_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=ground.station.connection_state"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"])
+      )
 
       ground_station_event_selector =
         ~s(#dashboard-evidence-inspector [data-evidence-ref-kind="operational interval"][data-evidence-ref-id="#{ground_station_interval.source_event_id}"][data-evidence-ref-link-target="operational_event"])
@@ -354,18 +355,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
       assert ground_station_event_path =~ "scope_kind=ground_station"
       assert ground_station_event_path =~ "scope_id=dss-14"
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{ground_station_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{ground_station_operational_event_route_id}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"])
+      )
 
       ground_station_event_copied_path =
-        view
-        |> render()
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query("#dashboard-data-link-copy-link")
-        |> LazyHTML.attribute("data-clipboard-text")
-        |> List.first()
+        clipboard_text(view, "#dashboard-data-link-copy-link")
 
       assert ground_station_event_copied_path =~ "panel=data_link"
       assert ground_station_event_copied_path =~ "selected_target=operational_event"
@@ -392,10 +388,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                ~s(#dashboard-data-link-inspector[data-data-link-target="operational_event"][data-data-link-target-id="#{ground_station_operational_event_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"])
              )
 
-      assert has_element?(
-               reopened_ground_station_event_view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{ground_station_operational_event_route_id}"][data-clipboard-text*="selected_time=#{ground_station_event_at_ms}"])
-             )
+      assert_clipboard_button(
+        reopened_ground_station_event_view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{ground_station_operational_event_route_id}"][data-clipboard-text*="selected_time=#{ground_station_event_at_ms}"])
+      )
 
       assert has_element?(
                reopened_ground_station_event_view,
@@ -502,10 +498,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableGroundStationScop
                "Goldstone DSS-14"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"][data-clipboard-text*="selected_target=ground_station"][data-clipboard-text*="selected_id=dss-14"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="scope_kind=ground_station"][data-clipboard-text*="scope_id=dss-14"][data-clipboard-text*="selected_target=ground_station"][data-clipboard-text*="selected_id=dss-14"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"])
+      )
 
       stop_dashboard_view(reopened_ground_station_event_view)
       stop_dashboard_view(view)

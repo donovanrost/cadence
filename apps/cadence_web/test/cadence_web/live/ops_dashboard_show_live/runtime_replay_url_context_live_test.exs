@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -191,10 +192,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              "replay"
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="time_mode=replay_run"][data-clipboard-text*="replay_run_id=replay_run_001"][data-clipboard-text*="selected_target=telemetry_point"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="time_mode=replay_run"][data-clipboard-text*="replay_run_id=replay_run_001"][data-clipboard-text*="selected_target=telemetry_point"])
+    )
 
     assert has_element?(
              view,

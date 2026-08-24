@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
   use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -160,10 +161,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeSourceCapabilityTimelineLiveTes
              "occurred_at"
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(persisted_event.event_id)}"][data-clipboard-text*="selected_placement=#{URI.encode_www_form(events_widget.widget_id)}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=operational_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(persisted_event.event_id)}"][data-clipboard-text*="selected_placement=#{URI.encode_www_form(events_widget.widget_id)}"])
+    )
 
     stop_dashboard_view(view)
   end

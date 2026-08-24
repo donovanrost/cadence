@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
   @moduletag :config
 
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
 
   use Phoenix.VerifiedRoutes,
@@ -311,10 +312,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetTimeSeriesLimitEventSelectio
                "yellow"
              )
 
-      assert has_element?(
-               view,
-               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="/ops/dashboards/#{dashboard.dashboard_id}"][data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=limit_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(marker_limit_event_id)}"][data-clipboard-text*="selected_placement=#{trend_widget_id}"][data-clipboard-text*="selected_time=#{marker_timestamp_ms}"][data-clipboard-text*="realm=flight"][data-clipboard-text*="data_source_id=#{limit_data_source_id}"][data-clipboard-text*="source_binding_id=default_flight_limits"])
-             )
+      assert_clipboard_button(
+        view,
+        ~s(#dashboard-data-link-copy-link[data-clipboard-text*="/ops/dashboards/#{dashboard.dashboard_id}"][data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=limit_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(marker_limit_event_id)}"][data-clipboard-text*="selected_placement=#{trend_widget_id}"][data-clipboard-text*="selected_time=#{marker_timestamp_ms}"][data-clipboard-text*="realm=flight"][data-clipboard-text*="data_source_id=#{limit_data_source_id}"][data-clipboard-text*="source_binding_id=default_flight_limits"])
+      )
 
       {:ok, shared_limit_view, _html} = live(conn, limit_event_path)
       render_dashboard_async(shared_limit_view)

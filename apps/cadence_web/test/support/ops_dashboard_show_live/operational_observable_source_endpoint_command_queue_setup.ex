@@ -6,6 +6,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
   import ExUnit.Assertions
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
+  import CadenceWeb.LiveVueClipboardTestSupport
   import CadenceWeb.OpsDashboardShowLive.ViewTestSupport
   import CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointScopeFixtures
 
@@ -150,10 +151,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
              ~s(#dashboard-evidence-inspector [data-evidence-ref-id="live-command-queue-entry-released"])
            )
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("commanding.queue_depth")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=source_endpoint"][data-clipboard-text*="scope_id=#{source_endpoint.source_endpoint_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-evidence-copy-link[data-clipboard-text*="panel=evidence"][data-clipboard-text*="selected_evidence_kind=frame"][data-clipboard-text*="selected_observable=#{URI.encode_www_form("commanding.queue_depth")}"][data-clipboard-text*="selected_data_source=managed_operational_observables"][data-clipboard-text*="selected_source_binding=default_flight_operational_observables"][data-clipboard-text*="scope_kind=source_endpoint"][data-clipboard-text*="scope_id=#{source_endpoint.source_endpoint_id}"])
+    )
 
     command_queue_entry_route_id = URI.encode_www_form(queue_entry.command_queue_entry_id)
     command_queue_entry_at_ms = DateTime.to_unix(queue_entry.enqueued_at, :millisecond)
@@ -196,18 +197,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
     assert command_queue_entry_path =~
              "source_binding_id=default_flight_operational_observables"
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="selected_time=#{command_queue_entry_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=source_endpoint"][data-clipboard-text*="scope_id=#{source_endpoint.source_endpoint_id}"])
-           )
+    assert_clipboard_button(
+      view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="selected_time=#{command_queue_entry_at_ms}"][data-clipboard-text*="data_source_id=managed_operational_observables"][data-clipboard-text*="source_binding_id=default_flight_operational_observables"][data-clipboard-text*="scope_kind=source_endpoint"][data-clipboard-text*="scope_id=#{source_endpoint.source_endpoint_id}"])
+    )
 
     command_queue_entry_copied_path =
-      view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("#dashboard-data-link-copy-link")
-      |> LazyHTML.attribute("data-clipboard-text")
-      |> List.first()
+      clipboard_text(view, "#dashboard-data-link-copy-link")
 
     assert command_queue_entry_copied_path =~ "panel=data_link"
     assert command_queue_entry_copied_path =~ "selected_target=command_queue_entry"
@@ -237,10 +233,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.OperationalObservableSourceEndpointCom
              ~s(#dashboard-data-link-inspector[data-data-link-target="command_queue_entry"][data-data-link-target-id="#{queue_entry.command_queue_entry_id}"][data-data-link-status="resolved"][data-data-link-selected-data-source-id="managed_operational_observables"][data-data-link-selected-source-binding-id="default_flight_operational_observables"][data-data-link-selected-time-mode="live"])
            )
 
-    assert has_element?(
-             reopened_command_queue_entry_view,
-             ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="selected_time=#{command_queue_entry_at_ms}"])
-           )
+    assert_clipboard_button(
+      reopened_command_queue_entry_view,
+      ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=command_queue_entry"][data-clipboard-text*="selected_id=#{command_queue_entry_route_id}"][data-clipboard-text*="selected_time=#{command_queue_entry_at_ms}"])
+    )
 
     assert has_element?(
              reopened_command_queue_entry_view,
