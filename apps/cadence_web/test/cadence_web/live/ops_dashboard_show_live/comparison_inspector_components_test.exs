@@ -4,18 +4,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponents
+  alias CadenceWeb.OpsDashboardShowLive.ComparisonRollupComponents
 
-  test "renders Compare as a page-local dock with an explicit close action" do
-    html =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: true,
-        rollup: rollup()
-      )
-
-    vue =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-comparison-inspector-component"
-      )
+  test "presents Compare as a page-local dock through the actual LiveVue host" do
+    {html, vue} = render_inspector_host(rollup())
 
     presentation = vue.props["presentation"]
 
@@ -35,17 +27,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
              |> LazyHTML.attribute("id")
   end
 
-  test "renders the exact comparison inspector header LiveVue boundary" do
-    html =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: true,
-        rollup: rollup()
-      )
-
-    vue =
-      LiveVue.Test.get_vue(html,
-        id: "dashboard-comparison-inspector-component"
-      )
+  test "preserves the exact comparison inspector header LiveVue boundary" do
+    {_html, vue} = render_inspector_host(rollup())
 
     assert vue.component == "DashboardComparisonInspector"
     assert vue.id == "dashboard-comparison-inspector-component"
@@ -114,46 +97,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
            }
   end
 
-  test "does not render when closed or no comparison context exists" do
-    closed =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: false,
-        rollup: rollup()
-      )
-
-    unavailable =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: true,
-        rollup: empty_rollup()
-      )
-
-    closed_with_saved =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: false,
-        rollup: empty_rollup(),
-        saved_presets: [%{dashboard_investigation_preset_id: "preset-1"}]
-      )
-
-    for html <- [closed, unavailable, closed_with_saved] do
-      assert [] =
-               html
-               |> LazyHTML.from_fragment()
-               |> LazyHTML.query("#dashboard-comparison-inspector-component")
-               |> LazyHTML.attribute("id")
-    end
-
+  test "presentation closes cleanly and saved-only context still reaches the LiveVue host" do
     assert ComparisonInspectorComponents.presentation(false, rollup(), nil, %{}, []) == nil
 
     assert ComparisonInspectorComponents.presentation(true, empty_rollup(), nil, %{}, []) == nil
 
-    saved_only =
-      render_component(&ComparisonInspectorComponents.comparison_inspector/1,
-        open?: true,
-        rollup: empty_rollup(),
-        saved_presets: [%{dashboard_investigation_preset_id: "preset-1"}]
-      )
+    assert ComparisonInspectorComponents.presentation(
+             false,
+             empty_rollup(),
+             nil,
+             %{},
+             [%{dashboard_investigation_preset_id: "preset-1"}]
+           ) == nil
 
-    vue = LiveVue.Test.get_vue(saved_only, id: "dashboard-comparison-inspector-component")
+    {_html, vue} =
+      render_inspector_host(empty_rollup(), [
+        %{dashboard_investigation_preset_id: "preset-1"}
+      ])
 
     assert vue.props["presentation"]["inspector"]["root"]["attrs"]["id"] ==
              "dashboard-comparison-inspector"
@@ -161,6 +121,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonInspectorComponentsTest do
     assert vue.props["presentation"]["rollup"]["root"]["attrs"][
              "data-dashboard-comparison-saved-presets"
            ] == "1"
+  end
+
+  test "retired comparison_inspector/1 render API is absent" do
+    refute function_exported?(ComparisonInspectorComponents, :comparison_inspector, 1)
+  end
+
+  defp render_inspector_host(rollup, saved_presets \\ []) do
+    presentation =
+      ComparisonInspectorComponents.presentation(true, rollup, nil, %{}, saved_presets)
+
+    html =
+      render_component(&ComparisonRollupComponents.comparison_rollup_strip/1,
+        inspector: presentation.inspector,
+        rollup: rollup,
+        saved_presets: saved_presets
+      )
+
+    {html, LiveVue.Test.get_vue(html, id: "dashboard-comparison-inspector-component")}
   end
 
   defp rollup do

@@ -5,212 +5,81 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents
 
-  test "data_management_badge renders actionable direct data-link controls" do
-    html =
-      render_component(&WidgetDataManagementComponents.data_management_badge/1,
-        badge: actionable_badge(),
-        class: "data-management-primary"
-      )
+  test "data-management badge presentation preserves actionable direct data-link controls" do
+    presentation = badge_presentation(actionable_badge(), "data-management-primary")
+    attrs = presentation["attrs"]
 
-    document = LazyHTML.from_fragment(html)
+    assert presentation["tag"] == "button"
+    assert presentation["class"] == "badge badge-xs cursor-pointer badge-warning data-management-primary"
+    assert presentation["text"] == "Backfill started"
+    assert attrs["phx-click"] == "open_data_link"
+    assert attrs["phx-value-link-id"] ==
+             "direct:telemetry_backfill_lifecycle_event:backfill-event-1"
 
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["direct:telemetry_backfill_lifecycle_event:backfill-event-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-link-id")
-
-    assert ["telemetry_backfill_lifecycle_event"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("data-data-link-target")
-
-    assert ["replay"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-realm")
-
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-data-view")
-
-    assert ["questdb-replay"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-data-source-id")
-
-    assert ["binding-replay"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-source-binding-id")
-
-    assert ["replay_run"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-time-mode")
-
-    assert ["generation_time"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-time-axis")
-
-    assert ["replay-run-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("phx-value-replay-run-id")
-
-    assert ["Backfill started - Operator requested replay"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="backfill_started"]))
-             |> LazyHTML.attribute("title")
+    assert attrs["data-data-link-target"] == "telemetry_backfill_lifecycle_event"
+    assert attrs["phx-value-realm"] == "replay"
+    assert attrs["phx-value-data-view"] == "all_revisions"
+    assert attrs["phx-value-data-source-id"] == "questdb-replay"
+    assert attrs["phx-value-source-binding-id"] == "binding-replay"
+    assert attrs["phx-value-time-mode"] == "replay_run"
+    assert attrs["phx-value-time-axis"] == "generation_time"
+    assert attrs["phx-value-replay-run-id"] == "replay-run-1"
+    assert attrs["title"] == "Backfill started - Operator requested replay"
   end
 
-  test "data_management_badge exposes workflow job execution context" do
-    html =
-      render_component(&WidgetDataManagementComponents.data_management_badge/1,
-        badge: workflow_job_badge()
-      )
+  test "data-management badge presentation exposes workflow job execution context" do
+    attrs = badge_presentation(workflow_job_badge())["attrs"]
 
-    document = LazyHTML.from_fragment(html)
+    assert attrs["data-data-management-workflow-run-id"] == "backfill-run-1"
+    assert attrs["data-data-management-workflow-job-id"] == "job-1"
+    assert attrs["data-data-management-workflow-job-status"] == "failed"
+    assert attrs["data-data-management-workflow-job-failure"] == "dispatcher unavailable"
 
-    assert ["backfill-run-1"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-run-id")
-
-    assert ["job-1"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-id")
-
-    assert ["failed"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-status")
-
-    assert ["dispatcher unavailable"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("data-data-management-workflow-job-failure")
-
-    assert ["Backfill dispatch failed - workflow job failed: dispatcher unavailable"] =
-             document
-             |> LazyHTML.query(
-               ~s(button[data-data-management-badge="backfill_started_dispatch_degraded"])
-             )
-             |> LazyHTML.attribute("title")
+    assert attrs["title"] ==
+             "Backfill dispatch failed - workflow job failed: dispatcher unavailable"
   end
 
-  test "data_management_badge renders source watermark event direct data-link controls" do
-    html =
-      render_component(&WidgetDataManagementComponents.data_management_badge/1,
-        badge: source_watermark_badge()
-      )
+  test "data-management badge presentation preserves source watermark data-link controls" do
+    attrs = badge_presentation(source_watermark_badge())["attrs"]
 
-    document = LazyHTML.from_fragment(html)
-
-    assert ["open_data_link"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["direct:source_watermark_event:watermark-event-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-link-id")
-
-    assert ["source_watermark_event"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-target")
-
-    assert ["watermark-event-1"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-target-id")
-
-    assert ["flight"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-realm")
-
-    assert ["questdb-flight"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-data-source-id")
-
-    assert ["binding-flight"] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="advanced"]))
-             |> LazyHTML.attribute("phx-value-source-binding-id")
+    assert attrs["phx-click"] == "open_data_link"
+    assert attrs["phx-value-link-id"] == "direct:source_watermark_event:watermark-event-1"
+    assert attrs["phx-value-target"] == "source_watermark_event"
+    assert attrs["phx-value-target-id"] == "watermark-event-1"
+    assert attrs["phx-value-realm"] == "flight"
+    assert attrs["phx-value-data-source-id"] == "questdb-flight"
+    assert attrs["phx-value-source-binding-id"] == "binding-flight"
   end
 
-  test "data_management_badge renders passive badge without link target" do
-    html =
-      render_component(&WidgetDataManagementComponents.data_management_badge/1,
-        badge: %{
-          kind: :data_view,
-          value: "all_revisions",
-          code: nil,
-          label: "All revisions",
-          status: :info,
-          summary: "Multiple revisions included"
-        }
-      )
+  test "data-management badge presentation preserves passive tag and absent link event" do
+    presentation =
+      badge_presentation(%{
+        kind: :data_view,
+        value: "all_revisions",
+        code: nil,
+        label: "All revisions",
+        status: :info,
+        summary: "Multiple revisions included"
+      })
 
-    document = LazyHTML.from_fragment(html)
-
-    assert ["all_revisions"] =
-             document
-             |> LazyHTML.query(~s(span[data-data-management-badge="all_revisions"]))
-             |> LazyHTML.attribute("data-data-management-badge")
-
-    assert [] =
-             document
-             |> LazyHTML.query(~s(button[data-data-management-badge="all_revisions"]))
-             |> LazyHTML.attribute("phx-click")
+    assert presentation["tag"] == "span"
+    assert presentation["class"] == "badge badge-xs badge-info badge-outline"
+    assert presentation["text"] == "All revisions"
+    assert presentation["attrs"]["data-data-management-badge"] == "all_revisions"
+    refute Map.has_key?(presentation["attrs"], "phx-click")
   end
 
-  test "data_management_badge renders late-data execution summaries" do
-    html =
-      render_component(&WidgetDataManagementComponents.data_management_badge/1,
-        badge: late_data_accepted_badge()
-      )
+  test "data-management badge presentation preserves late-data execution summaries" do
+    presentation = badge_presentation(late_data_accepted_badge())
+    attrs = presentation["attrs"]
 
-    document = LazyHTML.from_fragment(html)
+    assert presentation["text"] == "Late data accepted"
 
-    assert "Late data accepted" ==
-             document
-             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
-             |> LazyHTML.text()
-             |> String.trim()
-
-    assert [
+    assert attrs["data-data-management-summary"] ==
              "2 selected samples; writes canonical history; refreshes current/latest; effect canonical_history_and_current_projection"
-           ] =
-             document
-             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
-             |> LazyHTML.attribute("data-data-management-summary")
 
-    assert [
+    assert attrs["title"] ==
              "Late data accepted - 2 selected samples; writes canonical history; refreshes current/latest; effect canonical_history_and_current_projection"
-           ] =
-             document
-             |> LazyHTML.query(~s([data-data-management-badge="late_data_accepted"]))
-             |> LazyHTML.attribute("title")
   end
 
   test "chart_data_management_strip combines primary and compare badges with view labels" do
@@ -476,6 +345,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
 
     assert WidgetDataManagementComponents.widget_data_management_badge_codes([data, backfill]) ==
              "all_revisions,corrected,backfill_started"
+  end
+
+  defp badge_presentation(badge, extra_class \\ nil) do
+    badge
+    |> WidgetDataManagementComponents.data_management_badge_presentation(extra_class)
+    |> Jason.encode!()
+    |> Jason.decode!()
   end
 
   defp data_with_badges(badges), do: %{data_management: %{badges: badges}}

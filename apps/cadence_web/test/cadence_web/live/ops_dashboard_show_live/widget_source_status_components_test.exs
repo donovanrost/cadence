@@ -5,172 +5,94 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponentsTest do
 
   alias CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents
 
-  test "source_status_badge renders actionable evidence and inventory controls" do
-    html =
-      render_component(&WidgetSourceStatusComponents.source_status_badge/1,
-        source_status: source_status(),
-        mission_id: "mission-1"
-      )
+  test "source-status presentation preserves actionable evidence and inventory controls" do
+    presentation = source_badge_presentation(source_status())
+    attrs = presentation["badge"]["attrs"]
 
-    document = LazyHTML.from_fragment(html)
+    assert presentation["wrapper"] == %{"tag" => "span", "class" => "join"}
+    assert presentation["badge"]["tag"] == "button"
+    assert presentation["badge"]["text"] == "Source stale"
+    assert attrs["phx-click"] == "open_evidence"
+    assert attrs["data-widget-source-badge-label"] == "Source stale"
+    assert attrs["data-widget-source-badge-inventory-action"] == "source_inventory"
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="stale"]))
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["Source stale"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="stale"]))
-             |> LazyHTML.attribute("data-widget-source-badge-label")
-
-    assert ["source_inventory"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="stale"]))
-             |> LazyHTML.attribute("data-widget-source-badge-inventory-action")
-
-    assert [inventory_query] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="stale"]))
-             |> LazyHTML.attribute("data-widget-source-badge-inventory-query")
+    inventory_query = attrs["data-widget-source-badge-inventory-query"]
 
     assert inventory_query =~ "contact_id=contact-1"
     assert inventory_query =~ "data_source_id=questdb-flight"
     assert inventory_query =~ "source_binding_id=binding-flight"
     assert inventory_query =~ "source_endpoint_id=endpoint-1"
 
-    assert [href] =
-             document
-             |> LazyHTML.query(~s(a[data-widget-source-badge-inventory-open="stale"]))
-             |> LazyHTML.attribute("href")
+    inventory_link = presentation["inventory_link"]
+    assert inventory_link["tag"] == "a"
+    assert inventory_link["attrs"]["data-widget-source-badge-inventory-open"] == "stale"
+    href = inventory_link["attrs"]["href"]
 
     assert href =~ "/missions/mission-1/ops/data-sources?"
     assert href =~ "data_source_id=questdb-flight"
   end
 
-  test "source_status_badge renders passive badge without evidence context" do
-    html =
-      render_component(&WidgetSourceStatusComponents.source_status_badge/1,
-        source_status: %{state: :no_data, severity: :info, data_state: :no_data},
-        mission_id: "mission-1"
-      )
+  test "source-status presentation preserves passive tag without evidence context" do
+    presentation =
+      source_badge_presentation(%{state: :no_data, severity: :info, data_state: :no_data})
 
-    document = LazyHTML.from_fragment(html)
-
-    assert ["none"] =
-             document
-             |> LazyHTML.query(~s(span[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-action")
-
-    assert [] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("phx-click")
+    assert presentation["wrapper"] == nil
+    assert presentation["inventory_link"] == nil
+    assert presentation["badge"]["tag"] == "span"
+    assert presentation["badge"]["text"] == "No source"
+    assert presentation["badge"]["attrs"]["data-widget-source-badge-action"] == "none"
+    refute Map.has_key?(presentation["badge"]["attrs"], "phx-click")
   end
 
-  test "source_status_badge renders full no-data source context" do
-    html =
-      render_component(&WidgetSourceStatusComponents.source_status_badge/1,
-        source_status: no_data_source_status(),
-        mission_id: "mission-1"
-      )
+  test "source-status presentation preserves full no-data source context" do
+    presentation = source_badge_presentation(no_data_source_status())
+    attrs = presentation["badge"]["attrs"]
 
-    document = LazyHTML.from_fragment(html)
+    assert attrs["phx-click"] == "open_evidence"
+    assert attrs["data-widget-source-badge-label"] == "No source"
+    assert attrs["data-widget-source-badge-severity"] == "info"
+    assert attrs["data-widget-source-badge-source"] == "operational_observables"
+    assert attrs["data-widget-source-badge-data-source"] == "managed_operational_observables"
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("phx-click")
+    assert attrs["data-widget-source-badge-binding"] ==
+             "default_flight_operational_observables"
 
-    assert ["No source"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-label")
+    assert attrs["data-widget-source-badge-time-mode"] == "archive"
+    assert attrs["data-widget-source-badge-scope-kind"] == "link"
+    assert attrs["data-widget-source-badge-scope-id"] == "link-alpha"
+    assert attrs["data-widget-source-badge-empty-reason"] == "scope_no_data"
 
-    assert ["info"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-severity")
-
-    assert ["operational_observables"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-source")
-
-    assert ["managed_operational_observables"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-data-source")
-
-    assert ["default_flight_operational_observables"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-binding")
-
-    assert ["archive"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-time-mode")
-
-    assert ["link"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-scope-kind")
-
-    assert ["link-alpha"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-scope-id")
-
-    assert ["scope_no_data"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-empty-reason")
-
-    assert [inventory_query] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="no_data"]))
-             |> LazyHTML.attribute("data-widget-source-badge-inventory-query")
+    inventory_query = attrs["data-widget-source-badge-inventory-query"]
 
     assert inventory_query =~ "data_source_id=managed_operational_observables"
     assert inventory_query =~ "logical_source=operational_observables"
     assert inventory_query =~ "scope_id=link-alpha"
     assert inventory_query =~ "source_empty_reason=scope_no_data"
 
-    assert [href] =
-             document
-             |> LazyHTML.query(~s(a[data-widget-source-badge-inventory-open="no_data"]))
-             |> LazyHTML.attribute("href")
+    href = presentation["inventory_link"]["attrs"]["href"]
 
     assert href =~ "/missions/mission-1/ops/data-sources?"
     assert href =~ "data_source_id=managed_operational_observables"
   end
 
-  test "source_status_badge renders partial source evidence as actionable warning" do
-    html =
-      render_component(&WidgetSourceStatusComponents.source_status_badge/1,
-        source_status: %{
-          state: :partial,
-          severity: :warning,
-          data_state: :ready,
-          logical_sources: [:telemetry],
-          data_source_ids: ["questdb-flight"],
-          source_binding_ids: ["binding-flight"]
-        },
-        mission_id: "mission-1"
-      )
+  test "source-status presentation preserves partial evidence as actionable warning" do
+    presentation =
+      source_badge_presentation(%{
+        state: :partial,
+        severity: :warning,
+        data_state: :ready,
+        logical_sources: [:telemetry],
+        data_source_ids: ["questdb-flight"],
+        source_binding_ids: ["binding-flight"]
+      })
 
-    document = LazyHTML.from_fragment(html)
+    assert presentation["badge"]["class"] ==
+             "badge badge-xs gap-1 cursor-pointer join-item badge-warning badge-outline"
 
-    assert ["open_evidence"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="partial"]))
-             |> LazyHTML.attribute("phx-click")
+    assert presentation["badge"]["attrs"]["phx-click"] == "open_evidence"
 
-    assert ["Source partial"] =
-             document
-             |> LazyHTML.query(~s(button[data-widget-source-badge="partial"]))
-             |> LazyHTML.attribute("data-widget-source-badge-label")
+    assert presentation["badge"]["attrs"]["data-widget-source-badge-label"] ==
+             "Source partial"
   end
 
   test "widget_query_diagnostics exposes query context and evidence attrs" do
@@ -465,6 +387,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponentsTest do
 
     html = render_component(&WidgetSourceStatusComponents.widget_query_diagnostics/1, attrs)
     LiveVue.Test.get_vue(html, id: "widget-query-placement-1-component")
+  end
+
+  defp source_badge_presentation(source_status) do
+    source_status
+    |> WidgetSourceStatusComponents.source_status_badge_presentation("mission-1")
+    |> Jason.encode!()
+    |> Jason.decode!()
   end
 
   defp widget do
