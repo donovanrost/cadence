@@ -3,8 +3,15 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext}
+  alias Cadence.Applications.{
+    ActionConfirmation,
+    ApplicationInstallations,
+    HostContext,
+    LifecycleActions
+  }
+
   alias CadenceWeb.{ApplicationInventory, ApplicationInventoryCard, ApplicationInventoryLifecycle}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -21,13 +28,19 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
      |> assign(:nav_item, :spacecraft)
      |> assign(:type_binding, type_binding)
      |> assign(:application_host_context, host_context)
-     |> assign(:applications_empty?, applications == [])
-     |> stream_configure(:applications,
-       dom_id: fn application ->
-         ApplicationInventoryCard.dom_id(host_context, application.application_key)
-       end
+     |> assign(
+       :profile_card,
+       profile_card_dto(type_binding, mission.mission_id, spacecraft.spacecraft_id)
      )
-     |> stream(:applications, applications)}
+     |> assign(
+       :application_rows,
+       application_rows_dto(
+         applications,
+         host_context,
+         mission.mission_id,
+         spacecraft.spacecraft_id
+       )
+     )}
   end
 
   @impl true
@@ -58,80 +71,40 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div id="spacecraft-applications-page" class="space-y-6">
-      <.page_header
-        title="Applications"
-        subtitle="Install profile-declared product applications and open their host-rendered workspaces."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {@current_spacecraft.display_name,
-           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-          {"Applications", nil}
-        ]}
-      >
-        <:actions>
-          <.button
-            variant={:ghost}
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
-            }
-          >
-            Readiness
-          </.button>
-        </:actions>
-      </.page_header>
-
-      <.card
-        :if={is_nil(@type_binding)}
-        id="spacecraft-applications-no-profile"
-        title="Spacecraft Profile"
-      >
-        <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
-        <p class="mt-1 text-sm text-base-content/70">
-          Select a Spacecraft Profile before installing profile-declared applications.
-        </p>
-        <.button
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-          }
-          class="mt-5"
+        <.page_header
+          title="Applications"
+          subtitle="Install profile-declared product applications and open their host-rendered workspaces."
+          breadcrumbs={[
+            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+            {@current_spacecraft.display_name,
+             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+            {"Applications", nil}
+          ]}
         >
-          Select profile
-        </.button>
-      </.card>
+          <:actions>
+            <.button
+              variant={:ghost}
+              navigate={
+                ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
+              }
+            >
+              Readiness
+            </.button>
+          </:actions>
+        </.page_header>
 
-      <.card :if={@type_binding} id="spacecraft-applications-profile">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label">Pinned Profile</p>
-            <h2 class="mt-2 text-base font-semibold">
-              {@type_binding.pinned.display_name}
-              <span class="mc-value-small text-base-content/70">v{@type_binding.pinned.version}</span>
-            </h2>
-          </div>
-          <.status_badge
-            status={if(@type_binding.drift?, do: :attention, else: :ready)}
-            label={if(@type_binding.drift?, do: "Profile drift", else: "Current")}
-          />
-        </div>
-      </.card>
-
-      <section
-        :if={@type_binding || not @applications_empty?}
-        id="spacecraft-applications-list"
-        class="grid gap-4 lg:grid-cols-2"
-        phx-update="stream"
-      >
-        <ApplicationInventoryCard.application_inventory_card
-          :for={{dom_id, app} <- @streams.applications}
-          id={dom_id}
-          app={app}
-          host_context={@application_host_context}
-          manage_path={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications/#{app.application_key}"
-          }
+        <.vue
+          id="spacecraft-applications-component"
+          v-component="SpacecraftApplications"
+          profile={@profile_card}
+          applications={@application_rows}
+          v-on:install={JS.push("install_application")}
+          v-on:disable={JS.push("disable_application")}
+          v-on:uninstall={JS.push("uninstall_application")}
+          v-diff={false}
+          v-ssr={false}
         />
-      </section>
       </div>
     </Layouts.app>
     """
@@ -223,8 +196,139 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
         socket.assigns.application_host_context
       )
 
-    socket
-    |> assign(:applications_empty?, applications == [])
-    |> stream(:applications, applications, reset: true)
+    assign(
+      socket,
+      :application_rows,
+      application_rows_dto(
+        applications,
+        socket.assigns.application_host_context,
+        socket.assigns.current_mission.mission_id,
+        socket.assigns.current_spacecraft.spacecraft_id
+      )
+    )
   end
+
+  defp profile_card_dto(nil, mission_id, spacecraft_id) do
+    %{
+      kind: "missing",
+      id: "spacecraft-applications-no-profile",
+      label: "Spacecraft Profile",
+      title: "No profile selected",
+      description: "Select a Spacecraft Profile before installing profile-declared applications.",
+      action: %{
+        label: "Select profile",
+        path: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/identity"
+      }
+    }
+  end
+
+  defp profile_card_dto(%{pinned: pinned, drift?: drift?}, _mission_id, _spacecraft_id) do
+    %{
+      kind: "pinned",
+      id: "spacecraft-applications-profile",
+      label: "Pinned Profile",
+      display_name: pinned.display_name,
+      version: pinned.version,
+      status: %{
+        tone: if(drift?, do: "attention", else: "ready"),
+        label: if(drift?, do: "Profile drift", else: "Current")
+      }
+    }
+  end
+
+  defp application_rows_dto(applications, host_context, mission_id, spacecraft_id) do
+    Enum.map(
+      applications,
+      &application_row_dto(&1, host_context, mission_id, spacecraft_id)
+    )
+  end
+
+  defp application_row_dto(application, host_context, mission_id, spacecraft_id) do
+    card_id = ApplicationInventoryCard.dom_id(host_context, application.application_key)
+
+    %{
+      id: card_id,
+      application_key: application.application_key,
+      application_version: application.application_version,
+      display_name: application.display_name,
+      description: application.description,
+      lifecycle_state: atom_string(application.lifecycle_state),
+      installable: application.installable?,
+      manageable: application.manageable?,
+      uninstallable: application.uninstallable?,
+      scope_label: "Application",
+      manage_path:
+        ~p"/missions/#{mission_id}/spacecraft/#{spacecraft_id}/applications/#{application.application_key}",
+      status: status_dto(application.status),
+      install_action: install_action_dto(application, card_id),
+      disable_action: if(application.manageable?, do: lifecycle_action_dto("disable", card_id)),
+      uninstall_action:
+        if(application.uninstallable?, do: lifecycle_action_dto("uninstall", card_id)),
+      unavailable_message:
+        if(application.installable?,
+          do: nil,
+          else: "This application is not available for installation in this deployment."
+        )
+    }
+  end
+
+  defp status_dto(status) do
+    %{
+      state: Atom.to_string(status.state),
+      label: status.label,
+      tone: Atom.to_string(status.tone),
+      facts:
+        Enum.map(status.facts, fn fact ->
+          %{id: fact.id, label: fact.label, value: fact.value}
+        end)
+    }
+  end
+
+  defp install_action_dto(application, card_id) do
+    if application.installable? and not application.manageable? do
+      %{
+        id: "install-#{card_id}",
+        action_id: "install",
+        label: install_label(application.lifecycle_state),
+        variant: "primary",
+        effect: "durable",
+        execution: "immediate",
+        confirmation: nil
+      }
+    end
+  end
+
+  defp lifecycle_action_dto(action_id, card_id) do
+    {:ok, action} = LifecycleActions.fetch(action_id)
+
+    %{
+      id: "#{action_id}-#{card_id}",
+      action_id: action.action_id,
+      label: action.label,
+      variant: Atom.to_string(action.button_variant),
+      effect: Atom.to_string(action.effect),
+      execution: Atom.to_string(action.execution),
+      confirmation: confirmation_dto(action.confirmation)
+    }
+  end
+
+  defp confirmation_dto(nil), do: nil
+
+  defp confirmation_dto(%ActionConfirmation{} = confirmation) do
+    %{
+      title: confirmation.title,
+      message: confirmation.message,
+      confirm_label: confirmation.confirm_label,
+      tone: Atom.to_string(confirmation.tone),
+      prompt: ActionConfirmation.prompt(confirmation)
+    }
+  end
+
+  defp install_label(:disabled), do: "Enable"
+  defp install_label(:uninstalled), do: "Reinstall"
+  defp install_label(:installed), do: "Upgrade"
+  defp install_label(_lifecycle_state), do: "Install"
+
+  defp atom_string(nil), do: nil
+  defp atom_string(value) when is_atom(value), do: Atom.to_string(value)
 end
