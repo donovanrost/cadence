@@ -385,13 +385,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplaySourceFamilyLiveTest do
                ~s([data-event-timeline-logical-source="events"][data-event-timeline-realm="replay"][data-event-timeline-data-source-id="#{replay_sources.events_data_source_id}"][data-event-timeline-source-binding-id="#{replay_sources.events_binding_id}"][data-event-timeline-replay-run-id="replay_run_events_ops"][data-event-timeline-dataset="mission_events_replay"])
            )
 
-    event_row_id =
-      "event:#{scheduled_contact.scheduled_contact_id}:#{DateTime.to_unix(replay_contact_starts_at, :millisecond)}:0"
+    event_component_selector =
+      event_row_selector <>
+        ~s( [id^="event-row-links-#{events_widget.widget_id}-"][id$="-component"])
 
-    event_component_id =
-      "event-row-links-#{events_widget.widget_id}-#{event_row_id}-component"
-
-    assert has_element?(view, "#{event_row_selector} [id=\"#{event_component_id}\"]")
+    assert [event_component_id] =
+             view
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query(event_component_selector)
+             |> LazyHTML.attribute("id")
 
     assert_widget_data_link_item(view, event_component_id, %{
       "data-event-timeline-row-link-target" => "contact",
