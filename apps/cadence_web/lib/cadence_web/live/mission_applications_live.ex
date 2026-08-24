@@ -10,17 +10,13 @@ defmodule CadenceWeb.MissionApplicationsLive do
   @impl true
   def mount(_params, _session, socket) do
     host_context = HostContext.mission(socket.assigns.current_mission.mission_id)
-    applications = application_rows(socket.assigns.current_scope, host_context)
 
     {:ok,
      socket
      |> assign(:page_title, "#{socket.assigns.current_mission.display_name} Applications")
      |> assign(:nav_item, :mission_applications)
      |> assign(:application_host_context, host_context)
-     |> assign(
-       :application_rows,
-       application_rows_dto(applications, host_context, socket.assigns.current_mission.mission_id)
-     )}
+     |> assign_applications_presentation()}
   end
 
   @impl true
@@ -45,29 +41,149 @@ defmodule CadenceWeb.MissionApplicationsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="mission-applications-page" class="space-y-6">
-        <.page_header
-          title="Applications"
-          subtitle="Install mission-scoped product capabilities and open their host-rendered workspaces."
-          breadcrumbs={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Applications", nil}
-          ]}
-        />
-
-        <.vue
-          id="mission-applications-component"
-          v-component="MissionApplications"
-          applications={@application_rows}
-          v-on:install={JS.push("install_application")}
-          v-on:disable={JS.push("disable_application")}
-          v-on:uninstall={JS.push("uninstall_application")}
-          v-diff={false}
-          v-ssr={false}
-        />
-      </div>
+      <.vue
+        id="mission-applications-page-component"
+        v-component="MissionApplicationsPage"
+        presentation={@presentation}
+        v-on:install={JS.push("install_application")}
+        v-on:disable={JS.push("disable_application")}
+        v-on:uninstall={JS.push("uninstall_application")}
+        v-diff={false}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp assign_applications_presentation(socket) do
+    applications =
+      application_rows(
+        socket.assigns.current_scope,
+        socket.assigns.application_host_context
+      )
+
+    assign(
+      socket,
+      :presentation,
+      page_presentation_dto(
+        socket.assigns.current_mission,
+        applications,
+        socket.assigns.application_host_context
+      )
+    )
+  end
+
+  defp page_presentation_dto(mission, applications, host_context) do
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "mission-applications-page",
+            "class" => "space-y-6"
+          })
+      },
+      "header" => header_presentation(mission),
+      "applications_component" => %{
+        "attrs" => presentation_attrs(%{"id" => "mission-applications-component"}),
+        "props" => %{
+          "applications" => application_rows_dto(applications, host_context, mission.mission_id)
+        }
+      }
+    }
+  end
+
+  defp header_presentation(mission) do
+    %{
+      "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+      "body" => %{"attrs" => %{}},
+      "content" => %{"attrs" => %{}},
+      "breadcrumbs" => breadcrumbs_presentation(mission),
+      "title" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+          }),
+        "text" => "Applications"
+      },
+      "subtitle" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+          }),
+        "text" =>
+          "Install mission-scoped product capabilities and open their host-rendered workspaces."
+      }
+    }
+  end
+
+  defp breadcrumbs_presentation(mission) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "aria-label" => "Breadcrumb",
+          "class" =>
+            "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+        }),
+      "items" => [
+        %{
+          "key" => "mission",
+          "separator" => nil,
+          "link" => %{
+            "attrs" =>
+              navigate_attrs(~p"/missions/#{mission.mission_id}", %{
+                "class" => "hover:text-primary transition-colors"
+              }),
+            "text" => mission.display_name
+          },
+          "current" => nil
+        },
+        %{
+          "key" => "applications",
+          "separator" => breadcrumb_separator(),
+          "link" => nil,
+          "current" => %{
+            "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+            "text" => "Applications"
+          }
+        }
+      ]
+    }
+  end
+
+  defp breadcrumb_separator do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "text-base-content/20",
+          "aria-hidden" => "true"
+        }),
+      "text" => "/"
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp application_rows(scope, host_context) do
@@ -78,21 +194,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
   end
 
   defp refresh_applications(socket) do
-    applications =
-      application_rows(
-        socket.assigns.current_scope,
-        socket.assigns.application_host_context
-      )
-
-    assign(
-      socket,
-      :application_rows,
-      application_rows_dto(
-        applications,
-        socket.assigns.application_host_context,
-        socket.assigns.current_mission.mission_id
-      )
-    )
+    assign_applications_presentation(socket)
   end
 
   defp application_rows_dto(applications, host_context, mission_id) do

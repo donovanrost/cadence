@@ -35,12 +35,19 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     {:ok, view, _html} =
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
 
-    assert has_element?(view, "#mission-applications-page")
-    assert has_element?(view, "#mission-applications-component")
+    assert has_element?(view, "#mission-applications-page-component")
+
+    presentation = mission_applications_presentation(view)
+
+    assert presentation["root"]["attrs"]["id"] == "mission-applications-page"
+
+    assert presentation["applications_component"]["attrs"]["id"] ==
+             "mission-applications-component"
 
     vue = mission_applications_vue(view)
 
-    assert vue.component == "MissionApplications"
+    assert vue.component == "MissionApplicationsPage"
+    assert vue.use_diff == false
     assert vue.handlers["install"] == JS.push("install_application")
     assert vue.handlers["disable"] == JS.push("disable_application")
     assert vue.handlers["uninstall"] == JS.push("uninstall_application")
@@ -628,14 +635,120 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     assert path == ~p"/missions/#{context.mission.mission_id}/applications"
   end
 
+  test "projects the complete inventory shell through one JSON-safe non-SSR parent", context do
+    {:ok, view, _html} =
+      live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
+
+    assert has_element?(view, "#mission-applications-page-component")
+
+    vue = mission_applications_vue(view)
+    presentation = vue.props["presentation"]
+
+    assert vue.component == "MissionApplicationsPage"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.use_diff == false
+    assert Map.keys(vue.props) == ["presentation"]
+    assert presentation == Jason.decode!(Jason.encode!(presentation))
+    assert Map.keys(presentation) == ["applications_component", "header", "root"]
+
+    assert presentation["root"] == %{
+             "attrs" => %{"class" => "space-y-6", "id" => "mission-applications-page"}
+           }
+
+    assert presentation["header"] == %{
+             "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
+             "body" => %{"attrs" => %{}},
+             "content" => %{"attrs" => %{}},
+             "breadcrumbs" => %{
+               "attrs" => %{
+                 "aria-label" => "Breadcrumb",
+                 "class" =>
+                   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+               },
+               "items" => [
+                 %{
+                   "key" => "mission",
+                   "separator" => nil,
+                   "link" => %{
+                     "attrs" => %{
+                       "class" => "hover:text-primary transition-colors",
+                       "data-phx-link" => "redirect",
+                       "data-phx-link-state" => "push",
+                       "href" => ~p"/missions/#{context.mission.mission_id}"
+                     },
+                     "text" => context.mission.display_name
+                   },
+                   "current" => nil
+                 },
+                 %{
+                   "key" => "applications",
+                   "separator" => %{
+                     "attrs" => %{
+                       "aria-hidden" => "true",
+                       "class" => "text-base-content/20"
+                     },
+                     "text" => "/"
+                   },
+                   "link" => nil,
+                   "current" => %{
+                     "attrs" => %{"class" => "text-primary/90"},
+                     "text" => "Applications"
+                   }
+                 }
+               ]
+             },
+             "title" => %{
+               "attrs" => %{
+                 "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+               },
+               "text" => "Applications"
+             },
+             "subtitle" => %{
+               "attrs" => %{
+                 "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+               },
+               "text" =>
+                 "Install mission-scoped product capabilities and open their host-rendered workspaces."
+             }
+           }
+
+    assert presentation["applications_component"]["attrs"] == %{
+             "id" => "mission-applications-component"
+           }
+
+    assert is_list(presentation["applications_component"]["props"]["applications"])
+  end
+
+  test "raw presentation attrs preserve HEEx nil false true string and number semantics" do
+    attrs =
+      CadenceWeb.MissionApplicationsLive.presentation_attrs(%{
+        "nil" => nil,
+        "false" => false,
+        "true" => true,
+        "string" => "retained",
+        "number" => 7
+      })
+
+    assert attrs == %{
+             "true" => "",
+             "string" => "retained",
+             "number" => "7"
+           }
+  end
+
   defp mission_applications_vue(view) do
-    LiveVue.Test.get_vue(view, id: "mission-applications-component")
+    LiveVue.Test.get_vue(view, id: "mission-applications-page-component")
+  end
+
+  defp mission_applications_presentation(view) do
+    mission_applications_vue(view).props["presentation"]
   end
 
   defp application_prop(view, application_key) do
     view
-    |> mission_applications_vue()
-    |> get_in([:props, "applications"])
+    |> mission_applications_presentation()
+    |> get_in(["applications_component", "props", "applications"])
     |> Enum.find(&(&1["application_key"] == application_key))
   end
 end
