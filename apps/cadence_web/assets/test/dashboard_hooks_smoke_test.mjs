@@ -54,10 +54,17 @@ function classList(...initialClasses) {
   const gridCalls = []
   const timerCallbacks = new Map()
   const timerDelays = new Map()
+  const animationFrameCallbacks = new Map()
+  const canceledAnimationFrames = []
   let nextTimerId = 0
+  let nextAnimationFrameId = 0
   let mountedCallback
   let updatedCallback
   let unmountedCallback
+  let observerCallback
+  let observerTarget
+  let observerOptions
+  let observerDisconnectCount = 0
   const connectedNode = {
     x: 2,
     y: 3,
@@ -95,6 +102,7 @@ function classList(...initialClasses) {
     },
     movable(el, value) {
       gridCalls.push(["movable", el.id, value])
+      if (value) el.classList.add("ui-draggable")
     },
     resizable(el, value) {
       gridCalls.push(["resizable", el.id, value])
@@ -122,6 +130,18 @@ function classList(...initialClasses) {
     },
   }
 
+  const gridItems = [
+    {
+      id: "widget-new",
+      classList: classList("grid-stack-item"),
+    },
+    {
+      id: "widget-existing",
+      gridstackNode: { el: null },
+      classList: classList("grid-stack-item"),
+    },
+  ]
+
   const gridElement = {
     dataset: { editMode: "false" },
     classList: classList("grid-stack-static"),
@@ -136,18 +156,34 @@ function classList(...initialClasses) {
     },
     querySelectorAll(selector) {
       assert.equal(selector, ":scope > .grid-stack-item")
-      return [
-        {
-          id: "widget-new",
-          classList: classList("grid-stack-item"),
-        },
-        {
-          id: "widget-existing",
-          gridstackNode: { el: null },
-          classList: classList("grid-stack-item"),
-        },
-      ]
+      return gridItems
     },
+  }
+
+  gridItems.forEach((item) => {
+    item.parentElement = gridElement
+  })
+
+  class FakeMutationObserver {
+    constructor(callback) {
+      observerCallback = callback
+    }
+
+    observe(target, options) {
+      observerTarget = target
+      observerOptions = options
+    }
+
+    disconnect() {
+      observerDisconnectCount += 1
+    }
+  }
+
+  const runAnimationFrame = (id) => {
+    const callback = animationFrameCallbacks.get(id)
+    assert.equal(typeof callback, "function")
+    animationFrameCallbacks.delete(id)
+    callback()
   }
 
   const props = {target_id: "dashboard-grid-alpha", edit_mode: false, item_ids: ["widget-alpha"]}
@@ -187,7 +223,16 @@ function classList(...initialClasses) {
           return fakeGrid
         },
       },
-      requestAnimationFrame: (callback) => callback(),
+      MutationObserver: FakeMutationObserver,
+      requestAnimationFrame(callback) {
+        const id = ++nextAnimationFrameId
+        animationFrameCallbacks.set(id, callback)
+        return id
+      },
+      cancelAnimationFrame(id) {
+        canceledAnimationFrames.push(id)
+        animationFrameCallbacks.delete(id)
+      },
       setTimeout(callback, delay) {
         const id = ++nextTimerId
         timerCallbacks.set(id, callback)
@@ -220,6 +265,23 @@ function classList(...initialClasses) {
     ["on", "change"],
   ])
   assert.equal(typeof sectionListeners.get("toggle"), "function")
+  assert.equal(typeof observerCallback, "function")
+  assert.equal(observerTarget, gridElement)
+  assert.deepEqual(JSON.parse(JSON.stringify(observerOptions)), {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: [
+      "class",
+      "data-edit-mode",
+      "gs-id",
+      "gs-x",
+      "gs-y",
+      "gs-w",
+      "gs-h",
+      "gs-auto-position",
+    ],
+  })
 
   gridElement.gestureActive = true
   const callsBeforeGestureUpdate = gridCalls.length
@@ -243,6 +305,27 @@ function classList(...initialClasses) {
     ["setStatic", false],
     ["float", false],
   ])
+
+  const externalGridItem = {
+    id: "widget-external",
+    parentElement: gridElement,
+    classList: classList("grid-stack-item"),
+  }
+  gridItems.push(externalGridItem)
+  const callsBeforeExternalMutation = gridCalls.length
+  observerCallback([{type: "childList", target: gridElement}])
+  observerCallback([{type: "attributes", attributeName: "gs-x", target: externalGridItem}])
+  assert.equal(animationFrameCallbacks.size, 1)
+  assert.equal(gridCalls.length, callsBeforeExternalMutation)
+  runAnimationFrame(nextAnimationFrameId)
+  assert.equal(
+    gridCalls.some(([name, id]) => name === "makeWidget" && id === "widget-external"),
+    true
+  )
+
+  const nestedWidgetContent = {parentElement: {parentElement: externalGridItem}}
+  observerCallback([{type: "childList", target: nestedWidgetContent}])
+  assert.equal(animationFrameCallbacks.size, 0)
 
   controller.flushLayout()
 
@@ -274,6 +357,7 @@ function classList(...initialClasses) {
   sectionDetails.open = true
   fakeGrid.prevWidth = 720
   sectionListeners.get("toggle")()
+  runAnimationFrame(nextAnimationFrameId)
   assert.equal(fakeGrid.prevWidth, undefined)
   assert.deepEqual(gridCalls.at(-1), ["onResize"])
 
@@ -288,8 +372,14 @@ function classList(...initialClasses) {
     ["setStatic", true],
   ])
 
+  observerCallback([{type: "childList", target: gridElement}])
+  const pendingReconciliationFrame = nextAnimationFrameId
+  assert.equal(animationFrameCallbacks.has(pendingReconciliationFrame), true)
   unmountedCallback()
   assert.deepEqual(gridCalls.at(-1), ["destroy", false])
+  assert.equal(observerDisconnectCount, 1)
+  assert.equal(canceledAnimationFrames.includes(pendingReconciliationFrame), true)
+  assert.equal(animationFrameCallbacks.size, 0)
   assert.equal(sectionListeners.size, 0)
   assert.equal(context.DashboardGridTest.getController(), null)
 }

@@ -6,6 +6,16 @@ import {onBeforeUnmount, onMounted, onUpdated} from "vue"
 import GridStack from "../vendor/gridstack/gridstack-all"
 
 const LAYOUT_PUSH_DEBOUNCE_MS = 400
+const RECONCILIATION_ATTRIBUTES = [
+  "class",
+  "data-edit-mode",
+  "gs-id",
+  "gs-x",
+  "gs-y",
+  "gs-w",
+  "gs-h",
+  "gs-auto-position",
+]
 
 // GridStack + LiveView coexistence:
 // - View mode runs staticGrid, so GridStack never mutates the DOM after init
@@ -13,8 +23,10 @@ const LAYOUT_PUSH_DEBOUNCE_MS = 400
 //   server-rendered gs-* attributes).
 // - Edit mode is the only mutation window; the LiveView pauses data assigns
 //   while it is active, and layout changes autosave via "layout_changed".
-// - updated() reconciles after LiveView patches: adopts added items, drops
-//   removed ones, and re-arms drag/resize classes morphdom may have stripped.
+// - A target-grid observer plus updated() reconcile after LiveView patches:
+//   they adopt added items, drop removed ones, and re-arm drag/resize classes
+//   morphdom may have stripped. The observer is required because the adjacent
+//   headless LiveVue island is not necessarily patched with the external grid.
 // - While a drag/resize gesture is in flight, updated() must not reconcile:
 //   GridStack points node.el at its placeholder during the gesture, and a
 //   patch that removes the placeholder from the DOM would make the node look
@@ -47,6 +59,7 @@ const DashboardGridController = {
       this.el
     )
     this.pushTimer = null
+    this.reconcileFrame = null
 
     this.grid.on("change", () => this.scheduleLayoutPush())
     this.syncEditMode()
@@ -61,6 +74,18 @@ const DashboardGridController = {
       }
       this.sectionDetails.addEventListener("toggle", this.handleSectionToggle)
     }
+
+    this.gridObserver = new MutationObserver((records) => {
+      if (records.some((record) => this.reconciliationMutation(record))) {
+        this.scheduleReconciliation()
+      }
+    })
+    this.gridObserver.observe(this.el, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: RECONCILIATION_ATTRIBUTES,
+    })
   },
 
   updated() {
@@ -71,6 +96,14 @@ const DashboardGridController = {
 
   destroyed() {
     clearTimeout(this.pushTimer)
+    if (this.gridObserver) {
+      this.gridObserver.disconnect()
+      this.gridObserver = null
+    }
+    if (this.reconcileFrame !== null) {
+      cancelAnimationFrame(this.reconcileFrame)
+      this.reconcileFrame = null
+    }
     if (this.sectionDetails && this.handleSectionToggle) {
       this.sectionDetails.removeEventListener("toggle", this.handleSectionToggle)
     }
@@ -85,6 +118,22 @@ const DashboardGridController = {
     return Boolean(
       this.el.querySelector(".ui-draggable-dragging, .ui-resizable-resizing")
     )
+  },
+
+  reconciliationMutation(record) {
+    // LiveView may patch deeply nested widget content without changing the
+    // GridStack item contract. Reconcile only mutations on the grid itself or
+    // one of its direct item children.
+    return record.target === this.el || record.target.parentElement === this.el
+  },
+
+  scheduleReconciliation() {
+    if (this.reconcileFrame !== null) return
+
+    this.reconcileFrame = requestAnimationFrame(() => {
+      this.reconcileFrame = null
+      this.updated()
+    })
   },
 
   syncEditMode() {
