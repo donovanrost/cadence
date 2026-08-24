@@ -34,7 +34,8 @@ const evidenceComponentsPath = resolve(
   testDirectory,
   "../../lib/cadence_web/live/ops_dashboard_show_live/evidence_inspector_panel_components.ex",
 )
-const overlayPath = resolve(testDirectory, "../../lib/cadence_web/components/overlay.ex")
+const dashboardToolbarPath = resolve(testDirectory, "../vue/DashboardToolbar.vue")
+const dashboardToolbarMenuPath = resolve(testDirectory, "../vue/DashboardToolbarMenu.vue")
 const routerPath = resolve(testDirectory, "../../lib/cadence_web/router.ex")
 const appJsPath = resolve(testDirectory, "../js/app.js")
 
@@ -47,7 +48,8 @@ const [
   dataLinkPresentationSource,
   runtimeDiagnosticsComponentsSource,
   evidenceComponentsSource,
-  overlaySource,
+  dashboardToolbarSource,
+  dashboardToolbarMenuSource,
   routerSource,
   appJsSource,
 ] = await Promise.all([
@@ -59,7 +61,8 @@ const [
   readFile(dataLinkPresentationPath, "utf8"),
   readFile(runtimeDiagnosticsComponentsPath, "utf8"),
   readFile(evidenceComponentsPath, "utf8"),
-  readFile(overlayPath, "utf8"),
+  readFile(dashboardToolbarPath, "utf8"),
+  readFile(dashboardToolbarMenuPath, "utf8"),
   readFile(routerPath, "utf8"),
   readFile(appJsPath, "utf8"),
 ])
@@ -179,7 +182,7 @@ assert.doesNotMatch(
   formComponentsSource,
   /v-component="(?:RenameDashboardForm|DashboardSectionManager|HistoricalWorkflowRequestForm|DataLinkInspectorPanel|EvidenceInspectorPanel|WidgetInspectPanel|RuntimeDiagnosticsPanel|VersionHistoryPanel|WidgetForm)"/,
 )
-assert.doesNotMatch(source, /v-component|<\.vue|defineAsyncComponent|<component\b/)
+assert.doesNotMatch(source, /v-component|<\.vue|defineAsyncComponent|<component\b|phx-hook|hooks\/overlay/)
 
 assert.match(template, /^  <div v-bind="presentation\.sheet\.layer\.attrs">/)
 assert.match(template, /<section v-bind="presentation\.sheet\.root\.attrs">/)
@@ -195,6 +198,7 @@ const sheetTokens = [
   '"id" => "dashboard-panel"',
   '"role" => "dialog"',
   '"aria-modal" => "false"',
+  '"aria-label" => title',
   '"data-sheet-width" => panel_width(assigns.panel)',
   '"class" => "cadence-sheet"',
   '"phx-window-keydown" => "close_panel"',
@@ -213,25 +217,21 @@ for (const token of sheetTokens) {
   assert.ok(formComponentsSource.includes(token), `missing exact sheet contract: ${token}`)
 }
 
-for (const token of [
-  'id={"#{@id}-layer"}',
-  'class="cadence-sheet-layer"',
-  'role="dialog"',
-  'aria-modal={to_string(@modal)}',
-  'data-sheet-width={@width}',
-  'class={["cadence-sheet", @class]}',
-  'phx-window-keydown={@close_event}',
-  'phx-key="Escape"',
-  'class="cadence-sheet-header"',
-  'class="hud-label"',
-  'class="cadence-icon-button"',
-  'phx-click={@close_event}',
-  'aria-label={@close_label}',
-  'class="hero-x-mark h-4 w-4"',
-  'class="cadence-sheet-body"',
-]) {
-  assert.ok(overlaySource.includes(token), `the canonical Phoenix sheet oracle changed: ${token}`)
-}
+assert.match(
+  formComponentsSource,
+  /@doc "Builds the server-authoritative, JSON-safe dashboard panel presentation\."/,
+)
+assert.match(formComponentsSource, /def dashboard_panel_presentation\(assigns\) do/)
+assert.match(formComponentsSource, /title = panel_title\(assigns\.panel\)/)
+assert.match(formComponentsSource, /child: child_presentation\(assigns\)/)
+assert.match(formComponentsSource, /defp raw_attributes\(attributes\) do/)
+assert.match(formComponentsSource, /defp rendered_body\(value\), do: to_string\(value\)/)
+assert.doesNotMatch(formComponentsSource, /<\.sheet\b|CadenceWeb\.Components\.Overlay/)
+assert.doesNotMatch(
+  source,
+  /dashboard-panel-layer|cadence-sheet|phx-window-keydown|close_panel/,
+  "DashboardPanel must render the server-authored sheet DTO without recreating its values",
+)
 
 assert.match(
   formComponentsSource,
@@ -319,6 +319,23 @@ assert.deepEqual(dispatchWindowKey(representativeSheet, "Escape"), {
 })
 assert.equal(dispatchWindowKey(representativeSheet, "Enter"), null)
 
+assert.doesNotMatch(appJsSource, /hooks\/(?:overlay|resizable_panel)/)
+assert.doesNotMatch(appJsSource, /\b(?:Overlay|ResizablePanel)\b/)
+
+for (const [ownerSource, controller] of [
+  [dashboardToolbarSource, "createDashboardToolbarPopoverController"],
+  [dashboardToolbarMenuSource, "createDashboardToolbarMenuController"],
+]) {
+  assert.match(ownerSource, new RegExp(`const ${controller} =`))
+  assert.match(ownerSource, /onMounted\(/)
+  assert.match(ownerSource, /onBeforeUpdate\(/)
+  assert.match(ownerSource, /onUpdated\(/)
+  assert.match(ownerSource, /onBeforeUnmount\(/)
+  assert.match(ownerSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
+  assert.match(ownerSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
+  assert.match(ownerSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
+}
+
 const authorSessionStart = routerSource.indexOf("live_session :ops_dashboard_author")
 const viewerSessionStart = routerSource.indexOf("live_session :ops,", authorSessionStart)
 const nextSessionStart = routerSource.indexOf("live_session :ops_admin", viewerSessionStart)
@@ -340,14 +357,9 @@ assert.equal(
   "the authenticated viewer/author router contract must remain byte-unchanged",
 )
 assert.equal(
-  sha256(overlaySource),
-  "69d164583093786637d8b4b56e2d76fd12b03e45ac838b3d2e7986ae8bb7bdec",
-  "the canonical shared sheet must remain byte-unchanged",
-)
-assert.equal(
   sha256(appJsSource),
-  "0352b203d3a74377cb0a903e8052c7516a83bd6a4fae705be1bd8c33c0626867",
-  "app.js and its shared hooks must remain byte-unchanged",
+  "67d0ac41fba902e2c566f52940dad01ee5211c0e40dd528c5aa77f5d753dadc3",
+  "app.js must retain the LiveVue registry without retired global UI hooks",
 )
 
 console.log("dashboard_panel_test passed")
