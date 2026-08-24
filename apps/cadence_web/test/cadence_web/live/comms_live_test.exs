@@ -15,7 +15,7 @@ defmodule CadenceWeb.CommsLiveTest do
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   alias Cadence.Comms.Transport
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{CommsOverviewLive, TestFixtures}
 
   defp signed_in_org_and_mission do
     {conn, org, mission, _scope} = signed_in_scope_and_mission()
@@ -45,10 +45,12 @@ defmodule CadenceWeb.CommsLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
-      assert has_element?(view, "#comms-overview-page")
+      presentation = comms_overview_presentation(view)
+
+      assert presentation["root"]["attrs"]["id"] == "comms-overview-page"
       assert has_element?(view, "#comms-overview-component")
 
-      assert comms_overview_props(view) == %{
+      assert presentation["overview"] == %{
                "transport" => expected_transport_summary(mission.mission_id, []),
                "validation" =>
                  expected_validation_summary([
@@ -321,10 +323,81 @@ defmodule CadenceWeb.CommsLiveTest do
     end
   end
 
+  describe "overview presentation" do
+    test "projects the complete page through one JSON-safe non-SSR parent" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
+
+      vue = comms_overview_vue(view)
+      presentation = vue.props["presentation"]
+
+      assert presentation == Jason.decode!(Jason.encode!(presentation))
+
+      assert presentation["root"] == %{
+               "attrs" => %{"class" => "space-y-6", "id" => "comms-overview-page"}
+             }
+
+      assert presentation["header"] == %{
+               "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
+               "body" => %{"attrs" => %{}},
+               "content" => %{"attrs" => %{}},
+               "eyebrow" => %{
+                 "attrs" => %{"class" => "hud-label"},
+                 "text" => "Communications"
+               },
+               "title" => %{
+                 "attrs" => %{
+                   "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+                 },
+                 "text" => mission.display_name
+               },
+               "title_suffix" => %{
+                 "attrs" => %{
+                   "class" => "ml-3 font-mono text-base text-base-content/60"
+                 },
+                 "text" => "· Mission Comms"
+               }
+             }
+
+      assert Map.keys(presentation) == ["header", "overview", "root"]
+      assert presentation["overview"] == comms_overview_props(view)
+    end
+
+    test "raw attrs preserve HEEx nil, false, true, string, and number semantics" do
+      attrs =
+        CommsOverviewLive.presentation_attrs(%{
+          "nil" => nil,
+          "false" => false,
+          "true" => true,
+          "string" => "retained",
+          "number" => 7
+        })
+
+      assert attrs == %{
+               "true" => "",
+               "string" => "retained",
+               "number" => "7"
+             }
+    end
+  end
+
   defp comms_overview_props(view) do
+    comms_overview_presentation(view)["overview"]
+  end
+
+  defp comms_overview_presentation(view) do
+    comms_overview_vue(view).props["presentation"]
+  end
+
+  defp comms_overview_vue(view) do
     vue = LiveVue.Test.get_vue(view, id: "comms-overview-component")
-    assert vue.component == "CommsOverview"
-    vue.props["overview"]
+
+    assert vue.component == "CommsOverviewPage"
+    assert vue.ssr == false
+    assert Map.keys(vue.props) == ["presentation"]
+
+    vue
   end
 
   defp expected_transport_summary(mission_id, rows) do

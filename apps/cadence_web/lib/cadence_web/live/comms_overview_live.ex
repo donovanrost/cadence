@@ -9,33 +9,77 @@ defmodule CadenceWeb.CommsOverviewLive do
   @impl true
   def mount(_params, _session, socket) do
     summary = load_summary(socket.assigns)
-    overview = overview_dto(socket.assigns.current_mission.mission_id, summary)
+    presentation = page_presentation_dto(socket.assigns.current_mission, summary)
 
     {:ok,
      socket
      |> assign(:page_title, "Comms")
      |> assign(:nav_item, :comms_overview)
-     |> assign(:overview, overview)}
+     |> assign(:presentation, presentation)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="comms-overview-page" class="space-y-6">
-        <.page_header title={@current_mission.display_name} eyebrow="Communications">
-          <:title_suffix>&middot; Mission Comms</:title_suffix>
-        </.page_header>
-
-        <.vue
-          id="comms-overview-component"
-          v-component="CommsOverview"
-          overview={@overview}
-          v-ssr={false}
-        />
-      </div>
+      <.vue
+        id="comms-overview-component"
+        v-component="CommsOverviewPage"
+        presentation={@presentation}
+        v-ssr={false}
+      />
     </Layouts.app>
     """
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp page_presentation_dto(mission, summary) do
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "space-y-6",
+            "id" => "comms-overview-page"
+          })
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{"attrs" => presentation_attrs(%{"class" => false})},
+        "content" => %{"attrs" => presentation_attrs(%{})},
+        "eyebrow" => %{
+          "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+          "text" => "Communications"
+        },
+        "title" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+            }),
+          "text" => mission.display_name
+        },
+        "title_suffix" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "ml-3 font-mono text-base text-base-content/60"
+            }),
+          "text" => "· Mission Comms"
+        }
+      },
+      "overview" => overview_dto(mission.mission_id, summary)
+    }
   end
 
   defp load_summary(%{current_scope: scope, current_mission: mission}) do
