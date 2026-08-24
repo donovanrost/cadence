@@ -707,7 +707,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    assert {:ok, _requirement, _version} =
+    assert {:ok, requirement, _version} =
              ContactRequirements.create(
                scope,
                mission.mission_id,
@@ -840,7 +840,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}"
     )
 
-    {:ok, run_view, _html} =
+    {:ok, run_view, initial_run_html} =
       live(
         conn,
         ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}"
@@ -848,13 +848,65 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     track_async_view(run_view)
 
-    assert has_element?(run_view, "#ops-fleet-planning-run-page")
-    assert has_element?(run_view, "#fleet-run-phase-strip")
-    assert has_element?(run_view, "#fleet-coverage-matrix")
-    assert has_element?(run_view, "#fleet-decision-inspector")
-    assert has_element?(run_view, "#fleet-requirement-rows [id^=fleet-requirement-]")
+    assert has_element?(run_view, "#ops-fleet-planning-run-component.contents")
+    refute has_element?(run_view, "#ops-fleet-planning-run-page")
+    refute has_element?(run_view, "#fleet-run-phase-strip")
+    refute has_element?(run_view, "#fleet-coverage-matrix")
+    refute has_element?(run_view, "#fleet-decision-inspector")
+    refute has_element?(run_view, "#fleet-requirement-rows")
+
+    initial_run_vue = fleet_planning_run_vue(initial_run_html)
+
+    assert initial_run_vue.component == "OpsFleetPlanningRun"
+    assert initial_run_vue.class == "contents"
+    assert initial_run_vue.ssr == false
+    assert initial_run_vue.slots == %{}
+    assert initial_run_vue.props["planning"] == true
+
+    assert initial_run_vue.handlers == %{
+             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+           }
+
+    assert initial_run_vue.props["page"]["header"]["run_id"] ==
+             run.fleet_planning_run_id
+
+    assert [requirement_row] =
+             fleet_planning_run_stream_upserts(initial_run_vue, "requirement_rows")
+
+    assert requirement_row["__dom_id"] ==
+             "fleet-requirement-#{requirement.contact_requirement_id}"
+
+    assert requirement_row["requirement_href"] ==
+             "/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+
+    assert fleet_planning_run_replaced_streams(initial_run_vue) ==
+             ~w(automation_actions decisions exceptions horizon_commitments requirement_rows resource_pressure)
+
+    assert_json_safe_fleet_planning_run_vue(initial_run_vue)
 
     render_async(run_view, 5_000)
+
+    finished_vue = fleet_planning_run_vue(run_view)
+
+    assert finished_vue.props["planning"] == false
+
+    assert %{"state" => "finished"} =
+             Enum.find(
+               finished_vue.props["page"]["phase_strip"]["phases"],
+               & &1["current"]
+             )
+
+    assert_json_safe_fleet_planning_run_vue(finished_vue)
+
+    render_hook(run_view, "refresh-fleet-run", %{})
+
+    refreshed_vue = fleet_planning_run_vue(run_view)
+    assert refreshed_vue.props["planning"] == false
+    assert fleet_planning_run_replaced_streams(refreshed_vue) ==
+             ~w(automation_actions decisions exceptions horizon_commitments requirement_rows resource_pressure)
+
+    assert_json_safe_fleet_planning_run_vue(refreshed_vue)
 
     assert {:ok, finished} =
              FleetPlanningRuns.fetch(
@@ -864,6 +916,428 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              )
 
     assert finished.phase == :finished
+  end
+
+  test "fleet run LiveVue exposes terminal evidence through six JSON-safe stream contracts" do
+    {conn, scope, org, mission, spacecraft} = signed_in_scope(:organization_admin)
+    activate_policy!(scope, mission)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    horizon_end = DateTime.add(now, 6, :hour)
+
+    assert {:ok, requirement, _version} =
+             ContactRequirements.create(
+               scope,
+               mission.mission_id,
+               requirement_attrs(spacecraft.spacecraft_id, now)
+               |> Map.put(:metadata, %{"secret" => "requirement-sensitive-marker"}),
+               now: now
+             )
+
+    assert {:ok, run, [_ref]} =
+             FleetPlanningRuns.create(scope, mission.mission_id, %{
+               horizon_start: now,
+               horizon_end: horizon_end,
+               trigger_kind: :manual
+             })
+
+    assert {:ok, _materializing} =
+             FleetPlanningRuns.advance_phase(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               :queued,
+               :materializing
+             )
+
+    assert {:ok, _searching} =
+             FleetPlanningRuns.advance_phase(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               :materializing,
+               :searching
+             )
+
+    assert {:ok, _failed_ref} =
+             FleetPlanningRuns.update_requirement_progress(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               requirement.contact_requirement_id,
+               :failed,
+               :unsatisfied,
+               %{explanation_document: %{"code" => "provider_search_unavailable"}}
+             )
+
+    assert {:ok, _optimizing} =
+             FleetPlanningRuns.advance_phase(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               :searching,
+               :optimizing
+             )
+
+    assert {:ok, [decision]} =
+             FleetPlanningRuns.persist_decisions(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               [
+                 %{
+                   contact_opportunity_snapshot_id: "snapshot-provider-pressure",
+                   disposition: :ineligible,
+                   score: -10,
+                   hard_constraint_document: %{
+                     "failures" => [%{"code" => "provider_capacity_exceeded"}]
+                   },
+                   score_document: %{},
+                   explanation_document: %{
+                     "code" => "no_eligible_window",
+                     "message" => "Provider capacity was exhausted."
+                   }
+                 }
+               ]
+             )
+
+    assert {:ok, _materializing_plan} =
+             FleetPlanningRuns.advance_phase(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               :optimizing,
+               :materializing_plan,
+               %{
+                 result_summary_document: %{
+                   "resources" => %{
+                     "resources" => %{
+                       "provider-alpha" => %{
+                         "peak_parallel" => 3,
+                         "capacity" => 2,
+                         "over_capacity" => true
+                       }
+                     }
+                   }
+                 }
+               }
+             )
+
+    assert {:ok, failed} =
+             FleetPlanningRuns.fail(
+               scope,
+               mission.mission_id,
+               run.fleet_planning_run_id,
+               :materializing_plan,
+               %{
+                 "reason_code" => "provider_search_unavailable",
+                 "phase" => "materializing_plan",
+                 "credentials" => "failure-sensitive-marker"
+               }
+             )
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{failed.fleet_planning_run_id}"
+      )
+
+    vue = fleet_planning_run_vue(view)
+
+    assert vue.component == "OpsFleetPlanningRun"
+    assert vue.class == "contents"
+    assert vue.ssr == false
+    assert vue.slots == %{}
+    assert vue.props["planning"] == false
+    assert vue.props["repair_form"] == nil
+
+    assert vue.handlers == %{
+             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+           }
+
+    assert vue.props["page"]["failure"] == %{
+             "id" => "fleet-run-failure",
+             "label" => "Stopped safely",
+             "phase" => "materializing_plan",
+             "reason" => "provider search unavailable"
+           }
+
+    assert Enum.map(vue.props["page"]["phase_strip"]["phases"], fn phase ->
+             Map.take(phase, ["state", "complete", "current"])
+           end) == [
+             %{"state" => "queued", "complete" => true, "current" => false},
+             %{"state" => "materializing", "complete" => true, "current" => false},
+             %{"state" => "searching", "complete" => true, "current" => false},
+             %{"state" => "optimizing", "complete" => true, "current" => false},
+             %{"state" => "materializing_plan", "complete" => true, "current" => false},
+             %{"state" => "finished", "complete" => false, "current" => true}
+           ]
+
+    assert fleet_planning_run_replaced_streams(vue) ==
+             ~w(automation_actions decisions exceptions horizon_commitments requirement_rows resource_pressure)
+
+    assert [requirement_row] = fleet_planning_run_stream_upserts(vue, "requirement_rows")
+
+    assert Map.take(requirement_row, [
+             "__dom_id",
+             "spacecraft_id",
+             "contact_requirement_id",
+             "contact_requirement_version",
+             "requirement_href",
+             "input",
+             "coverage",
+             "contact_planning_run_id"
+           ]) == %{
+             "__dom_id" => "fleet-requirement-#{requirement.contact_requirement_id}",
+             "spacecraft_id" => spacecraft.spacecraft_id,
+             "contact_requirement_id" => requirement.contact_requirement_id,
+             "contact_requirement_version" => 1,
+             "requirement_href" =>
+               "/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}",
+             "input" => %{
+               "state" => "failed",
+               "label" => "failed",
+               "class" => "font-mono text-[0.62rem] uppercase text-error"
+             },
+             "coverage" => %{
+               "state" => "unsatisfied",
+               "label" => "unsatisfied",
+               "class" => "font-mono text-[0.62rem] uppercase text-warning"
+             },
+             "contact_planning_run_id" => "not searched"
+           }
+
+    assert [exception] = fleet_planning_run_stream_upserts(vue, "exceptions")
+
+    assert exception == %{
+             "id" => requirement.contact_requirement_id,
+             "__dom_id" => "fleet-exception-#{requirement.contact_requirement_id}",
+             "contact_requirement_id" => requirement.contact_requirement_id,
+             "result" => %{"state" => "unsatisfied", "label" => "unsatisfied"}
+           }
+
+    assert [decision_row] = fleet_planning_run_stream_upserts(vue, "decisions")
+
+    assert Map.take(decision_row, [
+             "__dom_id",
+             "fleet_planning_decision_id",
+             "disposition",
+             "title",
+             "contact_opportunity_snapshot_id",
+             "score",
+             "operational_rationale",
+             "hard_constraints"
+           ]) == %{
+             "__dom_id" => "fleet-decision-#{decision.fleet_planning_decision_id}",
+             "fleet_planning_decision_id" => decision.fleet_planning_decision_id,
+             "disposition" => %{
+               "state" => "ineligible",
+               "label" => "ineligible",
+               "class" =>
+                 "border border-error/35 bg-error/[0.07] px-1.5 py-0.5 font-mono text-[0.58rem] uppercase text-error"
+             },
+             "title" => "no_eligible_window",
+             "contact_opportunity_snapshot_id" => "snapshot-provider-pressure",
+             "score" => -10,
+             "operational_rationale" => "Provider capacity was exhausted.",
+             "hard_constraints" => "provider capacity exceeded"
+           }
+
+    assert [resource] = fleet_planning_run_stream_upserts(vue, "resource_pressure")
+
+    assert resource == %{
+             "id" => "provider-alpha",
+             "__dom_id" => "fleet-resource-provider-alpha",
+             "peak_parallel" => 3,
+             "capacity" => 2,
+             "over_capacity" => true,
+             "pressure_percent" => 100
+           }
+
+    assert fleet_planning_run_stream_upserts(vue, "horizon_commitments") == []
+    assert fleet_planning_run_stream_upserts(vue, "automation_actions") == []
+    assert_json_safe_fleet_planning_run_vue(vue)
+
+    encoded_contract = Jason.encode!(%{"props" => vue.props, "streams_diff" => vue.streams_diff})
+    refute encoded_contract =~ scope.user.email
+    refute encoded_contract =~ "requirement-sensitive-marker"
+    refute encoded_contract =~ "failure-sensitive-marker"
+    refute encoded_contract =~ "trigger_actor_document"
+    refute encoded_contract =~ "capabilities"
+    refute encoded_contract =~ "credentials"
+    refute encoded_contract =~ "metadata"
+
+    render_hook(view, "refresh-fleet-run", %{})
+
+    refreshed_vue = fleet_planning_run_vue(view)
+    assert refreshed_vue.props["page"]["failure"] == vue.props["page"]["failure"]
+    assert_json_safe_fleet_planning_run_vue(refreshed_vue)
+  end
+
+  test "fleet run LiveVue keeps repair values as strings and submits the exact authorized payload" do
+    {conn, scope, org, mission, spacecraft} = signed_in_scope(:organization_admin)
+    activate_policy!(scope, mission)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    horizon_end = DateTime.add(now, 6, :hour)
+
+    assert {:ok, requirement, _version} =
+             ContactRequirements.create(
+               scope,
+               mission.mission_id,
+               requirement_attrs(spacecraft.spacecraft_id, now),
+               now: now
+             )
+
+    assert {:ok, source_run, [_ref]} =
+             FleetPlanningRuns.create(scope, mission.mission_id, %{
+               horizon_start: now,
+               horizon_end: horizon_end,
+               trigger_kind: :manual
+             })
+
+    assert {:ok, result} =
+             Cadence.ContactPlanning.FleetPlanner.run(
+               scope,
+               mission.mission_id,
+               source_run.fleet_planning_run_id
+             )
+
+    assert result.run.lifecycle_state in [:completed, :partial]
+    assert %{} = result.plan
+    assert %{} = result.plan_version
+
+    plan_row =
+      Cadence.Repo.get_by!(Cadence.Management.Contacts.Store.ContactPlanRow,
+        organization_id: org.organization_id,
+        mission_id: mission.mission_id,
+        contact_plan_id: result.plan.contact_plan_id
+      )
+
+    assert {:ok, _failed_plan_row} =
+             plan_row
+             |> Cadence.Management.Contacts.Store.ContactPlanRow.projection_changeset(%{
+               lifecycle_state: "failed",
+               lifecycle_changed_at: DateTime.utc_now(),
+               lifecycle_reason: "Exercise authorized repair presentation"
+             })
+             |> Cadence.Repo.update()
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{result.run.fleet_planning_run_id}"
+      )
+
+    vue = fleet_planning_run_vue(view)
+    repair_form = vue.props["repair_form"]
+
+    assert vue.props["planning"] == false
+
+    assert vue.handlers == %{
+             "refresh-fleet-run" => Phoenix.LiveView.JS.push("refresh-fleet-run"),
+             "repair-fleet-run" => Phoenix.LiveView.JS.push("repair-fleet-run")
+           }
+
+    assert vue.props["page"]["header"]["candidate_plan"] == %{
+             "id" => "fleet-run-candidate-plan-link",
+             "href" =>
+               "/missions/#{mission.mission_id}/ops/plans/#{result.plan.contact_plan_id}",
+             "label" => "Open candidate Plan",
+             "icon" => "hero-arrow-right"
+           }
+
+    assert repair_form["panel_id"] == "fleet-repair-panel"
+    assert repair_form["id"] == "fleet-repair-form"
+    assert repair_form["sync_key"] == result.run.fleet_planning_run_id
+    assert repair_form["submit"] == %{"id" => "start-fleet-repair", "label" => "Start repair run"}
+
+    assert repair_form["fields"]["horizon_start"] == %{
+             "id" => "fleet-repair-horizon-start",
+             "name" => "repair[horizon_start]",
+             "type" => "datetime-local",
+             "label" => "Repair starts (UTC)",
+             "required" => true,
+             "value" => repair_form["fields"]["horizon_start"]["value"]
+           }
+
+    assert repair_form["fields"]["horizon_end"] == %{
+             "id" => "fleet-repair-horizon-end",
+             "name" => "repair[horizon_end]",
+             "type" => "datetime-local",
+             "label" => "Repair ends (UTC)",
+             "required" => true,
+             "value" => repair_form["fields"]["horizon_end"]["value"]
+           }
+
+    repair_params = %{
+      "horizon_start" => repair_form["fields"]["horizon_start"]["value"],
+      "horizon_end" => repair_form["fields"]["horizon_end"]["value"]
+    }
+
+    assert Enum.all?(Map.values(repair_params), &is_binary/1)
+    assert repair_params["horizon_start"] =~ ~r/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\z/
+    assert repair_params["horizon_end"] =~ ~r/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\z/
+
+    assert [requirement_row] = fleet_planning_run_stream_upserts(vue, "requirement_rows")
+
+    assert requirement_row["requirement_href"] ==
+             "/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+
+    assert_json_safe_fleet_planning_run_vue(vue)
+
+    render_hook(view, "repair-fleet-run", %{"repair" => repair_params})
+
+    repair_run =
+      FleetPlanningRuns.list(org.organization_id, mission.mission_id)
+      |> Enum.find(&(&1.trigger_kind == :repair))
+
+    assert repair_run.source_fleet_planning_run_id == result.run.fleet_planning_run_id
+    assert repair_run.source_contact_plan_id == result.plan.contact_plan_id
+    assert repair_run.source_contact_plan_version == result.plan_version.version
+
+    assert_redirect(
+      view,
+      ~p"/missions/#{mission.mission_id}/ops/planning/runs/#{repair_run.fleet_planning_run_id}"
+    )
+  end
+
+  defp fleet_planning_run_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-fleet-planning-run-component")
+  end
+
+  defp fleet_planning_run_stream_upserts(vue, stream_name) do
+    prefix = "/#{stream_name}/"
+
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", path, _row] -> String.starts_with?(path, prefix)
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, row] -> row end)
+  end
+
+  defp fleet_planning_run_replaced_streams(vue) do
+    vue
+    |> fleet_planning_run_stream_mutations()
+    |> Enum.flat_map(fn
+      ["replace", "/" <> stream_name, []] -> [stream_name]
+      _operation -> []
+    end)
+    |> Enum.sort()
+  end
+
+  defp fleet_planning_run_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe_fleet_planning_run_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
   defp fleet_policy_vue(view) do
