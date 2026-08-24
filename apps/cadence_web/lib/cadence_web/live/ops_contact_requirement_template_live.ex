@@ -379,7 +379,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
     }
   end
 
-  defp form_field_dto(form, field, id, label, type, opts \\ []) do
+  defp form_field_dto(form, field, id, label, type, opts) do
     %{
       id: id,
       name: "#{form.name}[#{field}]",
