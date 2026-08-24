@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.{Document, Management}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"dashboard_id" => dashboard_id} = params, _session, socket) do
@@ -30,6 +31,7 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
          |> assign(:ops_nav_item, :dashboards)
          |> assign(:active_dashboard_id, dashboard_id)
          |> assign(:dashboard_document, document)
+         |> assign(:settings_page, settings_page_dto(mission.mission_id, document))
          |> assign(:runtime_context, Management.normalize_runtime_context(params))
          |> assign(:settings_form, settings_form(document))
          |> assign(:share_form, share_form())
@@ -110,7 +112,7 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
 
   @impl true
   def handle_event("validate_settings", %{"settings" => params}, socket) do
-    {:noreply, assign(socket, :settings_form, to_form(params, as: :settings))}
+    {:noreply, assign(socket, :settings_form, settings_form(params))}
   end
 
   @impl true
@@ -122,6 +124,10 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
       {:noreply,
        socket
        |> assign(:dashboard_document, persisted)
+       |> assign(
+         :settings_page,
+         settings_page_dto(socket.assigns.current_mission.mission_id, persisted)
+       )
        |> assign(:settings_form, settings_form(persisted))
        |> put_flash(:info, "Dashboard settings saved as version #{Document.version(persisted)}.")}
     else
@@ -168,146 +174,97 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-settings-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto flex max-w-5xl items-end justify-between gap-4">
-            <div>
-              <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-                Dashboard / Settings
-              </p>
-              <h1 class="mt-1 text-2xl font-bold tracking-tight">{@dashboard_document.name}</h1>
-              <p class="mt-2 text-sm text-base-content/60">
-                Durable identity, runtime defaults, discovery metadata, and lifecycle posture.
-              </p>
-            </div>
-            <.link
-              id="dashboard-settings-viewer"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_document.dashboard_id}"}
-              class="btn btn-ghost btn-sm"
-            >
-              Back to Viewer
-            </.link>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:p-7">
-          <div class="space-y-5">
-          <.form
-            for={@settings_form}
-            id="dashboard-settings-form"
-            phx-change="validate_settings"
-            phx-submit="save_settings"
-            class="space-y-5 border border-base-300 bg-base-200/20 p-5"
-          >
-            <.input field={@settings_form[:name]} type="text" label="Name" required />
-            <.input field={@settings_form[:description]} type="textarea" label="Description" />
-            <.input
-              field={@settings_form[:tags]}
-              type="text"
-              label="Tags"
-              placeholder="power, flight, anomaly-response"
-            />
-            <.input
-              field={@settings_form[:defaults_json]}
-              type="textarea"
-              label="Runtime defaults (JSON)"
-              class="textarea textarea-bordered min-h-64 w-full font-mono text-xs"
-            />
-            <div class="flex justify-end">
-              <.button id="dashboard-settings-save" type="submit" variant={:primary}>
-                Save Settings
-              </.button>
-            </div>
-          </.form>
-
-          <section id="dashboard-sharing" class="border border-base-300 bg-base-200/20 p-5">
-            <p class="hud-label">Permission-aware sharing</p>
-            <h2 class="mt-1 text-lg font-semibold">Share this runtime context</h2>
-            <p class="mt-1 text-xs text-base-content/55">
-              Links require an authenticated member of this mission. Runtime selectors are captured;
-              credentials and runtime samples are never embedded.
-            </p>
-            <.form for={@share_form} id="dashboard-share-form" phx-submit="create_share" class="mt-4 grid gap-3 sm:grid-cols-2">
-              <.input field={@share_form[:data_visibility]} type="select" label="Data visibility" options={[{"Authorized runtime data", "authorized_runtime_data"}, {"Definition only", "definition_only"}]} />
-              <.input field={@share_form[:expires_in_hours]} type="number" label="Expires in hours" min="1" placeholder="Never" />
-              <.button id="dashboard-share-create" type="submit" class="sm:col-span-2">Create authenticated link</.button>
-            </.form>
-            <div id="dashboard-share-list" phx-update="stream" class="mt-4 space-y-2">
-              <p id="dashboard-share-empty" class="hidden only:block text-xs text-base-content/45">No active or revoked links yet.</p>
-              <article :for={{id, share} <- @streams.dashboard_shares} id={id} class="flex items-center gap-3 border border-base-300 bg-base-100 p-3 text-xs">
-                <div class="min-w-0 flex-1">
-                  <.link id={"dashboard-share-open-#{share.dashboard_share_id}"} navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboard-shares/#{share.dashboard_share_id}"} class="font-mono text-primary hover:underline">{share.dashboard_share_id}</.link>
-                  <p class="mt-1 text-base-content/50">{share.access_policy} · {share.data_visibility} · {if share.revoked_at, do: "revoked", else: "active"}</p>
-                </div>
-                <.button :if={is_nil(share.revoked_at)} id={"dashboard-share-revoke-#{share.dashboard_share_id}"} size={:xs} variant={:ghost} phx-click="revoke_share" phx-value-share-id={share.dashboard_share_id}>Revoke</.button>
-              </article>
-            </div>
-          </section>
-
-          <section id="dashboard-snapshots" class="border border-base-300 bg-base-200/20 p-5">
-            <p class="hud-label">Read-only snapshots</p>
-            <h2 class="mt-1 text-lg font-semibold">Freeze definition and context</h2>
-            <.form for={@snapshot_form} id="dashboard-snapshot-form" phx-submit="create_snapshot" class="mt-4 flex items-end gap-3">
-              <.input field={@snapshot_form[:data_visibility]} type="select" label="Data visibility" options={[{"Authorized runtime data", "authorized_runtime_data"}, {"Definition only", "definition_only"}]} />
-              <.button id="dashboard-snapshot-create" type="submit">Create snapshot</.button>
-            </.form>
-            <div id="dashboard-snapshot-list" phx-update="stream" class="mt-4 space-y-2">
-              <p id="dashboard-snapshot-empty" class="hidden only:block text-xs text-base-content/45">No snapshots yet.</p>
-              <article :for={{id, snapshot} <- @streams.dashboard_snapshots} id={id} class="border border-base-300 bg-base-100 p-3 text-xs">
-                <.link id={"dashboard-snapshot-open-#{snapshot.dashboard_snapshot_id}"} navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboard-snapshots/#{snapshot.dashboard_snapshot_id}"} class="font-mono text-primary hover:underline">{snapshot.dashboard_snapshot_id}</.link>
-                <p class="mt-1 text-base-content/50">Version {snapshot.dashboard_version} · {snapshot.data_semantics} · {snapshot.data_visibility}</p>
-              </article>
-            </div>
-          </section>
-          </div>
-
-          <aside class="space-y-4">
-            <section class="border border-primary/30 bg-primary/5 p-4">
-              <p class="hud-label">Governed portability</p>
-              <p class="mt-2 text-xs text-base-content/60">
-                Export includes an integrity digest over binding semantics and records the artifact.
-                Import replaces source identity with the target mission.
-              </p>
-              <a id="dashboard-settings-export" href={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_document.dashboard_id}/export"} class="btn btn-outline btn-sm mt-3">
-                <.icon name="hero-arrow-up-tray" class="h-4 w-4" /> Export JSON
-              </a>
-              <div id="dashboard-deployment-list" phx-update="stream" class="mt-3 space-y-1">
-                <p id="dashboard-deployment-empty" class="hidden only:block text-[0.7rem] text-base-content/45">No exports recorded.</p>
-                <p :for={{id, deployment} <- @streams.dashboard_deployments} id={id} class="font-mono text-[0.65rem] text-base-content/50">
-                  {deployment.environment} · v{deployment.dashboard_version} · {String.slice(deployment.artifact_digest, 0, 10)}
-                </p>
-              </div>
-            </section>
-            <section class="border border-base-300 bg-base-200/20 p-4">
-              <p class="hud-label">Access posture</p>
-              <p class="mt-2 text-sm font-semibold">Mission shared</p>
-              <p class="mt-1 text-xs text-base-content/55">
-                Mission operators can view this dashboard. Dashboard authors can change its shared
-                document.
-              </p>
-            </section>
-            <section class="border border-error/30 bg-error/5 p-4">
-              <p class="hud-label text-error">Lifecycle</p>
-              <p class="mt-2 text-xs text-base-content/60">
-                Archiving removes this dashboard from normal discovery without deleting its version
-                history.
-              </p>
-              <.button
-                id="dashboard-settings-archive"
-                variant={:ghost}
-                size={:sm}
-                class="mt-3 text-error"
-                phx-click="archive_dashboard"
-                data-confirm="Archive this dashboard for every operator on the mission?"
-              >
-                <.icon name="hero-archive-box" class="h-4 w-4" /> Archive Dashboard
-              </.button>
-            </section>
-          </aside>
-        </div>
-      </section>
+      <.vue
+        id="ops-dashboard-settings-component"
+        v-component="OpsDashboardSettings"
+        page={@settings_page}
+        settings_form={@settings_form}
+        share_form={@share_form}
+        snapshot_form={@snapshot_form}
+        dashboard_shares={@streams.dashboard_shares}
+        dashboard_snapshots={@streams.dashboard_snapshots}
+        dashboard_deployments={@streams.dashboard_deployments}
+        v-on:validate-settings={JS.push("validate_settings")}
+        v-on:save-settings={JS.push("save_settings")}
+        v-on:create-share={JS.push("create_share")}
+        v-on:revoke-share={JS.push("revoke_share")}
+        v-on:create-snapshot={JS.push("create_snapshot")}
+        v-on:archive-dashboard={JS.push("archive_dashboard")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  defp settings_page_dto(mission_id, %Document{} = document) do
+    dashboard_id = document.dashboard_id
+
+    %{
+      id: "dashboard-settings-page",
+      header: %{
+        eyebrow: "Dashboard / Settings",
+        heading: document.name,
+        copy: "Durable identity, runtime defaults, discovery metadata, and lifecycle posture.",
+        viewer: %{
+          id: "dashboard-settings-viewer",
+          label: "Back to Viewer",
+          href: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}"
+        }
+      },
+      sharing: %{
+        id: "dashboard-sharing",
+        eyebrow: "Permission-aware sharing",
+        heading: "Share this runtime context",
+        copy:
+          "Links require an authenticated member of this mission. Runtime selectors are captured; credentials and runtime samples are never embedded.",
+        list: %{
+          id: "dashboard-share-list",
+          empty: %{id: "dashboard-share-empty", copy: "No active or revoked links yet."}
+        }
+      },
+      snapshots: %{
+        id: "dashboard-snapshots",
+        eyebrow: "Read-only snapshots",
+        heading: "Freeze definition and context",
+        list: %{
+          id: "dashboard-snapshot-list",
+          empty: %{id: "dashboard-snapshot-empty", copy: "No snapshots yet."}
+        }
+      },
+      portability: %{
+        eyebrow: "Governed portability",
+        copy:
+          "Export includes an integrity digest over binding semantics and records the artifact. Import replaces source identity with the target mission.",
+        export: %{
+          id: "dashboard-settings-export",
+          label: "Export JSON",
+          icon: "hero-arrow-up-tray",
+          href: ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}/export"
+        },
+        deployments: %{
+          id: "dashboard-deployment-list",
+          empty: %{id: "dashboard-deployment-empty", copy: "No exports recorded."}
+        }
+      },
+      access: %{
+        eyebrow: "Access posture",
+        heading: "Mission shared",
+        copy:
+          "Mission operators can view this dashboard. Dashboard authors can change its shared document."
+      },
+      lifecycle: %{
+        eyebrow: "Lifecycle",
+        copy:
+          "Archiving removes this dashboard from normal discovery without deleting its version history.",
+        archive: %{
+          id: "dashboard-settings-archive",
+          label: "Archive Dashboard",
+          icon: "hero-archive-box",
+          confirm: "Archive this dashboard for every operator on the mission?"
+        }
+      }
+    }
   end
 
   defp settings_form(%Document{} = document) do
@@ -318,44 +275,177 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
       "defaults_json" => Jason.encode!(document.defaults || %{}, pretty: true)
     }
 
-    to_form(params, as: :settings)
+    settings_form(params)
+  end
+
+  defp settings_form(params) when is_map(params) do
+    %{
+      id: "dashboard-settings-form",
+      fields: %{
+        name: %{
+          id: "settings_name",
+          name: "settings[name]",
+          type: "text",
+          label: "Name",
+          value: form_value(params, "name"),
+          required: true
+        },
+        description: %{
+          id: "settings_description",
+          name: "settings[description]",
+          type: "textarea",
+          label: "Description",
+          value: form_value(params, "description"),
+          required: false
+        },
+        tags: %{
+          id: "settings_tags",
+          name: "settings[tags]",
+          type: "text",
+          label: "Tags",
+          value: form_value(params, "tags"),
+          required: false,
+          placeholder: "power, flight, anomaly-response"
+        },
+        defaults_json: %{
+          id: "settings_defaults_json",
+          name: "settings[defaults_json]",
+          type: "textarea",
+          label: "Runtime defaults (JSON)",
+          value: form_value(params, "defaults_json"),
+          required: false
+        }
+      },
+      submit: %{id: "dashboard-settings-save", label: "Save Settings"}
+    }
   end
 
   defp share_form do
-    to_form(%{"data_visibility" => "authorized_runtime_data", "expires_in_hours" => "24"},
-      as: :share
-    )
+    %{
+      id: "dashboard-share-form",
+      fields: %{
+        data_visibility: %{
+          id: "share_data_visibility",
+          name: "share[data_visibility]",
+          type: "select",
+          label: "Data visibility",
+          value: "authorized_runtime_data",
+          required: false,
+          options: data_visibility_options()
+        },
+        expires_in_hours: %{
+          id: "share_expires_in_hours",
+          name: "share[expires_in_hours]",
+          type: "number",
+          label: "Expires in hours",
+          value: "24",
+          required: false,
+          min: 1,
+          placeholder: "Never"
+        }
+      },
+      submit: %{id: "dashboard-share-create", label: "Create authenticated link"}
+    }
   end
 
   defp snapshot_form do
-    to_form(%{"data_visibility" => "authorized_runtime_data"}, as: :snapshot)
+    %{
+      id: "dashboard-snapshot-form",
+      fields: %{
+        data_visibility: %{
+          id: "snapshot_data_visibility",
+          name: "snapshot[data_visibility]",
+          type: "select",
+          label: "Data visibility",
+          value: "authorized_runtime_data",
+          required: false,
+          options: data_visibility_options()
+        }
+      },
+      submit: %{id: "dashboard-snapshot-create", label: "Create snapshot"}
+    }
   end
 
   defp refresh_management(socket) do
     %{current_scope: scope, current_mission: mission, dashboard_document: document} =
       socket.assigns
 
+    shares =
+      scope.organization_id
+      |> Management.list_shares(mission.mission_id, document.dashboard_id)
+      |> Enum.map(&dashboard_share_dto(mission.mission_id, &1))
+
+    snapshots =
+      scope.organization_id
+      |> Management.list_snapshots(mission.mission_id, document.dashboard_id)
+      |> Enum.map(&dashboard_snapshot_dto(mission.mission_id, &1))
+
+    deployments =
+      scope.organization_id
+      |> Management.list_deployments(mission.mission_id, document.dashboard_id)
+      |> Enum.map(&dashboard_deployment_dto/1)
+
     socket
-    |> stream(
-      :dashboard_shares,
-      Management.list_shares(scope.organization_id, mission.mission_id, document.dashboard_id),
-      reset: true
-    )
-    |> stream(
-      :dashboard_snapshots,
-      Management.list_snapshots(scope.organization_id, mission.mission_id, document.dashboard_id),
-      reset: true
-    )
-    |> stream(
-      :dashboard_deployments,
-      Management.list_deployments(
-        scope.organization_id,
-        mission.mission_id,
-        document.dashboard_id
-      ),
-      reset: true
-    )
+    |> stream(:dashboard_shares, shares, reset: true)
+    |> stream(:dashboard_snapshots, snapshots, reset: true)
+    |> stream(:dashboard_deployments, deployments, reset: true)
   end
+
+  defp dashboard_share_dto(mission_id, share) do
+    share_id = share.dashboard_share_id
+
+    %{
+      dashboard_share_id: share_id,
+      access_policy: share.access_policy,
+      data_visibility: share.data_visibility,
+      status: if(is_nil(share.revoked_at), do: "active", else: "revoked"),
+      open: %{
+        id: "dashboard-share-open-#{share_id}",
+        href: ~p"/missions/#{mission_id}/ops/dashboard-shares/#{share_id}"
+      },
+      revoke:
+        if(is_nil(share.revoked_at),
+          do: %{
+            id: "dashboard-share-revoke-#{share_id}",
+            payload: %{"share-id" => share_id}
+          },
+          else: nil
+        )
+    }
+  end
+
+  defp dashboard_snapshot_dto(mission_id, snapshot) do
+    snapshot_id = snapshot.dashboard_snapshot_id
+
+    %{
+      dashboard_snapshot_id: snapshot_id,
+      dashboard_version: snapshot.dashboard_version,
+      data_semantics: snapshot.data_semantics,
+      data_visibility: snapshot.data_visibility,
+      open: %{
+        id: "dashboard-snapshot-open-#{snapshot_id}",
+        href: ~p"/missions/#{mission_id}/ops/dashboard-snapshots/#{snapshot_id}"
+      }
+    }
+  end
+
+  defp dashboard_deployment_dto(deployment) do
+    %{
+      dashboard_deployment_id: deployment.dashboard_deployment_id,
+      environment: deployment.environment,
+      dashboard_version: deployment.dashboard_version,
+      artifact_digest_prefix: String.slice(deployment.artifact_digest, 0, 10)
+    }
+  end
+
+  defp data_visibility_options do
+    [
+      %{label: "Authorized runtime data", value: "authorized_runtime_data"},
+      %{label: "Definition only", value: "definition_only"}
+    ]
+  end
+
+  defp form_value(params, field), do: Map.get(params, field) || ""
 
   defp positive_integer(value) when is_binary(value) do
     case Integer.parse(value) do
