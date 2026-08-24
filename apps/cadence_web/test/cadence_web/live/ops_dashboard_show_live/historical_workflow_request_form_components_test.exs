@@ -140,8 +140,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
 
     assert presentation["request_context"]
            |> Map.take(["class", "title"]) == %{
-             "class" =>
-               "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
+             "class" => "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
              "title" => %{"class" => "hud-label", "text" => "Request Context"}
            }
 
@@ -168,8 +167,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
     assert presentation["preview"]
            |> Map.drop(["list"]) == %{
              "id" => "dashboard-historical-workflow-request-preview",
-             "class" =>
-               "space-y-2 rounded border border-info/30 bg-info/10 p-2 text-xs",
+             "class" => "space-y-2 rounded border border-info/30 bg-info/10 p-2 text-xs",
              "title" => %{"class" => "hud-label", "text" => "Request Preview"}
            }
 
@@ -255,8 +253,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
 
     assert presentation["source_window"]
            |> Map.take(["class", "title"]) == %{
-             "class" =>
-               "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
+             "class" => "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
              "title" => %{"class" => "hud-label", "text" => "Source Window"}
            }
 
