@@ -168,7 +168,12 @@ defmodule CadenceWeb.OpsInvestigationNavigationLiveTest do
 
     track_dashboard_view(diagnostics)
     assert has_element?(diagnostics, "#ops-context-rail-component")
-    assert has_element?(diagnostics, "#dashboard-diagnostics-page")
+
+    diagnostics_vue =
+      LiveVue.Test.get_vue(diagnostics, id: "ops-dashboard-diagnostics-page-component")
+
+    assert diagnostics_vue.props["presentation"]["root"]["attrs"]["id"] ==
+             "dashboard-diagnostics-page"
   end
 
   defp action_href(actions, id) do
