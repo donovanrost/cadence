@@ -72,10 +72,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
       render_hook(view, "search", %{"q" => "goldstone"})
 
-      assert_patch(
-        view,
+      search_path =
         "/missions/#{mission.mission_id}/comms/ground-stations?q=goldstone"
-      )
+
+      assert_patch(view, search_path)
+      render_patch(view, search_path)
 
       searched_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
       assert searched_vue.props["search"] == "goldstone"
@@ -128,10 +129,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
       render_hook(view, "sort", %{"sort" => "display_name"})
 
-      assert_patch(
-        view,
+      sort_path =
         "/missions/#{mission.mission_id}/comms/ground-stations?sort=display_name&dir=desc"
-      )
+
+      assert_patch(view, sort_path)
+      render_patch(view, sort_path)
 
       sorted_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
       assert sorted_vue.props["sort_dir"] == "desc"
@@ -143,10 +145,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
       render_hook(view, "search", %{"q" => "alpha"})
 
-      assert_patch(
-        view,
+      alpha_search_path =
         "/missions/#{mission.mission_id}/comms/ground-stations?q=alpha&sort=display_name&dir=desc"
-      )
+
+      assert_patch(view, alpha_search_path)
+      render_patch(view, alpha_search_path)
 
       searched_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
       assert searched_vue.props["search"] == "alpha"
@@ -155,10 +158,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
       render_hook(view, "search", %{"q" => "no-such-station"})
 
-      assert_patch(
-        view,
+      no_match_path =
         "/missions/#{mission.mission_id}/comms/ground-stations?q=no-such-station&sort=display_name&dir=desc"
-      )
+
+      assert_patch(view, no_match_path)
+      render_patch(view, no_match_path)
 
       no_matches_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
       assert no_matches_vue.props["search"] == "no-such-station"
@@ -188,10 +192,11 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
 
       render_hook(view, "paginate", %{"page" => "2"})
 
-      assert_patch(
-        view,
+      second_page_path =
         "/missions/#{mission.mission_id}/comms/ground-stations?page=2"
-      )
+
+      assert_patch(view, second_page_path)
+      render_patch(view, second_page_path)
 
       second_page_vue = LiveVue.Test.get_vue(view, id: "ground-stations-list-component")
       assert second_page_vue.props["page"] == 2
