@@ -5,10 +5,12 @@ defmodule CadenceWeb.UserSessionLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    params = %{"email" => "", "password" => ""}
+
     {:ok,
      socket
-     |> assign(:current_scope, nil)
-     |> assign(:form, to_form(%{"email" => "", "password" => ""}, as: :user))
+     |> assign(:form, to_form(params, as: :user))
+     |> assign(:csrf_token, Plug.CSRFProtection.get_csrf_token_for(~p"/sign-in"))
      |> assign(:page_title, "Sign in")}
   end
 
@@ -20,51 +22,60 @@ defmodule CadenceWeb.UserSessionLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-4">
-      <%!-- Bespoke header: centered auth-layout branding, not a <.page_header> page. --%>
-      <div class="text-center">
-        <p class="text-primary tracking-[0.15em] text-sm font-semibold">
-          &#9670; CADENCE
-        </p>
-        <h1 class="mt-3 text-xl font-bold text-base-content">Sign in</h1>
-        <p class="text-xs text-base-content/70 mt-0.5">
-          Enter your operator credentials to access the control plane.
-        </p>
-      </div>
-
-      <.form
-        for={@form}
-        id="sign-in-form"
-        action={~p"/sign-in"}
-        phx-change="validate"
-      >
-        <.input
-          field={@form[:email]}
-          type="email"
-          label="Email"
-          placeholder="operator@example.com"
-          required
-          autocomplete="email"
-          autofocus
-        />
-        <.input
-          field={@form[:password]}
-          type="password"
-          label="Password"
-          placeholder="Enter your password"
-          required
-          autocomplete="current-password"
-        />
-
-        <.button type="submit" size={:md} class="w-full mt-2">
-          Sign In
-        </.button>
-
-        <p class="mt-3 text-center text-xs text-base-content/70">
-          Need access? Contact your organization admin.
-        </p>
-      </.form>
-    </div>
+    <.vue
+      id="user-session-component"
+      v-component="UserSession"
+      page={page_dto()}
+      form={form_dto(@form, @csrf_token)}
+      v-on:validate={Phoenix.LiveView.JS.push("validate")}
+      v-ssr={false}
+    />
     """
   end
+
+  defp page_dto do
+    %{
+      id: "user-session-page",
+      brand: "◆ CADENCE",
+      heading: "Sign in",
+      body: "Enter your operator credentials to access the control plane.",
+      access_help: "Need access? Contact your organization admin."
+    }
+  end
+
+  defp form_dto(form, csrf_token) do
+    %{
+      id: "sign-in-form",
+      action: ~p"/sign-in",
+      method: "post",
+      csrf: %{name: "_csrf_token", value: csrf_token},
+      fields: %{
+        email: %{
+          id: "user_email",
+          name: "user[email]",
+          type: "email",
+          label: "Email",
+          placeholder: "operator@example.com",
+          required: true,
+          autocomplete: "email",
+          autofocus: true,
+          value: form_value(form, :email)
+        },
+        password: %{
+          id: "user_password",
+          name: "user[password]",
+          type: "password",
+          label: "Password",
+          placeholder: "Enter your password",
+          required: true,
+          autocomplete: "current-password",
+          autofocus: false,
+          value: form_value(form, :password)
+        }
+      },
+      submit: %{id: "sign-in-submit", label: "Sign In"}
+    }
+  end
+
+  defp form_value(form, field), do: Phoenix.HTML.Form.input_value(form, field) || ""
 end
