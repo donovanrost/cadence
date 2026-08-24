@@ -111,6 +111,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
 
     document = LazyHTML.from_fragment(html)
 
+    invalidation =
+      html
+      |> LiveVue.Test.get_vue(id: "dashboard-recent-invalidations-component")
+      |> Map.fetch!(:props)
+      |> Map.fetch!("presentation")
+      |> Map.fetch!("events")
+      |> List.first()
+
     assert ["reused"] =
              document
              |> LazyHTML.query("#dashboard-cache-summary")
@@ -121,38 +129,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
              |> LazyHTML.query("#dashboard-no-refresh-summary")
              |> LazyHTML.attribute("data-no-refresh-status")
 
-    assert ["source"] =
-             document
-             |> LazyHTML.query("#dashboard-runtime-invalidation-invalidation-1")
-             |> LazyHTML.attribute("data-runtime-invalidation-boundary")
+    assert "source" =
+             invalidation["data_attrs"]["data-runtime-invalidation-boundary"]
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-runtime-invalidation-invalidation-1")
-             |> LazyHTML.attribute("data-runtime-invalidation-selection-affected")
+    assert "true" =
+             invalidation["data_attrs"]["data-runtime-invalidation-selection-affected"]
 
-    assert ["affected_placement"] =
-             document
-             |> LazyHTML.query("#dashboard-runtime-invalidation-invalidation-1")
-             |> LazyHTML.attribute("data-runtime-invalidation-selection-impact-reason")
+    assert "affected_placement" =
+             invalidation["data_attrs"]["data-runtime-invalidation-selection-impact-reason"]
 
     assert "telemetry_sample" =
-             document
-             |> LazyHTML.query(~s([data-invalidation-field="Selection target"]))
-             |> LazyHTML.text()
-             |> String.trim()
+             invalidation_field_value(invalidation, "Selection target")
 
     assert "sample-1" =
-             document
-             |> LazyHTML.query(~s([data-invalidation-field="Selection ID"]))
-             |> LazyHTML.text()
-             |> String.trim()
+             invalidation_field_value(invalidation, "Selection ID")
 
     assert "total:2 resolved:1 context:1 missing:0" =
-             document
-             |> LazyHTML.query(~s([data-invalidation-field="Source cache evidence"]))
-             |> LazyHTML.text()
-             |> String.trim()
+             invalidation_field_value(invalidation, "Source cache evidence")
 
     assert ["1"] =
              document
@@ -200,6 +193,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
              |> LazyHTML.query(~s([data-source-capability-field="Clock"]))
              |> LazyHTML.text()
              |> String.trim()
+  end
+
+  defp invalidation_field_value(invalidation, data_label) do
+    invalidation["fields"]
+    |> Enum.find(&(&1["data_attrs"]["data-invalidation-field"] == data_label))
+    |> Map.fetch!("value")
   end
 
   defp diagnostics(overrides) do
