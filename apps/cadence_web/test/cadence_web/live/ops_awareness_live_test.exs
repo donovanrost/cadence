@@ -270,18 +270,111 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
   test "a followed command is URL-scoped and remains visible on another Ops page" do
     {conn, org, mission} = signed_in_org_and_mission()
     persist_command_request!(org, mission, "command-1")
+    persist_command_evidence!(org, mission, "command-1")
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/commands")
 
-    assert has_element?(view, "#ops-commands-page")
-    assert has_element?(view, ~s([data-command-request="command-1"]))
-    refute has_element?(view, ~s(button[phx-click="release_command"]))
+    assert has_element?(view, "#ops-commands-component.contents")
+    assert has_element?(view, "#ops-context-rail")
+    refute has_element?(view, "#ops-commands-page")
 
-    view
-    |> element("#follow-command-command-1")
-    |> render_click()
+    initial_vue = ops_commands_vue(view)
+    initial_observed = initial_vue.props["summary"]["observed"]
+    [initial_row] = command_upserts(initial_vue)
+    age_display = initial_row["age"]["display"]
+    unfocused_row = command_row(age_display, false)
 
-    assert has_element?(view, ~s(#followed-command-banner[data-followed-command="command-1"]))
+    assert initial_vue.component == "OpsCommands"
+    assert initial_vue.class == "contents"
+    assert initial_vue.ssr == false
+    assert initial_vue.slots == %{}
+
+    assert initial_vue.handlers == %{
+             "clear_command_focus" => Phoenix.LiveView.JS.push("clear_command_focus"),
+             "filter" => Phoenix.LiveView.JS.push("filter"),
+             "follow_command" => Phoenix.LiveView.JS.push("follow_command"),
+             "reset_filters" => Phoenix.LiveView.JS.push("reset_filters")
+           }
+
+    assert initial_vue.props == command_props(initial_observed, default_command_filters(), nil)
+
+    assert initial_observed =~
+             ~r/^Projection observed \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/
+
+    assert age_display =~ ~r/^\d+[smhd]$/
+    assert initial_row == unfocused_row
+
+    initial_stream_mutations = command_stream_mutations(initial_vue)
+    assert ["replace", "/commands", []] in initial_stream_mutations
+    assert ["upsert", "/commands/-", unfocused_row] in initial_stream_mutations
+
+    assert initial_row["evidence"]["queue_entry"]["record_id"] == "queue-command-1"
+
+    assert initial_row["evidence"]["release_attempt"]["record_id"] ==
+             "release-command-1"
+
+    assert initial_row["evidence"]["verification"]["state"] == "pending"
+
+    assert initial_row["focus"]["action"] == %{
+             "id" => "follow-command-command-1",
+             "icon" => "hero-eye",
+             "label" => "Follow",
+             "payload" => %{"command-request-id" => "command-1"}
+           }
+
+    refute Map.has_key?(initial_vue.handlers, "release_command")
+    refute Map.has_key?(initial_row["focus"], "release")
+    assert_json_safe_command_vue(initial_vue)
+
+    filtered_values = %{
+      "status" => "in_flight",
+      "target" => "uplink-primary",
+      "query" => "operation"
+    }
+
+    render_hook(view, "filter", %{"filters" => filtered_values})
+
+    filtered_path =
+      ~p"/missions/#{mission.mission_id}/ops/commands?#{filtered_values}"
+
+    assert_patch(view, filtered_path)
+
+    filtered_vue = ops_commands_vue(view)
+    filtered_observed = filtered_vue.props["summary"]["observed"]
+    [filtered_row] = command_upserts(filtered_vue)
+
+    assert filtered_vue.props == command_props(filtered_observed, filtered_values, nil)
+    assert filtered_row == command_row(filtered_row["age"]["display"], false)
+
+    assert command_stream_mutations(filtered_vue) == [
+             ["replace", "/commands", []],
+             ["upsert", "/commands/-", filtered_row]
+           ]
+
+    assert_json_safe_command_vue(filtered_vue)
+
+    render_hook(view, "follow_command", %{"command-request-id" => "command-1"})
+
+    focused_path =
+      ~p"/missions/#{mission.mission_id}/ops/commands?#{Map.put(filtered_values, "focus_command_id", "command-1")}"
+
+    assert_patch(view, focused_path)
+
+    focused_vue = ops_commands_vue(view)
+    focused_observed = focused_vue.props["summary"]["observed"]
+    [focused_row] = command_upserts(focused_vue)
+
+    assert focused_vue.props ==
+             command_props(focused_observed, filtered_values, "command-1")
+
+    assert focused_row == command_row(focused_row["age"]["display"], true)
+
+    assert command_stream_mutations(focused_vue) == [
+             ["replace", "/commands", []],
+             ["upsert", "/commands/-", focused_row]
+           ]
+
+    assert_json_safe_command_vue(focused_vue)
 
     assert has_element?(
              view,
@@ -308,6 +401,230 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
              planning_view,
              ~s(#ops-nav-rail a[href*="/ops/commands"][href*="focus_command_id=command-1"])
            )
+
+    render_hook(view, "clear_command_focus", %{})
+    assert_patch(view, filtered_path)
+
+    cleared_vue = ops_commands_vue(view)
+    cleared_observed = cleared_vue.props["summary"]["observed"]
+    [cleared_row] = command_upserts(cleared_vue)
+
+    assert cleared_vue.props == command_props(cleared_observed, filtered_values, nil)
+    assert cleared_row == command_row(cleared_row["age"]["display"], false)
+    assert_json_safe_command_vue(cleared_vue)
+
+    render_hook(view, "follow_command", %{"command-request-id" => "command-1"})
+    assert_patch(view, focused_path)
+
+    render_hook(view, "reset_filters", %{})
+
+    reset_path =
+      ~p"/missions/#{mission.mission_id}/ops/commands?#{%{focus_command_id: "command-1"}}"
+
+    assert_patch(view, reset_path)
+
+    reset_vue = ops_commands_vue(view)
+    reset_observed = reset_vue.props["summary"]["observed"]
+    [reset_row] = command_upserts(reset_vue)
+
+    assert reset_vue.props ==
+             command_props(reset_observed, default_command_filters(), "command-1")
+
+    assert reset_row == command_row(reset_row["age"]["display"], true)
+
+    assert command_stream_mutations(reset_vue) == [
+             ["replace", "/commands", []],
+             ["upsert", "/commands/-", reset_row]
+           ]
+
+    assert_json_safe_command_vue(reset_vue)
+  end
+
+  defp ops_commands_vue(view) do
+    LiveVue.Test.get_vue(view, id: "ops-commands-component")
+  end
+
+  defp command_upserts(vue) do
+    vue.streams_diff
+    |> Enum.filter(fn
+      ["upsert", "/commands/" <> _index, _command] -> true
+      _operation -> false
+    end)
+    |> Enum.map(fn ["upsert", _path, command] -> command end)
+  end
+
+  defp command_stream_mutations(vue) do
+    Enum.reject(vue.streams_diff, fn
+      ["test", "", _value] -> true
+      _operation -> false
+    end)
+  end
+
+  defp assert_json_safe_command_vue(vue) do
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+  end
+
+  defp command_props(observed, filter_values, focus_command_id) do
+    %{
+      "page" => command_page_props(),
+      "summary" => command_summary_props(observed),
+      "filters" => command_filter_props(filter_values),
+      "reset" => %{
+        "id" => "command-filter-reset",
+        "label" => "Reset filters",
+        "payload" => %{}
+      },
+      "focus_banner" => command_focus_banner_props(focus_command_id),
+      "empty" => %{
+        "id" => "command-rows-empty",
+        "icon" => "hero-command-line",
+        "heading" => "No matching commands",
+        "copy" =>
+          "Empty and unavailable projections are reported separately by the context rail."
+      }
+    }
+  end
+
+  defp command_page_props do
+    %{
+      "id" => "ops-commands-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / command posture",
+        "heading" => "Commands",
+        "copy" =>
+          "Read-only request, queue, release, transport, and verification state. Command creation, approval, and release remain outside this operator-readable surface."
+      },
+      "rows_id" => "command-rows"
+    }
+  end
+
+  defp command_summary_props(observed) do
+    %{
+      "id" => "command-summary",
+      "active_count" => 1,
+      "observed" => observed,
+      "metrics" => [
+        %{"label" => "Queued", "value" => 0, "value_class" => "text-base-content/35"},
+        %{
+          "label" => "Release pending",
+          "value" => 0,
+          "value_class" => "text-base-content/35"
+        },
+        %{"label" => "In flight", "value" => 1, "value_class" => "text-info"},
+        %{"label" => "Failed", "value" => 0, "value_class" => "text-base-content/35"}
+      ]
+    }
+  end
+
+  defp command_filter_props(values) do
+    %{
+      "id" => "command-filter-form",
+      "values" => values,
+      "fields" => %{
+        "status" => %{
+          "id" => "filters_status",
+          "name" => "filters[status]",
+          "type" => "select",
+          "label" => "State",
+          "options" => [
+            %{"label" => "All states", "value" => "all"},
+            %{"label" => "Failed", "value" => "failed"},
+            %{"label" => "Release pending", "value" => "release_pending"},
+            %{"label" => "In flight", "value" => "in_flight"},
+            %{"label" => "Queued", "value" => "queued"},
+            %{"label" => "Released", "value" => "released"},
+            %{"label" => "Approval pending", "value" => "approval_pending"}
+          ]
+        },
+        "target" => %{
+          "id" => "filters_target",
+          "name" => "filters[target]",
+          "type" => "select",
+          "label" => "Target",
+          "options" => [
+            %{"label" => "All targets", "value" => "all"},
+            %{"label" => "uplink-primary", "value" => "uplink-primary"}
+          ]
+        },
+        "query" => %{
+          "id" => "filters_query",
+          "name" => "filters[query]",
+          "type" => "search",
+          "label" => "Command or requester",
+          "placeholder" => "NOOP, request id, endpoint",
+          "debounce_ms" => 250
+        }
+      }
+    }
+  end
+
+  defp default_command_filters do
+    %{"status" => "all", "target" => "all", "query" => ""}
+  end
+
+  defp command_focus_banner_props(nil), do: nil
+
+  defp command_focus_banner_props(command_request_id) do
+    %{
+      "id" => "followed-command-banner",
+      "command_request_id" => command_request_id,
+      "icon" => "hero-eye",
+      "prefix" => "Following",
+      "suffix" => "across Ops pages",
+      "clear" => %{
+        "id" => "clear-command-focus",
+        "label" => "Stop following",
+        "payload" => %{}
+      }
+    }
+  end
+
+  defp command_row(age_display, following) do
+    %{
+      "id" => "command-1",
+      "__dom_id" => "command-row-command-1",
+      "command_request_id" => "command-1",
+      "command_name" => "No operation",
+      "status" => %{
+        "value" => "in_flight",
+        "label" => "in flight",
+        "class" => "badge badge-info badge-sm"
+      },
+      "target" => %{"label" => "Target", "display" => "uplink-primary"},
+      "requester" => %{"label" => "Requested by", "display" => "Flight Director"},
+      "age" => %{"label" => "Age", "display" => age_display},
+      "focus" => %{
+        "following" => following,
+        "label" => "Following",
+        "class" => "badge badge-info badge-outline badge-sm",
+        "action" => %{
+          "id" => "follow-command-command-1",
+          "label" => "Follow",
+          "icon" => "hero-eye",
+          "payload" => %{"command-request-id" => "command-1"}
+        }
+      },
+      "evidence" => %{
+        "summary" => "Queue, release, and verifier evidence",
+        "request_state" => %{"label" => "Request state", "display" => "approved"},
+        "queue_entry" => %{
+          "label" => "Queue entry",
+          "record_id" => "queue-command-1",
+          "display" => "queue-command-1"
+        },
+        "release_attempt" => %{
+          "label" => "Release attempt",
+          "record_id" => "release-command-1",
+          "display" => "release-command-1"
+        },
+        "verification" => %{
+          "label" => "Verification",
+          "state" => "pending",
+          "display" => "pending"
+        }
+      }
+    }
   end
 
   defp signed_in_org_and_mission do
@@ -355,6 +672,45 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
 
     request
     |> CommandRequestRow.changeset()
+    |> Repo.insert!()
+  end
+
+  defp persist_command_evidence!(org, mission, command_request_id) do
+    queue_entry = %Cadence.Commanding.CommandQueueEntry{
+      command_queue_entry_id: "queue-#{command_request_id}",
+      organization_id: org.organization_id,
+      mission_id: mission.mission_id,
+      command_request_id: command_request_id,
+      source_endpoint_ref: "uplink-primary",
+      queue_lane_key: "uplink-primary",
+      queue_sequence: 1,
+      lifecycle_state: :released,
+      enqueued_at: ~U[2026-08-01 12:01:00Z]
+    }
+
+    queue_entry
+    |> Cadence.Commanding.CommandQueueEntryRow.changeset()
+    |> Repo.insert!()
+
+    release_attempt = %Cadence.Commanding.CommandReleaseAttempt{
+      command_release_attempt_id: "release-#{command_request_id}",
+      organization_id: org.organization_id,
+      mission_id: mission.mission_id,
+      command_queue_entry_id: queue_entry.command_queue_entry_id,
+      command_request_id: command_request_id,
+      source_endpoint_ref: "uplink-primary",
+      realized_contact_id: "contact-1",
+      mission_model_revision_id: "mission-model-1",
+      command_id: "NOOP",
+      command_name: "NOOP",
+      lifecycle_state: :released,
+      verification_state: :pending,
+      attempted_at: ~U[2026-08-01 12:02:00Z],
+      released_at: ~U[2026-08-01 12:03:00Z]
+    }
+
+    release_attempt
+    |> Cadence.Commanding.CommandReleaseAttemptRow.changeset()
     |> Repo.insert!()
   end
 end
