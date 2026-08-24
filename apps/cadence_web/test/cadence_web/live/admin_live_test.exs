@@ -170,8 +170,22 @@ defmodule CadenceWeb.AdminLiveTest do
     test "organization list shows empty state when no orgs exist", %{admin_conn: admin_conn} do
       {:ok, view, _html} = live(admin_conn, ~p"/admin/organizations")
 
-      assert has_element?(view, "#admin-organizations-page", "No organizations yet")
+      assert has_element?(view, "#admin-organization-list-page-component")
       refute has_element?(view, "#admin-organization-list-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-organization-list-page-component")
+
+      assert vue.component == "AdminOrganizationListPage"
+      assert vue.ssr == false
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+      assert vue.props["presentation"]["root"]["attrs"]["id"] == "admin-organizations-page"
+
+      assert vue.props["presentation"]["empty_state"]["title"]["text"] ==
+               "No organizations yet"
+
+      assert vue.props["presentation"]["card"] == nil
+
+      refute Jason.encode!(vue.props["presentation"]) =~ "admin-organization-list-component"
     end
 
     test "admin can create an organization", %{admin_conn: admin_conn} do
@@ -216,23 +230,25 @@ defmodule CadenceWeb.AdminLiveTest do
       # Verify the org appears in the list
       {:ok, list_view, _html} = live(admin_conn, ~p"/admin/organizations")
 
-      assert has_element?(list_view, "#admin-organization-list-component")
+      assert has_element?(list_view, "#admin-organization-list-page-component")
 
-      vue = LiveVue.Test.get_vue(list_view, id: "admin-organization-list-component")
+      vue = LiveVue.Test.get_vue(list_view, id: "admin-organization-list-page-component")
       assert [organization] = Cadence.Organizations.list_organizations()
 
-      assert vue.component == "AdminOrganizationList"
+      assert vue.component == "AdminOrganizationListPage"
+      assert vue.ssr == false
 
-      assert vue.props == %{
-               "rows" => [
-                 %{
-                   "id" => "admin-organization-#{organization.organization_id}",
-                   "display_name" => "Test Org",
-                   "slug" => "test-org",
-                   "href" => "/admin/organizations/#{organization.organization_id}"
-                 }
-               ]
-             }
+      assert vue.props["presentation"]["card"]["child"]["attrs"]["id"] ==
+               "admin-organization-list-component"
+
+      assert vue.props["presentation"]["card"]["rows"] == [
+               %{
+                 "id" => "admin-organization-#{organization.organization_id}",
+                 "display_name" => "Test Org",
+                 "slug" => "test-org",
+                 "href" => "/admin/organizations/#{organization.organization_id}"
+               }
+             ]
     end
 
     test "organization validation preserves the Vue-owned form values", %{
