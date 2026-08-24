@@ -213,7 +213,10 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     {conn, user, org, mission} = signed_in_user_org_and_mission()
     power = TestFixtures.persist_dashboard_document!(mission, name: "Power")
     thermal = TestFixtures.persist_dashboard_document!(mission, name: "Thermal")
-    sibling_mission = TestFixtures.persist_mission!(org, slug: "dashboard-playlists-sibling-author")
+
+    sibling_mission =
+      TestFixtures.persist_mission!(org, slug: "dashboard-playlists-sibling-author")
+
     sibling_dashboard = TestFixtures.persist_dashboard_document!(sibling_mission, name: "Sibling")
 
     assert {:ok, sibling_playlist} =
