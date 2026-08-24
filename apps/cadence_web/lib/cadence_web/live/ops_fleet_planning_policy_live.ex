@@ -298,8 +298,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
       panel_id: "fleet-policy-editor",
       id: "fleet-policy-form",
       open: is_nil(policy),
-      summary:
-        if(policy, do: "Draft a new immutable version", else: "Create the initial policy"),
+      summary: if(policy, do: "Draft a new immutable version", else: "Create the initial policy"),
       fields: %{
         max_horizon_hours:
           form_field_dto(
@@ -360,8 +359,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
             "number",
             min: 0
           ),
-        currency:
-          form_field_dto(form, :currency, "policy-currency", "Currency", "text"),
+        currency: form_field_dto(form, :currency, "policy-currency", "Currency", "text"),
         critical_contact_reserve:
           form_field_dto(
             form,

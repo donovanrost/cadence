@@ -413,6 +413,9 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     draft_content_sha256 = draft_vue.props["page"]["manifest"]["content_sha256"]
     assert has_element?(view, "#flash-info", "Draft policy created.")
 
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
+
     render_hook(view, "approve-policy", %{
       "decision" => %{"reason" => "Bound mission-scale provider demand"}
     })
@@ -517,8 +520,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
         capabilities: [:mission_admin]
       })
 
-    assert {:ok,
-            %{service_identity: %{service_identity_id: "svc-fleet-policy"}}} =
+    assert {:ok, %{service_identity: %{service_identity_id: "svc-fleet-policy"}}} =
              Cadence.Auth.issue_service_identity(service_identity)
 
     {:ok, view, _html} =
@@ -584,8 +586,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              "boundary" => "≤ 40 contacts · ≤ 12.0 h",
              "expiry" => "expires #{Calendar.strftime(grant.valid_until, "%d %b %Y %H:%MZ")}",
              "lifecycle_state" => "active",
-             "lifecycle_state_class" =>
-               "font-mono text-[0.58rem] uppercase text-success",
+             "lifecycle_state_class" => "font-mono text-[0.58rem] uppercase text-success",
              "policy_evidence" => "policy v1 · plan, repair",
              "service_identity_id" => "svc-fleet-policy"
            }
@@ -603,6 +604,9 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                "value" => grant.automation_grant_id
              }
            ]
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
 
     render_hook(view, "revoke-grant", %{
       "revocation" => %{
@@ -913,23 +917,23 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
         {"policy-execution-concurrency", "policy[execution_concurrency]", "number",
          "Execution workers", true, 1, [], "4", []},
       "max_contacts" =>
-        {"policy-max-contacts", "policy[max_contacts]", "number", "Contact ceiling", true, 1,
-         [], "500", []},
+        {"policy-max-contacts", "policy[max_contacts]", "number", "Contact ceiling", true, 1, [],
+         "500", []},
       "max_estimated_cost_micros" =>
         {"policy-max-cost", "policy[max_estimated_cost_micros]", "number",
          "Cost micros (optional)", false, 0, [], "", []},
       "max_horizon_hours" =>
-        {"policy-max-horizon-hours", "policy[max_horizon_hours]", "number", "Maximum hours",
-         true, 1, [], "24", []},
+        {"policy-max-horizon-hours", "policy[max_horizon_hours]", "number", "Maximum hours", true,
+         1, [], "24", []},
       "max_repair_attempts" =>
-        {"policy-repair-attempts", "policy[max_repair_attempts]", "number",
-         "Repair attempts", true, 0, [], "3", []},
+        {"policy-repair-attempts", "policy[max_repair_attempts]", "number", "Repair attempts",
+         true, 0, [], "3", []},
       "provider_search_concurrency" =>
         {"policy-provider-concurrency", "policy[provider_search_concurrency]", "number",
          "Provider workers", true, 1, [], "4", []},
       "repair_horizon_hours" =>
-        {"policy-repair-horizon-hours", "policy[repair_horizon_hours]", "number",
-         "Repair hours", true, 1, [], "24", []},
+        {"policy-repair-horizon-hours", "policy[repair_horizon_hours]", "number", "Repair hours",
+         true, 1, [], "24", []},
       "requirement_concurrency" =>
         {"policy-requirement-concurrency", "policy[requirement_concurrency]", "number",
          "Requirement workers", true, 1, [], "8", []},
