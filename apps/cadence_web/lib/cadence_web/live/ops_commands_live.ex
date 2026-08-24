@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsCommandsLive do
 
   alias Cadence.Reads.Commands
   alias CadenceWeb.OpsContextSnapshot
+  alias Phoenix.LiveView.JS
 
   @filter_keys ~w(status target query focus_command_id)
 
@@ -12,6 +13,7 @@ defmodule CadenceWeb.OpsCommandsLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
+     |> stream_configure(:commands, dom_id: &"command-row-#{&1.id}")
      |> assign(:page_title, "Commands")
      |> assign(:ops_nav_item, :commands)
      |> assign(:command_summary, empty_summary())
@@ -19,6 +21,12 @@ defmodule CadenceWeb.OpsCommandsLive do
      |> assign(:commands_empty?, true)
      |> assign(:focus_command_id, nil)
      |> assign(:filter_form, to_form(%{}, as: :filters))
+     |> assign(:commands_page, page_dto())
+     |> assign(:command_summary_dto, summary_dto(empty_summary()))
+     |> assign(:command_filters_dto, filters_dto(%{}, []))
+     |> assign(:command_reset, reset_dto())
+     |> assign(:command_focus_banner, nil)
+     |> assign(:command_empty, empty_dto())
      |> stream(:commands, [])}
   end
 
@@ -42,7 +50,14 @@ defmodule CadenceWeb.OpsCommandsLive do
      |> assign(:commands_empty?, snapshot.rows == [])
      |> assign(:focus_command_id, focus_command_id)
      |> assign(:filter_form, to_form(filters, as: :filters))
-     |> stream(:commands, snapshot.rows, reset: true)}
+     |> assign(:command_summary_dto, summary_dto(snapshot.summary))
+     |> assign(:command_filters_dto, filters_dto(filters, snapshot.targets))
+     |> assign(:command_focus_banner, focus_banner_dto(focus_command_id))
+     |> stream(
+       :commands,
+       Enum.map(snapshot.rows, &command_dto(&1, focus_command_id)),
+       reset: true
+     )}
   end
 
   @impl true
@@ -78,171 +93,209 @@ defmodule CadenceWeb.OpsCommandsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-commands-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-                Mission operations / command posture
-              </p>
-              <h1 class="mt-1 text-2xl font-bold tracking-tight">Commands</h1>
-              <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-                Read-only request, queue, release, transport, and verification state. Command
-                creation, approval, and release remain outside this operator-readable surface.
-              </p>
-            </div>
-            <div id="command-summary" class="grid grid-cols-2 gap-px border border-base-300 bg-base-300 sm:grid-cols-4" data-command-active-count={@command_summary.active_count}>
-              <.summary_metric label="Queued" value={@command_summary.queued_count} tone={:info} />
-              <.summary_metric label="Release pending" value={@command_summary.release_pending_count} tone={:warning} />
-              <.summary_metric label="In flight" value={@command_summary.in_flight_count} tone={:info} />
-              <.summary_metric label="Failed" value={@command_summary.failed_count + @command_summary.indeterminate_count} tone={:critical} />
-            </div>
-          </div>
-        </header>
-
-        <div class="mx-auto max-w-[100rem] space-y-4 p-5 lg:p-7">
-          <div
-            :if={@focus_command_id}
-            id="followed-command-banner"
-            data-followed-command={@focus_command_id}
-            class="flex items-center gap-3 border-l-2 border-info bg-info/10 px-3 py-2"
-          >
-            <.icon name="hero-eye" class="h-4 w-4 text-info" />
-            <p class="min-w-0 flex-1 truncate text-sm">
-              Following <span class="font-mono font-semibold">{@focus_command_id}</span> across Ops pages
-            </p>
-            <button id="clear-command-focus" type="button" phx-click="clear_command_focus" class="btn btn-ghost btn-xs">
-              Stop following
-            </button>
-          </div>
-
-          <.form
-            for={@filter_form}
-            id="command-filter-form"
-            phx-change="filter"
-            class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-3"
-          >
-            <.input
-              field={@filter_form[:status]}
-              type="select"
-              label="State"
-              options={[{"All states", "all"}, {"Failed", "failed"}, {"Release pending", "release_pending"}, {"In flight", "in_flight"}, {"Queued", "queued"}, {"Released", "released"}, {"Approval pending", "approval_pending"}]}
-            />
-            <.input
-              field={@filter_form[:target]}
-              type="select"
-              label="Target"
-              options={[{"All targets", "all"} | Enum.map(@command_targets, &{&1, &1})]}
-            />
-            <.input
-              field={@filter_form[:query]}
-              type="search"
-              label="Command or requester"
-              placeholder="NOOP, request id, endpoint"
-              phx-debounce="250"
-            />
-          </.form>
-
-          <div class="flex items-center justify-between gap-3">
-            <p class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45">
-              Projection observed {timestamp(@command_summary.observed_at)}
-            </p>
-            <button id="command-filter-reset" type="button" phx-click="reset_filters" class="btn btn-ghost btn-xs">
-              Reset filters
-            </button>
-          </div>
-
-          <section class="overflow-hidden border border-base-300 bg-base-100">
-            <div id="command-rows" phx-update="stream">
-              <div id="command-rows-empty" class="hidden only:flex min-h-48 flex-col items-center justify-center px-6 text-center">
-                <.icon name="hero-command-line" class="h-8 w-8 text-base-content/30" />
-                <p class="mt-3 font-semibold">No matching commands</p>
-                <p class="mt-1 text-sm text-base-content/55">
-                  Empty and unavailable projections are reported separately by the context rail.
-                </p>
-              </div>
-              <article
-                :for={{id, command} <- @streams.commands}
-                id={id}
-                data-command-request={command.command_request_id}
-                data-command-state={command.status}
-                class="grid gap-3 border-b border-base-300/60 px-4 py-3 last:border-b-0 xl:grid-cols-[9rem_minmax(0,1fr)_13rem_10rem_10rem_auto] xl:items-center"
-              >
-                <span class={status_class(command.status)}>{status_label(command.status)}</span>
-                <div class="min-w-0">
-                  <p class="truncate font-semibold">{command.command_name}</p>
-                  <p class="truncate font-mono text-[0.68rem] text-base-content/50">
-                    {command.command_request_id}
-                  </p>
-                </div>
-                <div>
-                  <p class="hud-label">Target</p>
-                  <p class="mt-1 truncate font-mono text-[0.68rem]">{command.target}</p>
-                </div>
-                <div>
-                  <p class="hud-label">Requested by</p>
-                  <p class="mt-1 truncate text-xs">{command.requested_by}</p>
-                </div>
-                <div>
-                  <p class="hud-label">Age</p>
-                  <p class="mt-1 font-mono text-[0.68rem]">{age_label(command.requested_at)}</p>
-                </div>
-                <div class="flex justify-end">
-                  <button
-                    :if={@focus_command_id != command.command_request_id}
-                    id={"follow-command-#{command.command_request_id}"}
-                    type="button"
-                    phx-click="follow_command"
-                    phx-value-command-request-id={command.command_request_id}
-                    class="btn btn-ghost btn-xs"
-                  >
-                    <.icon name="hero-eye" class="h-3.5 w-3.5" /> Follow
-                  </button>
-                  <span :if={@focus_command_id == command.command_request_id} class="badge badge-info badge-outline badge-sm">
-                    Following
-                  </span>
-                </div>
-                <details class="xl:col-span-6 border-t border-base-300/50 pt-2">
-                  <summary class="cursor-pointer font-mono text-[0.65rem] uppercase tracking-wider text-base-content/50">
-                    Queue, release, and verifier evidence
-                  </summary>
-                  <dl class="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                    <.detail label="Request state" value={command.request_state} />
-                    <.detail label="Queue entry" value={record_id(command.queue_entry, :command_queue_entry_id)} />
-                    <.detail label="Release attempt" value={record_id(command.release_attempt, :command_release_attempt_id)} />
-                    <.detail label="Verification" value={command.verification_state || "not required"} />
-                  </dl>
-                </details>
-              </article>
-            </div>
-          </section>
-        </div>
-      </section>
+      <.vue
+        id="ops-commands-component"
+        v-component="OpsCommands"
+        page={@commands_page}
+        summary={@command_summary_dto}
+        filters={@command_filters_dto}
+        reset={@command_reset}
+        focus_banner={@command_focus_banner}
+        empty={@command_empty}
+        commands={@streams.commands}
+        v-on:filter={JS.push("filter")}
+        v-on:reset_filters={JS.push("reset_filters")}
+        v-on:follow_command={JS.push("follow_command")}
+        v-on:clear_command_focus={JS.push("clear_command_focus")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :integer, required: true
-  attr :tone, :atom, required: true
-
-  defp summary_metric(assigns) do
-    ~H"""
-    <div class="min-w-24 bg-base-100/80 px-3 py-2">
-      <p class="hud-label">{@label}</p>
-      <p class={["mt-1 font-mono text-lg font-semibold", metric_class(@tone, @value)]}>{@value}</p>
-    </div>
-    """
+  defp page_dto do
+    %{
+      id: "ops-commands-page",
+      header: %{
+        eyebrow: "Mission operations / command posture",
+        heading: "Commands",
+        copy:
+          "Read-only request, queue, release, transport, and verification state. Command creation, approval, and release remain outside this operator-readable surface."
+      },
+      rows_id: "command-rows"
+    }
   end
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
-
-  defp detail(assigns) do
-    ~H"""
-    <div><dt class="hud-label">{@label}</dt><dd class="mt-1 break-all font-mono text-[0.68rem]">{@value || "—"}</dd></div>
-    """
+  defp summary_dto(summary) do
+    %{
+      id: "command-summary",
+      active_count: summary.active_count,
+      observed: "Projection observed #{timestamp(summary.observed_at)}",
+      metrics: [
+        summary_metric_dto("Queued", summary.queued_count, :info),
+        summary_metric_dto("Release pending", summary.release_pending_count, :warning),
+        summary_metric_dto("In flight", summary.in_flight_count, :info),
+        summary_metric_dto(
+          "Failed",
+          summary.failed_count + summary.indeterminate_count,
+          :critical
+        )
+      ]
+    }
   end
+
+  defp summary_metric_dto(label, value, tone) do
+    %{
+      label: label,
+      value: value,
+      value_class: metric_class(tone, value)
+    }
+  end
+
+  defp filters_dto(filters, targets) do
+    %{
+      id: "command-filter-form",
+      values: %{
+        status: Map.get(filters, "status", "all"),
+        target: Map.get(filters, "target", "all"),
+        query: Map.get(filters, "query", "")
+      },
+      fields: %{
+        status:
+          select_field_dto(
+            "filters_status",
+            "filters[status]",
+            "State",
+            [
+              {"All states", "all"},
+              {"Failed", "failed"},
+              {"Release pending", "release_pending"},
+              {"In flight", "in_flight"},
+              {"Queued", "queued"},
+              {"Released", "released"},
+              {"Approval pending", "approval_pending"}
+            ]
+          ),
+        target:
+          select_field_dto(
+            "filters_target",
+            "filters[target]",
+            "Target",
+            [{"All targets", "all"} | Enum.map(targets, &{&1, &1})]
+          ),
+        query: %{
+          id: "filters_query",
+          name: "filters[query]",
+          type: "search",
+          label: "Command or requester",
+          placeholder: "NOOP, request id, endpoint",
+          debounce_ms: 250
+        }
+      }
+    }
+  end
+
+  defp select_field_dto(id, name, label, options) do
+    %{
+      id: id,
+      name: name,
+      type: "select",
+      label: label,
+      options:
+        Enum.map(options, fn {option_label, value} ->
+          %{label: option_label, value: value}
+        end)
+    }
+  end
+
+  defp reset_dto do
+    %{id: "command-filter-reset", label: "Reset filters", payload: %{}}
+  end
+
+  defp focus_banner_dto(nil), do: nil
+
+  defp focus_banner_dto(command_request_id) do
+    %{
+      id: "followed-command-banner",
+      command_request_id: command_request_id,
+      icon: "hero-eye",
+      prefix: "Following",
+      suffix: "across Ops pages",
+      clear: %{
+        id: "clear-command-focus",
+        label: "Stop following",
+        payload: %{}
+      }
+    }
+  end
+
+  defp empty_dto do
+    %{
+      id: "command-rows-empty",
+      icon: "hero-command-line",
+      heading: "No matching commands",
+      copy: "Empty and unavailable projections are reported separately by the context rail."
+    }
+  end
+
+  defp command_dto(command, focus_command_id) do
+    command_request_id = command.command_request_id
+    verification_state = optional_state(command.verification_state)
+
+    %{
+      id: command_request_id,
+      command_request_id: command_request_id,
+      command_name: command.command_name,
+      status: %{
+        value: Atom.to_string(command.status),
+        label: status_label(command.status),
+        class: status_class(command.status)
+      },
+      target: %{label: "Target", display: command.target},
+      requester: %{label: "Requested by", display: command.requested_by},
+      age: %{label: "Age", display: age_label(command.requested_at)},
+      focus: %{
+        following: focus_command_id == command_request_id,
+        label: "Following",
+        class: "badge badge-info badge-outline badge-sm",
+        action: %{
+          id: "follow-command-#{command_request_id}",
+          label: "Follow",
+          icon: "hero-eye",
+          payload: %{"command-request-id" => command_request_id}
+        }
+      },
+      evidence: %{
+        summary: "Queue, release, and verifier evidence",
+        request_state: detail_dto("Request state", Atom.to_string(command.request_state)),
+        queue_entry:
+          record_detail_dto(
+            "Queue entry",
+            record_id(command.queue_entry, :command_queue_entry_id)
+          ),
+        release_attempt:
+          record_detail_dto(
+            "Release attempt",
+            record_id(command.release_attempt, :command_release_attempt_id)
+          ),
+        verification: %{
+          label: "Verification",
+          state: verification_state,
+          display: verification_state || "not required"
+        }
+      }
+    }
+  end
+
+  defp detail_dto(label, display), do: %{label: label, display: display}
+
+  defp record_detail_dto(label, record_id) do
+    %{label: label, record_id: record_id, display: record_id || "—"}
+  end
+
+  defp optional_state(nil), do: nil
+  defp optional_state(state), do: Atom.to_string(state)
 
   defp commands_path(socket, filters) do
     query = filters |> Enum.reject(fn {_key, value} -> value in [nil, "", "all"] end) |> Map.new()
