@@ -67,17 +67,101 @@ defmodule CadenceWeb.AdminLiveTest do
     end
 
     test "platform admin can access the dashboard", %{admin_conn: admin_conn} do
-      {:ok, _view, html} = live(admin_conn, ~p"/admin")
-      assert html =~ "Platform Administration"
+      {:ok, view, _html} = live(admin_conn, ~p"/admin")
+
+      assert has_element?(view, "#admin-home-page")
+      assert has_element?(view, "#admin-home-component")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-home-component")
+
+      assert vue.component == "AdminHome"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "organization_count" => 0,
+               "user_count" => 1,
+               "presentation" => %{
+                 "title" => "Platform Administration",
+                 "subtitle" => "Manage organizations, users, and system settings",
+                 "organizations" => %{
+                   "title" => "Organizations",
+                   "action_label" => "Manage Organizations"
+                 },
+                 "users" => %{
+                   "title" => "Users",
+                   "action_label" => "Manage Users",
+                   "coming_soon" => "(Coming Soon)"
+                 },
+                 "runtime" => %{
+                   "title" => "Runtime",
+                   "description" =>
+                     "Inspect process-local runtime diagnostics and dashboard invalidation decisions.",
+                   "action_label" => "View Runtime"
+                 },
+                 "quick_actions" => %{
+                   "title" => "Quick Actions",
+                   "create_organization_title" => "Create New Organization",
+                   "create_organization_description" =>
+                     "Add a new organization to the system"
+                 }
+               },
+               "navigation" => %{
+                 "organizations_href" => "/admin/organizations",
+                 "runtime_href" => "/admin/runtime",
+                 "create_organization_href" => "/admin/organizations/new"
+               }
+             }
     end
   end
 
   describe "organization management" do
     test "admin dashboard shows organization and user counts", %{admin_conn: admin_conn} do
-      {:ok, _view, html} = live(admin_conn, ~p"/admin")
-      assert html =~ "Organizations"
-      assert html =~ "Users"
-      assert html =~ "Runtime"
+      create_test_org!("Cadence Ops", "cadence-ops")
+      persist_durable_user!(email: "dashboard-user@example.com", password: "password-123456")
+
+      {:ok, view, _html} = live(admin_conn, ~p"/admin")
+
+      vue = LiveVue.Test.get_vue(view, id: "admin-home-component")
+
+      assert vue.component == "AdminHome"
+      assert vue.ssr == false
+      assert is_binary(Jason.encode!(vue.props))
+
+      assert vue.props == %{
+               "organization_count" => 1,
+               "user_count" => 2,
+               "presentation" => %{
+                 "title" => "Platform Administration",
+                 "subtitle" => "Manage organizations, users, and system settings",
+                 "organizations" => %{
+                   "title" => "Organizations",
+                   "action_label" => "Manage Organizations"
+                 },
+                 "users" => %{
+                   "title" => "Users",
+                   "action_label" => "Manage Users",
+                   "coming_soon" => "(Coming Soon)"
+                 },
+                 "runtime" => %{
+                   "title" => "Runtime",
+                   "description" =>
+                     "Inspect process-local runtime diagnostics and dashboard invalidation decisions.",
+                   "action_label" => "View Runtime"
+                 },
+                 "quick_actions" => %{
+                   "title" => "Quick Actions",
+                   "create_organization_title" => "Create New Organization",
+                   "create_organization_description" =>
+                     "Add a new organization to the system"
+                 }
+               },
+               "navigation" => %{
+                 "organizations_href" => "/admin/organizations",
+                 "runtime_href" => "/admin/runtime",
+                 "create_organization_href" => "/admin/organizations/new"
+               }
+             }
     end
 
     test "organization list shows empty state when no orgs exist", %{admin_conn: admin_conn} do
