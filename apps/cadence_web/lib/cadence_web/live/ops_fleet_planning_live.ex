@@ -256,8 +256,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
     %{
       id: run.fleet_planning_run_id,
       fleet_planning_run_id: run.fleet_planning_run_id,
-      href:
-        ~p"/missions/#{mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}",
+      href: ~p"/missions/#{mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}",
       lifecycle: %{
         state: Atom.to_string(run.lifecycle_state),
         label: humanize(run.lifecycle_state),

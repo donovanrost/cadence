@@ -778,8 +778,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       "id" => run.fleet_planning_run_id,
       "__dom_id" => "fleet-planning-run-#{run.fleet_planning_run_id}",
       "fleet_planning_run_id" => run.fleet_planning_run_id,
-      "href" =>
-        "/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}",
+      "href" => "/missions/#{mission.mission_id}/ops/planning/runs/#{run.fleet_planning_run_id}",
       "lifecycle" => lifecycle,
       "trigger" => trigger,
       "horizon" => %{
