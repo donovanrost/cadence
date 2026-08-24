@@ -33,7 +33,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponentsTest do
       |> Map.fetch!("presentation")
 
     assert presentation |> Map.keys() |> Enum.sort() ==
-             ["fields", "fields_class", "headline", "heading", "kind", "root"]
+             ["fields", "fields_class", "heading", "headline", "kind", "root"]
 
     assert presentation["root"]["id"] == "dashboard-source-execution-degraded-summary"
 
