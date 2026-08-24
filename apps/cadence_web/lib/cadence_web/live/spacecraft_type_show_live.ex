@@ -24,8 +24,10 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
          socket
          |> assign(:page_title, profile.display_name)
          |> assign(:nav_item, :spacecraft)
-         |> assign(:profile, profile)
-         |> assign(:versions, versions)}
+         |> assign(:profile_details, profile_details_dto(profile))
+         |> assign(:navigation, navigation_dto(mission, profile))
+         |> assign(:labels, labels_dto())
+         |> assign(:version_rows, Enum.map(versions, &version_row_dto/1))}
 
       {:error, :spacecraft_type_not_found} ->
         {:ok,
@@ -38,108 +40,107 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title={@profile.display_name}
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {"Spacecraft Profiles", ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"},
-          {@profile.display_name, nil}
-        ]}
-      >
-        <:title_suffix>
-          <span class="mc-value-medium text-base-content">v{@profile.version}</span>
-          <span class="hud-label">{@profile.lifecycle_state}</span>
-        </:title_suffix>
-      </.page_header>
-
-      <.byte_interpretation_card profile={@profile} />
-
-      <.applications_card profile={@profile} />
-
-      <.version_history versions={@versions} />
-    </div>
-    """
-  end
-
-  attr :profile, :any, required: true
-
-  defp byte_interpretation_card(assigns) do
-    ~H"""
-    <.card title="Byte Interpretation">
-      <div class="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
-        <.detail_row label="Downlink Protocol">
-          <span class="uppercase">{@profile.downlink_protocol}</span>
-        </.detail_row>
-        <.detail_row label="Uplink Protocol">
-          <span class="uppercase">{@profile.uplink_protocol}</span>
-        </.detail_row>
-        <.detail_row label="Packet Protocol" value={to_string(@profile.packet_protocol)} />
-        <.detail_row label="Lifecycle" value={to_string(@profile.lifecycle_state)} />
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="spacecraft-profile-show-page">
+        <.vue
+          id="spacecraft-profile-show-component"
+          v-component="SpacecraftTypeShow"
+          profile={@profile_details}
+          navigation={@navigation}
+          labels={@labels}
+          versions={@version_rows}
+          v-ssr={false}
+        />
       </div>
-
-      <div :if={map_size(@profile.frame_parameters) > 0} class="mt-5">
-        <div class="hud-divider"></div>
-        <p class="hud-label mb-3">Frame Parameters</p>
-        <div class="grid gap-x-8 gap-y-1 md:grid-cols-2">
-          <.detail_row
-            :for={{key, value} <- Enum.sort(@profile.frame_parameters)}
-            label={humanize(key)}
-            value={format_value(value)}
-          />
-        </div>
-      </div>
-    </.card>
+    </Layouts.app>
     """
   end
 
-  attr :profile, :any, required: true
-
-  defp applications_card(assigns) do
-    ~H"""
-    <.card title="Applications">
-      <%= if map_size(@profile.applications) > 0 do %>
-        <ul class="mt-4 space-y-2">
-          <li
-            :for={{key, _config} <- Enum.sort(@profile.applications)}
-            class="flex items-center gap-3 rounded border border-base-300 bg-base-100/40 p-3 text-sm border-l-2 border-l-primary/60"
-          >
-            <.icon name="hero-bolt" class="h-4 w-4 text-primary/70" />
-            <span class="font-medium">{humanize(key)}</span>
-          </li>
-        </ul>
-      <% else %>
-        <p class="mt-4 text-sm text-base-content/50 italic">No applications enabled.</p>
-      <% end %>
-    </.card>
-    """
+  defp profile_details_dto(profile) do
+    %{
+      id: "spacecraft-profile-#{profile.spacecraft_type_id}",
+      profile_id: profile.spacecraft_type_id,
+      display_name: profile.display_name,
+      version: "v#{profile.version}",
+      lifecycle: to_string(profile.lifecycle_state),
+      downlink_protocol: protocol_label(profile.downlink_protocol),
+      uplink_protocol: protocol_label(profile.uplink_protocol),
+      packet_protocol: to_string(profile.packet_protocol),
+      frame_parameters:
+        profile.frame_parameters
+        |> Enum.sort()
+        |> Enum.map(&frame_parameter_dto/1),
+      applications:
+        profile.applications
+        |> Enum.sort()
+        |> Enum.map(&application_dto/1)
+    }
   end
 
-  attr :versions, :list, required: true
+  defp navigation_dto(mission, profile) do
+    %{
+      mission: %{
+        label: mission.display_name,
+        href: ~p"/missions/#{mission.mission_id}"
+      },
+      spacecraft: %{
+        label: "Spacecraft",
+        href: ~p"/missions/#{mission.mission_id}/spacecraft"
+      },
+      profiles: %{
+        label: "Spacecraft Profiles",
+        href: ~p"/missions/#{mission.mission_id}/spacecraft/profiles"
+      },
+      current: %{label: profile.display_name}
+    }
+  end
 
-  defp version_history(assigns) do
-    ~H"""
-    <.card :if={length(@versions) > 1} title="Version History">
-      <.table
-        id="spacecraft-profile-version-history"
-        rows={@versions}
-        row_accent={false}
-        class="mt-3"
-      >
-        <:col :let={version} label="Version" mono>v{version.version}</:col>
-        <:col :let={version} label="Lifecycle" mono class="text-base-content/70">
-          {version.lifecycle_state}
-        </:col>
-        <:col :let={version} label="Downlink" mono class="uppercase text-primary/80">
-          {version.downlink_protocol}
-        </:col>
-        <:col :let={version} label="Uplink" mono class="uppercase text-primary/80">
-          {version.uplink_protocol}
-        </:col>
-      </.table>
-    </.card>
-    """
+  defp labels_dto do
+    %{
+      byte_interpretation: "Byte Interpretation",
+      applications: "Applications",
+      version_history: "Version History",
+      frame_parameters: "Frame Parameters",
+      no_applications: "No applications enabled.",
+      downlink_protocol: "Downlink Protocol",
+      uplink_protocol: "Uplink Protocol",
+      packet_protocol: "Packet Protocol",
+      lifecycle: "Lifecycle",
+      version: "Version",
+      downlink: "Downlink",
+      uplink: "Uplink"
+    }
+  end
+
+  defp frame_parameter_dto({key, value}) do
+    %{
+      id: "spacecraft-profile-frame-parameter-#{key}",
+      label: humanize(key),
+      value: format_value(value)
+    }
+  end
+
+  defp application_dto({key, _config}) do
+    %{
+      id: "spacecraft-profile-application-#{key}",
+      label: humanize(key)
+    }
+  end
+
+  defp version_row_dto(version) do
+    %{
+      id: "spacecraft-profile-version-#{version.spacecraft_type_id}-#{version.version}",
+      version: "v#{version.version}",
+      lifecycle: to_string(version.lifecycle_state),
+      downlink_protocol: protocol_label(version.downlink_protocol),
+      uplink_protocol: protocol_label(version.uplink_protocol)
+    }
+  end
+
+  defp protocol_label(protocol) do
+    protocol
+    |> to_string()
+    |> String.upcase()
   end
 
   defp humanize(key) when is_atom(key), do: humanize(Atom.to_string(key))
