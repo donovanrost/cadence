@@ -275,8 +275,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
 
   defp string_data_attrs(attrs) do
     Enum.reduce(attrs, %{}, fn
-      {_key, nil}, data_attrs ->
+      {_key, value}, data_attrs when value in [nil, false] ->
         data_attrs
+
+      {key, true}, data_attrs ->
+        Map.put(data_attrs, to_string(key), "")
 
       {key, value}, data_attrs ->
         Map.put(data_attrs, to_string(key), data_attr_value(value))
@@ -284,7 +287,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
   end
 
   defp data_attr_value(value) when is_binary(value), do: value
-  defp data_attr_value(value) when is_boolean(value), do: to_string(value)
   defp data_attr_value(value) when is_number(value), do: to_string(value)
   defp data_attr_value(value) when is_atom(value), do: Atom.to_string(value)
   defp data_attr_value(value), do: inspect(value)

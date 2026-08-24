@@ -15,9 +15,9 @@ assert.ok(template, "DashboardHealth.vue must have a template block")
 assert.match(script, /import ClipboardButton from "\.\/ClipboardButton\.vue"/)
 assert.match(template, /:id="presentation\.root\.id"/)
 assert.match(template, /<ClipboardButton v-bind="presentation\.copy_props" \/>/)
-assert.match(template, /:data-overlay-open="isOpen\(group\) \? group\.overlay\.open_attr : undefined"/)
-assert.match(template, /:aria-expanded=/)
-assert.match(template, /:hidden="!isOpen\(group\)"/)
+assert.match(template, /:data-overlay-open="overlayState\(group\)\.dataOverlayOpen"/)
+assert.match(template, /:aria-expanded="overlayState\(group\)\.ariaExpanded"/)
+assert.match(template, /:hidden="overlayState\(group\)\.hidden"/)
 assert.match(template, /@click="toggle\(group, \$event\)"/)
 assert.match(template, /v-bind="presentation\.evidence\.attrs"/)
 assert.match(template, /v-bind="presentation\.capture\.attrs"/)
@@ -55,7 +55,11 @@ class FakeElement {
 const group = (name) => ({
   overlay: {
     id: `dashboard-health-group-${name}`,
-    trigger: {id: `dashboard-health-group-${name}-trigger`},
+    open_attr: "",
+    trigger: {
+      id: `dashboard-health-group-${name}-trigger`,
+      aria_expanded: {open: "true", closed: "false"}
+    },
     panel: {id: `dashboard-health-group-${name}-panel`}
   }
 })
@@ -151,13 +155,23 @@ const testableScript =
       'import {nextTick, onBeforeUnmount, onMounted, onUpdated, ref} from "vue"',
       "const {nextTick, onBeforeUnmount, onMounted, onUpdated, ref} = globalThis.Vue"
     ) +
-  "\nglobalThis.dashboardHealth = {root, openGroupId, isOpen, toggle, close, onDocumentPointerDown, onDocumentKeyDown, onOverlayOpened}"
+  "\nglobalThis.dashboardHealth = {root, openGroupId, isOpen, overlayState, toggle, close, onDocumentPointerDown, onDocumentKeyDown, onOverlayOpened}"
 
 vm.createContext(context)
 vm.runInContext(testableScript, context, {filename: componentPath})
 
 const controller = context.dashboardHealth
 controller.root.value = rootElement
+
+const assertOverlayState = (
+  item,
+  {ariaExpanded, hidden, dataOverlayOpen}
+) => {
+  const state = controller.overlayState(item)
+  assert.equal(state.ariaExpanded, ariaExpanded)
+  assert.equal(state.hidden, hidden)
+  assert.equal(state.dataOverlayOpen, dataOverlayOpen)
+}
 
 assert.equal(typeof mountedCallback, "function")
 assert.equal(typeof updatedCallback, "function")
@@ -166,12 +180,24 @@ assert.equal(typeof unmountedCallback, "function")
 mountedCallback()
 assert.deepEqual(Array.from(listeners.document.keys()), ["pointerdown", "keydown"])
 assert.deepEqual(Array.from(listeners.window.keys()), ["cadence:overlay-opened"])
+assertOverlayState(blocked, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
 
 let prevented = 0
 await controller.toggle(blocked, {preventDefault: () => (prevented += 1)})
 assert.equal(prevented, 1)
 assert.equal(controller.isOpen(blocked), true)
 assert.equal(controller.isOpen(degraded), false)
+assertOverlayState(blocked, {ariaExpanded: "true", hidden: false, dataOverlayOpen: ""})
+assertOverlayState(degraded, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
+assert.equal(dispatchedEvents.length, 1)
 assert.equal(dispatchedEvents.at(-1).type, "cadence:overlay-opened")
 assert.equal(dispatchedEvents.at(-1).detail.id, blocked.overlay.id)
 assert.equal(elements.get(blocked.overlay.panel.id).style.transform, "translateX(20px)")
@@ -181,6 +207,12 @@ await Promise.resolve()
 assert.equal(prevented, 2)
 assert.equal(controller.openGroupId.value, null)
 assert.equal(elements.get(blocked.overlay.trigger.id).focusCount, 1)
+assert.equal(dispatchedEvents.length, 1)
+assertOverlayState(blocked, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
 
 await controller.toggle(blocked, {preventDefault: () => (prevented += 1)})
 await controller.toggle(degraded, {preventDefault: () => (prevented += 1)})
@@ -188,13 +220,33 @@ assert.equal(controller.isOpen(blocked), false)
 assert.equal(controller.isOpen(degraded), true)
 assert.equal(elements.get(blocked.overlay.trigger.id).focusCount, 1)
 assert.equal(elements.get(degraded.overlay.panel.id).style.transform, "translateX(-26px)")
+assert.equal(dispatchedEvents.length, 3)
+assertOverlayState(blocked, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
+assertOverlayState(degraded, {ariaExpanded: "true", hidden: false, dataOverlayOpen: ""})
 
+const updatedBlocked = group("blocked")
+const updatedDegraded = group("degraded")
+props.presentation.groups = [updatedBlocked, updatedDegraded]
 updatedCallback()
-assert.equal(controller.isOpen(degraded), true, "updates preserve an existing open group")
+assert.equal(controller.isOpen(updatedDegraded), true, "updates preserve an existing open group")
+assertOverlayState(updatedDegraded, {
+  ariaExpanded: "true",
+  hidden: false,
+  dataOverlayOpen: ""
+})
 
 listeners.document.get("pointerdown")({target: new FakeElement("outside")})
 assert.equal(controller.openGroupId.value, null)
 assert.equal(elements.get(degraded.overlay.trigger.id).focusCount, 0)
+assertOverlayState(degraded, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
 
 await controller.toggle(blocked, {preventDefault: () => (prevented += 1)})
 let escapePrevented = 0
@@ -206,6 +258,11 @@ await Promise.resolve()
 assert.equal(escapePrevented, 1)
 assert.equal(controller.openGroupId.value, null)
 assert.equal(elements.get(blocked.overlay.trigger.id).focusCount, 2)
+assertOverlayState(blocked, {
+  ariaExpanded: "false",
+  hidden: true,
+  dataOverlayOpen: undefined
+})
 
 await controller.toggle(blocked, {preventDefault: () => (prevented += 1)})
 listeners.window.get("cadence:overlay-opened")({detail: new FakeElement("another-overlay")})

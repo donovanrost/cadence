@@ -11,6 +11,18 @@ const openGroupId = ref(null)
 
 const isOpen = (group) => openGroupId.value === group.overlay.id
 
+const overlayState = (group) => {
+  const open = isOpen(group)
+
+  return {
+    ariaExpanded: open
+      ? group.overlay.trigger.aria_expanded.open
+      : group.overlay.trigger.aria_expanded.closed,
+    hidden: !open,
+    dataOverlayOpen: open ? group.overlay.open_attr : undefined
+  }
+}
+
 const activeGroup = () =>
   props.presentation.groups.find((group) => group.overlay.id === openGroupId.value)
 
@@ -146,17 +158,13 @@ onBeforeUnmount(() => {
         :key="group.key"
         :class="group.overlay.class"
         v-bind="group.overlay.attrs"
-        :data-overlay-open="isOpen(group) ? group.overlay.open_attr : undefined"
+        :data-overlay-open="overlayState(group).dataOverlayOpen"
       >
         <button
           :id="group.overlay.trigger.id"
           :type="group.overlay.trigger.type"
           :class="group.overlay.trigger.class"
-          :aria-expanded="
-            isOpen(group)
-              ? group.overlay.trigger.aria_expanded.open
-              : group.overlay.trigger.aria_expanded.closed
-          "
+          :aria-expanded="overlayState(group).ariaExpanded"
           v-bind="group.overlay.trigger.attrs"
           @click="toggle(group, $event)"
         >
@@ -173,7 +181,7 @@ onBeforeUnmount(() => {
         <section
           :id="group.overlay.panel.id"
           :class="group.overlay.panel.class"
-          :hidden="!isOpen(group)"
+          :hidden="overlayState(group).hidden"
           v-bind="group.overlay.panel.attrs"
         >
           <div :class="group.details.class">

@@ -401,8 +401,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponentsTest do
 
     health = %{
       health
-      | severity_text: 7,
+      | state_text: "false",
+        severity_text: 7,
         states: false,
+        blocked_placements: true,
         stale_placements: nil,
         groups: [
           %{
@@ -423,19 +425,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponentsTest do
     presentation = vue.props["presentation"]
     root_attrs = presentation["root"]["attrs"]
 
-    assert root_attrs["data-dashboard-health-states"] == "false"
+    refute Map.has_key?(root_attrs, "data-dashboard-health-states")
+    assert root_attrs["data-dashboard-health-state"] == "false"
     assert root_attrs["data-dashboard-health-severity"] == "7"
+    assert root_attrs["data-dashboard-health-blocked-placements"] == ""
     refute Map.has_key?(root_attrs, "data-dashboard-health-stale-placements")
 
     [group | _remaining_groups] = presentation["groups"]
     [item] = group["items"]
 
-    assert group["overlay"]["attrs"]["data-dashboard-health-group-placements"] == "false"
+    refute Map.has_key?(
+             group["overlay"]["attrs"],
+             "data-dashboard-health-group-placements"
+           )
+
     assert group["overlay"]["attrs"]["data-dashboard-health-group-count"] == "1"
-    assert item["attrs"]["data-dashboard-health-item-warnings"] == "false"
+    refute Map.has_key?(item["attrs"], "data-dashboard-health-item-warnings")
     refute Map.has_key?(item["attrs"], "data-dashboard-health-item-source")
-    assert presentation["evidence"]["attrs"]["phx-value-dashboard-health-states"] == "false"
+    refute Map.has_key?(
+             presentation["evidence"]["attrs"],
+             "phx-value-dashboard-health-states"
+           )
+
+    assert presentation["evidence"]["attrs"]["phx-value-dashboard-health-state"] == "false"
     assert presentation["evidence"]["attrs"]["phx-value-dashboard-health-severity"] == "7"
+
+    assert presentation["evidence"]["attrs"]["phx-value-dashboard-health-blocked-placements"] ==
+             ""
 
     refute Map.has_key?(
              presentation["evidence"]["attrs"],
