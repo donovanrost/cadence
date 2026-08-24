@@ -45,6 +45,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     assert initial_vue.component == "OpsDashboardPlaylistPresent"
     assert initial_vue.ssr == false
     assert initial_vue.props == Jason.decode!(Jason.encode!(initial_vue.props))
+
     assert initial_vue.handlers == %{
              "next-dashboard" => Phoenix.LiveView.JS.push("next_dashboard")
            }
@@ -160,6 +161,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
       })
 
     assert unavailable_vue.props == unavailable_props
+
     assert unavailable_vue.props["page"]["position"] == %{
              "id" => "dashboard-playlist-position",
              "current" => 2,
@@ -182,10 +184,9 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
              %{
                to: ^dashboard_list_path,
                flash: %{
-                 "error" =>
-                   "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
+                 "error" => "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
                }
-             }}}} =
+             }}} =
              live(
                conn,
                ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/missing-dashboard-playlist/present"
@@ -199,10 +200,9 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
              %{
                to: ^sibling_dashboard_list_path,
                flash: %{
-                 "error" =>
-                   "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
+                 "error" => "Dashboard playlist is unavailable: :dashboard_playlist_not_found"
                }
-             }}}} =
+             }}} =
              live(
                conn,
                ~p"/missions/#{sibling_mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
