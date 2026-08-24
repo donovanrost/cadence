@@ -73,15 +73,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
         </p>
       </div>
 
-      <button
-        id="dashboard-data-link-copy-link"
-        type="button"
-        phx-hook="ClipboardButton"
-        data-clipboard-text={@dashboard_current_path}
-        class="btn btn-sm btn-outline w-full justify-start"
-      >
-        <.icon name="hero-link" class="h-4 w-4" /> Copy link
-      </button>
+      <.vue
+        id="dashboard-data-link-copy-link-component"
+        v-component="ClipboardButton"
+        button_id="dashboard-data-link-copy-link"
+        clipboard_text={@dashboard_current_path}
+        button_class="btn btn-sm btn-outline w-full justify-start"
+        icon="hero-link"
+        icon_class="h-4 w-4"
+        label="Copy link"
+        v-ssr={false}
+        class="contents"
+      />
 
       <.dashboard_actions actions={@data_link_actions} />
 

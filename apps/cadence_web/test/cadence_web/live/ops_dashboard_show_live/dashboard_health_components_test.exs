@@ -75,27 +75,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponentsTest do
              |> LazyHTML.query(~s([data-dashboard-health-evidence-open]))
              |> LazyHTML.attribute("phx-value-dashboard-health-affected-placements")
 
-    assert ["ClipboardButton"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-health-snapshot-copy]))
-             |> LazyHTML.attribute("phx-hook")
+    copy = LiveVue.Test.get_vue(html, id: "dashboard-health-snapshot-copy-component")
 
-    assert ["dashboard_health_snapshot.v1"] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-health-snapshot-copy]))
-             |> LazyHTML.attribute("data-dashboard-health-snapshot-schema")
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "dashboard-health-snapshot-copy"
+    assert copy.props["button_class"] == "btn btn-ghost btn-xs btn-square"
+    assert copy.props["icon"] == "hero-clipboard-document"
+    assert copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert copy.props["label"] == nil
+    assert copy.props["title"] == "Copy dashboard health snapshot"
+    assert copy.props["aria_label"] == "Copy dashboard health snapshot"
 
-    assert [^snapshot_id] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-health-snapshot-copy]))
-             |> LazyHTML.attribute("data-dashboard-health-snapshot-id")
+    assert copy.props["data_attrs"] == %{
+             "data-dashboard-health-snapshot-copy" => "",
+             "data-dashboard-health-snapshot-schema" => "dashboard_health_snapshot.v1",
+             "data-dashboard-health-snapshot-id" => snapshot_id
+           }
 
-    assert [snapshot_json] =
-             document
-             |> LazyHTML.query(~s([data-dashboard-health-snapshot-copy]))
-             |> LazyHTML.attribute("data-clipboard-text")
+    snapshot_json = copy.props["clipboard_text"]
 
     assert Jason.decode!(snapshot_json) == dashboard_health_snapshot(snapshot_id)
+    assert copy.class == "contents"
+    refute copy.ssr
 
     assert ["capture_dashboard_health_snapshot"] =
              document

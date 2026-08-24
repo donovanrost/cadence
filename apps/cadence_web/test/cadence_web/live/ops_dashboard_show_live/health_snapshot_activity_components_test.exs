@@ -77,19 +77,33 @@ defmodule CadenceWeb.OpsDashboardShowLive.HealthSnapshotActivityComponentsTest d
              |> LazyHTML.query("[data-dashboard-health-snapshot-placements]")
              |> LazyHTML.attribute("data-dashboard-health-snapshot-placements")
 
-    assert ["ClipboardButton"] =
-             document
-             |> LazyHTML.query(
-               "#dashboard-health-snapshot-event-copy-dashboard-lifecycle-event-health"
-             )
-             |> LazyHTML.attribute("phx-hook")
+    copy =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-health-snapshot-event-copy-dashboard-lifecycle-event-health-component"
+      )
 
-    [snapshot_json] =
-      document
-      |> LazyHTML.query("#dashboard-health-snapshot-event-copy-dashboard-lifecycle-event-health")
-      |> LazyHTML.attribute("data-clipboard-text")
+    assert copy.component == "ClipboardButton"
+
+    assert copy.props["button_id"] ==
+             "dashboard-health-snapshot-event-copy-dashboard-lifecycle-event-health"
+
+    assert copy.props["button_class"] == "btn btn-ghost btn-xs shrink-0"
+    assert copy.props["icon"] == "hero-clipboard-document"
+    assert copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert copy.props["label"] == "Copy"
+
+    assert copy.props["data_attrs"] == %{
+             "data-dashboard-health-snapshot-event-copy" =>
+               "dashboard-lifecycle-event-health",
+             "data-dashboard-health-snapshot-id" => "health-snapshot-1",
+             "data-dashboard-health-snapshot-schema" => "dashboard_health_snapshot.v1"
+           }
+
+    snapshot_json = copy.props["clipboard_text"]
 
     assert Jason.decode!(snapshot_json) == snapshot
+    assert copy.class == "contents"
+    refute copy.ssr
   end
 
   test "event_details does not render non-health lifecycle events" do

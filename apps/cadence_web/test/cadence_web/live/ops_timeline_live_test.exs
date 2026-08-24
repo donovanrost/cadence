@@ -121,6 +121,19 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
 
     assert has_element?(view, "#timeline-selected-event-title")
 
+    copy = LiveVue.Test.get_vue(view, id: "timeline-copy-event-link-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "timeline-copy-event-link"
+    assert copy.props["clipboard_text"] =~ "/missions/#{mission.mission_id}/ops/timeline?"
+    assert copy.props["clipboard_text"] =~ "event_id=#{URI.encode_www_form(historical_mission_event_id)}"
+    assert copy.props["button_class"] == "btn btn-xs btn-outline w-full justify-start"
+    assert copy.props["icon"] == "hero-link"
+    assert copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert copy.props["label"] == "Copy canonical event link"
+    assert copy.class == "contents"
+    refute copy.ssr
+
     assert has_element?(
              view,
              ~s(#timeline-open-event-owner[href*="/ops/data-operations"][href*="group=historical-group-1"])

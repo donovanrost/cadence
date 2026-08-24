@@ -341,7 +341,7 @@ function viewportProfile(name) {
       ...viewportProfile("rendered-dashboard"),
       name,
       chartSelector: "[phx-hook='TelemetryChart'] .uplot",
-      copyClickSelector: "[phx-hook='ClipboardButton'], #dashboard-data-link-copy-link, #dashboard-evidence-copy-link",
+      copyClickSelector: "[data-clipboard-button]",
       readyExpression: `
         Boolean(
           window.liveSocket &&
@@ -379,7 +379,7 @@ function viewportProfile(name) {
       gridItemSelector: ".grid-stack-item",
       chartSelector: "[phx-hook='TelemetryChart']",
       panelSelector: "#dashboard-panel, #dashboard-data-link-inspector, #dashboard-evidence-inspector",
-      copySelector: "[phx-hook='ClipboardButton'], #dashboard-data-link-copy-link, #dashboard-evidence-copy-link",
+      copySelector: "[data-clipboard-button]",
       allowedOverlapSelector: "#dashboard-panel",
       textSelector: [
         "#ops-dashboard-show-page h1",
@@ -1239,7 +1239,7 @@ async function evaluateViewport(client, viewport, profile) {
         const el = document.querySelector(selector)
         return {
           present: Boolean(el),
-          hook: el?.getAttribute("phx-hook") || "",
+          component: el?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           raw: el?.dataset.clipboardText || "",
           copied: el?.dataset.clipboardCopied || ""
         }
@@ -1360,7 +1360,7 @@ function assertViewport(result) {
   if (result.requireSelectedDataLinkCopyPayload) {
     assert.equal(result.dataLinkCopyPayload.present, true, `${result.name} should render selected data-link copy control`)
     assert.equal(
-      result.dataLinkCopyPayload.hook,
+      result.dataLinkCopyPayload.component,
       "ClipboardButton",
       `${result.name} data-link copy should use ClipboardButton`
     )
@@ -3525,7 +3525,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -3548,7 +3548,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
     "route should preserve source binding"
   )
   assert.match(dataLink.bodyText, /Realized contact|browser-contact-phase-alpha/i, "contact inspector should render contact details")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "contact DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "contact DataLink copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(
     dataLink.copyText,
@@ -3582,7 +3582,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -3604,7 +3604,7 @@ async function runOperationalContactPhaseTimelineInspection(client, profile) {
   )
   assert.equal(evidence.scopeKind, "contact", "route should preserve contact scope")
   assert.equal(evidence.scopeId, contactId, "route should preserve scoped contact id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
   assert.match(
     evidence.copyText,
@@ -3902,7 +3902,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
           replayRunId: url.searchParams.get("replay_run_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -3923,7 +3923,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "route should preserve source binding")
   assert.equal(dataLink.replayRunId, replayRunId, "route should preserve replay run id")
   assert.match(dataLink.bodyText, /Realized contact|browser-contact-phase-replay-alpha/i, "contact inspector should render contact details")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "contact DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "contact DataLink copy action should use ClipboardButton")
 
   await clickAndWaitForSelector(
     client,
@@ -3984,7 +3984,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4005,7 +4005,7 @@ async function runOperationalContactPhaseReplayTimelineInspection(client, profil
   assert.equal(evidence.replayRunId, replayRunId, "route should preserve dashboard replay run id")
   assert.equal(evidence.scopeKind, "contact", "route should preserve contact scope")
   assert.equal(evidence.scopeId, contactId, "route should preserve scoped contact id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
 
   return {
     contactId,
@@ -4208,7 +4208,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4227,7 +4227,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
   assert.equal(dataLink.selectedScopeKind, "contact", "selected ref should preserve contact kind")
   assert.equal(dataLink.selectedScopeId, betaContactId, "selected ref should preserve beta contact id")
   assert.equal(dataLink.selectedScopeIds, scopeIdsParam, "selected ref should preserve full contact scope set")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "beta contact copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "beta contact copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(dataLink.copyText, new RegExp(`selected_id=${betaContactId}`), "copy payload should preserve beta contact id")
   assert.match(
@@ -4276,7 +4276,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4295,7 +4295,7 @@ async function runOperationalContactPhaseMultiContactTimelineInspection(client, 
   assert.equal(evidence.selectedScopeKind, "contact", "selected evidence scope should preserve contact kind")
   assert.equal(evidence.selectedScopeId, alphaContactId, "selected evidence scope should preserve primary contact id")
   assert.equal(evidence.selectedScopeIds, scopeIdsParam, "selected evidence scope should preserve full contact scope set")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
   assert.match(
     evidence.copyText,
@@ -4501,7 +4501,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4520,7 +4520,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
   assert.equal(dataLink.selectedScopeKind, scopeKind, "selected ref should preserve query scope kind")
   assert.equal(dataLink.selectedScopeId, primaryScopeId, "selected ref should preserve primary query scope id")
   assert.equal(dataLink.selectedScopeIds, scopeIdsParam, "selected ref should preserve full query scope set")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "beta contact copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "beta contact copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(dataLink.copyText, new RegExp(`selected_id=${betaContactId}`), "copy payload should preserve beta contact id")
   assert.match(
@@ -4569,7 +4569,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4588,7 +4588,7 @@ async function runOperationalContactPhaseMultiResourceTimelineInspection(client,
   assert.equal(evidence.selectedScopeKind, scopeKind, "selected evidence scope should preserve query scope kind")
   assert.equal(evidence.selectedScopeId, primaryScopeId, "selected evidence scope should preserve primary query scope id")
   assert.equal(evidence.selectedScopeIds, scopeIdsParam, "selected evidence scope should preserve full query scope set")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
   assert.match(
     evidence.copyText,
@@ -4799,7 +4799,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4822,7 +4822,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
     "default_flight_operational_observables",
     "route should preserve source binding"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "beta contact copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "beta contact copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(dataLink.copyText, new RegExp(`selected_id=${betaContactId}`), "copy payload should preserve beta contact id")
 
@@ -4859,7 +4859,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -4876,7 +4876,7 @@ async function runOperationalContactPhaseMissionTimelineInspection(client, profi
   assert.equal(evidence.scopeId, missionId, "evidence route should preserve mission id")
   assert.equal(evidence.selectedScopeKind, "mission", "selected evidence scope should preserve mission kind")
   assert.equal(evidence.selectedScopeId, missionId, "selected evidence scope should preserve mission id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
 
   return { missionId, contactIds, initial, dataLink, evidence }
@@ -5085,7 +5085,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -5109,7 +5109,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
     "default_flight_operational_observables",
     "route should preserve source binding"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "contact copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "contact copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(
     dataLink.copyText,
@@ -5151,7 +5151,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -5169,7 +5169,7 @@ async function runOperationalContactPhaseSpacecraftTimelineInspection(client, pr
   assert.equal(evidence.scopeId, "", "single-spacecraft evidence route should use spacecraft_id")
   assert.equal(evidence.selectedScopeKind, "spacecraft", "selected evidence scope should preserve spacecraft kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "selected evidence scope should preserve spacecraft id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
 
   return { spacecraftId, contactId, realizedContactId, initial, dataLink, evidence }
@@ -5375,7 +5375,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -5398,7 +5398,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
     "default_flight_operational_observables",
     "route should preserve source binding"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "contact copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "contact copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(dataLink.copyText, new RegExp(`scope_kind=${scopeKind}`), "copy payload should preserve scope kind")
   assert.match(dataLink.copyText, new RegExp(`scope_id=${scopeId}`), "copy payload should preserve scope id")
@@ -5436,7 +5436,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -5453,7 +5453,7 @@ async function runOperationalContactPhaseResourceTimelineInspection(client, { sc
   assert.equal(evidence.scopeId, scopeId, "evidence route should preserve query scope id")
   assert.equal(evidence.selectedScopeKind, scopeKind, "selected evidence scope should preserve query scope kind")
   assert.equal(evidence.selectedScopeId, scopeId, "selected evidence scope should preserve query scope id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
 
   return { scopeKind, scopeId, contactId, realizedContactId, initial, dataLink, evidence }
@@ -5661,7 +5661,7 @@ async function runSourceEndpointOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || ""
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
         }
       })()
     `,
@@ -5698,7 +5698,7 @@ async function runSourceEndpointOperationalResourceInspection(client, profile) {
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=source_endpoint`),
@@ -5990,7 +5990,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
             dataSourceId: url.searchParams.get("data_source_id") || "",
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -6016,7 +6016,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
       "default_flight_operational_observables",
       "route should preserve operational source binding"
     )
-    assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+    assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
     assert.match(
       dataLink.copyText,
       new RegExp(`selected_target=${resourceScopeKind}`),
@@ -6070,7 +6070,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
           dataSource: detailText("Data source"),
           sourceBinding: detailText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasResource: Boolean(document.body.textContent.includes(resourceId))
         }
       })()
@@ -6121,7 +6121,7 @@ async function runOperationalCommandQueueDepthInspection(client, profile) {
     /default_flight_operational_observables/,
     "frame evidence should show source binding"
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(
     evidence.copyText,
     /selected_evidence_kind=frame/,
@@ -6435,7 +6435,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
             dataSourceId: url.searchParams.get("data_source_id") || "",
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -6457,7 +6457,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
       "default_flight_operational_observables",
       "route should preserve source binding"
     )
-    assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+    assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
     assert.match(
       dataLink.copyText,
       new RegExp(`selected_target=${resourceScopeKind}`),
@@ -6531,7 +6531,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
             dataSource: detailText("Data source"),
             sourceBinding: detailText("Source binding"),
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             detailHasResource: Boolean(document.body.textContent.includes(resourceId))
           }
         })()
@@ -6577,7 +6577,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
       /default_flight_operational_observables/,
       "frame evidence should show source binding"
     )
-    assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+    assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
     assert.match(
       evidence.copyText,
       /selected_evidence_kind=frame/,
@@ -6863,7 +6863,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -6889,7 +6889,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
     "default_flight_operational_observables",
     "route should preserve operational source binding"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     /selected_target=source_endpoint/,
@@ -6939,7 +6939,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasScope: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -6966,7 +6966,7 @@ async function runOperationalCommandQueueValueTileInspection(client, profile) {
   assert.equal(evidence.selectedScopeIds, "", "single-scope evidence should not add selected scope ids")
   assert.equal(evidence.scopeKind, "source_endpoint", "route should preserve dashboard scope kind")
   assert.equal(evidence.scopeId, sourceEndpointId, "route should preserve dashboard scope id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(
     evidence.copyText,
     /selected_evidence_kind=frame/,
@@ -7211,7 +7211,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || ""
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
         }
       })()
     `,
@@ -7233,7 +7233,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
     "default_flight_operational_observables",
     "DataLink route should preserve source binding"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     /selected_target=source_endpoint/,
@@ -7283,7 +7283,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
           sourceBinding: detailText("Source binding"),
           refs,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -7331,7 +7331,7 @@ async function runOperationalIngressLatencyInspection(client, profile) {
     ),
     `ingress latency row frame evidence should include metric sample operational-event ref ${expectedOperationalEventId}; refs=${JSON.stringify(evidence.refs)}`
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(
     evidence.copyText,
     /selected_evidence_kind=frame/,
@@ -7538,7 +7538,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || ""
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
         }
       })()
     `,
@@ -7554,7 +7554,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
   assert.equal(dataLink.selectedId, contactId, "DataLink route should select contact id")
   assert.equal(dataLink.scopeKind, "contact", "DataLink route should preserve contact scope")
   assert.equal(dataLink.scopeId, contactId, "DataLink route should preserve contact id")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=contact/, "copy payload should preserve selected target")
   assert.match(dataLink.copyText, new RegExp(`selected_id=${contactId}`), "copy payload should preserve selected contact id")
 
@@ -7587,7 +7587,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
           scopeId: url.searchParams.get("scope_id") || "",
           refs,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasContact: Boolean(document.body.textContent.includes(${JSON.stringify(contactId)}))
         }
       })()
@@ -7612,7 +7612,7 @@ async function runOperationalIngressLatencyContactInspection(client, profile) {
     ),
     `contact-scoped ingress latency evidence should include metric sample operational-event ref ${expectedOperationalEventId}; refs=${JSON.stringify(evidence.refs)}`
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence selection")
   assert.match(evidence.copyText, /scope_kind=contact/, "copy payload should preserve contact scope kind")
   assert.match(evidence.copyText, new RegExp(`scope_id=${contactId}`), "copy payload should preserve contact id")
@@ -7805,7 +7805,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
           scopeId: url.searchParams.get("scope_id") || "",
           scopeIds: url.searchParams.get("scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -7821,7 +7821,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
   assert.equal(dataLink.scopeKind, "spacecraft", "DataLink route should preserve spacecraft scope")
   assert.equal(dataLink.scopeId, "", "DataLink route should not collapse multi-spacecraft scope to scope_id")
   assert.equal(dataLink.scopeIds, scopeIdsParam, "DataLink route should preserve full spacecraft set")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=source_endpoint/, "copy payload should preserve selected target")
   assert.match(
     dataLink.copyText,
@@ -7864,7 +7864,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
           selectedDataSource: url.searchParams.get("selected_data_source") || "",
           selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -7888,7 +7888,7 @@ async function runOperationalIngressLatencyMultiSpacecraftInspection(client, pro
     "default_flight_operational_observables",
     "evidence should preserve source binding"
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /scope_kind=spacecraft/, "copy payload should preserve spacecraft scope kind")
   assert.match(
     evidence.copyText,
@@ -8335,7 +8335,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
           sourceBinding: detailText("Source binding"),
           scopes: detailText("Scopes"),
           sourceEndpoint: detailText("Source endpoint"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           inventoryHref: inventory?.getAttribute("href") || "",
           detailHasEndpoint: Boolean(inspector?.textContent?.includes(sourceEndpointId))
@@ -8387,7 +8387,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
   )
   assert.match(queryEvidence.scopes, new RegExp(expectedSourceEndpointIds.join(",")), "query evidence should show scope ids")
   assert.match(queryEvidence.sourceEndpoint, new RegExp(sourceEndpointId), "query evidence should show selected endpoint")
-  assert.equal(queryEvidence.copyHook, "ClipboardButton", "query evidence copy action should use ClipboardButton")
+  assert.equal(queryEvidence.copyComponent, "ClipboardButton", "query evidence copy action should use ClipboardButton")
   assert.match(queryEvidence.copyText, /selected_evidence_kind=query/, "query copy payload should preserve evidence kind")
   assert.match(
     queryEvidence.copyText,
@@ -8488,7 +8488,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -8517,7 +8517,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
     new RegExp(expectedSourceBindingId),
     "ingress latency DataLink inspector should preserve source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "ingress latency DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "ingress latency DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     /selected_target=source_endpoint/,
@@ -8602,7 +8602,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
           productFamily: detailText("Product family"),
           bindingSetInterval: detailText("Binding set interval"),
           applicationBindingInterval: detailText("Application binding interval"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           refs,
         }
@@ -8699,7 +8699,7 @@ async function runOperationalIngressLatencyTimeSeriesInspection(client, profile)
     `ingress latency frame evidence should include application-binding interval ref; refs=${JSON.stringify(frameEvidence.refs)}`
   )
   assert.equal(
-    frameEvidence.copyHook,
+    frameEvidence.copyComponent,
     "ClipboardButton",
     "ingress latency evidence copy action should use ClipboardButton"
   )
@@ -9036,7 +9036,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
             sourceBindingId: root?.dataset.dashboardEvidenceSourceBindingId || "",
             scopeKind: root?.dataset.dashboardEvidenceScopeKind || "",
             scopeId: root?.dataset.dashboardEvidenceScopeId || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
           }
@@ -9071,7 +9071,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
     )
     assert.equal(sourceEvidence.scopeKind, "source_endpoint", "source evidence should preserve scope kind")
     assert.equal(sourceEvidence.scopeId, sourceEndpointId, "source evidence should preserve source endpoint scope")
-    assert.equal(sourceEvidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+    assert.equal(sourceEvidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
     assert.match(sourceEvidence.copyText, /selected_evidence_kind=source/, "source evidence copy should preserve kind")
     assert.match(sourceEvidence.text, /Source/i, "source evidence should render source details")
   }
@@ -9100,7 +9100,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
             selectedId: url.searchParams.get("selected_id") || "",
             dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
           }
@@ -9130,7 +9130,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
       "default_flight_operational_observables",
       "source-health inspector should preserve source binding"
     )
-    assert.equal(sourceHealthLink.copyHook, "ClipboardButton", "source-health DataLink copy should use ClipboardButton")
+    assert.equal(sourceHealthLink.copyComponent, "ClipboardButton", "source-health DataLink copy should use ClipboardButton")
     assert.match(sourceHealthLink.copyText, /selected_target=source_health_event/, "copy should preserve source health target")
     assert.ok(
       sourceHealthLink.copyText.includes(`selected_id=${expectedSourceHealthEventId}`),
@@ -9166,7 +9166,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -9189,7 +9189,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
     "default_flight_operational_observables",
     "mixed command route should preserve source binding"
   )
-  assert.equal(commandLink.copyHook, "ClipboardButton", "mixed command DataLink copy should use ClipboardButton")
+  assert.equal(commandLink.copyComponent, "ClipboardButton", "mixed command DataLink copy should use ClipboardButton")
   assert.match(commandLink.copyText, /selected_target=source_endpoint/, "copy payload should preserve selected target")
   assert.match(
     commandLink.copyText,
@@ -9225,7 +9225,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -9248,7 +9248,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
     "default_flight_operational_observables",
     "mixed ingress route should preserve source binding"
   )
-  assert.equal(ingressLink.copyHook, "ClipboardButton", "mixed ingress DataLink copy should use ClipboardButton")
+  assert.equal(ingressLink.copyComponent, "ClipboardButton", "mixed ingress DataLink copy should use ClipboardButton")
   assert.match(
     ingressLink.copyText,
     /selected_target=source_endpoint/,
@@ -9307,7 +9307,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           dataSource: detailText("Data source"),
           sourceBinding: detailText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -9353,7 +9353,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
     /default_flight_operational_observables/,
     "mixed command frame evidence should show source binding"
   )
-  assert.equal(commandEvidence.copyHook, "ClipboardButton", "mixed command evidence copy action should use ClipboardButton")
+  assert.equal(commandEvidence.copyComponent, "ClipboardButton", "mixed command evidence copy action should use ClipboardButton")
   assert.match(commandEvidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve command frame evidence")
 
   await clickAndWaitForSelector(
@@ -9400,7 +9400,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
           scopeId: url.searchParams.get("scope_id") || "",
           refs,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -9431,7 +9431,7 @@ async function runMixedOperationalDataTableInspection(client, profile) {
     ),
     `mixed data-table ingress frame evidence should include metric sample operational-event ref ${expectedOperationalEventId}; refs=${JSON.stringify(evidence.refs)}`
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "mixed ingress evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "mixed ingress evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
 
   return {sourceEndpointId, initial, commandLink, ingressLink, commandEvidence, evidence}
@@ -9655,7 +9655,7 @@ async function runStaleOperationalDataTableIngressLatencyInspection(client, prof
           sourceBinding: detailText("Source binding"),
           refs,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           detailHasSourceEndpoint: Boolean(document.body.textContent.includes(sourceEndpointId))
         }
       })()
@@ -9695,7 +9695,7 @@ async function runStaleOperationalDataTableIngressLatencyInspection(client, prof
     ),
     `stale ingress latency data-table frame evidence should include metric sample operational-event ref ${expectedOperationalEventId}; refs=${JSON.stringify(evidence.refs)}`
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
   assert.match(
     evidence.copyText,
@@ -9918,7 +9918,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -9936,7 +9936,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
   assert.equal(dataLink.selectedId, expectedSampleId, "route should preserve telemetry sample id")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, "default_flight_telemetry", "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${expectedSampleId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.text, new RegExp(returnedObservable.replace(".", "\\.")), "DataLink inspector should show point")
@@ -9969,7 +9969,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
           scopeId: url.searchParams.get("scope_id") || "",
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -9993,7 +9993,7 @@ async function runPartialTelemetryDataTableInspection(client, profile) {
   )
   assert.equal(evidence.selectedScopeKind, "spacecraft", "evidence route should preserve spacecraft scope")
   assert.equal(evidence.selectedScopeId, spacecraftId, "evidence route should preserve spacecraft id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "evidence copy should preserve frame kind")
 
   return {initial, dataLink, evidence}
@@ -10182,7 +10182,7 @@ async function runEmptyTelemetryValueTileInspection(client, profile) {
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10203,7 +10203,7 @@ async function runEmptyTelemetryValueTileInspection(client, profile) {
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "source evidence copy should preserve evidence kind")
   assert.match(
     evidence.copyText,
@@ -10394,7 +10394,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10411,7 +10411,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
   assert.equal(dataLink.selectedId, expectedSampleId, "data link route should preserve sample id")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "data link inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "data link inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "data link copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "data link copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "data link copy should preserve sample target")
   assert.ok(dataLink.copyText.includes(`selected_id=${expectedSampleId}`), "data link copy should preserve sample id")
 
@@ -10441,7 +10441,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
           selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10461,7 +10461,7 @@ async function runStaleTelemetryValueTileInspection(client, profile) {
   assert.equal(evidence.selectedSourceBinding, expectedSourceBindingId, "evidence route should preserve source binding")
   assert.equal(evidence.selectedScopeKind, "spacecraft", "evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "evidence route should preserve scope id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "evidence copy should preserve frame kind")
   assert.match(evidence.copyText, /selected_observable=HK\.counter/, "evidence copy should preserve observable")
 
@@ -10642,7 +10642,7 @@ async function runFreshTelemetryValueTileInspection(client, profile) {
           selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10661,7 +10661,7 @@ async function runFreshTelemetryValueTileInspection(client, profile) {
   assert.equal(evidence.selectedSourceBinding, expectedSourceBindingId, "evidence route should preserve source binding")
   assert.equal(evidence.selectedScopeKind, "spacecraft", "evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "evidence route should preserve scope id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "evidence copy should preserve frame kind")
   assert.match(evidence.copyText, /selected_observable=HK\.counter/, "evidence copy should preserve observable")
 
@@ -10859,7 +10859,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -10877,7 +10877,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
   assert.equal(dataLink.selectedId, expectedSampleId, "route should preserve telemetry sample id")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, "default_flight_telemetry", "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${expectedSampleId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.text, new RegExp(returnedObservable.replace(".", "\\.")), "DataLink inspector should show point")
@@ -10908,7 +10908,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
           selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -10932,7 +10932,7 @@ async function runPartialTelemetryStatusMatrixInspection(client, profile) {
   )
   assert.equal(evidence.selectedScopeKind, "spacecraft", "evidence route should preserve spacecraft scope")
   assert.equal(evidence.selectedScopeId, spacecraftId, "evidence route should preserve spacecraft id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "evidence copy should preserve frame kind")
 
   return {initial, dataLink, evidence}
@@ -11153,7 +11153,7 @@ async function runSourceUnavailableTelemetryRowWidgetsInspection(client, profile
             selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedObservable: url.searchParams.get("selected_observable") || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
           }
         })()
@@ -11182,7 +11182,7 @@ async function runSourceUnavailableTelemetryRowWidgetsInspection(client, profile
     assert.equal(evidence.selectedScopeKind, "spacecraft", `${spec.kind} evidence should preserve scope kind`)
     assert.equal(evidence.selectedScopeId, spacecraftId, `${spec.kind} evidence should preserve scope id`)
     assert.equal(evidence.selectedObservable, "", `${spec.kind} source evidence should not invent selected observable`)
-    assert.equal(evidence.copyHook, "ClipboardButton", `${spec.kind} source evidence copy should use ClipboardButton`)
+    assert.equal(evidence.copyComponent, "ClipboardButton", `${spec.kind} source evidence copy should use ClipboardButton`)
     assert.match(evidence.copyText, /selected_evidence_kind=source/, `${spec.kind} copy should preserve evidence kind`)
     assert.match(
       evidence.copyText,
@@ -11423,7 +11423,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -11445,7 +11445,7 @@ async function runPartialTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(dataLink.selectedPlacement, placementId, "route should preserve selected placement")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${dataLink.targetId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.copyText, new RegExp(`selected_placement=${placementId}`), "DataLink copy should preserve placement")
@@ -11639,7 +11639,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -11660,7 +11660,7 @@ async function runEmptyTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=no_data/, "copy should preserve no-data source state")
 
@@ -11909,7 +11909,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -11931,7 +11931,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(dataLink.selectedPlacement, placementId, "route should preserve selected placement")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${dataLink.targetId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.copyText, new RegExp(`selected_placement=${placementId}`), "DataLink copy should preserve placement")
@@ -11964,7 +11964,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
         }
@@ -11986,7 +11986,7 @@ async function runStaleTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=stale/, "copy should preserve stale source state")
   assert.match(evidence.text, /stale|watermark/i, "source evidence should render stale watermark details")
@@ -12235,7 +12235,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -12257,7 +12257,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
   assert.equal(dataLink.selectedPlacement, placementId, "route should preserve selected placement")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${dataLink.targetId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.copyText, new RegExp(`selected_placement=${placementId}`), "DataLink copy should preserve placement")
@@ -12290,7 +12290,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
         }
@@ -12312,7 +12312,7 @@ async function runUnknownWatermarkTelemetryTimeSeriesInspection(client, profile)
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=unknown/, "copy should preserve unknown source state")
   assert.match(evidence.text, /unknown|watermark/i, "source evidence should render unknown watermark details")
@@ -12584,7 +12584,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -12606,7 +12606,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(dataLink.selectedPlacement, placementId, "route should preserve selected placement")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${dataLink.targetId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.copyText, new RegExp(`selected_placement=${placementId}`), "DataLink copy should preserve placement")
@@ -12639,7 +12639,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
         }
@@ -12661,7 +12661,7 @@ async function runRetentionGapTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=retention_gap/, "copy should preserve retention state")
   assert.match(evidence.text, /retention gap/i, "source evidence should render retention gap details")
@@ -12978,7 +12978,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           selectedPlacement: url.searchParams.get("selected_placement") || "",
           dataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           sourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -13000,7 +13000,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(dataLink.selectedPlacement, placementId, "route should preserve selected placement")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "DataLink inspector should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "DataLink inspector should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=telemetry_sample/, "DataLink copy should preserve selected target")
   assert.ok(dataLink.copyText.includes(`selected_id=${dataLink.targetId}`), "DataLink copy should preserve sample id")
   assert.match(dataLink.copyText, new RegExp(`selected_placement=${placementId}`), "DataLink copy should preserve placement")
@@ -13036,7 +13036,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
         }
@@ -13069,7 +13069,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=degraded/, "copy should preserve degraded source state")
   assert.match(evidence.copyText, /selected_source_health_state=degraded/, "copy should preserve source-health state")
@@ -13269,7 +13269,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -13290,7 +13290,7 @@ async function runSourceUnavailableTelemetryTimeSeriesInspection(client, profile
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=unavailable/, "copy should preserve source state")
 
@@ -13502,7 +13502,7 @@ async function runGroundStationOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || ""
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
         }
       })()
     `,
@@ -13541,7 +13541,7 @@ async function runGroundStationOperationalResourceInspection(client, profile) {
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=ground_station`),
@@ -13930,7 +13930,7 @@ async function runLinkOperationalResourceInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || ""
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || ""
         }
       })()
     `,
@@ -13968,7 +13968,7 @@ async function runLinkOperationalResourceInspection(client, profile) {
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=link`),
@@ -14608,7 +14608,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -14647,7 +14647,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
     new RegExp(expectedSourceBindingId),
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=link`),
@@ -14742,7 +14742,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
             inspectorSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -14831,7 +14831,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
       "operational-event inspector should render RF lock source event details"
     )
     assert.equal(
-      operationalEventDataLink.copyHook,
+      operationalEventDataLink.copyComponent,
       "ClipboardButton",
       "operational-event copy action should use ClipboardButton"
     )
@@ -14894,7 +14894,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
             replayRunId: url.searchParams.get("replay_run_id") || "",
             refs,
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -14941,7 +14941,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
       replayRunId,
       "frame evidence route should preserve replay run id"
     )
-    assert.equal(frameEvidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+    assert.equal(frameEvidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
     assert.match(
       frameEvidence.copyText,
       /selected_evidence_kind=frame/,
@@ -15074,7 +15074,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -15123,7 +15123,7 @@ async function runOperationalRfStateTimelineInspection(client, profile) {
       "interval DataLink should render interval details"
     )
     assert.equal(
-      intervalDataLink.copyHook,
+      intervalDataLink.copyComponent,
       "ClipboardButton",
       "interval DataLink copy action should use ClipboardButton"
     )
@@ -15472,7 +15472,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           displayName: fieldText("Display name"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -15496,7 +15496,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
     "route should preserve operational source binding"
   )
   assert.match(dataLink.displayName, /Goldstone DSS-14/, "ground-station DataLink should resolve setup display name")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /scope_kind=ground_station/, "copy payload should preserve ground-station scope")
   assert.match(
     dataLink.copyText,
@@ -15559,7 +15559,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
           replayRunId: url.searchParams.get("replay_run_id") || "",
           refs,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -15595,7 +15595,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
   assert.equal(frameEvidence.scopeKind, "ground_station", "frame evidence route should preserve scope kind")
   assert.equal(frameEvidence.scopeId, groundStationId, "frame evidence route should preserve scope id")
   assert.equal(frameEvidence.replayRunId, replayRunId, "frame evidence route should preserve replay run id")
-  assert.equal(frameEvidence.copyHook, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
+  assert.equal(frameEvidence.copyComponent, "ClipboardButton", "frame evidence copy action should use ClipboardButton")
   assert.match(
     frameEvidence.copyText,
     /selected_evidence_kind=frame/,
@@ -15656,7 +15656,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -15696,7 +15696,7 @@ async function runOperationalAntennaPointingStateTimelineInspection(client, prof
     /ground\.station\.antenna_pointing_state|dss-14|tracking/i,
     "antenna pointing interval should render details"
   )
-  assert.equal(intervalDataLink.copyHook, "ClipboardButton", "interval copy action should use ClipboardButton")
+  assert.equal(intervalDataLink.copyComponent, "ClipboardButton", "interval copy action should use ClipboardButton")
   assert.match(
     intervalDataLink.copyText,
     /selected_target=ground_station_antenna_pointing_state_interval/,
@@ -16556,7 +16556,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -16600,7 +16600,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
       expectedScopeIdsParam,
       "selected ref should preserve full multi-scope id set"
     )
-    assert.equal(betaTransportDataLink.copyHook, "ClipboardButton", "beta transport copy action should use ClipboardButton")
+    assert.equal(betaTransportDataLink.copyComponent, "ClipboardButton", "beta transport copy action should use ClipboardButton")
     assert.match(
       betaTransportDataLink.copyText,
       /selected_target=transport/,
@@ -16678,7 +16678,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -16726,7 +16726,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
       expectedScopeIdsParam,
       "beta row evidence selected params should preserve full multi-scope id set"
     )
-    assert.equal(betaTransportFrameEvidence.copyHook, "ClipboardButton", "beta row evidence copy action should use ClipboardButton")
+    assert.equal(betaTransportFrameEvidence.copyComponent, "ClipboardButton", "beta row evidence copy action should use ClipboardButton")
 	    assert.match(
 	      betaTransportFrameEvidence.copyText,
 	      /selected_evidence_kind=frame/,
@@ -17009,7 +17009,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             replayRunId: url.searchParams.get("replay_run_id") || "",
             refs,
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -17053,7 +17053,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
       replayRunId,
       `${description} evidence route should preserve replay run id`
     )
-    assert.equal(frameEvidence.copyHook, "ClipboardButton", `${description} evidence copy action should use ClipboardButton`)
+    assert.equal(frameEvidence.copyComponent, "ClipboardButton", `${description} evidence copy action should use ClipboardButton`)
     assert.match(
       frameEvidence.copyText,
       /selected_evidence_kind=frame/,
@@ -17115,7 +17115,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -17156,7 +17156,7 @@ async function runOperationalConnectionStateTimelineInspection(client, profile) 
       `${description} route should preserve source binding`
     )
     assert.match(intervalDataLink.bodyText, expectedBodyPattern, `${description} interval should render details`)
-    assert.equal(intervalDataLink.copyHook, "ClipboardButton", `${description} copy action should use ClipboardButton`)
+    assert.equal(intervalDataLink.copyComponent, "ClipboardButton", `${description} copy action should use ClipboardButton`)
     assert.match(
       intervalDataLink.copyText,
       new RegExp(`selected_target=${intervalTarget}`),
@@ -17458,7 +17458,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
           dataSourceId: url.searchParams.get("data_source_id") || "",
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -17476,7 +17476,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
   assert.equal(dataLink.scopeId, missionId, "route should preserve mission id")
   assert.equal(dataLink.dataSourceId, expectedDataSourceId, "route should preserve data source")
   assert.equal(dataLink.sourceBindingId, expectedSourceBindingId, "route should preserve source binding")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "ground-station copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "ground-station copy action should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=ground_station/, "copy payload should preserve selected target")
   assert.match(
     dataLink.copyText,
@@ -17510,7 +17510,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
           scopeKind: url.searchParams.get("scope_kind") || "",
           scopeId: url.searchParams.get("scope_id") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -17532,7 +17532,7 @@ async function runMissionOperationalConnectionStateTimelineInspection(client, pr
   assert.equal(evidence.selectedSourceBinding, expectedSourceBindingId, "route should preserve source binding")
   assert.equal(evidence.scopeKind, "mission", "evidence route should preserve mission scope")
   assert.equal(evidence.scopeId, missionId, "evidence route should preserve mission id")
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=frame/, "copy payload should preserve frame evidence")
   assert.match(
     evidence.copyText,
@@ -18352,7 +18352,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
           selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
           selectedReplayRunId: inspector?.dataset.dataLinkSelectedReplayRunId || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -18413,7 +18413,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "source status annotation inspector should preserve replay run"
   )
   assert.equal(
-    sourceHealthInspector.copyHook,
+    sourceHealthInspector.copyComponent,
     "ClipboardButton",
     "source status annotation copy action should use ClipboardButton"
   )
@@ -18504,7 +18504,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedKind: url.searchParams.get("selected_evidence_kind") || "",
           selectedMode: url.searchParams.get("selected_source_evidence_mode") || "",
           selectedPlacement: url.searchParams.get("selected_placement") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -18575,7 +18575,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "source watermark route should preserve selected placement"
   )
   assert.equal(
-    sourceWatermarkEvidence.copyHook,
+    sourceWatermarkEvidence.copyComponent,
     "ClipboardButton",
     "source watermark evidence copy action should use ClipboardButton"
   )
@@ -18801,7 +18801,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           productFamily: detailText("Product family"),
           bindingSetInterval: detailText("Binding set interval"),
           applicationBindingInterval: detailText("Application binding interval"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           refs,
         }
@@ -18881,7 +18881,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     )
   }
   assert.equal(
-    rfFrameEvidence.copyHook,
+    rfFrameEvidence.copyComponent,
     "ClipboardButton",
     "RF SNR evidence copy action should use ClipboardButton"
   )
@@ -18974,7 +18974,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           productFamily: detailText("Product family"),
           bindingSetInterval: detailText("Binding set interval"),
           applicationBindingInterval: detailText("Application binding interval"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           refs,
         }
@@ -19085,7 +19085,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     )
   }
   assert.equal(
-    bitrateFrameEvidence.copyHook,
+    bitrateFrameEvidence.copyComponent,
     "ClipboardButton",
     "transport bitrate evidence copy action should use ClipboardButton"
   )
@@ -19196,7 +19196,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedId: url.searchParams.get("selected_id") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19221,7 +19221,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     new RegExp(expectedSourceBindingId),
     "chart point inspector should preserve replay source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "chart point copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "chart point copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`selected_target=transport`),
@@ -19349,7 +19349,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19397,7 +19397,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "RF Eb/N0 chart point inspector should preserve replay source binding context"
   )
   assert.equal(
-    ebn0DataLink.copyHook,
+    ebn0DataLink.copyComponent,
     "ClipboardButton",
     "RF Eb/N0 chart point copy action should use ClipboardButton"
   )
@@ -19539,7 +19539,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
           selectedTime: url.searchParams.get("selected_time") || "",
           dataSourceContext: inspector?.dataset.dataLinkDataSourceContext || inspector?.textContent || "",
           sourceBindingContext: inspector?.dataset.dataLinkSourceBindingContext || inspector?.textContent || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -19591,7 +19591,7 @@ async function runOperationalMetricReplayTimeSeriesInspection(client, profile) {
     "bitrate chart point inspector should preserve replay source binding context"
   )
   assert.equal(
-    bitrateDataLink.copyHook,
+    bitrateDataLink.copyComponent,
     "ClipboardButton",
     "bitrate chart point copy action should use ClipboardButton"
   )
@@ -19889,7 +19889,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
           selectedTarget: url.searchParams.get("selected_target") || "",
           selectedId: url.searchParams.get("selected_id") || "",
           selectedPlacement: url.searchParams.get("selected_placement") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           text: inspector?.textContent || "",
         }
@@ -19906,7 +19906,7 @@ async function runOperationalMetricReplayTimeSeriesPartialInspection(client, pro
   assert.equal(dataLink.selectedTarget, "transport", "partial operational route should select transport")
   assert.equal(dataLink.selectedId, transportId, "partial operational route should preserve transport")
   assert.equal(dataLink.selectedPlacement, placementId, "partial operational route should preserve placement")
-  assert.equal(dataLink.copyHook, "ClipboardButton", "partial operational copy should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "partial operational copy should use ClipboardButton")
   assert.match(dataLink.copyText, /selected_target=transport/, "partial operational copy should preserve target")
   assert.match(
     dataLink.copyText,
@@ -20158,7 +20158,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
             dataSource: detailText("Data source"),
             sourceBinding: detailText("Source binding"),
             scopes: detailText("Scopes"),
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             inventoryHref: inventory?.getAttribute("href") || "",
             text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
@@ -20210,7 +20210,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
       `${label} query detail should show source binding`
     )
     assert.match(queryEvidence.scopes, new RegExp(scopeId), `${label} query detail should show scope id`)
-    assert.equal(queryEvidence.copyHook, "ClipboardButton", `${label} query evidence copy should use ClipboardButton`)
+    assert.equal(queryEvidence.copyComponent, "ClipboardButton", `${label} query evidence copy should use ClipboardButton`)
     assert.match(queryEvidence.copyText, /selected_evidence_kind=query/, `${label} copy should preserve query kind`)
     assert.match(
       queryEvidence.copyText,
@@ -20301,7 +20301,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
             selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedObservable: url.searchParams.get("selected_observable") || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             inventoryHref: inventory?.getAttribute("href") || "",
             text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
@@ -20346,7 +20346,7 @@ async function runOperationalMetricTimeSeriesNoDataInspection(client, profile) {
     assert.equal(evidence.selectedScopeKind, scopeKind, `${label} route should preserve scope kind`)
     assert.equal(evidence.selectedScopeId, scopeId, `${label} route should preserve scope id`)
     assert.equal(evidence.selectedObservable, "", `${label} source evidence should not invent selected observable`)
-    assert.equal(evidence.copyHook, "ClipboardButton", `${label} source evidence copy should use ClipboardButton`)
+    assert.equal(evidence.copyComponent, "ClipboardButton", `${label} source evidence copy should use ClipboardButton`)
     assert.match(evidence.copyText, /selected_evidence_kind=source/, `${label} copy should preserve evidence kind`)
     assert.match(
       evidence.copyText,
@@ -20676,7 +20676,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -20705,7 +20705,7 @@ async function runOperationalIngressLatencyTimeSeriesSourceUnavailableInspection
   assert.equal(evidence.selectedScopeKind, "source_endpoint", "source route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, sourceEndpointId, "source route should preserve source endpoint")
   assert.equal(evidence.selectedObservable, "", "source route should not invent selected observable")
-  assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=unavailable/, "copy should preserve source state")
   assert.match(
@@ -21445,7 +21445,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           }
@@ -21488,7 +21488,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
       expectedSourceBindingId,
       "source-health inspector should preserve source binding"
     )
-    assert.equal(sourceHealthLink.copyHook, "ClipboardButton", "source-health DataLink copy should use ClipboardButton")
+    assert.equal(sourceHealthLink.copyComponent, "ClipboardButton", "source-health DataLink copy should use ClipboardButton")
     assert.match(sourceHealthLink.copyText, /selected_target=source_health_event/, "copy should preserve source health target")
     assert.ok(
       sourceHealthLink.copyText.includes(`selected_id=${expectedSourceHealthEventId}`),
@@ -21719,7 +21719,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -21758,7 +21758,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
     new RegExp(expectedSourceBindingId),
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=${expectedScopeKind}`),
@@ -21867,7 +21867,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -21903,7 +21903,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
       expectedScopeIdsParam,
       "selected ref should preserve full multi-scope id set"
     )
-    assert.equal(betaTransportDataLink.copyHook, "ClipboardButton", "beta transport copy action should use ClipboardButton")
+    assert.equal(betaTransportDataLink.copyComponent, "ClipboardButton", "beta transport copy action should use ClipboardButton")
     assert.match(
       betaTransportDataLink.copyText,
       /selected_target=transport/,
@@ -21981,7 +21981,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             selectedScopeId: url.searchParams.get("selected_scope_id") || "",
             selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -22021,7 +22021,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
       expectedScopeIdsParam,
       "beta evidence selected params should preserve full multi-scope id set"
     )
-    assert.equal(betaFrameEvidence.copyHook, "ClipboardButton", "beta evidence copy action should use ClipboardButton")
+    assert.equal(betaFrameEvidence.copyComponent, "ClipboardButton", "beta evidence copy action should use ClipboardButton")
     assert.match(
       betaFrameEvidence.copyText,
       /selected_evidence_kind=frame/,
@@ -22075,7 +22075,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
           supportedCapability: detailText("Supported capability"),
           productFamily: detailText("Product family"),
           refs,
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -22167,7 +22167,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
   )
   assert.ok(sourceEventRef, "transport execution frame evidence should include source operational-event handoff")
   assert.equal(
-    frameEvidence.copyHook,
+    frameEvidence.copyComponent,
     "ClipboardButton",
     "transport execution evidence copy action should use ClipboardButton"
   )
@@ -22225,7 +22225,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
             sourceBindingId: url.searchParams.get("source_binding_id") || "",
             bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
             copyText: copy?.dataset.clipboardText || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           }
         })()
       `,
@@ -22266,7 +22266,7 @@ async function runOperationalTransportExecutionStateTimelineInspection(client, p
       "interval DataLink should render interval details"
     )
     assert.equal(
-      intervalDataLink.copyHook,
+      intervalDataLink.copyComponent,
       "ClipboardButton",
       "transport execution interval copy action should use ClipboardButton"
     )
@@ -22490,7 +22490,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -22528,7 +22528,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=transport`),
@@ -22645,7 +22645,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
           scopeId: url.searchParams.get("scope_id") || "",
           supportedCapability: detailText("Supported capability"),
           observable: detailText("Observable"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
           refs,
         }
@@ -22690,7 +22690,7 @@ async function runOperationalMetricValueTileInspection(client, profile) {
     `value tile frame evidence should include latest metric operational-event ref ${expectedOperationalEventId}; refs=${JSON.stringify(frameEvidence.refs)}`
   )
   assert.equal(
-    frameEvidence.copyHook,
+    frameEvidence.copyComponent,
     "ClipboardButton",
     "value tile frame evidence copy action should use ClipboardButton"
   )
@@ -23235,7 +23235,7 @@ async function runOperationalRfMetricValueTileInspection(client, profile) {
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -23274,7 +23274,7 @@ async function runOperationalRfMetricValueTileInspection(client, profile) {
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=link`),
@@ -23522,7 +23522,7 @@ async function runOperationalMetricMissingSnapshotValueTileInspection(client, pr
           dataSourceContext: contextText("Data source"),
           sourceBindingContext: contextText("Source binding"),
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -23561,7 +23561,7 @@ async function runOperationalMetricMissingSnapshotValueTileInspection(client, pr
     /default_flight_operational_observables/,
     "DataLink inspector should show source binding context"
   )
-  assert.equal(dataLink.copyHook, "ClipboardButton", "DataLink copy action should use ClipboardButton")
+  assert.equal(dataLink.copyComponent, "ClipboardButton", "DataLink copy action should use ClipboardButton")
   assert.match(
     dataLink.copyText,
     new RegExp(`scope_kind=transport`),
@@ -24482,7 +24482,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           related,
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -24523,7 +24523,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
     "source_event",
     "operational-event handoff should be marked as source event"
   )
-  assert.equal(missionEvent.copyHook, "ClipboardButton", "mission-event copy action should use ClipboardButton")
+  assert.equal(missionEvent.copyComponent, "ClipboardButton", "mission-event copy action should use ClipboardButton")
   assert.match(
     missionEvent.copyText,
     new RegExp(`replay_run_id=${expectedReplayRunId}`),
@@ -24589,7 +24589,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
           inspectorSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -24617,7 +24617,7 @@ async function runReplayMissionTimelineManagedRuntimeInspection(client, profile)
     /managed_action_requested|managed action requested/i,
     "operational-event inspector should render canonical managed runtime event"
   )
-  assert.equal(operationalEvent.copyHook, "ClipboardButton", "operational-event copy action should use ClipboardButton")
+  assert.equal(operationalEvent.copyComponent, "ClipboardButton", "operational-event copy action should use ClipboardButton")
   assert.match(
     operationalEvent.copyText,
     new RegExp(`replay_run_id=${expectedReplayRunId}`),
@@ -25167,7 +25167,7 @@ async function inspectLatestOperationalStateRowEvidence(
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           refs,
         }
       })()
@@ -25228,7 +25228,7 @@ async function inspectLatestOperationalStateRowEvidence(
       `${description} route should preserve selected scope ids`
     )
   }
-  assert.equal(frameEvidence.copyHook, "ClipboardButton", `${description} copy action should use ClipboardButton`)
+  assert.equal(frameEvidence.copyComponent, "ClipboardButton", `${description} copy action should use ClipboardButton`)
   assert.match(
     frameEvidence.copyText,
     /selected_evidence_kind=frame/,
@@ -25287,7 +25287,7 @@ async function inspectLatestOperationalStateRowEvidence(
           sourceBindingId: url.searchParams.get("source_binding_id") || "",
           bodyText: inspector?.textContent?.replace(/\\s+/g, " ").trim() || "",
           copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
         }
       })()
     `,
@@ -25334,7 +25334,7 @@ async function inspectLatestOperationalStateRowEvidence(
     `${description} route should preserve source binding`
   )
   assert.match(intervalDataLink.bodyText, expectedBodyPattern, `${description} interval should render details`)
-  assert.equal(intervalDataLink.copyHook, "ClipboardButton", `${description} copy action should use ClipboardButton`)
+  assert.equal(intervalDataLink.copyComponent, "ClipboardButton", `${description} copy action should use ClipboardButton`)
   assert.match(
     intervalDataLink.copyText,
     new RegExp(`selected_target=${intervalTarget}`),
@@ -31413,7 +31413,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
             replayRunId: root?.dataset.dashboardEvidenceReplayRunId || "",
             requestedRealm: root?.dataset.dashboardEvidenceRequestedRealm || "",
             requestedDataView: root?.dataset.dashboardEvidenceRequestedDataView || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
             rows,
@@ -31460,7 +31460,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
       expectedMarker.requestedDataView,
       `${label} evidence should preserve requested data view`
     )
-    assert.equal(evidence.copyHook, "ClipboardButton", `${label} copy action should use ClipboardButton`)
+    assert.equal(evidence.copyComponent, "ClipboardButton", `${label} copy action should use ClipboardButton`)
     assert.ok(
       evidence.copyText.includes("panel=evidence"),
       `${label} copy payload should preserve evidence panel`
@@ -31558,7 +31558,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
             selectedDataSourceId: inspector?.dataset.dataLinkSelectedDataSourceId || "",
             selectedSourceBindingId: inspector?.dataset.dataLinkSelectedSourceBindingId || "",
             selectedReplayRunId: inspector?.dataset.dataLinkSelectedReplayRunId || "",
-            copyHook: copy?.getAttribute("phx-hook") || "",
+            copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
             copyText: copy?.dataset.clipboardText || "",
             text: inspector?.textContent || "",
           }
@@ -31615,7 +31615,7 @@ async function runTelemetryWatermarkMarkerEvidenceInspection(client, profile) {
       "source watermark event inspector should preserve replay run"
     )
     assert.equal(
-      eventInspector.copyHook,
+      eventInspector.copyComponent,
       "ClipboardButton",
       "source watermark event copy action should use ClipboardButton"
     )
@@ -31862,7 +31862,7 @@ async function runTelemetryRevisionRangeEvidenceInspection(client, profile) {
           selectedWarningCode: url.searchParams.get("selected_warning_code") || "",
           revisionDependency: detailText("Revision dependency"),
           warningCodes: detailText("Warning codes"),
-          copyHook: copy?.getAttribute("phx-hook") || "",
+          copyComponent: copy?.closest("[data-name='ClipboardButton']")?.dataset.name || "",
           copyText: copy?.dataset.clipboardText || "",
         }
       })()
@@ -31917,7 +31917,7 @@ async function runTelemetryRevisionRangeEvidenceInspection(client, profile) {
     new RegExp(expectedWarningCode),
     "frame evidence should show warning code"
   )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+  assert.equal(evidence.copyComponent, "ClipboardButton", "evidence copy action should use ClipboardButton")
   assert.ok(evidence.copyText.includes("panel=evidence"), "copy payload should preserve evidence panel")
   assert.ok(
     evidence.copyText.includes("selected_evidence_kind=frame"),

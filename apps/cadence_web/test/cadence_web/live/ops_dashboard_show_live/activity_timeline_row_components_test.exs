@@ -109,24 +109,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineRowComponentsTest do
              |> LazyHTML.query("#dashboard-activity-select-dashboard-lifecycle-event-readiness")
              |> LazyHTML.attribute("phx-click")
 
-    assert ["ClipboardButton"] =
-             document
-             |> LazyHTML.query(
-               "#dashboard-activity-link-copy-dashboard-lifecycle-event-readiness"
-             )
-             |> LazyHTML.attribute("phx-hook")
+    copy =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-activity-link-copy-dashboard-lifecycle-event-readiness-component"
+      )
 
-    assert [href] =
-             document
-             |> LazyHTML.query(
-               "#dashboard-activity-link-copy-dashboard-lifecycle-event-readiness"
-             )
-             |> LazyHTML.attribute("data-clipboard-text")
+    assert copy.component == "ClipboardButton"
+
+    assert copy.props["button_id"] ==
+             "dashboard-activity-link-copy-dashboard-lifecycle-event-readiness"
+
+    assert copy.props["button_class"] == "btn btn-ghost btn-xs"
+    assert copy.props["icon"] == "hero-link"
+    assert copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert copy.props["label"] == "Copy link"
+
+    assert copy.props["data_attrs"] == %{
+             "data-dashboard-activity-link-copy" => "dashboard-lifecycle-event-readiness"
+           }
+
+    href = copy.props["clipboard_text"]
 
     assert URI.decode_query(URI.parse(href).query) == %{
              "panel" => "versions",
              "activity_filter" => "publish_readiness",
              "activity_event" => "dashboard-lifecycle-event-readiness"
            }
+
+    assert copy.class == "contents"
+    refute copy.ssr
   end
 end

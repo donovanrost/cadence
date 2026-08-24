@@ -90,10 +90,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-data-link-inspector")
              |> LazyHTML.attribute("data-data-link-selected-replay-run-id")
 
-    assert ["/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"] =
-             document
-             |> LazyHTML.query("#dashboard-data-link-copy-link")
-             |> LazyHTML.attribute("data-clipboard-text")
+    copy = LiveVue.Test.get_vue(html, id: "dashboard-data-link-copy-link-component")
+
+    assert copy.component == "ClipboardButton"
+    assert copy.props["button_id"] == "dashboard-data-link-copy-link"
+
+    assert copy.props["clipboard_text"] ==
+             "/missions/mission-1/ops/dashboards/dashboard-1?panel=data_link"
+
+    assert copy.props["button_class"] == "btn btn-sm btn-outline w-full justify-start"
+    assert copy.props["icon"] == "hero-link"
+    assert copy.props["icon_class"] == "h-4 w-4"
+    assert copy.props["label"] == "Copy link"
+    assert copy.class == "contents"
+    refute copy.ssr
 
     assert "context_only" =
              document

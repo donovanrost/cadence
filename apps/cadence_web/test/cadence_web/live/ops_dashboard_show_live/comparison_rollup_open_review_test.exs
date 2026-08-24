@@ -118,10 +118,43 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonRollupOpenReviewTest do
     assert selection_path =~ "selected_scope_ids=endpoint-alpha%2Cendpoint-beta"
     assert selection_path =~ "selected_contact_ids=contact-alpha%2Ccontact-beta"
 
-    assert [^encoded_open_findings] =
-             document
-             |> LazyHTML.query("#dashboard-comparison-open-findings-copy")
-             |> LazyHTML.attribute("data-clipboard-text")
+    open_copy =
+      LiveVue.Test.get_vue(html, id: "dashboard-comparison-open-findings-copy-component")
+
+    assert open_copy.component == "ClipboardButton"
+    assert open_copy.props["button_id"] == "dashboard-comparison-open-findings-copy"
+    assert open_copy.props["clipboard_text"] == encoded_open_findings
+    assert open_copy.props["button_class"] == "btn btn-ghost btn-xs gap-1"
+    assert open_copy.props["icon"] == "hero-clipboard-document-list"
+    assert open_copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert open_copy.props["label"] == "Open"
+    assert open_copy.props["title"] == "Copy open comparison findings"
+
+    assert open_copy.props["data_attrs"] == %{
+             "data-dashboard-comparison-open-findings-copy" => ""
+           }
+
+    assert open_copy.class == "contents"
+    refute open_copy.ssr
+
+    preset_copy =
+      LiveVue.Test.get_vue(html, id: "dashboard-comparison-preset-copy-component")
+
+    assert preset_copy.component == "ClipboardButton"
+    assert preset_copy.props["button_id"] == "dashboard-comparison-preset-copy"
+    assert preset_copy.props["clipboard_text"] =~ "comparison_mode="
+    assert preset_copy.props["button_class"] == "btn btn-ghost btn-xs gap-1"
+    assert preset_copy.props["icon"] == "hero-bookmark-square"
+    assert preset_copy.props["icon_class"] == "h-3.5 w-3.5"
+    assert preset_copy.props["label"] == "Preset"
+    assert preset_copy.props["title"] == "Copy comparison investigation preset link"
+
+    assert preset_copy.props["data_attrs"] == %{
+             "data-dashboard-comparison-preset-copy" => ""
+           }
+
+    assert preset_copy.class == "contents"
+    refute preset_copy.ssr
 
     assert ["request_comparison_review"] =
              document

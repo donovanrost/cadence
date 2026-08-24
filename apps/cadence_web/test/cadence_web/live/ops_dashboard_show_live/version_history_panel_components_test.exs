@@ -202,15 +202,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              |> LazyHTML.query("#dashboard-activity-select-dashboard-lifecycle-event-health")
              |> LazyHTML.attribute("phx-click")
 
-    assert ["ClipboardButton"] =
-             document
-             |> LazyHTML.query("#dashboard-activity-link-copy-dashboard-lifecycle-event-health")
-             |> LazyHTML.attribute("phx-hook")
+    copy =
+      LiveVue.Test.get_vue(html,
+        id: "dashboard-activity-link-copy-dashboard-lifecycle-event-health-component"
+      )
 
-    [activity_link] =
-      document
-      |> LazyHTML.query("#dashboard-activity-link-copy-dashboard-lifecycle-event-health")
-      |> LazyHTML.attribute("data-clipboard-text")
+    assert copy.component == "ClipboardButton"
+
+    assert copy.props["button_id"] ==
+             "dashboard-activity-link-copy-dashboard-lifecycle-event-health"
+
+    assert copy.props["data_attrs"] == %{
+             "data-dashboard-activity-link-copy" => "dashboard-lifecycle-event-health"
+           }
+
+    activity_link = copy.props["clipboard_text"]
 
     uri = URI.parse(activity_link)
 
@@ -223,6 +229,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.VersionHistoryPanelComponentsTest do
              "activity_filter" => "health_snapshots",
              "activity_event" => "dashboard-lifecycle-event-health"
            }
+
+    refute copy.ssr
   end
 
   test "versions_panel correlates selected version activity with runtime invalidation impact" do

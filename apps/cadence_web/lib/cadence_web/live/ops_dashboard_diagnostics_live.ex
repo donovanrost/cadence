@@ -132,15 +132,18 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
                       {@selected_diagnostic.identity}
                     </p>
                   </div>
-                  <button
-                    id="dashboard-diagnostic-copy-identity"
-                    type="button"
-                    phx-hook="ClipboardButton"
-                    data-clipboard-text={@selected_diagnostic.identity}
-                    class="btn btn-outline btn-xs"
-                  >
-                    <.icon name="hero-clipboard" class="h-3.5 w-3.5" /> Copy identity
-                  </button>
+                  <.vue
+                    id="dashboard-diagnostic-copy-identity-component"
+                    v-component="ClipboardButton"
+                    button_id="dashboard-diagnostic-copy-identity"
+                    clipboard_text={@selected_diagnostic.identity}
+                    button_class="btn btn-outline btn-xs"
+                    icon="hero-clipboard"
+                    icon_class="h-3.5 w-3.5"
+                    label="Copy identity"
+                    v-ssr={false}
+                    class="contents"
+                  />
                 </div>
 
                 <dl class="mt-5 grid gap-x-6 gap-y-3 border-t border-base-300 pt-5 sm:grid-cols-2">
