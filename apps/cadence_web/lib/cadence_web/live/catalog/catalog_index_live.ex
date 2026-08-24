@@ -39,76 +39,166 @@ defmodule CadenceWeb.CatalogIndexLive do
     latest_revisions = Catalog.latest_revision_by_database(organization_id, mission_id)
     latest_runs = Catalog.latest_import_run_by_database(organization_id, mission_id)
 
-    socket
-    |> assign(:databases, databases)
-    |> assign(:latest_revisions, latest_revisions)
-    |> assign(:latest_runs, latest_runs)
-    |> assign(
-      :database_table_rows,
+    rows =
       Enum.map(databases, &database_table_row(&1, mission_id, latest_revisions, latest_runs))
+
+    assign(
+      socket,
+      :catalog_index_presentation,
+      page_presentation_dto(socket.assigns.current_mission, rows)
     )
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
-      <.page_header
-        title="Catalog"
-        subtitle="Mission database library. Revisions are imported here; runtime usage is selected later."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Catalog", nil}
-        ]}
-      >
-        <:actions>
-          <.button
-            id="new-database-link"
-            navigate={~p"/missions/#{@current_mission.mission_id}/catalog/new"}
-            class="gap-1"
-          >
-            <span class="hero-plus h-4 w-4"></span> New database
-          </.button>
-        </:actions>
-      </.page_header>
-
-      <.databases_table
-        current_mission={@current_mission}
-        databases={@databases}
-        latest_revisions={@latest_revisions}
-        latest_runs={@latest_runs}
-        database_table_rows={@database_table_rows}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="catalog-index-component"
+        v-component="CatalogIndex"
+        presentation={@catalog_index_presentation}
+        v-ssr={false}
+        class="contents"
       />
-    </div>
+    </Layouts.app>
     """
   end
 
-  attr(:current_mission, :map, required: true)
-  attr(:databases, :list, required: true)
-  attr(:latest_revisions, :map, required: true)
-  attr(:latest_runs, :map, required: true)
-  attr(:database_table_rows, :list, required: true)
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
 
-  defp databases_table(assigns) do
-    ~H"""
-    <%= if @databases == [] do %>
-      <div id="catalog-database-list">
-        <.empty_state
-          title="No catalog databases yet"
-          description="Use + New database above to import the first revision."
-        />
-      </div>
-    <% else %>
-      <.card id="catalog-database-list" padding={:none}>
-        <.vue
-          id="catalog-databases-table-component"
-          v-component="CatalogDatabaseTable"
-          rows={@database_table_rows}
-          v-ssr={false}
-        />
-      </.card>
-    <% end %>
-    """
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, to_string(value))
+    end)
+  end
+
+  defp page_presentation_dto(mission, rows) do
+    %{
+      "root" => %{
+        "attrs" => presentation_attrs(%{"class" => "space-y-6"})
+      },
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{
+          "attrs" => presentation_attrs(%{"class" => "flex items-end justify-between gap-4"})
+        },
+        "content" => %{"attrs" => presentation_attrs(%{})},
+        "breadcrumbs" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "aria-label" => "Breadcrumb",
+              "class" =>
+                "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+            }),
+          "mission" => %{
+            "attrs" =>
+              navigate_attrs(
+                ~p"/missions/#{mission.mission_id}",
+                %{"class" => "hover:text-primary transition-colors"}
+              ),
+            "text" => mission.display_name
+          },
+          "separator" => %{
+            "attrs" =>
+              presentation_attrs(%{
+                "aria-hidden" => "true",
+                "class" => "text-base-content/20"
+              }),
+            "text" => "/"
+          },
+          "current" => %{
+            "attrs" => presentation_attrs(%{"class" => "text-primary/90"}),
+            "text" => "Catalog"
+          }
+        },
+        "title" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
+            }),
+          "text" => "Catalog"
+        },
+        "subtitle" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-1 max-w-3xl text-sm text-base-content/70"
+            }),
+          "text" =>
+            "Mission database library. Revisions are imported here; runtime usage is selected later."
+        },
+        "actions" => %{
+          "attrs" => presentation_attrs(%{"class" => "flex items-center gap-2"})
+        },
+        "new_database" => %{
+          "attrs" =>
+            navigate_attrs(
+              ~p"/missions/#{mission.mission_id}/catalog/new",
+              %{"class" => "btn btn-primary btn-sm gap-1", "id" => "new-database-link"}
+            ),
+          "icon" => %{
+            "attrs" => presentation_attrs(%{"class" => "hero-plus h-4 w-4"})
+          },
+          "text" => "New database"
+        }
+      },
+      "empty_state" => %{
+        "visible" => rows == [],
+        "list" => %{
+          "attrs" => presentation_attrs(%{"id" => "catalog-database-list"})
+        },
+        "root" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" =>
+                "rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
+            })
+        },
+        "title" => %{
+          "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+          "text" => "No catalog databases yet"
+        },
+        "description" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-2 max-w-md mx-auto text-sm text-base-content/70"
+            }),
+          "text" => "Use + New database above to import the first revision."
+        }
+      },
+      "card" => %{
+        "visible" => rows != [],
+        "root" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "card bg-base-200 border border-base-300",
+              "id" => "catalog-database-list"
+            })
+        },
+        "body" => %{
+          "attrs" => presentation_attrs(%{"class" => "card-body p-0"})
+        },
+        "child_wrapper" => %{
+          "attrs" => presentation_attrs(%{"id" => "catalog-databases-table-component"})
+        },
+        "rows" => rows
+      }
+    }
+  end
+
+  defp navigate_attrs(href, extra_attrs) do
+    %{
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push",
+      "href" => href
+    }
+    |> Map.merge(extra_attrs)
+    |> presentation_attrs()
   end
 
   defp database_table_row(database, mission_id, latest_revisions, latest_runs) do
@@ -117,13 +207,13 @@ defmodule CadenceWeb.CatalogIndexLive do
     run = Map.get(latest_runs, database_id)
 
     %{
-      id: "catalog-database-row-#{database_id}",
-      actions_id: "#{database_id}-actions",
-      name: database.name,
-      slug: database.slug,
-      href: ~p"/missions/#{mission_id}/catalog/databases/#{database_id}",
-      latest_revision: latest_revision_dto(revision, mission_id),
-      latest_import: latest_import_dto(run, mission_id)
+      "id" => "catalog-database-row-#{database_id}",
+      "actions_id" => "#{database_id}-actions",
+      "name" => database.name,
+      "slug" => database.slug,
+      "href" => ~p"/missions/#{mission_id}/catalog/databases/#{database_id}",
+      "latest_revision" => latest_revision_dto(revision, mission_id),
+      "latest_import" => latest_import_dto(run, mission_id)
     }
   end
 
@@ -131,8 +221,8 @@ defmodule CadenceWeb.CatalogIndexLive do
 
   defp latest_revision_dto(revision, mission_id) do
     %{
-      label: revision.revision_label,
-      href: ~p"/missions/#{mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
+      "label" => revision.revision_label,
+      "href" => ~p"/missions/#{mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
     }
   end
 
@@ -140,9 +230,9 @@ defmodule CadenceWeb.CatalogIndexLive do
 
   defp latest_import_dto(run, mission_id) do
     %{
-      status: import_status_badge(run.status),
-      status_label: import_status_label(run.status),
-      href: ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
+      "status" => import_status_badge(run.status),
+      "status_label" => import_status_label(run.status),
+      "href" => ~p"/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
     }
   end
 
