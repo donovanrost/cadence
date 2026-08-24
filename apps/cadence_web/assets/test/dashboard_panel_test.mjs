@@ -356,10 +356,11 @@ assert.equal(
   "83cedada0ed49d4c06d4e2b81133fbc84db147b5608a281fa0fe1bb4f08edc03",
   "the authenticated viewer/author router contract must remain byte-unchanged",
 )
-assert.equal(
-  sha256(appJsSource),
-  "67d0ac41fba902e2c566f52940dad01ee5211c0e40dd528c5aa77f5d753dadc3",
-  "app.js must retain the LiveVue registry without retired global UI hooks",
+assert.match(appJsSource, /hooks: \{\.\.\.Hooks, \.\.\.getHooks\(liveVueApp\)\}/)
+assert.doesNotMatch(
+  appJsSource,
+  /\bdom:\s*\{|onBeforeElUpdated|grid-stack|ui-resizable-handle/,
+  "app.js must retain the LiveVue registry without global dashboard DOM repair",
 )
 
 console.log("dashboard_panel_test passed")

@@ -1,37 +1,27 @@
 <script setup>
-import {onBeforeUnmount, onMounted, onUpdated} from "vue"
+import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"
 // gridstack-all.js is a UMD bundle whose export value is the GridStack class
 // itself (module.exports = GridStack), so it imports as a default, not a named
 // export — `import { GridStack }` resolves to undefined.
 import GridStack from "../vendor/gridstack/gridstack-all"
+import DashboardWidget from "./DashboardWidget.vue"
 
 const LAYOUT_PUSH_DEBOUNCE_MS = 400
-const GRID_OBSERVER_OPTIONS = {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: [
-    "class",
-    "data-edit-mode",
-    "gs-id",
-    "gs-x",
-    "gs-y",
-    "gs-w",
-    "gs-h",
-    "gs-auto-position",
-  ],
-}
 
-// GridStack + LiveView coexistence:
+// GridStack + LiveVue coexistence:
 // - View mode runs staticGrid, so GridStack never mutates the DOM after init
-//   and LiveView freely patches widget contents (positions are pure CSS from
+//   and Vue freely patches widget contents (positions are pure CSS from
 //   server-rendered gs-* attributes).
 // - Edit mode is the only mutation window; the LiveView pauses data assigns
 //   while it is active, and layout changes autosave via "layout_changed".
-// - A target-grid observer plus updated() reconcile after LiveView patches:
-//   they adopt added items, drop removed ones, and re-arm drag/resize classes
-//   morphdom may have stripped. The observer is required because the adjacent
-//   headless LiveVue island is not necessarily patched with the external grid.
+// - This component renders the grid, items, widgets, and headless controller
+//   marker as one Vue-owned subtree. updated() therefore runs after relevant
+//   DOM patches and can adopt added items, drop removed ones, and re-arm any
+//   drag/resize classes replaced by a server-presented class update.
+// - GridStack owns its generated gs-id-* class, row style/attribute, item gs-*
+//   attributes during edit mode, and resize-handle children. Vue patches only
+//   its own prior VNodes, so those imperative additions remain in place until
+//   setStatic() or destroy(false) lets GridStack clean them up itself.
 // - While a drag/resize gesture is in flight, updated() must not reconcile:
 //   GridStack points node.el at its placeholder during the gesture, and a
 //   patch that removes the placeholder from the DOM would make the node look
@@ -64,60 +54,49 @@ const DashboardGridController = {
       this.el
     )
     this.pushTimer = null
-    this.reconcileFrame = null
+    this.sectionResizeFrame = null
 
     this.grid.on("change", () => this.scheduleLayoutPush())
+    this.grid.on("dragstop resizestop", () => this.updated())
     this.syncEditMode()
     this.sectionDetails = this.el.closest && this.el.closest("details[data-dashboard-section]")
     if (this.sectionDetails) {
       this.handleSectionToggle = () => {
+        if (this.sectionResizeFrame !== null) {
+          cancelAnimationFrame(this.sectionResizeFrame)
+          this.sectionResizeFrame = null
+        }
         if (!this.sectionDetails.open) return
-        requestAnimationFrame(() => {
+        this.sectionResizeFrame = requestAnimationFrame(() => {
+          this.sectionResizeFrame = null
           this.grid.prevWidth = undefined
           this.grid.onResize()
         })
       }
       this.sectionDetails.addEventListener("toggle", this.handleSectionToggle)
     }
-
-    this.gridObserver = new MutationObserver((records) => {
-      if (records.some((record) => this.reconciliationMutation(record))) {
-        this.scheduleReconciliation()
-      }
-    })
-    this.observeGrid()
   },
 
   updated() {
     if (this.gestureActive()) return
 
-    // GridStack mutates the same attributes this observer watches. Suspend
-    // observation around reconciliation so those controller-owned mutations
-    // cannot enqueue another reconciliation frame. disconnect() also discards
-    // any already-queued records; the current DOM state is reconciled below.
-    this.gridObserver?.disconnect()
-    try {
-      this.reconcileItems()
-      this.syncEditMode()
-    } finally {
-      this.observeGrid()
-    }
+    this.reconcileItems()
+    this.syncEditMode()
   },
 
   destroyed() {
     clearTimeout(this.pushTimer)
-    if (this.gridObserver) {
-      this.gridObserver.disconnect()
-      this.gridObserver = null
-    }
-    if (this.reconcileFrame !== null) {
-      cancelAnimationFrame(this.reconcileFrame)
-      this.reconcileFrame = null
+    if (this.sectionResizeFrame !== null) {
+      cancelAnimationFrame(this.sectionResizeFrame)
+      this.sectionResizeFrame = null
     }
     if (this.sectionDetails && this.handleSectionToggle) {
       this.sectionDetails.removeEventListener("toggle", this.handleSectionToggle)
     }
-    if (this.grid) this.grid.destroy(false)
+    if (this.grid) {
+      this.grid.destroy(false)
+      this.grid = null
+    }
   },
 
   editMode() {
@@ -130,30 +109,9 @@ const DashboardGridController = {
     )
   },
 
-  reconciliationMutation(record) {
-    // LiveView may patch deeply nested widget content without changing the
-    // GridStack item contract. Reconcile only mutations on the grid itself or
-    // one of its direct item children.
-    return record.target === this.el || record.target.parentElement === this.el
-  },
-
-  observeGrid() {
-    this.gridObserver?.observe(this.el, GRID_OBSERVER_OPTIONS)
-  },
-
-  scheduleReconciliation() {
-    if (this.reconcileFrame !== null) return
-
-    this.reconcileFrame = requestAnimationFrame(() => {
-      this.reconcileFrame = null
-      this.updated()
-    })
-  },
-
   syncEditMode() {
     const editing = this.editMode()
-    // Read GridStack's own state, not the grid-stack-static class: LiveView
-    // patches rewrite the container's class attribute and strip it.
+    // Read GridStack's own state, not the client-owned grid-stack-static class.
     const isStatic = this.grid.opts.staticGrid === true
 
     if (editing && isStatic) {
@@ -223,24 +181,19 @@ const DashboardGridController = {
 }
 
 const props = defineProps({
-  target_id: {type: String, required: true},
-  edit_mode: {type: Boolean, default: false},
-  // The server-owned grid stays outside this island. Reading its stable item
-  // ids in the headless root gives Vue an update boundary whenever LiveView
-  // adds, removes, or moves a widget between grids.
-  item_ids: {type: Array, default: () => []},
+  presentation: {type: Object, required: true},
 })
 
 const emit = defineEmits(["layout_changed"])
+const gridElement = ref(null)
 let controller = null
 
 onMounted(() => {
-  const gridElement = document.getElementById(props.target_id)
-  if (!gridElement) return
+  if (!gridElement.value) return
 
   controller = Object.create(DashboardGridController)
-  controller.el = gridElement
-  controller.editModeValue = () => props.edit_mode
+  controller.el = gridElement.value
+  controller.editModeValue = () => props.presentation.controller.props.edit_mode
   controller.emit = emit
   controller.mounted()
 })
@@ -254,12 +207,27 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span
-    data-dashboard-grid-controller
-    :data-dashboard-grid-target="props.target_id"
-    :data-edit-mode="String(props.edit_mode)"
-    :data-dashboard-grid-item-count="String(props.item_ids.length)"
-    aria-hidden="true"
-    hidden
-  ></span>
+  <div ref="gridElement" v-bind="props.presentation.root.attrs">
+    <div
+      v-for="widget in props.presentation.widgets"
+      :key="widget.key"
+      v-bind="widget.shell.attrs"
+    >
+      <div v-bind="widget.content.attrs">
+        <div v-bind="widget.host.attrs">
+          <DashboardWidget :presentation="widget.presentation" />
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-bind="props.presentation.controller.host.attrs">
+    <span
+      data-dashboard-grid-controller
+      :data-dashboard-grid-target="props.presentation.controller.props.target_id"
+      :data-edit-mode="String(props.presentation.controller.props.edit_mode)"
+      :data-dashboard-grid-item-count="String(props.presentation.controller.props.item_ids.length)"
+      aria-hidden="true"
+      hidden
+    ></span>
+  </div>
 </template>
