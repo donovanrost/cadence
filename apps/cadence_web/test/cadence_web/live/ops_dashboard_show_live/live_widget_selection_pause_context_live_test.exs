@@ -412,11 +412,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       render_dashboard_async(view)
       paused_html = render(view)
 
-      assert widget_point_value_text(paused_html, context_item.placement_id) == "15"
+      assert Enum.any?(chart_backfill(paused_html, trend_widget_id), fn
+               [_timestamp, value, _metadata] -> value == 15
+               _point -> false
+             end)
 
-      assert paused_html
-             |> widget_header_presentation(context_item.placement_id)
-             |> get_in(["status_indicators", "limit", "text"]) == "Yellow"
+      assert Enum.any?(
+               chart_limit_markers(paused_html, trend_widget_id),
+               &(&1["normalized_state"] == "yellow")
+             )
 
       refute widget_body_presentation(paused_html, context_item.placement_id)["notice"]
 
