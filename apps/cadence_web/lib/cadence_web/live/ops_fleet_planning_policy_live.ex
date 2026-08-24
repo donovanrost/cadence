@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{AutomationGrants, FleetPlanningPolicies}
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -129,327 +130,544 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <section id="ops-fleet-planning-policy-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto max-w-[100rem]">
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/planning"}
-              class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-            >
-              <.icon name="hero-arrow-left" class="h-3.5 w-3.5" /> Fleet planning
-            </.link>
-            <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-                  Administrative boundary
-                </p>
-                <h1 class="mt-1 text-2xl font-bold tracking-tight">Fleet Policy & Automation</h1>
-                <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-                  Operators declare mission needs. Organization administrators approve the bounded horizon, capacity, cost, repair, and unattended authority Cadence may use.
-                </p>
-              </div>
-              <span
-                id="fleet-policy-state"
-                class={policy_state_class(@policy)}
-              >
-                {policy_state_label(@policy)}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)] lg:p-7">
-          <div class="min-w-0 space-y-5">
-            <section id="fleet-policy-manifest" class="border border-base-300 bg-base-200/15">
-              <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
-                <div>
-                  <p class="hud-label">Current immutable version</p>
-                  <p class="mt-1 font-mono text-sm">
-                    {if @policy_version, do: "v#{@policy_version.version}", else: "not configured"}
-                  </p>
-                </div>
-                <p :if={@policy_version} class="max-w-md break-all text-right font-mono text-[0.58rem] text-base-content/40">
-                  {@policy_version.content_sha256}
-                </p>
-              </div>
-
-              <%= if @policy_version do %>
-                <div class="grid md:grid-cols-2">
-                  <.policy_section
-                    title="Horizon & search"
-                    facts={[
-                      {"Maximum horizon", hours(@policy_version.horizon_document["max_horizon_seconds"])},
-                      {"Requirement workers", @policy_version.horizon_document["requirement_concurrency"]},
-                      {"Provider workers", @policy_version.horizon_document["provider_search_concurrency"]},
-                      {"Evidence reuse", "#{@policy_version.horizon_document["reuse_freshness_seconds"]} sec"}
-                    ]}
-                  />
-                  <.policy_section
-                    title="Quota & budget"
-                    facts={[
-                      {"Contact ceiling", @policy_version.budget_quota_document["max_contacts"] || "none"},
-                      {"Cost ceiling", format_cost(@policy_version.budget_quota_document)},
-                      {"Critical reserve", @policy_version.budget_quota_document["critical_contact_reserve"]},
-                      {"Default capacity", @policy_version.resource_policy_document["default_exclusive_capacity"]}
-                    ]}
-                  />
-                  <.policy_section
-                    title="Automation"
-                    facts={[
-                      {"Mode", humanize(@policy_version.automation_repair_document["mode"])},
-                      {"Automatic submission", yes_no(@policy_version.automation_repair_document["automatic_submission"])},
-                      {"Execution workers", @policy_version.automation_repair_document["execution_concurrency"]},
-                      {"Repair attempts", @policy_version.automation_repair_document["max_repair_attempts"]}
-                    ]}
-                  />
-                  <.policy_section
-                    title="Redundancy"
-                    facts={[
-                      {"Distinct provider", yes_no(@policy_version.redundancy_document["distinct_provider_required"])},
-                      {"Distinct station", yes_no(@policy_version.redundancy_document["distinct_station_required"])},
-                      {"Distinct pool", yes_no(@policy_version.redundancy_document["distinct_service_pool_required"])},
-                      {"Repair horizon", hours(@policy_version.automation_repair_document["repair_horizon_seconds"])}
-                    ]}
-                  />
-                </div>
-              <% else %>
-                <div id="fleet-policy-empty" class="px-6 py-14 text-center">
-                  <.icon name="hero-adjustments-horizontal" class="mx-auto h-8 w-8 text-warning/50" />
-                  <h2 class="mt-4 text-base font-semibold">No scheduling boundary exists</h2>
-                  <p class="mx-auto mt-2 max-w-xl text-sm text-base-content/55">
-                    Fleet runs and automation remain stopped until an administrator creates and approves a policy.
-                  </p>
-                </div>
-              <% end %>
-            </section>
-
-            <section
-              :if={@organization_admin?}
-              id="fleet-policy-editor"
-              class="border border-base-300 bg-base-200/15"
-            >
-              <details open={is_nil(@policy)}>
-                <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
-                  {if @policy, do: "Draft a new immutable version", else: "Create the initial policy"}
-                </summary>
-                <.form
-                  for={@policy_form}
-                  id="fleet-policy-form"
-                  phx-change="validate-policy"
-                  phx-submit="save-policy"
-                  class="space-y-5 border-t border-base-300 p-4"
-                >
-                  <div>
-                    <p class="hud-label">Search boundary</p>
-                    <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <.input id="policy-max-horizon-hours" field={@policy_form[:max_horizon_hours]} type="number" min="1" label="Maximum hours" required />
-                      <.input id="policy-requirement-concurrency" field={@policy_form[:requirement_concurrency]} type="number" min="1" label="Requirement workers" required />
-                      <.input id="policy-provider-concurrency" field={@policy_form[:provider_search_concurrency]} type="number" min="1" label="Provider workers" required />
-                      <.input id="policy-reuse-seconds" field={@policy_form[:reuse_freshness_seconds]} type="number" min="0" label="Reuse seconds" required />
-                    </div>
-                  </div>
-
-                  <div>
-                    <p class="hud-label">Capacity & budget</p>
-                    <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <.input id="policy-max-contacts" field={@policy_form[:max_contacts]} type="number" min="1" label="Contact ceiling" required />
-                      <.input id="policy-max-cost" field={@policy_form[:max_estimated_cost_micros]} type="number" min="0" label="Cost micros (optional)" />
-                      <.input id="policy-currency" field={@policy_form[:currency]} type="text" label="Currency" />
-                      <.input id="policy-critical-reserve" field={@policy_form[:critical_contact_reserve]} type="number" min="0" label="Critical reserve" required />
-                    </div>
-                  </div>
-
-                  <div>
-                    <p class="hud-label">Automation & repair</p>
-                    <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <.input
-                        id="policy-automation-mode"
-                        field={@policy_form[:automation_mode]}
-                        type="select"
-                        label="Mode"
-                        options={[
-                          {"Advisory", "advisory"},
-                          {"Approval required", "approval_required"},
-                          {"Bounded automatic", "bounded_automatic"}
-                        ]}
-                      />
-                      <.input id="policy-execution-concurrency" field={@policy_form[:execution_concurrency]} type="number" min="1" label="Execution workers" required />
-                      <.input id="policy-repair-attempts" field={@policy_form[:max_repair_attempts]} type="number" min="0" label="Repair attempts" required />
-                      <.input id="policy-repair-horizon-hours" field={@policy_form[:repair_horizon_hours]} type="number" min="1" label="Repair hours" required />
-                    </div>
-                    <.input
-                      :if={@policy_form[:automation_mode].value != "advisory"}
-                      id="policy-automatic-submission"
-                      field={@policy_form[:automatic_submission]}
-                      type="checkbox"
-                      label="Allow exact candidate Plans to be submitted automatically"
-                    />
-                  </div>
-
-                  <details id="fleet-policy-redundancy-details" class="border border-base-300">
-                    <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
-                      Redundancy constraints
-                    </summary>
-                    <div class="grid gap-3 border-t border-base-300 p-3 sm:grid-cols-3">
-                      <.input id="policy-distinct-provider" field={@policy_form[:distinct_provider_required]} type="checkbox" label="Distinct providers" />
-                      <.input id="policy-distinct-station" field={@policy_form[:distinct_station_required]} type="checkbox" label="Distinct stations" />
-                      <.input id="policy-distinct-pool" field={@policy_form[:distinct_service_pool_required]} type="checkbox" label="Distinct service pools" />
-                    </div>
-                  </details>
-
-                  <button id="save-fleet-policy" type="submit" class="btn btn-primary btn-sm w-full">
-                    {if @policy, do: "Create draft version", else: "Create draft policy"}
-                  </button>
-                </.form>
-              </details>
-            </section>
-
-            <section
-              :if={@organization_admin? and approvable?(@policy, @policy_version)}
-              id="fleet-policy-approval"
-              class="border border-primary/35 bg-primary/[0.035] p-4"
-            >
-              <p class="hud-label">Activate exact version</p>
-              <p class="mt-2 text-sm text-base-content/60">
-                Approval invalidates grants tied to an older policy version and changes the boundary for future runs.
-              </p>
-              <.form
-                for={@decision_form}
-                id="fleet-policy-approval-form"
-                phx-submit="approve-policy"
-                class="mt-4"
-              >
-                <.input id="fleet-policy-approval-reason" field={@decision_form[:reason]} type="textarea" label="Approval reason" required />
-                <button id="approve-fleet-policy" type="submit" class="btn btn-primary btn-sm w-full">
-                  Approve exact v{@policy_version.version}
-                </button>
-              </.form>
-            </section>
-          </div>
-
-          <aside class="min-w-0 space-y-5">
-            <section id="automation-grant-ledger" class="border border-base-300 bg-base-200/15">
-              <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-                <div>
-                  <p class="hud-label">Automation grants</p>
-                  <p class="mt-1 text-xs text-base-content/50">Exact service + policy authority</p>
-                </div>
-                <span class="font-mono text-xs text-base-content/45">{@active_grant_count} active</span>
-              </div>
-              <div id="automation-grants" phx-update="stream">
-                <div id="automation-grants-empty" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
-                  No automation authority issued.
-                </div>
-                <div
-                  :for={{dom_id, grant} <- @streams.automation_grants}
-                  id={dom_id}
-                  class="border-b border-base-300 p-4 last:border-b-0"
-                >
-                  <div class="flex items-center justify-between gap-3">
-                    <p class="truncate text-xs font-semibold">{grant.service_identity_id}</p>
-                    <span class={grant_state_class(grant.lifecycle_state)}>
-                      {grant.lifecycle_state}
-                    </span>
-                  </div>
-                  <p class="mt-2 font-mono text-[0.58rem] text-base-content/40">
-                    policy v{grant.fleet_planning_policy_version} · {Enum.join(Enum.map(grant.allowed_actions, &Atom.to_string/1), ", ")}
-                  </p>
-                  <p class="mt-2 text-xs text-base-content/55">
-                    ≤ {grant.maximum_contacts} contacts · ≤ {hours(grant.maximum_horizon_seconds)}
-                  </p>
-                  <p class="mt-2 font-mono text-[0.56rem] text-base-content/35">
-                    expires {format_time(grant.valid_until)}
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            <section
-              :if={
-                @organization_admin? and not is_nil(@active_policy_version) and
-                  @service_identity_options != []
-              }
-              id="automation-grant-issuer"
-              class="border border-base-300 bg-base-200/15"
-            >
-              <details>
-                <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
-                  Issue bounded authority
-                </summary>
-                <.form
-                  for={@grant_form}
-                  id="automation-grant-form"
-                  phx-change="validate-grant"
-                  phx-submit="issue-grant"
-                  class="space-y-4 border-t border-base-300 p-4"
-                >
-                  <.input id="grant-service-identity" field={@grant_form[:service_identity_id]} type="select" label="Mission service identity" options={@service_identity_options} required />
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <.input id="grant-max-horizon-hours" field={@grant_form[:maximum_horizon_hours]} type="number" min="1" label="Maximum hours" required />
-                    <.input id="grant-max-contacts" field={@grant_form[:maximum_contacts]} type="number" min="1" label="Maximum contacts" required />
-                    <.input id="grant-execution-concurrency" field={@grant_form[:maximum_execution_concurrency]} type="number" min="1" label="Execution workers" required />
-                    <.input id="grant-valid-days" field={@grant_form[:valid_days]} type="number" min="1" label="Valid days" required />
-                  </div>
-                  <.input id="grant-approval-reason" field={@grant_form[:approval_reason]} type="textarea" label="Why this unattended authority is appropriate" required />
-                  <button id="issue-automation-grant" type="submit" class="btn btn-primary btn-sm w-full">
-                    Issue exact grant
-                  </button>
-                </.form>
-              </details>
-            </section>
-
-            <section
-              :if={@organization_admin? and @active_grant_options != []}
-              id="automation-grant-revoker"
-              class="border border-error/25 bg-error/[0.025]"
-            >
-              <details>
-                <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-error">
-                  Revoke automation authority
-                </summary>
-                <.form
-                  for={@revocation_form}
-                  id="automation-grant-revocation-form"
-                  phx-submit="revoke-grant"
-                  class="space-y-3 border-t border-error/20 p-4"
-                >
-                  <.input id="revoke-automation-grant-id" field={@revocation_form[:automation_grant_id]} type="select" label="Active grant" options={@active_grant_options} required />
-                  <.input id="revoke-automation-grant-reason" field={@revocation_form[:reason]} type="textarea" label="Revocation reason" required />
-                  <button id="revoke-automation-grant" type="submit" class="btn btn-error btn-sm w-full">
-                    Revoke immediately
-                  </button>
-                </.form>
-              </details>
-            </section>
-
-            <p
-              :if={not @organization_admin?}
-              id="fleet-policy-admin-required"
-              class="border-l-2 border-warning px-3 text-xs text-warning"
-            >
-              Organization administrator authority is required to change policy or grants.
-            </p>
-          </aside>
+        <div id={if(@organization_admin?, do: nil, else: "fleet-policy-admin-required")} class="contents">
+          <.vue
+            id="ops-fleet-planning-policy-component"
+            v-component="OpsFleetPlanningPolicy"
+            page={policy_page_dto(@current_mission, @policy, @policy_version)}
+            policy_form={policy_form_dto(@policy_form, @policy, @organization_admin?)}
+            approval_form={approval_form_dto(
+              @decision_form,
+              @policy,
+              @policy_version,
+              @organization_admin?
+            )}
+            authorization={authorization_dto(@organization_admin?)}
+            grant_ledger={grant_ledger_dto(@active_grant_count)}
+            grant_form={grant_form_dto(
+              @grant_form,
+              @service_identity_options,
+              @active_policy_version,
+              @organization_admin?
+            )}
+            revocation_form={revocation_form_dto(
+              @revocation_form,
+              @active_grant_options,
+              @organization_admin?
+            )}
+            automation_grants={@streams.automation_grants}
+            v-on:validate-policy={JS.push("validate-policy")}
+            v-on:save-policy={JS.push("save-policy")}
+            v-on:approve-policy={JS.push("approve-policy")}
+            v-on:validate-grant={JS.push("validate-grant")}
+            v-on:issue-grant={JS.push("issue-grant")}
+            v-on:revoke-grant={JS.push("revoke-grant")}
+            v-ssr={false}
+            class="contents"
+          />
         </div>
       </section>
     </Layouts.app>
     """
   end
 
-  attr :title, :string, required: true
-  attr :facts, :list, required: true
+  defp policy_page_dto(mission, policy, version) do
+    %{
+      back: %{
+        href: ~p"/missions/#{mission.mission_id}/ops/planning",
+        icon: "hero-arrow-left",
+        label: "Fleet planning"
+      },
+      header: %{
+        eyebrow: "Administrative boundary",
+        title: "Fleet Policy & Automation",
+        copy:
+          "Operators declare mission needs. Organization administrators approve the bounded horizon, capacity, cost, repair, and unattended authority Cadence may use."
+      },
+      state: %{
+        id: "fleet-policy-state",
+        label: policy_state_label(policy),
+        class: policy_state_class(policy)
+      },
+      manifest: policy_manifest_dto(version)
+    }
+  end
 
-  defp policy_section(assigns) do
-    ~H"""
-    <div class="border-b border-base-300 p-4 last:border-b-0 md:border-r md:odd:border-r md:even:border-r-0">
-      <p class="hud-label">{@title}</p>
-      <dl class="mt-3 space-y-2 text-xs">
-        <div :for={{term, value} <- @facts} class="flex items-center justify-between gap-4">
-          <dt class="text-base-content/50">{term}</dt>
-          <dd class="font-mono text-right text-base-content/75">{value}</dd>
-        </div>
-      </dl>
-    </div>
-    """
+  defp policy_manifest_dto(nil) do
+    %{
+      id: "fleet-policy-manifest",
+      version_label: "not configured",
+      content_sha256: nil,
+      sections: [],
+      empty: %{
+        id: "fleet-policy-empty",
+        icon: "hero-adjustments-horizontal",
+        title: "No scheduling boundary exists",
+        copy:
+          "Fleet runs and automation remain stopped until an administrator creates and approves a policy."
+      }
+    }
+  end
+
+  defp policy_manifest_dto(version) do
+    %{
+      id: "fleet-policy-manifest",
+      version_label: "v#{version.version}",
+      content_sha256: version.content_sha256,
+      empty: nil,
+      sections: [
+        %{
+          title: "Horizon & search",
+          facts: [
+            fact_dto("Maximum horizon", hours(version.horizon_document["max_horizon_seconds"])),
+            fact_dto("Requirement workers", version.horizon_document["requirement_concurrency"]),
+            fact_dto(
+              "Provider workers",
+              version.horizon_document["provider_search_concurrency"]
+            ),
+            fact_dto(
+              "Evidence reuse",
+              "#{version.horizon_document["reuse_freshness_seconds"]} sec"
+            )
+          ]
+        },
+        %{
+          title: "Quota & budget",
+          facts: [
+            fact_dto("Contact ceiling", version.budget_quota_document["max_contacts"] || "none"),
+            fact_dto("Cost ceiling", format_cost(version.budget_quota_document)),
+            fact_dto(
+              "Critical reserve",
+              version.budget_quota_document["critical_contact_reserve"]
+            ),
+            fact_dto(
+              "Default capacity",
+              version.resource_policy_document["default_exclusive_capacity"]
+            )
+          ]
+        },
+        %{
+          title: "Automation",
+          facts: [
+            fact_dto("Mode", humanize(version.automation_repair_document["mode"])),
+            fact_dto(
+              "Automatic submission",
+              yes_no(version.automation_repair_document["automatic_submission"])
+            ),
+            fact_dto(
+              "Execution workers",
+              version.automation_repair_document["execution_concurrency"]
+            ),
+            fact_dto(
+              "Repair attempts",
+              version.automation_repair_document["max_repair_attempts"]
+            )
+          ]
+        },
+        %{
+          title: "Redundancy",
+          facts: [
+            fact_dto(
+              "Distinct provider",
+              yes_no(version.redundancy_document["distinct_provider_required"])
+            ),
+            fact_dto(
+              "Distinct station",
+              yes_no(version.redundancy_document["distinct_station_required"])
+            ),
+            fact_dto(
+              "Distinct pool",
+              yes_no(version.redundancy_document["distinct_service_pool_required"])
+            ),
+            fact_dto(
+              "Repair horizon",
+              hours(version.automation_repair_document["repair_horizon_seconds"])
+            )
+          ]
+        }
+      ]
+    }
+  end
+
+  defp fact_dto(term, value), do: %{term: term, value: to_string(value)}
+
+  defp policy_form_dto(_form, _policy, false), do: nil
+
+  defp policy_form_dto(form, policy, true) do
+    %{
+      panel_id: "fleet-policy-editor",
+      id: "fleet-policy-form",
+      open: is_nil(policy),
+      summary:
+        if(policy, do: "Draft a new immutable version", else: "Create the initial policy"),
+      fields: %{
+        max_horizon_hours:
+          form_field_dto(
+            form,
+            :max_horizon_hours,
+            "policy-max-horizon-hours",
+            "Maximum hours",
+            "number",
+            required: true,
+            min: 1
+          ),
+        requirement_concurrency:
+          form_field_dto(
+            form,
+            :requirement_concurrency,
+            "policy-requirement-concurrency",
+            "Requirement workers",
+            "number",
+            required: true,
+            min: 1
+          ),
+        provider_search_concurrency:
+          form_field_dto(
+            form,
+            :provider_search_concurrency,
+            "policy-provider-concurrency",
+            "Provider workers",
+            "number",
+            required: true,
+            min: 1
+          ),
+        reuse_freshness_seconds:
+          form_field_dto(
+            form,
+            :reuse_freshness_seconds,
+            "policy-reuse-seconds",
+            "Reuse seconds",
+            "number",
+            required: true,
+            min: 0
+          ),
+        max_contacts:
+          form_field_dto(
+            form,
+            :max_contacts,
+            "policy-max-contacts",
+            "Contact ceiling",
+            "number",
+            required: true,
+            min: 1
+          ),
+        max_estimated_cost_micros:
+          form_field_dto(
+            form,
+            :max_estimated_cost_micros,
+            "policy-max-cost",
+            "Cost micros (optional)",
+            "number",
+            min: 0
+          ),
+        currency:
+          form_field_dto(form, :currency, "policy-currency", "Currency", "text"),
+        critical_contact_reserve:
+          form_field_dto(
+            form,
+            :critical_contact_reserve,
+            "policy-critical-reserve",
+            "Critical reserve",
+            "number",
+            required: true,
+            min: 0
+          ),
+        automation_mode:
+          form_field_dto(
+            form,
+            :automation_mode,
+            "policy-automation-mode",
+            "Mode",
+            "select",
+            options: [
+              %{label: "Advisory", value: "advisory"},
+              %{label: "Approval required", value: "approval_required"},
+              %{label: "Bounded automatic", value: "bounded_automatic"}
+            ]
+          ),
+        execution_concurrency:
+          form_field_dto(
+            form,
+            :execution_concurrency,
+            "policy-execution-concurrency",
+            "Execution workers",
+            "number",
+            required: true,
+            min: 1
+          ),
+        max_repair_attempts:
+          form_field_dto(
+            form,
+            :max_repair_attempts,
+            "policy-repair-attempts",
+            "Repair attempts",
+            "number",
+            required: true,
+            min: 0
+          ),
+        repair_horizon_hours:
+          form_field_dto(
+            form,
+            :repair_horizon_hours,
+            "policy-repair-horizon-hours",
+            "Repair hours",
+            "number",
+            required: true,
+            min: 1
+          ),
+        automatic_submission:
+          checkbox_field_dto(
+            form,
+            :automatic_submission,
+            "policy-automatic-submission",
+            "Allow exact candidate Plans to be submitted automatically"
+          ),
+        distinct_provider_required:
+          checkbox_field_dto(
+            form,
+            :distinct_provider_required,
+            "policy-distinct-provider",
+            "Distinct providers"
+          ),
+        distinct_station_required:
+          checkbox_field_dto(
+            form,
+            :distinct_station_required,
+            "policy-distinct-station",
+            "Distinct stations"
+          ),
+        distinct_service_pool_required:
+          checkbox_field_dto(
+            form,
+            :distinct_service_pool_required,
+            "policy-distinct-pool",
+            "Distinct service pools"
+          )
+      },
+      redundancy: %{id: "fleet-policy-redundancy-details", summary: "Redundancy constraints"},
+      submit: %{
+        id: "save-fleet-policy",
+        label: if(policy, do: "Create draft version", else: "Create draft policy")
+      }
+    }
+  end
+
+  defp approval_form_dto(_form, _policy, _version, false), do: nil
+
+  defp approval_form_dto(form, policy, version, true) do
+    if approvable?(policy, version) do
+      %{
+        panel_id: "fleet-policy-approval",
+        id: "fleet-policy-approval-form",
+        reason:
+          form_field_dto(
+            form,
+            :reason,
+            "fleet-policy-approval-reason",
+            "Approval reason",
+            "textarea",
+            required: true
+          ),
+        submit: %{id: "approve-fleet-policy", label: "Approve exact v#{version.version}"}
+      }
+    end
+  end
+
+  defp authorization_dto(organization_admin?) do
+    %{
+      organization_admin: organization_admin?,
+      admin_required:
+        if(organization_admin?,
+          do: nil,
+          else: %{
+            copy: "Organization administrator authority is required to change policy or grants."
+          }
+        )
+    }
+  end
+
+  defp grant_ledger_dto(active_grant_count) do
+    %{
+      id: "automation-grant-ledger",
+      list_id: "automation-grants",
+      empty: %{
+        id: "automation-grants-empty",
+        copy: "No automation authority issued."
+      },
+      active_count: active_grant_count,
+      active_label: "#{active_grant_count} active"
+    }
+  end
+
+  defp grant_form_dto(_form, _options, _active_version, false), do: nil
+  defp grant_form_dto(_form, [], _active_version, true), do: nil
+  defp grant_form_dto(_form, _options, nil, true), do: nil
+
+  defp grant_form_dto(form, options, _active_version, true) do
+    %{
+      panel_id: "automation-grant-issuer",
+      id: "automation-grant-form",
+      fields: %{
+        service_identity_id:
+          form_field_dto(
+            form,
+            :service_identity_id,
+            "grant-service-identity",
+            "Mission service identity",
+            "select",
+            required: true,
+            options: options_dto(options)
+          ),
+        maximum_horizon_hours:
+          form_field_dto(
+            form,
+            :maximum_horizon_hours,
+            "grant-max-horizon-hours",
+            "Maximum hours",
+            "number",
+            required: true,
+            min: 1
+          ),
+        maximum_contacts:
+          form_field_dto(
+            form,
+            :maximum_contacts,
+            "grant-max-contacts",
+            "Maximum contacts",
+            "number",
+            required: true,
+            min: 1
+          ),
+        maximum_execution_concurrency:
+          form_field_dto(
+            form,
+            :maximum_execution_concurrency,
+            "grant-execution-concurrency",
+            "Execution workers",
+            "number",
+            required: true,
+            min: 1
+          ),
+        valid_days:
+          form_field_dto(
+            form,
+            :valid_days,
+            "grant-valid-days",
+            "Valid days",
+            "number",
+            required: true,
+            min: 1
+          ),
+        approval_reason:
+          form_field_dto(
+            form,
+            :approval_reason,
+            "grant-approval-reason",
+            "Why this unattended authority is appropriate",
+            "textarea",
+            required: true
+          )
+      },
+      submit: %{id: "issue-automation-grant", label: "Issue exact grant"}
+    }
+  end
+
+  defp revocation_form_dto(_form, _options, false), do: nil
+  defp revocation_form_dto(_form, [], true), do: nil
+
+  defp revocation_form_dto(form, options, true) do
+    %{
+      panel_id: "automation-grant-revoker",
+      id: "automation-grant-revocation-form",
+      fields: %{
+        automation_grant_id:
+          form_field_dto(
+            form,
+            :automation_grant_id,
+            "revoke-automation-grant-id",
+            "Active grant",
+            "select",
+            required: true,
+            options: options_dto(options)
+          ),
+        reason:
+          form_field_dto(
+            form,
+            :reason,
+            "revoke-automation-grant-reason",
+            "Revocation reason",
+            "textarea",
+            required: true
+          )
+      },
+      submit: %{id: "revoke-automation-grant", label: "Revoke immediately"}
+    }
+  end
+
+  defp form_field_dto(form, field, id, label, type, opts \\ []) do
+    %{
+      id: id,
+      name: "#{form.name}[#{field}]",
+      type: type,
+      label: label,
+      required: Keyword.get(opts, :required, false),
+      min: Keyword.get(opts, :min),
+      options: Keyword.get(opts, :options, []),
+      value: string_form_value(form, field),
+      errors: form_errors(form, field)
+    }
+  end
+
+  defp checkbox_field_dto(form, field, id, label) do
+    %{
+      id: id,
+      name: "#{form.name}[#{field}]",
+      type: "checkbox",
+      label: label,
+      value: truthy?(Map.get(form.params, Atom.to_string(field))),
+      errors: form_errors(form, field)
+    }
+  end
+
+  defp options_dto(options) do
+    Enum.map(options, fn {label, value} -> %{label: label, value: value} end)
+  end
+
+  defp string_form_value(form, field) do
+    case Map.get(form.params, Atom.to_string(field)) do
+      value when is_binary(value) -> value
+      nil -> ""
+      value -> to_string(value)
+    end
+  end
+
+  defp form_errors(form, field) do
+    form.errors
+    |> Keyword.get_values(field)
+    |> Enum.map(&format_form_error/1)
+  end
+
+  defp format_form_error({message, opts}) when is_binary(message) and is_list(opts) do
+    Enum.reduce(opts, message, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp format_form_error(message) when is_binary(message), do: message
+  defp format_form_error(error), do: inspect(error)
+
+  defp automation_grant_dto(grant) do
+    %{
+      automation_grant_id: grant.automation_grant_id,
+      service_identity_id: grant.service_identity_id,
+      lifecycle_state: Atom.to_string(grant.lifecycle_state),
+      lifecycle_state_class: grant_state_class(grant.lifecycle_state),
+      policy_evidence:
+        "policy v#{grant.fleet_planning_policy_version} · #{Enum.join(Enum.map(grant.allowed_actions, &Atom.to_string/1), ", ")}",
+      boundary:
+        "≤ #{grant.maximum_contacts} contacts · ≤ #{hours(grant.maximum_horizon_seconds)}",
+      expiry: "expires #{format_time(grant.valid_until)}"
+    }
   end
 
   defp load_policy(socket) do
@@ -497,7 +715,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
       :active_grant_options,
       Enum.map(active_grants, &{&1.service_identity_id, &1.automation_grant_id})
     )
-    |> stream(:automation_grants, grants, reset: true)
+    |> stream(:automation_grants, Enum.map(grants, &automation_grant_dto/1), reset: true)
   end
 
   defp save_policy(scope, mission_id, nil, attrs),
