@@ -187,6 +187,16 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div id="catalog-database-show-page">
+        <form
+          :if={@show_revision_form}
+          id="catalog-revision-upload-live-form"
+          phx-change="validate"
+          phx-submit="save"
+          style="display: none"
+        >
+          <.live_file_input upload={@uploads.artifact} />
+        </form>
+
         <.vue
           id="catalog-database-show-component"
           v-component="CatalogDatabaseShow"

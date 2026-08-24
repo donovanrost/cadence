@@ -136,6 +136,8 @@ assert.match(
 )
 assert.match(uploadForm, /entries,\s*progress,\s*addFiles,\s*submit,\s*clear,\s*inputEl,/s)
 assert.match(uploadForm, /valid: uploadValid/)
+assert.match(uploadForm, /document\.getElementById\(props\.upload\.ref\)/)
+assert.match(uploadForm, /inputEl\.value = serverUploadInput/)
 assert.match(uploadForm, /addFiles\(Array\.from\(files\)\)/)
 assert.match(uploadForm, /emit\("cancel-upload", \{ref\}\)/)
 assert.match(uploadForm, /emit\("validate", \{\[props\.form\.name\]: formValues\(\)\}\)/)
@@ -184,7 +186,9 @@ for (const [label, source, componentName] of [
   assert.match(source, /v-on:validate=\{JS\.push\("validate"\)\}/)
   assert.match(source, /v-on:cancel-upload=\{JS\.push\("cancel_upload"\)\}/)
   assert.match(source, /v-ssr=\{false\}/)
-  assert.doesNotMatch(source, /<\.live_file_input|<\.detected_preview|phx-submit="save"/)
+  assert.match(source, /<\.live_file_input upload=\{@uploads\.artifact\} \/>/)
+  assert.match(source, /phx-submit="save"/)
+  assert.doesNotMatch(source, /<\.detected_preview/)
 
   assert.match(
     source,
@@ -287,8 +291,11 @@ for (const [source, scenarios] of [
   }
 }
 
-assert.equal(newTest.match(/file_input\(view, "#catalog-database-new-component"/g)?.length, 4)
-assert.equal(showTest.match(/file_input\(view, "#catalog-database-show-component"/g)?.length, 2)
+assert.equal(newTest.match(/file_input\(view, "#catalog-upload-live-form"/g)?.length, 4)
+assert.equal(
+  showTest.match(/file_input\(view, "#catalog-revision-upload-live-form"/g)?.length,
+  2,
+)
 assert.match(newTest, /assert vue\.props == Jason\.decode!\(Jason\.encode!\(vue\.props\)\)/)
 assert.match(showTest, /assert is_binary\(Jason\.encode!\(vue\.props\)\)/)
 

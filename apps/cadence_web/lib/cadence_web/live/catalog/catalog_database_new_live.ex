@@ -182,6 +182,15 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <form
+        id="catalog-upload-live-form"
+        phx-change="validate"
+        phx-submit="save"
+        style="display: none"
+      >
+        <.live_file_input upload={@uploads.artifact} />
+      </form>
+
       <.vue
         id="catalog-database-new-component"
         v-component="CatalogDatabaseNew"

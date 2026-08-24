@@ -229,7 +229,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
     assert open_vue.props["revision_form_open"] == true
 
     uploads =
-      file_input(view, "#catalog-database-show-component", :artifact, [
+      file_input(view, "#catalog-revision-upload-live-form", :artifact, [
         %{
           name: "mission.bin",
           content: "anything",
@@ -265,7 +265,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
     render_click(view, "toggle_revision_form", %{})
 
     uploads =
-      file_input(view, "#catalog-database-show-component", :artifact, [
+      file_input(view, "#catalog-revision-upload-live-form", :artifact, [
         %{
           name: "mission.yaml",
           content: """

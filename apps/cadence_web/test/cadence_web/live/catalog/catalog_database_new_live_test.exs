@@ -125,7 +125,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 
     uploads =
-      file_input(view, "#catalog-database-new-component", :artifact, [
+      file_input(view, "#catalog-upload-live-form", :artifact, [
         %{
           name: "mission.bin",
           content: "anything",
@@ -154,7 +154,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 
     uploads =
-      file_input(view, "#catalog-database-new-component", :artifact, [
+      file_input(view, "#catalog-upload-live-form", :artifact, [
         %{
           name: "mission.yaml",
           content: """
@@ -209,7 +209,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     """
 
     uploads =
-      file_input(view, "#catalog-database-new-component", :artifact, [
+      file_input(view, "#catalog-upload-live-form", :artifact, [
         %{
           name: "mission.yaml",
           content: yaml,
@@ -244,7 +244,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 
     uploads =
-      file_input(view, "#catalog-database-new-component", :artifact, [
+      file_input(view, "#catalog-upload-live-form", :artifact, [
         %{
           name: "mission.bin",
           content: "anything",

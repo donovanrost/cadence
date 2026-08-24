@@ -135,6 +135,11 @@ const {
   },
 )
 
+// Reuse Phoenix's server-rendered upload input so LiveView owns one canonical
+// transport in both the browser and Phoenix.LiveViewTest.
+const serverUploadInput = document.getElementById(props.upload.ref)
+if (serverUploadInput instanceof HTMLInputElement) inputEl.value = serverUploadInput
+
 const validationErrors = computed(() => props.upload.errors)
 
 const formValues = () =>
