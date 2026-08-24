@@ -2,207 +2,227 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
   @moduledoc false
   use CadenceWeb, :html
 
-  attr :form, Phoenix.HTML.Form, required: true
+  @hidden_fields [
+    :dashboard_id,
+    :dashboard_version,
+    :dashboard_time_mode,
+    :dashboard_replay_run_id,
+    :dashboard_data_view,
+    :dashboard_limit_mode,
+    :comparison_review_request_event_id,
+    :comparison_review_request_kind,
+    :comparison_review_open_count,
+    :comparison_review_open_placement_ids,
+    :comparison_review_workflow_kind,
+    :comparison_review_workflow_action,
+    :comparison_review_workflow_selection_kind,
+    :comparison_review_workflow_selection_count,
+    :comparison_review_primary_data_view,
+    :comparison_review_compare_data_view,
+    :comparison_review_scope_kind,
+    :comparison_review_scope_ids,
+    :comparison_review_contact_ids,
+    :comparison_review_resource_ids,
+    :comparison_review_transport_ids,
+    :comparison_review_source_endpoint_ids,
+    :comparison_review_ground_station_ids,
+    :comparison_review_scope_link_ids
+  ]
+
+  attr(:form, Phoenix.HTML.Form, required: true)
 
   def request_form(assigns) do
-    assigns = assign(assigns, :preview_rows, request_preview_rows(assigns.form))
+    assigns = assign(assigns, :presentation, request_form_dto(assigns.form))
 
     ~H"""
-    <.form
-      for={@form}
-      id="dashboard-historical-workflow-request-form"
-      phx-submit="record_historical_workflow_request"
-      class="space-y-3"
-    >
-      <input type="hidden" name={@form[:dashboard_id].name} value={@form[:dashboard_id].value} />
-      <input
-        type="hidden"
-        name={@form[:dashboard_version].name}
-        value={@form[:dashboard_version].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:dashboard_time_mode].name}
-        value={@form[:dashboard_time_mode].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:dashboard_replay_run_id].name}
-        value={@form[:dashboard_replay_run_id].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:dashboard_data_view].name}
-        value={@form[:dashboard_data_view].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:dashboard_limit_mode].name}
-        value={@form[:dashboard_limit_mode].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_request_event_id].name}
-        value={@form[:comparison_review_request_event_id].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_request_kind].name}
-        value={@form[:comparison_review_request_kind].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_open_count].name}
-        value={@form[:comparison_review_open_count].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_open_placement_ids].name}
-        value={@form[:comparison_review_open_placement_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_workflow_kind].name}
-        value={@form[:comparison_review_workflow_kind].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_workflow_action].name}
-        value={@form[:comparison_review_workflow_action].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_workflow_selection_kind].name}
-        value={@form[:comparison_review_workflow_selection_kind].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_workflow_selection_count].name}
-        value={@form[:comparison_review_workflow_selection_count].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_primary_data_view].name}
-        value={@form[:comparison_review_primary_data_view].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_compare_data_view].name}
-        value={@form[:comparison_review_compare_data_view].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_scope_kind].name}
-        value={@form[:comparison_review_scope_kind].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_scope_ids].name}
-        value={@form[:comparison_review_scope_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_contact_ids].name}
-        value={@form[:comparison_review_contact_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_resource_ids].name}
-        value={@form[:comparison_review_resource_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_transport_ids].name}
-        value={@form[:comparison_review_transport_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_source_endpoint_ids].name}
-        value={@form[:comparison_review_source_endpoint_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_ground_station_ids].name}
-        value={@form[:comparison_review_ground_station_ids].value}
-      />
-      <input
-        type="hidden"
-        name={@form[:comparison_review_scope_link_ids].name}
-        value={@form[:comparison_review_scope_link_ids].value}
-      />
-      <section
-        id="dashboard-historical-workflow-request-preview"
-        class="space-y-2 rounded border border-info/30 bg-info/10 p-2 text-xs"
-      >
-        <h3 class="hud-label">Request Preview</h3>
-        <dl class="grid grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-3 gap-y-1">
-          <div
-            :for={row <- @preview_rows}
-            class="contents"
-            data-preview-field={row.field}
-          >
-            <dt class="text-base-content/60">{row.label}</dt>
-            <dd class="min-w-0 truncate text-base-content" title={row.value}>{row.value}</dd>
-          </div>
-        </dl>
-      </section>
-      <section class="space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs">
-        <h3 class="hud-label">Request Context</h3>
-        <.input
-          field={@form[:workflow]}
-          type="select"
-          label="Workflow"
-          options={[{"Backfill", "backfill"}, {"Import", "import"}]}
-          compact
-        />
-        <.input field={@form[:run_id]} type="text" label="Run" compact />
-        <div class="grid grid-cols-1 gap-2">
-          <.input field={@form[:realm]} type="text" label="Realm" compact />
-          <.input field={@form[:data_source_id]} type="text" label="Data Source" compact />
-          <.input field={@form[:source_binding_id]} type="text" label="Source Binding" compact />
-        </div>
-      </section>
-      <section class="space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs">
-        <h3 class="hud-label">Source Window</h3>
-        <.input field={@form[:observable_id]} type="text" label="Observable" compact />
-        <.input field={@form[:point_id]} type="text" label="Point" compact />
-        <.input
-          field={@form[:point_ids]}
-          type="text"
-          label="Points"
-          placeholder="Comma, space, or newline separated point IDs"
-          compact
-        />
-        <.input field={@form[:source_from]} type="text" label="Source From" compact />
-        <.input field={@form[:source_to]} type="text" label="Source To" compact />
-        <.input field={@form[:reason]} type="text" label="Reason" compact />
-      </section>
-      <label
-        id="dashboard-historical-workflow-request-confirm-row"
-        class="flex items-start gap-2 rounded border border-warning/40 bg-warning/10 p-2 text-xs"
-      >
-        <input
-          id="dashboard-historical-workflow-request-confirm"
-          type="checkbox"
-          name={@form[:confirmed].name}
-          value="confirmed"
-          required
-          class="checkbox checkbox-xs mt-0.5"
-        />
-        <span class="text-base-content/80">
-          Confirm historical data workflow request
-        </span>
-      </label>
-      <button
-        id="dashboard-historical-workflow-request-submit"
-        type="submit"
-        class="btn btn-xs btn-primary w-full justify-start"
-      >
-        <.icon name="hero-document-plus" class="h-3.5 w-3.5" /> Record request
-      </button>
-    </.form>
+    <.vue
+      id="historical-workflow-request-form-component"
+      v-component="HistoricalWorkflowRequestForm"
+      presentation={@presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
+
+  defp request_form_dto(form) do
+    %{
+      root: %{
+        id: "dashboard-historical-workflow-request-form",
+        class: "space-y-3",
+        attrs: %{"phx-submit" => "record_historical_workflow_request"}
+      },
+      hidden_fields: Enum.map(@hidden_fields, &hidden_field_dto(form, &1)),
+      preview: request_preview_dto(form),
+      request_context: %{
+        class: "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
+        title: %{class: "hud-label", text: "Request Context"},
+        fields: [
+          field_dto(form, :workflow, "select", "Workflow",
+            options: [{"Backfill", "backfill"}, {"Import", "import"}]
+          ),
+          field_dto(form, :run_id, "text", "Run")
+        ],
+        group: %{
+          class: "grid grid-cols-1 gap-2",
+          fields: [
+            field_dto(form, :realm, "text", "Realm"),
+            field_dto(form, :data_source_id, "text", "Data Source"),
+            field_dto(form, :source_binding_id, "text", "Source Binding")
+          ]
+        }
+      },
+      source_window: %{
+        class: "space-y-2 rounded border border-base-300 bg-base-100/70 p-2 text-xs",
+        title: %{class: "hud-label", text: "Source Window"},
+        fields: [
+          field_dto(form, :observable_id, "text", "Observable"),
+          field_dto(form, :point_id, "text", "Point"),
+          field_dto(form, :point_ids, "text", "Points",
+            placeholder: "Comma, space, or newline separated point IDs"
+          ),
+          field_dto(form, :source_from, "text", "Source From"),
+          field_dto(form, :source_to, "text", "Source To"),
+          field_dto(form, :reason, "text", "Reason")
+        ]
+      },
+      confirmation: %{
+        id: "dashboard-historical-workflow-request-confirm-row",
+        class:
+          "flex items-start gap-2 rounded border border-warning/40 bg-warning/10 p-2 text-xs",
+        field: %{
+          class: "checkbox checkbox-xs mt-0.5",
+          attrs:
+            raw_attrs(%{
+              "id" => "dashboard-historical-workflow-request-confirm",
+              "type" => "checkbox",
+              "name" => form[:confirmed].name,
+              "value" => "confirmed",
+              "required" => true
+            })
+        },
+        label: %{
+          class: "text-base-content/80",
+          text: "Confirm historical data workflow request"
+        }
+      },
+      submit: %{
+        id: "dashboard-historical-workflow-request-submit",
+        type: "submit",
+        class: "btn btn-xs btn-primary w-full justify-start",
+        icon: %{name: "hero-document-plus", class: "h-3.5 w-3.5"},
+        text: "Record request"
+      }
+    }
+  end
+
+  defp hidden_field_dto(form, field) do
+    form_field = form[field]
+
+    %{
+      key: Atom.to_string(field),
+      attrs:
+        raw_attrs(%{
+          "type" => "hidden",
+          "name" => form_field.name,
+          "value" => form_field.value
+        })
+    }
+  end
+
+  defp request_preview_dto(form) do
+    %{
+      id: "dashboard-historical-workflow-request-preview",
+      class: "space-y-2 rounded border border-info/30 bg-info/10 p-2 text-xs",
+      title: %{class: "hud-label", text: "Request Preview"},
+      list: %{
+        class: "grid grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-3 gap-y-1",
+        rows:
+          Enum.map(request_preview_rows(form), fn row ->
+            %{
+              key: row.field,
+              class: "contents",
+              attrs: %{"data-preview-field" => row.field},
+              label: %{class: "text-base-content/60", text: row.label},
+              value: %{
+                class: "min-w-0 truncate text-base-content",
+                attrs: raw_attrs(%{"title" => row.value}),
+                text: row.value
+              }
+            }
+          end)
+      }
+    }
+  end
+
+  defp field_dto(form, field, type, label, options \\ []) do
+    form_field = form[field]
+    errors = if Phoenix.Component.used_input?(form_field), do: form_field.errors, else: []
+
+    %{
+      key: Atom.to_string(field),
+      type: type,
+      wrapper_class: "fieldset",
+      label: %{class: "hud-label block mb-1.5", text: label},
+      control: control_dto(form_field, type, errors, options),
+      errors:
+        Enum.map(errors, fn {message, _opts} ->
+          %{class: "mt-1.5 text-sm text-error", text: dom_text(message)}
+        end)
+    }
+  end
+
+  defp control_dto(form_field, "select", errors, options) do
+    %{
+      class: class_names(["w-full select", errors != [] && "select-error"]),
+      attrs:
+        raw_attrs(%{
+          "id" => form_field.id,
+          "name" => form_field.name,
+          "required" => false,
+          "multiple" => false
+        }),
+      options:
+        options
+        |> Keyword.get(:options, [])
+        |> Enum.map(fn {label, value} ->
+          %{
+            key: dom_text(value),
+            text: dom_text(label),
+            attrs:
+              raw_attrs(%{
+                "value" => value,
+                "selected" => option_selected?(form_field.value, value),
+                "disabled" => false,
+                "title" => nil
+              })
+          }
+        end)
+    }
+  end
+
+  defp control_dto(form_field, type, errors, options) do
+    %{
+      class: class_names(["w-full input", errors != [] && "input-error"]),
+      attrs:
+        raw_attrs(%{
+          "id" => form_field.id,
+          "name" => form_field.name,
+          "type" => type,
+          "value" => form_field.value,
+          "placeholder" => Keyword.get(options, :placeholder),
+          "required" => false
+        }),
+      options: []
+    }
+  end
+
+  defp option_selected?(values, option_value) when is_list(values) do
+    Enum.any?(values, &(to_string(&1) == to_string(option_value)))
+  end
+
+  defp option_selected?(value, option_value),
+    do: to_string(value) == to_string(option_value)
 
   defp request_preview_rows(form) do
     workflow = form_value(form, :workflow)
@@ -348,4 +368,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestFormComponent
   defp text_param(value) when is_atom(value), do: Atom.to_string(value)
   defp text_param(value) when is_integer(value), do: Integer.to_string(value)
   defp text_param(_value), do: nil
+
+  defp class_names(values) do
+    values
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.map(&dom_text/1)
+    |> Enum.join(" ")
+  end
+
+  defp raw_attrs(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, name, "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, name, dom_text(value))
+    end)
+  end
+
+  defp dom_text(nil), do: ""
+  defp dom_text(value) when is_binary(value), do: value
+  defp dom_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp dom_text(value) when is_number(value), do: to_string(value)
+  defp dom_text(value), do: to_string(value)
 end
