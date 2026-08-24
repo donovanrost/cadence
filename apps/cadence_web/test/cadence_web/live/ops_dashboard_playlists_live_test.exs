@@ -10,6 +10,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
 
   alias Cadence.Dashboards.Management
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "playlist stores ordered dashboard references and presents without hiding health posture" do
     {conn, user, org, mission} = signed_in_user_org_and_mission()
@@ -47,7 +48,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     assert initial_vue.props == Jason.decode!(Jason.encode!(initial_vue.props))
 
     assert initial_vue.handlers == %{
-             "next-dashboard" => Phoenix.LiveView.JS.push("next_dashboard")
+             "next-dashboard" => JS.push("next_dashboard")
            }
 
     initial_props = %{
@@ -243,7 +244,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     assert initial_vue.ssr == false
 
     assert initial_vue.handlers == %{
-             "create-playlist" => Phoenix.LiveView.JS.push("create_playlist")
+             "create-playlist" => JS.push("create_playlist")
            }
 
     initial_props = %{

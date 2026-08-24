@@ -8,8 +8,8 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.TestFixtures
   alias CadenceWeb.SpacecraftListLive
+  alias CadenceWeb.TestFixtures
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()

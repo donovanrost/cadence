@@ -14,6 +14,7 @@ defmodule CadenceWeb.CommsTransportLiveTest do
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
   alias CadenceWeb.{CommsTransportListLive, TestFixtures}
+  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -417,8 +418,8 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
       assert vue.handlers == %{
-               "save" => Phoenix.LiveView.JS.push("save"),
-               "validate" => Phoenix.LiveView.JS.push("validate")
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
              }
 
       assert vue.props["page"] == %{

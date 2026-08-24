@@ -14,7 +14,10 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
+  alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Management.Contacts, as: ManagementContacts
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "authenticated Ops routes expose Requirements navigation" do
     {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope()
@@ -432,8 +435,8 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert Enum.sort(Map.keys(vue.props)) == ["actions", "form", "journey", "page"]
 
     assert vue.handlers == %{
-             "save" => Phoenix.LiveView.JS.push("save"),
-             "validate" => Phoenix.LiveView.JS.push("validate")
+             "save" => JS.push("save"),
+             "validate" => JS.push("validate")
            }
 
     vue
@@ -1108,10 +1111,10 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert member_vue.ssr == false
 
     assert member_vue.handlers == %{
-             "approve-plan" => Phoenix.LiveView.JS.push("approve-plan"),
-             "execute-plan" => Phoenix.LiveView.JS.push("execute-plan"),
-             "reject-plan" => Phoenix.LiveView.JS.push("reject-plan"),
-             "submit-plan" => Phoenix.LiveView.JS.push("submit-plan")
+             "approve-plan" => JS.push("approve-plan"),
+             "execute-plan" => JS.push("execute-plan"),
+             "reject-plan" => JS.push("reject-plan"),
+             "submit-plan" => JS.push("submit-plan")
            }
 
     assert Enum.sort(Map.keys(member_vue.props)) == [
@@ -1295,7 +1298,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
 
     assert still_pending.lifecycle_state == :pending_approval
 
-    assert Cadence.Management.Contacts.list_approvals(
+    assert ManagementContacts.list_approvals(
              org.organization_id,
              mission.mission_id,
              plan.contact_plan_id
@@ -1350,7 +1353,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert approved_plan.approved_by == approve_admin.user_id
 
     assert [approval] =
-             Cadence.Management.Contacts.list_approvals(
+             ManagementContacts.list_approvals(
                approve_org.organization_id,
                approve_mission.mission_id,
                approve_plan.contact_plan_id
@@ -1393,7 +1396,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
            ]
 
     assert [execution_item] =
-             Cadence.Control.Contacts.list_plan_execution(
+             ControlContacts.list_plan_execution(
                approve_org.organization_id,
                approve_mission.mission_id,
                approve_plan.contact_plan_id,
@@ -1458,7 +1461,7 @@ defmodule CadenceWeb.OpsContactRequirementsLiveTest do
     assert rejected_plan.lifecycle_state == :draft
 
     assert [rejection] =
-             Cadence.Management.Contacts.list_approvals(
+             ManagementContacts.list_approvals(
                reject_org.organization_id,
                reject_mission.mission_id,
                reject_plan.contact_plan_id

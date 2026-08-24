@@ -11,6 +11,7 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   test "version selection is URL-addressable and publish reads the canonical lifecycle store" do
     {conn, user, org, mission} = signed_in_user_org_and_mission()
@@ -79,8 +80,8 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
            }
 
     assert detail_vue.handlers == %{
-             "publish_version" => Phoenix.LiveView.JS.push("publish_version"),
-             "restore_version" => Phoenix.LiveView.JS.push("restore_version")
+             "publish_version" => JS.push("publish_version"),
+             "restore_version" => JS.push("restore_version")
            }
 
     assert events_vue.props == %{"page" => initial_page, "surface" => "activity"}
