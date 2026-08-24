@@ -10,13 +10,16 @@ defmodule CadenceWeb.OpsDashboardShareLive do
 
     case Management.fetch_active_share(scope.organization_id, mission.mission_id, share_id) do
       {:ok, share} ->
+        dashboard_path = dashboard_path(mission.mission_id, share)
+
         {:ok,
          socket
          |> assign(:page_title, "Shared Dashboard")
          |> assign(:ops_nav_item, :dashboards)
          |> assign(:active_dashboard_id, share.dashboard_id)
          |> assign(:dashboard_share, share)
-         |> assign(:dashboard_path, dashboard_path(mission.mission_id, share))}
+         |> assign(:dashboard_path, dashboard_path)
+         |> assign(:dashboard_share_props, dashboard_share_dto(mission, share, dashboard_path))}
 
       {:error, reason} ->
         {:ok,
@@ -30,33 +33,46 @@ defmodule CadenceWeb.OpsDashboardShareLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-share-page" class="h-full overflow-y-auto bg-base-100 p-6">
-        <div class="mx-auto max-w-3xl border border-primary/30 bg-base-200/30 p-6">
-          <p class="hud-label">Authenticated mission share</p>
-          <h1 class="mt-2 text-2xl font-semibold">Dashboard context is ready</h1>
-          <p class="mt-3 text-sm text-base-content/65">
-            This link is restricted to members of {@current_mission.display_name}. It declares
-            <span id="dashboard-share-visibility" class="font-mono">{@dashboard_share.data_visibility}</span>
-            and opens the dashboard with the captured operational selectors.
-          </p>
-          <dl id="dashboard-share-context" class="mt-5 grid gap-2 text-xs sm:grid-cols-2">
-            <div :for={{key, value} <- Enum.sort(@dashboard_share.runtime_context)} class="border border-base-300 bg-base-100 p-2">
-              <dt class="font-mono uppercase text-base-content/45">{key}</dt>
-              <dd class="mt-1 break-all">{value}</dd>
-            </div>
-          </dl>
-          <.link id="dashboard-share-open-dashboard" navigate={@dashboard_path} class="btn btn-primary mt-6">
-            Open live dashboard
-          </.link>
-        </div>
-      </section>
+      <.vue
+        id="ops-dashboard-share-component"
+        v-component="OpsDashboardShare"
+        share={@dashboard_share_props}
+        v-ssr={false}
+        class="h-full"
+      />
     </Layouts.app>
     """
   end
 
+  defp dashboard_share_dto(mission, share, dashboard_path) do
+    %{
+      id: "dashboard-share-page",
+      eyebrow: "Authenticated mission share",
+      title: "Dashboard context is ready",
+      restriction: %{
+        prefix: "This link is restricted to members of #{mission.display_name}. It declares",
+        visibility_id: "dashboard-share-visibility",
+        visibility: share.data_visibility,
+        suffix: "and opens the dashboard with the captured operational selectors."
+      },
+      context: %{
+        id: "dashboard-share-context",
+        entries:
+          share.runtime_context
+          |> Enum.sort()
+          |> Enum.map(fn {key, value} -> %{key: to_string(key), value: to_string(value)} end)
+      },
+      action: %{
+        id: "dashboard-share-open-dashboard",
+        label: "Open live dashboard",
+        href: dashboard_path
+      }
+    }
+  end
+
   defp dashboard_path(mission_id, share) do
     base = "/missions/#{mission_id}/ops/dashboards/#{share.dashboard_id}"
-    query = URI.encode_query(share.runtime_context)
+    query = share.runtime_context |> Enum.sort() |> URI.encode_query()
     if query == "", do: base, else: base <> "?" <> query
   end
 end
