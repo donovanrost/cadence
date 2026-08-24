@@ -27,8 +27,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
 
     assert root == %{
              "id" => "dashboard-historical-workflow-correction-form",
-             "class" =>
-               "space-y-3 rounded border border-warning/40 bg-warning/10 p-2",
+             "class" => "space-y-3 rounded border border-warning/40 bg-warning/10 p-2",
              "attrs" => %{
                "phx-submit" => "record_corrected_historical_workflow_request",
                "data-workflow-action-id" => "request-correction",
@@ -64,8 +63,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormCompon
              "class" =>
                "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-1 rounded border border-warning/30 bg-base-100/70 p-2 text-xs",
              "attrs" => %{
-               "data-historical-workflow-correction-group-context-request-mode" =>
-                 "bulk_points",
+               "data-historical-workflow-correction-group-context-request-mode" => "bulk_points",
                "data-historical-workflow-correction-group-context-request-group" =>
                  "request-group-1",
                "data-historical-workflow-correction-group-context-request-item" => "2/3",
