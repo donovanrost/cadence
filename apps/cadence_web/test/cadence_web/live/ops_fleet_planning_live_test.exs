@@ -17,7 +17,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     ContactRequirements,
     ContactRequirementTemplates,
     FleetPlanningPolicies,
-    FleetPlanningRuns
+    FleetPlanningRuns,
+    Planner
   }
 
   alias CadenceWeb.TestFixtures
@@ -903,6 +904,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     refreshed_vue = fleet_planning_run_vue(run_view)
     assert refreshed_vue.props["planning"] == false
+
     assert fleet_planning_run_replaced_streams(refreshed_vue) ==
              ~w(automation_actions decisions exceptions horizon_commitments requirement_rows resource_pressure)
 
@@ -919,13 +921,13 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   end
 
   test "fleet run LiveVue exposes terminal evidence through six JSON-safe stream contracts" do
-    {conn, scope, org, mission, spacecraft} = signed_in_scope(:organization_admin)
+    {conn, scope, _org, mission, spacecraft} = signed_in_scope(:organization_admin)
     activate_policy!(scope, mission)
 
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     horizon_end = DateTime.add(now, 6, :hour)
 
-    assert {:ok, requirement, _version} =
+    assert {:ok, requirement, requirement_version} =
              ContactRequirements.create(
                scope,
                mission.mission_id,
@@ -933,6 +935,71 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                |> Map.put(:metadata, %{"secret" => "requirement-sensitive-marker"}),
                now: now
              )
+
+    opportunity = %{
+      "id" => "opportunity-provider-pressure",
+      "spacecraft_ref" => "SC-PROVIDER-PRESSURE",
+      "ground_station_ref" => "station-pressure",
+      "antenna_or_service_pool_ref" => "pool-pressure",
+      "service_profile_ref" => "service-downlink",
+      "starts_at" => now |> DateTime.add(1_200, :second) |> DateTime.to_iso8601(),
+      "ends_at" => now |> DateTime.add(2_100, :second) |> DateTime.to_iso8601(),
+      "expires_at" => now |> DateTime.add(3_600, :second) |> DateTime.to_iso8601(),
+      "availability" => "available",
+      "estimated_capacity" => %{"bytes" => 1_000_000},
+      "synthetic" => true,
+      "extensions" => %{"orbit_readiness" => %{"status" => "current"}}
+    }
+
+    assert {:ok, planning} =
+             Planner.run(
+               scope,
+               mission.mission_id,
+               requirement.contact_requirement_id,
+               requirement_version.version,
+               now: now,
+               list_routes: fn _, _, _ ->
+                 {:ok,
+                  %{
+                    routes: [
+                      %{
+                        route_key: "route-provider-pressure",
+                        spacecraft_id: spacecraft.spacecraft_id,
+                        provider_spacecraft_ref: "SC-PROVIDER-PRESSURE",
+                        source_endpoint_id: "source-provider-pressure",
+                        routing_rule_id: "routing-provider-pressure",
+                        link_assignment_id: "link-provider-pressure",
+                        path_template_id: "path-provider-pressure",
+                        path_template_version: 1,
+                        transport_id: "transport-provider-pressure",
+                        transport_version: 1,
+                        provider_id: "provider-pressure",
+                        provider_version: 1,
+                        provider_account_id: "account-provider-pressure",
+                        provider_account_version: 1,
+                        provider_account_grant_id: "grant-provider-pressure",
+                        provider_account_grant_version: 1,
+                        provider_profile_id: "runtime-provider-pressure",
+                        provider_profile_version: 1,
+                        service_profile_ref: %{"id" => "service-downlink", "version" => 1},
+                        delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 1},
+                        delivery_policy_document: %{},
+                        provider_display_name: "Provider pressure",
+                        service_display_name: "Downlink",
+                        delivery_display_name: "Cadence",
+                        route_display_name: "Provider pressure route",
+                        client: __MODULE__
+                      }
+                    ],
+                    findings: []
+                  }}
+               end,
+               search_opportunities: fn _, _, _, _, _ ->
+                 {:ok, %{opportunities: [opportunity]}}
+               end
+             )
+
+    assert [snapshot] = planning.snapshots
 
     assert {:ok, run, [_ref]} =
              FleetPlanningRuns.create(scope, mission.mission_id, %{
@@ -967,7 +1034,10 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                requirement.contact_requirement_id,
                :failed,
                :unsatisfied,
-               %{explanation_document: %{"code" => "provider_search_unavailable"}}
+               %{
+                 contact_planning_run_id: planning.run.contact_planning_run_id,
+                 explanation_document: %{"code" => "provider_search_unavailable"}
+               }
              )
 
     assert {:ok, _optimizing} =
@@ -986,7 +1056,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                run.fleet_planning_run_id,
                [
                  %{
-                   contact_opportunity_snapshot_id: "snapshot-provider-pressure",
+                   contact_opportunity_snapshot_id: snapshot.contact_opportunity_snapshot_id,
                    disposition: :ineligible,
                    score: -10,
                    hard_constraint_document: %{
@@ -1105,7 +1175,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                "label" => "unsatisfied",
                "class" => "font-mono text-[0.62rem] uppercase text-warning"
              },
-             "contact_planning_run_id" => "not searched"
+             "contact_planning_run_id" => planning.run.contact_planning_run_id
            }
 
     assert [exception] = fleet_planning_run_stream_upserts(vue, "exceptions")
@@ -1137,8 +1207,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
                "class" =>
                  "border border-error/35 bg-error/[0.07] px-1.5 py-0.5 font-mono text-[0.58rem] uppercase text-error"
              },
-             "title" => "no_eligible_window",
-             "contact_opportunity_snapshot_id" => "snapshot-provider-pressure",
+             "title" => "Provider pressure · station-pressure",
+             "contact_opportunity_snapshot_id" => snapshot.contact_opportunity_snapshot_id,
              "score" => -10,
              "operational_rationale" => "Provider capacity was exhausted.",
              "hard_constraints" => "provider capacity exceeded"
@@ -1242,8 +1312,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
 
     assert vue.props["page"]["header"]["candidate_plan"] == %{
              "id" => "fleet-run-candidate-plan-link",
-             "href" =>
-               "/missions/#{mission.mission_id}/ops/plans/#{result.plan.contact_plan_id}",
+             "href" => "/missions/#{mission.mission_id}/ops/plans/#{result.plan.contact_plan_id}",
              "label" => "Open candidate Plan",
              "icon" => "hero-arrow-right"
            }
