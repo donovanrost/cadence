@@ -203,60 +203,208 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports/new")
 
-      assert has_element?(view, "#comms-transport-new-page")
-      assert has_element?(view, "#transport-form")
-      assert has_element?(view, "#transport-identity-section")
-      assert has_element?(view, "#transport-origin-section")
-      assert has_element?(view, "#transport-source-section")
-      assert has_element?(view, "#transport-capability-section")
+      assert has_element?(view, "#comms-transport-new-component")
 
-      assert has_element?(
-               view,
-               "#transport-direct-configuration[data-extension-presentation='transport_kind']"
-             )
+      vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
 
-      assert has_element?(view, "#transport-capability-section-fields")
-      assert has_element?(view, "#transport-framing-section")
-      assert has_element?(view, "#transport-reliability-section")
-      assert has_element?(view, "#transport-summary-section")
-      assert has_element?(view, "#transport-admin-diagnostics")
-      assert has_element?(view, "#create-transport-button[disabled]")
-      refute has_element?(view, "#transport-provider")
+      assert vue.component == "CommsTransportNew"
+      assert vue.ssr == false
+      assert vue.class == "contents"
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-      refute has_element?(
-               view,
-               "#transport-direct-configuration-input-frame-size"
-             )
+      assert vue.handlers == %{
+               "save" => Phoenix.LiveView.JS.push("save"),
+               "validate" => Phoenix.LiveView.JS.push("validate")
+             }
 
-      view
-      |> form("#transport-form",
-        transport: %{
-          display_name: "AI&T TCP",
-          origin: "direct",
-          transport_kind: "tcp_socket",
-          tcp_mode: "connect",
-          direction_capability: "inbound",
-          host: "lab.example",
-          port: "5001",
-          framing_mode: "fixed_size",
-          tls_enabled: "false"
+      assert vue.props["page"] == %{
+               "id" => "comms-transport-new-page",
+               "title" => "New Transport",
+               "subtitle" =>
+                 "Describe a durable byte-moving capability. This setup does not mean a connection is currently open.",
+               "breadcrumbs" => [
+                 %{
+                   "label" => mission.display_name,
+                   "href" => "/missions/#{mission.mission_id}"
+                 },
+                 %{
+                   "label" => "Comms",
+                   "href" => "/missions/#{mission.mission_id}/comms"
+                 },
+                 %{
+                   "label" => "Transports",
+                   "href" => "/missions/#{mission.mission_id}/comms/transports"
+                 },
+                 %{"label" => "New Transport", "href" => nil}
+               ]
+             }
+
+      initial_form = vue.props["form"]
+      assert initial_form["id"] == "transport-form"
+      assert initial_form["selected_origin"] == "direct"
+      refute initial_form["can_submit"]
+      assert initial_form["provider"]["active"] == false
+      assert initial_form["direct_configuration"]["active"] == true
+
+      assert initial_form["sections"] == %{
+               "identity" => %{
+                 "id" => "transport-identity-section",
+                 "number" => "01",
+                 "title" => "Identity"
+               },
+               "origin" => %{
+                 "id" => "transport-origin-section",
+                 "number" => "02",
+                 "title" => "Origin"
+               },
+               "source" => %{
+                 "id" => "transport-source-section",
+                 "number" => "03",
+                 "title" => "Source"
+               },
+               "provider_capability" => %{
+                 "id" => "transport-capability-section",
+                 "number" => "04",
+                 "title" => "Capability"
+               },
+               "review" => %{
+                 "id" => "transport-summary-section",
+                 "number" => "06",
+                 "title" => "Review"
+               }
+             }
+
+      assert initial_form["fields"]["display_name"]
+             |> Map.take(["id", "name", "type", "label", "required", "value"]) == %{
+               "id" => "transport-display-name",
+               "name" => "transport[display_name]",
+               "type" => "text",
+               "label" => "Display Name",
+               "required" => true,
+               "value" => ""
+             }
+
+      assert initial_form["fields"]["origin"]["options"] == [
+               %{
+                 "label" => "Direct — configured in Cadence",
+                 "value" => "direct",
+                 "disabled" => false
+               },
+               %{
+                 "label" => "Ground Station Provider",
+                 "value" => "provider_managed",
+                 "disabled" => false
+               }
+             ]
+
+      assert initial_form["actions"] == %{
+               "submit" => %{
+                 "id" => "create-transport-button",
+                 "label" => "Create Transport"
+               },
+               "cancel" => %{
+                 "id" => "cancel-transport-link",
+                 "label" => "Cancel",
+                 "href" => "/missions/#{mission.mission_id}/comms/transports"
+               }
+             }
+
+      assert initial_form["direct_configuration"]
+             |> Map.take(["id", "kind", "description"]) == %{
+               "id" => "transport-direct-configuration",
+               "kind" => "transport_kind",
+               "description" =>
+                 "Cadence owns this endpoint, framing boundary, and reconnect behavior."
+             }
+
+      assert Enum.map(initial_form["direct_configuration"]["sections"], fn section ->
+               {section["id"], section["fields_id"], section["number"], section["title"]}
+             end) == [
+               {"transport-capability-section", "transport-capability-section-fields", "04",
+                "TCP Capability"},
+               {"transport-framing-section", "transport-framing-section-fields", "05",
+                "Framing"},
+               {"transport-reliability-section", "transport-reliability-section-fields", "05B",
+                "Reliability"}
+             ]
+
+      initial_configuration_fields =
+        initial_form["direct_configuration"]["sections"]
+        |> Enum.flat_map(& &1["fields"])
+        |> Map.new(&{&1["key"], &1})
+
+      assert initial_configuration_fields["tcp_mode"]["value"] == "listen"
+      assert initial_configuration_fields["direction_capability"]["value"] == "inbound"
+      assert initial_configuration_fields["host"]["value"] == "0.0.0.0"
+      assert initial_configuration_fields["port"]["min"] == 1
+      assert initial_configuration_fields["port"]["max"] == 65_535
+      assert initial_configuration_fields["framing_mode"]["value"] == "raw"
+      refute initial_configuration_fields["frame_size"]["visible"]
+      refute initial_configuration_fields["reconnect_policy"]["visible"]
+      assert initial_configuration_fields["tls_enabled"]["value"] == "false"
+
+      progressive_payload = %{
+        "transport" => %{
+          "display_name" => "AI&T TCP",
+          "origin" => "direct",
+          "transport_kind" => "tcp_socket",
+          "tcp_mode" => "connect",
+          "direction_capability" => "inbound",
+          "host" => "lab.example",
+          "port" => "5001",
+          "framing_mode" => "fixed_size",
+          "tls_enabled" => "false"
         }
-      )
-      |> render_change()
+      }
 
-      assert has_element?(view, "#transport-direct-configuration-input-frame-size")
-      assert has_element?(view, "#transport-direct-configuration-input-reconnect-policy")
+      render_hook(view, "validate", progressive_payload)
 
-      view
-      |> form("#transport-form", transport: direct_transport_params())
-      |> render_change()
+      progressive_vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
 
-      assert has_element?(view, "#create-transport-button:not([disabled])")
+      progressive_fields =
+        progressive_vue.props["form"]["direct_configuration"]["sections"]
+        |> Enum.flat_map(& &1["fields"])
+        |> Map.new(&{&1["key"], &1})
 
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#transport-form", transport: direct_transport_params())
-               |> render_submit()
+      assert progressive_fields["frame_size"]["visible"]
+      assert progressive_fields["frame_size"]["visible_when"] == %{
+               "field" => "framing_mode",
+               "equals" => "fixed_size"
+             }
+
+      assert progressive_fields["reconnect_policy"]["visible"]
+      assert progressive_fields["reconnect_policy"]["visible_when"] == %{
+               "field" => "tcp_mode",
+               "equals" => "connect"
+             }
+
+      direct_params =
+        direct_transport_params()
+        |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
+
+      assert direct_params == %{
+               "display_name" => "AI&T TCP",
+               "origin" => "direct",
+               "transport_kind" => "tcp_socket",
+               "tcp_mode" => "connect",
+               "direction_capability" => "inbound",
+               "host" => "lab.example",
+               "port" => "5001",
+               "framing_mode" => "fixed_size",
+               "frame_size" => "64",
+               "reconnect_policy" => "always",
+               "tls_enabled" => "false"
+             }
+
+      render_hook(view, "validate", %{"transport" => direct_params})
+
+      ready_vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
+      assert ready_vue.props["form"]["can_submit"]
+      assert ready_vue.props["form"]["review"]["readiness"]["value"] == "Ready to save"
+      assert ready_vue.props["form"]["review"]["readiness"]["endpoint"] == "lab.example:5001"
+
+      render_hook(view, "save", %{"transport" => direct_params})
+      {target, _flash} = assert_redirect(view)
 
       [transport] =
         TransportStore.list_transports(
@@ -372,37 +520,118 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports/new")
 
-      view
-      |> form("#transport-form",
-        transport: %{
-          display_name: "Provider Downlink",
-          origin: "provider_managed"
+      validate_payload = %{
+        "transport" => %{
+          "display_name" => "Provider Downlink",
+          "origin" => "provider_managed",
+          "transport_kind" => "tcp_socket",
+          "tcp_mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "0.0.0.0",
+          "port" => "",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
         }
-      )
-      |> render_change()
+      }
 
-      assert has_element?(view, "#transport-provider")
-      assert has_element?(view, "#transport-kind-provider-managed[value='tcp_socket']")
-      assert has_element?(view, "#transport-service-profile")
-      assert has_element?(view, "#transport-delivery-profile")
-      assert has_element?(view, "#transport-provider-operator-summary", "Streaming to Cadence")
-      assert has_element?(view, "#transport-provider-derived-section")
-      assert has_element?(view, "#transport-provider-derived-configuration", "127.0.0.1:5100")
-      assert has_element?(view, "#create-transport-button:not([disabled])")
-      refute has_element?(view, "#transport-direct-configuration")
-      refute has_element?(view, "#transport-framing-section")
-      refute has_element?(view, "#transport-reliability-section")
+      render_hook(view, "validate", validate_payload)
 
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#transport-form",
-                 transport: %{
-                   display_name: "Provider Downlink",
-                   origin: "provider_managed",
-                   mission_provider_id: provider.provider_id
-                 }
-               )
-               |> render_submit()
+      vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
+      assert vue.component == "CommsTransportNew"
+      assert vue.ssr == false
+      assert vue.class == "contents"
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+      form = vue.props["form"]
+      assert form["selected_origin"] == "provider_managed"
+      assert form["provider"]["active"]
+      refute form["direct_configuration"]["active"]
+      assert form["fields"]["transport_kind"]["provider_managed_id"] ==
+               "transport-kind-provider-managed"
+
+      assert form["fields"]["transport_kind"]["value"] == "tcp_socket"
+
+      assert form["fields"]["mission_provider_id"]["options"] == [
+               %{
+                 "label" => "#{provider.display_name} · v#{provider.version}",
+                 "value" => provider.provider_id,
+                 "disabled" => false
+               }
+             ]
+
+      assert form["provider"]["selected"] == %{
+               "display_name" => provider.display_name,
+               "version" => provider.version,
+               "status" => "ready",
+               "status_label" => "Profiles synced"
+             }
+
+      service_token = form["fields"]["service_profile_id"]["value"]
+      delivery_token = form["fields"]["delivery_profile_id"]["value"]
+
+      assert form["fields"]["service_profile_id"]["options"] == [
+               %{
+                 "label" => "Realtime telemetry · v3",
+                 "value" => service_token,
+                 "disabled" => false
+               }
+             ]
+
+      assert form["fields"]["delivery_profile_id"]["options"] == [
+               %{
+                 "label" => "Streaming to Cadence",
+                 "value" => delivery_token,
+                 "disabled" => false
+               }
+             ]
+
+      assert form["provider"]["operator_summary"] == %{
+               "id" => "transport-provider-operator-summary",
+               "label" => "Operator Summary",
+               "text" => "Streaming to Cadence",
+               "endpoint" => "127.0.0.1:5100"
+             }
+
+      assert form["provider_derived"]
+             |> Map.take(["active", "id", "number", "title", "description"]) == %{
+               "active" => true,
+               "id" => "transport-provider-derived-section",
+               "number" => "05",
+               "title" => "Provider-Derived Runtime",
+               "description" =>
+                 "Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only."
+             }
+
+      assert form["provider_derived"]["configuration"] == %{
+               "id" => "transport-provider-derived-configuration",
+               "empty_text" => nil,
+               "rows" => [
+                 %{"label" => "Actual kind", "value" => "TCP socket", "mono" => false},
+                 %{"label" => "Mode", "value" => "LISTEN", "mono" => false},
+                 %{"label" => "Direction", "value" => "INBOUND", "mono" => false},
+                 %{"label" => "Endpoint", "value" => "127.0.0.1:5100", "mono" => true},
+                 %{"label" => "Framing", "value" => "FIXED SIZE", "mono" => false},
+                 %{"label" => "TLS", "value" => "Disabled", "mono" => false}
+               ]
+             }
+
+      assert form["can_submit"]
+      refute Jason.encode!(vue.props) =~ "config://simulator"
+      refute Map.has_key?(form["provider"]["selected"], "credential_ref")
+
+      save_payload = %{
+        "transport" => %{
+          "display_name" => "Provider Downlink",
+          "origin" => "provider_managed",
+          "transport_kind" => "tcp_socket",
+          "mission_provider_id" => provider.provider_id,
+          "service_profile_id" => service_token,
+          "delivery_profile_id" => delivery_token
+        }
+      }
+
+      render_hook(view, "save", save_payload)
+      {target, _flash} = assert_redirect(view)
 
       [transport] =
         TransportStore.list_transports(
@@ -555,20 +784,47 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports/new")
 
-      view
-      |> form("#transport-form",
-        transport: %{display_name: "Downlink", origin: "provider_managed"}
-      )
-      |> render_change()
+      payload = %{
+        "transport" => %{
+          "display_name" => "Downlink",
+          "origin" => "provider_managed",
+          "transport_kind" => "tcp_socket",
+          "tcp_mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "0.0.0.0",
+          "port" => "",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        }
+      }
 
-      assert has_element?(view, "#transport-provider-empty-state")
+      render_hook(view, "validate", payload)
 
-      assert has_element?(
-               view,
-               "#transport-provider option[value='#{provider.provider_id}'][disabled]"
-             )
+      vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-      assert has_element?(view, "#create-transport-button[disabled]")
+      form = vue.props["form"]
+      assert form["provider"]["active"]
+      assert form["provider"]["ready_count"] == 0
+      assert form["provider"]["empty_state"]["visible"]
+      assert form["provider"]["selected"] == nil
+      assert form["fields"]["service_profile_id"]["options"] == []
+      assert form["fields"]["delivery_profile_id"]["options"] == []
+
+      assert Enum.find(
+               form["fields"]["mission_provider_id"]["options"],
+               &(&1["value"] == provider.provider_id)
+             ) == %{
+               "label" => "#{provider.display_name} · v#{provider.version}",
+               "value" => provider.provider_id,
+               "disabled" => true
+             }
+
+      refute form["can_submit"]
+      assert form["actions"]["submit"] == %{
+               "id" => "create-transport-button",
+               "label" => "Create Transport"
+             }
     end
 
     test "renders a stable validation outcome for invalid direct TCP setup" do
@@ -576,27 +832,43 @@ defmodule CadenceWeb.CommsTransportLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports/new")
 
-      view
-      |> form("#transport-form",
-        transport: %{
-          display_name: "Bad TCP",
-          origin: "direct",
-          transport_kind: "tcp_socket",
-          tcp_mode: "listen",
-          direction_capability: "inbound",
-          host: "0.0.0.0",
-          port: "70000",
-          framing_mode: "raw",
-          tls_enabled: "false"
+      payload = %{
+        "transport" => %{
+          "display_name" => "Bad TCP",
+          "origin" => "direct",
+          "transport_kind" => "tcp_socket",
+          "tcp_mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "0.0.0.0",
+          "port" => "70000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
         }
-      )
-      |> render_submit()
+      }
 
-      assert has_element?(
-               view,
-               "#transport-form-error",
+      render_hook(view, "save", payload)
+
+      vue = LiveVue.Test.get_vue(view, id: "comms-transport-new-component")
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+      refute vue.props["form"]["can_submit"]
+
+      invalid_port_field =
+        vue.props["form"]["direct_configuration"]["sections"]
+        |> Enum.flat_map(& &1["fields"])
+        |> Enum.find(&(&1["key"] == "port"))
+
+      assert invalid_port_field["value"] == "70000"
+      assert vue.props["form"]["review"]["error_id"] == "transport-form-error"
+
+      assert vue.props["form"]["review"]["error"] ==
                "Port must be an integer from 1 to 65535."
-             )
+
+      assert vue.props["form"]["review"]["readiness"] == %{
+               "label" => "Readiness",
+               "status" => "attention",
+               "value" => "Incomplete",
+               "endpoint" => "Endpoint not yet resolved"
+             }
 
       assert TransportStore.list_transports(
                mission.organization_id,
