@@ -193,60 +193,19 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
           database={@database_details}
           navigation={@navigation}
           revision_form_open={@show_revision_form}
+          revision_form={revision_upload_form_dto(@revision_form)}
+          upload={upload_dto(@uploads.artifact)}
+          detected_importer={detected_importer_dto(@uploads.artifact.entries)}
+          submit_disabled={submit_disabled?(@uploads.artifact.entries)}
           revisions={@revision_rows}
           import_runs={@import_run_rows}
           v-on:toggle-revision-form={JS.push("toggle_revision_form")}
+          v-on:validate={JS.push("validate")}
+          v-on:cancel-upload={JS.push("cancel_upload")}
           v-ssr={false}
-        >
-          <:revision_form>
-            <.revision_upload_card
-              :if={@show_revision_form}
-              uploads={@uploads}
-              form={@revision_form}
-            />
-          </:revision_form>
-        </.vue>
+        />
       </div>
     </Layouts.app>
-    """
-  end
-
-  attr :uploads, :map, required: true
-  attr :form, Phoenix.HTML.Form, required: true
-
-  defp revision_upload_card(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :detected_importer,
-        detect_importer_from_entries(assigns.uploads.artifact.entries)
-      )
-
-    ~H"""
-    <.card id="catalog-revision-upload-card" title="Add revision">
-      <.form
-        id="catalog-revision-upload-form"
-        for={@form}
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-4"
-      >
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <.input field={@form[:revision_label]} type="text" label="Revision label" />
-          <.input field={@form[:revision_notes]} type="text" label="Notes" />
-        </div>
-        <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
-        <.detected_preview detected={@detected_importer} />
-        <.button
-          id="catalog-revision-upload-submit"
-          type="submit"
-          size={:md}
-          disabled={!importer_detected?(@detected_importer)}
-        >
-          Upload revision
-        </.button>
-      </.form>
-    </.card>
     """
   end
 
@@ -322,6 +281,106 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
 
   defp empty_revision_form do
     to_form(%{"revision_label" => "", "revision_notes" => ""}, as: :catalog_revision)
+  end
+
+  defp revision_upload_form_dto(form) do
+    %{
+      id: "catalog-revision-upload-form",
+      name: "catalog_revision",
+      class: "space-y-4",
+      card: %{
+        id: "catalog-revision-upload-card",
+        class: "card bg-base-200 border border-base-300",
+        body_class: "card-body p-6",
+        title: "Add revision",
+        title_class: "hud-label"
+      },
+      content_class: nil,
+      description: nil,
+      primary_fields_class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+      primary_fields: [
+        upload_field_dto(
+          "catalog_revision",
+          "revision_label",
+          "text",
+          "Revision label",
+          form.params
+        ),
+        upload_field_dto(
+          "catalog_revision",
+          "revision_notes",
+          "text",
+          "Notes",
+          form.params
+        )
+      ],
+      secondary_fields: [],
+      file_input: %{
+        id: "catalog-revision-upload-file-input",
+        name: "artifact",
+        class: "file-input file-input-bordered w-full",
+        wrapper_class: nil
+      },
+      entries: upload_entries_presentation(),
+      error_class: "border px-4 py-3 text-sm text-base-content border-error/40 bg-error/10",
+      importer: importer_presentation(),
+      actions_class: nil,
+      submit: %{
+        id: "catalog-revision-upload-submit",
+        label: "Upload revision",
+        class: "btn btn-primary"
+      }
+    }
+  end
+
+  defp upload_field_dto(form_name, key, type, label, params) do
+    %{
+      key: key,
+      id: "#{form_name}_#{key}",
+      name: "#{form_name}[#{key}]",
+      type: type,
+      label: label,
+      value: string_param(params, key),
+      errors: [],
+      wrapper_class: "fieldset mb-3",
+      label_class: "hud-label block mb-1.5",
+      input_class: if(type == "textarea", do: "w-full textarea", else: "w-full input"),
+      error_class: "mt-1.5 text-sm text-error"
+    }
+  end
+
+  defp upload_entries_presentation do
+    %{
+      list_class: "space-y-1",
+      item_class: "flex items-center justify-between text-sm",
+      name_class: "font-mono",
+      progress_class: "progress progress-primary h-1 w-24",
+      remove_class: "btn btn-ghost btn-xs",
+      remove_label: "Remove"
+    }
+  end
+
+  defp importer_presentation do
+    %{
+      detected_class: "flex items-center gap-2 text-sm text-base-content/80",
+      icon_class: "hero-check-circle h-4 w-4 text-success",
+      name_class: "font-medium",
+      empty_class: "text-xs text-base-content/60"
+    }
+  end
+
+  defp submit_disabled?(entries) do
+    entries
+    |> detect_importer_from_entries()
+    |> importer_detected?()
+    |> Kernel.not()
+  end
+
+  defp string_param(params, key) do
+    case Map.get(params, key, "") do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 
   defp uploader_identity(socket) do

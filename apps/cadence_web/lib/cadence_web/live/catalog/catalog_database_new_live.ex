@@ -9,6 +9,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -181,28 +182,19 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id={@page.id} class="space-y-6 max-w-2xl">
-        <.vue
-          id="catalog-database-new-component"
-          v-component="CatalogDatabaseNew"
-          page={@page}
-          v-ssr={false}
-          class="contents"
-        />
-
-        <.upload_card uploads={@uploads} form={@database_form} />
-
-        <div>
-          <.button
-            id={@page.cancel.id}
-            variant={:ghost}
-            size={:md}
-            navigate={@page.cancel.href}
-          >
-            {@page.cancel.label}
-          </.button>
-        </div>
-      </div>
+      <.vue
+        id="catalog-database-new-component"
+        v-component="CatalogDatabaseNew"
+        page={@page}
+        form={database_upload_form_dto(@database_form)}
+        upload={upload_dto(@uploads.artifact)}
+        detected_importer={detected_importer_dto(@uploads.artifact.entries)}
+        submit_disabled={submit_disabled?(@uploads.artifact.entries)}
+        v-on:validate={JS.push("validate")}
+        v-on:cancel-upload={JS.push("cancel_upload")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
@@ -228,5 +220,117 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
         href: ~p"/missions/#{mission.mission_id}/catalog"
       }
     }
+  end
+
+  defp database_upload_form_dto(form) do
+    %{
+      id: "catalog-upload-form",
+      name: "catalog_database",
+      class: "space-y-4",
+      card: %{
+        id: nil,
+        class: "card bg-base-200 border border-base-300",
+        body_class: "card-body p-6",
+        title: "Create catalog database revision",
+        title_class: "hud-label"
+      },
+      content_class: "space-y-4 mt-2",
+      description: %{
+        text:
+          "Save the upload as an immutable revision in the mission catalog library. Runtime usage is chosen separately.",
+        class: "text-sm text-base-content/70"
+      },
+      primary_fields_class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+      primary_fields: [
+        upload_field_dto(
+          "catalog_database",
+          "name",
+          "text",
+          "Catalog database name",
+          form.params
+        ),
+        upload_field_dto(
+          "catalog_database",
+          "revision_label",
+          "text",
+          "Revision label",
+          form.params
+        )
+      ],
+      secondary_fields: [
+        upload_field_dto(
+          "catalog_database",
+          "revision_notes",
+          "textarea",
+          "Revision notes",
+          form.params
+        )
+      ],
+      file_input: %{
+        id: "catalog-upload-file-input",
+        name: "artifact",
+        class: "file-input file-input-bordered w-full",
+        wrapper_class: "block"
+      },
+      entries: upload_entries_presentation(),
+      error_class: "border px-4 py-3 text-sm text-base-content border-error/40 bg-error/10",
+      importer: importer_presentation(),
+      actions_class: "flex items-center gap-3",
+      submit: %{
+        id: nil,
+        label: "Upload & import",
+        class: "btn btn-primary"
+      }
+    }
+  end
+
+  defp upload_field_dto(form_name, key, type, label, params) do
+    %{
+      key: key,
+      id: "#{form_name}_#{key}",
+      name: "#{form_name}[#{key}]",
+      type: type,
+      label: label,
+      value: string_param(params, key),
+      errors: [],
+      wrapper_class: "fieldset mb-3",
+      label_class: "hud-label block mb-1.5",
+      input_class: if(type == "textarea", do: "w-full textarea", else: "w-full input"),
+      error_class: "mt-1.5 text-sm text-error"
+    }
+  end
+
+  defp upload_entries_presentation do
+    %{
+      list_class: "space-y-1",
+      item_class: "flex items-center justify-between text-sm",
+      name_class: "font-mono",
+      progress_class: "progress progress-primary h-1 w-24",
+      remove_class: "btn btn-ghost btn-xs",
+      remove_label: "Remove"
+    }
+  end
+
+  defp importer_presentation do
+    %{
+      detected_class: "flex items-center gap-2 text-sm text-base-content/80",
+      icon_class: "hero-check-circle h-4 w-4 text-success",
+      name_class: "font-medium",
+      empty_class: "text-xs text-base-content/60"
+    }
+  end
+
+  defp submit_disabled?(entries) do
+    entries
+    |> detect_importer_from_entries()
+    |> importer_detected?()
+    |> Kernel.not()
+  end
+
+  defp string_param(params, key) do
+    case Map.get(params, key, "") do
+      value when is_binary(value) -> value
+      _other -> ""
+    end
   end
 end
