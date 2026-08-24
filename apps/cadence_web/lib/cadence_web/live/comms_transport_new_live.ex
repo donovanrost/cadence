@@ -4,9 +4,11 @@ defmodule CadenceWeb.CommsTransportNewLive do
 
   alias Cadence.Comms.Transport
   alias Cadence.ExtensionCatalog
-  alias Cadence.Extensions.Presentation.ConfigurationDefinition
+  alias Cadence.Extensions.Presentation.{ConfigurationDefinition, FieldDefinition}
   alias Cadence.Management.Providers
   alias Cadence.Management.Transports
+  alias Phoenix.HTML.Form
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -64,292 +66,349 @@ defmodule CadenceWeb.CommsTransportNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="comms-transport-new-page" class="mx-auto max-w-4xl space-y-6">
-      <.page_header
-        title="New Transport"
-        subtitle="Describe a durable byte-moving capability. This setup does not mean a connection is currently open."
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
-          {"Transports", @return_to},
-          {"New Transport", nil}
-        ]}
+      <.vue
+        id="comms-transport-new-component"
+        v-component="CommsTransportNew"
+        page={transport_page_dto(@current_mission, @return_to)}
+        form={transport_form_dto(assigns)}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="contents"
       />
-
-      <.form
-        for={@form}
-        id="transport-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <.form_section id="transport-identity-section" number="01" title="Identity">
-          <.input
-            id="transport-display-name"
-            field={@form[:display_name]}
-            type="text"
-            label="Display Name"
-            required
-          />
-        </.form_section>
-
-        <.form_section id="transport-origin-section" number="02" title="Origin">
-          <.input
-            id="transport-origin"
-            field={@form[:origin]}
-            type="select"
-            label="Configuration Owner"
-            options={origin_options()}
-            required
-          />
-          <div class="grid gap-3 md:grid-cols-2">
-            <div class={origin_card_class(@selected_origin == "direct")}>
-              <p class="hud-label">Direct</p>
-              <p class="mt-2 text-sm text-base-content/65">
-                Cadence owns the endpoint, framing, TLS, and reconnect setup.
-              </p>
-            </div>
-            <div class={origin_card_class(@selected_origin == "provider_managed")}>
-              <p class="hud-label">Ground Station Provider</p>
-              <p class="mt-2 text-sm text-base-content/65">
-                Cadence derives read-only runtime setup from synchronized provider profiles.
-              </p>
-            </div>
-          </div>
-        </.form_section>
-
-        <.form_section id="transport-source-section" number="03" title="Source">
-          <%= if @selected_origin == "direct" do %>
-            <.input
-              id="transport-kind"
-              field={@form[:transport_kind]}
-              type="select"
-              label="Transport Kind"
-              options={@transport_kind_options}
-              required
-            />
-          <% else %>
-            <.input
-              id="transport-kind-provider-managed"
-              field={@form[:transport_kind]}
-              type="hidden"
-            />
-            <.input
-              id="transport-provider"
-              field={@form[:mission_provider_id]}
-              type="select"
-              label="Ground Network Provider"
-              options={provider_options(@providers)}
-              placeholder="Select a validated provider"
-              required
-            />
-            <div
-              :if={@provider_ready_count == 0}
-              id="transport-provider-empty-state"
-              class="border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70"
-            >
-              No provider has both a healthy validation and synchronized profiles.
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
-                class="ml-1 text-primary hover:underline"
-              >
-                Review providers
-              </.link>
-            </div>
-          <% end %>
-        </.form_section>
-
-        <%= if @selected_origin == "direct" do %>
-          <.extension_configuration
-            definition={@kind_entry.configuration}
-            form={@form}
-            kind="transport_kind"
-          />
-        <% else %>
-          <.form_section id="transport-capability-section" number="04" title="Capability">
-            <.provider_profile_fields
-              form={@form}
-              selected_provider={@selected_provider}
-              service_profiles={@service_profiles}
-              delivery_profiles={@delivery_profiles}
-              selected_delivery={@selected_delivery}
-              derived_summary={@derived_summary}
-              derivation_error={@derivation_error}
-            />
-          </.form_section>
-          <section id="transport-provider-derived-section" class="space-y-4">
-            <div class="flex items-center gap-3">
-              <span class="hud-label text-primary/70">05</span>
-              <h2 class="hud-label">Provider-Derived Runtime</h2>
-              <div class="h-px flex-1 bg-base-300/60"></div>
-            </div>
-            <p class="text-sm text-base-content/65">
-              Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only.
-            </p>
-            <.derived_configuration
-              configuration={@derived_configuration}
-              kind_entry={@kind_entry}
-            />
-          </section>
-        <% end %>
-
-        <section id="transport-summary-section" class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">06</span>
-            <h2 class="hud-label">Review</h2>
-            <div class="h-px flex-1 bg-base-300/60"></div>
-          </div>
-
-          <.card id="transport-configuration-summary" padding={:none}>
-            <div class="grid divide-y divide-base-300 md:grid-cols-2 md:divide-x md:divide-y-0">
-              <div class="p-5">
-                <p class="hud-label">Ownership</p>
-                <p class="mt-2 text-base font-semibold">{origin_label(@selected_origin)}</p>
-                <p class="mt-1 text-sm text-base-content/60">
-                  {source_summary(@selected_origin, @selected_provider)}
-                </p>
-              </div>
-              <div class="p-5">
-                <p class="hud-label">Readiness</p>
-                <div class="mt-2">
-                  <.status_badge
-                    status={if(@can_submit?, do: :ready, else: :attention)}
-                    label={if(@can_submit?, do: "Ready to save", else: "Incomplete")}
-                  />
-                </div>
-                <p class="mt-2 font-mono text-xs text-base-content/60">
-                  {summary_endpoint(@derived_summary)}
-                </p>
-              </div>
-            </div>
-          </.card>
-
-          <p
-            :if={@form_error}
-            id="transport-form-error"
-            class="border-l-2 border-error/70 bg-error/10 px-4 py-3 text-sm text-error"
-          >
-            {@form_error}
-          </p>
-
-          <details
-            id="transport-admin-diagnostics"
-            class="rounded border border-base-300 bg-base-100/40 p-4 text-sm"
-          >
-            <summary class="cursor-pointer hud-label hover:text-primary">
-              Administrator Diagnostics
-            </summary>
-            <pre id="transport-admin-diagnostics-json" class="mt-3 max-h-96 overflow-auto font-mono text-xs text-base-content/70">{diagnostics_json(assigns)}</pre>
-          </details>
-        </section>
-
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button
-            id="create-transport-button"
-            type="submit"
-            size={:md}
-            disabled={!@can_submit?}
-          >
-            Create Transport
-          </.button>
-          <.button id="cancel-transport-link" variant={:ghost} size={:md} navigate={@return_to}>
-            Cancel
-          </.button>
-        </div>
-      </.form>
-      </div>
     </Layouts.app>
     """
   end
 
-  attr :form, Phoenix.HTML.Form, required: true
-  attr :selected_provider, :map, default: nil
-  attr :service_profiles, :list, required: true
-  attr :delivery_profiles, :list, required: true
-  attr :selected_delivery, :map, default: nil
-  attr :derived_summary, :map, default: nil
-  attr :derivation_error, :string, default: nil
-
-  defp provider_profile_fields(assigns) do
-    ~H"""
-    <div id="transport-provider-profile-fields" class="space-y-4">
-      <div
-        :if={@selected_provider}
-        class="flex items-center justify-between border-l-2 border-success/60 bg-success/10 px-4 py-3"
-      >
-        <div>
-          <p class="hud-label">Validated Provider</p>
-          <p class="mt-1 text-sm">{@selected_provider.display_name} · v{@selected_provider.version}</p>
-        </div>
-        <.status_badge status={:ready} label="Profiles synced" />
-      </div>
-      <.input
-        id="transport-service-profile"
-        field={@form[:service_profile_id]}
-        type="select"
-        label="Service Profile"
-        options={profile_options(@service_profiles)}
-        placeholder="Select service"
-        required
-      />
-      <.input
-        id="transport-delivery-profile"
-        field={@form[:delivery_profile_id]}
-        type="select"
-        label="Delivery Profile"
-        options={delivery_profile_options(@delivery_profiles)}
-        placeholder="Select delivery"
-        required
-      />
-      <div
-        :if={@selected_delivery}
-        id="transport-provider-operator-summary"
-        class="border border-base-300 bg-base-200/70 p-4"
-      >
-        <p class="hud-label">Operator Summary</p>
-        <p class="mt-2 text-sm font-medium">{@selected_delivery["operator_summary"]}</p>
-        <p class="mt-2 font-mono text-xs text-base-content/60">
-          {summary_endpoint(@derived_summary)}
-        </p>
-      </div>
-      <div
-        :if={@derivation_error}
-        id="transport-provider-derivation-error"
-        class="border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70"
-      >
-        {@derivation_error}
-      </div>
-    </div>
-    """
+  defp transport_page_dto(mission, return_to) do
+    %{
+      id: "comms-transport-new-page",
+      title: "New Transport",
+      subtitle:
+        "Describe a durable byte-moving capability. This setup does not mean a connection is currently open.",
+      breadcrumbs: [
+        %{label: mission.display_name, href: ~p"/missions/#{mission.mission_id}"},
+        %{label: "Comms", href: ~p"/missions/#{mission.mission_id}/comms"},
+        %{label: "Transports", href: return_to},
+        %{label: "New Transport", href: nil}
+      ]
+    }
   end
 
-  attr :configuration, :map, default: nil
-  attr :kind_entry, :map, required: true
+  defp transport_form_dto(assigns) do
+    form = assigns.form
+    definition = assigns.kind_entry.configuration
 
-  defp derived_configuration(assigns) do
-    summary =
-      if assigns.configuration,
-        do: assigns.kind_entry.module.display_summary(assigns.configuration),
-        else: nil
-
-    assigns = assign(assigns, :summary, summary)
-
-    ~H"""
-    <.card id="transport-provider-derived-configuration">
-      <div :if={@summary} class="divide-y divide-base-300">
-        <.detail_row label="Actual kind" value={@kind_entry.label} />
-        <.detail_row label="Mode" value={human_text(@summary.mode)} />
-        <.detail_row label="Direction" value={human_text(@summary.direction_capability)} />
-        <.detail_row label="Endpoint" value={@summary.endpoint} mono />
-        <.detail_row label="Framing" value={human_text(@summary.framing)} />
-        <.detail_row label="TLS" value={if(@summary.tls_enabled?, do: "Enabled", else: "Disabled")} />
-      </div>
-      <p :if={!@summary} class="text-sm text-base-content/60">
-        Select compatible provider profiles to derive runtime configuration.
-      </p>
-    </.card>
-    """
+    %{
+      id: "transport-form",
+      selected_origin: assigns.selected_origin,
+      can_submit: assigns.can_submit?,
+      sections: sections_dto(),
+      fields: form_fields_dto(assigns, form),
+      origin_cards: origin_cards_dto(),
+      direct_configuration:
+        configuration_dto(definition, form, assigns.selected_origin == "direct"),
+      provider: provider_dto(assigns),
+      provider_derived: provider_derived_dto(assigns),
+      review: review_dto(assigns),
+      actions: %{
+        submit: %{id: "create-transport-button", label: "Create Transport"},
+        cancel: %{id: "cancel-transport-link", label: "Cancel", href: assigns.return_to}
+      }
+    }
   end
+
+  defp sections_dto do
+    %{
+      identity: %{id: "transport-identity-section", number: "01", title: "Identity"},
+      origin: %{id: "transport-origin-section", number: "02", title: "Origin"},
+      source: %{id: "transport-source-section", number: "03", title: "Source"},
+      provider_capability: %{
+        id: "transport-capability-section",
+        number: "04",
+        title: "Capability"
+      },
+      review: %{id: "transport-summary-section", number: "06", title: "Review"}
+    }
+  end
+
+  defp form_fields_dto(assigns, form) do
+    %{
+      display_name:
+        form_field_dto(:display_name, "transport-display-name", "text", "Display Name", form,
+          required: true
+        ),
+      origin:
+        form_field_dto(:origin, "transport-origin", "select", "Configuration Owner", form,
+          required: true,
+          options: origin_options()
+        ),
+      transport_kind:
+        form_field_dto(:transport_kind, "transport-kind", "select", "Transport Kind", form,
+          required: true,
+          options: assigns.transport_kind_options,
+          provider_managed_id: "transport-kind-provider-managed"
+        ),
+      mission_provider_id:
+        form_field_dto(
+          :mission_provider_id,
+          "transport-provider",
+          "select",
+          "Ground Network Provider",
+          form,
+          required: true,
+          placeholder: "Select a validated provider",
+          options: provider_options(assigns.providers)
+        ),
+      service_profile_id:
+        form_field_dto(
+          :service_profile_id,
+          "transport-service-profile",
+          "select",
+          "Service Profile",
+          form,
+          required: true,
+          placeholder: "Select service",
+          options: profile_options(assigns.service_profiles)
+        ),
+      delivery_profile_id:
+        form_field_dto(
+          :delivery_profile_id,
+          "transport-delivery-profile",
+          "select",
+          "Delivery Profile",
+          form,
+          required: true,
+          placeholder: "Select delivery",
+          options: delivery_profile_options(assigns.delivery_profiles)
+        )
+    }
+  end
+
+  defp form_field_dto(field, id, type, label, form, opts) do
+    key = Atom.to_string(field)
+
+    %{
+      key: key,
+      id: id,
+      name: "transport[#{key}]",
+      type: type,
+      label: label,
+      required: Keyword.get(opts, :required, false),
+      placeholder: Keyword.get(opts, :placeholder),
+      options: opts |> Keyword.get(:options, []) |> Enum.map(&option_dto/1),
+      value: form_value(form, field),
+      provider_managed_id: Keyword.get(opts, :provider_managed_id)
+    }
+  end
+
+  defp origin_cards_dto do
+    [
+      %{
+        value: "direct",
+        label: "Direct",
+        description: "Cadence owns the endpoint, framing, TLS, and reconnect setup."
+      },
+      %{
+        value: "provider_managed",
+        label: "Ground Station Provider",
+        description:
+          "Cadence derives read-only runtime setup from synchronized provider profiles."
+      }
+    ]
+  end
+
+  defp configuration_dto(%ConfigurationDefinition{} = definition, form, active?) do
+    %{
+      id: definition.id,
+      kind: "transport_kind",
+      description: definition.description,
+      active: active?,
+      sections:
+        Enum.map(
+          definition.sections,
+          &configuration_section_dto(&1, definition.id, form)
+        )
+    }
+  end
+
+  defp configuration_section_dto(section, definition_id, form) do
+    %{
+      id: section.id,
+      fields_id: "#{section.id}-fields",
+      number: section.number,
+      title: section.title,
+      description: section.description,
+      fields: Enum.map(section.fields, &configuration_field_dto(&1, definition_id, form))
+    }
+  end
+
+  defp configuration_field_dto(%FieldDefinition{} = field, definition_id, form) do
+    key = Atom.to_string(field.field)
+    dom_field = String.replace(key, "_", "-")
+
+    %{
+      key: key,
+      wrapper_id: "#{definition_id}-field-#{dom_field}",
+      id: "#{definition_id}-input-#{dom_field}",
+      name: "transport[#{key}]",
+      type: configuration_input_type(field.type),
+      label: field.label,
+      required: field.required,
+      placeholder: field.placeholder,
+      help: field.help,
+      step: field.step,
+      min: field.min,
+      max: field.max,
+      default: presentation_value(field.default),
+      value: form_value(form, field.field),
+      options: Enum.map(field.options, &option_dto/1),
+      visible: field_visible?(field.visible_when, form),
+      visible_when: visibility_dto(field.visible_when)
+    }
+  end
+
+  defp provider_dto(assigns) do
+    %{
+      active: assigns.selected_origin == "provider_managed",
+      profile_fields_id: "transport-provider-profile-fields",
+      ready_count: assigns.provider_ready_count,
+      selected: selected_provider_dto(assigns.selected_provider),
+      empty_state: %{
+        id: "transport-provider-empty-state",
+        visible: assigns.provider_ready_count == 0,
+        message: "No provider has both a healthy validation and synchronized profiles.",
+        action: %{
+          label: "Review providers",
+          href: ~p"/missions/#{assigns.current_mission.mission_id}/comms/providers"
+        }
+      },
+      operator_summary: operator_summary_dto(assigns.selected_delivery, assigns.derived_summary),
+      derivation_error: assigns.derivation_error
+    }
+  end
+
+  defp selected_provider_dto(nil), do: nil
+
+  defp selected_provider_dto(provider) do
+    %{
+      display_name: provider.display_name,
+      version: provider.version,
+      status: "ready",
+      status_label: "Profiles synced"
+    }
+  end
+
+  defp operator_summary_dto(nil, _summary), do: nil
+
+  defp operator_summary_dto(delivery, summary) do
+    %{
+      id: "transport-provider-operator-summary",
+      label: "Operator Summary",
+      text: delivery["operator_summary"],
+      endpoint: summary_endpoint(summary)
+    }
+  end
+
+  defp provider_derived_dto(assigns) do
+    %{
+      active: assigns.selected_origin == "provider_managed",
+      id: "transport-provider-derived-section",
+      number: "05",
+      title: "Provider-Derived Runtime",
+      description:
+        "Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only.",
+      configuration:
+        derived_configuration_dto(assigns.derived_configuration, assigns.kind_entry)
+    }
+  end
+
+  defp derived_configuration_dto(nil, _kind_entry) do
+    %{
+      id: "transport-provider-derived-configuration",
+      rows: [],
+      empty_text: "Select compatible provider profiles to derive runtime configuration."
+    }
+  end
+
+  defp derived_configuration_dto(configuration, kind_entry) do
+    summary = kind_entry.module.display_summary(configuration)
+
+    %{
+      id: "transport-provider-derived-configuration",
+      rows: [
+        detail_dto("Actual kind", kind_entry.label),
+        detail_dto("Mode", human_text(summary.mode)),
+        detail_dto("Direction", human_text(summary.direction_capability)),
+        detail_dto("Endpoint", summary.endpoint, true),
+        detail_dto("Framing", human_text(summary.framing)),
+        detail_dto("TLS", if(summary.tls_enabled?, do: "Enabled", else: "Disabled"))
+      ],
+      empty_text: nil
+    }
+  end
+
+  defp detail_dto(label, value, mono? \\ false),
+    do: %{label: label, value: value, mono: mono?}
+
+  defp review_dto(assigns) do
+    %{
+      configuration_summary_id: "transport-configuration-summary",
+      ownership: %{
+        label: "Ownership",
+        value: origin_label(assigns.selected_origin),
+        source: source_summary(assigns.selected_origin, assigns.selected_provider)
+      },
+      readiness: %{
+        label: "Readiness",
+        status: if(assigns.can_submit?, do: "ready", else: "attention"),
+        value: if(assigns.can_submit?, do: "Ready to save", else: "Incomplete"),
+        endpoint: summary_endpoint(assigns.derived_summary)
+      },
+      error: assigns.form_error,
+      error_id: "transport-form-error",
+      diagnostics: %{
+        id: "transport-admin-diagnostics",
+        label: "Administrator Diagnostics",
+        json_id: "transport-admin-diagnostics-json",
+        json: diagnostics_json(assigns)
+      }
+    }
+  end
+
+  defp option_dto({label, value}),
+    do: %{label: label, value: presentation_value(value), disabled: false}
+
+  defp option_dto({label, value, opts}) do
+    %{
+      label: label,
+      value: presentation_value(value),
+      disabled: Keyword.get(opts, :disabled, false)
+    }
+  end
+
+  defp visibility_dto(nil), do: nil
+
+  defp visibility_dto(%{field: field, equals: expected}) do
+    %{field: Atom.to_string(field), equals: presentation_value(expected)}
+  end
+
+  defp field_visible?(nil, _form), do: true
+
+  defp field_visible?(%{field: field, equals: expected}, form),
+    do: form_value(form, field) == presentation_value(expected)
+
+  defp configuration_input_type(:reference), do: "select"
+  defp configuration_input_type(type), do: Atom.to_string(type)
+
+  defp form_value(form, field), do: form |> Form.input_value(field) |> presentation_value()
+
+  defp presentation_value(nil), do: ""
+  defp presentation_value(value) when is_binary(value), do: value
+  defp presentation_value(value) when is_boolean(value), do: to_string(value)
+  defp presentation_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp presentation_value(value) when is_number(value), do: to_string(value)
+  defp presentation_value(value), do: inspect(value)
 
   defp assign_form_state(socket, raw_params) do
     params = normalize_form_params(raw_params)
@@ -624,13 +683,6 @@ defmodule CadenceWeb.CommsTransportNewLive do
       {"Direct — configured in Cadence", "direct"},
       {"Ground Station Provider", "provider_managed"}
     ]
-
-  defp origin_card_class(selected?) do
-    [
-      "border bg-base-200 p-4 transition-colors",
-      if(selected?, do: "border-primary/60", else: "border-base-300")
-    ]
-  end
 
   defp origin_label("provider_managed"), do: "Ground Station Provider"
   defp origin_label(_origin), do: "Direct"
