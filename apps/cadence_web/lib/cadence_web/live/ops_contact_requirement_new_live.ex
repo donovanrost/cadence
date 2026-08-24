@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.ContactRequirements
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -14,45 +15,39 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
 
     starts_at = DateTime.utc_now() |> DateTime.add(15 * 60, :second) |> DateTime.truncate(:second)
 
-    form =
-      to_form(
-        %{
-          "spacecraft_id" =>
-            spacecraft |> List.first() |> then(&if(&1, do: &1.spacecraft_id, else: "")),
-          "contact_intent" => "payload_downlink",
-          "earliest_start" => datetime_local(starts_at),
-          "latest_end" => starts_at |> DateTime.add(24 * 60 * 60, :second) |> datetime_local(),
-          "success_measure" => "minimum_data_volume",
-          "minimum_duration_seconds" => "600",
-          "preferred_duration_seconds" => "900",
-          "minimum_data_volume_bytes" => "1000000000",
-          "contact_count" => "1",
-          "minimum_separation_seconds" => "0",
-          "priority" => "high",
-          "allowed_providers" => "",
-          "excluded_providers" => "",
-          "allowed_stations" => "",
-          "excluded_stations" => "",
-          "rationale" => ""
-        },
-        as: :contact_requirement
-      )
+    form_params = %{
+      "spacecraft_id" =>
+        spacecraft |> List.first() |> then(&if(&1, do: &1.spacecraft_id, else: "")),
+      "contact_intent" => "payload_downlink",
+      "earliest_start" => datetime_local(starts_at),
+      "latest_end" => starts_at |> DateTime.add(24 * 60 * 60, :second) |> datetime_local(),
+      "success_measure" => "minimum_data_volume",
+      "minimum_duration_seconds" => "600",
+      "preferred_duration_seconds" => "900",
+      "minimum_data_volume_bytes" => "1000000000",
+      "contact_count" => "1",
+      "minimum_separation_seconds" => "0",
+      "priority" => "high",
+      "allowed_providers" => "",
+      "excluded_providers" => "",
+      "allowed_stations" => "",
+      "excluded_stations" => "",
+      "rationale" => ""
+    }
 
     {:ok,
      socket
      |> assign(:page_title, "Declare Contact Need")
      |> assign(:ops_nav_item, :requirements)
      |> assign(:spacecraft, spacecraft)
-     |> assign(:form, form)
-     |> assign(:form_error, nil)}
+     |> assign(:page, page_dto())
+     |> assign(:actions, actions_dto(mission))
+     |> assign_form_state(form_params, nil)}
   end
 
   @impl true
   def handle_event("validate", %{"contact_requirement" => params}, socket) do
-    {:noreply,
-     socket
-     |> assign(:form, to_form(params, as: :contact_requirement))
-     |> assign(:form_error, nil)}
+    {:noreply, assign_form_state(socket, params, nil)}
   end
 
   def handle_event("save", %{"contact_requirement" => params}, socket) do
@@ -68,10 +63,7 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
        )}
     else
       {:error, reason} ->
-        {:noreply,
-         socket
-         |> assign(:form, to_form(params, as: :contact_requirement))
-         |> assign(:form_error, error_message(reason))}
+        {:noreply, assign_form_state(socket, params, error_message(reason))}
     end
   end
 
@@ -79,183 +71,300 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="ops-contact-requirement-new-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto max-w-5xl">
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/requirements"}
-              class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-            >
-              <.icon name="hero-arrow-left" class="h-3.5 w-3.5" /> Requirements
-            </.link>
-            <p class="mt-4 font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-              Need / outcome-first declaration
-            </p>
-            <h1 class="mt-1 text-2xl font-bold tracking-tight">What does the mission need?</h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              Describe success and the acceptable horizon. Provider, station, and route choices remain planning concerns—not part of the need itself.
-            </p>
-          </div>
-        </header>
-
-        <div class="mx-auto max-w-5xl p-5 lg:p-7">
-          <.form
-            for={@form}
-            id="contact-requirement-form"
-            phx-change="validate"
-            phx-submit="save"
-            class="space-y-5"
-          >
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-5 py-3">
-                <p class="hud-label">01 / Mission outcome</p>
-                <p class="mt-1 text-sm text-base-content/55">The operator-readable reason this contact must exist.</p>
-              </div>
-              <div class="grid gap-x-5 p-5 md:grid-cols-2">
-                <.input
-                  id="requirement-spacecraft"
-                  field={@form[:spacecraft_id]}
-                  type="select"
-                  label="Spacecraft"
-                  options={Enum.map(@spacecraft, &{&1.display_name, &1.spacecraft_id})}
-                  required
-                />
-                <.input
-                  id="requirement-intent"
-                  field={@form[:contact_intent]}
-                  type="select"
-                  label="Contact intent"
-                  options={[
-                    {"Payload downlink", "payload_downlink"},
-                    {"Health and safety", "health_and_safety"},
-                    {"TT&C maintenance", "ttc_maintenance"},
-                    {"Commissioning", "commissioning"}
-                  ]}
-                />
-                <.input
-                  id="requirement-success-measure"
-                  field={@form[:success_measure]}
-                  type="select"
-                  label="Success means"
-                  options={[
-                    {"Minimum data volume", "minimum_data_volume"},
-                    {"Minimum contact duration", "minimum_duration"},
-                    {"Number of contacts", "contact_count"},
-                    {"Any eligible contact", "any_contact"}
-                  ]}
-                />
-                <.input
-                  id="requirement-priority"
-                  field={@form[:priority]}
-                  type="select"
-                  label="Operational priority"
-                  options={[{"Routine", "routine"}, {"High", "high"}, {"Critical", "critical"}]}
-                />
-              </div>
-            </section>
-
-            <section class="border border-base-300 bg-base-200/20">
-              <div class="border-b border-base-300 px-5 py-3">
-                <p class="hud-label">02 / Acceptable horizon</p>
-                <p class="mt-1 text-sm text-base-content/55">All times are coordinated universal time.</p>
-              </div>
-              <div class="grid gap-x-5 p-5 md:grid-cols-2">
-                <.input
-                  id="requirement-earliest-start"
-                  field={@form[:earliest_start]}
-                  type="datetime-local"
-                  label="Earliest start (UTC)"
-                  required
-                />
-                <.input
-                  id="requirement-latest-end"
-                  field={@form[:latest_end]}
-                  type="datetime-local"
-                  label="Latest end (UTC)"
-                  required
-                />
-                <div :if={@form[:success_measure].value == "minimum_data_volume"}>
-                  <.input
-                    id="requirement-minimum-data-volume"
-                    field={@form[:minimum_data_volume_bytes]}
-                    type="number"
-                    label="Minimum data volume (bytes)"
-                    min="1"
-                  />
-                </div>
-                <div :if={@form[:success_measure].value in ["minimum_duration", "minimum_data_volume"]}>
-                  <.input
-                    id="requirement-minimum-duration"
-                    field={@form[:minimum_duration_seconds]}
-                    type="number"
-                    label="Minimum window duration (seconds)"
-                    min="1"
-                  />
-                </div>
-                <.input
-                  id="requirement-preferred-duration"
-                  field={@form[:preferred_duration_seconds]}
-                  type="number"
-                  label="Preferred window duration (seconds)"
-                  min="1"
-                />
-                <.input
-                  id="requirement-contact-count"
-                  field={@form[:contact_count]}
-                  type="number"
-                  label="Required contact count"
-                  min="1"
-                />
-                <.input
-                  id="requirement-minimum-separation"
-                  field={@form[:minimum_separation_seconds]}
-                  type="number"
-                  label="Minimum separation (seconds)"
-                  min="0"
-                />
-              </div>
-            </section>
-
-            <details id="requirement-advanced-constraints" class="border border-base-300 bg-base-200/20">
-              <summary class="cursor-pointer px-5 py-4 text-sm font-semibold">
-                Advanced constraints
-                <span class="ml-2 font-normal text-base-content/45">Optional provider and station boundaries</span>
-              </summary>
-              <div class="grid gap-x-5 border-t border-base-300 p-5 md:grid-cols-2">
-                <.input id="requirement-allowed-providers" field={@form[:allowed_providers]} label="Allowed provider IDs" placeholder="provider-a, provider-b" />
-                <.input id="requirement-excluded-providers" field={@form[:excluded_providers]} label="Excluded provider IDs" placeholder="provider-c" />
-                <.input id="requirement-allowed-stations" field={@form[:allowed_stations]} label="Allowed station refs" placeholder="station-a, station-b" />
-                <.input id="requirement-excluded-stations" field={@form[:excluded_stations]} label="Excluded station refs" placeholder="station-c" />
-              </div>
-            </details>
-
-            <section class="border border-base-300 bg-base-200/20 p-5">
-              <.input
-                id="requirement-rationale"
-                field={@form[:rationale]}
-                type="textarea"
-                label="Operator rationale"
-                placeholder="Why this outcome and horizon are operationally important"
-                required
-                maxlength="2000"
-              />
-              <p :if={@form_error} id="contact-requirement-form-error" class="mt-2 text-sm text-error">
-                {@form_error}
-              </p>
-              <div class="mt-4 flex justify-end gap-3">
-                <.link navigate={~p"/missions/#{@current_mission.mission_id}/ops/requirements"} class="btn btn-ghost btn-sm">
-                  Cancel
-                </.link>
-                <button id="save-contact-requirement" type="submit" class="btn btn-primary btn-sm font-mono text-xs uppercase tracking-wider">
-                  Declare need
-                </button>
-              </div>
-            </section>
-          </.form>
-        </div>
-      </section>
+      <.vue
+        id="ops-contact-requirement-new-component"
+        v-component="OpsContactRequirementNew"
+        page={@page}
+        journey={@journey}
+        form={@contact_requirement_form}
+        actions={@actions}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
+  end
+
+  defp assign_form_state(socket, params, form_error) do
+    form = to_form(params, as: :contact_requirement)
+
+    socket
+    |> assign(:journey, journey_dto(form))
+    |> assign(
+      :contact_requirement_form,
+      contact_requirement_form_dto(form, socket.assigns.spacecraft, form_error)
+    )
+  end
+
+  defp page_dto do
+    %{
+      id: "ops-contact-requirement-new-page",
+      eyebrow: "Need / outcome-first declaration",
+      heading: "What does the mission need?",
+      description:
+        "Describe success and the acceptable horizon. Provider, station, and route choices remain planning concerns—not part of the need itself."
+    }
+  end
+
+  defp journey_dto(form) do
+    success_measure = string_form_value(form, :success_measure)
+
+    %{
+      outcome: %{
+        id: "contact-requirement-outcome-section",
+        step: "01",
+        title: "Mission outcome",
+        copy: "The operator-readable reason this contact must exist."
+      },
+      horizon: %{
+        id: "contact-requirement-horizon-section",
+        step: "02",
+        title: "Acceptable horizon",
+        copy: "All times are coordinated universal time."
+      },
+      advanced: %{
+        id: "requirement-advanced-constraints",
+        title: "Advanced constraints",
+        copy: "Optional provider and station boundaries"
+      },
+      rationale: %{id: "contact-requirement-rationale-section"},
+      progressive: %{
+        minimum_data_volume: %{
+          id: "requirement-minimum-data-volume-section",
+          visible: success_measure == "minimum_data_volume",
+          visible_for: ["minimum_data_volume"]
+        },
+        minimum_duration: %{
+          id: "requirement-minimum-duration-section",
+          visible: success_measure in ["minimum_duration", "minimum_data_volume"],
+          visible_for: ["minimum_duration", "minimum_data_volume"]
+        }
+      }
+    }
+  end
+
+  defp contact_requirement_form_dto(form, spacecraft, form_error) do
+    %{
+      id: "contact-requirement-form",
+      fields: %{
+        spacecraft_id: %{
+          id: "requirement-spacecraft",
+          name: "contact_requirement[spacecraft_id]",
+          type: "select",
+          label: "Spacecraft",
+          required: true,
+          value: string_form_value(form, :spacecraft_id),
+          options:
+            Enum.map(spacecraft, &%{label: &1.display_name, value: &1.spacecraft_id})
+        },
+        contact_intent: %{
+          id: "requirement-intent",
+          name: "contact_requirement[contact_intent]",
+          type: "select",
+          label: "Contact intent",
+          required: false,
+          value: string_form_value(form, :contact_intent),
+          options: [
+            %{label: "Payload downlink", value: "payload_downlink"},
+            %{label: "Health and safety", value: "health_and_safety"},
+            %{label: "TT&C maintenance", value: "ttc_maintenance"},
+            %{label: "Commissioning", value: "commissioning"}
+          ]
+        },
+        success_measure: %{
+          id: "requirement-success-measure",
+          name: "contact_requirement[success_measure]",
+          type: "select",
+          label: "Success means",
+          required: false,
+          value: string_form_value(form, :success_measure),
+          options: [
+            %{label: "Minimum data volume", value: "minimum_data_volume"},
+            %{label: "Minimum contact duration", value: "minimum_duration"},
+            %{label: "Number of contacts", value: "contact_count"},
+            %{label: "Any eligible contact", value: "any_contact"}
+          ]
+        },
+        priority: %{
+          id: "requirement-priority",
+          name: "contact_requirement[priority]",
+          type: "select",
+          label: "Operational priority",
+          required: false,
+          value: string_form_value(form, :priority),
+          options: [
+            %{label: "Routine", value: "routine"},
+            %{label: "High", value: "high"},
+            %{label: "Critical", value: "critical"}
+          ]
+        },
+        earliest_start:
+          datetime_field_dto(
+            form,
+            :earliest_start,
+            "requirement-earliest-start",
+            "Earliest start (UTC)"
+          ),
+        latest_end:
+          datetime_field_dto(
+            form,
+            :latest_end,
+            "requirement-latest-end",
+            "Latest end (UTC)"
+          ),
+        minimum_data_volume_bytes:
+          number_field_dto(
+            form,
+            :minimum_data_volume_bytes,
+            "requirement-minimum-data-volume",
+            "Minimum data volume (bytes)",
+            "1"
+          ),
+        minimum_duration_seconds:
+          number_field_dto(
+            form,
+            :minimum_duration_seconds,
+            "requirement-minimum-duration",
+            "Minimum window duration (seconds)",
+            "1"
+          ),
+        preferred_duration_seconds:
+          number_field_dto(
+            form,
+            :preferred_duration_seconds,
+            "requirement-preferred-duration",
+            "Preferred window duration (seconds)",
+            "1"
+          ),
+        contact_count:
+          number_field_dto(
+            form,
+            :contact_count,
+            "requirement-contact-count",
+            "Required contact count",
+            "1"
+          ),
+        minimum_separation_seconds:
+          number_field_dto(
+            form,
+            :minimum_separation_seconds,
+            "requirement-minimum-separation",
+            "Minimum separation (seconds)",
+            "0"
+          ),
+        allowed_providers:
+          text_field_dto(
+            form,
+            :allowed_providers,
+            "requirement-allowed-providers",
+            "Allowed provider IDs",
+            "provider-a, provider-b"
+          ),
+        excluded_providers:
+          text_field_dto(
+            form,
+            :excluded_providers,
+            "requirement-excluded-providers",
+            "Excluded provider IDs",
+            "provider-c"
+          ),
+        allowed_stations:
+          text_field_dto(
+            form,
+            :allowed_stations,
+            "requirement-allowed-stations",
+            "Allowed station refs",
+            "station-a, station-b"
+          ),
+        excluded_stations:
+          text_field_dto(
+            form,
+            :excluded_stations,
+            "requirement-excluded-stations",
+            "Excluded station refs",
+            "station-c"
+          ),
+        rationale: %{
+          id: "requirement-rationale",
+          name: "contact_requirement[rationale]",
+          type: "textarea",
+          label: "Operator rationale",
+          required: true,
+          value: string_form_value(form, :rationale),
+          placeholder: "Why this outcome and horizon are operationally important",
+          maxlength: "2000"
+        }
+      },
+      error:
+        form_error && %{
+          id: "contact-requirement-form-error",
+          message: form_error
+        }
+    }
+  end
+
+  defp actions_dto(mission) do
+    requirements_path = ~p"/missions/#{mission.mission_id}/ops/requirements"
+
+    %{
+      back: %{
+        id: "contact-requirements-back-link",
+        label: "Requirements",
+        href: requirements_path,
+        icon: "hero-arrow-left"
+      },
+      cancel: %{
+        id: "cancel-contact-requirement",
+        label: "Cancel",
+        href: requirements_path
+      },
+      submit: %{id: "save-contact-requirement", label: "Declare need"}
+    }
+  end
+
+  defp datetime_field_dto(form, field, id, label) do
+    %{
+      id: id,
+      name: "contact_requirement[#{field}]",
+      type: "datetime-local",
+      label: label,
+      required: true,
+      value: string_form_value(form, field)
+    }
+  end
+
+  defp number_field_dto(form, field, id, label, minimum) do
+    %{
+      id: id,
+      name: "contact_requirement[#{field}]",
+      type: "number",
+      label: label,
+      required: false,
+      value: string_form_value(form, field),
+      min: minimum
+    }
+  end
+
+  defp text_field_dto(form, field, id, label, placeholder) do
+    %{
+      id: id,
+      name: "contact_requirement[#{field}]",
+      type: "text",
+      label: label,
+      required: false,
+      value: string_form_value(form, field),
+      placeholder: placeholder
+    }
+  end
+
+  defp string_form_value(form, field) do
+    case Map.get(form.params, Atom.to_string(field)) do
+      value when is_binary(value) -> value
+      nil -> ""
+      value -> to_string(value)
+    end
   end
 
   defp requirement_attrs(params) do
