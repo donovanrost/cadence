@@ -4,10 +4,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.EvidenceAttrs
 
-  attr :summary, :map, required: true
+  attr(:summary, :map, required: true)
 
   def degraded_source_summary(%{summary: %{visible?: true} = summary} = assigns) do
-    assigns = assign(assigns, :presentation, degraded_source_summary_dto(summary))
+    assigns = assign(assigns, :presentation, degraded_source_summary_presentation(summary))
 
     ~H"""
     <.vue
@@ -22,11 +22,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
 
   def degraded_source_summary(assigns), do: ~H""
 
-  attr :drilldowns, :list, required: true
+  attr(:drilldowns, :list, required: true)
 
   def degraded_source_drilldowns(%{drilldowns: drilldowns} = assigns)
       when is_list(drilldowns) and drilldowns != [] do
-    assigns = assign(assigns, :presentation, degraded_source_drilldowns_dto(drilldowns))
+    assigns = assign(assigns, :presentation, degraded_source_drilldowns_presentation(drilldowns))
 
     ~H"""
     <.vue
@@ -41,11 +41,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
 
   def degraded_source_drilldowns(assigns), do: ~H""
 
-  attr :postures, :list, default: []
+  attr(:postures, :list, default: [])
 
   def source_capability_postures(%{postures: postures} = assigns)
       when is_list(postures) and postures != [] do
-    assigns = assign(assigns, :presentation, source_capability_postures_dto(postures))
+    assigns = assign(assigns, :presentation, source_capability_postures_presentation(postures))
 
     ~H"""
     <.vue
@@ -60,11 +60,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
 
   def source_capability_postures(assigns), do: ~H""
 
-  attr :dependencies, :list, default: []
+  attr(:dependencies, :list, default: [])
 
   def source_dependency_causes(%{dependencies: dependencies} = assigns)
       when is_list(dependencies) and dependencies != [] do
-    assigns = assign(assigns, :presentation, source_dependency_causes_dto(dependencies))
+    assigns = assign(assigns, :presentation, source_dependency_causes_presentation(dependencies))
 
     ~H"""
     <.vue
@@ -79,7 +79,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
 
   def source_dependency_causes(assigns), do: ~H""
 
-  defp degraded_source_summary_dto(summary) do
+  def degraded_source_summary_presentation(summary) do
     %{
       kind: "summary",
       root: %{
@@ -130,7 +130,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
     }
   end
 
-  defp degraded_source_drilldowns_dto(drilldowns) do
+  def degraded_source_drilldowns_presentation(drilldowns) do
     %{
       kind: "drilldowns",
       root: %{
@@ -189,7 +189,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
     }
   end
 
-  defp source_capability_postures_dto(postures) do
+  def source_capability_postures_presentation(postures) do
     %{
       kind: "capability_postures",
       root: %{
@@ -266,7 +266,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDegradedSourceComponents do
     }
   end
 
-  defp source_dependency_causes_dto(dependencies) do
+  def source_dependency_causes_presentation(dependencies) do
     %{
       kind: "dependency_causes",
       root: %{

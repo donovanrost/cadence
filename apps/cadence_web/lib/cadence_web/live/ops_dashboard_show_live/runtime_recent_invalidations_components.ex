@@ -7,13 +7,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRecentInvalidationsComponents d
   alias CadenceWeb.OpsDashboardShowLive.LifecycleRuntimeCorrelation
   alias CadenceWeb.OpsDashboardShowLive.RuntimeAdminDecisionLink
 
-  attr :invalidations, :list, required: true
-  attr :dashboard_lifecycle_events, :list, default: []
-  attr :dashboard_current_path, :string, default: nil
+  attr(:invalidations, :list, required: true)
+  attr(:dashboard_lifecycle_events, :list, default: [])
+  attr(:dashboard_current_path, :string, default: nil)
 
   def recent_invalidations(assigns) do
     presentation =
-      recent_invalidations_dto(
+      recent_invalidations_presentation(
         assigns.invalidations,
         Map.get(assigns, :dashboard_lifecycle_events, []),
         Map.get(assigns, :dashboard_current_path)
@@ -32,7 +32,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeRecentInvalidationsComponents d
     """
   end
 
-  defp recent_invalidations_dto(invalidations, lifecycle_events, current_path) do
+  def recent_invalidations_presentation(invalidations, lifecycle_events, current_path) do
     %{
       section: %{
         class: "space-y-2",

@@ -7,7 +7,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeNoRefreshSummaryComponents do
   attr(:summary, :map, required: true)
 
   def no_refresh_summary(%{summary: %{visible?: true}} = assigns) do
-    assigns = assign(assigns, :no_refresh_summary, no_refresh_summary_dto(assigns.summary))
+    assigns =
+      assign(assigns, :no_refresh_summary, no_refresh_summary_presentation(assigns.summary))
 
     ~H"""
     <.vue
@@ -22,7 +23,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeNoRefreshSummaryComponents do
 
   def no_refresh_summary(assigns), do: ~H""
 
-  defp no_refresh_summary_dto(summary) do
+  def no_refresh_summary_presentation(summary) do
     admin_decision_href = admin_decision_link(summary)
 
     %{

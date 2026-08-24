@@ -7,7 +7,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeCacheSummaryComponents do
   attr(:summary, :map, required: true)
 
   def cache_summary(%{summary: %{visible?: true} = summary} = assigns) do
-    assigns = assign(assigns, :presentation, cache_summary_dto(summary))
+    assigns = assign(assigns, :presentation, cache_summary_presentation(summary))
 
     ~H"""
     <.vue
@@ -22,7 +22,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeCacheSummaryComponents do
 
   def cache_summary(assigns), do: ~H""
 
-  defp cache_summary_dto(summary) do
+  def cache_summary_presentation(summary) do
     %{
       section: %{
         id: "dashboard-cache-summary",

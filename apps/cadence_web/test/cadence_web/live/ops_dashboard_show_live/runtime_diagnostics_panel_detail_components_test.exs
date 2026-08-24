@@ -109,27 +109,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
           })
       )
 
+    presentation = panel_presentation(html)
+
     invalidation =
-      html
-      |> LiveVue.Test.get_vue(id: "dashboard-recent-invalidations-component")
-      |> Map.fetch!(:props)
+      presentation["recent_invalidations"]
       |> Map.fetch!("presentation")
       |> Map.fetch!("events")
       |> List.first()
 
-    cache_vue = LiveVue.Test.get_vue(html, id: "dashboard-cache-summary-component")
+    cache_summary = presentation["cache_summary"]
 
     assert "reused" =
-             cache_vue.props["presentation"]["section"]["attributes"][
+             cache_summary["presentation"]["section"]["attributes"][
                "data-cache-classification"
              ]
 
-    no_refresh_vue =
-      LiveVue.Test.get_vue(html, id: "dashboard-no-refresh-summary-component")
+    no_refresh_summary = presentation["no_refresh_summary"]
 
-    assert no_refresh_vue.component == "RuntimeNoRefreshSummary"
+    assert no_refresh_summary["root"]["attrs"]["id"] ==
+             "dashboard-no-refresh-summary-component"
 
-    assert no_refresh_vue.props["summary"]["section"]["attributes"][
+    assert no_refresh_summary["presentation"]["section"]["attributes"][
              "data-no-refresh-status"
            ] == "suppressed"
 
@@ -152,9 +152,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
              invalidation_field_value(invalidation, "Source cache evidence")
 
     dependency_presentation =
-      html
-      |> LiveVue.Test.get_vue(id: "dashboard-source-dependency-causes-component")
-      |> Map.fetch!(:props)
+      presentation["source_dependency_causes"]
       |> Map.fetch!("presentation")
 
     [dependency] = dependency_presentation["items"]
@@ -166,9 +164,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
              "Limits waiting on telemetry input"
 
     capability_presentation =
-      html
-      |> LiveVue.Test.get_vue(id: "dashboard-source-capability-postures-component")
-      |> Map.fetch!(:props)
+      presentation["source_capability_postures"]
       |> Map.fetch!("presentation")
 
     [posture] = capability_presentation["items"]
@@ -191,6 +187,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelDetailComponent
     invalidation["fields"]
     |> Enum.find(&(&1["data_attrs"]["data-invalidation-field"] == data_label))
     |> Map.fetch!("value")
+  end
+
+  defp panel_presentation(html) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel")
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
   end
 
   defp diagnostics(overrides) do

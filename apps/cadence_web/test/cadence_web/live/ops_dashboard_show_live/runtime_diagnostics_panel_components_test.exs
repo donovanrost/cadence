@@ -88,6 +88,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
       )
 
     document = LazyHTML.from_fragment(html)
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel")
+    presentation = vue.props["presentation"]
 
     host_ids = [
       "dashboard-diagnostics-engine-section-component",
@@ -95,24 +97,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
       "dashboard-diagnostics-invalidation-section-component"
     ]
 
-    vues = Enum.map(host_ids, &LiveVue.Test.get_vue(html, id: &1))
+    sections = [
+      presentation["engine_section"],
+      presentation["runtime_section"],
+      presentation["invalidation_section"]
+    ]
 
     assert host_ids ==
+             Enum.map(sections, & &1["root"]["attrs"]["id"])
+
+    assert ["dashboard-diagnostics-panel"] ==
              document
-             |> LazyHTML.query(~s([id^="dashboard-diagnostics-"][id$="-section-component"]))
+             |> LazyHTML.query(~s([phx-hook="VueHook"]))
              |> LazyHTML.attribute("id")
 
-    assert Enum.map(vues, & &1.id) == host_ids
-    assert Enum.uniq(Enum.map(vues, & &1.id)) == host_ids
-    assert Enum.map(vues, & &1.component) == List.duplicate("RuntimeDiagnosticsSection", 3)
-    assert Enum.map(vues, & &1.ssr) == [false, false, false]
-    assert Enum.map(vues, & &1.class) == ["contents", "contents", "contents"]
-    assert Enum.map(vues, & &1.handlers) == [%{}, %{}, %{}]
-    assert Enum.map(vues, & &1.slots) == [%{}, %{}, %{}]
-    assert Enum.all?(vues, &(Map.keys(&1.props) == ["presentation"]))
-    assert Enum.all?(vues, &(&1.props == Jason.decode!(Jason.encode!(&1.props))))
+    assert vue.id == "dashboard-diagnostics-panel"
+    assert vue.component == "RuntimeDiagnosticsPanel"
+    assert vue.ssr == false
+    assert vue.class == "space-y-5"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
 
-    [engine, runtime, invalidation] = Enum.map(vues, & &1.props["presentation"])
+    [engine, runtime, invalidation] = Enum.map(sections, & &1["presentation"])
 
     assert engine ==
              expected_section("Engine", [
@@ -134,8 +142,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
                {"Context matches", "2"}
              ])
 
-    assert LiveVue.Test.get_vue(html, id: "dashboard-recent-invalidations-component").component ==
-             "RuntimeRecentInvalidations"
+    assert presentation["recent_invalidations"]["root"]["attrs"]["id"] ==
+             "dashboard-recent-invalidations-component"
   end
 
   test "diagnostics section DTO preserves scalar HEEx body semantics and remains JSON-total" do
@@ -143,6 +151,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
       render_component(&RuntimeDiagnosticsPanelComponents.diagnostics_panel/1,
         diagnostics:
           diagnostics(%{
+            refresh_reason: nil,
+            active_refresh_mode: false,
+            active_refresh_started_at: true,
+            last_refresh_duration_ms: 0,
             engine_rows: [
               %{label: "Nil", value: nil},
               %{label: "True", value: true},
@@ -153,10 +165,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
           })
       )
 
-    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-engine-section-component")
-    presentation = vue.props["presentation"]
+    vue = LiveVue.Test.get_vue(html, id: "dashboard-diagnostics-panel")
+    panel = vue.props["presentation"]
+    presentation = panel["engine_section"]["presentation"]
 
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    refute Map.has_key?(panel["root"]["attrs"], "data-runtime-refresh-reason")
+    refute Map.has_key?(panel["root"]["attrs"], "data-runtime-active-refresh-mode")
+    assert panel["root"]["attrs"]["data-runtime-active-refresh-started-at"] == ""
+    assert panel["root"]["attrs"]["data-runtime-last-refresh-duration-ms"] == "0"
 
     assert Enum.map(presentation["rows"]["items"], fn row ->
              {row["label"]["body"], row["value"]["body"]}
@@ -233,7 +250,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeDiagnosticsPanelComponentsTest 
 
   defp diagnostics_section_presentation(html, id) do
     html
-    |> LiveVue.Test.get_vue(id: id)
+    |> panel_presentation()
+    |> Map.values()
+    |> Enum.find(fn
+      %{"root" => %{"attrs" => %{"id" => ^id}}} -> true
+      _other -> false
+    end)
+    |> Map.fetch!("presentation")
+  end
+
+  defp panel_presentation(html) do
+    html
+    |> LiveVue.Test.get_vue(id: "dashboard-diagnostics-panel")
     |> Map.fetch!(:props)
     |> Map.fetch!("presentation")
   end
