@@ -15,6 +15,21 @@ defmodule CadenceWeb.Layouts do
   @nav_section_summary_prefix "list-none cursor-pointer"
   @nav_child_base_class "flex items-center gap-2 px-3 py-1.5 text-xs tracking-wide uppercase border-l-2 border-transparent transition-all"
 
+  defp auth_layout_brand_presentation do
+    %{
+      "link" => %{
+        "attrs" => raw_attrs(%{"href" => ~p"/"}),
+        "class" =>
+          "inline-block font-mono text-sm tracking-[0.28em] uppercase text-primary",
+        "label" => "Cadence"
+      },
+      "tagline" => %{
+        "class" => "mt-1 text-xs text-base-content/50",
+        "text" => "Ground data control plane"
+      }
+    }
+  end
+
   defp global_sidebar_navigation_presentation(assigns) do
     %{
       "overlay" => %{
