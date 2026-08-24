@@ -12,10 +12,13 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    mission = socket.assigns.current_mission
+
     {:ok,
      socket
      |> assign(:page_title, "New catalog database")
      |> assign(:nav_item, :catalog)
+     |> assign(:page, page_dto(mission))
      |> assign(:database_form, empty_database_form())
      |> allow_upload(:artifact,
        accept: :any,
@@ -177,28 +180,41 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-2xl">
-      <.page_header
-        title="New catalog database"
-        breadcrumbs={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
-          {"New database", nil}
-        ]}
-      />
-
-      <.upload_card uploads={@uploads} form={@database_form} />
-
-      <div>
-        <.button
-          variant={:ghost}
-          size={:md}
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-        >
-          Cancel
-        </.button>
-      </div>
-    </div>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="catalog-database-new-component"
+        v-component="CatalogDatabaseNew"
+        page={@page}
+        v-ssr={false}
+      >
+        <:upload_form>
+          <.upload_card uploads={@uploads} form={@database_form} />
+        </:upload_form>
+      </.vue>
+    </Layouts.app>
     """
+  end
+
+  defp page_dto(mission) do
+    %{
+      id: "catalog-database-new-page",
+      heading: "New catalog database",
+      breadcrumbs: [
+        %{
+          label: mission.display_name,
+          href: ~p"/missions/#{mission.mission_id}"
+        },
+        %{
+          label: "Catalog",
+          href: ~p"/missions/#{mission.mission_id}/catalog"
+        },
+        %{label: "New database", href: nil}
+      ],
+      cancel: %{
+        id: "catalog-database-new-cancel",
+        label: "Cancel",
+        href: ~p"/missions/#{mission.mission_id}/catalog"
+      }
+    }
   end
 end
