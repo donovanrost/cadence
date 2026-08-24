@@ -10,6 +10,7 @@ defmodule CadenceWeb.MissionNewLiveTest do
 
   alias Cadence.Missions.Mission
   alias CadenceWeb.TestFixtures
+  alias Phoenix.LiveView.JS
 
   defp signed_in_conn do
     user = TestFixtures.persist_user!()
@@ -22,11 +23,65 @@ defmodule CadenceWeb.MissionNewLiveTest do
     test "renders the empty form" do
       {conn, _org} = signed_in_conn()
 
-      {:ok, _view, html} = live(conn, ~p"/missions/new")
+      {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      assert html =~ "New Mission"
-      assert html =~ "Display Name"
-      assert html =~ "Slug"
+      assert has_element?(view, "#mission-new-component")
+      refute has_element?(view, "#mission-form")
+
+      vue = mission_new_vue(view)
+
+      assert vue.component == "MissionNew"
+      assert vue.class == "space-y-6 max-w-xl"
+      assert vue.ssr == false
+      assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+      assert vue.handlers == %{
+               "save" => JS.push("save"),
+               "validate" => JS.push("validate")
+             }
+
+      assert vue.props == %{
+               "page" => %{
+                 "id" => "mission-new-page",
+                 "heading" => "New Mission",
+                 "breadcrumbs" => [
+                   %{"label" => "Missions", "href" => "/missions"},
+                   %{"label" => "New Mission", "href" => nil}
+                 ]
+               },
+               "form" => %{
+                 "id" => "mission-form",
+                 "fields" => %{
+                   "display_name" => %{
+                     "id" => "mission_display_name",
+                     "name" => "mission[display_name]",
+                     "type" => "text",
+                     "label" => "Display Name",
+                     "required" => true,
+                     "value" => ""
+                   },
+                   "slug" => %{
+                     "id" => "mission_slug",
+                     "name" => "mission[slug]",
+                     "type" => "text",
+                     "label" => "Slug",
+                     "required" => true,
+                     "value" => ""
+                   }
+                 },
+                 "actions" => %{
+                   "submit" => %{
+                     "id" => "create-mission-button",
+                     "label" => "Create Mission"
+                   },
+                   "cancel" => %{
+                     "id" => "cancel-mission-link",
+                     "label" => "Cancel",
+                     "href" => "/missions"
+                   }
+                 }
+               }
+             }
     end
   end
 
@@ -36,12 +91,14 @@ defmodule CadenceWeb.MissionNewLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Alpha Mission", slug: ""})
-        |> render_change()
+      render_hook(view, "validate", %{
+        "mission" => %{"display_name" => "Alpha Mission", "slug" => ""}
+      })
 
-      assert html =~ ~s(value="alpha-mission")
+      fields = mission_new_vue(view).props["form"]["fields"]
+
+      assert fields["display_name"]["value"] == "Alpha Mission"
+      assert fields["slug"]["value"] == "alpha-mission"
     end
 
     test "preserves user-entered slug even when display_name changes" do
@@ -49,16 +106,18 @@ defmodule CadenceWeb.MissionNewLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      view
-      |> form("#mission-form", mission: %{display_name: "Foo", slug: "custom-slug"})
-      |> render_change()
+      render_hook(view, "validate", %{
+        "mission" => %{"display_name" => "Foo", "slug" => "custom-slug"}
+      })
 
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Bar", slug: "custom-slug"})
-        |> render_change()
+      render_hook(view, "validate", %{
+        "mission" => %{"display_name" => "Bar", "slug" => "custom-slug"}
+      })
 
-      assert html =~ ~s(value="custom-slug")
+      fields = mission_new_vue(view).props["form"]["fields"]
+
+      assert fields["display_name"]["value"] == "Bar"
+      assert fields["slug"]["value"] == "custom-slug"
     end
   end
 
@@ -68,9 +127,9 @@ defmodule CadenceWeb.MissionNewLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      view
-      |> form("#mission-form", mission: %{display_name: "Alpha", slug: "alpha"})
-      |> render_submit()
+      render_hook(view, "save", %{
+        "mission" => %{"display_name" => " Alpha ", "slug" => " alpha "}
+      })
 
       {redirect_path, _flash} = assert_redirect(view)
       assert redirect_path =~ ~r|^/missions/mission_|
@@ -80,17 +139,32 @@ defmodule CadenceWeb.MissionNewLiveTest do
       assert mission.display_name == "Alpha"
     end
 
-    test "flashes an error when display_name is blank" do
+    test "flashes an error when display_name is blank after trimming" do
       {conn, _org} = signed_in_conn()
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "", slug: "alpha"})
-        |> render_submit()
+      render_hook(view, "save", %{
+        "mission" => %{"display_name" => "   ", "slug" => "alpha"}
+      })
 
-      assert html =~ "required"
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Display name is required."
+             )
+    end
+
+    test "flashes an error when slug is blank after trimming" do
+      {conn, _org} = signed_in_conn()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/new")
+
+      render_hook(view, "save", %{
+        "mission" => %{"display_name" => "Alpha", "slug" => "   "}
+      })
+
+      assert has_element?(view, "#flash-error[role='alert']", "Slug is required.")
     end
 
     test "flashes a humanized error when slug is already taken" do
@@ -107,12 +181,19 @@ defmodule CadenceWeb.MissionNewLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Alpha Two", slug: "alpha"})
-        |> render_submit()
+      render_hook(view, "save", %{
+        "mission" => %{"display_name" => "Alpha Two", "slug" => "alpha"}
+      })
 
-      assert html =~ "has already been taken"
+      assert has_element?(
+               view,
+               "#flash-error[role='alert']",
+               "Slug has already been taken"
+             )
     end
+  end
+
+  defp mission_new_vue(view) do
+    LiveVue.Test.get_vue(view, id: "mission-new-component")
   end
 end

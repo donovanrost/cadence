@@ -7,6 +7,7 @@ defmodule CadenceWeb.MissionNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Missions.Mission
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -16,7 +17,8 @@ defmodule CadenceWeb.MissionNewLive do
      |> assign(:nav_item, :missions)
      |> assign(:slug_auto, true)
      |> assign(:last_auto_slug, "")
-     |> assign(:form, empty_form())}
+     |> assign(:mission_page, mission_page_dto())
+     |> assign(:mission_form, mission_form_dto("", ""))}
   end
 
   @impl true
@@ -35,11 +37,9 @@ defmodule CadenceWeb.MissionNewLive do
         {slug_input, socket.assigns.last_auto_slug}
       end
 
-    form = to_form(%{"display_name" => display_name, "slug" => slug}, as: :mission)
-
     {:noreply,
      socket
-     |> assign(:form, form)
+     |> assign(:mission_form, mission_form_dto(display_name, slug))
      |> assign(:slug_auto, slug_auto)
      |> assign(:last_auto_slug, last_auto_slug)}
   end
@@ -80,23 +80,58 @@ defmodule CadenceWeb.MissionNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-xl">
-      <.page_header
-        title="New Mission"
-        breadcrumbs={[{"Missions", ~p"/missions"}, {"New Mission", nil}]}
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.vue
+        id="mission-new-component"
+        v-component="MissionNew"
+        page={@mission_page}
+        form={@mission_form}
+        v-on:validate={JS.push("validate")}
+        v-on:save={JS.push("save")}
+        v-ssr={false}
+        class="space-y-6 max-w-xl"
       />
-
-      <.form for={@form} id="mission-form" phx-change="validate" phx-submit="save" class="space-y-6">
-        <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        <.input field={@form[:slug]} type="text" label="Slug" required />
-        <.form_actions submit="Create Mission" cancel_navigate={~p"/missions"} />
-      </.form>
-    </div>
+    </Layouts.app>
     """
   end
 
-  defp empty_form do
-    to_form(%{"display_name" => "", "slug" => ""}, as: :mission)
+  defp mission_page_dto do
+    %{
+      id: "mission-new-page",
+      heading: "New Mission",
+      breadcrumbs: [
+        %{label: "Missions", href: ~p"/missions"},
+        %{label: "New Mission", href: nil}
+      ]
+    }
+  end
+
+  defp mission_form_dto(display_name, slug) do
+    %{
+      id: "mission-form",
+      fields: %{
+        display_name: %{
+          id: "mission_display_name",
+          name: "mission[display_name]",
+          type: "text",
+          label: "Display Name",
+          required: true,
+          value: display_name
+        },
+        slug: %{
+          id: "mission_slug",
+          name: "mission[slug]",
+          type: "text",
+          label: "Slug",
+          required: true,
+          value: slug
+        }
+      },
+      actions: %{
+        submit: %{id: "create-mission-button", label: "Create Mission"},
+        cancel: %{id: "cancel-mission-link", label: "Cancel", href: ~p"/missions"}
+      }
+    }
   end
 
   defp slugify(value) when is_binary(value) do
