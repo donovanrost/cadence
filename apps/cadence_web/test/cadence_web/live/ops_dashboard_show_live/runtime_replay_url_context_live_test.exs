@@ -247,7 +247,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeReplayUrlContextLiveTest do
              ~s(#ops-dashboard-show-page[data-runtime-refresh-noops*="live_tick:not_live_time_mode"][data-runtime-canceled-resolves="0"][data-runtime-failed-resolves="0"])
            )
 
-    view |> element("#dashboard-time-preset-live") |> render_click()
+    render_click(view, "set_time_preset", %{"preset" => "live"})
     assert_patch(view, show_path(mission, dashboard))
     render_dashboard_async(view)
 

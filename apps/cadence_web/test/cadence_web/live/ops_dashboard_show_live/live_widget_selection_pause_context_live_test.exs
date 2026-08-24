@@ -422,9 +422,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.LiveWidgetSelectionPauseContextLiveTes
       assert paused_html =~ "Yellow"
       refute paused_html =~ "Pick a spacecraft context"
 
-      assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")
+      live_preset =
+        view
+        |> LiveVue.Test.get_vue(id: "dashboard-time-quick-ranges-component")
+        |> Map.fetch!(:props)
+        |> get_in(["presentation", "presets", "items"])
+        |> Enum.find(&(&1["attrs"]["id"] == "dashboard-time-preset-live"))
 
-      view |> element("#dashboard-time-preset-live") |> render_click()
+      refute live_preset["attrs"]["disabled"]
+
+      render_click(view, "set_time_preset", %{"preset" => "live"})
 
       assert_patch(view)
       render_dashboard_async(view)

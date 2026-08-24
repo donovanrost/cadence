@@ -77,6 +77,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
     |> find_selected_datum_node("id", id)
   end
 
+  defp quick_ranges_vue(html) do
+    LiveVue.Test.get_vue(html, id: "dashboard-time-quick-ranges-component")
+  end
+
+  defp quick_ranges_presentation(html) do
+    html
+    |> quick_ranges_vue()
+    |> Map.fetch!(:props)
+    |> Map.fetch!("presentation")
+  end
+
+  defp quick_range_item(html, id) do
+    html
+    |> quick_ranges_presentation()
+    |> get_in(["presets", "items"])
+    |> Enum.find(&(&1["attrs"]["id"] == id))
+  end
+
   defp find_selected_datum_node(%{"attrs" => attrs} = node, attribute, value) do
     if attrs[attribute] == value do
       node
@@ -317,7 +335,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
   end
 
   test "plain live mode renders Live without inactive time navigation" do
-    document = LazyHTML.from_fragment(render_cluster([]))
+    html = render_cluster([])
+    document = LazyHTML.from_fragment(html)
 
     assert ["live"] =
              document
@@ -349,28 +368,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
              |> LazyHTML.query("#dashboard-time-controls")
              |> LazyHTML.attribute("data-dashboard-primary-control")
 
-    assert [""] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-live")
-             |> LazyHTML.attribute("disabled")
+    assert quick_range_item(html, "dashboard-time-preset-live")["attrs"]["disabled"]
   end
 
   test "sliding window labels the trigger and highlights the quick range" do
-    document =
-      LazyHTML.from_fragment(render_cluster(time_from: "now-6h", time_to: "now"))
+    html = render_cluster(time_from: "now-6h", time_to: "now")
+    document = LazyHTML.from_fragment(html)
 
     assert document |> LazyHTML.query("#dashboard-active-time-range") |> LazyHTML.text() =~
              "Last 6 hours"
 
-    assert ["true"] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-last-6h")
-             |> LazyHTML.attribute("aria-current")
+    last_6h = quick_range_item(html, "dashboard-time-preset-last-6h")
+    last_5m = quick_range_item(html, "dashboard-time-preset-last-5m")
 
-    assert ["false"] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-last-5m")
-             |> LazyHTML.attribute("aria-current")
+    assert last_6h["attrs"]["aria-current"] == "true"
+
+    assert last_6h["attrs"]["class"] ==
+             "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs bg-primary/10 font-semibold text-primary"
+
+    assert last_5m["attrs"]["aria-current"] == "false"
+
+    assert last_5m["attrs"]["class"] ==
+             "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs text-base-content/80 hover:bg-base-300/40 hover:text-base-content"
 
     for id <- [
           "dashboard-time-shift-back",
@@ -380,26 +399,181 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponentsTest do
       assert [] = document |> LazyHTML.query("##{id}") |> LazyHTML.attribute("disabled")
     end
 
-    assert [] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-live")
-             |> LazyHTML.attribute("disabled")
+    refute quick_range_item(html, "dashboard-time-preset-live")["attrs"]["disabled"]
   end
 
   test "renders every quick range and filters by search query" do
-    document = LazyHTML.from_fragment(render_cluster([]))
+    html = render_cluster([])
+    document = LazyHTML.from_fragment(html)
+    vue = quick_ranges_vue(html)
 
     assert document
-           |> LazyHTML.query("#dashboard-time-presets button")
-           |> LazyHTML.attribute("id")
-           |> length() == 9
+           |> LazyHTML.query("#dashboard-time-quick-ranges-component")
+           |> Enum.count() == 1
 
-    filtered = LazyHTML.from_fragment(render_cluster(quick_query: "6 h"))
+    assert document
+           |> LazyHTML.query("#dashboard-time-quick-ranges-component #dashboard-time-presets")
+           |> Enum.empty?()
 
-    assert ["dashboard-time-preset-last-6h"] =
-             filtered
-             |> LazyHTML.query("#dashboard-time-presets button")
-             |> LazyHTML.attribute("id")
+    assert vue.id == "dashboard-time-quick-ranges-component"
+    assert vue.component == "DashboardQuickRangeList"
+    assert vue.ssr == false
+    assert vue.class == "contents"
+    assert vue.handlers == %{}
+    assert vue.slots == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+
+    presentation = vue.props["presentation"]
+    assert Map.keys(presentation) |> Enum.sort() == ["presets", "root", "search"]
+
+    assert presentation["root"] == %{
+             "attrs" => %{
+               "class" => "w-44 shrink-0 border-l border-base-300/60 pl-3"
+             }
+           }
+
+    assert presentation["search"] == %{
+             "form" => %{
+               "attrs" => %{
+                 "id" => "dashboard-time-quick-search-form",
+                 "phx-change" => "time_quick_search",
+                 "onsubmit" => "return false"
+               }
+             },
+             "field" => %{
+               "wrapper_class" => "fieldset",
+               "attrs" => %{
+                 "id" => "dashboard-time-quick-search",
+                 "name" => "query",
+                 "type" => "search",
+                 "value" => "",
+                 "placeholder" => "Search quick ranges",
+                 "required" => false,
+                 "autocomplete" => nil,
+                 "class" => "w-full input",
+                 "phx-debounce" => "150"
+               }
+             }
+           }
+
+    presets = presentation["presets"]
+    assert Map.keys(presets) |> Enum.sort() == ["attrs", "items"]
+
+    assert presets["attrs"] == %{
+             "id" => "dashboard-time-presets",
+             "role" => "presentation",
+             "aria-label" => "Quick time ranges",
+             "class" => "mt-2 max-h-56 overflow-y-auto"
+           }
+
+    assert Enum.map(presets["items"], & &1["attrs"]["id"]) == [
+             "dashboard-time-preset-live",
+             "dashboard-time-preset-last-5m",
+             "dashboard-time-preset-last-15m",
+             "dashboard-time-preset-last-30m",
+             "dashboard-time-preset-last-1h",
+             "dashboard-time-preset-last-3h",
+             "dashboard-time-preset-last-6h",
+             "dashboard-time-preset-last-12h",
+             "dashboard-time-preset-last-24h"
+           ]
+
+    assert Enum.all?(presets["items"], fn item ->
+             Map.keys(item) |> Enum.sort() == ["attrs", "indicator_class", "key", "label"]
+           end)
+
+    assert Enum.all?(presets["items"], fn item ->
+             Map.keys(item["attrs"]) |> Enum.sort() == [
+               "aria-current",
+               "class",
+               "disabled",
+               "id",
+               "phx-click",
+               "phx-value-preset",
+               "title",
+               "type"
+             ]
+           end)
+
+    assert Enum.map(presets["items"], & &1["attrs"]["phx-click"])
+           |> Enum.uniq() == ["set_time_preset"]
+
+    assert Enum.map(presets["items"], & &1["attrs"]["phx-value-preset"]) == [
+             "live",
+             "last_5m",
+             "last_15m",
+             "last_30m",
+             "last_1h",
+             "last_3h",
+             "last_6h",
+             "last_12h",
+             "last_24h"
+           ]
+
+    assert Enum.map(presets["items"], & &1["label"]) == [
+             "Live",
+             "Last 5 minutes",
+             "Last 15 minutes",
+             "Last 30 minutes",
+             "Last 1 hour",
+             "Last 3 hours",
+             "Last 6 hours",
+             "Last 12 hours",
+             "Last 24 hours"
+           ]
+
+    assert Enum.map(presets["items"], & &1["attrs"]["title"]) == [
+             "Return to live dashboard time",
+             "Follow the last 5 minutes as a sliding window",
+             "Follow the last 15 minutes as a sliding window",
+             "Follow the last 30 minutes as a sliding window",
+             "Follow the last 1 hour as a sliding window",
+             "Follow the last 3 hours as a sliding window",
+             "Follow the last 6 hours as a sliding window",
+             "Follow the last 12 hours as a sliding window",
+             "Follow the last 24 hours as a sliding window"
+           ]
+
+    assert Enum.all?(presets["items"], &(&1["attrs"]["type"] == "button"))
+
+    assert Enum.map(presets["items"], & &1["attrs"]["disabled"]) ==
+             [true, false, false, false, false, false, false, false, false]
+
+    assert Enum.map(presets["items"], & &1["attrs"]["aria-current"]) ==
+             ["true", "false", "false", "false", "false", "false", "false", "false", "false"]
+
+    assert Enum.map(presets["items"], & &1["indicator_class"]) == [
+             "h-1.5 w-1.5 rounded-full bg-success",
+             nil,
+             nil,
+             nil,
+             nil,
+             nil,
+             nil,
+             nil,
+             nil
+           ]
+
+    live = List.first(presets["items"])
+    assert live["key"] == "dashboard-time-preset-live"
+    assert live["label"] == "Live"
+    assert live["indicator_class"] == "h-1.5 w-1.5 rounded-full bg-success"
+    assert live["attrs"]["aria-current"] == "true"
+    assert live["attrs"]["title"] == "Return to live dashboard time"
+
+    filtered_html = render_cluster(quick_query: "6 h")
+    filtered = quick_ranges_presentation(filtered_html)
+
+    assert filtered["search"]["field"]["attrs"]["value"] == "6 h"
+
+    assert Enum.map(filtered["presets"]["items"], & &1["attrs"]["id"]) == [
+             "dashboard-time-preset-last-6h"
+           ]
+
+    assert quick_ranges_presentation(render_cluster(quick_query: "no matching range"))[
+             "presets"
+           ]["items"] == []
   end
 
   test "archive mode renders the time validation badge and range form values" do

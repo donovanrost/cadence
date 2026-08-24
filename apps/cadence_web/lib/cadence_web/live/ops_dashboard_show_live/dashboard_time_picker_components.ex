@@ -278,90 +278,116 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardTimePickerComponents do
   attr :quick_query, :string, default: ""
 
   defp quick_range_list(assigns) do
-    assigns =
-      assigns
-      |> assign(:search_form, to_form(%{"query" => assigns.quick_query}))
-      |> assign(:visible_ranges, filter_quick_ranges(assigns.quick_query))
-      |> assign(:live_selected?, assigns.time_mode == "live" and is_nil(assigns.time_from))
-      |> assign(:live_visible?, quick_match?("Live", assigns.quick_query))
+    assigns = assign(assigns, :quick_range_presentation, quick_range_presentation(assigns))
 
     ~H"""
-    <div class="w-44 shrink-0 border-l border-base-300/60 pl-3">
-      <.form
-        for={@search_form}
-        id="dashboard-time-quick-search-form"
-        phx-change="time_quick_search"
-        onsubmit="return false"
-      >
-        <.input
-          field={@search_form[:query]}
-          id="dashboard-time-quick-search"
-          type="search"
-          placeholder="Search quick ranges"
-          compact
-          phx-debounce="150"
-        />
-      </.form>
-      <ul
-        id="dashboard-time-presets"
-        role="presentation"
-        aria-label="Quick time ranges"
-        class="mt-2 max-h-56 overflow-y-auto"
-      >
-        <li :if={@live_visible?}>
-          <.quick_range_button
-            id="dashboard-time-preset-live"
-            preset="live"
-            label="Live"
-            selected?={@live_selected?}
-            disabled={@live_selected?}
-            title="Return to live dashboard time"
-          />
-        </li>
-        <li :for={range <- @visible_ranges}>
-          <.quick_range_button
-            id={"dashboard-time-preset-#{String.replace(range.key, "_", "-")}"}
-            preset={range.key}
-            label={range.label}
-            selected?={quick_range_selected?(range, @time_mode, @time_from, @time_to)}
-            disabled={false}
-            title={"Follow the #{String.downcase(range.label)} as a sliding window"}
-          />
-        </li>
-      </ul>
-    </div>
+    <.vue
+      id="dashboard-time-quick-ranges-component"
+      v-component="DashboardQuickRangeList"
+      presentation={@quick_range_presentation}
+      v-ssr={false}
+      class="contents"
+    />
     """
   end
 
-  attr :id, :string, required: true
-  attr :preset, :string, required: true
-  attr :label, :string, required: true
-  attr :selected?, :boolean, required: true
-  attr :disabled, :boolean, required: true
-  attr :title, :string, required: true
+  defp quick_range_presentation(assigns) do
+    search_form = to_form(%{"query" => assigns.quick_query})
+    search_field = search_form[:query]
+    live_selected? = assigns.time_mode == "live" and is_nil(assigns.time_from)
 
-  defp quick_range_button(assigns) do
-    ~H"""
-    <button
-      id={@id}
-      type="button"
-      phx-click="set_time_preset"
-      phx-value-preset={@preset}
-      disabled={@disabled}
-      aria-current={to_string(@selected?)}
-      title={@title}
-      class={[
-        "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs",
-        if(@selected?,
-          do: "bg-primary/10 font-semibold text-primary",
-          else: "text-base-content/80 hover:bg-base-300/40 hover:text-base-content"
+    live_items =
+      if quick_match?("Live", assigns.quick_query) do
+        [
+          quick_range_button_dto(
+            "dashboard-time-preset-live",
+            "live",
+            "Live",
+            live_selected?,
+            live_selected?,
+            "Return to live dashboard time"
+          )
+        ]
+      else
+        []
+      end
+
+    range_items =
+      assigns.quick_query
+      |> filter_quick_ranges()
+      |> Enum.map(fn range ->
+        quick_range_button_dto(
+          "dashboard-time-preset-#{String.replace(range.key, "_", "-")}",
+          range.key,
+          range.label,
+          quick_range_selected?(range, assigns.time_mode, assigns.time_from, assigns.time_to),
+          false,
+          "Follow the #{String.downcase(range.label)} as a sliding window"
         )
-      ]}
-    >
-      <span :if={@preset == "live"} class="h-1.5 w-1.5 rounded-full bg-success"></span>
-      {@label}
-    </button>
-    """
+      end)
+
+    %{
+      root: %{
+        attrs: %{class: "w-44 shrink-0 border-l border-base-300/60 pl-3"}
+      },
+      search: %{
+        form: %{
+          attrs: %{
+            id: "dashboard-time-quick-search-form",
+            "phx-change": "time_quick_search",
+            onsubmit: "return false"
+          }
+        },
+        field: %{
+          wrapper_class: "fieldset",
+          attrs: %{
+            id: "dashboard-time-quick-search",
+            name: search_field.name,
+            type: "search",
+            value: search_field.value,
+            placeholder: "Search quick ranges",
+            required: false,
+            autocomplete: nil,
+            class: "w-full input",
+            "phx-debounce": "150"
+          }
+        }
+      },
+      presets: %{
+        attrs: %{
+          id: "dashboard-time-presets",
+          role: "presentation",
+          "aria-label": "Quick time ranges",
+          class: "mt-2 max-h-56 overflow-y-auto"
+        },
+        items: live_items ++ range_items
+      }
+    }
+  end
+
+  defp quick_range_button_dto(id, preset, label, selected?, disabled, title) do
+    state_class =
+      if selected? do
+        "bg-primary/10 font-semibold text-primary"
+      else
+        "text-base-content/80 hover:bg-base-300/40 hover:text-base-content"
+      end
+
+    %{
+      key: id,
+      attrs: %{
+        id: id,
+        type: "button",
+        "phx-click": "set_time_preset",
+        "phx-value-preset": preset,
+        disabled: disabled,
+        "aria-current": to_string(selected?),
+        title: title,
+        class: "flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs #{state_class}"
+      },
+      indicator_class: if(preset == "live", do: "h-1.5 w-1.5 rounded-full bg-success"),
+      label: label
+    }
   end
 
   def time_query_label(%{time_mode: "live"} = assigns) do

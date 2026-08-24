@@ -181,6 +181,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     |> Map.fetch!(prop)
   end
 
+  defp quick_range_item(view, id) do
+    view
+    |> LiveVue.Test.get_vue(id: "dashboard-time-quick-ranges-component")
+    |> Map.fetch!(:props)
+    |> get_in(["presentation", "presets", "items"])
+    |> Enum.find(&(&1["attrs"]["id"] == id))
+  end
+
   test "quick ranges slide live, absolute bounds snapshot archive, and live resumes" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
@@ -193,7 +201,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
     {:ok, view, _html} = live(conn, show_path(mission, dashboard))
     render_dashboard_async(view)
 
-    view |> element("#dashboard-time-preset-last-5m") |> render_click()
+    render_click(view, "set_time_preset", %{"preset" => "last_5m"})
 
     patched_path = assert_patch(view)
     assert patched_path =~ "from=now-5m"
@@ -208,7 +216,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="live"][data-dashboard-time-from="now-5m"][data-dashboard-time-to="now"][data-dashboard-time-validation="ok"][data-engine-snapshot="false"][data-engine-live-append-eligible="true"])
            )
 
-    assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")
+    refute quick_range_item(view, "dashboard-time-preset-live")["attrs"]["disabled"]
 
     view
     |> form("#dashboard-custom-range-form", %{
@@ -230,9 +238,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RuntimeArchiveLiveTest do
              ~s(#ops-dashboard-show-page[data-dashboard-time-mode="archive"][data-dashboard-time-axis="generation_time"][data-dashboard-time-validation="ok"][data-engine-time-axis="generation_time"][data-engine-snapshot="true"][data-engine-live-append-eligible="false"])
            )
 
-    assert has_element?(view, "#dashboard-time-preset-live:not([disabled])")
+    refute quick_range_item(view, "dashboard-time-preset-live")["attrs"]["disabled"]
 
-    view |> element("#dashboard-time-preset-live") |> render_click()
+    render_click(view, "set_time_preset", %{"preset" => "live"})
     assert_patch(view, show_path(mission, dashboard))
     render_dashboard_async(view)
 

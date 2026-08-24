@@ -798,20 +798,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardToolbarComponentsTest do
 
     document = LazyHTML.from_fragment(html)
 
+    live_preset =
+      html
+      |> LiveVue.Test.get_vue(id: "dashboard-time-quick-ranges-component")
+      |> Map.fetch!(:props)
+      |> get_in(["presentation", "presets", "items"])
+      |> Enum.find(&(&1["attrs"]["id"] == "dashboard-time-preset-live"))
+
     assert ["archive"] =
              document
              |> LazyHTML.query("#dashboard-active-time-range")
              |> LazyHTML.attribute("data-dashboard-time-mode")
 
-    assert ["set_time_preset"] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-live")
-             |> LazyHTML.attribute("phx-click")
-
-    assert ["live"] =
-             document
-             |> LazyHTML.query("#dashboard-time-preset-live")
-             |> LazyHTML.attribute("phx-value-preset")
+    assert live_preset["attrs"]["phx-click"] == "set_time_preset"
+    assert live_preset["attrs"]["phx-value-preset"] == "live"
 
     assert [href] =
              document
