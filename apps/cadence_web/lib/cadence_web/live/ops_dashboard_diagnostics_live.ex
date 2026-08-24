@@ -33,168 +33,43 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
     selected = select_row(rows, params["selected"])
     runtime_query = runtime_query(params)
 
-    {:noreply,
-     socket
-     |> assign(:diagnostic_collection, collection)
-     |> assign(:runtime_query, runtime_query)
-     |> assign(:diagnostic_rows_list, rows)
-     |> assign(:selected_diagnostic, selected)
-     |> assign(:diagnostic_count, length(rows))
-     |> stream(:diagnostic_rows, rows, reset: true)}
+    socket =
+      socket
+      |> assign(:diagnostic_collection, collection)
+      |> assign(:runtime_query, runtime_query)
+      |> assign(:diagnostic_rows_list, rows)
+      |> assign(:selected_diagnostic, selected)
+      |> assign(:diagnostic_count, length(rows))
+      |> assign_diagnostics_presentation()
+
+    stream_rows =
+      Enum.map(rows, fn row ->
+        diagnostic_row_presentation(
+          row,
+          selected,
+          socket.assigns.current_mission.mission_id,
+          socket.assigns.dashboard_id,
+          collection,
+          runtime_query
+        )
+      end)
+
+    {:noreply, stream(socket, :diagnostic_rows, stream_rows, reset: true)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-diagnostics-page" class="h-full overflow-y-auto bg-base-100">
-        <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
-          <div class="mx-auto flex max-w-[110rem] items-end justify-between gap-4">
-            <div>
-              <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-                Dashboard / Diagnostics
-              </p>
-              <h1 class="mt-1 text-2xl font-bold tracking-tight">{@dashboard_document.name}</h1>
-              <p class="mt-2 text-sm text-base-content/60">
-                Explainable plan, execution, source, refresh, and invalidation evidence.
-              </p>
-            </div>
-            <.link
-              id="dashboard-diagnostics-viewer"
-              navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_id}?#{@runtime_query}"}
-              class="btn btn-ghost btn-sm"
-            >
-              Back to Viewer
-            </.link>
-          </div>
-        </header>
-
-        <div class="mx-auto max-w-[110rem] p-5 lg:p-7">
-          <nav id="dashboard-diagnostic-collections" class="flex flex-wrap gap-1 border-b border-base-300" aria-label="Diagnostic collections">
-            <.link
-              :for={collection <- @collections}
-              id={"dashboard-diagnostic-collection-#{collection}"}
-              patch={diagnostic_path(@current_mission.mission_id, @dashboard_id, collection, nil, @runtime_query)}
-              data-diagnostic-collection={collection}
-              class={[
-                "border-b-2 px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wider",
-                collection == @diagnostic_collection && "border-primary text-primary",
-                collection != @diagnostic_collection &&
-                  "border-transparent text-base-content/50 hover:text-base-content"
-              ]}
-            >
-              {collection_label(collection)}
-              <span class="ml-1 opacity-60">{length(Map.get(@diagnostic_collections, collection, []))}</span>
-            </.link>
-          </nav>
-
-          <div class="grid min-h-[34rem] border-x border-b border-base-300 lg:grid-cols-[24rem_minmax(0,1fr)]">
-            <div class="border-b border-base-300 lg:border-b-0 lg:border-r">
-              <div class="flex items-center justify-between bg-base-200/45 px-3 py-2">
-                <p class="hud-label">{collection_label(@diagnostic_collection)}</p>
-                <span id="dashboard-diagnostic-count" class="font-mono text-xs text-base-content/45">
-                  {@diagnostic_count}
-                </span>
-              </div>
-              <div id="dashboard-diagnostic-rows" phx-update="stream" class="divide-y divide-base-300/70">
-                <p id="dashboard-diagnostic-rows-empty" class="hidden only:block p-5 text-sm text-base-content/55">
-                  No records exist for this diagnostic collection yet.
-                </p>
-                <.link
-                  :for={{id, row} <- @streams.diagnostic_rows}
-                  id={id}
-                  patch={diagnostic_path(@current_mission.mission_id, @dashboard_id, @diagnostic_collection, row.id, @runtime_query)}
-                  data-diagnostic-id={row.id}
-                  class={[
-                    "block p-3 transition-colors hover:bg-base-200/50",
-                    @selected_diagnostic && @selected_diagnostic.id == row.id &&
-                      "border-l-2 border-primary bg-primary/5"
-                  ]}
-                >
-                  <div class="flex items-start justify-between gap-2">
-                    <p class="min-w-0 truncate text-sm font-medium">{row.title}</p>
-                    <span class={status_class(row.status)}>{row.status}</span>
-                  </div>
-                  <p class="mt-1 truncate font-mono text-[0.63rem] text-base-content/45">
-                    {row.identity}
-                  </p>
-                </.link>
-              </div>
-            </div>
-
-            <article id="dashboard-diagnostic-detail" class="min-w-0 p-5 lg:p-6">
-              <%= if @selected_diagnostic do %>
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p class="hud-label">Diagnostic identity</p>
-                    <h2 class="mt-1 text-lg font-semibold">{@selected_diagnostic.title}</h2>
-                    <p class="mt-1 break-all font-mono text-xs text-base-content/55">
-                      {@selected_diagnostic.identity}
-                    </p>
-                  </div>
-                  <.vue
-                    id="dashboard-diagnostic-copy-identity-component"
-                    v-component="ClipboardButton"
-                    button_id="dashboard-diagnostic-copy-identity"
-                    clipboard_text={@selected_diagnostic.identity}
-                    button_class="btn btn-outline btn-xs"
-                    icon="hero-clipboard"
-                    icon_class="h-3.5 w-3.5"
-                    label="Copy identity"
-                    v-ssr={false}
-                    class="contents"
-                  />
-                </div>
-
-                <dl class="mt-5 grid gap-x-6 gap-y-3 border-t border-base-300 pt-5 sm:grid-cols-2">
-                  <div :for={{key, value} <- @selected_diagnostic.details} class="min-w-0">
-                    <dt class="font-mono text-[0.62rem] uppercase tracking-wider text-base-content/45">
-                      {detail_label(key)}
-                    </dt>
-                    <dd class="mt-1 break-words font-mono text-xs">{detail_value(value)}</dd>
-                  </div>
-                </dl>
-
-                <nav class="mt-6 flex flex-wrap gap-2 border-t border-base-300 pt-4" aria-label="Diagnostic drilldowns">
-                  <.link
-                    id="diagnostics-open-explore"
-                    navigate={~p"/missions/#{@current_mission.mission_id}/ops/explore?#{Map.put(@runtime_query, "source_dashboard_id", @dashboard_id)}"}
-                    class="btn btn-outline btn-xs"
-                  >
-                    Explore
-                  </.link>
-                  <.link
-                    id="diagnostics-open-sources"
-                    navigate={~p"/missions/#{@current_mission.mission_id}/ops/data-sources?#{Map.put(@runtime_query, "source_dashboard_id", @dashboard_id)}"}
-                    class="btn btn-outline btn-xs"
-                  >
-                    Sources
-                  </.link>
-                  <.link
-                    id="diagnostics-open-catalog"
-                    navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-                    class="btn btn-outline btn-xs"
-                  >
-                    Catalog
-                  </.link>
-                  <.link
-                    :if={platform_admin?(@current_scope)}
-                    id="diagnostics-open-admin-runtime"
-                    navigate={~p"/admin/runtime"}
-                    class="btn btn-outline btn-xs"
-                  >
-                    Admin Runtime
-                  </.link>
-                </nav>
-              <% else %>
-                <div class="flex min-h-64 items-center justify-center text-sm text-base-content/55">
-                  Select a diagnostic record to inspect its evidence.
-                </div>
-              <% end %>
-            </article>
-          </div>
-        </div>
-      </section>
+      <.vue
+        id="ops-dashboard-diagnostics-page-component"
+        v-component="OpsDashboardDiagnostics"
+        presentation={@presentation}
+        diagnostic_rows={@streams.diagnostic_rows}
+        v-diff={false}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
@@ -209,18 +84,445 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
          ) do
       {:ok, %Document{} = document} ->
         collections = diagnostic_collections(scope, mission, document)
+        rows = Map.get(collections, "plan", [])
+        selected = select_row(rows, nil)
 
         socket
         |> assign(:page_title, "#{document.name} Diagnostics")
         |> assign(:dashboard_document, document)
         |> assign(:collections, @collections)
         |> assign(:diagnostic_collections, collections)
+        |> assign(:diagnostic_collection, "plan")
+        |> assign(:runtime_query, %{})
+        |> assign(:diagnostic_rows_list, rows)
+        |> assign(:selected_diagnostic, selected)
+        |> assign(:diagnostic_count, length(rows))
+        |> assign_diagnostics_presentation()
 
       {:error, _reason} ->
         socket
         |> put_flash(:error, "Dashboard diagnostics are unavailable.")
         |> push_navigate(to: ~p"/missions/#{mission.mission_id}/ops/dashboards")
     end
+  end
+
+  @doc false
+  def presentation_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {_name, value}, rendered when value in [nil, false] ->
+        rendered
+
+      {name, true}, rendered ->
+        Map.put(rendered, to_string(name), "")
+
+      {name, value}, rendered ->
+        Map.put(rendered, to_string(name), to_string(value))
+    end)
+  end
+
+  defp assign_diagnostics_presentation(socket) do
+    assign(socket, :presentation, diagnostics_presentation(socket.assigns))
+  end
+
+  defp diagnostics_presentation(assigns) do
+    mission_id = assigns.current_mission.mission_id
+    dashboard_id = assigns.dashboard_id
+    runtime_query = assigns.runtime_query
+
+    %{
+      "root" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "dashboard-diagnostics-page",
+            "class" => "h-full overflow-y-auto bg-base-100"
+          })
+      },
+      "header" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7"
+          }),
+        "inner" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mx-auto flex max-w-[110rem] items-end justify-between gap-4"
+            })
+        },
+        "content" => %{"attrs" => %{}},
+        "eyebrow" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70"
+            }),
+          "text" => "Dashboard / Diagnostics"
+        },
+        "heading" => %{
+          "attrs" => presentation_attrs(%{"class" => "mt-1 text-2xl font-bold tracking-tight"}),
+          "text" => assigns.dashboard_document.name
+        },
+        "copy" => %{
+          "attrs" => presentation_attrs(%{"class" => "mt-2 text-sm text-base-content/60"}),
+          "text" => "Explainable plan, execution, source, refresh, and invalidation evidence."
+        },
+        "viewer" => %{
+          "attrs" =>
+            navigate_attrs(
+              ~p"/missions/#{mission_id}/ops/dashboards/#{dashboard_id}?#{runtime_query}",
+              %{
+                "id" => "dashboard-diagnostics-viewer",
+                "class" => "btn btn-ghost btn-sm"
+              }
+            ),
+          "text" => "Back to Viewer"
+        }
+      },
+      "content" => %{
+        "attrs" => presentation_attrs(%{"class" => "mx-auto max-w-[110rem] p-5 lg:p-7"})
+      },
+      "collections" =>
+        collections_presentation(
+          assigns.collections,
+          assigns.diagnostic_collections,
+          assigns.diagnostic_collection,
+          mission_id,
+          dashboard_id,
+          runtime_query
+        ),
+      "workspace" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" =>
+              "grid min-h-[34rem] border-x border-b border-base-300 lg:grid-cols-[24rem_minmax(0,1fr)]"
+          })
+      },
+      "master" => master_presentation(assigns.diagnostic_collection, assigns.diagnostic_count),
+      "detail" =>
+        detail_presentation(
+          assigns.selected_diagnostic,
+          assigns.current_scope,
+          mission_id,
+          dashboard_id,
+          runtime_query
+        )
+    }
+  end
+
+  defp collections_presentation(
+         collections,
+         diagnostic_collections,
+         selected_collection,
+         mission_id,
+         dashboard_id,
+         runtime_query
+       ) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "id" => "dashboard-diagnostic-collections",
+          "class" => "flex flex-wrap gap-1 border-b border-base-300",
+          "aria-label" => "Diagnostic collections"
+        }),
+      "items" =>
+        Enum.map(collections, fn collection ->
+          %{
+            "key" => collection,
+            "attrs" =>
+              patch_attrs(
+                diagnostic_path(
+                  mission_id,
+                  dashboard_id,
+                  collection,
+                  nil,
+                  runtime_query
+                ),
+                %{
+                  "id" => "dashboard-diagnostic-collection-#{collection}",
+                  "data-diagnostic-collection" => collection,
+                  "class" => collection_class(collection, selected_collection)
+                }
+              ),
+            "label" => collection_label(collection),
+            "count" => %{
+              "attrs" => presentation_attrs(%{"class" => "ml-1 opacity-60"}),
+              "text" => to_string(length(Map.get(diagnostic_collections, collection, [])))
+            }
+          }
+        end)
+    }
+  end
+
+  defp master_presentation(collection, count) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "border-b border-base-300 lg:border-b-0 lg:border-r"
+        }),
+      "header" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "flex items-center justify-between bg-base-200/45 px-3 py-2"
+          }),
+        "label" => %{
+          "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+          "text" => collection_label(collection)
+        },
+        "count" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "id" => "dashboard-diagnostic-count",
+              "class" => "font-mono text-xs text-base-content/45"
+            }),
+          "text" => to_string(count)
+        }
+      },
+      "stream" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "id" => "dashboard-diagnostic-rows",
+            "class" => "divide-y divide-base-300/70"
+          }),
+        "empty" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "id" => "dashboard-diagnostic-rows-empty",
+              "class" => "hidden only:block p-5 text-sm text-base-content/55"
+            }),
+          "text" => "No records exist for this diagnostic collection yet."
+        }
+      }
+    }
+  end
+
+  defp diagnostic_row_presentation(
+         row,
+         selected,
+         mission_id,
+         dashboard_id,
+         collection,
+         runtime_query
+       ) do
+    %{
+      :id => row.id,
+      "attrs" =>
+        patch_attrs(
+          diagnostic_path(mission_id, dashboard_id, collection, row.id, runtime_query),
+          %{
+            "data-diagnostic-id" => row.id,
+            "class" => diagnostic_row_class(row, selected)
+          }
+        ),
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "flex items-start justify-between gap-2"})
+      },
+      "title" => %{
+        "attrs" => presentation_attrs(%{"class" => "min-w-0 truncate text-sm font-medium"}),
+        "text" => row.title
+      },
+      "status" => %{
+        "attrs" => presentation_attrs(%{"class" => Enum.join(status_class(row.status), " ")}),
+        "text" => row.status
+      },
+      "identity" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "mt-1 truncate font-mono text-[0.63rem] text-base-content/45"
+          }),
+        "text" => row.identity
+      }
+    }
+  end
+
+  defp detail_presentation(nil, _scope, _mission_id, _dashboard_id, _runtime_query) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "id" => "dashboard-diagnostic-detail",
+          "class" => "min-w-0 p-5 lg:p-6"
+        }),
+      "selected" => nil,
+      "empty" => %{
+        "attrs" =>
+          presentation_attrs(%{
+            "class" => "flex min-h-64 items-center justify-center text-sm text-base-content/55"
+          }),
+        "text" => "Select a diagnostic record to inspect its evidence."
+      }
+    }
+  end
+
+  defp detail_presentation(selected, scope, mission_id, dashboard_id, runtime_query) do
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "id" => "dashboard-diagnostic-detail",
+          "class" => "min-w-0 p-5 lg:p-6"
+        }),
+      "selected" => %{
+        "header" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "flex flex-wrap items-start justify-between gap-3"
+            }),
+          "content" => %{"attrs" => %{}},
+          "label" => %{
+            "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+            "text" => "Diagnostic identity"
+          },
+          "title" => %{
+            "attrs" => presentation_attrs(%{"class" => "mt-1 text-lg font-semibold"}),
+            "text" => selected.title
+          },
+          "identity" => %{
+            "attrs" =>
+              presentation_attrs(%{
+                "class" => "mt-1 break-all font-mono text-xs text-base-content/55"
+              }),
+            "text" => selected.identity
+          },
+          "copy" => %{
+            "component" => "ClipboardButton",
+            "host" => %{
+              "attrs" =>
+                presentation_attrs(%{
+                  "id" => "dashboard-diagnostic-copy-identity-component",
+                  "class" => "contents",
+                  "data-name" => "ClipboardButton"
+                })
+            },
+            "props" => %{
+              "button_id" => "dashboard-diagnostic-copy-identity",
+              "clipboard_text" => selected.identity,
+              "button_class" => "btn btn-outline btn-xs",
+              "icon" => "hero-clipboard",
+              "icon_class" => "h-3.5 w-3.5",
+              "label" => "Copy identity"
+            }
+          }
+        },
+        "details" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "mt-5 grid gap-x-6 gap-y-3 border-t border-base-300 pt-5 sm:grid-cols-2"
+            }),
+          "items" => detail_items(selected.details)
+        },
+        "drilldowns" => drilldowns_presentation(scope, mission_id, dashboard_id, runtime_query)
+      },
+      "empty" => nil
+    }
+  end
+
+  defp detail_items(details) do
+    details
+    |> Enum.with_index()
+    |> Enum.map(fn {{key, value}, index} ->
+      %{
+        "key" => "#{index}-#{key}",
+        "attrs" => presentation_attrs(%{"class" => "min-w-0"}),
+        "label" => %{
+          "attrs" =>
+            presentation_attrs(%{
+              "class" => "font-mono text-[0.62rem] uppercase tracking-wider text-base-content/45"
+            }),
+          "text" => detail_label(key)
+        },
+        "value" => %{
+          "attrs" => presentation_attrs(%{"class" => "mt-1 break-words font-mono text-xs"}),
+          "text" => detail_value(value)
+        }
+      }
+    end)
+  end
+
+  defp drilldowns_presentation(scope, mission_id, dashboard_id, runtime_query) do
+    dashboard_runtime_query = Map.put(runtime_query, "source_dashboard_id", dashboard_id)
+
+    links = [
+      drilldown_link(
+        "diagnostics-open-explore",
+        ~p"/missions/#{mission_id}/ops/explore?#{dashboard_runtime_query}",
+        "Explore"
+      ),
+      drilldown_link(
+        "diagnostics-open-sources",
+        ~p"/missions/#{mission_id}/ops/data-sources?#{dashboard_runtime_query}",
+        "Sources"
+      ),
+      drilldown_link(
+        "diagnostics-open-catalog",
+        ~p"/missions/#{mission_id}/catalog",
+        "Catalog"
+      )
+    ]
+
+    links =
+      if platform_admin?(scope) do
+        links ++
+          [drilldown_link("diagnostics-open-admin-runtime", ~p"/admin/runtime", "Admin Runtime")]
+      else
+        links
+      end
+
+    %{
+      "attrs" =>
+        presentation_attrs(%{
+          "class" => "mt-6 flex flex-wrap gap-2 border-t border-base-300 pt-4",
+          "aria-label" => "Diagnostic drilldowns"
+        }),
+      "links" => links
+    }
+  end
+
+  defp drilldown_link(id, href, text) do
+    %{
+      "key" => id,
+      "attrs" =>
+        navigate_attrs(href, %{
+          "id" => id,
+          "class" => "btn btn-outline btn-xs"
+        }),
+      "text" => text
+    }
+  end
+
+  defp collection_class(collection, selected_collection) do
+    base = "border-b-2 px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wider"
+
+    if collection == selected_collection do
+      base <> " border-primary text-primary"
+    else
+      base <> " border-transparent text-base-content/50 hover:text-base-content"
+    end
+  end
+
+  defp diagnostic_row_class(row, selected) do
+    base = "block p-3 transition-colors hover:bg-base-200/50"
+
+    if selected && selected.id == row.id do
+      base <> " border-l-2 border-primary bg-primary/5"
+    else
+      base
+    end
+  end
+
+  defp navigate_attrs(href, attrs) do
+    %{
+      "href" => href,
+      "data-phx-link" => "redirect",
+      "data-phx-link-state" => "push"
+    }
+    |> Map.merge(attrs)
+    |> presentation_attrs()
+  end
+
+  defp patch_attrs(href, attrs) do
+    %{
+      "href" => href,
+      "data-phx-link" => "patch",
+      "data-phx-link-state" => "push"
+    }
+    |> Map.merge(attrs)
+    |> presentation_attrs()
   end
 
   defp diagnostic_collections(scope, mission, document) do

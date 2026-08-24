@@ -21,35 +21,57 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/diagnostics?collection=cache"
       )
 
-    assert has_element?(view, "#dashboard-diagnostic-collection-cache.text-primary")
-    assert has_element?(view, "#dashboard-diagnostic-row-cache-contract")
+    assert has_element?(view, "#ops-dashboard-diagnostics-page-component.contents")
+    refute has_element?(view, "#dashboard-diagnostics-page")
 
-    copy =
-      LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
+    vue = diagnostics_vue(view)
 
-    assert copy.component == "ClipboardButton"
-    assert copy.props["button_id"] == "dashboard-diagnostic-copy-identity"
-    assert copy.props["clipboard_text"] == "#{dashboard.dashboard_id}:cache"
-    assert copy.props["button_class"] == "btn btn-outline btn-xs"
-    assert copy.props["icon"] == "hero-clipboard"
-    assert copy.props["icon_class"] == "h-3.5 w-3.5"
-    assert copy.props["label"] == "Copy identity"
-    assert copy.class == "contents"
-    refute copy.ssr
-    assert has_element?(view, "#diagnostics-open-explore")
-    assert has_element?(view, "#diagnostics-open-sources")
-    assert has_element?(view, "#diagnostics-open-catalog")
+    assert vue.component == "OpsDashboardDiagnostics"
+    assert vue.class == "contents"
+    assert vue.use_diff == false
+    refute vue.ssr
+    assert vue.handlers == %{}
+    assert Map.keys(vue.props) == ["presentation"]
+    assert Enum.all?(vue.streams_diff, &diagnostic_stream_mutation?/1)
 
-    view
-    |> element("#dashboard-diagnostic-collection-invalidations")
-    |> render_click()
+    contract = %{"props" => vue.props, "streams_diff" => vue.streams_diff}
+    assert contract == Jason.decode!(Jason.encode!(contract))
+
+    presentation = vue.props["presentation"]
+    cache_tab = collection_presentation(presentation, "cache")
+    assert cache_tab["attrs"]["class"] =~ "text-primary"
+
+    [cache_row] = diagnostic_stream_rows(vue)
+    assert cache_row["__dom_id"] == "dashboard-diagnostic-row-cache-contract"
+
+    copy = presentation["detail"]["selected"]["header"]["copy"]
+
+    assert copy["component"] == "ClipboardButton"
+    assert copy["props"]["button_id"] == "dashboard-diagnostic-copy-identity"
+    assert copy["props"]["clipboard_text"] == "#{dashboard.dashboard_id}:cache"
+    assert copy["props"]["button_class"] == "btn btn-outline btn-xs"
+    assert copy["props"]["icon"] == "hero-clipboard"
+    assert copy["props"]["icon_class"] == "h-3.5 w-3.5"
+    assert copy["props"]["label"] == "Copy identity"
+    assert copy["host"]["attrs"]["class"] == "contents"
+    refute vue.ssr
+
+    drilldowns = presentation["detail"]["selected"]["drilldowns"]["links"]
+    assert Enum.any?(drilldowns, &(&1["attrs"]["id"] == "diagnostics-open-explore"))
+    assert Enum.any?(drilldowns, &(&1["attrs"]["id"] == "diagnostics-open-sources"))
+    assert Enum.any?(drilldowns, &(&1["attrs"]["id"] == "diagnostics-open-catalog"))
+
+    invalidations_tab = collection_presentation(presentation, "invalidations")
+    assert invalidations_tab["attrs"]["data-phx-link"] == "patch"
+    render_patch(view, invalidations_tab["attrs"]["href"])
 
     assert_patch(
       view,
       ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/diagnostics?collection=invalidations"
     )
 
-    assert has_element?(view, "#dashboard-diagnostic-count", "0")
+    patched_presentation = diagnostics_vue(view).props["presentation"]
+    assert patched_presentation["master"]["header"]["count"]["text"] == "0"
   end
 
   test "durable invalidation decisions expose context, impact, and refresh evidence" do
@@ -107,36 +129,69 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/diagnostics?collection=invalidations"
       )
 
-    assert has_element?(view, "#dashboard-diagnostic-count", "1")
+    vue = diagnostics_vue(view)
+    presentation = vue.props["presentation"]
+    assert presentation["master"]["header"]["count"]["text"] == "1"
 
-    assert has_element?(
-             view,
-             ~s([data-diagnostic-id*="#{decision.invalidation_event_id}"])
-           )
+    row =
+      Enum.find(
+        diagnostic_stream_rows(vue),
+        &String.contains?(&1["attrs"]["data-diagnostic-id"], decision.invalidation_event_id)
+      )
 
-    assert has_element?(
-             view,
-             ~s([data-diagnostic-id*="#{decision.invalidation_event_id}"]),
-             "filtered"
-           )
+    assert row
+    assert row["status"]["text"] == "filtered"
+    assert row["title"]["text"] =~ "historical_data_changed"
 
-    assert has_element?(
-             view,
-             ~s([data-diagnostic-id*="#{decision.invalidation_event_id}"]),
-             "historical_data_changed"
-           )
+    details = presentation["detail"]["selected"]["details"]["items"]
 
-    assert has_element?(view, "#dashboard-diagnostic-detail", "replay_run_mismatch")
-    assert has_element?(view, "#dashboard-diagnostic-detail", "stale_for_context")
+    assert Enum.any?(details, &String.contains?(&1["value"]["text"], "replay_run_mismatch"))
+    assert Enum.any?(details, &String.contains?(&1["value"]["text"], "stale_for_context"))
 
-    copy =
-      LiveVue.Test.get_vue(view, id: "dashboard-diagnostic-copy-identity-component")
+    copy = presentation["detail"]["selected"]["header"]["copy"]
 
-    assert copy.component == "ClipboardButton"
-    assert copy.props["button_id"] == "dashboard-diagnostic-copy-identity"
-    assert copy.props["clipboard_text"] =~ decision.invalidation_event_id
-    refute copy.ssr
+    assert copy["component"] == "ClipboardButton"
+    assert copy["props"]["button_id"] == "dashboard-diagnostic-copy-identity"
+    assert copy["props"]["clipboard_text"] =~ decision.invalidation_event_id
+    refute vue.ssr
   end
+
+  test "diagnostic presentation attrs preserve HEEx coercion semantics" do
+    assert CadenceWeb.OpsDashboardDiagnosticsLive.presentation_attrs(%{
+             "nil" => nil,
+             "false" => false,
+             "true" => true,
+             "string-false" => "false",
+             "empty" => "",
+             "number" => 7
+           }) == %{
+             "true" => "",
+             "string-false" => "false",
+             "empty" => "",
+             "number" => "7"
+           }
+  end
+
+  defp diagnostics_vue(view_or_html) do
+    LiveVue.Test.get_vue(view_or_html, id: "ops-dashboard-diagnostics-page-component")
+  end
+
+  defp collection_presentation(presentation, collection) do
+    Enum.find(presentation["collections"]["items"], &(&1["key"] == collection))
+  end
+
+  defp diagnostic_stream_rows(vue) do
+    for ["upsert", path, row] <- vue.streams_diff,
+        String.starts_with?(path, "/diagnostic_rows/"),
+        do: row
+  end
+
+  defp diagnostic_stream_mutation?(["replace", "/diagnostic_rows", []]), do: true
+
+  defp diagnostic_stream_mutation?(["upsert", path, _row]),
+    do: String.starts_with?(path, "/diagnostic_rows/")
+
+  defp diagnostic_stream_mutation?(_mutation), do: false
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
