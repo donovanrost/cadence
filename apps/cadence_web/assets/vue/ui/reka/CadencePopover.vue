@@ -19,12 +19,14 @@ const props = withDefaults(
     align?: "start" | "center" | "end"
     sideOffset?: number
     collisionPadding?: number
+    prioritizePosition?: boolean
   }>(),
   {
     side: "bottom",
     align: "end",
     sideOffset: 8,
     collisionPadding: 16,
+    prioritizePosition: true,
   },
 )
 
@@ -124,6 +126,7 @@ onBeforeUnmount(() => {
         :align="props.align"
         :side-offset="props.sideOffset"
         :collision-padding="props.collisionPadding"
+        :prioritize-position="props.prioritizePosition"
         position-strategy="fixed"
         @close-auto-focus="handleCloseAutoFocus"
         @interact-outside="handleInteractOutside"
