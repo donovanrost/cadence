@@ -2,277 +2,187 @@ import assert from "node:assert/strict"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
-import vm from "node:vm"
+import {
+  CADENCE_OVERLAY_OPENED_EVENT,
+  announceCadencePopoverOpened,
+  focusCurrentPopoverTrigger,
+  preservesPopoverOpenState,
+  subscribeToLegacyOverlayOpen,
+} from "../vue/ui/reka/popover_compatibility.js"
+
+const nodeScenarioLedger = [
+  "CadencePopover owns the warning overlay without changing caller-owned ids or DOM presentation",
+  "warning details evidence and data-link rows retain every server-provided attribute and class",
+  "the trigger and panel expose synchronized dialog aria and hidden state",
+  "bottom-end positioning uses the existing eight pixel offset and sixteen pixel collision padding",
+  "Escape focuses the current trigger while outside and global dismissals suppress focus restoration",
+  "panel evidence and data-link actions do not implicitly dismiss the popover",
+  "truthy unchanged identity preserves open state while changed or missing identity closes",
+]
+
+assert.equal(process.versions.node, "24.16.0", "widget warning contracts use pinned Node 24.16.0")
+assert.equal(nodeScenarioLedger.length, 7)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/WidgetWarning.vue")
-const source = await readFile(componentPath, "utf8")
+const adapterPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
+const overlayStylesPath = resolve(__dirname, "../css/components/overlay.css")
+const presenterPath = resolve(
+  __dirname,
+  "../../lib/cadence_web/live/ops_dashboard_show_live/widget_warning_components.ex",
+)
 
-const controllerStart = "// WIDGET_WARNING_CONTROLLER_START"
-const controllerEnd = "// WIDGET_WARNING_CONTROLLER_END"
-const start = source.indexOf(controllerStart)
-const end = source.indexOf(controllerEnd)
+const [source, adapterSource, overlayStylesSource, presenterSource] = await Promise.all([
+  readFile(componentPath, "utf8"),
+  readFile(adapterPath, "utf8"),
+  readFile(overlayStylesPath, "utf8"),
+  readFile(presenterPath, "utf8"),
+])
+const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const adapterTemplate = adapterSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
-assert.ok(start >= 0, "WidgetWarning.vue should expose its colocated popover controller")
-assert.ok(end > start, "WidgetWarning.vue should close its controller boundary")
-assert.match(source, /<script setup lang="ts">/)
-assert.match(source, /v-bind="presentation\.overlay\.attrs"/)
-assert.match(source, /v-bind="presentation\.trigger\.attrs"/)
-assert.match(source, /v-bind="presentation\.trigger\.badge\.attrs"/)
-assert.match(source, /v-bind="presentation\.panel\.attrs"/)
-assert.match(source, /v-bind="presentation\.body\.evidence_button\.attrs"/)
-assert.match(source, /v-bind="row\.value\.attrs"/)
-assert.match(source, /v-bind="row\.attrs"/)
-assert.match(source, /v-if="presentation\.body\.details\.visible"/)
-assert.match(source, /v-if="presentation\.body\.evidence\.visible"/)
-assert.match(source, /v-if="presentation\.body\.links\.visible"/)
+assert.ok(template, "WidgetWarning.vue must have a template block")
+assert.ok(adapterTemplate, "CadencePopover.vue must have a template block")
+
+// The migration changes overlay mechanics only; the presentation remains the public contract.
+assert.match(source, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
+assert.equal(template.match(/<CadencePopover/g)?.length, 1)
+assert.match(template, /:id="props\.presentation\.overlay\.id"/)
+assert.match(template, /:identity="props\.presentation\.overlay\.id"/)
+assert.match(template, /:class="props\.presentation\.overlay\.class"/)
+assert.match(template, /v-bind="props\.presentation\.overlay\.attrs"/)
+assert.match(template, /side="bottom"/)
+assert.match(template, /align="end"/)
+assert.match(template, /:side-offset="8"/)
+assert.match(template, /:collision-padding="16"/)
+
+assert.match(template, /:id="props\.presentation\.trigger\.id"/)
+assert.match(template, /:type="props\.presentation\.trigger\.type"/)
+assert.match(template, /:class="props\.presentation\.trigger\.class"/)
+assert.match(template, /v-bind="props\.presentation\.trigger\.attrs"/)
+assert.match(template, /:aria-expanded="String\(open\)"/)
+assert.match(template, /v-bind="props\.presentation\.trigger\.badge\.attrs"/)
+
+assert.match(source, /const attrs = \{\.\.\.props\.presentation\.panel\.attrs\}/)
+assert.match(source, /delete attrs\.hidden/)
+assert.match(template, /:id="props\.presentation\.panel\.id"/)
+assert.match(template, /:class="props\.presentation\.panel\.class"/)
+assert.match(template, /v-bind="panelAttrs"[\s\S]*:hidden="!open"/)
+
+assert.match(template, /v-bind="props\.presentation\.body\.evidence_button\.attrs"/)
+assert.match(template, /v-if="props\.presentation\.body\.details\.visible"/)
+assert.match(template, /v-bind="row\.value\.attrs"/)
+assert.match(template, /v-if="props\.presentation\.body\.evidence\.visible"/)
+assert.match(template, /v-bind="props\.presentation\.body\.evidence\.attrs"/)
+assert.match(template, /v-if="props\.presentation\.body\.links\.visible"/)
+assert.match(template, /v-bind="props\.presentation\.body\.links\.attrs"/)
+assert.match(template, /v-for="row in props\.presentation\.body\.links\.rows"/)
+assert.match(template, /v-bind="row\.attrs"/)
+assert.doesNotMatch(template, /@click|@pointerdown|@keydown/)
 assert.doesNotMatch(source, /open_data_link|open_evidence|phx-hook/)
 assert.doesNotMatch(source, /severity|badge-(?:error|warning|info)|\.length/)
+assert.doesNotMatch(
+  source,
+  /createWidgetWarningController|WIDGET_WARNING_CONTROLLER|addEventListener|removeEventListener/,
+)
+assert.doesNotMatch(source, /onMounted|onBeforeUpdate|onUpdated|onBeforeUnmount/)
 
-const controllerSource = source.slice(start + controllerStart.length, end)
-assert.doesNotMatch(controllerSource, /setTimeout|setInterval/)
-const context = {}
-vm.createContext(context)
-vm.runInContext(
-  `${controllerSource}\nglobalThis.createWidgetWarningController = createWidgetWarningController`,
-  context,
-  {filename: componentPath},
+// The read-only presenter continues to own event names, payloads, and domain decisions.
+assert.match(presenterSource, /\|> EvidenceAttrs\.warning\(placement_id\)/)
+assert.match(presenterSource, /"phx-click" => "open_evidence"/)
+assert.match(
+  presenterSource,
+  /\|> DataLinkAttrs\.open\([\s\S]*placement_id: placement_id,[\s\S]*context_fallback:/,
+)
+assert.match(presenterSource, /"phx-click" => "open_data_link"/)
+assert.match(presenterSource, /warning_data_link_context_fallback\(warning\)/)
+assert.match(presenterSource, /warning_badge_class\(%\{severity: :error\}\)/)
+
+// CadencePopover supplies non-modal Reka dialog behavior and compatibility semantics.
+assert.match(
+  adapterSource,
+  /import \{PopoverContent, PopoverRoot, PopoverTrigger\} from "reka-ui"/,
+)
+assert.match(adapterTemplate, /<PopoverRoot[\s\S]*:open="open"[\s\S]*:modal="false"/)
+assert.match(adapterTemplate, /<PopoverTrigger as-child>/)
+assert.match(adapterTemplate, /<PopoverContent[\s\S]*v-if="open"[\s\S]*as-child/)
+assert.match(adapterTemplate, /:side="props\.side"/)
+assert.match(adapterTemplate, /:align="props\.align"/)
+assert.match(adapterTemplate, /:collision-padding="props\.collisionPadding"/)
+assert.match(adapterTemplate, /position-strategy="fixed"/)
+assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
+assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
+assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
+assert.match(
+  adapterSource,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+)
+assert.match(
+  adapterSource,
+  /const closeWithoutFocus = \(\) => \{[\s\S]*suppressCloseAutoFocus = true[\s\S]*open\.value = false\n\}/,
+)
+assert.match(adapterSource, /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/)
+assert.match(
+  overlayStylesSource,
+  /\[data-reka-popper-content-wrapper\] > \.cadence-overlay-panel \{\n    position: static;/,
 )
 
-const createController = context.createWidgetWarningController
-assert.equal(typeof createController, "function")
+assert.equal(preservesPopoverOpenState(true, "warning-a", "warning-a"), true)
+assert.equal(preservesPopoverOpenState(false, "warning-a", "warning-a"), false)
+assert.equal(preservesPopoverOpenState(true, "warning-a", "warning-b"), false)
+assert.equal(preservesPopoverOpenState(true, "warning-a", ""), false)
+assert.equal(preservesPopoverOpenState(true, "warning-a", null), false)
+assert.equal(preservesPopoverOpenState(true, "warning-a", undefined), false)
 
-class FakeEventTarget {
-  constructor() {
-    this.listeners = new Map()
-  }
-
-  addEventListener(type, listener) {
-    const listeners = this.listeners.get(type) || new Set()
-    listeners.add(listener)
-    this.listeners.set(type, listeners)
-  }
-
-  removeEventListener(type, listener) {
-    this.listeners.get(type)?.delete(listener)
-  }
-
-  dispatchEvent(event) {
-    event.target ||= this
-    for (const listener of this.listeners.get(event.type) || []) listener(event)
-    return true
-  }
-
-  listenerCount(type) {
-    return this.listeners.get(type)?.size || 0
-  }
-}
-
-class FakeElement extends FakeEventTarget {
-  constructor(name) {
-    super()
-    this.name = name
-    this.id = name
-    this.attributes = new Map()
-    this.hidden = true
-    this.style = {transform: ""}
-    this.isConnected = true
-    this.focusCount = 0
-    this.rect = {left: 900, right: 1000}
-  }
-
-  setAttribute(name, value) {
-    this.attributes.set(name, value)
-  }
-
-  toggleAttribute(name, force) {
-    if (force) this.attributes.set(name, "")
-    else this.attributes.delete(name)
-  }
-
-  hasAttribute(name) {
-    return this.attributes.has(name)
-  }
-
-  focus() {
-    this.focusCount += 1
-  }
-
-  getBoundingClientRect() {
-    return this.rect
-  }
-}
-
-class FakeRoot extends FakeElement {
-  constructor(name) {
-    super(name)
-    this.trigger = new FakeElement(`${name}-trigger`)
-    this.panel = new FakeElement(`${name}-panel`)
-  }
-
+let staleTriggerFocusCount = 0
+let currentTriggerFocusCount = 0
+const staleTrigger = {focus: () => (staleTriggerFocusCount += 1)}
+const currentTrigger = {focus: () => (currentTriggerFocusCount += 1)}
+let renderedTrigger = staleTrigger
+const currentRoot = {
   querySelector(selector) {
-    if (selector === ":scope > [data-overlay-trigger]") return this.trigger
-    if (selector === ":scope > [data-overlay-panel]") return this.panel
-    return null
-  }
-
-  contains(target) {
-    return target === this || target === this.trigger || target === this.panel
-  }
-}
-
-class FakeCustomEvent {
-  constructor(type, options) {
-    this.type = type
-    this.detail = options.detail
-  }
-}
-
-const event = (type, attrs = {}) => ({
-  type,
-  defaultPrevented: false,
-  preventDefault() {
-    this.defaultPrevented = true
+    assert.equal(selector, ":scope > [data-overlay-trigger]")
+    return renderedTrigger
   },
-  ...attrs,
-})
+}
 
-const documentObject = new FakeEventTarget()
-const windowObject = new FakeEventTarget()
-windowObject.CustomEvent = FakeCustomEvent
-windowObject.innerWidth = 1000
+renderedTrigger = currentTrigger
+assert.equal(focusCurrentPopoverTrigger(currentRoot), true)
+assert.equal(currentTriggerFocusCount, 1)
+assert.equal(staleTriggerFocusCount, 0)
 
-const firstRoot = new FakeRoot("first")
-const first = createController({rootElement: firstRoot, documentObject, windowObject})
-first.mounted()
+class FakeWindow extends EventTarget {
+  CustomEvent = class extends Event {
+    constructor(type, options) {
+      super(type)
+      this.detail = options.detail
+    }
+  }
+}
 
-assert.equal(firstRoot.trigger.listenerCount("click"), 1)
-assert.equal(firstRoot.panel.listenerCount("click"), 1)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-const openEvent = event("click")
-firstRoot.trigger.dispatchEvent(openEvent)
-
-assert.equal(openEvent.defaultPrevented, true)
-assert.equal(first.state.open, true)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "true")
-assert.equal(firstRoot.panel.hidden, false)
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), true)
-assert.equal(firstRoot.panel.style.transform, "translateX(-16px)")
-assert.equal(documentObject.listenerCount("pointerdown"), 1)
-assert.equal(documentObject.listenerCount("keydown"), 1)
-
-firstRoot.panel.dispatchEvent(event("click", {target: firstRoot.panel}))
-assert.equal(first.state.open, true, "popover action clicks must not implicitly close the panel")
-
-const closeEvent = event("click")
-firstRoot.trigger.dispatchEvent(closeEvent)
-
-assert.equal(closeEvent.defaultPrevented, true)
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "false")
-assert.equal(firstRoot.panel.hidden, true)
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), false)
-assert.equal(firstRoot.trigger.focusCount, 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger.dispatchEvent(event("click"))
-documentObject.dispatchEvent(event("pointerdown", {target: new FakeElement("outside")}))
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 1, "outside dismissal must not restore focus")
-
-firstRoot.trigger.dispatchEvent(event("click"))
-const escapeEvent = event("keydown", {key: "Escape"})
-documentObject.dispatchEvent(escapeEvent)
-assert.equal(escapeEvent.defaultPrevented, true)
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 2, "Escape dismissal must restore trigger focus")
-
-firstRoot.trigger.dispatchEvent(event("click"))
-windowObject.dispatchEvent(
-  new FakeCustomEvent("cadence:overlay-opened", {detail: new FakeRoot("other")}),
+const windowObject = new FakeWindow()
+const firstRoot = {id: "warning-first"}
+const secondRoot = {id: "warning-second"}
+let firstCloseCount = 0
+let secondCloseCount = 0
+const removeFirst = subscribeToLegacyOverlayOpen(
+  windowObject,
+  firstRoot,
+  () => (firstCloseCount += 1),
 )
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 2, "another local overlay must dismiss without focus restore")
+const removeSecond = subscribeToLegacyOverlayOpen(
+  windowObject,
+  secondRoot,
+  () => (secondCloseCount += 1),
+)
 
-firstRoot.trigger.dispatchEvent(event("click"))
-const oldTrigger = firstRoot.trigger
-const oldPanel = firstRoot.panel
-first.beforeUpdate()
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger = new FakeElement("first-trigger-updated")
-firstRoot.panel = new FakeElement("first-panel-updated")
-firstRoot.panel.rect = {left: -4, right: 96}
-first.updated()
-
-assert.equal(first.state.open, true)
-assert.equal(oldTrigger.listenerCount("click"), 0)
-assert.equal(oldPanel.listenerCount("click"), 0)
-assert.equal(firstRoot.trigger.listenerCount("click"), 1)
-assert.equal(firstRoot.panel.listenerCount("click"), 1)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "true")
-assert.equal(firstRoot.panel.hidden, false)
-assert.equal(firstRoot.panel.style.transform, "translateX(20px)")
-assert.equal(documentObject.listenerCount("pointerdown"), 1)
-assert.equal(documentObject.listenerCount("keydown"), 1)
-
-first.beforeUpdate()
-firstRoot.id = "first-renamed"
-first.updated()
-
-assert.equal(first.state.open, false, "an overlay identity change must not preserve open state")
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), false)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "false")
-assert.equal(firstRoot.panel.hidden, true)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger.dispatchEvent(event("click"))
-const removedTrigger = firstRoot.trigger
-const removedPanel = firstRoot.panel
-first.beforeUpdate()
-firstRoot.trigger = null
-firstRoot.panel = null
-first.updated()
-
-assert.equal(first.state.open, false, "a removed overlay must close")
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), false)
-assert.equal(removedTrigger.listenerCount("click"), 0)
-assert.equal(removedPanel.listenerCount("click"), 0)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger = new FakeElement("first-renamed-trigger")
-firstRoot.panel = new FakeElement("first-renamed-panel")
-first.updated()
-firstRoot.trigger.dispatchEvent(event("click"))
-
-const secondRoot = new FakeRoot("second")
-const second = createController({rootElement: secondRoot, documentObject, windowObject})
-second.mounted()
-secondRoot.trigger.dispatchEvent(event("click"))
-
-assert.equal(first.state.open, false, "opening another WidgetWarning island should close the first")
-assert.equal(second.state.open, true)
-assert.equal(firstRoot.trigger.focusCount, 0)
-
-second.destroyed()
-assert.equal(secondRoot.trigger.listenerCount("click"), 0)
-assert.equal(secondRoot.panel.listenerCount("click"), 0)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-first.destroyed()
-assert.equal(firstRoot.trigger.listenerCount("click"), 0)
-assert.equal(firstRoot.panel.listenerCount("click"), 0)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 0)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
+announceCadencePopoverOpened(windowObject, firstRoot)
+assert.equal(firstCloseCount, 0)
+assert.equal(secondCloseCount, 1, "global coordination closes peers without doing focus work")
+windowObject.dispatchEvent(new windowObject.CustomEvent(CADENCE_OVERLAY_OPENED_EVENT, {detail: {}}))
+assert.equal(firstCloseCount, 1)
+assert.equal(secondCloseCount, 2)
+removeFirst()
+removeSecond()
 
 console.log("widget_warning_test passed")

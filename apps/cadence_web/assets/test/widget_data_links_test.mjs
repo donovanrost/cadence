@@ -2,240 +2,238 @@ import assert from "node:assert/strict"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
-import vm from "node:vm"
+import {
+  announceCadencePopoverOpened,
+  focusCurrentPopoverTrigger,
+  preservesPopoverOpenState,
+  subscribeToLegacyOverlayOpen,
+} from "../vue/ui/reka/popover_compatibility.js"
+
+const nodeScenarioLedger = [
+  "one CadencePopover renders all five server-selected data-link menu variants",
+  "caller-owned root trigger and panel ids classes attributes and aria remain exact",
+  "every open_data_link and open_evidence payload passes through the generic item binding",
+  "bottom-end dialog positioning retains eight pixel offset and sixteen pixel collision padding",
+  "panel actions stay open while outside and global dismissals do not restore focus",
+  "Escape restores focus through the current public trigger rather than a stale trigger",
+  "open state survives only the same truthy root identity and closes on changed or missing identity",
+]
+
+assert.equal(process.versions.node, "24.16.0", "widget data-link contracts use pinned Node 24.16.0")
+assert.equal(nodeScenarioLedger.length, 7)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/WidgetDataLinks.vue")
-const source = await readFile(componentPath, "utf8")
-
-const controllerStart = "// WIDGET_DATA_LINKS_CONTROLLER_START"
-const controllerEnd = "// WIDGET_DATA_LINKS_CONTROLLER_END"
-const start = source.indexOf(controllerStart)
-const end = source.indexOf(controllerEnd)
-
-assert.ok(start >= 0, "WidgetDataLinks.vue should expose its colocated popover controller")
-assert.ok(end > start, "WidgetDataLinks.vue should close its controller boundary")
-assert.match(source, /<script setup lang="ts">/)
-assert.match(source, /v-bind="presentation\.overlay\.attrs"/)
-assert.match(source, /v-bind="presentation\.trigger\.attrs"/)
-assert.match(source, /v-bind="presentation\.trigger\.content\.attrs"/)
-assert.match(source, /v-bind="presentation\.panel\.attrs"/)
-assert.match(source, /v-bind="item\.attrs"/)
-assert.match(source, /:key="item\.key"/)
-assert.doesNotMatch(source, /open_data_link|open_evidence/)
-
-const controllerSource = source.slice(start + controllerStart.length, end)
-assert.doesNotMatch(controllerSource, /setTimeout|setInterval/)
-const context = {}
-vm.createContext(context)
-vm.runInContext(
-  `${controllerSource}\nglobalThis.createWidgetDataLinksController = createWidgetDataLinksController`,
-  context,
-  {filename: componentPath},
+const adapterPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
+const presenterPath = resolve(
+  __dirname,
+  "../../lib/cadence_web/live/ops_dashboard_show_live/widget_data_link_components.ex",
+)
+const dataLinkAttrsPath = resolve(
+  __dirname,
+  "../../lib/cadence_web/live/ops_dashboard_show_live/data_link_attrs.ex",
+)
+const evidenceAttrsPath = resolve(
+  __dirname,
+  "../../lib/cadence_web/live/ops_dashboard_show_live/evidence_attrs.ex",
 )
 
-const createController = context.createWidgetDataLinksController
-assert.equal(typeof createController, "function")
+const [source, adapterSource, presenterSource, dataLinkAttrsSource, evidenceAttrsSource] =
+  await Promise.all([
+    readFile(componentPath, "utf8"),
+    readFile(adapterPath, "utf8"),
+    readFile(presenterPath, "utf8"),
+    readFile(dataLinkAttrsPath, "utf8"),
+    readFile(evidenceAttrsPath, "utf8"),
+  ])
+const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const adapterTemplate = adapterSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
-class FakeEventTarget {
-  constructor() {
-    this.listeners = new Map()
-  }
+assert.ok(template, "WidgetDataLinks.vue must have a template block")
+assert.ok(adapterTemplate, "CadencePopover.vue must have a template block")
 
-  addEventListener(type, listener) {
-    const listeners = this.listeners.get(type) || new Set()
-    listeners.add(listener)
-    this.listeners.set(type, listeners)
-  }
+const expectedKinds = [
+  "widget",
+  "status_matrix_row",
+  "data_table_row",
+  "state_timeline_row",
+  "event_timeline_row",
+]
+const kindType = source.match(/kind:\n([\s\S]*?)\n  component_id:/)?.[1]
+assert.ok(kindType, "WidgetDataLinks must retain its five-kind presentation union")
+for (const kind of expectedKinds) assert.match(kindType, new RegExp(`\\| "${kind}"`))
 
-  removeEventListener(type, listener) {
-    this.listeners.get(type)?.delete(listener)
-  }
+// Reka owns mechanics while the server presentation remains the sole public DOM source.
+assert.match(source, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
+assert.equal(template.match(/<CadencePopover/g)?.length, 1)
+assert.match(template, /:id="props\.presentation\.overlay\.id"/)
+assert.match(template, /:identity="props\.presentation\.overlay\.id"/)
+assert.match(template, /:class="props\.presentation\.overlay\.class"/)
+assert.match(template, /v-bind="props\.presentation\.overlay\.attrs"/)
+assert.match(template, /side="bottom"/)
+assert.match(template, /align="end"/)
+assert.match(template, /:side-offset="8"/)
+assert.match(template, /:collision-padding="16"/)
 
-  dispatchEvent(event) {
-    event.target ||= this
-    for (const listener of this.listeners.get(event.type) || []) listener(event)
-    return true
-  }
+assert.match(template, /:id="props\.presentation\.trigger\.id"/)
+assert.match(template, /:type="props\.presentation\.trigger\.type"/)
+assert.match(template, /:class="props\.presentation\.trigger\.class"/)
+assert.match(template, /v-bind="props\.presentation\.trigger\.attrs"/)
+assert.match(template, /:aria-expanded="String\(open\)"/)
+assert.match(template, /v-bind="props\.presentation\.trigger\.content\.attrs"/)
+assert.match(source, /const attrs = \{\.\.\.props\.presentation\.panel\.attrs\}/)
+assert.match(source, /delete attrs\.hidden/)
+assert.match(template, /:id="props\.presentation\.panel\.id"/)
+assert.match(template, /:class="props\.presentation\.panel\.class"/)
+assert.match(template, /v-bind="panelAttrs"[\s\S]*:hidden="!open"/)
 
-  listenerCount(type) {
-    return this.listeners.get(type)?.size || 0
-  }
+assert.match(template, /v-for="item in props\.presentation\.items"/)
+assert.match(template, /:key="item\.key"/)
+assert.match(template, /:type="item\.type"/)
+assert.match(template, /:class="item\.class"/)
+assert.match(template, /v-bind="item\.attrs"/)
+assert.doesNotMatch(template, /@click|@pointerdown|@keydown/)
+assert.doesNotMatch(source, /open_data_link|open_evidence|phx-value-/)
+assert.doesNotMatch(
+  source,
+  /createWidgetDataLinksController|WIDGET_DATA_LINKS_CONTROLLER|addEventListener|removeEventListener/,
+)
+assert.doesNotMatch(source, /onMounted|onBeforeUpdate|onUpdated|onBeforeUnmount/)
+
+// The read-only presenter owns all five variants, timestamps, evidence, and navigation payloads.
+const presenterContracts = [
+  ["widget_data_link_presentation", '"widget"', "widget_link_item"],
+  ["status_matrix_row_link_presentation", '"status_matrix_row"', "status_matrix_link_item"],
+  ["data_table_row_link_presentation", '"data_table_row"', "data_table_link_item"],
+  ["state_timeline_row_link_presentation", '"state_timeline_row"', "state_timeline_link_item"],
+  ["event_timeline_row_link_presentation", '"event_timeline_row"', "event_timeline_link_item"],
+]
+for (const [presentationFunction, kind, itemFunction] of presenterContracts) {
+  assert.match(presenterSource, new RegExp(`def ${presentationFunction}\\(`))
+  assert.ok(presenterSource.includes(kind), `${presentationFunction} must retain ${kind}`)
+  assert.match(presenterSource, new RegExp(itemFunction))
+}
+assert.match(presenterSource, /DataLinkAttrs\.open\(link,[\s\S]*placement_id: placement_id/)
+assert.match(presenterSource, /Map\.put\("phx-click", "open_data_link"\)/)
+assert.match(presenterSource, /EvidenceAttrs\.row_frame\(placement_id, row\)/)
+assert.match(presenterSource, /Map\.put\("phx-click", "open_evidence"\)/)
+assert.match(presenterSource, /DateTime\.to_unix\(occurred_at, :millisecond\)/)
+assert.match(presenterSource, /DateTime\.to_unix\(starts_at, :millisecond\)/)
+
+const dataLinkPayloadAttrs = Array.from(
+  dataLinkAttrsSource.matchAll(/"[^"\n]+" => "(phx-value-[^"\n]+)"/g),
+  (match) => match[1],
+)
+assert.ok(dataLinkPayloadAttrs.length >= 45, "the full server data-link payload registry is covered")
+assert.equal(new Set(dataLinkPayloadAttrs).size, dataLinkPayloadAttrs.length)
+for (const requiredAttr of [
+  "phx-value-link-id",
+  "phx-value-target",
+  "phx-value-target-id",
+  "phx-value-placement-id",
+  "phx-value-timestamp-ms",
+  "phx-value-realm",
+  "phx-value-data-source-id",
+  "phx-value-source-binding-id",
+  "phx-value-time-mode",
+  "phx-value-time-axis",
+  "phx-value-replay-run-id",
+  "phx-value-scope-kind",
+  "phx-value-scope-id",
+  "phx-value-scope-ids",
+  "phx-value-nav-trail",
+]) {
+  assert.ok(dataLinkPayloadAttrs.includes(requiredAttr), `${requiredAttr} must remain server-owned`)
+}
+assert.match(evidenceAttrsSource, /def row_frame\(placement_id, row\) when is_map\(row\)/)
+for (const evidenceKey of [
+  '"kind" => "frame"',
+  '"placement-id" => event_value(placement_id)',
+  '"observable-id" => event_value(frame_observable_id(row))',
+  '"source-request-id" => event_value(row, :source_request_id)',
+  '"scope-kind" => row_scope_kind(row)',
+  '"scope-id" => row_scope_id(row)',
+  '"scope-ids" => row_scope_ids(row)',
+]) {
+  assert.ok(evidenceAttrsSource.includes(evidenceKey), `missing evidence payload contract ${evidenceKey}`)
 }
 
-class FakeElement extends FakeEventTarget {
-  constructor(name) {
-    super()
-    this.name = name
-    this.attributes = new Map()
-    this.hidden = true
-    this.style = {transform: ""}
-    this.isConnected = true
-    this.focusCount = 0
-    this.rect = {left: 900, right: 1000}
-  }
+// The shared adapter provides the exact dismissal, focus, and collision behavior.
+assert.match(adapterTemplate, /<PopoverRoot[\s\S]*:open="open"[\s\S]*:modal="false"/)
+assert.match(adapterTemplate, /<PopoverTrigger as-child>/)
+assert.match(adapterTemplate, /<PopoverContent[\s\S]*v-if="open"[\s\S]*as-child/)
+assert.match(adapterTemplate, /:side="props\.side"/)
+assert.match(adapterTemplate, /:align="props\.align"/)
+assert.match(adapterTemplate, /:side-offset="props\.sideOffset"/)
+assert.match(adapterTemplate, /:collision-padding="props\.collisionPadding"/)
+assert.match(adapterTemplate, /position-strategy="fixed"/)
+assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
+assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
+assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
+assert.match(
+  adapterSource,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+)
+assert.match(
+  adapterSource,
+  /const closeWithoutFocus = \(\) => \{[\s\S]*suppressCloseAutoFocus = true[\s\S]*open\.value = false\n\}/,
+)
 
-  setAttribute(name, value) {
-    this.attributes.set(name, value)
-  }
+// Identity behavior is explicit: only an open popover with the same truthy identity survives.
+assert.equal(preservesPopoverOpenState(true, "data-links-a", "data-links-a"), true)
+assert.equal(preservesPopoverOpenState(false, "data-links-a", "data-links-a"), false)
+assert.equal(preservesPopoverOpenState(true, "data-links-a", "data-links-b"), false)
+assert.equal(preservesPopoverOpenState(true, "data-links-a", ""), false)
+assert.equal(preservesPopoverOpenState(true, "data-links-a", null), false)
+assert.equal(preservesPopoverOpenState(true, "data-links-a", undefined), false)
+assert.equal(preservesPopoverOpenState(true, "", ""), false)
 
-  toggleAttribute(name, force) {
-    if (force) this.attributes.set(name, "")
-    else this.attributes.delete(name)
-  }
-
-  hasAttribute(name) {
-    return this.attributes.has(name)
-  }
-
-  focus() {
-    this.focusCount += 1
-  }
-
-  getBoundingClientRect() {
-    return this.rect
-  }
-}
-
-class FakeRoot extends FakeElement {
-  constructor(name) {
-    super(name)
-    this.trigger = new FakeElement(`${name}-trigger`)
-    this.panel = new FakeElement(`${name}-panel`)
-  }
-
+let staleTriggerFocusCount = 0
+let currentTriggerFocusCount = 0
+const staleTrigger = {focus: () => (staleTriggerFocusCount += 1)}
+const currentTrigger = {focus: () => (currentTriggerFocusCount += 1)}
+let renderedTrigger = staleTrigger
+const currentRoot = {
   querySelector(selector) {
-    if (selector === ":scope > [data-overlay-trigger]") return this.trigger
-    if (selector === ":scope > [data-overlay-panel]") return this.panel
-    return null
-  }
-
-  contains(target) {
-    return target === this || target === this.trigger || target === this.panel
-  }
-}
-
-class FakeCustomEvent {
-  constructor(type, options) {
-    this.type = type
-    this.detail = options.detail
-  }
-}
-
-const event = (type, attrs = {}) => ({
-  type,
-  defaultPrevented: false,
-  preventDefault() {
-    this.defaultPrevented = true
+    assert.equal(selector, ":scope > [data-overlay-trigger]")
+    return renderedTrigger
   },
-  ...attrs,
-})
+}
 
-const documentObject = new FakeEventTarget()
-const windowObject = new FakeEventTarget()
-windowObject.CustomEvent = FakeCustomEvent
-windowObject.innerWidth = 1000
+renderedTrigger = currentTrigger
+assert.equal(focusCurrentPopoverTrigger(currentRoot), true)
+assert.equal(currentTriggerFocusCount, 1)
+assert.equal(staleTriggerFocusCount, 0)
 
-const firstRoot = new FakeRoot("first")
-const first = createController({rootElement: firstRoot, documentObject, windowObject})
-first.mounted()
+class FakeWindow extends EventTarget {
+  CustomEvent = class extends Event {
+    constructor(type, options) {
+      super(type)
+      this.detail = options.detail
+    }
+  }
+}
 
-assert.equal(firstRoot.trigger.listenerCount("click"), 1)
-assert.equal(firstRoot.panel.listenerCount("click"), 1)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-const openEvent = event("click")
-firstRoot.trigger.dispatchEvent(openEvent)
-
-assert.equal(openEvent.defaultPrevented, true)
-assert.equal(first.state.open, true)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "true")
-assert.equal(firstRoot.panel.hidden, false)
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), true)
-assert.equal(firstRoot.panel.style.transform, "translateX(-16px)")
-assert.equal(documentObject.listenerCount("pointerdown"), 1)
-assert.equal(documentObject.listenerCount("keydown"), 1)
-
-firstRoot.panel.dispatchEvent(event("click", {target: firstRoot.panel}))
-assert.equal(first.state.open, true, "popover action clicks must not implicitly close the panel")
-
-const closeEvent = event("click")
-firstRoot.trigger.dispatchEvent(closeEvent)
-
-assert.equal(closeEvent.defaultPrevented, true)
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "false")
-assert.equal(firstRoot.panel.hidden, true)
-assert.equal(firstRoot.hasAttribute("data-overlay-open"), false)
-assert.equal(firstRoot.trigger.focusCount, 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger.dispatchEvent(event("click"))
-documentObject.dispatchEvent(event("pointerdown", {target: new FakeElement("outside")}))
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 1, "outside dismissal must not restore focus")
-
-firstRoot.trigger.dispatchEvent(event("click"))
-const escapeEvent = event("keydown", {key: "Escape"})
-documentObject.dispatchEvent(escapeEvent)
-assert.equal(escapeEvent.defaultPrevented, true)
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 2, "Escape dismissal must restore trigger focus")
-
-firstRoot.trigger.dispatchEvent(event("click"))
-windowObject.dispatchEvent(
-  new FakeCustomEvent("cadence:overlay-opened", {detail: new FakeRoot("other")}),
+const windowObject = new FakeWindow()
+const firstRoot = {id: "data-links-first"}
+const secondRoot = {id: "data-links-second"}
+let firstCloseCount = 0
+let secondCloseCount = 0
+const removeFirst = subscribeToLegacyOverlayOpen(
+  windowObject,
+  firstRoot,
+  () => (firstCloseCount += 1),
 )
-assert.equal(first.state.open, false)
-assert.equal(firstRoot.trigger.focusCount, 2, "another overlay must dismiss without focus restore")
+const removeSecond = subscribeToLegacyOverlayOpen(
+  windowObject,
+  secondRoot,
+  () => (secondCloseCount += 1),
+)
 
-firstRoot.trigger.dispatchEvent(event("click"))
-const oldTrigger = firstRoot.trigger
-const oldPanel = firstRoot.panel
-first.beforeUpdate()
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-firstRoot.trigger = new FakeElement("first-trigger-updated")
-firstRoot.panel = new FakeElement("first-panel-updated")
-firstRoot.panel.rect = {left: -4, right: 96}
-first.updated()
-
-assert.equal(first.state.open, true)
-assert.equal(oldTrigger.listenerCount("click"), 0)
-assert.equal(oldPanel.listenerCount("click"), 0)
-assert.equal(firstRoot.trigger.listenerCount("click"), 1)
-assert.equal(firstRoot.panel.listenerCount("click"), 1)
-assert.equal(firstRoot.trigger.attributes.get("aria-expanded"), "true")
-assert.equal(firstRoot.panel.hidden, false)
-assert.equal(firstRoot.panel.style.transform, "translateX(20px)")
-assert.equal(documentObject.listenerCount("pointerdown"), 1)
-assert.equal(documentObject.listenerCount("keydown"), 1)
-
-const secondRoot = new FakeRoot("second")
-const second = createController({rootElement: secondRoot, documentObject, windowObject})
-second.mounted()
-secondRoot.trigger.dispatchEvent(event("click"))
-
-assert.equal(first.state.open, false, "opening another local popover should close the first")
-assert.equal(second.state.open, true)
-assert.equal(firstRoot.trigger.focusCount, 0)
-
-second.destroyed()
-assert.equal(secondRoot.trigger.listenerCount("click"), 0)
-assert.equal(secondRoot.panel.listenerCount("click"), 0)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 1)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
-
-first.destroyed()
-assert.equal(firstRoot.trigger.listenerCount("click"), 0)
-assert.equal(firstRoot.panel.listenerCount("click"), 0)
-assert.equal(windowObject.listenerCount("cadence:overlay-opened"), 0)
-assert.equal(documentObject.listenerCount("pointerdown"), 0)
-assert.equal(documentObject.listenerCount("keydown"), 0)
+announceCadencePopoverOpened(windowObject, firstRoot)
+assert.equal(firstCloseCount, 0)
+assert.equal(secondCloseCount, 1, "global dismissal closes without invoking focus helpers")
+removeFirst()
+removeSecond()
 
 console.log("widget_data_links_test passed")
