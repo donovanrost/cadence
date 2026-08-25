@@ -113,6 +113,7 @@ const emit = defineEmits<{
             <button
               id="add-revision-toggle"
               type="button"
+              aria-controls="catalog-revision-upload-slot"
               class="btn"
               :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
             >
