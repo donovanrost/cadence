@@ -1206,8 +1206,14 @@ async function evaluateViewport(client, viewport, profile) {
         (() => {
           const target = document.querySelector(${copyClickSelector})
           if (!target) return null
+          const scrollPosition = {x: window.scrollX, y: window.scrollY}
+          target.scrollIntoView({behavior: "instant", block: "center", inline: "center"})
           const rect = target.getBoundingClientRect()
-          return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}
+          return {
+            x: rect.x + rect.width / 2,
+            y: rect.y + rect.height / 2,
+            scrollPosition
+          }
         })()
       `,
       returnByValue: true,
@@ -1230,6 +1236,9 @@ async function evaluateViewport(client, viewport, profile) {
         clickCount: 1,
       })
       await new Promise((resolve) => setTimeout(resolve, 100))
+      await client.send("Runtime.evaluate", {
+        expression: `window.scrollTo({left: ${target.scrollPosition.x}, top: ${target.scrollPosition.y}, behavior: "instant"})`,
+      })
     }
   }
 

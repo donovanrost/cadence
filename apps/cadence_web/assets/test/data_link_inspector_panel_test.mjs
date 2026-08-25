@@ -160,6 +160,23 @@ assert.match(presentationSource, /"data-phx-link" => "redirect"/)
 assert.match(presentationSource, /"data-phx-link-state" => "push"/)
 assert.match(presentationSource, /"phx-click" => "open_data_link"/)
 assert.match(presentationSource, /DataLinkAttrs\.open/)
+const viewportCopyClickPath = viewportSmokeSource.match(
+  /if \(profile\.copyClickSelector\) \{([\s\S]*?)\n  \}\n\n  const expression/,
+)?.[1]
+assert.ok(viewportCopyClickPath, "the viewport smoke must retain its physical clipboard click path")
+assert.match(
+  viewportCopyClickPath,
+  /target\.scrollIntoView\(\{behavior: "instant", block: "center", inline: "center"\}\)[\s\S]*const rect = target\.getBoundingClientRect\(\)/,
+  "the clipboard target must be scrolled deterministically before its click coordinates are measured",
+)
+assert.match(viewportCopyClickPath, /Input\.dispatchMouseEvent[\s\S]*type: "mousePressed"/)
+assert.match(viewportCopyClickPath, /Input\.dispatchMouseEvent[\s\S]*type: "mouseReleased"/)
+assert.match(viewportCopyClickPath, /window\.scrollTo\(\{left:/)
+assert.match(
+  viewportSmokeSource,
+  /assert\.equal\(result\.copyClickSucceeded, true, `\$\{result\.name\} should run ClipboardButton on click`\)/,
+  "the physical click must still prove ClipboardButton success",
+)
 let clipboardSelector
 let dataLinkClipboardOracles = 0
 for (const line of viewportSmokeSource.split("\n")) {
