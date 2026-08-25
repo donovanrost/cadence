@@ -10,9 +10,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponentsTest do
     attrs = presentation["attrs"]
 
     assert presentation["tag"] == "button"
-    assert presentation["class"] == "badge badge-xs cursor-pointer badge-warning data-management-primary"
+
+    assert presentation["class"] ==
+             "badge badge-xs cursor-pointer badge-warning data-management-primary"
+
     assert presentation["text"] == "Backfill started"
     assert attrs["phx-click"] == "open_data_link"
+
     assert attrs["phx-value-link-id"] ==
              "direct:telemetry_backfill_lifecycle_event:backfill-event-1"
 

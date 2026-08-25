@@ -19,8 +19,7 @@ defmodule CadenceWeb.Layouts do
     %{
       "link" => %{
         "attrs" => raw_attrs(%{"href" => ~p"/"}),
-        "class" =>
-          "inline-block font-mono text-sm tracking-[0.28em] uppercase text-primary",
+        "class" => "inline-block font-mono text-sm tracking-[0.28em] uppercase text-primary",
         "label" => "Cadence"
       },
       "tagline" => %{
