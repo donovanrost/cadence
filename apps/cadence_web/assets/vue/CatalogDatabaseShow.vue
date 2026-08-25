@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  CollapsibleContent,
+  CollapsibleRoot,
+  CollapsibleTrigger
+} from "reka-ui"
 import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -63,7 +68,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div id="catalog-database-show-surface" class="space-y-6">
+  <CollapsibleRoot
+    id="catalog-database-show-surface"
+    class="space-y-6"
+    as="div"
+    :open="revision_form_open"
+    :unmount-on-hide="true"
+    @update:open="emit('toggle-revision-form', {})"
+  >
     <header class="border-b border-primary/20 pb-4">
       <div class="flex items-end justify-between gap-4">
         <div>
@@ -97,15 +109,16 @@ const emit = defineEmits<{
         </div>
 
         <div class="flex items-center gap-2">
-          <button
-            id="add-revision-toggle"
-            type="button"
-            class="btn"
-            :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
-            @click="emit('toggle-revision-form', {})"
-          >
-            {{ revision_form_open ? "Cancel" : "+ Add revision" }}
-          </button>
+          <CollapsibleTrigger as-child>
+            <button
+              id="add-revision-toggle"
+              type="button"
+              class="btn"
+              :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
+            >
+              {{ revision_form_open ? "Cancel" : "+ Add revision" }}
+            </button>
+          </CollapsibleTrigger>
         </div>
       </div>
     </header>
@@ -128,16 +141,18 @@ const emit = defineEmits<{
       </section>
     </div>
 
-    <div v-if="revision_form_open" id="catalog-revision-upload-slot">
-      <CatalogUploadForm
-        :form="revision_form"
-        :upload="upload"
-        :detected_importer="detected_importer"
-        :submit_disabled="submit_disabled"
-        @validate="emit('validate', $event)"
-        @cancel-upload="emit('cancel-upload', $event)"
-      />
-    </div>
+    <CollapsibleContent as-child>
+      <div id="catalog-revision-upload-slot">
+        <CatalogUploadForm
+          :form="revision_form"
+          :upload="upload"
+          :detected_importer="detected_importer"
+          :submit_disabled="submit_disabled"
+          @validate="emit('validate', $event)"
+          @cancel-upload="emit('cancel-upload', $event)"
+        />
+      </div>
+    </CollapsibleContent>
 
     <section id="catalog-revision-history" class="card border border-base-300 bg-base-200">
       <div class="card-body p-6">
@@ -219,5 +234,5 @@ const emit = defineEmits<{
         </table>
       </div>
     </section>
-  </div>
+  </CollapsibleRoot>
 </template>
