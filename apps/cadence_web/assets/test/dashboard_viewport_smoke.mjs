@@ -2227,8 +2227,9 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     })
 
     throw new Error(
-      `${error.message}\nWidget query diagnostics focus state:\n` +
-      JSON.stringify(focusDiagnosticsResult.result.value, null, 2)
+      "Widget query diagnostics focus state:\n" +
+      JSON.stringify(focusDiagnosticsResult.result.value, null, 2) +
+      `\nOriginal timeout diagnostics:\n${error.message}`
     )
   }
 
