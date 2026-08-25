@@ -1962,12 +1962,95 @@ async function inspectOpsContextRail(client, options = {}) {
 }
 
 async function inspectWidgetQueryDiagnosticsPopover(client) {
+  const parentResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const root = Array.from(
+          document.querySelectorAll("[data-widget-query-diagnostics]")
+        ).find((candidate) => {
+          const detailsRoot = candidate.closest("[data-widget-details]")
+          return Boolean(
+            detailsRoot?.querySelector(":scope > [data-overlay-trigger]") &&
+            detailsRoot?.querySelector(":scope > [data-overlay-panel]")
+          )
+        })
+        const detailsRoot = root?.closest("[data-widget-details]")
+        const detailsTrigger = detailsRoot?.querySelector(":scope > [data-overlay-trigger]")
+        const detailsPanel = detailsRoot?.querySelector(":scope > [data-overlay-panel]")
+
+        if (detailsPanel?.hidden) detailsTrigger?.click()
+
+        return {
+          rootId: root?.id || "",
+          detailsRootId: detailsRoot?.id || "",
+          detailsTriggerId: detailsTrigger?.id || "",
+          detailsPanelId: detailsPanel?.id || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+  const parent = parentResult.result.value
+
+  assert.notEqual(parent.rootId, "", "widget query diagnostics should render")
+  assert.notEqual(
+    parent.detailsRootId,
+    "",
+    "widget query diagnostics should retain its owning widget details"
+  )
+  assert.notEqual(
+    parent.detailsTriggerId,
+    "",
+    "owning widget details should expose its trigger"
+  )
+  assert.notEqual(parent.detailsPanelId, "", "owning widget details should expose its panel")
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        !document.getElementById(${JSON.stringify(parent.detailsPanelId)})?.hidden
+      )
+    `,
+    2_000,
+    "widget query diagnostics owning details opening"
+  )
+
   const initialResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const root = document.querySelector("[data-widget-query-diagnostics]")
-        const trigger = root?.querySelector("[data-overlay-trigger]")
-        const panel = root?.querySelector("[data-overlay-panel]")
+        const root = document.getElementById(${JSON.stringify(parent.rootId)})
+        const trigger = root?.querySelector(":scope > [data-overlay-trigger]")
+        const panel = root?.querySelector(":scope > [data-overlay-panel]")
+        const style = trigger ? getComputedStyle(trigger) : null
+        const rect = trigger?.getBoundingClientRect()
+        const blockingAncestors = []
+        let ancestor = trigger
+        while (ancestor) {
+          const ancestorStyle = getComputedStyle(ancestor)
+          if (
+            ancestor.hidden ||
+            ancestor.inert ||
+            ancestor.getAttribute("aria-hidden") === "true" ||
+            ancestorStyle.display === "none" ||
+            ancestorStyle.visibility === "hidden" ||
+            ancestorStyle.visibility === "collapse"
+          ) {
+            blockingAncestors.push({
+              id: ancestor.id || "",
+              tag: ancestor.tagName,
+              hidden: ancestor.hidden,
+              inert: ancestor.inert,
+              ariaHidden: ancestor.getAttribute("aria-hidden") || "",
+              display: ancestorStyle.display,
+              visibility: ancestorStyle.visibility
+            })
+          }
+          ancestor = ancestor.parentElement
+        }
 
         return {
           rootId: root?.id || "",
@@ -1976,7 +2059,33 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
           controls: trigger?.getAttribute("aria-controls") || "",
           expanded: trigger?.getAttribute("aria-expanded") || "",
           closed: Boolean(root && !root.hasAttribute("data-overlay-open") && panel?.hidden),
-          closedInline: panel?.parentElement === root
+          closedInline: panel?.parentElement === root,
+          focusability: {
+            disabled: trigger?.disabled ?? null,
+            tabIndex: trigger?.tabIndex ?? null,
+            hidden: trigger?.hidden ?? null,
+            ariaHidden: trigger?.getAttribute("aria-hidden") || "",
+            display: style?.display || "",
+            visibility: style?.visibility || "",
+            rectCount: trigger?.getClientRects().length || 0,
+            width: rect ? Math.round(rect.width) : 0,
+            height: rect ? Math.round(rect.height) : 0,
+            offsetParent: trigger?.offsetParent?.id || trigger?.offsetParent?.tagName || "",
+            closestDetailsOpen: Boolean(
+              trigger?.closest("[data-widget-details]")?.hasAttribute("data-overlay-open")
+            ),
+            blockingAncestors,
+            activeBeforeFocus: document.activeElement?.id || document.activeElement?.tagName || "",
+            focusable: Boolean(
+              trigger &&
+              !trigger.disabled &&
+              trigger.tabIndex >= 0 &&
+              trigger.getClientRects().length > 0 &&
+              rect?.width > 0 &&
+              rect?.height > 0 &&
+              blockingAncestors.length === 0
+            )
+          }
         }
       })()
     `,
@@ -1984,7 +2093,11 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   })
   const initial = initialResult.result.value
 
-  assert.notEqual(initial.rootId, "", "widget query diagnostics should render")
+  assert.equal(
+    initial.focusability.focusable,
+    true,
+    `widget query diagnostics should select a visible focusable trigger: ${JSON.stringify(initial.focusability)}`
+  )
   assert.notEqual(initial.triggerId, "", "widget query diagnostics should expose its trigger")
   assert.notEqual(initial.panelId, "", "widget query diagnostics should retain its closed panel")
   assert.equal(
@@ -2010,7 +2123,11 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     `
       Boolean(
         document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
-        !document.getElementById(${JSON.stringify(initial.panelId)})?.hidden
+        !document.getElementById(${JSON.stringify(initial.panelId)})?.hidden &&
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        !document.getElementById(${JSON.stringify(parent.detailsPanelId)})?.hidden
       )
     `,
     2_000,
@@ -2023,6 +2140,8 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
         const root = document.getElementById(${JSON.stringify(initial.rootId)})
         const trigger = document.getElementById(${JSON.stringify(initial.triggerId)})
         const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        const detailsRoot = document.getElementById(${JSON.stringify(parent.detailsRootId)})
+        const detailsPanel = document.getElementById(${JSON.stringify(parent.detailsPanelId)})
         panel?.dispatchEvent(new MouseEvent("click", {bubbles: true}))
 
         return {
@@ -2030,6 +2149,9 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
           openAfterPanelClick: root?.hasAttribute("data-overlay-open") || false,
           inline: Boolean(root && panel && root.contains(panel)),
           portalled: Boolean(panel && !root?.contains(panel)),
+          owningDetailsOpen: Boolean(
+            detailsRoot?.hasAttribute("data-overlay-open") && !detailsPanel?.hidden
+          ),
           evidenceEvent: panel?.querySelector("[data-widget-query-evidence-open]")?.getAttribute("phx-click") || ""
         }
       })()
@@ -2042,6 +2164,11 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(mouseOpen.openAfterPanelClick, true, "panel interaction should not dismiss the popover")
   assert.equal(mouseOpen.inline, true, "the Reka popover should remain inside its LiveVue island")
   assert.equal(mouseOpen.portalled, false, "the Reka popover should explicitly avoid a portal")
+  assert.equal(
+    mouseOpen.owningDetailsOpen,
+    true,
+    "a nested diagnostics popover should retain its owning widget details"
+  )
   assert.notEqual(mouseOpen.evidenceEvent, "", "the panel should retain its Phoenix evidence event")
 
   const patchTriggerResult = await client.send("Runtime.evaluate", {
@@ -2083,7 +2210,11 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
           page?.getAttribute("data-dashboard-time-from") === "now-5m" &&
           page?.getAttribute("data-dashboard-time-to") === "now" &&
           root?.hasAttribute("data-overlay-open") &&
-          !panel?.hidden
+          !panel?.hidden &&
+          document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+            "data-overlay-open"
+          ) &&
+          !document.getElementById(${JSON.stringify(parent.detailsPanelId)})?.hidden
         )
       })()
     `,
@@ -2134,7 +2265,17 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   })
   await waitForExpression(
     client,
-    `!document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")`,
+    `
+      Boolean(
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        !document.getElementById(${JSON.stringify(parent.detailsPanelId)})?.hidden
+      )
+    `,
     2_000,
     "widget query diagnostics Escape open-state removal"
   )
@@ -2173,6 +2314,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
           const root = document.getElementById(${JSON.stringify(initial.rootId)})
           const panel = document.getElementById(${JSON.stringify(initial.panelId)})
           const activeElement = document.activeElement
+          const trigger = root?.querySelector(":scope > [data-overlay-trigger]")
           const describe = (element) => ({
             tag: element?.tagName || "",
             id: element?.id || "",
@@ -2181,6 +2323,34 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
             overlayPanel: Boolean(element?.hasAttribute("data-overlay-panel")),
             rekaWrapper: Boolean(element?.hasAttribute("data-reka-popper-content-wrapper"))
           })
+          const triggerStyle = trigger ? getComputedStyle(trigger) : null
+          const triggerRect = trigger?.getBoundingClientRect()
+          const detailsRoot = trigger?.closest("[data-widget-details]")
+          const detailsPanel = detailsRoot?.querySelector(":scope > [data-overlay-panel]")
+          const blockingAncestors = []
+          let ancestor = trigger
+          while (ancestor) {
+            const style = getComputedStyle(ancestor)
+            if (
+              ancestor.hidden ||
+              ancestor.inert ||
+              ancestor.getAttribute("aria-hidden") === "true" ||
+              style.display === "none" ||
+              style.visibility === "hidden" ||
+              style.visibility === "collapse"
+            ) {
+              blockingAncestors.push({
+                id: ancestor.id || "",
+                tag: ancestor.tagName,
+                hidden: ancestor.hidden,
+                inert: ancestor.inert,
+                ariaHidden: ancestor.getAttribute("aria-hidden") || "",
+                display: style.display,
+                visibility: style.visibility
+              })
+            }
+            ancestor = ancestor.parentElement
+          }
 
           return {
             adapter: {
@@ -2193,10 +2363,34 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
               helperCalled: root?.getAttribute("data-popover-focus-helper-called") || "",
               helperResult: root?.getAttribute("data-popover-focus-helper-result") || "",
               focusInvoked: root?.getAttribute("data-popover-focus-invoked") || "",
+              activeBeforeFocus: {
+                id: root?.getAttribute("data-popover-focus-active-before-id") || "",
+                tag: root?.getAttribute("data-popover-focus-active-before-tag") || "",
+                connected:
+                  root?.getAttribute("data-popover-focus-active-before-connected") || ""
+              },
               activeIdAfterHelper: root?.getAttribute("data-popover-focus-active-id") || "",
               activeTagAfterHelper: root?.getAttribute("data-popover-focus-active-tag") || "",
               activeConnectedAfterHelper:
                 root?.getAttribute("data-popover-focus-active-connected") || ""
+            },
+            triggerFocusability: {
+              disabled: trigger?.disabled ?? null,
+              tabIndex: trigger?.tabIndex ?? null,
+              hidden: trigger?.hidden ?? null,
+              ariaHidden: trigger?.getAttribute("aria-hidden") || "",
+              display: triggerStyle?.display || "",
+              visibility: triggerStyle?.visibility || "",
+              rectCount: trigger?.getClientRects().length || 0,
+              width: triggerRect ? Math.round(triggerRect.width) : 0,
+              height: triggerRect ? Math.round(triggerRect.height) : 0,
+              offsetParent: trigger?.offsetParent ? describe(trigger.offsetParent) : null,
+              closestDetails: {
+                id: detailsRoot?.id || "",
+                open: detailsRoot?.hasAttribute("data-overlay-open") || false,
+                panelHidden: detailsPanel?.hidden ?? null
+              },
+              blockingAncestors
             },
             root: {
               ...describe(root),
@@ -2252,7 +2446,16 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   })
   await waitForExpression(
     client,
-    `document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")`,
+    `
+      Boolean(
+        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        )
+      )
+    `,
     2_000,
     "widget query diagnostics keyboard opening"
   )
@@ -2260,7 +2463,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   const outsideResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const outside = document.querySelector("#dashboard-menu [data-overlay-trigger]")
+        const outside = document.getElementById(${JSON.stringify(parent.detailsTriggerId)})
         outside?.focus()
         outside?.dispatchEvent(
           new PointerEvent("pointerdown", {bubbles: true, composed: true, pointerType: "mouse"})
@@ -2279,6 +2482,9 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
       Boolean(
         !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
         document.activeElement?.id === ${JSON.stringify(outsideId)} &&
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
         !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
           "[data-reka-popper-content-wrapper]"
         )
@@ -2352,7 +2558,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     mobile: LIVE_INTERACTION_VIEWPORT.mobile,
   })
 
-  return {initial, mouseOpen, sameIdentityPatch, outsideId, narrow: narrowResult.result.value}
+  return {parent, initial, mouseOpen, sameIdentityPatch, outsideId, narrow: narrowResult.result.value}
 }
 
 async function runLiveDashboardInteractions(client, url, profile) {

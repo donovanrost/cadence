@@ -42,6 +42,9 @@ const focusDiagnosticAttributes = [
   "data-popover-focus-helper-called",
   "data-popover-focus-helper-result",
   "data-popover-focus-invoked",
+  "data-popover-focus-active-before-id",
+  "data-popover-focus-active-before-tag",
+  "data-popover-focus-active-before-connected",
   "data-popover-focus-active-id",
   "data-popover-focus-active-tag",
   "data-popover-focus-active-connected",
@@ -87,6 +90,19 @@ const restoreCurrentTriggerFocus = async () => {
   currentRoot.setAttribute(
     "data-popover-focus-direct-trigger-found",
     String(Boolean(directTrigger)),
+  )
+  const activeElementBeforeFocus = document.activeElement
+  currentRoot.setAttribute(
+    "data-popover-focus-active-before-id",
+    activeElementBeforeFocus?.id || "",
+  )
+  currentRoot.setAttribute(
+    "data-popover-focus-active-before-tag",
+    activeElementBeforeFocus?.tagName || "",
+  )
+  currentRoot.setAttribute(
+    "data-popover-focus-active-before-connected",
+    String(Boolean(activeElementBeforeFocus?.isConnected)),
   )
   currentRoot.setAttribute("data-popover-focus-helper-called", "true")
   const helperResult = focusCurrentPopoverTrigger(currentRoot)
