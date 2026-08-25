@@ -184,6 +184,7 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
 
     if mode == :livevue_closure do
       assert output =~ "\"liveVueClosure\""
+      assert output =~ "\"widgetQueryDiagnostics\""
     else
       assert output =~ "\"contextRail\""
       assert output =~ "\"sectionKeys\""
