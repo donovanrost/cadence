@@ -339,8 +339,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetDataManagementComponents do
     |> data_management_value_text()
   end
 
-  defp data_management_badge_context_attr(_badge, _key), do: nil
-
   defp data_management_badge_summary(%{summary: summary}), do: data_management_value_text(summary)
 
   defp data_management_badge_summary(%{"summary" => summary}),
