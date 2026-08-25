@@ -105,6 +105,7 @@ assert.match(adapterTemplate, /:side-offset="props\.sideOffset"/)
 assert.match(adapterTemplate, /:collision-padding="props\.collisionPadding"/)
 assert.match(adapterTemplate, /:prioritize-position="props\.prioritizePosition"/)
 assert.match(adapterTemplate, /position-strategy="fixed"/)
+assert.match(adapterTemplate, /sticky="always"/)
 assert.match(adapterTemplate, /<slot v-else name="content" :open="open"><\/slot>/)
 assert.doesNotMatch(adapterSource, /PopoverPortal|forceMount/)
 assert.match(adapterSource, /sideOffset: 8/)
@@ -162,13 +163,14 @@ assert.match(outsideSource, /CDP should dispatch a trusted pointerdown to the ou
 assert.doesNotMatch(outsideSource, /CDP should click the outside trigger/)
 assert.match(outsideSource, /owning details reopening before narrow viewport/)
 
-// Narrow align=end positioning enables Reka's cross-axis shift and reports compact geometry.
+// Narrow positioning keeps the fixed inline panel in-bounds even when its trigger is offscreen.
 assert.match(oracleSource, /--reka-popper-available-width/)
 assert.match(oracleSource, /--reka-popover-content-available-width/)
 assert.match(oracleSource, /style\.transform !== "none"/)
 assert.match(oracleSource, /style\.overflowX !== "visible"/)
 assert.match(oracleSource, /panelRect\.left >= 15/)
 assert.match(oracleSource, /panelRect\.right <= window\.innerWidth - 15/)
+assert.match(oracleSource, /widget query diagnostics should retain fixed wrapper positioning/)
 assert.match(oracleSource, /Widget query diagnostics narrow geometry:/)
 
 // The positioning readiness probe cannot strand CDP when animation frames are suppressed.
