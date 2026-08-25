@@ -1961,6 +1961,299 @@ async function inspectOpsContextRail(client, options = {}) {
   return { snapshot, persisted }
 }
 
+async function inspectWidgetQueryDiagnosticsPopover(client) {
+  const initialResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const root = document.querySelector("[data-widget-query-diagnostics]")
+        const trigger = root?.querySelector("[data-overlay-trigger]")
+        const panel = root?.querySelector("[data-overlay-panel]")
+
+        return {
+          rootId: root?.id || "",
+          triggerId: trigger?.id || "",
+          panelId: panel?.id || "",
+          controls: trigger?.getAttribute("aria-controls") || "",
+          expanded: trigger?.getAttribute("aria-expanded") || "",
+          closed: Boolean(root && !root.hasAttribute("data-overlay-open") && panel?.hidden),
+          closedInline: panel?.parentElement === root
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+  const initial = initialResult.result.value
+
+  assert.notEqual(initial.rootId, "", "widget query diagnostics should render")
+  assert.notEqual(initial.triggerId, "", "widget query diagnostics should expose its trigger")
+  assert.notEqual(initial.panelId, "", "widget query diagnostics should retain its closed panel")
+  assert.equal(
+    initial.triggerId,
+    `${initial.rootId}-trigger`,
+    "Reka should retain the public trigger id"
+  )
+  assert.equal(
+    initial.panelId,
+    `${initial.rootId}-panel`,
+    "Reka should retain the public panel id"
+  )
+  assert.equal(initial.controls, initial.panelId, "the trigger should retain its public panel identity")
+  assert.equal(initial.expanded, "false", "widget query diagnostics should begin collapsed")
+  assert.equal(initial.closed, true, "widget query diagnostics should begin closed")
+  assert.equal(initial.closedInline, true, "the closed panel should preserve the inline DOM contract")
+
+  await client.send("Runtime.evaluate", {
+    expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.click()`,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
+        !document.getElementById(${JSON.stringify(initial.panelId)})?.hidden
+      )
+    `,
+    2_000,
+    "widget query diagnostics mouse opening"
+  )
+
+  const mouseOpenResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const root = document.getElementById(${JSON.stringify(initial.rootId)})
+        const trigger = document.getElementById(${JSON.stringify(initial.triggerId)})
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        panel?.dispatchEvent(new MouseEvent("click", {bubbles: true}))
+
+        return {
+          expanded: trigger?.getAttribute("aria-expanded") || "",
+          openAfterPanelClick: root?.hasAttribute("data-overlay-open") || false,
+          inline: Boolean(root && panel && root.contains(panel)),
+          portalled: Boolean(panel && !root?.contains(panel)),
+          evidenceEvent: panel?.querySelector("[data-widget-query-evidence-open]")?.getAttribute("phx-click") || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+  const mouseOpen = mouseOpenResult.result.value
+
+  assert.equal(mouseOpen.expanded, "true", "mouse opening should expand the public trigger")
+  assert.equal(mouseOpen.openAfterPanelClick, true, "panel interaction should not dismiss the popover")
+  assert.equal(mouseOpen.inline, true, "the Reka popover should remain inside its LiveVue island")
+  assert.equal(mouseOpen.portalled, false, "the Reka popover should explicitly avoid a portal")
+  assert.notEqual(mouseOpen.evidenceEvent, "", "the panel should retain its Phoenix evidence event")
+
+  const patchTriggerResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const trigger = document.querySelector("#dashboard-comparison-toggle")
+        const available = Boolean(trigger && !trigger.disabled)
+        if (available) trigger.click()
+        return {available}
+      })()
+    `,
+    returnByValue: true,
+  })
+  assert.equal(
+    patchTriggerResult.result.value.available,
+    true,
+    "the live dashboard should expose a safe server-patched comparison toggle"
+  )
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-comparison-inspector") &&
+        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
+        !document.getElementById(${JSON.stringify(initial.panelId)})?.hidden
+      )
+    `,
+    3_000,
+    "same-identity widget query diagnostics state across a LiveVue prop patch"
+  )
+
+  const sameIdentityPatchResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const root = document.querySelector("[data-widget-query-diagnostics]")
+        const panel = root?.querySelector("[data-overlay-panel]")
+        document.querySelector("#dashboard-comparison-inspector-close")?.click()
+
+        return {
+          rootId: root?.id || "",
+          panelId: panel?.id || "",
+          open: root?.hasAttribute("data-overlay-open") || false,
+          wrapperCount: root?.querySelectorAll("[data-reka-popper-content-wrapper]").length || 0
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+  const sameIdentityPatch = sameIdentityPatchResult.result.value
+
+  assert.equal(sameIdentityPatch.rootId, initial.rootId, "the prop patch should retain overlay identity")
+  assert.equal(sameIdentityPatch.panelId, initial.panelId, "the prop patch should retain panel identity")
+  assert.equal(sameIdentityPatch.open, true, "the same identity should remain open across the prop patch")
+  assert.equal(sameIdentityPatch.wrapperCount, 1, "an open popover should own exactly one Reka wrapper")
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector("#dashboard-comparison-inspector") &&
+        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")
+      )
+    `,
+    3_000,
+    "widget query diagnostics state after closing the patch probe"
+  )
+
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
+        document.getElementById(${JSON.stringify(initial.panelId)})?.hidden &&
+        document.activeElement?.id === ${JSON.stringify(initial.triggerId)} &&
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
+          "[data-reka-popper-content-wrapper]"
+        ) &&
+        document.getElementById(${JSON.stringify(initial.panelId)})?.parentElement?.id ===
+          ${JSON.stringify(initial.rootId)}
+      )
+    `,
+    2_000,
+    "widget query diagnostics Escape dismissal and focus return"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.focus()`,
+  })
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+  })
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+  })
+  await waitForExpression(
+    client,
+    `document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")`,
+    2_000,
+    "widget query diagnostics keyboard opening"
+  )
+
+  const outsideResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const outside = document.querySelector("#dashboard-menu [data-overlay-trigger]")
+        outside?.focus()
+        outside?.dispatchEvent(
+          new PointerEvent("pointerdown", {bubbles: true, composed: true, pointerType: "mouse"})
+        )
+        return {outsideId: outside?.id || ""}
+      })()
+    `,
+    returnByValue: true,
+  })
+  const outsideId = outsideResult.result.value.outsideId
+
+  assert.notEqual(outsideId, "", "the dashboard should expose an outside focus target")
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
+        document.activeElement?.id === ${JSON.stringify(outsideId)} &&
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
+          "[data-reka-popper-content-wrapper]"
+        )
+      )
+    `,
+    2_000,
+    "widget query diagnostics outside dismissal without focus theft"
+  )
+
+  await client.send("Emulation.setDeviceMetricsOverride", {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 2,
+    mobile: true,
+  })
+  await client.send("Runtime.evaluate", {
+    expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.click()`,
+  })
+  await waitForExpression(
+    client,
+    `
+      (() => {
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        if (!panel || panel.hidden) return false
+        const rect = panel.getBoundingClientRect()
+        return rect.left >= 15 && rect.right <= window.innerWidth - 15
+      })()
+    `,
+    2_000,
+    "widget query diagnostics narrow viewport collision handling"
+  )
+
+  const narrowResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        const rect = panel?.getBoundingClientRect()
+        return {
+          viewportWidth: window.innerWidth,
+          left: rect ? Math.round(rect.left) : null,
+          right: rect ? Math.round(rect.right) : null
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.getElementById(${JSON.stringify(initial.panelId)})?.hidden &&
+        !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
+          "[data-reka-popper-content-wrapper]"
+        )
+      )
+    `,
+    2_000,
+    "widget query diagnostics narrow viewport dismissal"
+  )
+  await client.send("Emulation.setDeviceMetricsOverride", {
+    width: LIVE_INTERACTION_VIEWPORT.width,
+    height: LIVE_INTERACTION_VIEWPORT.height,
+    deviceScaleFactor: LIVE_INTERACTION_VIEWPORT.deviceScaleFactor,
+    mobile: LIVE_INTERACTION_VIEWPORT.mobile,
+  })
+
+  return {initial, mouseOpen, sameIdentityPatch, outsideId, narrow: narrowResult.result.value}
+}
+
 async function runLiveDashboardInteractions(client, url, profile) {
   if (!profile.requireLiveInteractions) return null
 
@@ -1968,6 +2261,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
   const contextRail = await inspectOpsContextRail(client)
+  const widgetQueryDiagnostics = await inspectWidgetQueryDiagnosticsPopover(client)
 
   const menuResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -2401,6 +2695,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
       initial: contextRail,
       afterReload: contextRailAfterReload,
     },
+    widgetQueryDiagnostics,
     limitAnalysisEvidence,
     workflowSurfaces,
     comparisonReview,
@@ -32966,7 +33261,11 @@ async function runLiveVueClosureInspection(client, profile) {
     results.push(result)
   }
 
-  return {results}
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+  const widgetQueryDiagnostics = await inspectWidgetQueryDiagnosticsPopover(client)
+
+  return {results, widgetQueryDiagnostics}
 }
 
 const INTERACTION_SCENARIOS = {
