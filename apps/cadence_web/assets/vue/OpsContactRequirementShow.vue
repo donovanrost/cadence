@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {Toggle} from "reka-ui"
+
 type EmptyPayload = Record<string, never>
 
 type Action<Payload> = {
@@ -296,21 +298,27 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
                 opportunity.selected && 'bg-primary/[0.06]'
               ]"
             >
-              <button
-                :id="opportunity.toggle_action.id"
-                type="button"
+              <Toggle
+                :model-value="opportunity.selected"
                 :disabled="opportunity.toggle_action.disabled"
-                :aria-label="opportunity.toggle_action.aria_label"
-                :class="[
-                  'h-5 w-5 border text-center font-mono text-xs',
-                  opportunity.selected && 'border-primary bg-primary text-primary-content',
-                  !opportunity.selected && 'border-base-content/30',
-                  !opportunity.eligible && 'cursor-not-allowed opacity-30'
-                ]"
-                @click="toggleOpportunity(opportunity)"
+                as-child
+                @update:model-value="toggleOpportunity(opportunity)"
               >
-                {{ opportunity.selected ? "✓" : "" }}
-              </button>
+                <button
+                  :id="opportunity.toggle_action.id"
+                  type="button"
+                  :disabled="opportunity.toggle_action.disabled"
+                  :aria-label="opportunity.toggle_action.aria_label"
+                  :class="[
+                    'h-5 w-5 border text-center font-mono text-xs',
+                    opportunity.selected && 'border-primary bg-primary text-primary-content',
+                    !opportunity.selected && 'border-base-content/30',
+                    !opportunity.eligible && 'cursor-not-allowed opacity-30'
+                  ]"
+                >
+                  {{ opportunity.selected ? "✓" : "" }}
+                </button>
+              </Toggle>
               <div class="min-w-0">
                 <p class="truncate text-sm font-semibold">
                   {{ opportunity.provider_display_name }}
