@@ -125,6 +125,7 @@ class FakeElement extends FakeEventTarget {
     this.id = name
     this.attributes = new Map()
     this.children = []
+    this.nodeType = 1
     this.hidden = false
     this.style = {transform: ""}
     this.isConnected = true
@@ -153,6 +154,17 @@ class FakeElement extends FakeEventTarget {
     return target === this || this.children.some((child) => child.contains(target))
   }
 
+  querySelector(selector) {
+    for (const child of this.children) {
+      if (selector === "[data-overlay-open]" && child.hasAttribute("data-overlay-open")) {
+        return child
+      }
+      const nested = child.querySelector(selector)
+      if (nested) return nested
+    }
+    return null
+  }
+
   focus() {
     this.focusCount += 1
   }
@@ -174,7 +186,7 @@ class FakeRoot extends FakeElement {
   querySelector(selector) {
     if (selector === ":scope > [data-overlay-trigger]") return this.trigger
     if (selector === ":scope > [data-overlay-panel]") return this.panel
-    return null
+    return super.querySelector(selector)
   }
 
   contains(target) {
@@ -236,6 +248,20 @@ const panelAction = new FakeElement("header-panel-action")
 root.panel.append(panelAction)
 root.panel.dispatchEvent(event("click", {target: panelAction}))
 assert.equal(controller.state.open, true, "popover actions must not implicitly close")
+
+const nestedOverlay = new FakeRoot("widget-query-placement-1")
+nestedOverlay.setAttribute("data-overlay-open", "")
+root.panel.append(nestedOverlay)
+windowObject.dispatchEvent(
+  new FakeCustomEvent("cadence:overlay-opened", {detail: nestedOverlay}),
+)
+assert.equal(controller.state.open, true, "a nested overlay must retain its owning widget details")
+
+const nestedEscapeEvent = event("keydown", {key: "Escape"})
+documentObject.dispatchEvent(nestedEscapeEvent)
+assert.equal(nestedEscapeEvent.defaultPrevented, false)
+assert.equal(controller.state.open, true, "Escape must dismiss the open nested overlay first")
+nestedOverlay.toggleAttribute("data-overlay-open", false)
 
 root.trigger.dispatchEvent(event("click"))
 assert.equal(controller.state.open, false)

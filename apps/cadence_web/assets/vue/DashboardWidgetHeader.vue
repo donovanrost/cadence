@@ -193,12 +193,19 @@ const createDashboardWidgetHeaderController = ({rootElement, documentObject, win
 
   function onDocumentKeyDown(event) {
     if (event.key !== "Escape") return
+    if (event.defaultPrevented || state.panel?.querySelector("[data-overlay-open]")) return
     event.preventDefault()
     close()
   }
 
   const onOverlayOpened = (event) => {
-    if (event.detail !== state.rootElement) close({restoreFocus: false})
+    const openedRoot = event.detail
+    if (
+      openedRoot !== state.rootElement &&
+      !(openedRoot?.nodeType && state.rootElement.contains(openedRoot))
+    ) {
+      close({restoreFocus: false})
+    }
   }
 
   const onPanelClick = () => {}
