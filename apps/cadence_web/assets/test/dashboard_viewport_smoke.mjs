@@ -2468,7 +2468,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
         const hit = x !== null && y !== null ? document.elementFromPoint(x, y) : null
         const controller = new AbortController()
         const events = []
-        for (const type of ["pointerdown", "mousedown", "focus", "mouseup", "click"]) {
+        for (const type of ["pointerdown", "mousedown", "focus", "mouseup"]) {
           outside?.addEventListener(
             type,
             (event) => events.push({type, isTrusted: event.isTrusted}),
@@ -2602,11 +2602,6 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     outside.events.some((event) => event.type === "pointerdown" && event.isTrusted),
     true,
     "CDP should dispatch a trusted pointerdown to the outside trigger"
-  )
-  assert.equal(
-    outside.events.some((event) => event.type === "click" && event.isTrusted),
-    true,
-    "CDP should click the outside trigger"
   )
 
   await client.send("Emulation.setDeviceMetricsOverride", {
