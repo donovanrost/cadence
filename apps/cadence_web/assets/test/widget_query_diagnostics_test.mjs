@@ -32,16 +32,28 @@ const oracleEnd = viewportSmokeSource.indexOf(
   oracleStart,
 )
 const oracleSource = viewportSmokeSource.slice(oracleStart, oracleEnd)
+const cdpStart = viewportSmokeSource.indexOf("class CdpClient")
+const cdpEnd = viewportSmokeSource.indexOf("async function loadViewport", cdpStart)
+const cdpSource = viewportSmokeSource.slice(cdpStart, cdpEnd)
 const keyboardStart = oracleSource.indexOf("const keyboardPreflightResult")
 const keyboardEnd = oracleSource.indexOf("const outsideTargetResult", keyboardStart)
 const keyboardSource = oracleSource.slice(keyboardStart, keyboardEnd)
 const outsideStart = keyboardEnd
 const outsideEnd = oracleSource.indexOf("const narrowResult", outsideStart)
 const outsideSource = oracleSource.slice(outsideStart, outsideEnd)
+const narrowStart = oracleSource.indexOf(
+  'reportProgress("widget query diagnostics: narrow opening")',
+)
+const narrowEnd = oracleSource.indexOf(
+  'reportProgress("widget query diagnostics: complete")',
+  narrowStart,
+)
+const narrowSource = oracleSource.slice(narrowStart, narrowEnd)
 
 assert.ok(componentTemplate, "WidgetQueryDiagnostics.vue must have a template block")
 assert.ok(adapterTemplate, "CadencePopover.vue must have a template block")
 assert.ok(oracleStart >= 0 && oracleEnd > oracleStart, "the browser oracle must remain auditable")
+assert.ok(cdpStart >= 0 && cdpEnd > cdpStart, "the bounded CDP client must remain auditable")
 assert.ok(
   keyboardStart >= 0 && keyboardEnd > keyboardStart,
   "the native keyboard oracle must remain auditable",
@@ -49,6 +61,10 @@ assert.ok(
 assert.ok(
   outsideStart >= 0 && outsideEnd > outsideStart,
   "the native outside pointer oracle must remain auditable",
+)
+assert.ok(
+  narrowStart >= 0 && narrowEnd > narrowStart,
+  "the narrow collision oracle must remain auditable",
 )
 
 // The presentation remains the sole source of public DOM and Phoenix contracts.
@@ -154,6 +170,27 @@ assert.match(oracleSource, /style\.overflowX !== "visible"/)
 assert.match(oracleSource, /panelRect\.left >= 15/)
 assert.match(oracleSource, /panelRect\.right <= window\.innerWidth - 15/)
 assert.match(oracleSource, /Widget query diagnostics narrow geometry:/)
+
+// The positioning readiness probe cannot strand CDP when animation frames are suppressed.
+assert.doesNotMatch(narrowSource, /requestAnimationFrame|awaitPromise/)
+assert.match(narrowSource, /widget query diagnostics: narrow positioning/)
+assert.match(narrowSource, /panel\?\.hasAttribute\("data-side"\)/)
+assert.match(narrowSource, /!transform\.includes\("-200%"\)/)
+assert.match(narrowSource, /widget query diagnostics narrow viewport positioning/)
+
+// Every CDP command/event and final browser cleanup has an explicit deadline and stage label.
+assert.match(viewportSmokeSource, /const CDP_COMMAND_TIMEOUT_MS = 15_000/)
+assert.match(viewportSmokeSource, /const CDP_EVENT_TIMEOUT_MS = 30_000/)
+assert.match(viewportSmokeSource, /const CLEANUP_TIMEOUT_MS = 10_000/)
+assert.match(cdpSource, /async send\(method, params = \{\}, timeoutMs = CDP_COMMAND_TIMEOUT_MS\)/)
+assert.match(cdpSource, /CDP \$\{method\} timed out after \$\{timeoutMs\}ms; last stage:/)
+assert.match(cdpSource, /once\(method, timeoutMs = CDP_EVENT_TIMEOUT_MS\)/)
+assert.match(cdpSource, /CDP event \$\{method\} timed out after \$\{timeoutMs\}ms; last stage:/)
+assert.match(cdpSource, /rejectPending\(error\)/)
+assert.match(
+  viewportSmokeSource,
+  /client\.close\(\)[\s\S]*withTimeout\(shutdown\.close\(\), CLEANUP_TIMEOUT_MS/,
+)
 
 // Open state survives only a truthy, unchanged overlay identity across a prop patch.
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", "widget-query-a"), true)

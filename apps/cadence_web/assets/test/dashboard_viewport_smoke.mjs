@@ -20,6 +20,15 @@ const LIVE_INTERACTION_VIEWPORT = {
   deviceScaleFactor: 1,
   mobile: false,
 }
+const CDP_COMMAND_TIMEOUT_MS = 15_000
+const CDP_EVENT_TIMEOUT_MS = 30_000
+const CLEANUP_TIMEOUT_MS = 10_000
+let currentProgressStage = "initializing"
+
+function reportProgress(stage) {
+  currentProgressStage = stage
+  console.error(`[dashboard-smoke] ${stage}`)
+}
 
 function argValue(name) {
   const index = process.argv.indexOf(name)
@@ -640,7 +649,11 @@ function withTimeout(promise, timeoutMs, label) {
 
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+      reject(
+        new Error(
+          `${label} timed out after ${timeoutMs}ms; last stage: ${currentProgressStage}`
+        )
+      )
     }, timeoutMs)
   })
 
@@ -679,18 +692,28 @@ class CdpClient {
     this.nextId = 1
     this.callbacks = new Map()
     this.events = new Map()
+    this.pendingEvents = new Set()
     this.socket = new WebSocket(wsUrl)
-    this.ready = new Promise((resolveReady, rejectReady) => {
+    const ready = new Promise((resolveReady, rejectReady) => {
       this.socket.addEventListener("open", resolveReady, { once: true })
       this.socket.addEventListener("error", rejectReady, { once: true })
+      this.socket.addEventListener(
+        "close",
+        () => rejectReady(new Error("CDP WebSocket closed before opening")),
+        { once: true }
+      )
     })
+    this.ready = withTimeout(ready, CDP_COMMAND_TIMEOUT_MS, "CDP WebSocket connection")
 
     this.socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data)
 
       if (message.id) {
         const callback = this.callbacks.get(message.id)
+        if (!callback) return
+
         this.callbacks.delete(message.id)
+        clearTimeout(callback.timer)
 
         if (message.error) {
           callback.reject(new Error(`${message.error.message}: ${message.error.data || ""}`))
@@ -702,30 +725,82 @@ class CdpClient {
         listeners.forEach((listener) => listener(message.params || {}))
       }
     })
+
+    this.socket.addEventListener("close", () => {
+      this.rejectPending(new Error(`CDP WebSocket closed; last stage: ${currentProgressStage}`))
+    })
   }
 
-  async send(method, params = {}) {
+  rejectPending(error) {
+    for (const callback of this.callbacks.values()) {
+      clearTimeout(callback.timer)
+      callback.reject(error)
+    }
+    this.callbacks.clear()
+
+    for (const pendingEvent of this.pendingEvents) pendingEvent.reject(error)
+    this.pendingEvents.clear()
+  }
+
+  async send(method, params = {}, timeoutMs = CDP_COMMAND_TIMEOUT_MS) {
     await this.ready
 
     const id = this.nextId++
     const response = new Promise((resolveResponse, rejectResponse) => {
-      this.callbacks.set(id, { resolve: resolveResponse, reject: rejectResponse })
+      const timer = setTimeout(() => {
+        this.callbacks.delete(id)
+        rejectResponse(
+          new Error(
+            `CDP ${method} timed out after ${timeoutMs}ms; last stage: ${currentProgressStage}`
+          )
+        )
+      }, timeoutMs)
+      this.callbacks.set(id, { resolve: resolveResponse, reject: rejectResponse, timer })
     })
 
-    this.socket.send(JSON.stringify({ id, method, params }))
+    try {
+      this.socket.send(JSON.stringify({ id, method, params }))
+    } catch (error) {
+      const callback = this.callbacks.get(id)
+      if (callback) clearTimeout(callback.timer)
+      this.callbacks.delete(id)
+      throw error
+    }
+
     return response
   }
 
-  once(method) {
-    return new Promise((resolveEvent) => {
-      const listener = (params) => {
+  once(method, timeoutMs = CDP_EVENT_TIMEOUT_MS) {
+    return new Promise((resolveEvent, rejectEvent) => {
+      let pendingEvent
+      let timer
+      const cleanup = () => {
+        clearTimeout(timer)
+        this.pendingEvents.delete(pendingEvent)
         this.events.set(
           method,
           (this.events.get(method) || []).filter((candidate) => candidate !== listener)
         )
+      }
+      const listener = (params) => {
+        cleanup()
         resolveEvent(params)
       }
+      pendingEvent = {
+        reject: (error) => {
+          cleanup()
+          rejectEvent(error)
+        },
+      }
+      timer = setTimeout(() => {
+        pendingEvent.reject(
+          new Error(
+            `CDP event ${method} timed out after ${timeoutMs}ms; last stage: ${currentProgressStage}`
+          )
+        )
+      }, timeoutMs)
 
+      this.pendingEvents.add(pendingEvent)
       this.events.set(method, [...(this.events.get(method) || []), listener])
     })
   }
@@ -735,7 +810,8 @@ class CdpClient {
   }
 
   close() {
-    this.socket.close()
+    this.rejectPending(new Error(`CDP client closed; last stage: ${currentProgressStage}`))
+    if (this.socket.readyState < 2) this.socket.close()
   }
 }
 
@@ -1962,6 +2038,7 @@ async function inspectOpsContextRail(client, options = {}) {
 }
 
 async function inspectWidgetQueryDiagnosticsPopover(client) {
+  reportProgress("widget query diagnostics: owning details")
   const parentResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -2115,6 +2192,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(initial.closed, true, "widget query diagnostics should begin closed")
   assert.equal(initial.closedInline, true, "the closed panel should preserve the inline DOM contract")
 
+  reportProgress("widget query diagnostics: mouse opening")
   await client.send("Runtime.evaluate", {
     expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.click()`,
   })
@@ -2171,6 +2249,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   )
   assert.notEqual(mouseOpen.evidenceEvent, "", "the panel should retain its Phoenix evidence event")
 
+  reportProgress("widget query diagnostics: server patch")
   const patchTriggerResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -2257,6 +2336,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(sameIdentityPatch.renderedFrom, "now-5m", "the server patch should render the from bound")
   assert.equal(sameIdentityPatch.renderedTo, "now", "the server patch should render the to bound")
 
+  reportProgress("widget query diagnostics: Escape dismissal")
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
     key: "Escape",
@@ -2307,6 +2387,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     "widget query diagnostics Escape focus return"
   )
 
+  reportProgress("widget query diagnostics: keyboard opening")
   const keyboardPreflightResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -2456,6 +2537,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(click?.isTrusted, true, "native Enter activation should click the diagnostics trigger")
   assert.equal(keyboard.rootOpen, true, "native trigger activation should reach Reka updateOpen")
 
+  reportProgress("widget query diagnostics: outside dismissal")
   const outsideTargetResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -2604,6 +2686,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     "CDP should dispatch a trusted pointerdown to the outside trigger"
   )
 
+  reportProgress("widget query diagnostics: narrow opening")
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: 390,
     height: 844,
@@ -2648,10 +2731,28 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     2_000,
     "widget query diagnostics narrow viewport opening"
   )
-  await client.send("Runtime.evaluate", {
-    expression: `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`,
-    awaitPromise: true,
-  })
+  reportProgress("widget query diagnostics: narrow positioning")
+  await waitForExpression(
+    client,
+    `
+      (() => {
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        const wrapper = panel?.closest("[data-reka-popper-content-wrapper]")
+        const transform = wrapper?.style.transform || ""
+        const availableWidth = wrapper?.style.getPropertyValue(
+          "--reka-popper-available-width"
+        ) || ""
+        return Boolean(
+          panel?.hasAttribute("data-side") &&
+          transform &&
+          !transform.includes("-200%") &&
+          availableWidth
+        )
+      })()
+    `,
+    2_000,
+    "widget query diagnostics narrow viewport positioning"
+  )
 
   const narrowResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -2741,6 +2842,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
       "widget query diagnostics narrow viewport collision handling"
   )
 
+  reportProgress("widget query diagnostics: narrow dismissal")
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
     key: "Escape",
@@ -2766,6 +2868,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     deviceScaleFactor: LIVE_INTERACTION_VIEWPORT.deviceScaleFactor,
     mobile: LIVE_INTERACTION_VIEWPORT.mobile,
   })
+  reportProgress("widget query diagnostics: complete")
 
   return {
     parent,
@@ -2781,12 +2884,15 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
 async function runLiveDashboardInteractions(client, url, profile) {
   if (!profile.requireLiveInteractions) return null
 
+  reportProgress("live dashboard: loading interaction viewport")
   await loadViewport(client, url, LIVE_INTERACTION_VIEWPORT)
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
+  reportProgress("live dashboard: context rail")
   const contextRail = await inspectOpsContextRail(client)
   const widgetQueryDiagnostics = await inspectWidgetQueryDiagnosticsPopover(client)
 
+  reportProgress("live dashboard: remaining interactions")
   const menuResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -34135,13 +34241,16 @@ async function runDefaultDashboardScenario(client, url, profile) {
   const results = []
 
   for (const viewport of DEFAULT_VIEWPORTS) {
+    reportProgress(`${viewport.name} viewport: loading`)
     await loadViewport(client, url, viewport)
     await waitForProfileReady(client, profile, viewport)
+    reportProgress(`${viewport.name} viewport: evaluating`)
     const result = await evaluateViewport(client, viewport, profile)
     assertViewport(result)
     results.push(result)
   }
 
+  reportProgress("live dashboard interactions")
   const interactions = await runLiveDashboardInteractions(client, url, profile)
 
   return {
@@ -34184,12 +34293,16 @@ const profile = viewportProfile(profileName())
 const credentials = loginCredentials()
 const mode = interactionMode()
 const timeoutMs = scenarioTimeoutMs()
+reportProgress("launching browser")
 const runtime = await launchChrome()
 const shutdown = installShutdownGuards(runtime)
+reportProgress("creating browser target")
 const pageWsUrl = await createPage(httpBaseFromWebSocket(runtime.devtoolsUrl), credentials ? "about:blank" : url)
 const client = new CdpClient(pageWsUrl)
+let runError = null
 
 try {
+  reportProgress("enabling CDP domains")
   await client.send("Page.enable")
   await client.send("Runtime.enable")
   client.on("Page.javascriptDialogOpening", () => {
@@ -34197,6 +34310,7 @@ try {
   })
 
   if (credentials) {
+    reportProgress("authenticating browser session")
     await client.send("Browser.grantPermissions", {
       origin: new URL(credentials.loginUrl).origin,
       permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
@@ -34205,14 +34319,25 @@ try {
     await selectOrganization(client, argValue("--organization-id"))
   }
 
+  reportProgress(`running ${mode} scenario`)
   const scenarioResult = await withTimeout(
     runBrowserScenario(client, url, profile, mode),
     timeoutMs,
     `dashboard viewport smoke ${mode}`
   )
+  reportProgress(`completed ${mode} scenario`)
   console.log(JSON.stringify(scenarioResult, null, 2))
   console.log("dashboard_viewport_smoke passed")
+} catch (error) {
+  runError = error
+  throw error
 } finally {
+  reportProgress("cleaning up browser")
   client.close()
-  await shutdown.close()
+  try {
+    await withTimeout(shutdown.close(), CLEANUP_TIMEOUT_MS, "dashboard browser cleanup")
+  } catch (cleanupError) {
+    if (!runError) throw cleanupError
+    console.error(`[dashboard-smoke] cleanup failed: ${cleanupError.message}`)
+  }
 }
