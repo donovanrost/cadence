@@ -2047,10 +2047,17 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   const patchTriggerResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const trigger = document.querySelector("#dashboard-comparison-toggle")
-        const available = Boolean(trigger && !trigger.disabled)
+        const trigger = document.querySelector("#dashboard-time-preset-last-5m")
+        const event = trigger?.getAttribute("phx-click") || ""
+        const preset = trigger?.getAttribute("phx-value-preset") || ""
+        const available = Boolean(
+          trigger &&
+          !trigger.disabled &&
+          event === "set_time_preset" &&
+          preset === "last_5m"
+        )
         if (available) trigger.click()
-        return {available}
+        return {available, event, preset}
       })()
     `,
     returnByValue: true,
@@ -2058,33 +2065,50 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(
     patchTriggerResult.result.value.available,
     true,
-    "the live dashboard should expose a safe server-patched comparison toggle"
+    "the live dashboard should expose the enabled last-five-minutes Phoenix preset"
   )
   await waitForExpression(
     client,
     `
-      Boolean(
-        document.querySelector("#dashboard-comparison-inspector") &&
-        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
-        !document.getElementById(${JSON.stringify(initial.panelId)})?.hidden
-      )
+      (() => {
+        const url = new URL(window.location.href)
+        const page = document.querySelector("#ops-dashboard-show-page")
+        const root = document.getElementById(${JSON.stringify(initial.rootId)})
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+
+        return Boolean(
+          url.searchParams.get("from") === "now-5m" &&
+          url.searchParams.get("to") === "now" &&
+          page?.getAttribute("data-dashboard-time-mode") === "live" &&
+          page?.getAttribute("data-dashboard-time-from") === "now-5m" &&
+          page?.getAttribute("data-dashboard-time-to") === "now" &&
+          root?.hasAttribute("data-overlay-open") &&
+          !panel?.hidden
+        )
+      })()
     `,
     3_000,
-    "same-identity widget query diagnostics state across a LiveVue prop patch"
+    "same-identity widget query diagnostics state across a server time-preset patch"
   )
 
   const sameIdentityPatchResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const root = document.querySelector("[data-widget-query-diagnostics]")
-        const panel = root?.querySelector("[data-overlay-panel]")
-        document.querySelector("#dashboard-comparison-inspector-close")?.click()
+        const url = new URL(window.location.href)
+        const page = document.querySelector("#ops-dashboard-show-page")
+        const root = document.getElementById(${JSON.stringify(initial.rootId)})
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
 
         return {
           rootId: root?.id || "",
           panelId: panel?.id || "",
           open: root?.hasAttribute("data-overlay-open") || false,
-          wrapperCount: root?.querySelectorAll("[data-reka-popper-content-wrapper]").length || 0
+          wrapperCount: root?.querySelectorAll("[data-reka-popper-content-wrapper]").length || 0,
+          urlFrom: url.searchParams.get("from") || "",
+          urlTo: url.searchParams.get("to") || "",
+          renderedTimeMode: page?.getAttribute("data-dashboard-time-mode") || "",
+          renderedFrom: page?.getAttribute("data-dashboard-time-from") || "",
+          renderedTo: page?.getAttribute("data-dashboard-time-to") || ""
         }
       })()
     `,
@@ -2092,21 +2116,15 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   })
   const sameIdentityPatch = sameIdentityPatchResult.result.value
 
-  assert.equal(sameIdentityPatch.rootId, initial.rootId, "the prop patch should retain overlay identity")
-  assert.equal(sameIdentityPatch.panelId, initial.panelId, "the prop patch should retain panel identity")
-  assert.equal(sameIdentityPatch.open, true, "the same identity should remain open across the prop patch")
+  assert.equal(sameIdentityPatch.rootId, initial.rootId, "the server patch should retain overlay identity")
+  assert.equal(sameIdentityPatch.panelId, initial.panelId, "the server patch should retain panel identity")
+  assert.equal(sameIdentityPatch.open, true, "the same identity should remain open across the server patch")
   assert.equal(sameIdentityPatch.wrapperCount, 1, "an open popover should own exactly one Reka wrapper")
-  await waitForExpression(
-    client,
-    `
-      Boolean(
-        !document.querySelector("#dashboard-comparison-inspector") &&
-        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")
-      )
-    `,
-    3_000,
-    "widget query diagnostics state after closing the patch probe"
-  )
+  assert.equal(sameIdentityPatch.urlFrom, "now-5m", "the preset should patch the URL from bound")
+  assert.equal(sameIdentityPatch.urlTo, "now", "the preset should patch the URL to bound")
+  assert.equal(sameIdentityPatch.renderedTimeMode, "live", "the server patch should retain live mode")
+  assert.equal(sameIdentityPatch.renderedFrom, "now-5m", "the server patch should render the from bound")
+  assert.equal(sameIdentityPatch.renderedTo, "now", "the server patch should render the to bound")
 
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
