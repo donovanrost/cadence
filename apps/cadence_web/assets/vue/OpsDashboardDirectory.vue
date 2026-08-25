@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {Toggle} from "reka-ui"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
 type LinkAction = {
@@ -173,7 +174,7 @@ const updateQuery = (event: Event) => {
   }, props.filters.fields.query.debounce_ms)
 }
 
-const toggleStar = (row: DirectoryRow) => {
+const toggleDashboardStar = (row: DirectoryRow) => {
   emit("toggle_dashboard_star", row.star.payload)
 }
 
@@ -367,18 +368,24 @@ const restoreDashboard = (row: DirectoryRow) => {
               </div>
             </div>
 
-            <button
-              :id="row.star.id"
-              type="button"
-              :aria-label="row.star.aria_label"
-              :aria-pressed="row.star.aria_pressed"
+            <Toggle
+              :model-value="row.starred"
               :disabled="row.star.disabled"
-              :title="row.star.title"
-              :class="['btn btn-ghost btn-xs shrink-0', row.starred && 'text-warning']"
-              @click="toggleStar(row)"
+              as-child
+              @update:model-value="toggleDashboardStar(row)"
             >
-              <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
-            </button>
+              <button
+                :id="row.star.id"
+                type="button"
+                :aria-label="row.star.aria_label"
+                :aria-pressed="row.star.aria_pressed"
+                :disabled="row.star.disabled"
+                :title="row.star.title"
+                :class="['btn btn-ghost btn-xs shrink-0', row.starred && 'text-warning']"
+              >
+                <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
+              </button>
+            </Toggle>
           </div>
 
           <div class="mt-4 flex items-center justify-between gap-3 border-t border-base-300/60 pt-3">
