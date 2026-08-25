@@ -14,14 +14,35 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/WidgetQueryDiagnostics.vue")
 const adapterPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
 const overlayStylesPath = resolve(__dirname, "../css/components/overlay.css")
-const componentSource = await readFile(componentPath, "utf8")
-const adapterSource = await readFile(adapterPath, "utf8")
-const overlayStylesSource = await readFile(overlayStylesPath, "utf8")
+const viewportSmokePath = resolve(__dirname, "dashboard_viewport_smoke.mjs")
+const [componentSource, adapterSource, overlayStylesSource, viewportSmokeSource] =
+  await Promise.all([
+    readFile(componentPath, "utf8"),
+    readFile(adapterPath, "utf8"),
+    readFile(overlayStylesPath, "utf8"),
+    readFile(viewportSmokePath, "utf8"),
+  ])
 const componentTemplate = componentSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 const adapterTemplate = adapterSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const oracleStart = viewportSmokeSource.indexOf(
+  "async function inspectWidgetQueryDiagnosticsPopover(client)",
+)
+const oracleEnd = viewportSmokeSource.indexOf(
+  "async function runLiveDashboardInteractions(client, url, profile)",
+  oracleStart,
+)
+const oracleSource = viewportSmokeSource.slice(oracleStart, oracleEnd)
+const keyboardStart = oracleSource.indexOf("const keyboardPreflightResult")
+const keyboardEnd = oracleSource.indexOf("const outsideResult", keyboardStart)
+const keyboardSource = oracleSource.slice(keyboardStart, keyboardEnd)
 
 assert.ok(componentTemplate, "WidgetQueryDiagnostics.vue must have a template block")
 assert.ok(adapterTemplate, "CadencePopover.vue must have a template block")
+assert.ok(oracleStart >= 0 && oracleEnd > oracleStart, "the browser oracle must remain auditable")
+assert.ok(
+  keyboardStart >= 0 && keyboardEnd > keyboardStart,
+  "the native keyboard oracle must remain auditable",
+)
 
 // The presentation remains the sole source of public DOM and Phoenix contracts.
 assert.match(componentSource, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
@@ -86,6 +107,21 @@ assert.match(
   /@layer components \{[\s\S]*\[data-reka-popper-content-wrapper\] > \.cadence-overlay-panel \{\n    position: static;/,
 )
 assert.doesNotMatch(adapterSource, /setTimeout|setInterval/)
+assert.doesNotMatch(adapterSource, /data-popover-focus/)
+
+// Enter remains a native CDP keyboard activation, including the text payload Chromium expects.
+assert.match(keyboardSource, /for \(const type of \["keydown", "keypress", "keyup", "click"\]\)/)
+assert.match(
+  keyboardSource,
+  /type: "keyDown",[\s\S]*key: "Enter",[\s\S]*code: "Enter",[\s\S]*text: "\\r",[\s\S]*unmodifiedText: "\\r",[\s\S]*windowsVirtualKeyCode: 13/,
+)
+assert.match(
+  keyboardSource,
+  /type: "keyUp",[\s\S]*key: "Enter",[\s\S]*code: "Enter",[\s\S]*windowsVirtualKeyCode: 13/,
+)
+assert.doesNotMatch(keyboardSource, /nativeVirtualKeyCode/)
+assert.match(keyboardSource, /native Enter activation should click the diagnostics trigger/)
+assert.match(keyboardSource, /native trigger activation should reach Reka updateOpen/)
 
 // Open state survives only a truthy, unchanged overlay identity across a prop patch.
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", "widget-query-a"), true)

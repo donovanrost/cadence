@@ -2300,165 +2300,167 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     2_000,
     "widget query diagnostics Escape panel reparenting"
   )
-  try {
-    await waitForExpression(
-      client,
-      `document.activeElement?.id === ${JSON.stringify(initial.triggerId)}`,
-      2_000,
-      "widget query diagnostics Escape focus return"
-    )
-  } catch (error) {
-    const focusDiagnosticsResult = await client.send("Runtime.evaluate", {
-      expression: `
-        (() => {
-          const root = document.getElementById(${JSON.stringify(initial.rootId)})
-          const panel = document.getElementById(${JSON.stringify(initial.panelId)})
-          const activeElement = document.activeElement
-          const trigger = root?.querySelector(":scope > [data-overlay-trigger]")
-          const describe = (element) => ({
-            tag: element?.tagName || "",
-            id: element?.id || "",
-            connected: Boolean(element?.isConnected),
-            overlayTrigger: Boolean(element?.hasAttribute("data-overlay-trigger")),
-            overlayPanel: Boolean(element?.hasAttribute("data-overlay-panel")),
-            rekaWrapper: Boolean(element?.hasAttribute("data-reka-popper-content-wrapper"))
+  await waitForExpression(
+    client,
+    `document.activeElement?.id === ${JSON.stringify(initial.triggerId)}`,
+    2_000,
+    "widget query diagnostics Escape focus return"
+  )
+
+  const keyboardPreflightResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        window.__cadenceWidgetQueryKeyboardProbe?.controller?.abort()
+
+        const root = document.getElementById(${JSON.stringify(initial.rootId)})
+        const trigger = document.getElementById(${JSON.stringify(initial.triggerId)})
+        const style = trigger ? getComputedStyle(trigger) : null
+        const rect = trigger?.getBoundingClientRect()
+        const controller = new AbortController()
+        const events = []
+        const record = (event) => {
+          const entry = {
+            type: event.type,
+            key: event.key || "",
+            code: event.code || "",
+            isTrusted: event.isTrusted,
+            detail: event.detail ?? null,
+            defaultPreventedAtTarget: event.defaultPrevented,
+            defaultPreventedAfterDispatch: null,
+            rootOpenAfterDispatch: null
+          }
+          events.push(entry)
+          queueMicrotask(() => {
+            entry.defaultPreventedAfterDispatch = event.defaultPrevented
+            entry.rootOpenAfterDispatch = root?.hasAttribute("data-overlay-open") || false
           })
-          const triggerStyle = trigger ? getComputedStyle(trigger) : null
-          const triggerRect = trigger?.getBoundingClientRect()
-          const detailsRoot = trigger?.closest("[data-widget-details]")
-          const detailsPanel = detailsRoot?.querySelector(":scope > [data-overlay-panel]")
-          const blockingAncestors = []
-          let ancestor = trigger
-          while (ancestor) {
-            const style = getComputedStyle(ancestor)
-            if (
-              ancestor.hidden ||
-              ancestor.inert ||
-              ancestor.getAttribute("aria-hidden") === "true" ||
-              style.display === "none" ||
-              style.visibility === "hidden" ||
-              style.visibility === "collapse"
-            ) {
-              blockingAncestors.push({
-                id: ancestor.id || "",
-                tag: ancestor.tagName,
-                hidden: ancestor.hidden,
-                inert: ancestor.inert,
-                ariaHidden: ancestor.getAttribute("aria-hidden") || "",
-                display: style.display,
-                visibility: style.visibility
-              })
-            }
-            ancestor = ancestor.parentElement
-          }
+        }
 
-          return {
-            adapter: {
-              closeHandler: root?.getAttribute("data-popover-focus-close-handler") || "",
-              closeSuppressed: root?.getAttribute("data-popover-focus-close-suppressed") || "",
-              afterNextTick: root?.getAttribute("data-popover-focus-after-next-tick") || "",
-              identityMatches: root?.getAttribute("data-popover-focus-identity-matches") || "",
-              directTriggerFound:
-                root?.getAttribute("data-popover-focus-direct-trigger-found") || "",
-              helperCalled: root?.getAttribute("data-popover-focus-helper-called") || "",
-              helperResult: root?.getAttribute("data-popover-focus-helper-result") || "",
-              focusInvoked: root?.getAttribute("data-popover-focus-invoked") || "",
-              activeBeforeFocus: {
-                id: root?.getAttribute("data-popover-focus-active-before-id") || "",
-                tag: root?.getAttribute("data-popover-focus-active-before-tag") || "",
-                connected:
-                  root?.getAttribute("data-popover-focus-active-before-connected") || ""
-              },
-              activeIdAfterHelper: root?.getAttribute("data-popover-focus-active-id") || "",
-              activeTagAfterHelper: root?.getAttribute("data-popover-focus-active-tag") || "",
-              activeConnectedAfterHelper:
-                root?.getAttribute("data-popover-focus-active-connected") || ""
-            },
-            triggerFocusability: {
-              disabled: trigger?.disabled ?? null,
-              tabIndex: trigger?.tabIndex ?? null,
-              hidden: trigger?.hidden ?? null,
-              ariaHidden: trigger?.getAttribute("aria-hidden") || "",
-              display: triggerStyle?.display || "",
-              visibility: triggerStyle?.visibility || "",
-              rectCount: trigger?.getClientRects().length || 0,
-              width: triggerRect ? Math.round(triggerRect.width) : 0,
-              height: triggerRect ? Math.round(triggerRect.height) : 0,
-              offsetParent: trigger?.offsetParent ? describe(trigger.offsetParent) : null,
-              closestDetails: {
-                id: detailsRoot?.id || "",
-                open: detailsRoot?.hasAttribute("data-overlay-open") || false,
-                panelHidden: detailsPanel?.hidden ?? null
-              },
-              blockingAncestors
-            },
-            root: {
-              ...describe(root),
-              directChildren: Array.from(root?.children || []).map(describe),
-              nestedTriggers: Array.from(
-                root?.querySelectorAll("[data-overlay-trigger]") || []
-              ).map((element) => ({
-                ...describe(element),
-                directChild: element.parentElement === root
-              })),
-              nestedWrappers: Array.from(
-                root?.querySelectorAll("[data-reka-popper-content-wrapper]") || []
-              ).map(describe)
-            },
-            panel: {
-              ...describe(panel),
-              hidden: panel?.hidden ?? null,
-              parentId: panel?.parentElement?.id || ""
-            },
-            activeElement: {
-              ...describe(activeElement),
-              withinRoot: Boolean(root && activeElement && root.contains(activeElement))
-            }
-          }
-        })()
-      `,
-      returnByValue: true,
-    })
+        for (const type of ["keydown", "keypress", "keyup", "click"]) {
+          trigger?.addEventListener(type, record, {signal: controller.signal})
+        }
 
-    throw new Error(
-      "Widget query diagnostics focus state:\n" +
-      JSON.stringify(focusDiagnosticsResult.result.value, null, 2) +
-      `\nOriginal timeout diagnostics:\n${error.message}`
-    )
-  }
+        const activeBeforeFocus = document.activeElement?.id || document.activeElement?.tagName || ""
+        trigger?.focus()
+        const activeAfterFocus = document.activeElement?.id || document.activeElement?.tagName || ""
+        window.__cadenceWidgetQueryKeyboardProbe = {controller, events, root, trigger}
 
-  await client.send("Runtime.evaluate", {
-    expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.focus()`,
+        return {
+          activeBeforeFocus,
+          activeAfterFocus,
+          disabled: trigger?.disabled ?? null,
+          tabIndex: trigger?.tabIndex ?? null,
+          hidden: trigger?.hidden ?? null,
+          ariaHidden: trigger?.getAttribute("aria-hidden") || "",
+          display: style?.display || "",
+          visibility: style?.visibility || "",
+          rectCount: trigger?.getClientRects().length || 0,
+          width: rect ? Math.round(rect.width) : 0,
+          height: rect ? Math.round(rect.height) : 0
+        }
+      })()
+    `,
+    returnByValue: true,
   })
+  const keyboardPreflight = keyboardPreflightResult.result.value
+
+  assert.equal(
+    keyboardPreflight.activeAfterFocus,
+    initial.triggerId,
+    `native keyboard probe should focus the diagnostics trigger: ${JSON.stringify(keyboardPreflight)}`
+  )
+  assert.equal(
+    Boolean(
+      keyboardPreflight.disabled === false &&
+      keyboardPreflight.tabIndex >= 0 &&
+      keyboardPreflight.hidden === false &&
+      keyboardPreflight.display !== "none" &&
+      keyboardPreflight.visibility !== "hidden" &&
+      keyboardPreflight.rectCount > 0 &&
+      keyboardPreflight.width > 0 &&
+      keyboardPreflight.height > 0
+    ),
+    true,
+    `native keyboard probe requires an enabled visible trigger: ${JSON.stringify(keyboardPreflight)}`
+  )
+
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
     key: "Enter",
     code: "Enter",
+    text: "\r",
+    unmodifiedText: "\r",
     windowsVirtualKeyCode: 13,
-    nativeVirtualKeyCode: 13,
   })
   await client.send("Input.dispatchKeyEvent", {
     type: "keyUp",
     key: "Enter",
     code: "Enter",
     windowsVirtualKeyCode: 13,
-    nativeVirtualKeyCode: 13,
   })
-  await waitForExpression(
-    client,
-    `
-      Boolean(
-        document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute(
-          "data-overlay-open"
-        ) &&
-        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
-          "data-overlay-open"
+  let keyboardOpeningError = null
+  try {
+    await waitForExpression(
+      client,
+      `
+        Boolean(
+          document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute(
+            "data-overlay-open"
+          ) &&
+          document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+            "data-overlay-open"
+          )
         )
-      )
+      `,
+      2_000,
+      "widget query diagnostics keyboard opening"
+    )
+  } catch (error) {
+    keyboardOpeningError = error
+  }
+
+  const keyboardResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const probe = window.__cadenceWidgetQueryKeyboardProbe
+        const result = {
+          activeAfterEvents: document.activeElement?.id || document.activeElement?.tagName || "",
+          rootOpen: probe?.root?.hasAttribute("data-overlay-open") || false,
+          triggerConnected: probe?.trigger?.isConnected || false,
+          events: probe?.events || []
+        }
+        probe?.controller?.abort()
+        delete window.__cadenceWidgetQueryKeyboardProbe
+        return result
+      })()
     `,
-    2_000,
-    "widget query diagnostics keyboard opening"
+    returnByValue: true,
+  })
+  const keyboard = keyboardResult.result.value
+
+  if (keyboardOpeningError) {
+    throw new Error(
+      "Widget query diagnostics keyboard state:\n" +
+      JSON.stringify({preflight: keyboardPreflight, ...keyboard}, null, 2) +
+      `\nOriginal timeout diagnostics:\n${keyboardOpeningError.message}`
+    )
+  }
+
+  const keydown = keyboard.events.find((event) => event.type === "keydown")
+  const keyup = keyboard.events.find((event) => event.type === "keyup")
+  const click = keyboard.events.find((event) => event.type === "click")
+  assert.deepEqual(
+    {key: keydown?.key, code: keydown?.code, isTrusted: keydown?.isTrusted},
+    {key: "Enter", code: "Enter", isTrusted: true},
+    "CDP should dispatch a trusted Enter keydown to the diagnostics trigger"
   )
+  assert.deepEqual(
+    {key: keyup?.key, code: keyup?.code, isTrusted: keyup?.isTrusted},
+    {key: "Enter", code: "Enter", isTrusted: true},
+    "CDP should dispatch a trusted Enter keyup to the diagnostics trigger"
+  )
+  assert.equal(click?.isTrusted, true, "native Enter activation should click the diagnostics trigger")
+  assert.equal(keyboard.rootOpen, true, "native trigger activation should reach Reka updateOpen")
 
   const outsideResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -2558,7 +2560,15 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     mobile: LIVE_INTERACTION_VIEWPORT.mobile,
   })
 
-  return {parent, initial, mouseOpen, sameIdentityPatch, outsideId, narrow: narrowResult.result.value}
+  return {
+    parent,
+    initial,
+    mouseOpen,
+    sameIdentityPatch,
+    keyboard: {preflight: keyboardPreflight, ...keyboard},
+    outsideId,
+    narrow: narrowResult.result.value
+  }
 }
 
 async function runLiveDashboardInteractions(client, url, profile) {
