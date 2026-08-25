@@ -15,6 +15,10 @@ const scenarioLedger = [
   "upload and entry errors remain server-mapped into the exact existing user-facing messages",
   "detected unsupported and empty importer presentation branches remain server-authoritative",
   "submit disabled state is authored by Phoenix from the detected importer result",
+  "the add-revision Reka Collapsible is controlled only by Phoenix revision_form_open",
+  "the trigger requests exactly toggle-revision-form without optimistic local state",
+  "closed collapsible content unmounts so CatalogUploadForm follows the Phoenix upload lifecycle",
+  "the add-revision trigger and upload slot retain their exact DOM identities and structure",
   "the new database cancel route and add-revision toggle remain exact",
   "existing catalog save persistence metadata redirect and failure behavior is byte-pinned by source slice",
   "focused LiveView scenarios still exercise unsupported supported persistence cancellation and scope",
@@ -23,7 +27,7 @@ const scenarioLedger = [
 ]
 
 assert.equal(process.versions.node, "24.16.0", "catalog upload contracts use pinned Node 24.16.0")
-assert.equal(scenarioLedger.length, 14)
+assert.equal(scenarioLedger.length, 18)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const paths = {
@@ -112,7 +116,7 @@ const assertScriptSyntax = (source, label) => {
   const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
   assert.ok(script, `${label} keeps a TypeScript setup block`)
 
-  const withoutImports = script.replace(/^import .*$/gm, "")
+  const withoutImports = script.replace(/^import[\s\S]*?from "[^"]+"\n/gm, "")
   const javascript = stripTypeScriptTypes(withoutImports, {mode: "strip"})
 
   assert.doesNotThrow(() => new Function(javascript), `${label} setup syntax parses`)
@@ -167,11 +171,99 @@ assert.match(databaseNew, /data-phx-link="redirect"/)
 assert.match(databaseNew, /data-phx-link-state="push"/)
 
 assert.match(databaseShow, /^import CatalogUploadForm from "\.\/CatalogUploadForm\.vue"$/m)
+assert.match(
+  databaseShow,
+  /import \{\s*CollapsibleContent,\s*CollapsibleRoot,\s*CollapsibleTrigger\s*\} from "reka-ui"/s,
+)
 assert.equal(databaseShow.match(/<CatalogUploadForm\b/g)?.length, 1)
-assert.match(databaseShow, /v-if="revision_form_open" id="catalog-revision-upload-slot"/)
 assert.match(databaseShow, /@validate="emit\('validate', \$event\)"/)
 assert.match(databaseShow, /@cancel-upload="emit\('cancel-upload', \$event\)"/)
 assert.doesNotMatch(databaseShow, /<slot name="revision_form"/)
+
+for (const primitive of ["CollapsibleRoot", "CollapsibleTrigger", "CollapsibleContent"]) {
+  assert.equal(
+    databaseShow.match(new RegExp(`<${primitive}\\b`, "g"))?.length,
+    1,
+    `${primitive} is composed exactly once`,
+  )
+}
+
+assert.match(
+  databaseShow,
+  /<CollapsibleRoot\s+id="catalog-database-show-surface"\s+class="space-y-6"\s+as="div"\s+:open="revision_form_open"\s+:unmount-on-hide="true"\s+@update:open="emit\('toggle-revision-form', \{\}\)"\s*>/s,
+)
+assert.equal(databaseShow.match(/as-child/g)?.length, 2, "only trigger and content use as-child")
+assert.doesNotMatch(databaseShow, /v-model(?::open)?|default-open|force-?mount/i)
+assert.doesNotMatch(databaseShow, /:unmount-on-hide="false"/)
+assert.doesNotMatch(databaseShow, /v-if="revision_form_open"/)
+assert.doesNotMatch(databaseShow, /\b(?:computed|reactive|ref|watch)\s*\(/)
+
+const toggleSource = sourceSlice(
+  databaseShow,
+  "          <CollapsibleTrigger as-child>",
+  "          </CollapsibleTrigger>",
+  "add revision trigger",
+)
+
+assert.match(
+  toggleSource,
+  /<button\s+id="add-revision-toggle"\s+type="button"\s+class="btn"\s+:class="revision_form_open \? 'btn-ghost' : 'btn-primary'"\s*>/s,
+)
+assert.match(toggleSource, /\{\{ revision_form_open \? "Cancel" : "\+ Add revision" \}\}/)
+assert.doesNotMatch(toggleSource, /@click|emit\(/)
+
+const uploadSlotSource = sourceSlice(
+  databaseShow,
+  "    <CollapsibleContent as-child>",
+  "    </CollapsibleContent>",
+  "revision upload collapsible content",
+)
+
+assert.match(
+  uploadSlotSource,
+  /<CollapsibleContent as-child>\s*<div id="catalog-revision-upload-slot">\s*<CatalogUploadForm/s,
+)
+assert.doesNotMatch(uploadSlotSource, /v-if|v-show|force-?mount/i)
+
+for (const id of ["add-revision-toggle", "catalog-revision-upload-slot"]) {
+  assert.equal(databaseShow.match(new RegExp(`id="${id}"`, "g"))?.length, 1, `${id} stays exact`)
+}
+
+assert.deepEqual(
+  Array.from(databaseShow.matchAll(/\bemit\('([^']+)'/g), ([, event]) => event),
+  ["toggle-revision-form", "validate", "cancel-upload"],
+  "the disclosure and upload bridge emit exactly the three Phoenix-owned events",
+)
+
+const emitsBlock = databaseShow.match(/const emit = defineEmits<\{([\s\S]*?)\}>\(\)/)?.[1]
+assert.ok(emitsBlock, "CatalogDatabaseShow keeps an auditable emit contract")
+assert.equal(
+  emitsBlock.trim(),
+  [
+    '"toggle-revision-form": [payload: Record<string, never>]',
+    "validate: [payload: Record<string, Record<string, string>>]",
+    '"cancel-upload": [payload: {ref: string}]',
+  ].join("\n  "),
+)
+
+for (const hrefBinding of [
+  "navigation.mission.href",
+  "navigation.catalog.href",
+  "revision.href",
+  "run.href",
+]) {
+  assert.match(
+    databaseShow,
+    new RegExp(
+      `:href="${hrefBinding.replaceAll(".", "\\.")}"\\s+data-phx-link="redirect"\\s+data-phx-link-state="push"`,
+      "s",
+    ),
+    `${hrefBinding} retains the server-authored LiveView navigation attributes`,
+  )
+}
+
+assert.equal(databaseShow.match(/data-phx-link="redirect"/g)?.length, 4)
+assert.equal(databaseShow.match(/data-phx-link-state="push"/g)?.length, 4)
 
 for (const [label, source, componentName] of [
   ["new database", newLive, "CatalogDatabaseNew"],
@@ -197,6 +289,78 @@ for (const [label, source, componentName] of [
   assert.match(source, /def handle_event\("cancel_upload", %\{"ref" => ref\}, socket\)/)
   assert.match(source, /def handle_event\("validate", %\{"catalog_(?:database|revision)" => params\}, socket\)/)
 }
+
+const showToggleSource = sourceSlice(
+  showLive,
+  '  def handle_event("toggle_revision_form", _params, socket) do',
+  '  @impl true\n  def handle_event("validate"',
+  "server-owned revision disclosure toggle",
+)
+
+for (const authority of [
+  "toggled = !socket.assigns.show_revision_form",
+  "cancel_active_uploads(:artifact)",
+  "assign(:revision_form, empty_revision_form())",
+  "assign(socket, :show_revision_form, toggled)",
+]) {
+  assert.ok(showToggleSource.includes(authority), `${authority} remains Phoenix-owned`)
+}
+
+assert.equal(
+  sha256(showToggleSource),
+  "030831ad211637d417a2d2d781db9fa26c27f9cb9ba5bf979d7bcecc0b2fb550",
+  "Phoenix disclosure cancellation and reset behavior remains byte-identical",
+)
+
+const showRenderSource = sourceSlice(
+  showLive,
+  "  def render(assigns) do",
+  "  defp database_details_dto(",
+  "server-owned CatalogDatabaseShow render contract",
+)
+const hiddenRevisionForm = sourceSlice(
+  showRenderSource,
+  "        <form",
+  "        </form>",
+  "hidden Phoenix revision upload form",
+)
+const showVueHost = sourceSlice(
+  showRenderSource,
+  "        <.vue",
+  "        />",
+  "CatalogDatabaseShow LiveVue host",
+)
+
+for (const contract of [
+  ":if={@show_revision_form}",
+  'id="catalog-revision-upload-live-form"',
+  'phx-change="validate"',
+  'phx-submit="save"',
+  'style="display: none"',
+  "<.live_file_input upload={@uploads.artifact} />",
+]) {
+  assert.ok(hiddenRevisionForm.includes(contract), `${contract} stays on the hidden Phoenix form`)
+}
+
+for (const contract of [
+  'id="catalog-database-show-component"',
+  'v-component="CatalogDatabaseShow"',
+  "revision_form_open={@show_revision_form}",
+  'v-on:toggle-revision-form={JS.push("toggle_revision_form")}',
+  'v-on:validate={JS.push("validate")}',
+  'v-on:cancel-upload={JS.push("cancel_upload")}',
+  "v-ssr={false}",
+]) {
+  assert.ok(showVueHost.includes(contract), `${contract} remains an exact server bridge`)
+}
+
+assert.equal(showVueHost.match(/v-on:/g)?.length, 3)
+assert.doesNotMatch(showVueHost, /v-on:save|v-model/)
+assert.equal(
+  sha256(showRenderSource),
+  "95f33f3a97652b09eccc8bb5276096ceb1b281db755e18caf48604a6b1f7ba2c",
+  "the hidden form, explicit props, and event bridge remain byte-identical",
+)
 
 assert.equal(
   sha256(
@@ -298,6 +462,10 @@ assert.equal(
 )
 assert.match(newTest, /assert vue\.props == Jason\.decode!\(Jason\.encode!\(vue\.props\)\)/)
 assert.match(showTest, /assert is_binary\(Jason\.encode!\(vue\.props\)\)/)
+assert.match(
+  showTest,
+  /assert vue\.handlers == %\{\s*"cancel-upload" => JS\.push\("cancel_upload"\),\s*"toggle-revision-form" => JS\.push\("toggle_revision_form"\),\s*"validate" => JS\.push\("validate"\)\s*\}/s,
+)
 
 const catalogSession = sourceSlice(
   router,
@@ -317,5 +485,11 @@ for (const routeContract of [
 ]) {
   assert.ok(catalogSession.includes(routeContract), `${routeContract} remains in catalog session`)
 }
+
+assert.equal(
+  sha256(catalogSession),
+  "97cbfdd714c7620054e78154ada952a9cf7215ae097e42bddce8cb63ffd224fd",
+  "the authenticated catalog LiveSession, current-scope mounts, layout, and routes stay byte-identical",
+)
 
 console.log("catalog_uploads_test passed")
