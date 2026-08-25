@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {Toggle} from "reka-ui"
 import {defineComponent, h, type PropType} from "vue"
 
 type Attributes = Record<string, string>
@@ -374,18 +375,23 @@ defineProps<{presentation: Presentation}>()
             v-for="option in presentation.point_widget.point_picker.list.options"
             :key="option.key"
           >
-            <button
-              :type="option.type"
-              :class="option.class"
-              v-bind="option.attrs"
+            <Toggle
+              :model-value="option.attrs['aria-pressed'] === 'true'"
+              as-child
             >
-              <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
-              <span class="font-mono">{{ option.point_id }}</span>
-              <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
-              <span v-if="option.description" :class="option.description.class">
-                {{ option.description.text }}
-              </span>
-            </button>
+              <button
+                :type="option.type"
+                :class="option.class"
+                v-bind="option.attrs"
+              >
+                <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
+                <span class="font-mono">{{ option.point_id }}</span>
+                <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
+                <span v-if="option.description" :class="option.description.class">
+                  {{ option.description.text }}
+                </span>
+              </button>
+            </Toggle>
           </li>
           <li
             v-if="presentation.point_widget.point_picker.list.empty"
@@ -478,23 +484,29 @@ defineProps<{presentation: Presentation}>()
             </div>
             <ul class="space-y-1">
               <li v-for="option in group.options" :key="option.key">
-                <button
-                  :type="option.type"
-                  :class="option.class"
-                  v-bind="option.attrs"
+                <Toggle
+                  :model-value="option.attrs['aria-pressed'] === 'true'"
+                  :disabled="option.attrs.disabled !== undefined"
+                  as-child
                 >
-                  <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
-                  <span class="font-mono">{{ option.observable_id }}</span>
-                  <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
-                  <span class="ml-2 text-base-content/60">{{ option.name }}</span>
-                  <span class="ml-auto flex flex-wrap justify-end gap-1">
-                    <span
-                      v-for="scope in option.scope_badges"
-                      :key="scope"
-                      class="badge badge-ghost badge-xs whitespace-nowrap"
-                    >{{ scope }}</span>
-                  </span>
-                </button>
+                  <button
+                    :type="option.type"
+                    :class="option.class"
+                    v-bind="option.attrs"
+                  >
+                    <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
+                    <span class="font-mono">{{ option.observable_id }}</span>
+                    <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
+                    <span class="ml-2 text-base-content/60">{{ option.name }}</span>
+                    <span class="ml-auto flex flex-wrap justify-end gap-1">
+                      <span
+                        v-for="scope in option.scope_badges"
+                        :key="scope"
+                        class="badge badge-ghost badge-xs whitespace-nowrap"
+                      >{{ scope }}</span>
+                    </span>
+                  </button>
+                </Toggle>
               </li>
             </ul>
           </li>
