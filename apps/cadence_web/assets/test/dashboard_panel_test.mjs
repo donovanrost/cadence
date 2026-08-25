@@ -36,6 +36,8 @@ const evidenceComponentsPath = resolve(
 )
 const dashboardToolbarPath = resolve(testDirectory, "../vue/DashboardToolbar.vue")
 const dashboardToolbarMenuPath = resolve(testDirectory, "../vue/DashboardToolbarMenu.vue")
+const cadencePopoverPath = resolve(testDirectory, "../vue/ui/reka/CadencePopover.vue")
+const cadenceMenuPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenu.vue")
 const routerPath = resolve(testDirectory, "../../lib/cadence_web/router.ex")
 const appJsPath = resolve(testDirectory, "../js/app.js")
 
@@ -50,6 +52,8 @@ const [
   evidenceComponentsSource,
   dashboardToolbarSource,
   dashboardToolbarMenuSource,
+  cadencePopoverSource,
+  cadenceMenuSource,
   routerSource,
   appJsSource,
 ] = await Promise.all([
@@ -63,6 +67,8 @@ const [
   readFile(evidenceComponentsPath, "utf8"),
   readFile(dashboardToolbarPath, "utf8"),
   readFile(dashboardToolbarMenuPath, "utf8"),
+  readFile(cadencePopoverPath, "utf8"),
+  readFile(cadenceMenuPath, "utf8"),
   readFile(routerPath, "utf8"),
   readFile(appJsPath, "utf8"),
 ])
@@ -322,19 +328,26 @@ assert.equal(dispatchWindowKey(representativeSheet, "Enter"), null)
 assert.doesNotMatch(appJsSource, /hooks\/(?:overlay|resizable_panel)/)
 assert.doesNotMatch(appJsSource, /\b(?:Overlay|ResizablePanel)\b/)
 
-for (const [ownerSource, controller] of [
-  [dashboardToolbarSource, "createDashboardToolbarPopoverController"],
-  [dashboardToolbarMenuSource, "createDashboardToolbarMenuController"],
-]) {
-  assert.match(ownerSource, new RegExp(`const ${controller} =`))
-  assert.match(ownerSource, /onMounted\(/)
-  assert.match(ownerSource, /onBeforeUpdate\(/)
-  assert.match(ownerSource, /onUpdated\(/)
-  assert.match(ownerSource, /onBeforeUnmount\(/)
-  assert.match(ownerSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
-  assert.match(ownerSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
-  assert.match(ownerSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
-}
+assert.match(dashboardToolbarSource, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
+assert.equal(dashboardToolbarSource.match(/<CadencePopover/g)?.length, 2)
+assert.match(dashboardToolbarMenuSource, /import CadenceMenu from "\.\/ui\/reka\/CadenceMenu\.vue"/)
+assert.match(dashboardToolbarMenuSource, /import \{DropdownMenuItem\} from "reka-ui"/)
+assert.match(cadencePopoverSource, /PopoverContent, PopoverRoot, PopoverTrigger/)
+assert.match(
+  cadenceMenuSource,
+  /DropdownMenuContent,[\s\S]*DropdownMenuRoot,[\s\S]*DropdownMenuTrigger/,
+)
+assert.match(cadenceMenuSource, /:modal="false"/)
+assert.match(cadenceMenuSource, /:loop="true"/)
+assert.match(cadenceMenuSource, /subscribeToLegacyOverlayOpen/)
+assert.doesNotMatch(
+  dashboardToolbarSource,
+  /createDashboardToolbarPopoverController|addEventListener|removeEventListener/,
+)
+assert.doesNotMatch(
+  dashboardToolbarMenuSource,
+  /createDashboardToolbarMenuController|addEventListener|removeEventListener/,
+)
 
 const authorSessionStart = routerSource.indexOf("live_session :ops_dashboard_author")
 const viewerSessionStart = routerSource.indexOf("live_session :ops,", authorSessionStart)
