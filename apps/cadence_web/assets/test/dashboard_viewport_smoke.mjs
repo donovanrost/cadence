@@ -2159,12 +2159,78 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     2_000,
     "widget query diagnostics Escape panel reparenting"
   )
-  await waitForExpression(
-    client,
-    `document.activeElement?.id === ${JSON.stringify(initial.triggerId)}`,
-    2_000,
-    "widget query diagnostics Escape focus return"
-  )
+  try {
+    await waitForExpression(
+      client,
+      `document.activeElement?.id === ${JSON.stringify(initial.triggerId)}`,
+      2_000,
+      "widget query diagnostics Escape focus return"
+    )
+  } catch (error) {
+    const focusDiagnosticsResult = await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          const root = document.getElementById(${JSON.stringify(initial.rootId)})
+          const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+          const activeElement = document.activeElement
+          const describe = (element) => ({
+            tag: element?.tagName || "",
+            id: element?.id || "",
+            connected: Boolean(element?.isConnected),
+            overlayTrigger: Boolean(element?.hasAttribute("data-overlay-trigger")),
+            overlayPanel: Boolean(element?.hasAttribute("data-overlay-panel")),
+            rekaWrapper: Boolean(element?.hasAttribute("data-reka-popper-content-wrapper"))
+          })
+
+          return {
+            adapter: {
+              closeHandler: root?.getAttribute("data-popover-focus-close-handler") || "",
+              closeSuppressed: root?.getAttribute("data-popover-focus-close-suppressed") || "",
+              afterNextTick: root?.getAttribute("data-popover-focus-after-next-tick") || "",
+              identityMatches: root?.getAttribute("data-popover-focus-identity-matches") || "",
+              directTriggerFound:
+                root?.getAttribute("data-popover-focus-direct-trigger-found") || "",
+              helperCalled: root?.getAttribute("data-popover-focus-helper-called") || "",
+              helperResult: root?.getAttribute("data-popover-focus-helper-result") || "",
+              focusInvoked: root?.getAttribute("data-popover-focus-invoked") || "",
+              activeIdAfterHelper: root?.getAttribute("data-popover-focus-active-id") || "",
+              activeTagAfterHelper: root?.getAttribute("data-popover-focus-active-tag") || "",
+              activeConnectedAfterHelper:
+                root?.getAttribute("data-popover-focus-active-connected") || ""
+            },
+            root: {
+              ...describe(root),
+              directChildren: Array.from(root?.children || []).map(describe),
+              nestedTriggers: Array.from(
+                root?.querySelectorAll("[data-overlay-trigger]") || []
+              ).map((element) => ({
+                ...describe(element),
+                directChild: element.parentElement === root
+              })),
+              nestedWrappers: Array.from(
+                root?.querySelectorAll("[data-reka-popper-content-wrapper]") || []
+              ).map(describe)
+            },
+            panel: {
+              ...describe(panel),
+              hidden: panel?.hidden ?? null,
+              parentId: panel?.parentElement?.id || ""
+            },
+            activeElement: {
+              ...describe(activeElement),
+              withinRoot: Boolean(root && activeElement && root.contains(activeElement))
+            }
+          }
+        })()
+      `,
+      returnByValue: true,
+    })
+
+    throw new Error(
+      `${error.message}\nWidget query diagnostics focus state:\n` +
+      JSON.stringify(focusDiagnosticsResult.result.value, null, 2)
+    )
+  }
 
   await client.send("Runtime.evaluate", {
     expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.focus()`,

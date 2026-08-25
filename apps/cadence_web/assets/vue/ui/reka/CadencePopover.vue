@@ -33,6 +33,24 @@ const open = ref(false)
 let suppressCloseAutoFocus = false
 let removeLegacyOverlayListener: (() => void) | null = null
 
+const focusDiagnosticAttributes = [
+  "data-popover-focus-close-handler",
+  "data-popover-focus-close-suppressed",
+  "data-popover-focus-after-next-tick",
+  "data-popover-focus-identity-matches",
+  "data-popover-focus-direct-trigger-found",
+  "data-popover-focus-helper-called",
+  "data-popover-focus-helper-result",
+  "data-popover-focus-invoked",
+  "data-popover-focus-active-id",
+  "data-popover-focus-active-tag",
+  "data-popover-focus-active-connected",
+]
+
+const clearFocusDiagnostics = () => {
+  for (const attribute of focusDiagnosticAttributes) root.value?.removeAttribute(attribute)
+}
+
 const closeWithoutFocus = () => {
   if (!open.value) return
   suppressCloseAutoFocus = true
@@ -42,6 +60,7 @@ const closeWithoutFocus = () => {
 const updateOpen = async (nextOpen: boolean) => {
   if (nextOpen && (!props.identity || !root.value)) return
 
+  if (nextOpen) clearFocusDiagnostics()
   open.value = nextOpen
   if (!nextOpen) return
 
@@ -56,12 +75,40 @@ const updateOpen = async (nextOpen: boolean) => {
 
 const restoreCurrentTriggerFocus = async () => {
   await nextTick()
-  if (!root.value || root.value.id !== props.identity) return
-  focusCurrentPopoverTrigger(root.value)
+  const currentRoot = root.value
+  if (!currentRoot) return
+
+  currentRoot.setAttribute("data-popover-focus-after-next-tick", "true")
+  const identityMatches = currentRoot.id === props.identity
+  currentRoot.setAttribute("data-popover-focus-identity-matches", String(identityMatches))
+  if (!identityMatches) return
+
+  const directTrigger = currentRoot.querySelector(":scope > [data-overlay-trigger]")
+  currentRoot.setAttribute(
+    "data-popover-focus-direct-trigger-found",
+    String(Boolean(directTrigger)),
+  )
+  currentRoot.setAttribute("data-popover-focus-helper-called", "true")
+  const helperResult = focusCurrentPopoverTrigger(currentRoot)
+  currentRoot.setAttribute("data-popover-focus-helper-result", String(helperResult))
+  currentRoot.setAttribute("data-popover-focus-invoked", String(helperResult))
+
+  const activeElement = document.activeElement
+  currentRoot.setAttribute("data-popover-focus-active-id", activeElement?.id || "")
+  currentRoot.setAttribute("data-popover-focus-active-tag", activeElement?.tagName || "")
+  currentRoot.setAttribute(
+    "data-popover-focus-active-connected",
+    String(Boolean(activeElement?.isConnected)),
+  )
 }
 
 const handleCloseAutoFocus = (event: Event) => {
   const restoreFocus = !suppressCloseAutoFocus
+  root.value?.setAttribute("data-popover-focus-close-handler", "true")
+  root.value?.setAttribute(
+    "data-popover-focus-close-suppressed",
+    String(suppressCloseAutoFocus),
+  )
   event.preventDefault()
   suppressCloseAutoFocus = false
   if (restoreFocus) void restoreCurrentTriggerFocus()

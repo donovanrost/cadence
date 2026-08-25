@@ -70,7 +70,7 @@ assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
 assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
 assert.match(adapterSource, /event\.preventDefault\(\)/)
 assert.match(adapterSource, /await nextTick\(\)/)
-assert.match(adapterSource, /focusCurrentPopoverTrigger\(root\.value\)/)
+assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
 assert.match(
   adapterSource,
   /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
