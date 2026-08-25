@@ -2836,6 +2836,12 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   const narrow = narrowResult.result.value
 
   assert.equal(
+    narrow.wrapper.position,
+    "fixed",
+    `Widget query diagnostics narrow geometry: ${JSON.stringify(narrow)} | ` +
+      "widget query diagnostics should retain fixed wrapper positioning"
+  )
+  assert.equal(
     narrow.panel.withinGutter,
     true,
     `Widget query diagnostics narrow geometry: ${JSON.stringify(narrow)} | ` +

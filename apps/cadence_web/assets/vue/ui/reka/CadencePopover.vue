@@ -128,6 +128,7 @@ onBeforeUnmount(() => {
         :collision-padding="props.collisionPadding"
         :prioritize-position="props.prioritizePosition"
         position-strategy="fixed"
+        sticky="always"
         @close-auto-focus="handleCloseAutoFocus"
         @interact-outside="handleInteractOutside"
       >
