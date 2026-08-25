@@ -5,6 +5,7 @@ import {fileURLToPath} from "node:url"
 import {
   CADENCE_OVERLAY_OPENED_EVENT,
   announceCadencePopoverOpened,
+  focusCurrentPopoverTrigger,
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
 } from "../vue/ui/reka/popover_compatibility.js"
@@ -66,7 +67,18 @@ assert.match(adapterSource, /collisionPadding: 16/)
 assert.match(adapterSource, /subscribeToLegacyOverlayOpen/)
 assert.match(adapterSource, /announceCadencePopoverOpened/)
 assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
+assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
 assert.match(adapterSource, /event\.preventDefault\(\)/)
+assert.match(adapterSource, /await nextTick\(\)/)
+assert.match(adapterSource, /focusCurrentPopoverTrigger\(root\.value\)/)
+assert.match(
+  adapterSource,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+)
+assert.match(
+  adapterSource,
+  /const closeWithoutFocus = \(\) => \{[\s\S]*suppressCloseAutoFocus = true[\s\S]*open\.value = false\n\}/,
+)
 assert.match(adapterSource, /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/)
 assert.doesNotMatch(adapterSource, /<style(?:\s[^>]*)?>/)
 assert.match(
@@ -82,6 +94,26 @@ assert.equal(preservesPopoverOpenState(true, "widget-query-a", "widget-query-b")
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", ""), false)
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", null), false)
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", undefined), false)
+
+// Close autofocus resolves the public trigger from the current island instead of a stale Reka ref.
+let staleTriggerFocusCount = 0
+let currentTriggerFocusCount = 0
+const staleTrigger = {focus: () => (staleTriggerFocusCount += 1)}
+const currentTrigger = {focus: () => (currentTriggerFocusCount += 1)}
+let renderedTrigger = staleTrigger
+const currentRoot = {
+  querySelector(selector) {
+    assert.equal(selector, ":scope > [data-overlay-trigger]")
+    return renderedTrigger
+  },
+}
+
+renderedTrigger = currentTrigger
+assert.equal(focusCurrentPopoverTrigger(currentRoot), true)
+assert.equal(currentTriggerFocusCount, 1)
+assert.equal(staleTriggerFocusCount, 0)
+assert.equal(focusCurrentPopoverTrigger({querySelector: () => null}), false)
+assert.equal(focusCurrentPopoverTrigger(null), false)
 
 class FakeWindow {
   constructor() {

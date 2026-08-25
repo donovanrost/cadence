@@ -3,6 +3,7 @@ import {PopoverContent, PopoverRoot, PopoverTrigger} from "reka-ui"
 import {nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue"
 import {
   announceCadencePopoverOpened,
+  focusCurrentPopoverTrigger,
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
 } from "./popover_compatibility.js"
@@ -53,10 +54,23 @@ const updateOpen = async (nextOpen: boolean) => {
   announceCadencePopoverOpened(window, root.value)
 }
 
+const restoreCurrentTriggerFocus = async () => {
+  await nextTick()
+  if (!root.value || root.value.id !== props.identity) return
+  focusCurrentPopoverTrigger(root.value)
+}
+
 const handleCloseAutoFocus = (event: Event) => {
-  if (!suppressCloseAutoFocus) return
+  const restoreFocus = !suppressCloseAutoFocus
   event.preventDefault()
   suppressCloseAutoFocus = false
+  if (restoreFocus) void restoreCurrentTriggerFocus()
+}
+
+const handleInteractOutside = (event: Event) => {
+  const trigger = root.value?.querySelector<HTMLElement>(":scope > [data-overlay-trigger]")
+  if (event.target instanceof Node && trigger?.contains(event.target)) return
+  suppressCloseAutoFocus = true
 }
 
 watch(
@@ -109,6 +123,7 @@ onBeforeUnmount(() => {
         :collision-padding="props.collisionPadding"
         position-strategy="fixed"
         @close-auto-focus="handleCloseAutoFocus"
+        @interact-outside="handleInteractOutside"
       >
         <slot name="content" :open="open"></slot>
       </PopoverContent>

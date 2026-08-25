@@ -21,3 +21,11 @@ export function subscribeToLegacyOverlayOpen(windowObject, rootElement, close) {
 export function preservesPopoverOpenState(open, previousIdentity, nextIdentity) {
   return Boolean(open && nextIdentity && previousIdentity === nextIdentity)
 }
+
+export function focusCurrentPopoverTrigger(rootElement) {
+  const trigger = rootElement?.querySelector?.(":scope > [data-overlay-trigger]")
+  if (!trigger || typeof trigger.focus !== "function") return false
+
+  trigger.focus()
+  return true
+}
