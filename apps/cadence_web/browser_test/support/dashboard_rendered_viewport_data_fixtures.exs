@@ -427,8 +427,18 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
   end
 
   def persist_replay_dashboard_sources!(organization_id, mission_id) do
+    %DataSource{} = default_managed_data_source = DataSources.default_managed_data_source()
+    %DataBinding{} = default_telemetry_binding = DataSources.default_flight_telemetry_binding()
+    %DataBinding{} = default_limits_binding = DataSources.default_flight_limits_binding()
+
+    %DataBinding{} =
+      default_operational_binding =
+      DataSources.default_flight_operational_observables_binding()
+
+    %DataBinding{} = default_events_binding = DataSources.default_flight_events_binding()
+
     replay_telemetry_source = %DataSource{
-      DataSources.default_managed_data_source()
+      default_managed_data_source
       | data_source_id: "managed_questdb_replay",
         organization_id: organization_id,
         mission_id: mission_id,
@@ -437,7 +447,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     }
 
     replay_telemetry_binding = %DataBinding{
-      DataSources.default_flight_telemetry_binding()
+      default_telemetry_binding
       | binding_id: "replay_telemetry",
         organization_id: organization_id,
         mission_id: mission_id,
@@ -448,7 +458,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     }
 
     replay_limits_binding = %DataBinding{
-      DataSources.default_flight_limits_binding()
+      default_limits_binding
       | binding_id: "replay_limits",
         organization_id: organization_id,
         mission_id: mission_id,
@@ -458,7 +468,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     }
 
     replay_operational_binding = %DataBinding{
-      DataSources.default_flight_operational_observables_binding()
+      default_operational_binding
       | binding_id: "replay_operational_observables",
         organization_id: organization_id,
         mission_id: mission_id,
@@ -468,7 +478,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportDataFixtures do
     }
 
     replay_events_binding = %DataBinding{
-      DataSources.default_flight_events_binding()
+      default_events_binding
       | binding_id: "replay_events",
         organization_id: organization_id,
         mission_id: mission_id,

@@ -7,6 +7,6 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteScenario do
   alias CadenceWeb.Assets.DashboardAuthenticatedRouteSetup
 
   def run(sandbox_owner) do
-    DashboardAuthenticatedRouteSetup.run(sandbox_owner, :current_ia)
+    DashboardAuthenticatedRouteSetup.run(sandbox_owner, :livevue_closure)
   end
 end

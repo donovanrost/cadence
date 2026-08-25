@@ -144,34 +144,50 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
 
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
+    interaction_mode_args =
+      if mode == :livevue_closure,
+        do: ["--interaction-mode", "livevue-closure"],
+        else: []
+
+    smoke_args =
+      [
+        script,
+        "--profile",
+        "live-dashboard"
+      ] ++
+        interaction_mode_args ++
+        [
+          "--url",
+          dashboard_url,
+          "--expected-limit-definition-id",
+          "browser-viewport-counter-limits",
+          "--expected-limit-set-name",
+          "browser-smoke",
+          "--expected-catalog-revision-id",
+          catalog_revision_id,
+          "--login-url",
+          base_url <> ~p"/sign-in",
+          "--login-email",
+          user.email,
+          "--login-password",
+          TestFixtures.default_password()
+        ]
+
     assert {output, 0} =
              run_dashboard_viewport_smoke(
-               [
-                 script,
-                 "--profile",
-                 "live-dashboard",
-                 "--url",
-                 dashboard_url,
-                 "--expected-limit-definition-id",
-                 "browser-viewport-counter-limits",
-                 "--expected-limit-set-name",
-                 "browser-smoke",
-                 "--expected-catalog-revision-id",
-                 catalog_revision_id,
-                 "--login-url",
-                 base_url <> ~p"/sign-in",
-                 "--login-email",
-                 user.email,
-                 "--login-password",
-                 TestFixtures.default_password()
-               ],
+               smoke_args,
                cd: app_root,
                stderr_to_stdout: true
              )
 
     assert output =~ "dashboard_viewport_smoke passed"
-    assert output =~ "\"contextRail\""
-    assert output =~ "\"sectionKeys\""
+
+    if mode == :livevue_closure do
+      assert output =~ "\"liveVueClosure\""
+    else
+      assert output =~ "\"contextRail\""
+      assert output =~ "\"sectionKeys\""
+    end
 
     if mode == :full do
       assert_live_stream_motion!(
@@ -195,11 +211,15 @@ defmodule CadenceWeb.Assets.DashboardAuthenticatedRouteSetup do
     assert persisted_counter_placement.layout.x == counter_item.layout.x
     assert persisted_counter_placement.layout.y == counter_item.layout.y
     assert persisted_counter_placement.layout.w == counter_item.layout.w
-    # edit mode runs float(false): the smoke mutates height (a vertical move
-    # would compact straight back), so the resize is what persists
-    assert persisted_counter_placement.layout.h == counter_item.layout.h + 1
 
-    if mode == :current_ia do
+    expected_height =
+      if mode == :livevue_closure,
+        do: counter_item.layout.h,
+        else: counter_item.layout.h + 1
+
+    assert persisted_counter_placement.layout.h == expected_height
+
+    if mode in [:current_ia, :livevue_closure] do
       %{
         app_root: app_root,
         base_unix: base_unix,

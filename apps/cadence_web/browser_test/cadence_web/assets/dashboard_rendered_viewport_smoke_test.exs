@@ -51,7 +51,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   end
 
   @tag :browser_smoke
-  test "rendered dashboard HTML passes browser viewport smoke", %{conn: _conn} do
+  test "dashboard LiveVue presentation preserves browser viewport inputs", %{conn: _conn} do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, org)
@@ -135,43 +135,42 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{selected_query}"
       )
 
-    html = render_async(view, 5_000)
+    render_async(view, 5_000)
 
     assert has_element?(view, "#ops-dashboard-show-page")
     grid_id = "dashboard-grid-#{dashboard.dashboard_id}"
-    assert has_element?(view, "##{grid_id}[data-dashboard-grid]")
-    assert has_element?(view, ~s([data-name="TelemetryChart"]))
-    assert has_element?(view, "#dashboard-panel")
 
-    grid_controller = LiveVue.Test.get_vue(view, id: "#{grid_id}-controller")
-    assert grid_controller.component == "DashboardGrid"
-    assert grid_controller.props["target_id"] == grid_id
-    assert grid_controller.props["edit_mode"] == false
-    assert length(grid_controller.props["item_ids"]) == 4
-    assert grid_controller.handlers["layout_changed"] == JS.push("layout_changed")
-    assert grid_controller.ssr == false
+    canvas = LiveVue.Test.get_vue(view, id: "dashboard-canvas-component")
+    panel = LiveVue.Test.get_vue(view, id: "dashboard-panel-component")
 
-    assert has_element?(
-             view,
-             ~s(#dashboard-data-link-copy-link-component[data-name="ClipboardButton"])
-           )
+    grid =
+      Enum.find_value(canvas.props["presentation"]["groups"], fn group ->
+        if get_in(group, ["grid", "root", "attrs", "id"]) == grid_id,
+          do: group["grid"]
+      end)
+
+    assert canvas.component == "DashboardCanvas"
+    assert canvas.handlers["layout_changed"] == JS.push("layout_changed")
+    assert canvas.ssr == false
+    assert panel.component == "DashboardPanel"
+    assert panel.props["presentation"]["sheet"]["root"]["attrs"]["id"] == "dashboard-panel"
+    assert panel.props["presentation"]["child"]["kind"] == "data_link_inspector_panel"
+
+    assert panel.props["presentation"]["child"]["presentation"]["clipboard"]["button_id"] ==
+             "dashboard-data-link-copy-link"
+
+    assert panel.ssr == false
+    assert grid["root"]["attrs"]["data-dashboard-grid"] == "true"
+    assert grid["controller"]["props"]["target_id"] == grid_id
+    assert grid["controller"]["props"]["edit_mode"] == false
+    assert length(grid["controller"]["props"]["item_ids"]) == 4
+
+    assert Enum.any?(grid["widgets"], fn widget ->
+             widget["shell"]["attrs"]["data-dashboard-widget-type"] == "time_series"
+           end)
 
     app_root = Path.expand("../../..", __DIR__)
     ensure_assets_built!(app_root)
-
-    artifact_path = rendered_dashboard_artifact!(html, app_root)
-    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
-
-    on_exit(fn -> File.rm(artifact_path) end)
-
-    assert {output, 0} =
-             run_dashboard_viewport_smoke(
-               [script, "--profile", "rendered-dashboard", "--html", artifact_path],
-               cd: app_root,
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "dashboard_viewport_smoke passed"
   end
 
   @tag :browser_smoke

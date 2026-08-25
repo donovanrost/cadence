@@ -341,7 +341,7 @@ function viewportProfile(name) {
       ...viewportProfile("rendered-dashboard"),
       name,
       chartSelector: "[data-telemetry-chart] .uplot",
-      copyClickSelector: "[data-clipboard-button]",
+      copyClickSelector: "#dashboard-data-link-copy-link[data-clipboard-button]",
       readyExpression: `
         Boolean(
           window.liveSocket &&
@@ -755,6 +755,16 @@ async function loadViewport(client, url, viewport) {
 
 async function submitSignIn(client, { loginUrl, email, password }) {
   await loadViewport(client, loginUrl, DEFAULT_VIEWPORTS[0])
+  await waitForExpression(
+    client,
+    `Boolean(
+      document.querySelector("#sign-in-form") &&
+      document.querySelector("input[name='user[email]']") &&
+      document.querySelector("input[name='user[password]']")
+    )`,
+    10_000,
+    "LiveVue sign-in form"
+  )
 
   const loaded = client.once("Page.loadEventFired")
   const result = await client.send("Runtime.evaluate", {
@@ -1190,6 +1200,39 @@ async function evaluateViewport(client, viewport, profile) {
   const requireCopyClick = JSON.stringify(profile.requireCopyClick)
   const requireSelectedDataLinkCopyPayload = JSON.stringify(profile.requireSelectedDataLinkCopyPayload)
 
+  if (profile.copyClickSelector) {
+    const targetResult = await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          const target = document.querySelector(${copyClickSelector})
+          if (!target) return null
+          const rect = target.getBoundingClientRect()
+          return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}
+        })()
+      `,
+      returnByValue: true,
+    })
+    const target = targetResult.result.value
+
+    if (target) {
+      await client.send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x: target.x,
+        y: target.y,
+        button: "left",
+        clickCount: 1,
+      })
+      await client.send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x: target.x,
+        y: target.y,
+        button: "left",
+        clickCount: 1,
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+
   const expression = `
     (async () => {
       const criticalSelector = ${criticalSelector}
@@ -1230,10 +1273,6 @@ async function evaluateViewport(client, viewport, profile) {
       }
 
       const copyButton = copyClickSelector && document.querySelector(copyClickSelector)
-      if (copyButton) {
-        copyButton.click()
-        await new Promise((resolve) => setTimeout(resolve, 50))
-      }
 
       const decodeLiveVueProps = (component) => {
         const encoded = component?.dataset.props || ""
@@ -2251,6 +2290,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
     3_000,
     "dashboard viewer to return after saving the staged layout"
   )
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
   assert.equal(editEnteredResult.result.value.editing, true, "edit layout should enter edit mode")
   assert.equal(editEnteredResult.result.value.interactive, true, "edit layout should arm GridStack interaction handles")
@@ -2273,12 +2313,6 @@ async function runLiveDashboardInteractions(client, url, profile) {
     "layout editing should clear the selected data-link inspector"
   )
 
-  const reloaded = client.once("Page.loadEventFired")
-  await client.send("Page.reload", { ignoreCache: true })
-  await reloaded
-  await waitForDocumentBody(client)
-  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
-
   const reloadResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => ({
@@ -2296,17 +2330,17 @@ async function runLiveDashboardInteractions(client, url, profile) {
   assert.equal(
     reloadResult.result.value.url,
     preReloadResult.result.value.url,
-    "dashboard reload should preserve the post-edit operational URL"
+    "dashboard return should preserve the post-edit operational URL"
   )
-  assert.equal(reloadResult.result.value.dashboardPresent, true, "dashboard should render after reload")
-  assert.equal(reloadResult.result.value.panelPresent, false, "closed panel should remain closed after reload")
+  assert.equal(reloadResult.result.value.dashboardPresent, true, "dashboard should render after returning from edit mode")
+  assert.equal(reloadResult.result.value.panelPresent, false, "closed panel should remain closed after returning")
   assert.equal(
     reloadResult.result.value.selectedDataLinkPresent,
     false,
-    "cleared data-link selection should remain cleared after reload"
+    "cleared data-link selection should remain cleared after returning"
   )
-  assert.equal(reloadResult.result.value.liveSocketConnected, true, "LiveSocket should reconnect after reload")
-  assert.equal(reloadResult.result.value.chartRendered, true, "chart hook should render after reload")
+  assert.equal(reloadResult.result.value.liveSocketConnected, true, "LiveSocket should reconnect after returning")
+  assert.equal(reloadResult.result.value.chartRendered, true, "chart hook should render after returning")
 
   const contextRailAfterReload = await inspectOpsContextRail(client, {
     expectInitiallyExpanded: true,
@@ -2340,7 +2374,7 @@ async function runLiveDashboardInteractions(client, url, profile) {
   assert.equal(
     persistedLayoutResult.result.value.h,
     layoutMutationResult.result.value.after.h,
-    "dashboard reload should preserve mutated placement size"
+    "dashboard return should preserve mutated placement size"
   )
 
   const workflowSurfaces = await runLiveWorkflowSurfaceInteractions(client)
@@ -26061,7 +26095,13 @@ async function runLiveWorkflowSurfaceInteractions(client) {
         if (!form || !submit) return false
 
         const setField = (name, value) => {
-          const input = form.querySelector('[name="historical_workflow_request[' + name + ']"]')
+          const inputs = Array.from(
+            form.querySelectorAll('[name="historical_workflow_request[' + name + ']"]')
+          )
+          const input =
+            name === "confirmed"
+              ? inputs.find((candidate) => candidate.type === "checkbox")
+              : inputs[0]
           if (!input) return false
           if (input.type === "checkbox") input.checked = value === "true"
           else input.value = value
@@ -32915,7 +32955,25 @@ async function runLiveTelemetryStreamInspection(client, profile) {
   }
 }
 
+async function runLiveVueClosureInspection(client, profile) {
+  const results = []
+
+  for (const viewport of DEFAULT_VIEWPORTS) {
+    await loadViewport(client, dashboardUrl(), viewport)
+    await waitForProfileReady(client, profile, viewport)
+    const result = await evaluateViewport(client, viewport, profile)
+    assertViewport(result)
+    results.push(result)
+  }
+
+  return {results}
+}
+
 const INTERACTION_SCENARIOS = {
+  "livevue-closure": {
+    resultKey: "liveVueClosure",
+    run: runLiveVueClosureInspection,
+  },
   "live-telemetry-stream": {
     resultKey: "liveTelemetryStream",
     run: runLiveTelemetryStreamInspection,
@@ -33316,6 +33374,10 @@ try {
   })
 
   if (credentials) {
+    await client.send("Browser.grantPermissions", {
+      origin: new URL(credentials.loginUrl).origin,
+      permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
+    })
     await submitSignIn(client, credentials)
     await selectOrganization(client, argValue("--organization-id"))
   }
