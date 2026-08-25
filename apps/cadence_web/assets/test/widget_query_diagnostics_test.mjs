@@ -136,7 +136,12 @@ assert.match(outsideSource, /document\.elementFromPoint\(x, y\)/)
 assert.match(outsideSource, /targetContainsHit: Boolean\(outside && hit && outside\.contains\(hit\)\)/)
 assert.match(outsideSource, /type: "mousePressed"[\s\S]*buttons: 1[\s\S]*clickCount: 1/)
 assert.match(outsideSource, /type: "mouseReleased"[\s\S]*buttons: 0[\s\S]*clickCount: 1/)
+assert.match(
+  outsideSource,
+  /for \(const type of \["pointerdown", "mousedown", "focus", "mouseup"\]\)/,
+)
 assert.match(outsideSource, /CDP should dispatch a trusted pointerdown to the outside trigger/)
+assert.doesNotMatch(outsideSource, /CDP should click the outside trigger/)
 assert.match(outsideSource, /owning details reopening before narrow viewport/)
 
 // Open state survives only a truthy, unchanged overlay identity across a prop patch.
