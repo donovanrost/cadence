@@ -2134,20 +2134,36 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   })
   await waitForExpression(
     client,
-    `
-      Boolean(
-        !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
-        document.getElementById(${JSON.stringify(initial.panelId)})?.hidden &&
-        document.activeElement?.id === ${JSON.stringify(initial.triggerId)} &&
-        !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
-          "[data-reka-popper-content-wrapper]"
-        ) &&
-        document.getElementById(${JSON.stringify(initial.panelId)})?.parentElement?.id ===
-          ${JSON.stringify(initial.rootId)}
-      )
-    `,
+    `!document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open")`,
     2_000,
-    "widget query diagnostics Escape dismissal and focus return"
+    "widget query diagnostics Escape open-state removal"
+  )
+  await waitForExpression(
+    client,
+    `document.getElementById(${JSON.stringify(initial.panelId)})?.hidden === true`,
+    2_000,
+    "widget query diagnostics Escape hidden panel state"
+  )
+  await waitForExpression(
+    client,
+    `!document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
+      "[data-reka-popper-content-wrapper]"
+    )`,
+    2_000,
+    "widget query diagnostics Escape wrapper cleanup"
+  )
+  await waitForExpression(
+    client,
+    `document.getElementById(${JSON.stringify(initial.panelId)})?.parentElement?.id ===
+      ${JSON.stringify(initial.rootId)}`,
+    2_000,
+    "widget query diagnostics Escape panel reparenting"
+  )
+  await waitForExpression(
+    client,
+    `document.activeElement?.id === ${JSON.stringify(initial.triggerId)}`,
+    2_000,
+    "widget query diagnostics Escape focus return"
   )
 
   await client.send("Runtime.evaluate", {
