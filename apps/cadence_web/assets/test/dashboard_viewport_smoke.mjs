@@ -2456,38 +2456,157 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   assert.equal(click?.isTrusted, true, "native Enter activation should click the diagnostics trigger")
   assert.equal(keyboard.rootOpen, true, "native trigger activation should reach Reka updateOpen")
 
-  const outsideResult = await client.send("Runtime.evaluate", {
+  const outsideTargetResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
         const outside = document.getElementById(${JSON.stringify(parent.detailsTriggerId)})
-        outside?.focus()
-        outside?.dispatchEvent(
-          new PointerEvent("pointerdown", {bubbles: true, composed: true, pointerType: "mouse"})
-        )
-        return {outsideId: outside?.id || ""}
+        outside?.scrollIntoView({block: "center", inline: "center", behavior: "instant"})
+        const rect = outside?.getBoundingClientRect()
+        const style = outside ? getComputedStyle(outside) : null
+        const x = rect ? rect.left + rect.width / 2 : null
+        const y = rect ? rect.top + rect.height / 2 : null
+        const hit = x !== null && y !== null ? document.elementFromPoint(x, y) : null
+        const controller = new AbortController()
+        const events = []
+        for (const type of ["pointerdown", "mousedown", "focus", "mouseup", "click"]) {
+          outside?.addEventListener(
+            type,
+            (event) => events.push({type, isTrusted: event.isTrusted}),
+            {signal: controller.signal}
+          )
+        }
+        window.__cadenceWidgetQueryOutsideProbe = {controller, events, outside}
+
+        return {
+          outsideId: outside?.id || "",
+          x,
+          y,
+          disabled: outside?.disabled ?? null,
+          tabIndex: outside?.tabIndex ?? null,
+          display: style?.display || "",
+          visibility: style?.visibility || "",
+          width: rect ? Math.round(rect.width) : 0,
+          height: rect ? Math.round(rect.height) : 0,
+          withinViewport: Boolean(
+            rect &&
+            rect.left >= 0 &&
+            rect.top >= 0 &&
+            rect.right <= window.innerWidth &&
+            rect.bottom <= window.innerHeight
+          ),
+          targetContainsHit: Boolean(outside && hit && outside.contains(hit)),
+          hitId: hit?.id || "",
+          hitTag: hit?.tagName || ""
+        }
       })()
     `,
     returnByValue: true,
   })
-  const outsideId = outsideResult.result.value.outsideId
+  const outsideTarget = outsideTargetResult.result.value
+  const outsideId = outsideTarget.outsideId
 
   assert.notEqual(outsideId, "", "the dashboard should expose an outside focus target")
-  await waitForExpression(
-    client,
-    `
-      Boolean(
-        !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute("data-overlay-open") &&
-        document.activeElement?.id === ${JSON.stringify(outsideId)} &&
-        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
-          "data-overlay-open"
-        ) &&
-        !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
-          "[data-reka-popper-content-wrapper]"
+  assert.equal(
+    Boolean(
+      outsideTarget.disabled === false &&
+      outsideTarget.tabIndex >= 0 &&
+      outsideTarget.display !== "none" &&
+      outsideTarget.visibility !== "hidden" &&
+      outsideTarget.width > 0 &&
+      outsideTarget.height > 0 &&
+      outsideTarget.withinViewport &&
+      outsideTarget.targetContainsHit
+    ),
+    true,
+    `outside pointer target should be visible and hit-testable: ${JSON.stringify(outsideTarget)}`
+  )
+
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: outsideTarget.x,
+    y: outsideTarget.y,
+  })
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: outsideTarget.x,
+    y: outsideTarget.y,
+    button: "left",
+    buttons: 1,
+    clickCount: 1,
+  })
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: outsideTarget.x,
+    y: outsideTarget.y,
+    button: "left",
+    buttons: 0,
+    clickCount: 1,
+  })
+
+  let outsideDismissalError = null
+  try {
+    await waitForExpression(
+      client,
+      `
+        Boolean(
+          !document.getElementById(${JSON.stringify(initial.rootId)})?.hasAttribute(
+            "data-overlay-open"
+          ) &&
+          document.getElementById(${JSON.stringify(initial.panelId)})?.hidden &&
+          document.activeElement?.id === ${JSON.stringify(outsideId)} &&
+          !document.getElementById(${JSON.stringify(initial.rootId)})?.querySelector(
+            "[data-reka-popper-content-wrapper]"
+          )
         )
-      )
+      `,
+      2_000,
+      "widget query diagnostics outside dismissal without focus theft"
+    )
+  } catch (error) {
+    outsideDismissalError = error
+  }
+
+  const outsideResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const probe = window.__cadenceWidgetQueryOutsideProbe
+        const root = document.getElementById(${JSON.stringify(initial.rootId)})
+        const panel = document.getElementById(${JSON.stringify(initial.panelId)})
+        const detailsRoot = document.getElementById(${JSON.stringify(parent.detailsRootId)})
+        const result = {
+          activeId: document.activeElement?.id || "",
+          childOpen: root?.hasAttribute("data-overlay-open") || false,
+          childHidden: panel?.hidden ?? null,
+          wrapperCount: root?.querySelectorAll("[data-reka-popper-content-wrapper]").length || 0,
+          parentOpen: detailsRoot?.hasAttribute("data-overlay-open") || false,
+          events: probe?.events || []
+        }
+        probe?.controller?.abort()
+        delete window.__cadenceWidgetQueryOutsideProbe
+        return result
+      })()
     `,
-    2_000,
-    "widget query diagnostics outside dismissal without focus theft"
+    returnByValue: true,
+  })
+  const outside = outsideResult.result.value
+
+  if (outsideDismissalError) {
+    throw new Error(
+      "Widget query diagnostics outside pointer state:\n" +
+      JSON.stringify({target: outsideTarget, ...outside}, null, 2) +
+      `\nOriginal timeout diagnostics:\n${outsideDismissalError.message}`
+    )
+  }
+
+  assert.equal(
+    outside.events.some((event) => event.type === "pointerdown" && event.isTrusted),
+    true,
+    "CDP should dispatch a trusted pointerdown to the outside trigger"
+  )
+  assert.equal(
+    outside.events.some((event) => event.type === "click" && event.isTrusted),
+    true,
+    "CDP should click the outside trigger"
   )
 
   await client.send("Emulation.setDeviceMetricsOverride", {
@@ -2496,6 +2615,29 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     deviceScaleFactor: 2,
     mobile: true,
   })
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const root = document.getElementById(${JSON.stringify(parent.detailsRootId)})
+        const trigger = document.getElementById(${JSON.stringify(parent.detailsTriggerId)})
+        const panel = document.getElementById(${JSON.stringify(parent.detailsPanelId)})
+        if (!root?.hasAttribute("data-overlay-open") || panel?.hidden) trigger?.click()
+      })()
+    `,
+  })
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.getElementById(${JSON.stringify(parent.detailsRootId)})?.hasAttribute(
+          "data-overlay-open"
+        ) &&
+        !document.getElementById(${JSON.stringify(parent.detailsPanelId)})?.hidden
+      )
+    `,
+    2_000,
+    "widget query diagnostics owning details reopening before narrow viewport"
+  )
   await client.send("Runtime.evaluate", {
     expression: `document.getElementById(${JSON.stringify(initial.triggerId)})?.click()`,
   })
@@ -2560,7 +2702,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     mouseOpen,
     sameIdentityPatch,
     keyboard: {preflight: keyboardPreflight, ...keyboard},
-    outsideId,
+    outside: {target: outsideTarget, ...outside},
     narrow: narrowResult.result.value
   }
 }

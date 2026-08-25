@@ -33,8 +33,11 @@ const oracleEnd = viewportSmokeSource.indexOf(
 )
 const oracleSource = viewportSmokeSource.slice(oracleStart, oracleEnd)
 const keyboardStart = oracleSource.indexOf("const keyboardPreflightResult")
-const keyboardEnd = oracleSource.indexOf("const outsideResult", keyboardStart)
+const keyboardEnd = oracleSource.indexOf("const outsideTargetResult", keyboardStart)
 const keyboardSource = oracleSource.slice(keyboardStart, keyboardEnd)
+const outsideStart = keyboardEnd
+const outsideEnd = oracleSource.indexOf("const narrowResult", outsideStart)
+const outsideSource = oracleSource.slice(outsideStart, outsideEnd)
 
 assert.ok(componentTemplate, "WidgetQueryDiagnostics.vue must have a template block")
 assert.ok(adapterTemplate, "CadencePopover.vue must have a template block")
@@ -42,6 +45,10 @@ assert.ok(oracleStart >= 0 && oracleEnd > oracleStart, "the browser oracle must 
 assert.ok(
   keyboardStart >= 0 && keyboardEnd > keyboardStart,
   "the native keyboard oracle must remain auditable",
+)
+assert.ok(
+  outsideStart >= 0 && outsideEnd > outsideStart,
+  "the native outside pointer oracle must remain auditable",
 )
 
 // The presentation remains the sole source of public DOM and Phoenix contracts.
@@ -122,6 +129,15 @@ assert.match(
 assert.doesNotMatch(keyboardSource, /nativeVirtualKeyCode/)
 assert.match(keyboardSource, /native Enter activation should click the diagnostics trigger/)
 assert.match(keyboardSource, /native trigger activation should reach Reka updateOpen/)
+
+// Outside dismissal remains a trusted physical pointer path against a hit-tested real control.
+assert.doesNotMatch(outsideSource, /new PointerEvent/)
+assert.match(outsideSource, /document\.elementFromPoint\(x, y\)/)
+assert.match(outsideSource, /targetContainsHit: Boolean\(outside && hit && outside\.contains\(hit\)\)/)
+assert.match(outsideSource, /type: "mousePressed"[\s\S]*buttons: 1[\s\S]*clickCount: 1/)
+assert.match(outsideSource, /type: "mouseReleased"[\s\S]*buttons: 0[\s\S]*clickCount: 1/)
+assert.match(outsideSource, /CDP should dispatch a trusted pointerdown to the outside trigger/)
+assert.match(outsideSource, /owning details reopening before narrow viewport/)
 
 // Open state survives only a truthy, unchanged overlay identity across a prop patch.
 assert.equal(preservesPopoverOpenState(true, "widget-query-a", "widget-query-a"), true)
