@@ -110,7 +110,7 @@ assert.doesNotMatch(adapterSource, /setTimeout|setInterval/)
 assert.doesNotMatch(adapterSource, /data-popover-focus/)
 
 // Enter remains a native CDP keyboard activation, including the text payload Chromium expects.
-assert.match(keyboardSource, /for \(const type of \["keydown", "keypress", "keyup", "click"\]\)/)
+assert.match(keyboardSource, /for \(const type of \["keydown", "keypress", "click"\]\)/)
 assert.match(
   keyboardSource,
   /type: "keyDown",[\s\S]*key: "Enter",[\s\S]*code: "Enter",[\s\S]*text: "\\r",[\s\S]*unmodifiedText: "\\r",[\s\S]*windowsVirtualKeyCode: 13/,

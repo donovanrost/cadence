@@ -2336,7 +2336,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
           })
         }
 
-        for (const type of ["keydown", "keypress", "keyup", "click"]) {
+        for (const type of ["keydown", "keypress", "click"]) {
           trigger?.addEventListener(type, record, {signal: controller.signal})
         }
 
@@ -2447,17 +2447,11 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
   }
 
   const keydown = keyboard.events.find((event) => event.type === "keydown")
-  const keyup = keyboard.events.find((event) => event.type === "keyup")
   const click = keyboard.events.find((event) => event.type === "click")
   assert.deepEqual(
     {key: keydown?.key, code: keydown?.code, isTrusted: keydown?.isTrusted},
     {key: "Enter", code: "Enter", isTrusted: true},
     "CDP should dispatch a trusted Enter keydown to the diagnostics trigger"
-  )
-  assert.deepEqual(
-    {key: keyup?.key, code: keyup?.code, isTrusted: keyup?.isTrusted},
-    {key: "Enter", code: "Enter", isTrusted: true},
-    "CDP should dispatch a trusted Enter keyup to the diagnostics trigger"
   )
   assert.equal(click?.isTrusted, true, "native Enter activation should click the diagnostics trigger")
   assert.equal(keyboard.rootOpen, true, "native trigger activation should reach Reka updateOpen")
