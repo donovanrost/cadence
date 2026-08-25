@@ -207,7 +207,7 @@ const toggleSource = sourceSlice(
 
 assert.match(
   toggleSource,
-  /<button\s+id="add-revision-toggle"\s+type="button"\s+class="btn"\s+:class="revision_form_open \? 'btn-ghost' : 'btn-primary'"\s*>/s,
+  /<button\s+id="add-revision-toggle"\s+type="button"\s+aria-controls="catalog-revision-upload-slot"\s+class="btn"\s+:class="revision_form_open \? 'btn-ghost' : 'btn-primary'"\s*>/s,
 )
 assert.match(toggleSource, /\{\{ revision_form_open \? "Cancel" : "\+ Add revision" \}\}/)
 assert.doesNotMatch(toggleSource, /@click|emit\(/)
@@ -224,6 +224,12 @@ assert.match(
   /<CollapsibleContent as-child>\s*<div id="catalog-revision-upload-slot">\s*<CatalogUploadForm/s,
 )
 assert.doesNotMatch(uploadSlotSource, /v-if|v-show|force-?mount/i)
+
+const triggerControls = toggleSource.match(/aria-controls="([^"]+)"/)?.[1]
+const uploadSlotId = uploadSlotSource.match(/<div id="([^"]+)"/)?.[1]
+
+assert.equal(triggerControls, uploadSlotId, "the trigger controls the preserved content child ID")
+assert.equal(triggerControls, "catalog-revision-upload-slot", "the control reference stays exact")
 
 for (const id of ["add-revision-toggle", "catalog-revision-upload-slot"]) {
   assert.equal(databaseShow.match(new RegExp(`id="${id}"`, "g"))?.length, 1, `${id} stays exact`)
