@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import {onBeforeUnmount, onBeforeUpdate, onMounted, onUpdated, ref} from "vue"
+import {computed} from "vue"
+import CadencePopover from "./ui/reka/CadencePopover.vue"
 
 type Attrs = Record<string, string | null>
 
@@ -46,219 +47,74 @@ type WidgetDataLinksPresentation = {
 }
 
 const props = defineProps<{presentation: WidgetDataLinksPresentation}>()
-const root = ref<HTMLElement | null>(null)
 
-// WIDGET_DATA_LINKS_CONTROLLER_START
-const createWidgetDataLinksController = ({rootElement, documentObject, windowObject}) => {
-  const state = {
-    rootElement,
-    trigger: null,
-    panel: null,
-    boundTrigger: null,
-    boundPanel: null,
-    open: false,
-    wasOpen: false,
-  }
-
-  const bindElements = () => {
-    state.trigger = state.rootElement.querySelector(":scope > [data-overlay-trigger]")
-    state.panel = state.rootElement.querySelector(":scope > [data-overlay-panel]")
-  }
-
-  const teardown = () => {
-    documentObject.removeEventListener("pointerdown", onDocumentPointerDown)
-    documentObject.removeEventListener("keydown", onDocumentKeyDown)
-  }
-
-  const bindDocumentListeners = () => {
-    documentObject.addEventListener("pointerdown", onDocumentPointerDown)
-    documentObject.addEventListener("keydown", onDocumentKeyDown)
-  }
-
-  const sync = () => {
-    if (!state.trigger || !state.panel) return
-    state.trigger.setAttribute("aria-expanded", state.open ? "true" : "false")
-    state.panel.hidden = !state.open
-    state.rootElement.toggleAttribute("data-overlay-open", state.open)
-  }
-
-  const positionPanel = () => {
-    if (!state.panel) return
-    state.panel.style.transform = ""
-    const rect = state.panel.getBoundingClientRect()
-    const gutter = 16
-    let offset = 0
-    if (rect.left < gutter) offset = gutter - rect.left
-    if (rect.right + offset > windowObject.innerWidth - gutter) {
-      offset -= rect.right + offset - (windowObject.innerWidth - gutter)
-    }
-    if (offset) state.panel.style.transform = `translateX(${Math.round(offset)}px)`
-  }
-
-  const close = ({restoreFocus = true} = {}) => {
-    if (!state.open) return
-    state.open = false
-    sync()
-    teardown()
-    if (restoreFocus && state.trigger?.isConnected) state.trigger.focus()
-  }
-
-  const show = () => {
-    windowObject.dispatchEvent(
-      new windowObject.CustomEvent("cadence:overlay-opened", {detail: state.rootElement}),
-    )
-    state.open = true
-    sync()
-    positionPanel()
-    bindDocumentListeners()
-  }
-
-  const onTriggerClick = (event) => {
-    event.preventDefault()
-    state.open ? close() : show()
-  }
-
-  function onDocumentPointerDown(event) {
-    if (!state.rootElement.contains(event.target)) close({restoreFocus: false})
-  }
-
-  function onDocumentKeyDown(event) {
-    if (event.key !== "Escape") return
-    event.preventDefault()
-    close()
-  }
-
-  const onOverlayOpened = (event) => {
-    if (event.detail !== state.rootElement) close({restoreFocus: false})
-  }
-
-  const onPanelClick = () => {}
-
-  const bindElementListeners = () => {
-    if (state.boundTrigger !== state.trigger) {
-      state.boundTrigger?.removeEventListener("click", onTriggerClick)
-      state.trigger?.addEventListener("click", onTriggerClick)
-      state.boundTrigger = state.trigger
-    }
-    if (state.boundPanel !== state.panel) {
-      state.boundPanel?.removeEventListener("click", onPanelClick)
-      state.panel?.addEventListener("click", onPanelClick)
-      state.boundPanel = state.panel
-    }
-  }
-
-  const unbindElementListeners = () => {
-    state.boundTrigger?.removeEventListener("click", onTriggerClick)
-    state.boundPanel?.removeEventListener("click", onPanelClick)
-    state.boundTrigger = null
-    state.boundPanel = null
-  }
-
-  const mounted = () => {
-    bindElements()
-    if (!state.trigger || !state.panel) return
-    bindElementListeners()
-    windowObject.addEventListener("cadence:overlay-opened", onOverlayOpened)
-  }
-
-  const beforeUpdate = () => {
-    state.wasOpen = state.open
-    teardown()
-  }
-
-  const updated = () => {
-    bindElements()
-    bindElementListeners()
-    state.open = state.wasOpen && Boolean(state.trigger && state.panel)
-    sync()
-    if (state.open) {
-      positionPanel()
-      bindDocumentListeners()
-    }
-    state.wasOpen = false
-  }
-
-  const destroyed = () => {
-    teardown()
-    unbindElementListeners()
-    windowObject.removeEventListener("cadence:overlay-opened", onOverlayOpened)
-  }
-
-  return {state, mounted, beforeUpdate, updated, destroyed, show, close, sync, positionPanel}
-}
-// WIDGET_DATA_LINKS_CONTROLLER_END
-
-let controller = null
-
-onMounted(() => {
-  if (!root.value) return
-  controller = createWidgetDataLinksController({
-    rootElement: root.value,
-    documentObject: document,
-    windowObject: window,
-  })
-  controller.mounted()
-})
-
-onBeforeUpdate(() => controller?.beforeUpdate())
-onUpdated(() => controller?.updated())
-
-onBeforeUnmount(() => {
-  controller?.destroyed()
-  controller = null
+const panelAttrs = computed(() => {
+  const attrs = {...props.presentation.panel.attrs}
+  delete attrs.hidden
+  return attrs
 })
 </script>
 
 <template>
-  <div
-    :id="presentation.overlay.id"
-    ref="root"
-    :class="presentation.overlay.class"
-    v-bind="presentation.overlay.attrs"
+  <CadencePopover
+    :id="props.presentation.overlay.id"
+    :identity="props.presentation.overlay.id"
+    :class="props.presentation.overlay.class"
+    v-bind="props.presentation.overlay.attrs"
+    side="bottom"
+    align="end"
+    :side-offset="8"
+    :collision-padding="16"
   >
-    <button
-      :id="presentation.trigger.id"
-      :type="presentation.trigger.type"
-      :class="presentation.trigger.class"
-      v-bind="presentation.trigger.attrs"
-    >
-      <span
-        :class="presentation.trigger.content.class"
-        :title="presentation.trigger.content.title"
-        v-bind="presentation.trigger.content.attrs"
+    <template #trigger="{open}">
+      <button
+        :id="props.presentation.trigger.id"
+        :type="props.presentation.trigger.type"
+        :class="props.presentation.trigger.class"
+        v-bind="props.presentation.trigger.attrs"
+        :aria-expanded="String(open)"
       >
         <span
-          :class="[
-            presentation.trigger.content.icon.name,
-            presentation.trigger.content.icon.class,
-          ]"
-        ></span>
-      </span>
-    </button>
-    <section
-      :id="presentation.panel.id"
-      :class="presentation.panel.class"
-      :hidden="presentation.panel.hidden"
-      v-bind="presentation.panel.attrs"
-    >
-      <div :class="presentation.body.class">
-        <button
-          v-for="item in presentation.items"
-          :key="item.key"
-          :type="item.type"
-          :class="item.class"
-          v-bind="item.attrs"
+          :class="props.presentation.trigger.content.class"
+          :title="props.presentation.trigger.content.title"
+          v-bind="props.presentation.trigger.content.attrs"
         >
-          <span :class="item.label.class">{{ item.label.text }}</span>
-          <span v-if="item.secondary" :class="item.secondary.class">
-            {{ item.secondary.text }}
-          </span>
           <span
-            v-if="item.icon"
-            :class="[item.icon.name, item.icon.class]"
+            :class="[
+              props.presentation.trigger.content.icon.name,
+              props.presentation.trigger.content.icon.class,
+            ]"
           ></span>
-        </button>
-      </div>
-    </section>
-  </div>
+        </span>
+      </button>
+    </template>
+
+    <template #content="{open}">
+      <section
+        :id="props.presentation.panel.id"
+        :class="props.presentation.panel.class"
+        v-bind="panelAttrs"
+        :hidden="!open"
+      >
+        <div :class="props.presentation.body.class">
+          <button
+            v-for="item in props.presentation.items"
+            :key="item.key"
+            :type="item.type"
+            :class="item.class"
+            v-bind="item.attrs"
+          >
+            <span :class="item.label.class">{{ item.label.text }}</span>
+            <span v-if="item.secondary" :class="item.secondary.class">
+              {{ item.secondary.text }}
+            </span>
+            <span
+              v-if="item.icon"
+              :class="[item.icon.name, item.icon.class]"
+            ></span>
+          </button>
+        </div>
+      </section>
+    </template>
+  </CadencePopover>
 </template>

@@ -9,7 +9,7 @@ const nodeScenarioLedger = [
   "the established warning strip root label fallback and HUD classes stay presentation-driven",
   "warning order and stable child host ids pass through without client normalization",
   "WidgetWarning receives the original overlay evidence and data-link event attributes",
-  "the global hook is absent while WidgetWarning retains its local overlay lifecycle and protocol",
+  "the global hook is absent while WidgetWarning delegates overlay mechanics to CadencePopover",
 ]
 
 assert.equal(process.versions.node, "24.16.0", "dashboard warning contracts use pinned Node 24.16.0")
@@ -18,6 +18,7 @@ assert.equal(nodeScenarioLedger.length, 5)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/DashboardWarnings.vue")
 const widgetWarningPath = resolve(__dirname, "../vue/WidgetWarning.vue")
+const adapterPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
 const componentsPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/ops_dashboard_show_live/components.ex",
@@ -28,12 +29,14 @@ const viewportSmokePath = resolve(__dirname, "dashboard_viewport_smoke.mjs")
 const [
   source,
   widgetWarningSource,
+  adapterSource,
   componentsSource,
   appSource,
   viewportSmokeSource,
 ] = await Promise.all([
   readFile(componentPath, "utf8"),
   readFile(widgetWarningPath, "utf8"),
+  readFile(adapterPath, "utf8"),
   readFile(componentsPath, "utf8"),
   readFile(appPath, "utf8"),
   readFile(viewportSmokePath, "utf8"),
@@ -89,18 +92,28 @@ assert.match(hostSource, /Enum\.with_index\(\)/)
 assert.match(hostSource, /WidgetWarningComponents\.warning_presentation\(/)
 assert.match(hostSource, /"dashboard-engine-warning-#\{index\}"/)
 
-assert.match(widgetWarningSource, /v-bind="presentation\.overlay\.attrs"/)
-assert.match(widgetWarningSource, /v-bind="presentation\.body\.evidence_button\.attrs"/)
+assert.match(widgetWarningSource, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
+assert.match(widgetWarningSource, /:id="props\.presentation\.overlay\.id"/)
+assert.match(widgetWarningSource, /:identity="props\.presentation\.overlay\.id"/)
+assert.match(widgetWarningSource, /v-bind="props\.presentation\.overlay\.attrs"/)
+assert.match(widgetWarningSource, /side="bottom"/)
+assert.match(widgetWarningSource, /align="end"/)
+assert.match(widgetWarningSource, /:collision-padding="16"/)
+assert.match(widgetWarningSource, /v-bind="props\.presentation\.trigger\.attrs"/)
+assert.match(widgetWarningSource, /:aria-expanded="String\(open\)"/)
+assert.match(widgetWarningSource, /v-bind="props\.presentation\.body\.evidence_button\.attrs"/)
 assert.match(widgetWarningSource, /v-bind="row\.attrs"/)
 assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
 assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
-assert.match(widgetWarningSource, /onMounted\(/)
-assert.match(widgetWarningSource, /onBeforeUpdate\(/)
-assert.match(widgetWarningSource, /onUpdated\(/)
-assert.match(widgetWarningSource, /onBeforeUnmount\(/)
-assert.match(widgetWarningSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
-assert.match(widgetWarningSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
-assert.match(widgetWarningSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
+assert.doesNotMatch(
+  widgetWarningSource,
+  /WIDGET_WARNING_CONTROLLER|addEventListener|removeEventListener|onMounted|onBeforeUpdate|onUpdated|onBeforeUnmount/,
+)
+assert.match(adapterSource, /subscribeToLegacyOverlayOpen/)
+assert.match(adapterSource, /announceCadencePopoverOpened/)
+assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
+assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
+assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
 assert.doesNotMatch(appSource, /DashboardWarnings|WidgetWarning/)
 assert.match(viewportSmokeSource, /document\.querySelectorAll\("\[data-engine-warning\]"\)/)
 assert.match(
