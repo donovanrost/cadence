@@ -12,8 +12,10 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/WidgetQueryDiagnostics.vue")
 const adapterPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
+const overlayStylesPath = resolve(__dirname, "../css/components/overlay.css")
 const componentSource = await readFile(componentPath, "utf8")
 const adapterSource = await readFile(adapterPath, "utf8")
+const overlayStylesSource = await readFile(overlayStylesPath, "utf8")
 const componentTemplate = componentSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 const adapterTemplate = adapterSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
@@ -66,9 +68,10 @@ assert.match(adapterSource, /announceCadencePopoverOpened/)
 assert.match(adapterSource, /@close-auto-focus="handleCloseAutoFocus"/)
 assert.match(adapterSource, /event\.preventDefault\(\)/)
 assert.match(adapterSource, /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/)
+assert.doesNotMatch(adapterSource, /<style(?:\s[^>]*)?>/)
 assert.match(
-  adapterSource,
-  /\[data-reka-popper-content-wrapper\] > \.cadence-overlay-panel \{\n  position: static;/,
+  overlayStylesSource,
+  /@layer components \{[\s\S]*\[data-reka-popper-content-wrapper\] > \.cadence-overlay-panel \{\n    position: static;/,
 )
 assert.doesNotMatch(adapterSource, /setTimeout|setInterval/)
 

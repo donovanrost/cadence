@@ -21,6 +21,10 @@
     color: var(--text-bright);
   }
 
+  [data-reka-popper-content-wrapper] > .cadence-overlay-panel {
+    position: static;
+  }
+
   .cadence-overlay[data-overlay-placement="bottom-end"] > .cadence-overlay-panel {
     right: 0;
   }

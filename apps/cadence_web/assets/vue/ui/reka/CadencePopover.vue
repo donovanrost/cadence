@@ -116,9 +116,3 @@ onBeforeUnmount(() => {
     </PopoverRoot>
   </div>
 </template>
-
-<style>
-[data-reka-popper-content-wrapper] > .cadence-overlay-panel {
-  position: static;
-}
-</style>
