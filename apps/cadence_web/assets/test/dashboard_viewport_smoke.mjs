@@ -2641,29 +2641,105 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     `
       (() => {
         const panel = document.getElementById(${JSON.stringify(initial.panelId)})
-        if (!panel || panel.hidden) return false
-        const rect = panel.getBoundingClientRect()
-        return rect.left >= 15 && rect.right <= window.innerWidth - 15
+        const wrapper = panel?.closest("[data-reka-popper-content-wrapper]")
+        return Boolean(panel && !panel.hidden && wrapper)
       })()
     `,
     2_000,
-    "widget query diagnostics narrow viewport collision handling"
+    "widget query diagnostics narrow viewport opening"
   )
+  await client.send("Runtime.evaluate", {
+    expression: `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`,
+    awaitPromise: true,
+  })
 
   const narrowResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
         const panel = document.getElementById(${JSON.stringify(initial.panelId)})
-        const rect = panel?.getBoundingClientRect()
+        const wrapper = panel?.closest("[data-reka-popper-content-wrapper]")
+        const trigger = document.getElementById(${JSON.stringify(initial.triggerId)})
+        const panelRect = panel?.getBoundingClientRect()
+        const rect = (element) => {
+          const value = element?.getBoundingClientRect()
+          if (!value) return null
+          return {
+            left: Math.round(value.left * 10) / 10,
+            top: Math.round(value.top * 10) / 10,
+            right: Math.round(value.right * 10) / 10,
+            bottom: Math.round(value.bottom * 10) / 10,
+            width: Math.round(value.width * 10) / 10,
+            height: Math.round(value.height * 10) / 10
+          }
+        }
+        const panelStyle = panel ? getComputedStyle(panel) : null
+        const wrapperStyle = wrapper ? getComputedStyle(wrapper) : null
+        const owningAncestors = []
+        for (let element = panel?.parentElement; element; element = element.parentElement) {
+          const style = getComputedStyle(element)
+          if (
+            style.transform !== "none" ||
+            style.overflowX !== "visible" ||
+            style.overflowY !== "visible"
+          ) {
+            owningAncestors.push({
+              id: element.id || "",
+              tag: element.tagName,
+              position: style.position,
+              transform: style.transform,
+              overflowX: style.overflowX,
+              overflowY: style.overflowY
+            })
+          }
+        }
         return {
-          viewportWidth: window.innerWidth,
-          left: rect ? Math.round(rect.left) : null,
-          right: rect ? Math.round(rect.right) : null
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            visualWidth: window.visualViewport?.width || null,
+            visualHeight: window.visualViewport?.height || null
+          },
+          panel: {
+            rect: rect(panel),
+            withinGutter: Boolean(
+              panelRect &&
+              panelRect.left >= 15 &&
+              panelRect.right <= window.innerWidth - 15
+            ),
+            width: panelStyle?.width || "",
+            maxWidth: panelStyle?.maxWidth || "",
+            position: panelStyle?.position || "",
+            boxSizing: panelStyle?.boxSizing || "",
+            availableWidth: panelStyle?.getPropertyValue(
+              "--reka-popover-content-available-width"
+            ).trim() || ""
+          },
+          wrapper: {
+            rect: rect(wrapper),
+            position: wrapperStyle?.position || "",
+            transform: wrapperStyle?.transform || "",
+            left: wrapperStyle?.left || "",
+            top: wrapperStyle?.top || "",
+            minWidth: wrapperStyle?.minWidth || "",
+            availableWidth: wrapperStyle?.getPropertyValue(
+              "--reka-popper-available-width"
+            ).trim() || ""
+          },
+          trigger: {rect: rect(trigger)},
+          owningAncestors
         }
       })()
     `,
     returnByValue: true,
   })
+  const narrow = narrowResult.result.value
+
+  assert.equal(
+    narrow.panel.withinGutter,
+    true,
+    `Widget query diagnostics narrow geometry: ${JSON.stringify(narrow)} | ` +
+      "widget query diagnostics narrow viewport collision handling"
+  )
 
   await client.send("Input.dispatchKeyEvent", {
     type: "keyDown",
@@ -2698,7 +2774,7 @@ async function inspectWidgetQueryDiagnosticsPopover(client) {
     sameIdentityPatch,
     keyboard: {preflight: keyboardPreflight, ...keyboard},
     outside: {target: outsideTarget, ...outside},
-    narrow: narrowResult.result.value
+    narrow
   }
 }
 
