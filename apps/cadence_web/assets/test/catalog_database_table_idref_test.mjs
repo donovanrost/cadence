@@ -8,19 +8,20 @@ import {
   flushVue,
   installDom,
   integrationRequire,
+  loadSfc,
 } from "./reka_adapter_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
   "the actual CatalogDatabaseTable SFC compiles and mounts with two rows",
-  "the integration runtime and repaired SFC bytes stay pinned",
-  "the repair adds only the one-way content label without custom menu ownership",
+  "the integration runtime and migrated SFC bytes stay pinned",
+  "the table composes CadenceModalMenu and CadenceMenuItem without custom menu ownership",
   "closed menus expose neither content nor an unresolved aria-controls IDREF",
   "open triggers and generated content IDs resolve both IDREF directions",
   "generated content IDs stay unique across both rows",
   "menu content remains portaled with Reka menu and menuitem roles",
   "View database links retain their exact href and LiveView navigation attributes",
   "ArrowDown, Escape, and selection retain their native menu behavior",
-  "default modal Tab behavior and trigger focus restoration remain intact",
+  "default modal Tab behavior, background hiding, and trigger focus restoration remain intact",
 ])
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
@@ -30,21 +31,27 @@ await assertPinnedAdapterRuntime(packageLockPath)
 assert.equal(scenarioLedger.length, 10)
 
 const source = await readFile(componentPath, "utf8")
-const rootTag = source.match(/<DropdownMenuRoot\b[^>]*>/)?.[0]
-const contentTag = source.match(/<DropdownMenuContent\b[\s\S]*?>/)?.[0]
+const menuTag = source.match(/<CadenceModalMenu\b[^>]*>/)?.[0]
+const contentSlot = source.match(/<template #content="\{open\}">([\s\S]*?)<\/template>/)?.[1]
+const contentRootTag = contentSlot?.match(/<div\b[\s\S]*?>/)?.[0]
 
 assert.equal(
   createHash("sha256").update(source).digest("hex"),
-  "14b28fc4ef6589daf99d5c2b32bdcff0b8845ee3dbce4823b2cf4cc2a98d72ed",
+  "97cf3163799f89d80e6f254d5ae84e3ee0177d9992dcd89e9b1b3b12b7dca2fd",
 )
-assert.equal(rootTag, "<DropdownMenuRoot>")
-assert.ok(contentTag, "CatalogDatabaseTable keeps its direct Reka content")
+assert.equal(menuTag, '<CadenceModalMenu side="bottom" align="end" :side-offset="4">')
+assert.ok(contentRootTag, "CatalogDatabaseTable keeps one native content root")
+assert.match(source, /import CadenceModalMenu from "\.\/ui\/reka\/CadenceModalMenu\.vue"/)
+assert.match(source, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
+assert.doesNotMatch(source, /from "reka-ui"/)
+assert.equal(source.match(/<CadenceModalMenu\b/g)?.length, 1)
+assert.equal(source.match(/<CadenceMenuItem\b/g)?.length, 1)
 assert.equal(source.match(/:aria-labelledby="row\.actions_id"/g)?.length, 1)
-assert.doesNotMatch(contentTag, /(?:^|\s):?id=/)
+assert.doesNotMatch(contentRootTag, /(?:^|\s):?id=/)
 assert.doesNotMatch(source, /aria-controls/)
-assert.doesNotMatch(rootTag, /\bv-slot\b/)
-assert.doesNotMatch(rootTag, /(?:^|\s):?modal(?:=|\s|>)/)
-assert.doesNotMatch(source, /CadenceMenu/)
+assert.doesNotMatch(menuTag, /(?:^|\s):?modal(?:=|\s|>)/)
+assert.match(contentSlot, /<CadenceMenuItem :active="open">/)
+assert.doesNotMatch(source, /@update:open|@select|\bref\(|\bwatch\(|request-change|compatibility/)
 
 const dom = installDom('<div id="app"></div>')
 Object.defineProperty(globalThis, "HTMLInputElement", {
@@ -55,6 +62,10 @@ Object.defineProperty(globalThis, "HTMLInputElement", {
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 const {transformSync} = integrationRequire("esbuild")
 const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
+const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Promise.all([
+  loadSfc(resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")),
+  loadSfc(resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")),
+])
 
 const parsed = parse(source, {filename: componentPath})
 assert.deepEqual(parsed.errors, [], "CatalogDatabaseTable parses with the pinned Vue compiler")
@@ -76,8 +87,12 @@ const StatusBadge = defineComponent({
   props: ["status", "label"],
   setup: (props) => () => h("span", props.label),
 })
-const localRequire = (specifier) =>
-  specifier === "./StatusBadge.vue" ? StatusBadge : integrationRequire(specifier)
+const localRequire = (specifier) => {
+  if (specifier === "./StatusBadge.vue") return StatusBadge
+  if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
+  if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
+  return integrationRequire(specifier)
+}
 
 new Function("require", "module", "exports", transformed.code)(
   localRequire,
@@ -118,8 +133,19 @@ const assertClosed = (row, contentId) => {
   const trigger = document.getElementById(row.actions_id)
 
   assert.ok(trigger, `${row.slug} retains its public trigger ID`)
+  assert.equal(trigger.tagName, "BUTTON")
+  assert.equal(trigger.getAttribute("type"), "button")
+  assert.equal(trigger.getAttribute("class"), "btn btn-ghost btn-sm")
+  assert.equal(trigger.getAttribute("aria-label"), "Database actions")
+  assert.equal(trigger.getAttribute("aria-haspopup"), "menu")
   assert.equal(trigger.getAttribute("aria-expanded"), "false")
   assert.equal(trigger.hasAttribute("aria-controls"), false)
+  assert.equal(trigger.getAttribute("data-state"), "closed")
+  assert.equal(trigger.parentElement.tagName, "TD", "the adapter adds no trigger wrapper")
+  assert.equal(trigger.parentElement.children.length, 1)
+  assert.equal(trigger.children.length, 1)
+  assert.equal(trigger.firstElementChild.tagName, "SPAN")
+  assert.equal(trigger.firstElementChild.className, "hero-ellipsis-vertical h-4 w-4")
   assert.equal(document.querySelector(`[role="menu"][aria-labelledby="${row.actions_id}"]`), null)
   if (contentId) assert.equal(document.getElementById(contentId), null)
 }
@@ -164,20 +190,35 @@ for (const [rowIndex, row] of rows.entries()) {
   assert.equal(contentId.includes(row.actions_id), false)
   assert.ok(content, `${row.slug} generated content ID resolves`)
   assert.equal(document.getElementById(trigger.getAttribute("aria-controls")), content)
+  assert.equal(content.tagName, "DIV")
   assert.equal(content.getAttribute("aria-labelledby"), row.actions_id)
   assert.equal(document.getElementById(content.getAttribute("aria-labelledby")), trigger)
   assert.equal(document.querySelectorAll(`[id="${contentId}"]`).length, 1)
   assert.equal(appElement.contains(content), false, `${row.slug} content stays portaled`)
+  assert.equal(document.body.contains(content), true)
+  assert.equal(content.parentElement.children.length, 1, "the portal has one content root")
   assert.equal(content.getAttribute("role"), "menu")
+  assert.equal(content.getAttribute("data-side"), "bottom")
+  assert.equal(content.getAttribute("data-align"), "end")
+  assert.equal(
+    content.getAttribute("class"),
+    "z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg",
+  )
   assert.equal(appElement.getAttribute("aria-hidden"), "true", `${row.slug} remains modal`)
   assert.equal(content.contains(document.activeElement), true)
   assert.equal(document.activeElement.getAttribute("role"), "menuitem")
 
   const links = [...content.querySelectorAll("a")]
   assert.equal(links.length, 1)
+  assert.equal(content.children.length, 1, "CadenceMenuItem adds no interactive wrapper")
+  assert.equal(links[0].parentElement, content)
   assert.equal(links[0].textContent.trim(), "View database")
   assert.equal(links[0].getAttribute("href"), row.href)
   assert.equal(links[0].getAttribute("role"), "menuitem")
+  assert.equal(
+    links[0].getAttribute("class"),
+    "block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200",
+  )
   assert.equal(links[0].getAttribute("data-phx-link"), "redirect")
   assert.equal(links[0].getAttribute("data-phx-link-state"), "push")
 
