@@ -162,7 +162,7 @@ assert.match(adapterSource, /announceCadencePopoverOpened/)
 assert.match(adapterSource, /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/)
 assert.match(
   adapterSource,
-  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*trigger\?\.contains\(event\.target\)[\s\S]*suppressCloseAutoFocus = true\n\}/,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*trigger\?\.contains\(event\.target\)[\s\S]*event\.preventDefault\(\)[\s\S]*closeWithoutFocus\(\)\n\}/,
 )
 assert.match(
   adapterSource,
