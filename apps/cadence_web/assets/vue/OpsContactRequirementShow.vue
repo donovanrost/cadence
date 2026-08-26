@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {Toggle} from "reka-ui"
+import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 
 type EmptyPayload = Record<string, never>
 
@@ -298,11 +298,10 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
                 opportunity.selected && 'bg-primary/[0.06]'
               ]"
             >
-              <Toggle
-                :model-value="opportunity.selected"
+              <CadenceToggle
+                :pressed="opportunity.selected"
                 :disabled="opportunity.toggle_action.disabled"
-                as-child
-                @update:model-value="toggleOpportunity(opportunity)"
+                @request-change="toggleOpportunity(opportunity)"
               >
                 <button
                   :id="opportunity.toggle_action.id"
@@ -318,7 +317,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
                 >
                   {{ opportunity.selected ? "✓" : "" }}
                 </button>
-              </Toggle>
+              </CadenceToggle>
               <div class="min-w-0">
                 <p class="truncate text-sm font-semibold">
                   {{ opportunity.provider_display_name }}

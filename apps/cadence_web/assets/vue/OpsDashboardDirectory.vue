@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {Toggle} from "reka-ui"
+import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
 type LinkAction = {
@@ -368,11 +368,10 @@ const restoreDashboard = (row: DirectoryRow) => {
               </div>
             </div>
 
-            <Toggle
-              :model-value="row.starred"
+            <CadenceToggle
+              :pressed="row.star.aria_pressed === 'true'"
               :disabled="row.star.disabled"
-              as-child
-              @update:model-value="toggleDashboardStar(row)"
+              @request-change="toggleDashboardStar(row)"
             >
               <button
                 :id="row.star.id"
@@ -385,7 +384,7 @@ const restoreDashboard = (row: DirectoryRow) => {
               >
                 <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
               </button>
-            </Toggle>
+            </CadenceToggle>
           </div>
 
           <div class="mt-4 flex items-center justify-between gap-3 border-t border-base-300/60 pt-3">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {Toggle} from "reka-ui"
+import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 import {defineComponent, h, type PropType} from "vue"
 
 type Attributes = Record<string, string>
@@ -375,9 +375,8 @@ defineProps<{presentation: Presentation}>()
             v-for="option in presentation.point_widget.point_picker.list.options"
             :key="option.key"
           >
-            <Toggle
-              :model-value="option.attrs['aria-pressed'] === 'true'"
-              as-child
+            <CadenceToggle
+              :pressed="option.attrs['aria-pressed'] === 'true'"
             >
               <button
                 :type="option.type"
@@ -391,7 +390,7 @@ defineProps<{presentation: Presentation}>()
                   {{ option.description.text }}
                 </span>
               </button>
-            </Toggle>
+            </CadenceToggle>
           </li>
           <li
             v-if="presentation.point_widget.point_picker.list.empty"
@@ -484,10 +483,9 @@ defineProps<{presentation: Presentation}>()
             </div>
             <ul class="space-y-1">
               <li v-for="option in group.options" :key="option.key">
-                <Toggle
-                  :model-value="option.attrs['aria-pressed'] === 'true'"
+                <CadenceToggle
+                  :pressed="option.attrs['aria-pressed'] === 'true'"
                   :disabled="option.attrs.disabled !== undefined"
-                  as-child
                 >
                   <button
                     :type="option.type"
@@ -506,7 +504,7 @@ defineProps<{presentation: Presentation}>()
                       >{{ scope }}</span>
                     </span>
                   </button>
-                </Toggle>
+                </CadenceToggle>
               </li>
             </ul>
           </li>
