@@ -15,10 +15,12 @@ const scenarios = Object.freeze([
   "the adapter maps server-authored pressed and disabled state into a controlled Reka Toggle",
   "raw Fragment text number and comment siblings survive around the one native button root",
   "zero and multiple root candidates fail with a clear contract error",
-  "anchor and component roots fail the native-button contract before interaction",
+  "component roots are rejected before their render shape or default attributes can escape",
+  "anchor roots fail the native-button contract before interaction",
   "activation emits the requested next state without optimistic local mutation",
   "disabled activation emits nothing and the adapter never introduces a hidden input",
   "normalized event handlers run exactly once and unmount remains safe",
+  "a parent template ref retains its owner through the adapter clone",
 ])
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
@@ -27,7 +29,7 @@ const primitiveChildPath = resolve(testDirectory, "../vue/ui/reka/cadence_primit
 const packageLockPath = resolve(testDirectory, "../../package-lock.json")
 
 await assertPinnedAdapterRuntime(packageLockPath)
-assert.equal(scenarios.length, 7)
+assert.equal(scenarios.length, 9)
 
 const dom = installDom('<div id="app"></div>')
 const {component: CadenceToggle, descriptor, source} = await loadSfc(componentPath)
@@ -52,7 +54,10 @@ assert.doesNotMatch(
   /\bv-model\b|defaultValue|default-value|<input\b|(?:^|\s)name=|\bref\(|\breactive\(/m,
 )
 assert.match(primitiveChildSource, /createVNode\(Text, null, String\(child\)\)/)
-assert.match(primitiveChildSource, /requires exactly one element or component child/)
+assert.match(primitiveChildSource, /requires exactly one native element child/)
+assert.match(primitiveChildSource, /component children are not supported/)
+assert.match(primitiveChildSource, /delete childProps\.ref/)
+assert.doesNotMatch(primitiveChildSource, /cloneVNode\([^\n]+,\s*child\.props/)
 assert.match(primitiveChildSource, /requires a native <\$\{props\.requiredTag\}> child/)
 
 const {
@@ -187,20 +192,72 @@ const mountInvalidToggle = (slot, expectedError) => {
 
 mountInvalidToggle(
   () => h(Fragment, null, ["text only", createCommentVNode("no-root")]),
-  /CadenceToggle requires exactly one element or component child; received 0/,
+  /CadenceToggle requires exactly one native element child; received 0/,
 )
 mountInvalidToggle(
   () => h(Fragment, null, [h("button", "First"), h("button", "Second")]),
-  /CadenceToggle requires exactly one element or component child; received 2/,
+  /CadenceToggle requires exactly one native element child; received 2/,
 )
 mountInvalidToggle(
   () => h("a", {href: "#unsupported"}, "Anchor"),
   /CadenceToggle requires a native <button> child; received <a>/,
 )
+
+const MultipleRootComponent = defineComponent({
+  name: "MultipleRootComponent",
+  render: () => [
+    h("button", "First component root"),
+    h("button", "Second component root"),
+  ],
+})
 mountInvalidToggle(
-  () => h(defineComponent({render: () => h("button", "Component button")})),
-  /CadenceToggle requires a native <button> child; received a component/,
+  () => h(MultipleRootComponent),
+  /CadenceToggle requires a native element child; component children are not supported/,
 )
+
+const DisabledDefaultComponent = defineComponent({
+  name: "DisabledDefaultComponent",
+  inheritAttrs: false,
+  props: {
+    dataDisabled: {
+      type: String,
+      default: "component-default",
+    },
+  },
+  render() {
+    return h("button", {"data-disabled": this.dataDisabled}, "Component button")
+  },
+})
+mountInvalidToggle(
+  () => h(DisabledDefaultComponent),
+  /CadenceToggle requires a native element child; component children are not supported/,
+)
+
+const templateRefContainer = dom.window.document.createElement("div")
+dom.window.document.body.append(templateRefContainer)
+const TemplateRefOracle = defineComponent({
+  name: "CadenceToggleTemplateRefOracle",
+  components: {CadenceToggle},
+  data: () => ({serverPressed: false}),
+  template: `
+    <CadenceToggle :pressed="serverPressed">
+      <button id="template-ref-toggle" ref="templateToggle" type="button">
+        Template ref toggle
+      </button>
+    </CadenceToggle>
+  `,
+})
+const templateRefApp = createApp(TemplateRefOracle)
+const templateRefOwner = templateRefApp.mount(templateRefContainer)
+await flushVue(nextTick)
+const templateRefButton = dom.window.document.querySelector("#template-ref-toggle")
+assert.equal(templateRefOwner.$refs.templateToggle, templateRefButton)
+assert.equal(Array.isArray(templateRefOwner.$refs.templateToggle), false)
+templateRefOwner.serverPressed = true
+await flushVue(nextTick)
+assert.equal(templateRefOwner.$refs.templateToggle, templateRefButton)
+assert.equal(templateRefButton.getAttribute("data-state"), "on")
+assert.doesNotThrow(() => templateRefApp.unmount())
 
 assert.doesNotThrow(() => app.unmount())
 dom.window.close()

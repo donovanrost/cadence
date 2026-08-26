@@ -30,13 +30,13 @@ const normalizeFragmentChildren = (children) =>
     return normalizeFragmentChildren(fragmentChildren)
   })
 
-const rootCandidate = (child) =>
-  typeof child.type === "string" ||
+const nativeElementRoot = (child) => typeof child.type === "string"
+
+const componentRoot = (child) =>
   typeof child.type === "function" ||
   (typeof child.type === "object" && child.type !== null)
 
-const describeRoot = (child) =>
-  typeof child.type === "string" ? `<${child.type}>` : "a component"
+const describeRoot = (child) => `<${child.type}>`
 
 export const CadencePrimitiveChild = defineComponent({
   name: "CadencePrimitiveChild",
@@ -58,13 +58,21 @@ export const CadencePrimitiveChild = defineComponent({
   setup(props, {attrs, slots}) {
     return () => {
       const children = normalizeFragmentChildren(slots.default?.() ?? [])
+      if (children.some(componentRoot)) {
+        throw new Error(
+          `${props.contractName} requires a native element child; ` +
+            "component children are not supported",
+        )
+      }
+
       const candidateIndexes = children.reduce(
-        (indexes, child, index) => (rootCandidate(child) ? [...indexes, index] : indexes),
+        (indexes, child, index) =>
+          nativeElementRoot(child) ? [...indexes, index] : indexes,
         [],
       )
       if (candidateIndexes.length !== 1) {
         throw new Error(
-          `${props.contractName} requires exactly one element or component child; ` +
+          `${props.contractName} requires exactly one native element child; ` +
             `received ${candidateIndexes.length}`,
         )
       }
@@ -81,7 +89,9 @@ export const CadencePrimitiveChild = defineComponent({
       const enforcedAttrs = Object.fromEntries(
         props.enforceAttrs.map((name) => [name, attrs[name]]),
       )
-      const mergedProps = mergeProps(attrs, child.props ?? {}, enforcedAttrs)
+      const childProps = {...(child.props ?? {})}
+      delete childProps.ref
+      const mergedProps = mergeProps(attrs, childProps, enforcedAttrs)
       children[childIndex] = cloneVNode({...child, props: {}}, mergedProps)
 
       return children
