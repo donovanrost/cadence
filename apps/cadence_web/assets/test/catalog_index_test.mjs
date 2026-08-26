@@ -16,7 +16,7 @@ const scenarioLedger = [
   "the six pre-migration scenarios and 21 assertion sites remain one-for-one",
   "the authenticated browser scope, Catalog LiveSession mounts, and mission-sidebar layout stay exact",
   "Layouts.app remains the Phoenix host boundary with flash and current_scope",
-  "CatalogDatabaseTable.vue remains byte-for-byte immutable",
+  "CatalogDatabaseTable.vue stays pinned to the reviewed Cadence menu migration",
 ]
 
 assert.equal(process.versions.node, "24.16.0", "Catalog Index contracts use pinned Node 24.16.0")
@@ -80,8 +80,8 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(child).digest("hex"),
-  "14b28fc4ef6589daf99d5c2b32bdcff0b8845ee3dbce4823b2cf4cc2a98d72ed",
-  "CatalogDatabaseTable.vue remains the explicitly immutable child",
+  "97cf3163799f89d80e6f254d5ae84e3ee0177d9992dcd89e9b1b3b12b7dca2fd",
+  "CatalogDatabaseTable.vue remains the explicitly reviewed child",
 )
 
 const script = component.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]

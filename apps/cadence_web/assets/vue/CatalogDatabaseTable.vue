@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger
-} from "reka-ui"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
 type Status = "info" | "ready" | "blocked"
 
@@ -93,8 +88,8 @@ defineProps<{rows: DatabaseRow[]}>()
           </span>
         </td>
         <td class="text-right">
-          <DropdownMenuRoot>
-            <DropdownMenuTrigger as-child>
+          <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+            <template #trigger>
               <button
                 :id="row.actions_id"
                 class="btn btn-ghost btn-sm"
@@ -103,26 +98,23 @@ defineProps<{rows: DatabaseRow[]}>()
               >
                 <span class="hero-ellipsis-vertical h-4 w-4"></span>
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuPortal>
-              <DropdownMenuContent
+            </template>
+            <template #content="{open}">
+              <div
                 :aria-labelledby="row.actions_id"
                 class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
-                side="bottom"
-                align="end"
-                :side-offset="4"
               >
-                <DropdownMenuItem as-child>
+                <CadenceMenuItem :active="open">
                   <a
                     :href="row.href"
                     data-phx-link="redirect"
                     data-phx-link-state="push"
                     class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
                   >View database</a>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenuPortal>
-          </DropdownMenuRoot>
+                </CadenceMenuItem>
+              </div>
+            </template>
+          </CadenceModalMenu>
         </td>
       </tr>
     </tbody>
