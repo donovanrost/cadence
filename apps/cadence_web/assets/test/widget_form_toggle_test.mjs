@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {createRequire} from "node:module"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {loadSfc} from "./reka_adapter_test_support.mjs"
 
 const expectedNodeVersion = "24.16.0"
 const expectedRekaVersion = "2.10.3"
@@ -17,6 +18,7 @@ assert.equal(
 )
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const cadenceTogglePath = resolve(testDirectory, "../vue/ui/reka/CadenceToggle.vue")
 const paths = {
   component: resolve(testDirectory, "../vue/WidgetForm.vue"),
   packageLock: resolve(testDirectory, "../../package-lock.json"),
@@ -61,10 +63,10 @@ assert.deepEqual(compiledTemplate.errors, [], "WidgetForm.vue compiles with the 
 const script = parsed.descriptor.scriptSetup.content
 const template = parsed.descriptor.template.content
 
-assert.match(script, /^import \{Toggle\} from "reka-ui"$/m)
-assert.equal(script.match(/from "reka-ui"/g)?.length, 1)
-assert.equal(template.match(/<Toggle\b/g)?.length, 2)
-assert.equal(template.match(/<\/Toggle>/g)?.length, 2)
+assert.match(script, /^import CadenceToggle from "\.\/ui\/reka\/CadenceToggle\.vue"$/m)
+assert.doesNotMatch(script, /from "reka-ui"/)
+assert.equal(template.match(/<CadenceToggle\b/g)?.length, 2)
+assert.equal(template.match(/<\/CadenceToggle>/g)?.length, 2)
 assert.doesNotMatch(source, /ToggleGroup|ToggleRoot/)
 
 const sourceSlice = (sourceText, start, end, label) => {
@@ -80,29 +82,28 @@ const inclusiveSourceSlice = (sourceText, start, end, label) =>
 
 const pointToggle = inclusiveSourceSlice(
   template,
-  "            <Toggle\n",
-  "            </Toggle>",
-  "point-picker option Toggle",
+  "            <CadenceToggle\n",
+  "            </CadenceToggle>",
+  "point-picker option CadenceToggle",
 )
 const observableToggle = inclusiveSourceSlice(
   template,
-  "                <Toggle\n",
-  "                </Toggle>",
-  "operational-observable option Toggle",
+  "                <CadenceToggle\n",
+  "                </CadenceToggle>",
+  "operational-observable option CadenceToggle",
 )
 
 for (const [label, toggle] of [
   ["point-picker", pointToggle],
   ["operational-observable", observableToggle],
 ]) {
-  assert.equal(toggle.match(/<button\b/g)?.length, 1, `${label} Toggle owns one button`)
-  assert.equal(toggle.match(/<\/button>/g)?.length, 1, `${label} Toggle closes one button`)
-  assert.match(toggle, /:model-value="option\.attrs\['aria-pressed'\] === 'true'"/)
-  assert.match(toggle, /\n\s+as-child\n/)
+  assert.equal(toggle.match(/<button\b/g)?.length, 1, `${label} CadenceToggle owns one button`)
+  assert.equal(toggle.match(/<\/button>/g)?.length, 1, `${label} CadenceToggle closes one button`)
+  assert.match(toggle, /:pressed="option\.attrs\['aria-pressed'\] === 'true'"/)
   assert.match(toggle, /:type="option\.type"/)
   assert.match(toggle, /:class="option\.class"/)
   assert.match(toggle, /v-bind="option\.attrs"/)
-  assert.doesNotMatch(toggle, /@click|@update:model-value|v-model|\bname=/)
+  assert.doesNotMatch(toggle, /@click|@update:model-value|@request-change|v-model|\bname=/)
   assert.doesNotMatch(toggle, /<input\b/)
 }
 
@@ -130,14 +131,17 @@ for (const removalButtons of [selectedPointRemovals, selectedObservableRemovals]
 
 assert.doesNotMatch(source, /\bv-model(?::model-value)?=/)
 assert.doesNotMatch(script, /\b(?:computed|reactive|ref|watch)\s*\(/)
-assert.doesNotMatch(source, /@update:model-value|\bname="[^"]*toggle|type="hidden"[^>]*toggle/)
+assert.doesNotMatch(
+  source,
+  /@update:model-value|@request-change|\bname="[^"]*toggle|type="hidden"[^>]*toggle/,
+)
 
 const unwrapToggle = (toggle) => {
   const lines = toggle.split("\n")
   const openingEnd = lines.findIndex((line) => line.trim() === ">")
 
   assert.ok(openingEnd > 0, "Toggle opening tag stays multiline and auditable")
-  assert.equal(lines.at(-1)?.trim(), "</Toggle>")
+  assert.equal(lines.at(-1)?.trim(), "</CadenceToggle>")
 
   return lines
     .slice(openingEnd + 1, -1)
@@ -146,7 +150,7 @@ const unwrapToggle = (toggle) => {
 }
 
 const normalizedComponent = source
-  .replace('import {Toggle} from "reka-ui"\n', "")
+  .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
   .replace(pointToggle, unwrapToggle(pointToggle))
   .replace(observableToggle, unwrapToggle(observableToggle))
 
@@ -224,7 +228,7 @@ for (const globalName of [
 }
 
 const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
-const {Toggle} = integrationRequire("reka-ui")
+const {component: CadenceToggle} = await loadSfc(cadenceTogglePath)
 
 const pointOption = Object.freeze({
   type: "button",
@@ -263,19 +267,17 @@ const RuntimeOracle = defineComponent({
     return () =>
       h("form", null, [
         h(
-          Toggle,
+          CadenceToggle,
           {
-            modelValue: pointOption.attrs["aria-pressed"] === "true",
-            asChild: true,
+            pressed: pointOption.attrs["aria-pressed"] === "true",
           },
           {default: () => button(pointOption)},
         ),
         h(
-          Toggle,
+          CadenceToggle,
           {
-            modelValue: observableOption.attrs["aria-pressed"] === "true",
+            pressed: observableOption.attrs["aria-pressed"] === "true",
             disabled: observableOption.attrs.disabled !== undefined,
-            asChild: true,
           },
           {default: () => button(observableOption)},
         ),
@@ -289,9 +291,9 @@ app.mount(dom.window.document.querySelector("#app"))
 const form = dom.window.document.querySelector("form")
 const buttons = [...form.querySelectorAll("button")]
 
-assert.equal(buttons.length, 2, "two Toggle instances render exactly two underlying buttons")
-assert.equal(form.children.length, 2, "as-child adds no wrapper elements")
-assert.equal(form.querySelectorAll("input").length, 0, "unnamed Toggles add no hidden inputs")
+assert.equal(buttons.length, 2, "two CadenceToggle instances render exactly two underlying buttons")
+assert.equal(form.children.length, 2, "CadenceToggle adds no wrapper elements")
+assert.equal(form.querySelectorAll("input").length, 0, "CadenceToggle adds no hidden inputs")
 
 const attributes = (element) =>
   Object.fromEntries(element.getAttributeNames().sort().map((name) => [name, element.getAttribute(name)]))
@@ -333,7 +335,7 @@ buttons[0].addEventListener("click", () => nativeClickCount++)
 buttons[0].click()
 await nextTick()
 
-assert.equal(nativeClickCount, 1, "Toggle leaves the underlying native click observable to Phoenix")
+assert.equal(nativeClickCount, 1, "CadenceToggle leaves the native phx-click path observable once")
 assert.equal(pointOption.attrs["aria-pressed"], "true")
 assert.equal(buttons[0].getAttribute("aria-pressed"), "true")
 assert.equal(buttons[0].getAttribute("data-state"), "on")

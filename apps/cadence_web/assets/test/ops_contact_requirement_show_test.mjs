@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url"
 import vm from "node:vm"
 
 const scenarioLedger = [
-  "the opportunity control uses one wrapper-free Reka Toggle",
+  "the opportunity control uses one wrapper-free CadenceToggle",
   "the server DTO remains the only source of pressed state",
   "a toggle request emits the exact Phoenix event and snapshot payload without local mutation",
   "the original button ID class aria label disabled state and checkmark stay exact",
@@ -64,11 +64,11 @@ const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
 assert.ok(script, "OpsContactRequirementShow.vue keeps an auditable TypeScript setup block")
 assert.ok(template, "OpsContactRequirementShow.vue keeps an auditable template block")
-assert.match(script, /^import \{Toggle\} from "reka-ui"$/m)
-assert.equal(script.match(/from "reka-ui"/g)?.length, 1)
+assert.match(script, /^import CadenceToggle from "\.\/ui\/reka\/CadenceToggle\.vue"$/m)
+assert.doesNotMatch(script, /from "reka-ui"/)
 assert.doesNotMatch(source, /ToggleRoot/)
-assert.equal(template.match(/<Toggle\b/g)?.length, 1)
-assert.equal(template.match(/<\/Toggle>/g)?.length, 1)
+assert.equal(template.match(/<CadenceToggle\b/g)?.length, 1)
+assert.equal(template.match(/<\/CadenceToggle>/g)?.length, 1)
 
 const opportunityRow = sourceSlice(
   template,
@@ -78,9 +78,9 @@ const opportunityRow = sourceSlice(
 )
 const toggleMarkup = inclusiveSourceSlice(
   source,
-  "              <Toggle\n",
-  "              </Toggle>",
-  "opportunity Toggle",
+  "              <CadenceToggle\n",
+  "              </CadenceToggle>",
+  "opportunity CadenceToggle",
 )
 
 assert.match(opportunityRow, /:id="opportunity\.__dom_id"/)
@@ -92,8 +92,9 @@ assert.match(
 assert.equal(toggleMarkup.match(/<button\b/g)?.length, 1)
 assert.match(
   toggleMarkup,
-  /<Toggle\n\s+:model-value="opportunity\.selected"\n\s+:disabled="opportunity\.toggle_action\.disabled"\n\s+as-child\n\s+@update:model-value="toggleOpportunity\(opportunity\)"/,
+  /<CadenceToggle\n\s+:pressed="opportunity\.selected"\n\s+:disabled="opportunity\.toggle_action\.disabled"\n\s+@request-change="toggleOpportunity\(opportunity\)"/,
 )
+assert.equal(toggleMarkup.match(/@request-change=/g)?.length, 1)
 assert.match(toggleMarkup, /:id="opportunity\.toggle_action\.id"/)
 assert.match(toggleMarkup, /type="button"/)
 assert.match(toggleMarkup, /:disabled="opportunity\.toggle_action\.disabled"/)
@@ -106,12 +107,12 @@ assert.match(
 assert.match(toggleMarkup, /!opportunity\.selected && 'border-base-content\/30'/)
 assert.match(toggleMarkup, /!opportunity\.eligible && 'cursor-not-allowed opacity-30'/)
 assert.match(toggleMarkup, /\{\{ opportunity\.selected \? "✓" : "" \}\}/)
-assert.doesNotMatch(toggleMarkup, /@click|v-model/)
+assert.doesNotMatch(toggleMarkup, /@click|@update:model-value|v-model|\bas-child\b/)
 
 // Normalize only the reviewed import and toggle subtree back to the pre-migration marker.
 // Its hash proves the rest of this large component is byte-for-byte unchanged.
 const normalizedComponentScaffold = source
-  .replace('import {Toggle} from "reka-ui"\n\n', "")
+  .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n\n', "")
   .replace(toggleMarkup, "              <!-- opportunity-toggle -->")
 
 assert.equal(

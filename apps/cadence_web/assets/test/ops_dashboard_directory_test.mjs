@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url"
 import vm from "node:vm"
 
 const scenarioLedger = [
-  "the star control uses one wrapper-free Reka Toggle around the existing button",
+  "the star control uses one wrapper-free CadenceToggle around the existing button",
   "the server row remains the only source of pressed and disabled state",
   "each update request emits the exact Phoenix event and row.star.payload once",
   "the button ID type disabled title classes icon aria label and focus node stay exact",
@@ -61,10 +61,10 @@ const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 
 assert.ok(script, "OpsDashboardDirectory.vue keeps an auditable TypeScript setup block")
 assert.ok(template, "OpsDashboardDirectory.vue keeps an auditable template block")
-assert.match(script, /^import \{Toggle\} from "reka-ui"$/m)
-assert.equal(script.match(/from "reka-ui"/g)?.length, 1)
-assert.equal(template.match(/<Toggle\b/g)?.length, 1)
-assert.equal(template.match(/<\/Toggle>/g)?.length, 1)
+assert.match(script, /^import CadenceToggle from "\.\/ui\/reka\/CadenceToggle\.vue"$/m)
+assert.doesNotMatch(script, /from "reka-ui"/)
+assert.equal(template.match(/<CadenceToggle\b/g)?.length, 1)
+assert.equal(template.match(/<\/CadenceToggle>/g)?.length, 1)
 assert.doesNotMatch(source, /ToggleRoot|ToggleGroup/)
 
 const directoryRow = sourceSlice(
@@ -75,9 +75,9 @@ const directoryRow = sourceSlice(
 )
 const toggleMarkup = inclusiveSourceSlice(
   source,
-  "            <Toggle\n",
-  "            </Toggle>",
-  "dashboard star Toggle",
+  "            <CadenceToggle\n",
+  "            </CadenceToggle>",
+  "dashboard star CadenceToggle",
 )
 const buttonMarkup = inclusiveSourceSlice(
   toggleMarkup,
@@ -98,8 +98,21 @@ assert.match(
 assert.equal(toggleMarkup.match(/<button\b/g)?.length, 1)
 assert.match(
   toggleMarkup,
-  /<Toggle\n\s+:model-value="row\.starred"\n\s+:disabled="row\.star\.disabled"\n\s+as-child\n\s+@update:model-value="toggleDashboardStar\(row\)"/,
+  /<CadenceToggle\n\s+:pressed="row\.star\.aria_pressed === 'true'"\n\s+:disabled="row\.star\.disabled"\n\s+@request-change="toggleDashboardStar\(row\)"/,
 )
+assert.equal(toggleMarkup.match(/@request-change=/g)?.length, 1)
+const pressedBinding = toggleMarkup.match(/:pressed="([^"]+)"/)?.[1]
+assert.ok(pressedBinding, "the server aria-pressed conversion remains executable")
+
+for (const [ariaPressed, expectedPressed] of [["false", false], ["true", true]]) {
+  assert.equal(
+    vm.runInNewContext(pressedBinding, {
+      row: {star: {aria_pressed: ariaPressed}, starred: !expectedPressed},
+    }),
+    expectedPressed,
+    "CadenceToggle pressed state follows the server string rather than a parallel row boolean",
+  )
+}
 assert.equal(
   buttonMarkup,
   `              <button
@@ -113,9 +126,12 @@ assert.equal(
               >
                 <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
               </button>`,
-  "as-child preserves the exact public button and focus node",
+  "CadenceToggle preserves the exact public button and focus node",
 )
-assert.doesNotMatch(toggleMarkup, /@click|v-model|\bname=|<input|<ToggleGroup/)
+assert.doesNotMatch(
+  toggleMarkup,
+  /@click|@update:model-value|v-model|\bname=|<input|<ToggleGroup|\bas-child\b/,
+)
 assert.doesNotMatch(source, /\bv-model(?::model-value)?=/)
 assert.doesNotMatch(script, /row\.starred\s*=|row\.star\s*=|starred\.value\s*=/)
 assert.doesNotMatch(
@@ -136,7 +152,7 @@ const originalButtonMarkup = `            <button
               <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
             </button>`
 const normalizedComponent = source
-  .replace('import {Toggle} from "reka-ui"\n', "")
+  .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
   .replace("const toggleDashboardStar = (row: DirectoryRow) => {", "const toggleStar = (row: DirectoryRow) => {")
   .replace(toggleMarkup, originalButtonMarkup)
 
