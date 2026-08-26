@@ -1,4 +1,6 @@
 <script setup>
+import CadenceButton from "./ui/components/CadenceButton.vue"
+
 const props = defineProps({
   csv: {type: String, default: ""},
   filename: {type: String, default: "widget-data.csv"},
@@ -21,13 +23,11 @@ const downloadCsv = () => {
 </script>
 
 <template>
-  <button
+  <CadenceButton
     id="dashboard-widget-inspect-download"
     type="button"
     :disabled="props.disabled"
     class="btn btn-sm btn-outline justify-start"
     @click="downloadCsv"
-  >
-    <span class="hero-arrow-down-tray h-4 w-4"></span> Download CSV
-  </button>
+  ><span class="hero-arrow-down-tray h-4 w-4"></span> Download CSV </CadenceButton>
 </template>
