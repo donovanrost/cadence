@@ -21,6 +21,8 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cadenceTogglePath = resolve(testDirectory, "../vue/ui/reka/CadenceToggle.vue")
 const paths = {
   component: resolve(testDirectory, "../vue/WidgetForm.vue"),
+  fieldComponent: resolve(testDirectory, "../vue/ui/components/WidgetFormField.vue"),
+  fieldTypes: resolve(testDirectory, "../vue/ui/components/widget_form_field.ts"),
   packageLock: resolve(testDirectory, "../../package-lock.json"),
   server: resolve(
     testDirectory,
@@ -33,8 +35,15 @@ const paths = {
   integrationRekaPackage: resolve(integrationNodeModules, "reka-ui/package.json"),
 }
 
-const [source, packageLockSource, serverSource, serverTestSource, rekaPackageSource] =
-  await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
+const [
+  source,
+  fieldSource,
+  fieldTypesSource,
+  packageLockSource,
+  serverSource,
+  serverTestSource,
+  rekaPackageSource,
+] = await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const packageLock = JSON.parse(packageLockSource)
 const rekaPackage = JSON.parse(rekaPackageSource)
@@ -64,7 +73,13 @@ const script = parsed.descriptor.scriptSetup.content
 const template = parsed.descriptor.template.content
 
 assert.match(script, /^import CadenceToggle from "\.\/ui\/reka\/CadenceToggle\.vue"$/m)
+assert.match(
+  script,
+  /^import WidgetFormField from "\.\/ui\/components\/WidgetFormField\.vue"$/m,
+)
+assert.match(script, /from "\.\/ui\/components\/widget_form_field"$/m)
 assert.doesNotMatch(script, /from "reka-ui"/)
+assert.doesNotMatch(script, /const WidgetFormField = defineComponent/)
 assert.equal(template.match(/<CadenceToggle\b/g)?.length, 2)
 assert.equal(template.match(/<\/CadenceToggle>/g)?.length, 2)
 assert.doesNotMatch(source, /ToggleGroup|ToggleRoot/)
@@ -149,7 +164,73 @@ const unwrapToggle = (toggle) => {
     .join("\n")
 }
 
-const normalizedComponent = source
+const extractionImports = `import WidgetFormField from "./ui/components/WidgetFormField.vue"
+import type {
+  Attributes,
+  FieldPresentation,
+  TextPresentation
+} from "./ui/components/widget_form_field"
+`
+const sharedTextTypes = `type Attributes = Record<string, string>
+
+type TextPresentation = {
+  class: string
+  text: string
+}`
+const iconPresentationType = `type IconPresentation = {
+  name: string
+  class: string
+}`
+const fieldPresentationTypes = `type OptionPresentation = {
+  key: string
+  text: string
+  attrs: Attributes
+}
+
+type FieldPresentation = {
+  key: string
+  type: "checkbox" | "search" | "select" | "text"
+  wrapper_class: string
+  label: TextPresentation | null
+  control: {
+    class: string
+    attrs: Attributes
+    options: OptionPresentation[]
+  }
+  hidden_control: {attrs: Attributes} | null
+  description: TextPresentation | null
+  errors: TextPresentation[]
+}`
+const fieldRenderer = sourceSlice(
+  fieldSource,
+  "const WidgetFormField = defineComponent({",
+  "\n\nexport default WidgetFormField",
+  "extracted WidgetFormField renderer",
+)
+
+assert.equal(
+  fieldTypesSource.trim(),
+  `${sharedTextTypes.replaceAll("type ", "export type ")}
+
+${fieldPresentationTypes.replaceAll("type ", "export type ")}`,
+  "shared WidgetForm field presentation types stay byte-equivalent to the local contract",
+)
+
+const reconstructedComponent = source
+  .replace(
+    extractionImports,
+    `import {defineComponent, h, type PropType} from "vue"
+
+${sharedTextTypes}
+`,
+  )
+  .replace(iconPresentationType, `${iconPresentationType}\n\n${fieldPresentationTypes}`)
+  .replace(
+    "defineProps<{presentation: Presentation}>()",
+    `${fieldRenderer}\n\ndefineProps<{presentation: Presentation}>()`,
+  )
+
+const normalizedComponent = reconstructedComponent
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
   .replace(pointToggle, unwrapToggle(pointToggle))
   .replace(observableToggle, unwrapToggle(observableToggle))

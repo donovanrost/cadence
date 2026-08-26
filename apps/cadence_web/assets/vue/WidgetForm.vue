@@ -1,38 +1,15 @@
 <script setup lang="ts">
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
-import {defineComponent, h, type PropType} from "vue"
-
-type Attributes = Record<string, string>
-
-type TextPresentation = {
-  class: string
-  text: string
-}
+import WidgetFormField from "./ui/components/WidgetFormField.vue"
+import type {
+  Attributes,
+  FieldPresentation,
+  TextPresentation
+} from "./ui/components/widget_form_field"
 
 type IconPresentation = {
   name: string
   class: string
-}
-
-type OptionPresentation = {
-  key: string
-  text: string
-  attrs: Attributes
-}
-
-type FieldPresentation = {
-  key: string
-  type: "checkbox" | "search" | "select" | "text"
-  wrapper_class: string
-  label: TextPresentation | null
-  control: {
-    class: string
-    attrs: Attributes
-    options: OptionPresentation[]
-  }
-  hidden_control: {attrs: Attributes} | null
-  description: TextPresentation | null
-  errors: TextPresentation[]
 }
 
 type ButtonPresentation = {
@@ -188,61 +165,6 @@ type Presentation = {
     submit: ButtonPresentation
   }
 }
-
-const WidgetFormField = defineComponent({
-  name: "WidgetFormField",
-  props: {
-    field: {
-      type: Object as PropType<FieldPresentation>,
-      required: true
-    }
-  },
-  setup(componentProps) {
-    return () => {
-      const field = componentProps.field
-
-      if (field.type === "checkbox") {
-        return h("div", {class: field.wrapper_class}, [
-          h("label", {class: "flex cursor-pointer items-start gap-3"}, [
-            h("input", field.hidden_control?.attrs ?? {}),
-            h("input", {...field.control.attrs, class: field.control.class}),
-            h("span", null, [
-              field.label === null
-                ? null
-                : h("span", {class: field.label.class}, field.label.text),
-              field.description === null
-                ? null
-                : h("span", {class: field.description.class}, field.description.text)
-            ])
-          ])
-        ])
-      }
-
-      const control =
-        field.type === "select"
-          ? h(
-              "select",
-              {...field.control.attrs, class: field.control.class},
-              field.control.options.map((option) =>
-                h("option", {...option.attrs, key: option.key}, option.text)
-              )
-            )
-          : h("input", {...field.control.attrs, class: field.control.class})
-
-      return h("div", {class: field.wrapper_class}, [
-        h("label", null, [
-          field.label === null
-            ? null
-            : h("span", {class: field.label.class}, field.label.text),
-          control
-        ]),
-        ...field.errors.map((error, index) =>
-          h("p", {class: error.class, key: `${field.key}-error-${index}`}, error.text)
-        )
-      ])
-    }
-  }
-})
 
 defineProps<{presentation: Presentation}>()
 </script>
