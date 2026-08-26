@@ -120,7 +120,7 @@ assert.match(adapterSource, /await nextTick\(\)/)
 assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
 assert.match(
   adapterSource,
-  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*trigger\?\.contains\(event\.target\)[\s\S]*event\.preventDefault\(\)[\s\S]*closeWithoutFocus\(\)\n\}/,
 )
 assert.match(
   adapterSource,

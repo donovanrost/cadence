@@ -11,7 +11,7 @@ const scenarioLedger = [
   "regular and lifecycle notices retain text structure classes state and actionable dispatches",
   "point row and chart component identities remain stable without nested Phoenix Vue hosts",
   "the parent composition selects exactly one point or row child and preserves empty bodies",
-  "global hooks are absent while the child header retains its local overlay lifecycle and protocol",
+  "global hooks are absent while the child header delegates overlay lifecycle and protocol ownership",
 ]
 
 assert.equal(scenarioLedger.length, 7)
@@ -34,9 +34,24 @@ const rowComponentsPath = resolve(
   "../../lib/cadence_web/live/ops_dashboard_show_live/widget_row_components.ex",
 )
 const appPath = resolve(__dirname, "../js/app.js")
+const popoverPath = resolve(__dirname, "../vue/ui/reka/CadencePopover.vue")
+const popoverCompatibilityPath = resolve(
+  __dirname,
+  "../vue/ui/reka/popover_compatibility.js",
+)
 
-const [source, headerSource, pointSource, rowsSource, componentsSource, pointPhoenix, rowPhoenix, appSource] =
-  await Promise.all([
+const [
+  source,
+  headerSource,
+  pointSource,
+  rowsSource,
+  componentsSource,
+  pointPhoenix,
+  rowPhoenix,
+  appSource,
+  popoverSource,
+  popoverCompatibilitySource,
+] = await Promise.all([
     readFile(componentPath, "utf8"),
     readFile(headerPath, "utf8"),
     readFile(pointPath, "utf8"),
@@ -45,6 +60,8 @@ const [source, headerSource, pointSource, rowsSource, componentsSource, pointPho
     readFile(pointComponentsPath, "utf8"),
     readFile(rowComponentsPath, "utf8"),
     readFile(appPath, "utf8"),
+    readFile(popoverPath, "utf8"),
+    readFile(popoverCompatibilityPath, "utf8"),
   ])
 
 const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -156,12 +173,40 @@ assert.deepEqual(JSON.parse(JSON.stringify(emptyComposition)), {header, point: n
 assert.doesNotMatch(appSource, /hooks\/(?:overlay|resizable_panel)/)
 assert.doesNotMatch(appSource, /\b(?:Overlay|ResizablePanel)\b/)
 assert.doesNotMatch(appSource, /DashboardWidget/)
-assert.match(headerSource, /onMounted\(/)
-assert.match(headerSource, /onBeforeUpdate\(/)
-assert.match(headerSource, /onUpdated\(/)
-assert.match(headerSource, /onBeforeUnmount\(/)
-assert.match(headerSource, /new windowObject\.CustomEvent\("cadence:overlay-opened"/)
-assert.match(headerSource, /windowObject\.addEventListener\("cadence:overlay-opened"/)
-assert.match(headerSource, /windowObject\.removeEventListener\("cadence:overlay-opened"/)
+assert.match(headerSource, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
+assert.equal(headerSource.match(/<CadencePopover\b/g)?.length, 1)
+assert.doesNotMatch(
+  headerSource,
+  /DASHBOARD_WIDGET_HEADER_CONTROLLER|onMounted|onBeforeUpdate|onUpdated|onBeforeUnmount/,
+)
+assert.doesNotMatch(
+  headerSource,
+  /cadence:overlay-opened|announceCadencePopoverOpened|subscribeToLegacyOverlayOpen/,
+)
+assert.match(popoverSource, /onMounted\(\(\) => \{[\s\S]*subscribeToLegacyOverlayOpen/)
+assert.match(
+  popoverSource,
+  /onBeforeUnmount\(\(\) => \{[\s\S]*removeLegacyOverlayListener\?\.\(\)/,
+)
+assert.match(
+  popoverSource,
+  /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/,
+)
+assert.match(
+  popoverCompatibilitySource,
+  /export const CADENCE_OVERLAY_OPENED_EVENT = "cadence:overlay-opened"/,
+)
+assert.match(
+  popoverCompatibilitySource,
+  /new windowObject\.CustomEvent\(CADENCE_OVERLAY_OPENED_EVENT/,
+)
+assert.match(
+  popoverCompatibilitySource,
+  /windowObject\.addEventListener\(CADENCE_OVERLAY_OPENED_EVENT, onOverlayOpened\)/,
+)
+assert.match(
+  popoverCompatibilitySource,
+  /windowObject\.removeEventListener\(CADENCE_OVERLAY_OPENED_EVENT, onOverlayOpened\)/,
+)
 
 console.log("dashboard_widget_test passed")
