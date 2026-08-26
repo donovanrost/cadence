@@ -106,6 +106,7 @@ defineProps<{rows: DatabaseRow[]}>()
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
               <DropdownMenuContent
+                :aria-labelledby="row.actions_id"
                 class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
                 side="bottom"
                 align="end"

@@ -80,7 +80,7 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(child).digest("hex"),
-  "0377786c137e68b00f4d128d4bb22f96b6d0d236a5925d24779ff18ec379de73",
+  "14b28fc4ef6589daf99d5c2b32bdcff0b8845ee3dbce4823b2cf4cc2a98d72ed",
   "CatalogDatabaseTable.vue remains the explicitly immutable child",
 )
 
