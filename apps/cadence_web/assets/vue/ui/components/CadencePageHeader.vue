@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./CadenceBreadcrumbs.vue"
-import type {PageHeaderAction, PageHeaderPresentation} from "./page_shell"
+import type {
+  CompactPageHeaderPresentation,
+  PageHeaderAction,
+  PageHeaderPresentation,
+} from "./page_shell"
 
 const props = defineProps<{
-  header: PageHeaderPresentation
+  header: PageHeaderPresentation | CompactPageHeaderPresentation
   action: PageHeaderAction
 }>()
 </script>
@@ -15,11 +19,11 @@ const props = defineProps<{
         <CadenceBreadcrumbs :breadcrumbs="props.header.breadcrumbs" />
         <h1 v-bind="props.header.title.attrs">
           {{ props.header.title.text }}
-          <span v-bind="props.header.title.suffix.attrs">
+          <span v-if="props.header.title.suffix" v-bind="props.header.title.suffix.attrs">
             {{ props.header.title.suffix.text }}
           </span>
         </h1>
-        <p v-bind="props.header.subtitle.attrs">
+        <p v-if="props.header.subtitle" v-bind="props.header.subtitle.attrs">
           {{ props.header.subtitle.text }}
         </p>
       </div>

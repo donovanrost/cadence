@@ -34,6 +34,16 @@ export type PageHeaderPresentation = ElementPresentation & {
   actions: ElementPresentation
 }
 
+export type CompactPageHeaderPresentation = Omit<
+  PageHeaderPresentation,
+  "title" | "subtitle"
+> & {
+  title: TextPresentation & {
+    suffix?: null
+  }
+  subtitle?: null
+}
+
 export type EmptyStatePresentation = ElementPresentation & {
   title: TextPresentation
   description: TextPresentation
