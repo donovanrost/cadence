@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import {DropdownMenuItem} from "reka-ui"
 import {computed} from "vue"
 
 import CadenceMenu from "./ui/reka/CadenceMenu.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 
 type AttrValue = string | boolean | null
 type Attrs = Record<string, AttrValue>
@@ -66,9 +66,8 @@ const panelAttrs = computed(() => {
           :key="item.key"
           v-bind="item.wrapper.attrs"
         >
-          <DropdownMenuItem
-            v-if="open"
-            as-child
+          <CadenceMenuItem
+            :active="open"
             @select="onItemSelect"
           >
             <a v-bind="item.link.attrs">
@@ -82,18 +81,7 @@ const panelAttrs = computed(() => {
                 {{ item.link.badge.text }}
               </span>
             </a>
-          </DropdownMenuItem>
-          <a v-else v-bind="item.link.attrs">
-            <span :class="item.link.icon_class"></span>
-            {{ item.link.text }}
-            <span
-              v-if="item.link.badge"
-              :class="item.link.badge.class"
-              v-bind="item.link.badge.attrs"
-            >
-              {{ item.link.badge.text }}
-            </span>
-          </a>
+          </CadenceMenuItem>
         </div>
       </div>
     </template>

@@ -11,6 +11,7 @@ import {
 
 const scenarioLedger = Object.freeze([
   "CadenceMenu owns a controlled non-modal Reka menu with collision-safe bottom-end positioning",
+  "the dashboard menu delegates active and inactive items through CadenceMenuItem without duplicating anchors",
   "the dashboard menu retains every server-owned root trigger panel item and navigation attribute",
   "opening focuses the first native menu item while Reka owns wrapped Arrow Home and End movement",
   "Escape restores the current trigger and suppressed close reasons never restore it",
@@ -20,7 +21,7 @@ const scenarioLedger = Object.freeze([
 ])
 
 assert.equal(process.versions.node, "24.16.0", "CadenceMenu contracts use pinned Node 24.16.0")
-assert.equal(scenarioLedger.length, 7)
+assert.equal(scenarioLedger.length, 8)
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const adapterPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenu.vue")
@@ -65,8 +66,9 @@ assert.match(adapterTemplate, /@keydown\.tab="handleTabKeyDown"/)
 assert.match(adapterTemplate, /<slot[\s\S]*v-else[\s\S]*name="content"/)
 assert.doesNotMatch(adapterSource, /DropdownMenuPortal|setTimeout|setInterval/)
 
-assert.match(menuSource, /import \{DropdownMenuItem\} from "reka-ui"/)
 assert.match(menuSource, /import CadenceMenu from "\.\/ui\/reka\/CadenceMenu\.vue"/)
+assert.match(menuSource, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
+assert.doesNotMatch(menuSource, /import \{DropdownMenuItem\} from "reka-ui"/)
 assert.match(menuSource, /const attrs = \{\.\.\.props\.presentation\.panel\.attrs\}/)
 assert.match(menuSource, /delete attrs\.hidden/)
 assert.match(menuTemplate, /<CadenceMenu/)
@@ -79,11 +81,20 @@ assert.match(menuTemplate, /v-bind="props\.presentation\.trigger\.attrs"/)
 assert.match(menuTemplate, /:aria-expanded="String\(open\)"/)
 assert.match(menuTemplate, /v-bind="panelAttrs"[\s\S]*:hidden="!open"/)
 assert.match(menuTemplate, /v-bind="item\.wrapper\.attrs"/)
-assert.match(menuTemplate, /<DropdownMenuItem[\s\S]*v-if="open"[\s\S]*as-child[\s\S]*@select="onItemSelect"/)
-assert.equal(menuTemplate.match(/<a v-(?:bind|else)/g)?.length, 2)
-assert.equal(menuTemplate.match(/v-bind="item\.link\.attrs"/g)?.length, 2)
+assert.match(
+  menuTemplate,
+  /<CadenceMenuItem[\s\S]*:active="open"[\s\S]*@select="onItemSelect"[\s\S]*<a v-bind="item\.link\.attrs">[\s\S]*<\/a>[\s\S]*<\/CadenceMenuItem>/,
+)
+assert.equal(menuTemplate.match(/<CadenceMenuItem\b/g)?.length, 1)
+assert.equal(menuTemplate.match(/<a\b/g)?.length, 1)
+assert.equal(menuTemplate.match(/v-bind="item\.link\.attrs"/g)?.length, 1)
+assert.equal(menuTemplate.match(/@select="onItemSelect"/g)?.length, 1)
+assert.doesNotMatch(menuTemplate, /<DropdownMenuItem|<a v-else/)
 assert.doesNotMatch(menuSource, /ArrowDown|ArrowUp|\bHome\b|\bEnd\b|createDashboardToolbarMenuController/)
-assert.doesNotMatch(menuSource, /addEventListener|removeEventListener|onBeforeUpdate|onUpdated/)
+assert.doesNotMatch(
+  menuSource,
+  /addEventListener|removeEventListener|onBeforeUpdate|onUpdated|@click|@keydown|preventDefault|stopPropagation/,
+)
 
 const serverContracts = [
   'id: "dashboard-menu"',
