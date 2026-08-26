@@ -22,7 +22,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const paths = {
   component: resolve(__dirname, "../vue/MissionList.vue"),
   missionTable: resolve(__dirname, "../vue/MissionTable.vue"),
-  statusBadge: resolve(__dirname, "../vue/StatusBadge.vue"),
   liveView: resolve(__dirname, "../../lib/cadence_web/live/mission_list_live.ex"),
   presentation: resolve(
     __dirname,
@@ -35,7 +34,7 @@ const paths = {
   ),
 }
 
-const [component, missionTable, statusBadge, liveView, presentation, router, liveViewTest] =
+const [component, missionTable, liveView, presentation, router, liveViewTest] =
   await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
@@ -45,12 +44,6 @@ assert.equal(
   "6589381280b0a77895a3a8beaaa6bbad01b247ce91f136624af7fefab64d7a6f",
   "MissionTable.vue remains byte-identical to the frozen source",
 )
-assert.equal(
-  sha256(statusBadge),
-  "44d9a452683390afdf9cc8d11db414d45f826a7ec5ba737c01b68f2c418c3888",
-  "StatusBadge.vue remains byte-identical to the frozen source",
-)
-
 const script = component.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = component.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
 

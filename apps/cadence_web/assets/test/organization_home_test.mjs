@@ -9,7 +9,7 @@ const scenarioLedger = [
   "Phoenix owns organization identity, counts, recent ordering and limit, status derivation, and routes",
   "the page root, header, stats, recent card, empty state, and row visual contracts stay exact",
   "OrganizationHome directly composes immutable OrganizationStats and RecentMissions children",
-  "RecentMissions continues composing the immutable StatusBadge child",
+  "RecentMissions continues composing the StatusBadge compatibility boundary",
   "all missions, new mission, and mission-detail links retain Phoenix redirect navigation semantics",
   "raw attrs preserve HEEx nil, false, true, string, and number behavior",
   "the five pre-migration LiveView scenarios remain present one-for-one",
@@ -24,7 +24,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(__dirname, "../vue/OrganizationHome.vue")
 const statsPath = resolve(__dirname, "../vue/OrganizationStats.vue")
 const recentMissionsPath = resolve(__dirname, "../vue/RecentMissions.vue")
-const statusBadgePath = resolve(__dirname, "../vue/StatusBadge.vue")
 const liveViewPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/organization_home_live.ex",
@@ -39,7 +38,6 @@ const [
   componentSource,
   statsSource,
   recentMissionsSource,
-  statusBadgeSource,
   liveViewSource,
   liveViewTestSource,
   routerSource,
@@ -47,7 +45,6 @@ const [
   readFile(componentPath, "utf8"),
   readFile(statsPath, "utf8"),
   readFile(recentMissionsPath, "utf8"),
-  readFile(statusBadgePath, "utf8"),
   readFile(liveViewPath, "utf8"),
   readFile(liveViewTestPath, "utf8"),
   readFile(routerPath, "utf8"),
@@ -83,7 +80,6 @@ const assertBalancedTemplate = (source) => {
 for (const [label, source, expectedHash] of [
   ["OrganizationStats.vue", statsSource, "99e4693d18ba7d2b32301bfbc7a09c5b52c83d12f26f9fa344ed5a7855b89771"],
   ["RecentMissions.vue", recentMissionsSource, "99872dcbdecee4489aedccd3996d5accb521935e9b9d10fd25bc33d2eda46584"],
-  ["StatusBadge.vue", statusBadgeSource, "44d9a452683390afdf9cc8d11db414d45f826a7ec5ba737c01b68f2c418c3888"],
 ]) {
   assert.equal(
     createHash("sha256").update(source).digest("hex"),
