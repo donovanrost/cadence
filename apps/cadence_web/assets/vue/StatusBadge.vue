@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceBadge from "./ui/components/CadenceBadge.vue"
+
 type Status = "info" | "ready" | "attention" | "blocked"
 
 const props = withDefaults(
@@ -9,17 +11,14 @@ const props = withDefaults(
   {status: "info"}
 )
 
-const statusClasses: Record<Status, string> = {
-  info: "bg-info/20 text-info",
-  ready: "bg-success/20 text-success",
-  attention: "bg-warning/20 text-warning",
-  blocked: "bg-error/20 text-error"
-}
+const statusTones = {
+  info: "info",
+  ready: "success",
+  attention: "warning",
+  blocked: "error"
+} as const satisfies Record<Status, "info" | "success" | "warning" | "error">
 </script>
 
 <template>
-  <span
-    class="inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide"
-    :class="statusClasses[props.status]"
-  >{{ props.label }}</span>
+  <CadenceBadge :tone="statusTones[props.status]">{{ props.label }}</CadenceBadge>
 </template>
