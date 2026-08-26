@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url"
 const scenarioLedger = [
   "one non-SSR AdminOrganizationListPage host owns the complete page boundary",
   "Phoenix retains organization loading, slug ordering, empty/card selection, row projection, and routes",
-  "AdminOrganizationListPage directly composes the byte-pinned AdminOrganizationList child",
+  "AdminOrganizationListPage composes the shared Cadence page shell and byte-pinned AdminOrganizationList child",
   "the DTO binds the exact root, header, breadcrumb, action, empty-state, card, class, ID, and copy contracts",
   "all three anchors receive server-rendered LiveView redirect navigation attrs",
   "all existing AdminLiveTest scenarios and assertions remain in the same broad test file",
@@ -26,6 +26,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const paths = {
   component: resolve(__dirname, "../vue/AdminOrganizationListPage.vue"),
   immutableChild: resolve(__dirname, "../vue/AdminOrganizationList.vue"),
+  breadcrumbs: resolve(__dirname, "../vue/ui/components/CadenceBreadcrumbs.vue"),
+  pageHeader: resolve(__dirname, "../vue/ui/components/CadencePageHeader.vue"),
+  emptyState: resolve(__dirname, "../vue/ui/components/CadenceEmptyState.vue"),
+  pageShellTypes: resolve(__dirname, "../vue/ui/components/page_shell.ts"),
   liveView: resolve(__dirname, "../../lib/cadence_web/live/admin_organization_list_live.ex"),
   presentation: resolve(
     __dirname,
@@ -36,8 +40,19 @@ const paths = {
   broadTest: resolve(__dirname, "../../test/cadence_web/live/admin_live_test.exs"),
 }
 
-const [component, immutableChild, liveView, presentation, organizations, router, broadTest] =
-  await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
+const [
+  component,
+  immutableChild,
+  breadcrumbs,
+  pageHeader,
+  emptyState,
+  pageShellTypes,
+  liveView,
+  presentation,
+  organizations,
+  router,
+  broadTest,
+] = await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 
@@ -68,7 +83,7 @@ const assertBalancedTemplate = (source) => {
     "meta",
   ])
 
-  for (const match of source.matchAll(/<\/?([a-z][\w-]*)(?:\s[^<>]*?)?>/gs)) {
+  for (const match of source.matchAll(/<\/?([A-Za-z][\w.-]*)(?:\s[^<>]*?)?>/gs)) {
     const token = match[0]
     const name = match[1]
 
@@ -84,52 +99,148 @@ const assertBalancedTemplate = (source) => {
 
 assertBalancedTemplate(template)
 
+const breadcrumbsTemplate = breadcrumbs.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const pageHeaderTemplate = pageHeader.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+const emptyStateTemplate = emptyState.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+assert.ok(breadcrumbsTemplate, "CadenceBreadcrumbs.vue keeps an auditable template block")
+assert.ok(pageHeaderTemplate, "CadencePageHeader.vue keeps an auditable template block")
+assert.ok(emptyStateTemplate, "CadenceEmptyState.vue keeps an auditable template block")
+assertBalancedTemplate(breadcrumbsTemplate)
+assertBalancedTemplate(pageHeaderTemplate)
+assertBalancedTemplate(emptyStateTemplate)
+
 assert.match(script, /^import AdminOrganizationList from "\.\/AdminOrganizationList\.vue"$/m)
 assert.equal(script.match(/import .*AdminOrganizationList\.vue/g)?.length, 1)
+assert.match(script, /import CadenceEmptyState from "\.\/ui\/components\/CadenceEmptyState\.vue"/)
+assert.match(script, /import CadencePageHeader from "\.\/ui\/components\/CadencePageHeader\.vue"/)
 assert.match(script, /defineProps<\{presentation: AdminOrganizationListPresentation\}>\(\)/)
 assert.doesNotMatch(script, /computed|ref\(|watch\(|fetch\(|defineEmits|useRoute|router/)
 
-const exactBindings = [
-  'v-bind="presentation.root.attrs"',
-  'v-bind="presentation.header.root.attrs"',
-  'v-bind="presentation.header.layout.attrs"',
-  'v-bind="presentation.header.content.attrs"',
-  'v-bind="presentation.header.breadcrumbs.root.attrs"',
-  'v-for="breadcrumb in presentation.header.breadcrumbs.items"',
-  'v-if="breadcrumb.separator"',
-  'v-bind="breadcrumb.separator.attrs"',
-  "{{ breadcrumb.separator.text }}",
-  "breadcrumb.kind === 'link'",
-  'v-bind="breadcrumb.content.attrs"',
-  "{{ breadcrumb.content.text }}",
-  'v-bind="presentation.header.title.attrs"',
-  "{{ presentation.header.title.text }}",
-  'v-bind="presentation.header.actions.attrs"',
-  'v-bind="presentation.header.create_action.attrs"',
-  "{{ presentation.header.create_action.text }}",
-  'v-if="presentation.empty_state"',
-  'v-bind="presentation.empty_state.root.attrs"',
-  'v-bind="presentation.empty_state.title.attrs"',
-  "{{ presentation.empty_state.title.text }}",
-  'v-bind="presentation.empty_state.description.attrs"',
-  "{{ presentation.empty_state.description.text }}",
-  'v-bind="presentation.empty_state.action_container.attrs"',
-  'v-bind="presentation.empty_state.action.attrs"',
-  'v-bind="presentation.empty_state.action_icon.attrs"',
-  "{{ presentation.empty_state.action.text }}",
-  'v-if="presentation.card"',
-  'v-bind="presentation.card.root.attrs"',
-  'v-bind="presentation.card.body.attrs"',
-  'v-bind="presentation.card.child.attrs"',
-  '<AdminOrganizationList :rows="presentation.card.rows" />',
+const headerAdapterSource = script.slice(
+  script.indexOf("const headerPresentation"),
+  script.indexOf("const emptyStatePresentation"),
+)
+
+assert.doesNotMatch(
+  headerAdapterSource,
+  /\bsuffix\b|\bsubtitle\b/,
+  "the Admin adapter does not invent the omitted title suffix or subtitle",
+)
+
+const pageBindings = [
+  'v-bind="props.presentation.root.attrs"',
+  '<CadencePageHeader',
+  ':header="headerPresentation(props.presentation.header)"',
+  ':action="props.presentation.header.create_action"',
+  '<CadenceEmptyState',
+  'v-if="props.presentation.empty_state"',
+  ':empty-state="emptyStatePresentation(props.presentation.empty_state)"',
+  'v-if="props.presentation.card"',
+  'v-bind="props.presentation.card.root.attrs"',
+  'v-bind="props.presentation.card.body.attrs"',
+  'v-bind="props.presentation.card.child.attrs"',
+  '<AdminOrganizationList :rows="props.presentation.card.rows" />',
 ]
 
-for (const binding of exactBindings) {
-  assert.ok(template.includes(binding), `AdminOrganizationListPage.vue preserves ${binding}`)
+let previousPageBindingIndex = -1
+
+for (const binding of pageBindings) {
+  const bindingIndex = template.indexOf(binding, previousPageBindingIndex + 1)
+
+  assert.ok(
+    bindingIndex > previousPageBindingIndex,
+    `AdminOrganizationListPage.vue preserves ${binding} in sibling order`,
+  )
+  previousPageBindingIndex = bindingIndex
 }
 
+for (const adapterBinding of [
+  "attrs: header.root.attrs",
+  "body: header.layout",
+  "content: header.content",
+  "attrs: header.breadcrumbs.root.attrs",
+  "header.breadcrumbs.items.map((breadcrumb)",
+  "key: breadcrumb.content.text",
+  "separator: breadcrumb.separator",
+  'link: breadcrumb.kind === "link" ? breadcrumb.content : null',
+  'current: breadcrumb.kind === "current" ? breadcrumb.content : null',
+  "title: header.title",
+  "actions: header.actions",
+  "attrs: emptyState.root.attrs",
+  "title: emptyState.title",
+  "description: emptyState.description",
+  "action_container: emptyState.action_container",
+  "...emptyState.action",
+  "icon: emptyState.action_icon",
+]) {
+  assert.ok(script.includes(adapterBinding), `the Admin DTO adapter preserves ${adapterBinding}`)
+}
+
+for (const binding of [
+  '<nav v-bind="props.breadcrumbs.attrs">',
+  'v-for="item in props.breadcrumbs.items"',
+  ':key="item.key"',
+  'v-if="item.separator"',
+  'v-bind="item.separator.attrs"',
+  "{{ item.separator.text }}",
+  'v-if="item.link"',
+  'v-bind="item.link.attrs"',
+  "{{ item.link.text }}",
+  'v-if="item.current"',
+  'v-bind="item.current.attrs"',
+  "{{ item.current.text }}",
+]) {
+  assert.ok(breadcrumbsTemplate.includes(binding), `CadenceBreadcrumbs.vue preserves ${binding}`)
+}
+
+for (const binding of [
+  '<header v-bind="props.header.attrs">',
+  'v-bind="props.header.body.attrs"',
+  'v-bind="props.header.content.attrs"',
+  ':breadcrumbs="props.header.breadcrumbs"',
+  'v-bind="props.header.title.attrs"',
+  "{{ props.header.title.text }}",
+  'v-if="props.header.title.suffix"',
+  'v-bind="props.header.title.suffix.attrs"',
+  "{{ props.header.title.suffix.text }}",
+  'v-if="props.header.subtitle"',
+  'v-bind="props.header.subtitle.attrs"',
+  "{{ props.header.subtitle.text }}",
+  'v-bind="props.header.actions.attrs"',
+  'v-bind="props.action.attrs"',
+  'v-if="props.action.icon"',
+  'v-bind="props.action.icon.attrs"',
+  "{{ props.action.text }}",
+]) {
+  assert.ok(pageHeaderTemplate.includes(binding), `CadencePageHeader.vue preserves ${binding}`)
+}
+
+for (const binding of [
+  '<div v-bind="props.emptyState.attrs">',
+  'v-bind="props.emptyState.title.attrs"',
+  "{{ props.emptyState.title.text }}",
+  'v-bind="props.emptyState.description.attrs"',
+  "{{ props.emptyState.description.text }}",
+  'v-bind="props.emptyState.action_container.attrs"',
+  'v-bind="props.emptyState.action.attrs"',
+  'v-bind="props.emptyState.action.icon.attrs"',
+  "{{ props.emptyState.action.text }}",
+]) {
+  assert.ok(emptyStateTemplate.includes(binding), `CadenceEmptyState.vue preserves ${binding}`)
+}
+
+assert.match(pageShellTypes, /suffix: TextPresentation/)
+assert.match(pageShellTypes, /export type CompactPageHeaderPresentation = Omit</)
+assert.match(pageShellTypes, /suffix\?: null/)
+assert.match(pageShellTypes, /subtitle\?: null/)
 assert.equal(template.match(/<AdminOrganizationList\b/g)?.length, 1)
-assert.equal(template.match(/<a\b/g)?.length, 3)
+assert.equal(template.match(/<CadencePageHeader\b/g)?.length, 1)
+assert.equal(template.match(/<CadenceEmptyState\b/g)?.length, 1)
+assert.equal(
+  [breadcrumbsTemplate, pageHeaderTemplate, emptyStateTemplate].join("\n").match(/<a\b/g)?.length,
+  3,
+)
 assert.doesNotMatch(component, /\/admin|data-phx-link|data-phx-link-state|Create organization/)
 
 assert.equal(liveView.match(/<\.vue\b/g)?.length, 1)
@@ -172,6 +283,19 @@ const sourceSlice = (source, startMarker, endMarker, label) => {
 
   return source.slice(start, end)
 }
+
+const createActionPresentation = sourceSlice(
+  presentation,
+  "        create_action: %{",
+  "\n      },\n      empty_state:",
+  "Admin create action presentation",
+)
+
+assert.doesNotMatch(
+  createActionPresentation,
+  /icon/,
+  "the Admin header action remains the icon-free optional-action case",
+)
 
 const organizationListQuery = sourceSlice(
   organizations,
