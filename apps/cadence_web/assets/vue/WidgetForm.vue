@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
+import WidgetFormCallout from "./WidgetFormCallout.vue"
 import WidgetFormField from "./ui/components/WidgetFormField.vue"
+import type {CalloutPresentation, IconPresentation} from "./widget_form_callout"
 import type {
   Attributes,
   FieldPresentation,
   TextPresentation
 } from "./ui/components/widget_form_field"
-
-type IconPresentation = {
-  name: string
-  class: string
-}
 
 type ButtonPresentation = {
   key?: string
@@ -43,13 +40,6 @@ type ObservableOptionPresentation = {
   unit: TextPresentation | null
   name: string
   scope_badges: string[]
-}
-
-type CalloutPresentation = {
-  class: string
-  attrs: Attributes
-  icon: IconPresentation
-  text: string
 }
 
 type Presentation = {
@@ -194,19 +184,10 @@ defineProps<{presentation: Presentation}>()
         :field="field"
       />
 
-      <p
+      <WidgetFormCallout
         v-if="presentation.point_widget.scope_override"
-        :class="presentation.point_widget.scope_override.class"
-        v-bind="presentation.point_widget.scope_override.attrs"
-      >
-        <span
-          :class="[
-            presentation.point_widget.scope_override.icon.name,
-            presentation.point_widget.scope_override.icon.class
-          ]"
-        ></span>
-        <span>{{ presentation.point_widget.scope_override.text }}</span>
-      </p>
+        :callout="presentation.point_widget.scope_override"
+      />
 
       <WidgetFormField
         v-for="field in presentation.point_widget.fixed_fields"
@@ -339,21 +320,10 @@ defineProps<{presentation: Presentation}>()
           {{ presentation.point_widget.operational_observable_picker.empty.text }}
         </p>
 
-        <p
+        <WidgetFormCallout
           v-if="presentation.point_widget.operational_observable_picker.capability_warning"
-          :class="presentation.point_widget.operational_observable_picker.capability_warning.class"
-          v-bind="presentation.point_widget.operational_observable_picker.capability_warning.attrs"
-        >
-          <span
-            :class="[
-              presentation.point_widget.operational_observable_picker.capability_warning.icon.name,
-              presentation.point_widget.operational_observable_picker.capability_warning.icon.class
-            ]"
-          ></span>
-          <span>
-            {{ presentation.point_widget.operational_observable_picker.capability_warning.text }}
-          </span>
-        </p>
+          :callout="presentation.point_widget.operational_observable_picker.capability_warning"
+        />
 
         <div
           v-if="presentation.point_widget.operational_observable_picker.selected"
@@ -372,19 +342,10 @@ defineProps<{presentation: Presentation}>()
           </button>
         </div>
 
-        <p
+        <WidgetFormCallout
           v-if="presentation.point_widget.operational_observable_picker.scope_warning"
-          :class="presentation.point_widget.operational_observable_picker.scope_warning.class"
-          v-bind="presentation.point_widget.operational_observable_picker.scope_warning.attrs"
-        >
-          <span
-            :class="[
-              presentation.point_widget.operational_observable_picker.scope_warning.icon.name,
-              presentation.point_widget.operational_observable_picker.scope_warning.icon.class
-            ]"
-          ></span>
-          <span>{{ presentation.point_widget.operational_observable_picker.scope_warning.text }}</span>
-        </p>
+          :callout="presentation.point_widget.operational_observable_picker.scope_warning"
+        />
 
         <WidgetFormField
           v-if="presentation.point_widget.operational_observable_picker.search"

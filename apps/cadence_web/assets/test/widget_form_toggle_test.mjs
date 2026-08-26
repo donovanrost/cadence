@@ -21,6 +21,8 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cadenceTogglePath = resolve(testDirectory, "../vue/ui/reka/CadenceToggle.vue")
 const paths = {
   component: resolve(testDirectory, "../vue/WidgetForm.vue"),
+  calloutComponent: resolve(testDirectory, "../vue/WidgetFormCallout.vue"),
+  calloutTypes: resolve(testDirectory, "../vue/widget_form_callout.ts"),
   fieldComponent: resolve(testDirectory, "../vue/ui/components/WidgetFormField.vue"),
   fieldTypes: resolve(testDirectory, "../vue/ui/components/widget_form_field.ts"),
   packageLock: resolve(testDirectory, "../../package-lock.json"),
@@ -37,6 +39,8 @@ const paths = {
 
 const [
   source,
+  calloutSource,
+  calloutTypesSource,
   fieldSource,
   fieldTypesSource,
   packageLockSource,
@@ -73,13 +77,17 @@ const script = parsed.descriptor.scriptSetup.content
 const template = parsed.descriptor.template.content
 
 assert.match(script, /^import CadenceToggle from "\.\/ui\/reka\/CadenceToggle\.vue"$/m)
+assert.match(script, /^import WidgetFormCallout from "\.\/WidgetFormCallout\.vue"$/m)
 assert.match(
   script,
   /^import WidgetFormField from "\.\/ui\/components\/WidgetFormField\.vue"$/m,
 )
 assert.match(script, /from "\.\/ui\/components\/widget_form_field"$/m)
+assert.match(script, /from "\.\/widget_form_callout"$/m)
 assert.doesNotMatch(script, /from "reka-ui"/)
+assert.doesNotMatch(script, /type CalloutPresentation =/)
 assert.doesNotMatch(script, /const WidgetFormField = defineComponent/)
+assert.equal(template.match(/<WidgetFormCallout\b/g)?.length, 3)
 assert.equal(template.match(/<CadenceToggle\b/g)?.length, 2)
 assert.equal(template.match(/<\/CadenceToggle>/g)?.length, 2)
 assert.doesNotMatch(source, /ToggleGroup|ToggleRoot/)
@@ -134,7 +142,7 @@ const selectedPointRemovals = sourceSlice(
 const selectedObservableRemovals = sourceSlice(
   template,
   '        <div\n          v-if="presentation.point_widget.operational_observable_picker.selected"',
-  "        <p\n          v-if=\"presentation.point_widget.operational_observable_picker.scope_warning\"",
+  "        <WidgetFormCallout\n          v-if=\"presentation.point_widget.operational_observable_picker.scope_warning\"",
   "selected operational-observable removal buttons",
 )
 
@@ -181,6 +189,12 @@ const iconPresentationType = `type IconPresentation = {
   name: string
   class: string
 }`
+const calloutPresentationType = `type CalloutPresentation = {
+  class: string
+  attrs: Attributes
+  icon: IconPresentation
+  text: string
+}`
 const fieldPresentationTypes = `type OptionPresentation = {
   key: string
   text: string
@@ -209,6 +223,18 @@ const fieldRenderer = sourceSlice(
 )
 
 assert.equal(
+  calloutTypesSource.trim(),
+  `import type {Attributes} from "./ui/components/widget_form_field"
+
+${iconPresentationType.replace("type ", "export type ")}
+
+${calloutPresentationType.replace("type ", "export type ")}`,
+  "shared WidgetForm callout presentation types stay byte-equivalent to the local contract",
+)
+
+assert.match(calloutSource, /defineProps<\{callout: CalloutPresentation\}>\(\)/)
+
+assert.equal(
   fieldTypesSource.trim(),
   `${sharedTextTypes.replaceAll("type ", "export type ")}
 
@@ -216,7 +242,74 @@ ${fieldPresentationTypes.replaceAll("type ", "export type ")}`,
   "shared WidgetForm field presentation types stay byte-equivalent to the local contract",
 )
 
-const reconstructedComponent = source
+const calloutComponentImport = 'import WidgetFormCallout from "./WidgetFormCallout.vue"\n'
+const calloutTypesImport =
+  'import type {CalloutPresentation, IconPresentation} from "./widget_form_callout"\n'
+const extractedCallouts = [
+  [
+    `      <WidgetFormCallout
+        v-if="presentation.point_widget.scope_override"
+        :callout="presentation.point_widget.scope_override"
+      />`,
+    `      <p
+        v-if="presentation.point_widget.scope_override"
+        :class="presentation.point_widget.scope_override.class"
+        v-bind="presentation.point_widget.scope_override.attrs"
+      >
+        <span
+          :class="[
+            presentation.point_widget.scope_override.icon.name,
+            presentation.point_widget.scope_override.icon.class
+          ]"
+        ></span>
+        <span>{{ presentation.point_widget.scope_override.text }}</span>
+      </p>`,
+  ],
+  [
+    `        <WidgetFormCallout
+          v-if="presentation.point_widget.operational_observable_picker.capability_warning"
+          :callout="presentation.point_widget.operational_observable_picker.capability_warning"
+        />`,
+    `        <p
+          v-if="presentation.point_widget.operational_observable_picker.capability_warning"
+          :class="presentation.point_widget.operational_observable_picker.capability_warning.class"
+          v-bind="presentation.point_widget.operational_observable_picker.capability_warning.attrs"
+        >
+          <span
+            :class="[
+              presentation.point_widget.operational_observable_picker.capability_warning.icon.name,
+              presentation.point_widget.operational_observable_picker.capability_warning.icon.class
+            ]"
+          ></span>
+          <span>
+            {{ presentation.point_widget.operational_observable_picker.capability_warning.text }}
+          </span>
+        </p>`,
+  ],
+  [
+    `        <WidgetFormCallout
+          v-if="presentation.point_widget.operational_observable_picker.scope_warning"
+          :callout="presentation.point_widget.operational_observable_picker.scope_warning"
+        />`,
+    `        <p
+          v-if="presentation.point_widget.operational_observable_picker.scope_warning"
+          :class="presentation.point_widget.operational_observable_picker.scope_warning.class"
+          v-bind="presentation.point_widget.operational_observable_picker.scope_warning.attrs"
+        >
+          <span
+            :class="[
+              presentation.point_widget.operational_observable_picker.scope_warning.icon.name,
+              presentation.point_widget.operational_observable_picker.scope_warning.icon.class
+            ]"
+          ></span>
+          <span>{{ presentation.point_widget.operational_observable_picker.scope_warning.text }}</span>
+        </p>`,
+  ],
+]
+
+let reconstructedComponent = source
+  .replace(calloutComponentImport, "")
+  .replace(calloutTypesImport, "")
   .replace(
     extractionImports,
     `import {defineComponent, h, type PropType} from "vue"
@@ -224,11 +317,18 @@ const reconstructedComponent = source
 ${sharedTextTypes}
 `,
   )
+  .replace("type ButtonPresentation", `${iconPresentationType}\n\ntype ButtonPresentation`)
   .replace(iconPresentationType, `${iconPresentationType}\n\n${fieldPresentationTypes}`)
+  .replace("type Presentation", `${calloutPresentationType}\n\ntype Presentation`)
   .replace(
     "defineProps<{presentation: Presentation}>()",
     `${fieldRenderer}\n\ndefineProps<{presentation: Presentation}>()`,
   )
+
+for (const [extracted, inlined] of extractedCallouts) {
+  assert.ok(reconstructedComponent.includes(extracted), "every extracted callout stays source-auditable")
+  reconstructedComponent = reconstructedComponent.replace(extracted, inlined)
+}
 
 const normalizedComponent = reconstructedComponent
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
