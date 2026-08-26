@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import {
-  CollapsibleContent,
-  CollapsibleRoot,
-  CollapsibleTrigger
-} from "reka-ui"
 import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 
 type NavigationItem = {
   label: string
@@ -68,14 +66,12 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <CollapsibleRoot
-    id="catalog-database-show-surface"
-    class="space-y-6"
-    as="div"
+  <CadenceCollapsible
+    content-id="catalog-revision-upload-slot"
     :open="revision_form_open"
-    :unmount-on-hide="true"
-    @update:open="emit('toggle-revision-form', {})"
+    @request-change="emit('toggle-revision-form', {})"
   >
+    <div id="catalog-database-show-surface" class="space-y-6">
     <header class="border-b border-primary/20 pb-4">
       <div class="flex items-end justify-between gap-4">
         <div>
@@ -109,17 +105,16 @@ const emit = defineEmits<{
         </div>
 
         <div class="flex items-center gap-2">
-          <CollapsibleTrigger as-child>
+          <CadenceCollapsibleTrigger>
             <button
               id="add-revision-toggle"
               type="button"
-              aria-controls="catalog-revision-upload-slot"
               class="btn"
               :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
             >
               {{ revision_form_open ? "Cancel" : "+ Add revision" }}
             </button>
-          </CollapsibleTrigger>
+          </CadenceCollapsibleTrigger>
         </div>
       </div>
     </header>
@@ -142,8 +137,8 @@ const emit = defineEmits<{
       </section>
     </div>
 
-    <CollapsibleContent as-child>
-      <div id="catalog-revision-upload-slot">
+    <CadenceCollapsibleContent>
+      <div>
         <CatalogUploadForm
           :form="revision_form"
           :upload="upload"
@@ -153,7 +148,7 @@ const emit = defineEmits<{
           @cancel-upload="emit('cancel-upload', $event)"
         />
       </div>
-    </CollapsibleContent>
+    </CadenceCollapsibleContent>
 
     <section id="catalog-revision-history" class="card border border-base-300 bg-base-200">
       <div class="card-body p-6">
@@ -235,5 +230,6 @@ const emit = defineEmits<{
         </table>
       </div>
     </section>
-  </CollapsibleRoot>
+    </div>
+  </CadenceCollapsible>
 </template>
