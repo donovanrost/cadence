@@ -4,6 +4,12 @@ import {readFile} from "node:fs/promises"
 import {stripTypeScriptTypes} from "node:module"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  flushVue,
+  installDom,
+  integrationRequire,
+  loadSfc,
+} from "./reka_adapter_test_support.mjs"
 
 const scenarioLedger = [
   "new database and add revision are non-SSR catalog-owned LiveVue surfaces",
@@ -15,9 +21,9 @@ const scenarioLedger = [
   "upload and entry errors remain server-mapped into the exact existing user-facing messages",
   "detected unsupported and empty importer presentation branches remain server-authoritative",
   "submit disabled state is authored by Phoenix from the detected importer result",
-  "the add-revision Reka Collapsible is controlled only by Phoenix revision_form_open",
+  "the add-revision CadenceCollapsible is controlled only by Phoenix revision_form_open",
   "the trigger requests exactly toggle-revision-form without optimistic local state",
-  "closed collapsible content unmounts so CatalogUploadForm follows the Phoenix upload lifecycle",
+  "closed content unmounts and reopening creates a fresh CatalogUploadForm lifecycle",
   "the add-revision trigger and upload slot retain their exact DOM identities and structure",
   "the new database cancel route and add-revision toggle remain exact",
   "existing catalog save persistence metadata redirect and failure behavior is byte-pinned by source slice",
@@ -34,6 +40,9 @@ const paths = {
   uploadForm: resolve(__dirname, "../vue/CatalogUploadForm.vue"),
   databaseNew: resolve(__dirname, "../vue/CatalogDatabaseNew.vue"),
   databaseShow: resolve(__dirname, "../vue/CatalogDatabaseShow.vue"),
+  collapsibleRoot: resolve(__dirname, "../vue/ui/reka/CadenceCollapsible.vue"),
+  collapsibleTrigger: resolve(__dirname, "../vue/ui/reka/CadenceCollapsibleTrigger.vue"),
+  collapsibleContent: resolve(__dirname, "../vue/ui/reka/CadenceCollapsibleContent.vue"),
   newLive: resolve(
     __dirname,
     "../../lib/cadence_web/live/catalog/catalog_database_new_live.ex",
@@ -58,6 +67,9 @@ const {
   uploadForm,
   databaseNew,
   databaseShow,
+  collapsibleRoot,
+  collapsibleTrigger,
+  collapsibleContent,
   newLive,
   showLive,
   components,
@@ -131,6 +143,14 @@ for (const [label, source] of [
   assertScriptSyntax(source, label)
 }
 
+const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
+const parsedDatabaseShow = parse(databaseShow, {filename: paths.databaseShow})
+assert.deepEqual(parsedDatabaseShow.errors, [], "CatalogDatabaseShow parses with pinned Vue")
+assert.doesNotThrow(
+  () => compileScript(parsedDatabaseShow.descriptor, {id: "catalog-database-show", inlineTemplate: true}),
+  "CatalogDatabaseShow compiles with the pinned Vue template compiler",
+)
+
 assert.match(uploadForm, /^import \{computed, reactive, ref\} from "vue"$/m)
 assert.match(uploadForm, /^import \{useLiveUpload\} from "live_vue"$/m)
 assert.equal(uploadForm.match(/useLiveUpload\(/g)?.length, 1)
@@ -173,67 +193,87 @@ assert.match(databaseNew, /data-phx-link-state="push"/)
 assert.match(databaseShow, /^import CatalogUploadForm from "\.\/CatalogUploadForm\.vue"$/m)
 assert.match(
   databaseShow,
-  /import \{\s*CollapsibleContent,\s*CollapsibleRoot,\s*CollapsibleTrigger\s*\} from "reka-ui"/s,
+  /^import CadenceCollapsible from "\.\/ui\/reka\/CadenceCollapsible\.vue"$/m,
 )
+assert.match(
+  databaseShow,
+  /^import CadenceCollapsibleContent from "\.\/ui\/reka\/CadenceCollapsibleContent\.vue"$/m,
+)
+assert.match(
+  databaseShow,
+  /^import CadenceCollapsibleTrigger from "\.\/ui\/reka\/CadenceCollapsibleTrigger\.vue"$/m,
+)
+assert.doesNotMatch(databaseShow, /from "reka-ui"/)
 assert.equal(databaseShow.match(/<CatalogUploadForm\b/g)?.length, 1)
 assert.match(databaseShow, /@validate="emit\('validate', \$event\)"/)
 assert.match(databaseShow, /@cancel-upload="emit\('cancel-upload', \$event\)"/)
 assert.doesNotMatch(databaseShow, /<slot name="revision_form"/)
 
-for (const primitive of ["CollapsibleRoot", "CollapsibleTrigger", "CollapsibleContent"]) {
+for (const adapter of [
+  "CadenceCollapsible",
+  "CadenceCollapsibleTrigger",
+  "CadenceCollapsibleContent",
+]) {
   assert.equal(
-    databaseShow.match(new RegExp(`<${primitive}\\b`, "g"))?.length,
+    databaseShow.match(new RegExp(`<${adapter}\\b`, "g"))?.length,
     1,
-    `${primitive} is composed exactly once`,
+    `${adapter} is composed exactly once`,
   )
 }
 
 assert.match(
   databaseShow,
-  /<CollapsibleRoot\s+id="catalog-database-show-surface"\s+class="space-y-6"\s+as="div"\s+:open="revision_form_open"\s+:unmount-on-hide="true"\s+@update:open="emit\('toggle-revision-form', \{\}\)"\s*>/s,
+  /<CadenceCollapsible\s+content-id="catalog-revision-upload-slot"\s+:open="revision_form_open"\s+@request-change="emit\('toggle-revision-form', \{\}\)"\s*>\s*<div id="catalog-database-show-surface" class="space-y-6">/s,
 )
-assert.equal(databaseShow.match(/as-child/g)?.length, 2, "only trigger and content use as-child")
+assert.equal(
+  databaseShow.match(/content-id="catalog-revision-upload-slot"/g)?.length,
+  1,
+  "the controlled root owns the one stable content ID source",
+)
+assert.equal(
+  databaseShow.match(/@request-change="emit\('toggle-revision-form', \{\}\)"/g)?.length,
+  1,
+  "the adapter request maps to the Phoenix toggle intent exactly once",
+)
+assert.doesNotMatch(databaseShow, /\b(?:CollapsibleRoot|CollapsibleTrigger|CollapsibleContent)\b/)
+assert.doesNotMatch(databaseShow, /as-child|aria-controls="catalog-revision-upload-slot"/)
 assert.doesNotMatch(databaseShow, /v-model(?::open)?|default-open|force-?mount/i)
-assert.doesNotMatch(databaseShow, /:unmount-on-hide="false"/)
+assert.doesNotMatch(databaseShow, /unmount-on-hide/)
 assert.doesNotMatch(databaseShow, /v-if="revision_form_open"/)
 assert.doesNotMatch(databaseShow, /\b(?:computed|reactive|ref|watch)\s*\(/)
 
 const toggleSource = sourceSlice(
   databaseShow,
-  "          <CollapsibleTrigger as-child>",
-  "          </CollapsibleTrigger>",
+  "          <CadenceCollapsibleTrigger>",
+  "          </CadenceCollapsibleTrigger>",
   "add revision trigger",
 )
 
 assert.match(
   toggleSource,
-  /<button\s+id="add-revision-toggle"\s+type="button"\s+aria-controls="catalog-revision-upload-slot"\s+class="btn"\s+:class="revision_form_open \? 'btn-ghost' : 'btn-primary'"\s*>/s,
+  /<button\s+id="add-revision-toggle"\s+type="button"\s+class="btn"\s+:class="revision_form_open \? 'btn-ghost' : 'btn-primary'"\s*>/s,
 )
 assert.match(toggleSource, /\{\{ revision_form_open \? "Cancel" : "\+ Add revision" \}\}/)
 assert.doesNotMatch(toggleSource, /@click|emit\(/)
 
 const uploadSlotSource = sourceSlice(
   databaseShow,
-  "    <CollapsibleContent as-child>",
-  "    </CollapsibleContent>",
+  "    <CadenceCollapsibleContent>",
+  "    </CadenceCollapsibleContent>",
   "revision upload collapsible content",
 )
 
 assert.match(
   uploadSlotSource,
-  /<CollapsibleContent as-child>\s*<div id="catalog-revision-upload-slot">\s*<CatalogUploadForm/s,
+  /<CadenceCollapsibleContent>\s*<div>\s*<CatalogUploadForm/s,
 )
 assert.doesNotMatch(uploadSlotSource, /v-if|v-show|force-?mount/i)
-
-const triggerControls = toggleSource.match(/aria-controls="([^"]+)"/)?.[1]
-const uploadSlotId = uploadSlotSource.match(/<div id="([^"]+)"/)?.[1]
-
-assert.equal(triggerControls, uploadSlotId, "the trigger controls the preserved content child ID")
-assert.equal(triggerControls, "catalog-revision-upload-slot", "the control reference stays exact")
-
-for (const id of ["add-revision-toggle", "catalog-revision-upload-slot"]) {
-  assert.equal(databaseShow.match(new RegExp(`id="${id}"`, "g"))?.length, 1, `${id} stays exact`)
-}
+assert.doesNotMatch(uploadSlotSource, /\bid=/)
+assert.equal(databaseShow.match(/id="add-revision-toggle"/g)?.length, 1)
+assert.equal(databaseShow.match(/catalog-revision-upload-slot/g)?.length, 1)
+assert.match(collapsibleRoot, /:unmount-on-hide="true"/)
+assert.match(collapsibleTrigger, /:aria-controls="collapsible\.contentId\.value"/)
+assert.match(collapsibleContent, /:id="collapsible\.contentId\.value"/)
 
 assert.deepEqual(
   Array.from(databaseShow.matchAll(/\bemit\('([^']+)'/g), ([, event]) => event),
@@ -497,5 +537,169 @@ assert.equal(
   "97cbfdd714c7620054e78154ada952a9cf7215ae097e42bddce8cb63ffd224fd",
   "the authenticated catalog LiveSession, current-scope mounts, layout, and routes stay byte-identical",
 )
+
+const dom = installDom()
+const [collapsibleRootSfc, collapsibleTriggerSfc, collapsibleContentSfc] = await Promise.all([
+  loadSfc(paths.collapsibleRoot),
+  loadSfc(paths.collapsibleTrigger),
+  loadSfc(paths.collapsibleContent),
+])
+const {createApp, defineComponent, h, nextTick, onMounted, onUnmounted, ref} =
+  integrationRequire("vue")
+const CadenceCollapsible = collapsibleRootSfc.component
+const CadenceCollapsibleTrigger = collapsibleTriggerSfc.component
+const CadenceCollapsibleContent = collapsibleContentSfc.component
+const disclosureOpen = ref(false)
+const requestedStates = []
+const mountedUploadInstances = []
+const unmountedUploadInstances = []
+let nextUploadInstance = 0
+
+const CatalogUploadLifecycleProbe = defineComponent({
+  name: "CatalogUploadLifecycleProbe",
+  setup() {
+    const instance = ++nextUploadInstance
+    onMounted(() => mountedUploadInstances.push(instance))
+    onUnmounted(() => unmountedUploadInstances.push(instance))
+
+    return () =>
+      h("form", {
+        id: "catalog-revision-upload-form",
+        "data-upload-instance": String(instance),
+      })
+  },
+})
+
+const CatalogDisclosureOracle = defineComponent({
+  name: "CatalogDisclosureOracle",
+  setup() {
+    return () =>
+      h(
+        CadenceCollapsible,
+        {
+          open: disclosureOpen.value,
+          contentId: "catalog-revision-upload-slot",
+          onRequestChange: (nextOpen) => requestedStates.push(nextOpen),
+        },
+        {
+          default: () =>
+            h(
+              "div",
+              {
+                id: "catalog-database-show-surface",
+                class: "space-y-6",
+              },
+              [
+                h("header", {id: "catalog-show-header"}, [
+                  h(
+                    CadenceCollapsibleTrigger,
+                    null,
+                    {
+                      default: () =>
+                        h(
+                          "button",
+                          {
+                            id: "add-revision-toggle",
+                            type: "button",
+                            class: [
+                              "btn",
+                              disclosureOpen.value ? "btn-ghost" : "btn-primary",
+                            ],
+                          },
+                          disclosureOpen.value ? "Cancel" : "+ Add revision",
+                        ),
+                    },
+                  ),
+                ]),
+                h("section", {id: "catalog-database-summary"}),
+                h(
+                  CadenceCollapsibleContent,
+                  null,
+                  {
+                    default: () => h("div", null, [h(CatalogUploadLifecycleProbe)]),
+                  },
+                ),
+                h("section", {id: "catalog-revision-history"}),
+                h("section", {id: "catalog-import-attempts"}),
+              ],
+            ),
+        },
+      )
+  },
+})
+
+const app = createApp(CatalogDisclosureOracle)
+app.mount(dom.window.document.querySelector("#app"))
+await flushVue(nextTick)
+
+const publicRoot = dom.window.document.querySelector("#catalog-database-show-surface")
+const trigger = dom.window.document.querySelector("#add-revision-toggle")
+const content = () => dom.window.document.querySelector("#catalog-revision-upload-slot")
+
+assert.equal(dom.window.document.querySelector("#app").children.length, 1)
+assert.equal(publicRoot.parentElement.id, "app")
+assert.equal(publicRoot.tagName, "DIV")
+assert.equal(publicRoot.className, "space-y-6")
+assert.equal(publicRoot.getAttribute("data-state"), "closed")
+assert.equal(publicRoot.getAttribute("data-disabled"), null)
+assert.equal(trigger.tagName, "BUTTON")
+assert.equal(trigger.type, "button")
+assert.equal(trigger.disabled, false)
+assert.equal(trigger.getAttribute("aria-controls"), "catalog-revision-upload-slot")
+assert.equal(trigger.getAttribute("aria-expanded"), "false")
+assert.equal(trigger.getAttribute("data-state"), "closed")
+assert.equal(trigger.textContent, "+ Add revision")
+assert.equal(content(), null)
+assert.deepEqual(mountedUploadInstances, [])
+
+trigger.click()
+await flushVue(nextTick)
+assert.deepEqual(requestedStates, [true])
+assert.equal(trigger.getAttribute("aria-expanded"), "false")
+assert.equal(content(), null, "the request does not optimistically mount the upload form")
+
+disclosureOpen.value = true
+await flushVue(nextTick)
+const firstContent = content()
+const firstUploadForm = dom.window.document.querySelector("#catalog-revision-upload-form")
+assert.ok(firstContent)
+assert.equal(firstContent.tagName, "DIV")
+assert.equal(firstContent.id, trigger.getAttribute("aria-controls"))
+assert.equal(firstContent.getAttribute("data-state"), "open")
+assert.equal(trigger.getAttribute("aria-expanded"), "true")
+assert.equal(trigger.getAttribute("data-state"), "open")
+assert.equal(trigger.textContent, "Cancel")
+assert.deepEqual(mountedUploadInstances, [1])
+assert.deepEqual(unmountedUploadInstances, [])
+
+trigger.click()
+await flushVue(nextTick)
+assert.deepEqual(requestedStates, [true, false])
+assert.equal(content(), firstContent, "content stays mounted until Phoenix closes it")
+
+disclosureOpen.value = false
+await flushVue(nextTick)
+assert.equal(content(), null)
+assert.equal(firstUploadForm.isConnected, false)
+assert.deepEqual(unmountedUploadInstances, [1])
+
+trigger.click()
+await flushVue(nextTick)
+assert.deepEqual(requestedStates, [true, false, true])
+assert.equal(content(), null, "the reopen request remains server-authoritative")
+
+disclosureOpen.value = true
+await flushVue(nextTick)
+const reopenedContent = content()
+const reopenedUploadForm = dom.window.document.querySelector("#catalog-revision-upload-form")
+assert.ok(reopenedContent)
+assert.equal(reopenedContent.id, "catalog-revision-upload-slot")
+assert.equal(trigger.getAttribute("aria-controls"), reopenedContent.id)
+assert.notEqual(reopenedUploadForm, firstUploadForm)
+assert.deepEqual(mountedUploadInstances, [1, 2])
+assert.deepEqual(unmountedUploadInstances, [1])
+
+app.unmount()
+dom.window.close()
 
 console.log("catalog_uploads_test passed")
