@@ -83,7 +83,7 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(child).digest("hex"),
-  "88882e692cd625c67a4a521d7454ee716fc0f423f335f3aff987bc61d933a94d",
+  "76dd24a2f09333ef871304a3d8de09530f099b6c683df822f1cf2040e227a6fa",
   "CatalogArtifactShow.vue remains the explicitly audited child",
 )
 
@@ -146,9 +146,11 @@ assert.doesNotMatch(
 )
 assert.doesNotMatch(page, /v-html|<\.vue|v-component=|JS\.push|phx-click/)
 
-assert.match(child, /from "reka-ui"/)
-assert.match(child, /<DropdownMenuPortal>/)
-assert.match(child, /<DropdownMenuContent/)
+assert.match(child, /import CadenceModalMenu from "\.\/ui\/reka\/CadenceModalMenu\.vue"/)
+assert.match(child, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
+assert.match(child, /<CadenceModalMenu/)
+assert.match(child, /<CadenceMenuItem/)
+assert.doesNotMatch(child, /from "reka-ui"|<DropdownMenu/)
 assert.match(child, /defineEmits<\{\s*reimport: \[\]\s*\}>\(\)/s)
 assert.match(child, /@click="emit\('reimport'\)"/)
 assert.match(child, /id="catalog-artifact-show-content" class="space-y-6"/)

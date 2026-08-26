@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger
-} from "reka-ui"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
 type Status = "info" | "ready" | "blocked"
 
@@ -125,8 +120,8 @@ const emit = defineEmits<{
                 <td class="text-sm text-base-content/70">{{ run.completed_at }}</td>
                 <td class="text-right">
                   <div :id="run.actions_id" class="cadence-overlay">
-                    <DropdownMenuRoot v-slot="{ open }">
-                      <DropdownMenuTrigger as-child>
+                    <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+                      <template #trigger="{open}">
                         <button
                           :id="`${run.actions_id}-trigger`"
                           type="button"
@@ -136,27 +131,24 @@ const emit = defineEmits<{
                         >
                           <span class="hero-ellipsis-vertical h-5 w-5"></span>
                         </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuPortal>
-                        <DropdownMenuContent
+                      </template>
+                      <template #content="{open}">
+                        <div
                           :id="`${run.actions_id}-menu`"
                           :aria-labelledby="`${run.actions_id}-trigger`"
                           class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
-                          side="bottom"
-                          align="end"
-                          :side-offset="4"
                         >
-                          <DropdownMenuItem as-child>
+                          <CadenceMenuItem :active="open">
                             <a
                               :href="run.href"
                               data-phx-link="redirect"
                               data-phx-link-state="push"
                               class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
                             >View run</a>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenuPortal>
-                    </DropdownMenuRoot>
+                          </CadenceMenuItem>
+                        </div>
+                      </template>
+                    </CadenceModalMenu>
                   </div>
                 </td>
               </tr>

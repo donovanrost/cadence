@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger
-} from "reka-ui"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 
@@ -180,8 +175,8 @@ defineProps<{
               </td>
               <td class="text-right">
                 <div :id="row.actions_id" class="cadence-overlay">
-                  <DropdownMenuRoot v-slot="{ open }">
-                    <DropdownMenuTrigger as-child>
+                  <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+                    <template #trigger="{open}">
                       <button
                         :id="`${row.actions_id}-trigger`"
                         type="button"
@@ -191,35 +186,32 @@ defineProps<{
                       >
                         <span class="hero-ellipsis-vertical h-5 w-5"></span>
                       </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuContent
+                    </template>
+                    <template #content="{open}">
+                      <div
                         :id="`${row.actions_id}-menu`"
                         :aria-labelledby="`${row.actions_id}-trigger`"
-                        side="bottom"
-                        align="end"
-                        :side-offset="4"
                         class="z-50 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
                       >
-                        <DropdownMenuItem as-child>
+                        <CadenceMenuItem :active="open">
                           <a
                             :href="row.primary_action_href"
                             data-phx-link="redirect"
                             data-phx-link-state="push"
                             class="flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-xs text-base-content/70 outline-none hover:bg-base-200 hover:text-base-content focus-visible:bg-base-200 focus-visible:text-base-content"
                           >{{ row.primary_action }}</a>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem as-child>
+                        </CadenceMenuItem>
+                        <CadenceMenuItem :active="open">
                           <a
                             :href="row.view_spacecraft_href"
                             data-phx-link="redirect"
                             data-phx-link-state="push"
                             class="flex w-full cursor-pointer items-center gap-2 rounded px-3 py-2 text-left text-xs text-base-content/70 outline-none hover:bg-base-200 hover:text-base-content focus-visible:bg-base-200 focus-visible:text-base-content"
                           >View spacecraft</a>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuRoot>
+                        </CadenceMenuItem>
+                      </div>
+                    </template>
+                  </CadenceModalMenu>
                 </div>
               </td>
             </tr>
