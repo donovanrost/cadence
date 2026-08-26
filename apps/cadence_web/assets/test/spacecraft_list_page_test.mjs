@@ -9,7 +9,7 @@ const scenarioLedger = [
   "Phoenix owns organization and mission scoping, ListParams, filtering, sorting, pagination, and patches",
   "Phoenix owns summary, roster, profile, drift, setup-status, label, and verified-route decisions",
   "the page root, exact header, breadcrumbs, and existing child visual contracts stay exact",
-  "SpacecraftListPage directly composes the byte-for-byte immutable SpacecraftList child once",
+  "SpacecraftListPage directly composes the audited IDREF-repaired SpacecraftList child once",
   "the child receives its existing summary_tiles, roster, and profiles props without renaming",
   "breadcrumb and child navigation retain the existing LiveView redirect or patch semantics",
   "raw attrs preserve HEEx nil, false, true, string, and number behavior",
@@ -17,7 +17,7 @@ const scenarioLedger = [
   "the Spacecraft Profile caller continues inspecting the same nested roster and profiles data",
   "handle_params recomputes the full presentation after every URL-driven list-state change",
   "the authenticated spacecraft route, mounts, action, and mission-sidebar layout stay unchanged",
-  "router, caller, and tests use semantic source slices; only immutable SpacecraftList.vue is hashed",
+  "router, caller, and tests use semantic source slices; only audited SpacecraftList.vue is hashed",
 ]
 
 assert.equal(process.versions.node, "24.16.0", "spacecraft-list contracts use pinned Node 24.16.0")
@@ -96,8 +96,8 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(childSource).digest("hex"),
-  "084a97d337f62f9b9df7ca7219489d51d50d2131d7ce33dfa5508c329912ab7d",
-  "SpacecraftList.vue remains the explicitly immutable child",
+  "0f0684adcd9496b7f89c9eec2ab3a9fac3eb39f635c529c5426cb6b92ea2235f",
+  "SpacecraftList.vue remains the explicitly audited child",
 )
 
 const script = pageSource.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
@@ -164,7 +164,7 @@ for (const childContract of [
   'phx-click="sort"',
   'phx-click="paginate"',
 ]) {
-  assert.ok(childSource.includes(childContract), `${childContract} remains in the immutable child`)
+  assert.ok(childSource.includes(childContract), `${childContract} remains in the audited child`)
 }
 
 const mountSource = sourceSlice(

@@ -125,13 +125,14 @@ const emit = defineEmits<{
                 <td class="text-sm text-base-content/70">{{ run.completed_at }}</td>
                 <td class="text-right">
                   <div :id="run.actions_id" class="cadence-overlay">
-                    <DropdownMenuRoot>
+                    <DropdownMenuRoot v-slot="{ open }">
                       <DropdownMenuTrigger as-child>
                         <button
                           :id="`${run.actions_id}-trigger`"
                           type="button"
                           class="btn btn-ghost btn-xs"
                           aria-label="Actions"
+                          :aria-controls="open ? `${run.actions_id}-menu` : undefined"
                         >
                           <span class="hero-ellipsis-vertical h-5 w-5"></span>
                         </button>
@@ -139,6 +140,7 @@ const emit = defineEmits<{
                       <DropdownMenuPortal>
                         <DropdownMenuContent
                           :id="`${run.actions_id}-menu`"
+                          :aria-labelledby="`${run.actions_id}-trigger`"
                           class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
                           side="bottom"
                           align="end"
