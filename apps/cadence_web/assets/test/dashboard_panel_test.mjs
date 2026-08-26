@@ -331,7 +331,17 @@ assert.doesNotMatch(appJsSource, /\b(?:Overlay|ResizablePanel)\b/)
 assert.match(dashboardToolbarSource, /import CadencePopover from "\.\/ui\/reka\/CadencePopover\.vue"/)
 assert.equal(dashboardToolbarSource.match(/<CadencePopover/g)?.length, 2)
 assert.match(dashboardToolbarMenuSource, /import CadenceMenu from "\.\/ui\/reka\/CadenceMenu\.vue"/)
-assert.match(dashboardToolbarMenuSource, /import \{DropdownMenuItem\} from "reka-ui"/)
+assert.match(
+  dashboardToolbarMenuSource,
+  /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/,
+)
+assert.match(
+  dashboardToolbarMenuSource,
+  /<CadenceMenuItem[\s\S]*:active="open"[\s\S]*@select="onItemSelect"[\s\S]*<\/CadenceMenuItem>/,
+)
+assert.equal(dashboardToolbarMenuSource.match(/<CadenceMenuItem\b/g)?.length, 1)
+assert.equal(dashboardToolbarMenuSource.match(/@select="onItemSelect"/g)?.length, 1)
+assert.doesNotMatch(dashboardToolbarMenuSource, /DropdownMenuItem|from "reka-ui"/)
 assert.match(cadencePopoverSource, /PopoverContent, PopoverRoot, PopoverTrigger/)
 assert.match(
   cadenceMenuSource,
