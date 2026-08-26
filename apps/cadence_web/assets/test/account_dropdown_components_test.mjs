@@ -10,16 +10,21 @@ const uiPath = resolve(testDirectory, "../../lib/cadence_web/components/ui.ex")
 
 const componentSource = async (name) => readFile(resolve(vueDirectory, name), "utf8")
 
-test("both account dropdown SFCs use the shared controller with unmount cleanup", async () => {
+test("both account dropdown SFCs use only the narrow first-party Reka boundary", async () => {
   for (const name of ["NotificationsBell.vue", "UserMenu.vue"]) {
     const source = await componentSource(name)
 
-    assert.match(source, /from "\.\/dropdown_controller\.js"/)
-    assert.match(source, /createDropdownController\(\{rootElement: rootElement\.value\}\)/)
-    assert.match(source, /onBeforeUnmount\(\(\) => controller\?\.destroy\(\)\)/)
+    assert.match(source, /import AccountDropdownMenu from "\.\/ui\/reka\/AccountDropdownMenu\.vue"/)
+    assert.match(source, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
+    assert.match(source, /<AccountDropdownMenu :class="presentation\.root\.class">/)
+    assert.match(source, /#trigger="\{open\}"/)
+    assert.match(source, /:aria-expanded="String\(open\)"/)
+    assert.match(source, /#content="\{open, onItemSelect\}"/)
+    assert.match(source, /:active="open"/)
+    assert.match(source, /@select="onItemSelect"/)
     assert.match(source, /<template>/)
     assert.match(source, /v-bind="presentation\./)
-    assert.doesNotMatch(source, /phx-hook|DropdownMenuRoot|DropdownMenuContent/)
+    assert.doesNotMatch(source, /phx-hook|dropdown_controller|from "reka-ui"/)
     assert.doesNotMatch(
       source,
       /["']\/(?:session|admin-mode|admin)["']|_csrf_token|_method|platform_admin/,
@@ -34,6 +39,8 @@ test("notifications renderer preserves server-owned menu and navigation attrs", 
   assert.match(source, /v-bind="presentation\.trigger\.attrs"/)
   assert.match(source, /v-bind="notification\.link\.attrs"/)
   assert.match(source, /v-bind="presentation\.menu\.footer\.attrs"/)
+  assert.equal(source.match(/<CadenceMenuItem\b/g)?.length, 2)
+  assert.equal(source.match(/<a\b/g)?.length, 2)
   assert.doesNotMatch(source, /9\+|No notifications|See all notifications/)
 })
 
@@ -45,6 +52,11 @@ test("user-menu renderer preserves server-owned forms, hidden fields, and action
   assert.match(source, /v-bind="presentation\.menu\.admin_action\.attrs"/)
   assert.match(source, /presentation\.menu\.leave_admin_mode\.hidden_fields/)
   assert.match(source, /presentation\.menu\.sign_out\.hidden_fields/)
+  assert.equal(source.match(/<form\b/g)?.length, 3)
+  assert.equal(source.match(/<input\b/g)?.length, 3)
+  assert.equal(source.match(/<button\b/g)?.length, 4)
+  assert.equal(source.match(/<a\b/g)?.length, 1)
+  assert.equal(source.match(/<CadenceMenuItem\b/g)?.length, 4)
   assert.doesNotMatch(
     source,
     /ORGANIZATION|Enter admin mode|System administration|Leave admin mode|Sign out/,

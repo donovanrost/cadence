@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import {readFileSync} from "node:fs"
 import {readFile} from "node:fs/promises"
 import {createRequire} from "node:module"
-import {dirname, resolve} from "node:path"
+import {dirname, extname, resolve} from "node:path"
 
 export const expectedNodeVersion = "24.16.0"
 export const expectedRekaVersion = "2.10.3"
@@ -17,12 +17,27 @@ const localModuleCache = new Map()
 const loadLocalModule = (modulePath) => {
   if (localModuleCache.has(modulePath)) return localModuleCache.get(modulePath).exports
 
-  const {transformSync} = integrationRequire("esbuild")
   const loadedModule = {exports: {}}
   localModuleCache.set(modulePath, loadedModule)
-  const transformed = transformSync(readFileSync(modulePath, "utf8"), {
+  const {transformSync} = integrationRequire("esbuild")
+  let moduleSource = readFileSync(modulePath, "utf8")
+  let loader = "js"
+
+  if (extname(modulePath) === ".vue") {
+    const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
+    const parsed = parse(moduleSource, {filename: modulePath})
+    if (parsed.errors.length > 0) throw parsed.errors[0]
+
+    moduleSource = compileScript(parsed.descriptor, {
+      id: `cadence-adapter-dependency-${modulePath.split("/").at(-1)}`,
+      inlineTemplate: true,
+    }).content
+    loader = "ts"
+  }
+
+  const transformed = transformSync(moduleSource, {
     format: "cjs",
-    loader: "js",
+    loader,
     platform: "node",
     target: "node24",
   })
