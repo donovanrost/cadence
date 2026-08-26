@@ -8,7 +8,8 @@ export function announceCadencePopoverOpened(windowObject, rootElement) {
 
 export function subscribeToLegacyOverlayOpen(windowObject, rootElement, close) {
   const onOverlayOpened = (event) => {
-    if (event.detail !== rootElement) close()
+    const openedRoot = event.detail
+    if (openedRoot !== rootElement && !rootElement?.contains?.(openedRoot)) close()
   }
 
   windowObject.addEventListener(CADENCE_OVERLAY_OPENED_EVENT, onOverlayOpened)

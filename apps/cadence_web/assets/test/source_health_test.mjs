@@ -278,7 +278,7 @@ assert.match(adapterSource, /@interact-outside="handleInteractOutside"/)
 assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
 assert.match(
   adapterSource,
-  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*event\.preventDefault\(\)[\s\S]*closeWithoutFocus\(\)\n\}/,
 )
 assert.match(
   adapterSource,
@@ -286,6 +286,8 @@ assert.match(
 )
 
 assert.equal(preservesPopoverOpenState(true, duplicateId, duplicateId), true)
+assert.match(adapterSource, /suppressEscapeDismiss = true/)
+assert.match(adapterSource, /!nextOpen && suppressEscapeDismiss/)
 assert.equal(preservesPopoverOpenState(false, duplicateId, duplicateId), false)
 assert.equal(preservesPopoverOpenState(true, duplicateId, "source-health-other-default"), false)
 assert.equal(preservesPopoverOpenState(true, duplicateId, ""), false)

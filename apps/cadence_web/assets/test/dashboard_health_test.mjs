@@ -289,13 +289,15 @@ assert.match(adapterSource, /await nextTick\(\)/)
 assert.match(adapterSource, /focusCurrentPopoverTrigger\(currentRoot\)/)
 assert.match(
   adapterSource,
-  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*event\.preventDefault\(\)[\s\S]*closeWithoutFocus\(\)\n\}/,
 )
 assert.match(
   adapterSource,
   /const closeWithoutFocus = \(\) => \{[\s\S]*suppressCloseAutoFocus = true[\s\S]*open\.value = false\n\}/,
 )
 assert.match(adapterSource, /preservesPopoverOpenState\(open\.value, previousIdentity, nextIdentity\)/)
+assert.match(adapterSource, /suppressEscapeDismiss = true/)
+assert.match(adapterSource, /!nextOpen && suppressEscapeDismiss/)
 assert.match(adapterSource, /onBeforeUnmount\(\(\) => \{[\s\S]*removeLegacyOverlayListener\?\.\(\)/)
 
 assert.match(

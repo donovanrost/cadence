@@ -33,6 +33,7 @@ const props = withDefaults(
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
 let suppressCloseAutoFocus = false
+let suppressEscapeDismiss = false
 let removeLegacyOverlayListener: (() => void) | null = null
 
 const closeWithoutFocus = () => {
@@ -43,6 +44,12 @@ const closeWithoutFocus = () => {
 
 const updateOpen = async (nextOpen: boolean) => {
   if (nextOpen && (!props.identity || !root.value)) return
+
+  if (!nextOpen && suppressEscapeDismiss) {
+    suppressEscapeDismiss = false
+    open.value = true
+    return
+  }
 
   open.value = nextOpen
   if (!nextOpen) return
@@ -75,7 +82,12 @@ const handleCloseAutoFocus = (event: Event) => {
 const handleInteractOutside = (event: Event) => {
   const trigger = root.value?.querySelector<HTMLElement>(":scope > [data-overlay-trigger]")
   if (event.target instanceof Node && trigger?.contains(event.target)) return
-  suppressCloseAutoFocus = true
+  event.preventDefault()
+  closeWithoutFocus()
+}
+
+const handleEscapeKeyDown = (event: Event) => {
+  if (root.value?.querySelector("[data-overlay-open]")) suppressEscapeDismiss = true
 }
 
 watch(
@@ -98,6 +110,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   suppressCloseAutoFocus = true
+  suppressEscapeDismiss = false
   open.value = false
   removeLegacyOverlayListener?.()
   removeLegacyOverlayListener = null
@@ -131,6 +144,7 @@ onBeforeUnmount(() => {
         sticky="always"
         @close-auto-focus="handleCloseAutoFocus"
         @interact-outside="handleInteractOutside"
+        @escape-key-down="handleEscapeKeyDown"
       >
         <slot name="content" :open="open"></slot>
       </PopoverContent>
