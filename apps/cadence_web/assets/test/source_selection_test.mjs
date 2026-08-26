@@ -171,7 +171,7 @@ assert.match(
 )
 assert.match(
   adapterSource,
-  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*suppressCloseAutoFocus = true\n\}/,
+  /const handleInteractOutside = \(event: Event\) => \{[\s\S]*trigger\?\.contains\(event\.target\)[\s\S]*event\.preventDefault\(\)[\s\S]*closeWithoutFocus\(\)\n\}/,
 )
 assert.doesNotMatch(adapterSource, /PopoverPortal|forceMount|setTimeout|setInterval/)
 
@@ -267,10 +267,19 @@ assert.equal(escapeCloseEvent.preventDefaultCount, 1)
 assert.equal(currentTriggerFocusCount, 1, "Escape focuses the current public trigger")
 assert.equal(staleTriggerFocusCount, 0, "Escape never focuses a stale trigger reference")
 
-// Outside interaction sets the adapter's suppression flag before Reka closes the popover.
+// Outside interaction closes through the adapter without restoring trigger focus.
 const outsideTarget = new FakeNode()
+const outsideInteractionEvent = {
+  target: outsideTarget,
+  preventDefaultCount: 0,
+  preventDefault() {
+    this.preventDefaultCount += 1
+  },
+}
 behavior.open.value = true
-behavior.handleInteractOutside({target: outsideTarget})
+behavior.handleInteractOutside(outsideInteractionEvent)
+assert.equal(outsideInteractionEvent.preventDefaultCount, 1)
+assert.equal(behavior.open.value, false)
 assert.equal(behavior.suppressCloseAutoFocus(), true)
 behavior.open.value = false
 const outsideCloseEvent = {
