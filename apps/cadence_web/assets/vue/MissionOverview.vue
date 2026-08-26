@@ -180,12 +180,13 @@ defineProps<{
               </td>
               <td class="text-right">
                 <div :id="row.actions_id" class="cadence-overlay">
-                  <DropdownMenuRoot>
+                  <DropdownMenuRoot v-slot="{ open }">
                     <DropdownMenuTrigger as-child>
                       <button
                         :id="`${row.actions_id}-trigger`"
                         type="button"
                         aria-label="Actions"
+                        :aria-controls="open ? `${row.actions_id}-menu` : undefined"
                         class="cadence-overlay-trigger btn btn-ghost btn-xs"
                       >
                         <span class="hero-ellipsis-vertical h-5 w-5"></span>
@@ -194,6 +195,7 @@ defineProps<{
                     <DropdownMenuPortal>
                       <DropdownMenuContent
                         :id="`${row.actions_id}-menu`"
+                        :aria-labelledby="`${row.actions_id}-trigger`"
                         side="bottom"
                         align="end"
                         :side-offset="4"

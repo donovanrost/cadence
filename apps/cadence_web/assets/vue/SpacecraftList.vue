@@ -245,13 +245,14 @@ defineProps<{
                 </td>
                 <td class="text-right">
                   <div :id="row.actions_id">
-                    <DropdownMenuRoot>
+                    <DropdownMenuRoot v-slot="{ open }">
                       <DropdownMenuTrigger as-child>
                         <button
                           :id="`${row.actions_id}-trigger`"
                           class="btn btn-ghost btn-xs"
                           type="button"
                           aria-label="Actions"
+                          :aria-controls="open ? `${row.actions_id}-menu` : undefined"
                         >
                           <span class="hero-ellipsis-vertical h-5 w-5"></span>
                         </button>
@@ -259,6 +260,7 @@ defineProps<{
                       <DropdownMenuPortal>
                         <DropdownMenuContent
                           :id="`${row.actions_id}-menu`"
+                          :aria-labelledby="`${row.actions_id}-trigger`"
                           class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
                           side="bottom"
                           align="end"

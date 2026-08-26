@@ -10,7 +10,7 @@ const scenarioLedger = [
   "Phoenix retains authenticated organization and mission scope plus artifact and run queries",
   "Phoenix retains subscription filtering upsert order status formatting routes and uploader identity",
   "every mount and matching PubSub refresh recomputes the complete presentation",
-  "CatalogArtifactShowPage directly composes the immutable CatalogArtifactShow child exactly once",
+  "CatalogArtifactShowPage directly composes the audited IDREF-repaired CatalogArtifactShow child exactly once",
   "the Vue root header breadcrumbs child wrapper text classes and navigation attrs stay exact",
   "CatalogArtifactShowPage transparently re-emits the unchanged child reimport event",
   "raw attrs preserve HEEx nil false true empty-string string and number behavior",
@@ -83,8 +83,8 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(child).digest("hex"),
-  "5e381d71d0f3692ce9a6c1e00fa81a738d038b94b98ab440f05a495469650dec",
-  "CatalogArtifactShow.vue remains the explicitly immutable child",
+  "88882e692cd625c67a4a521d7454ee716fc0f423f335f3aff987bc61d933a94d",
+  "CatalogArtifactShow.vue remains the explicitly audited child",
 )
 
 const script = page.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
