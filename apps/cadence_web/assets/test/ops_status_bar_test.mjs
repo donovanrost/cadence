@@ -11,7 +11,8 @@ const paths = {
   clock: resolve(testDirectory, "../vue/UtcClock.vue"),
   notifications: resolve(testDirectory, "../vue/NotificationsBell.vue"),
   userMenu: resolve(testDirectory, "../vue/UserMenu.vue"),
-  dropdown: resolve(testDirectory, "../vue/dropdown_controller.js"),
+  accountDropdown: resolve(testDirectory, "../vue/ui/reka/AccountDropdownMenu.vue"),
+  menuItem: resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue"),
   phoenix: resolve(testDirectory, "../../lib/cadence_web/components/ops_shell.ex"),
   ui: resolve(testDirectory, "../../lib/cadence_web/components/ui.ex"),
   phoenixTest: resolve(testDirectory, "../../test/cadence_web/components/ops_shell_test.exs"),
@@ -22,7 +23,8 @@ const [
   clockSource,
   notificationsSource,
   userMenuSource,
-  dropdownSource,
+  accountDropdownSource,
+  menuItemSource,
   phoenixSource,
   uiSource,
   phoenixTestSource,
@@ -165,13 +167,27 @@ assert.match(clockSource, /timerId = setInterval\(updateUtcTime, 1000\)/)
 assert.match(clockSource, /if \(timerId !== undefined\) clearInterval\(timerId\)/)
 
 for (const dropdownChildSource of [notificationsSource, userMenuSource]) {
-  assert.match(dropdownChildSource, /import \{createDropdownController\} from "\.\/dropdown_controller\.js"/)
   assert.match(
     dropdownChildSource,
-    /controller = createDropdownController\(\{rootElement: rootElement\.value\}\)/,
+    /import AccountDropdownMenu from "\.\/ui\/reka\/AccountDropdownMenu\.vue"/,
   )
-  assert.match(dropdownChildSource, /onBeforeUnmount\(\(\) => controller\?\.destroy\(\)\)/)
+  assert.match(
+    dropdownChildSource,
+    /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/,
+  )
+  assert.match(dropdownChildSource, /<AccountDropdownMenu :class="presentation\.root\.class">/)
+  assert.match(dropdownChildSource, /:aria-expanded="String\(open\)"/)
+  assert.match(dropdownChildSource, /@select="onItemSelect"/)
+  assert.doesNotMatch(dropdownChildSource, /dropdown_controller|from "reka-ui"/)
 }
+
+assert.match(accountDropdownSource, /from "reka-ui"/)
+assert.match(accountDropdownSource, /open\.value && "dropdown-open"/)
+assert.match(accountDropdownSource, /@open-auto-focus="handleOpenAutoFocus"/)
+assert.match(accountDropdownSource, /@close-auto-focus="handleCloseAutoFocus"/)
+assert.match(accountDropdownSource, /@escape-key-down="handleEscapeKeyDown"/)
+assert.match(accountDropdownSource, /@keydown\.tab="handleTabKeyDown"/)
+assert.match(menuItemSource, /import \{DropdownMenuItem\} from "reka-ui"/)
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 
@@ -182,18 +198,23 @@ assert.equal(
 )
 assert.equal(
   sha256(notificationsSource),
-  "5661e592a9fe74f13277e84be799470f865f508d12f50a8d9ea3b5c5b32d6d88",
+  "6b3f54ca6b0d87517062f640d5a33fe3c04325b94f312778f7dc570ad836804d",
   "NotificationsBell.vue must remain byte-unchanged",
 )
 assert.equal(
   sha256(userMenuSource),
-  "baebb6fbf33677d09dea692395d79b16623ec8cc730c63bffa29723e626f7499",
+  "93432a856d1924a17c45de379319b2a6d40dfd9d6d83a5084629f4ceabf50f84",
   "UserMenu.vue must remain byte-unchanged",
 )
 assert.equal(
-  sha256(dropdownSource),
-  "4afa50f0a26975006baf229029cc1ddd502b1ff6a7a8da40e66bf18f60806164",
-  "the shared dropdown controller must remain byte-unchanged",
+  sha256(accountDropdownSource),
+  "03e26f4a0e59475b809b68dcd4fbe15c6701bf4519beebe430d04169ea6168ff",
+  "the account dropdown Reka adapter must remain byte-unchanged",
+)
+assert.equal(
+  sha256(menuItemSource),
+  "eddb15aa1d205acd68fb1874a63c0ecccdae6aafcafbc0d0c86149a376628fdb",
+  "the shared Reka menu-item boundary must remain byte-unchanged",
 )
 
 console.log("ops_status_bar_test passed")

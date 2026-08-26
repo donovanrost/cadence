@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {onBeforeUnmount, onMounted, ref} from "vue"
-import {createDropdownController} from "./dropdown_controller.js"
+import AccountDropdownMenu from "./ui/reka/AccountDropdownMenu.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 
 type Attributes = Record<string, string>
 
@@ -85,32 +85,27 @@ type Presentation = {
 }
 
 defineProps<{presentation: Presentation}>()
-
-const rootElement = ref<HTMLElement | null>(null)
-let controller: ReturnType<typeof createDropdownController> | null = null
-
-onMounted(() => {
-  if (rootElement.value) {
-    controller = createDropdownController({rootElement: rootElement.value})
-    controller.mount()
-  }
-})
-
-onBeforeUnmount(() => controller?.destroy())
 </script>
 
 <template>
-  <div ref="rootElement" :class="presentation.root.class">
-    <button :class="presentation.trigger.class" v-bind="presentation.trigger.attrs">
-      <span :class="presentation.trigger.label.class">{{ presentation.trigger.label.text }}</span>
-      <span :class="presentation.trigger.icon_class"></span>
-    </button>
+  <AccountDropdownMenu :class="presentation.root.class">
+    <template #trigger="{open}">
+      <button
+        :class="presentation.trigger.class"
+        v-bind="presentation.trigger.attrs"
+        :aria-expanded="String(open)"
+      >
+        <span :class="presentation.trigger.label.class">{{ presentation.trigger.label.text }}</span>
+        <span :class="presentation.trigger.icon_class"></span>
+      </button>
+    </template>
 
-    <div
-      :id="presentation.menu.id"
-      :class="presentation.menu.class"
-      v-bind="presentation.menu.attrs"
-    >
+    <template #content="{open, onItemSelect}">
+      <div
+        :id="presentation.menu.id"
+        :class="presentation.menu.class"
+        v-bind="presentation.menu.attrs"
+      >
       <component
         :is="presentation.menu.identity.element"
         :class="presentation.menu.identity.class"
@@ -156,12 +151,17 @@ onBeforeUnmount(() => controller?.destroy())
                   :key="index"
                   v-bind="field.attrs"
                 >
-                <button
-                  :class="organization.form.button.class"
-                  v-bind="organization.form.button.attrs"
+                <CadenceMenuItem
+                  :active="open"
+                  @select="onItemSelect"
                 >
-                  <span :class="organization.form.button.label_class">{{ organization.label }}</span>
-                </button>
+                  <button
+                    :class="organization.form.button.class"
+                    v-bind="organization.form.button.attrs"
+                  >
+                    <span :class="organization.form.button.label_class">{{ organization.label }}</span>
+                  </button>
+                </CadenceMenuItem>
               </form>
             </li>
           </ul>
@@ -176,13 +176,18 @@ onBeforeUnmount(() => controller?.destroy())
         :class="presentation.menu.admin_action.item_class"
         v-bind="presentation.menu.admin_action.item_attrs"
       >
-        <a
-          :class="presentation.menu.admin_action.class"
-          v-bind="presentation.menu.admin_action.attrs"
+        <CadenceMenuItem
+          :active="open"
+          @select="onItemSelect"
         >
-          <span :class="presentation.menu.admin_action.icon_class"></span>
-          {{ presentation.menu.admin_action.label }}
-        </a>
+          <a
+            :class="presentation.menu.admin_action.class"
+            v-bind="presentation.menu.admin_action.attrs"
+          >
+            <span :class="presentation.menu.admin_action.icon_class"></span>
+            {{ presentation.menu.admin_action.label }}
+          </a>
+        </CadenceMenuItem>
       </li>
 
       <li
@@ -196,13 +201,18 @@ onBeforeUnmount(() => controller?.destroy())
             :key="index"
             v-bind="field.attrs"
           >
-          <button
-            :class="presentation.menu.leave_admin_mode.button.class"
-            v-bind="presentation.menu.leave_admin_mode.button.attrs"
+          <CadenceMenuItem
+            :active="open"
+            @select="onItemSelect"
           >
-            <span :class="presentation.menu.leave_admin_mode.button.icon_class"></span>
-            {{ presentation.menu.leave_admin_mode.button.label }}
-          </button>
+            <button
+              :class="presentation.menu.leave_admin_mode.button.class"
+              v-bind="presentation.menu.leave_admin_mode.button.attrs"
+            >
+              <span :class="presentation.menu.leave_admin_mode.button.icon_class"></span>
+              {{ presentation.menu.leave_admin_mode.button.label }}
+            </button>
+          </CadenceMenuItem>
         </form>
       </li>
 
@@ -216,15 +226,21 @@ onBeforeUnmount(() => controller?.destroy())
             :key="index"
             v-bind="field.attrs"
           >
-          <button
-            :class="presentation.menu.sign_out.button.class"
-            v-bind="presentation.menu.sign_out.button.attrs"
+          <CadenceMenuItem
+            :active="open"
+            @select="onItemSelect"
           >
-            <span :class="presentation.menu.sign_out.button.icon_class"></span>
-            {{ presentation.menu.sign_out.button.label }}
-          </button>
+            <button
+              :class="presentation.menu.sign_out.button.class"
+              v-bind="presentation.menu.sign_out.button.attrs"
+            >
+              <span :class="presentation.menu.sign_out.button.icon_class"></span>
+              {{ presentation.menu.sign_out.button.label }}
+            </button>
+          </CadenceMenuItem>
         </form>
       </li>
-    </div>
-  </div>
+      </div>
+    </template>
+  </AccountDropdownMenu>
 </template>
