@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger
-} from "reka-ui"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
 type Status = "ready" | "attention"
 
@@ -245,8 +240,8 @@ defineProps<{
                 </td>
                 <td class="text-right">
                   <div :id="row.actions_id">
-                    <DropdownMenuRoot v-slot="{ open }">
-                      <DropdownMenuTrigger as-child>
+                    <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+                      <template #trigger="{open}">
                         <button
                           :id="`${row.actions_id}-trigger`"
                           class="btn btn-ghost btn-xs"
@@ -256,35 +251,32 @@ defineProps<{
                         >
                           <span class="hero-ellipsis-vertical h-5 w-5"></span>
                         </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuPortal>
-                        <DropdownMenuContent
+                      </template>
+                      <template #content="{open}">
+                        <div
                           :id="`${row.actions_id}-menu`"
                           :aria-labelledby="`${row.actions_id}-trigger`"
                           class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
-                          side="bottom"
-                          align="end"
-                          :side-offset="4"
                         >
-                          <DropdownMenuItem as-child>
+                          <CadenceMenuItem :active="open">
                             <a
                               :href="row.href"
                               data-phx-link="redirect"
                               data-phx-link-state="push"
                               class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
                             >View</a>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem as-child>
+                          </CadenceMenuItem>
+                          <CadenceMenuItem :active="open">
                             <a
                               :href="row.identity_href"
                               data-phx-link="redirect"
                               data-phx-link-state="push"
                               class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
                             >Identity</a>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenuPortal>
-                    </DropdownMenuRoot>
+                          </CadenceMenuItem>
+                        </div>
+                      </template>
+                    </CadenceModalMenu>
                   </div>
                 </td>
               </tr>

@@ -96,7 +96,7 @@ const assertBalancedTemplate = (source) => {
 
 assert.equal(
   createHash("sha256").update(childSource).digest("hex"),
-  "0f0684adcd9496b7f89c9eec2ab3a9fac3eb39f635c529c5426cb6b92ea2235f",
+  "b322bffd1e6082c1d7f18a942c3a5879e2751beceb2e3d0f41175d2a11e25669",
   "SpacecraftList.vue remains the explicitly audited child",
 )
 

@@ -8,6 +8,7 @@ import {
   flushVue,
   installDom,
   integrationRequire,
+  loadSfc,
 } from "./reka_adapter_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
@@ -37,6 +38,13 @@ Object.defineProperty(globalThis, "HTMLInputElement", {
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 const {transformSync} = integrationRequire("esbuild")
 const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
+const modalMenuPath = resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")
+const menuItemPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")
+
+const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Promise.all([
+  loadSfc(modalMenuPath),
+  loadSfc(menuItemPath),
+])
 
 const StatusBadge = defineComponent({
   props: ["status", "label"],
@@ -48,19 +56,25 @@ const definitions = [
     name: "SpacecraftList",
     path: resolve(testDirectory, "../vue/SpacecraftList.vue"),
     subject: "row",
-    sha256: "0f0684adcd9496b7f89c9eec2ab3a9fac3eb39f635c529c5426cb6b92ea2235f",
+    menuItemCount: 2,
+    wrapperClass: "",
+    sha256: "b322bffd1e6082c1d7f18a942c3a5879e2751beceb2e3d0f41175d2a11e25669",
   },
   {
     name: "CatalogArtifactShow",
     path: resolve(testDirectory, "../vue/CatalogArtifactShow.vue"),
     subject: "run",
-    sha256: "88882e692cd625c67a4a521d7454ee716fc0f423f335f3aff987bc61d933a94d",
+    menuItemCount: 1,
+    wrapperClass: "cadence-overlay",
+    sha256: "76dd24a2f09333ef871304a3d8de09530f099b6c683df822f1cf2040e227a6fa",
   },
   {
     name: "MissionOverview",
     path: resolve(testDirectory, "../vue/MissionOverview.vue"),
     subject: "row",
-    sha256: "52ef18d8369fdc53c8c18da15e8fa0a695bc75d94006dded47fe38dc2a0e8ecb",
+    menuItemCount: 2,
+    wrapperClass: "cadence-overlay",
+    sha256: "79c4f3777ad19171238631f3c8f546ec591891ed8f049164b8554c55ddeb1371",
   },
 ]
 
@@ -72,9 +86,19 @@ const compileSfc = async (definition) => {
   assert.ok(parsed.descriptor.scriptSetup, `${definition.name} keeps its setup script`)
   assert.ok(parsed.descriptor.template, `${definition.name} keeps its template`)
   assert.equal(createHash("sha256").update(source).digest("hex"), definition.sha256)
-  assert.equal(source.match(/<DropdownMenuRoot v-slot="\{ open \}">/g)?.length, 1)
-  assert.equal(source.match(/<DropdownMenuPortal>/g)?.length, 1)
-  assert.doesNotMatch(source, /<DropdownMenuRoot[^>]*\bmodal(?:=|\s)/)
+  assert.match(source, /import CadenceModalMenu from "\.\/ui\/reka\/CadenceModalMenu\.vue"/)
+  assert.match(source, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
+  assert.equal(source.match(/<CadenceModalMenu\b/g)?.length, 1)
+  assert.equal(source.match(/<CadenceMenuItem\b/g)?.length, definition.menuItemCount)
+  assert.doesNotMatch(source, /from "reka-ui"|<DropdownMenu/)
+  assert.doesNotMatch(source, /\bmodal(?:=|\s)|\bref\(|\bwatch\(|@update:open/)
+  assert.ok(
+    source.includes(
+      definition.wrapperClass === ""
+        ? `<div :id="${definition.subject}.actions_id">`
+        : `<div :id="${definition.subject}.actions_id" class="${definition.wrapperClass}">`,
+    ),
+  )
   assert.ok(
     source.includes(
       `:aria-controls="open ? \`\${${definition.subject}.actions_id}-menu\` : undefined"`,
@@ -95,8 +119,12 @@ const compileSfc = async (definition) => {
     target: "node24",
   })
   const loadedModule = {exports: {}}
-  const localRequire = (specifier) =>
-    specifier === "./StatusBadge.vue" ? StatusBadge : integrationRequire(specifier)
+  const localRequire = (specifier) => {
+    if (specifier === "./StatusBadge.vue") return StatusBadge
+    if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
+    if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
+    return integrationRequire(specifier)
+  }
 
   new Function("require", "module", "exports", transformed.code)(
     localRequire,
@@ -217,6 +245,7 @@ const cases = [
     name: "spacecraft",
     component: SpacecraftList,
     props: spacecraftProps,
+    wrapperClass: "",
     rows: spacecraftRows.map((row) => ({
       actionsId: row.actions_id,
       links: [
@@ -229,6 +258,7 @@ const cases = [
     name: "artifact run",
     component: CatalogArtifactShow,
     props: artifactProps,
+    wrapperClass: "cadence-overlay",
     rows: artifactRuns.map((run) => ({
       actionsId: run.actions_id,
       links: [["View run", run.href]],
@@ -238,6 +268,7 @@ const cases = [
     name: "mission readiness",
     component: MissionOverview,
     props: missionProps,
+    wrapperClass: "cadence-overlay",
     rows: missionRows.map((row) => ({
       actionsId: row.actions_id,
       links: [
@@ -277,9 +308,15 @@ assert.equal(new Set(allTriggerIds).size, 6, "all six public trigger IDs are uni
 assert.equal(new Set(allContentIds).size, 6, "all six public content IDs are unique")
 
 const assertClosed = (actionsId, label) => {
+  const wrapper = document.getElementById(actionsId)
   const trigger = document.getElementById(`${actionsId}-trigger`)
 
+  assert.ok(wrapper, `${label} retains its public wrapper`)
   assert.ok(trigger, `${label} retains its public trigger`)
+  assert.equal(trigger.tagName, "BUTTON")
+  assert.equal(trigger.getAttribute("type"), "button")
+  assert.equal(wrapper.children.length, 1, `${label} has one native trigger root`)
+  assert.equal(trigger.parentElement, wrapper)
   assert.equal(trigger.getAttribute("aria-expanded"), "false")
   assert.equal(trigger.hasAttribute("aria-controls"), false)
   assert.equal(document.getElementById(`${actionsId}-menu`), null)
@@ -298,8 +335,10 @@ for (const testCase of cases) {
     const triggerId = `${row.actionsId}-trigger`
     const contentId = `${row.actionsId}-menu`
     const trigger = document.getElementById(triggerId)
+    const wrapper = document.getElementById(row.actionsId)
 
     assertClosed(row.actionsId, label)
+    assert.equal(wrapper.className, testCase.wrapperClass, `${label} preserves its wrapper class`)
     trigger.focus()
 
     if (rowIndex === 0) {
@@ -327,6 +366,8 @@ for (const testCase of cases) {
     assert.equal(document.getElementById(content.getAttribute("aria-labelledby")), trigger)
     assert.equal(document.querySelectorAll(`[id="${contentId}"]`).length, 1)
     assert.equal(appElement.contains(content), false, `${label} content stays portaled`)
+    assert.equal(content.tagName, "DIV")
+    assert.equal(content.parentElement.children.length, 1, `${label} has one native content root`)
     assert.equal(content.getAttribute("role"), "menu")
     assert.equal(appElement.getAttribute("aria-hidden"), "true", `${label} remains modal`)
     assert.equal(content.contains(document.activeElement), true, `${label} focuses a menu item`)
@@ -339,6 +380,7 @@ for (const testCase of cases) {
     )
 
     for (const link of links) {
+      assert.equal(link.parentElement, content)
       assert.equal(link.getAttribute("role"), "menuitem")
       assert.equal(link.getAttribute("data-phx-link"), "redirect")
       assert.equal(link.getAttribute("data-phx-link-state"), "push")
