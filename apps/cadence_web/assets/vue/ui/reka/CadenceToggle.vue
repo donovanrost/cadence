@@ -25,6 +25,8 @@ const emit = defineEmits<{
     @update:model-value="emit('request-change', $event)"
   >
     <CadencePrimitiveChild
+      contract-name="CadenceToggle"
+      required-tag="button"
       :enforce-attrs="['aria-pressed', 'data-state', 'data-disabled', 'disabled']"
     >
       <slot :pressed="props.pressed" :disabled="props.disabled"></slot>

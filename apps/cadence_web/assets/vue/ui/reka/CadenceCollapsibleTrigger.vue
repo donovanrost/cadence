@@ -12,6 +12,7 @@ if (!collapsible) throw new Error("CadenceCollapsibleTrigger requires CadenceCol
 <template>
   <CollapsibleTrigger as-child>
     <CadencePrimitiveChild
+      contract-name="CadenceCollapsibleTrigger"
       :aria-controls="collapsible.contentId.value"
       :enforce-attrs="[
         'type',

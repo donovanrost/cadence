@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
@@ -10,7 +11,7 @@ import {
 } from "./reka_adapter_test_support.mjs"
 
 const scenarios = Object.freeze([
-  "the adapter delegates to DropdownMenuItem with mandatory as-child composition",
+  "active items delegate to Reka while inactive items mirror CadenceMenu's raw fallback",
   "the slotted menu link remains the only public node with every server-authored attribute",
   "Reka role roving-tabindex and Enter selection semantics survive the adapter",
   "select forwards the cancelable Reka event and honors prevented then closing selections",
@@ -19,6 +20,7 @@ const scenarios = Object.freeze([
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")
+const menuPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenu.vue")
 const packageLockPath = resolve(testDirectory, "../../package-lock.json")
 
 await assertPinnedAdapterRuntime(packageLockPath)
@@ -26,6 +28,7 @@ assert.equal(scenarios.length, 5)
 
 const dom = installDom()
 const {component: CadenceMenuItem, descriptor, source} = await loadSfc(componentPath)
+const menuSource = await readFile(menuPath, "utf8")
 const script = descriptor.scriptSetup.content
 const template = descriptor.template.content
 
@@ -40,6 +43,11 @@ assert.match(template, /:disabled="props\.disabled"/)
 assert.match(template, /\bas-child\b/)
 assert.match(template, /@select="emit\('select', \$event\)"/)
 assert.match(template, /<slot v-else><\/slot>/)
+assert.match(
+  menuSource,
+  /<slot\s+v-else\s+name="content"\s+:open="open"\s+:onItemSelect="handleItemSelect"\s*><\/slot>/,
+  "CadenceMenu intentionally replaces active MenuContent items with raw closed-slot children",
+)
 assert.doesNotMatch(source, /@click|@keydown|preventDefault|stopPropagation|<a\b|<button\b/)
 
 const {createApp, defineComponent, h, nextTick, ref} = integrationRequire("vue")

@@ -12,6 +12,7 @@ if (!collapsible) throw new Error("CadenceCollapsibleContent requires CadenceCol
 <template>
   <CollapsibleContent as-child>
     <CadencePrimitiveChild
+      contract-name="CadenceCollapsibleContent"
       :id="collapsible.contentId.value"
       :enforce-attrs="['id', 'hidden', 'data-state', 'data-disabled']"
     >

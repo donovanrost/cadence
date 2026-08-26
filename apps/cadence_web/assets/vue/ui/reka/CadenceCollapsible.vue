@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {CollapsibleRoot} from "reka-ui"
 import {provide, toRef} from "vue"
+import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
 
 defineOptions({inheritAttrs: false})
 
@@ -28,6 +29,11 @@ provide("cadence-collapsible", {contentId: toRef(props, "contentId")})
     as-child
     @update:open="emit('request-change', $event)"
   >
-    <slot :open="props.open" :disabled="props.disabled"></slot>
+    <CadencePrimitiveChild
+      contract-name="CadenceCollapsible"
+      :enforce-attrs="['data-state', 'data-disabled']"
+    >
+      <slot :open="props.open" :disabled="props.disabled"></slot>
+    </CadencePrimitiveChild>
   </CollapsibleRoot>
 </template>

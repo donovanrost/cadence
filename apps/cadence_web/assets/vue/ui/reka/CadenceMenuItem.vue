@@ -25,6 +25,7 @@ const emit = defineEmits<{
     @select="emit('select', $event)"
   >
     <CadencePrimitiveChild
+      contract-name="CadenceMenuItem"
       :enforce-attrs="['role', 'tabindex', 'aria-disabled', 'data-disabled']"
     >
       <slot></slot>

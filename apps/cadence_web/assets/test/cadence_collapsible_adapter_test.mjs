@@ -49,6 +49,8 @@ assert.match(rootSfc.descriptor.template.content, /:open="props\.open"/)
 assert.match(rootSfc.descriptor.template.content, /:disabled="props\.disabled"/)
 assert.match(rootSfc.descriptor.template.content, /:unmount-on-hide="true"/)
 assert.match(rootSfc.descriptor.template.content, /\bas-child\b/)
+assert.match(rootSfc.descriptor.template.content, /contract-name="CadenceCollapsible"/)
+assert.match(rootSfc.descriptor.template.content, /:enforce-attrs="\['data-state', 'data-disabled'\]"/)
 assert.match(
   rootSfc.descriptor.template.content,
   /@update:open="emit\('request-change', \$event\)"/,
@@ -101,6 +103,8 @@ const RuntimeOracle = defineComponent({
               {
                 id: "catalog-database-show-surface",
                 class: "space-y-6",
+                "data-state": open.value ? "closed" : "open",
+                "data-disabled": disabled.value ? undefined : "child-stale",
                 "data-server-root": "preserved",
               },
               [
@@ -167,6 +171,7 @@ assert.equal(publicRoot.parentElement.id, "app")
 assert.equal(publicRoot.className, "space-y-6")
 assert.equal(publicRoot.getAttribute("data-server-root"), "preserved")
 assert.equal(publicRoot.getAttribute("data-state"), "closed")
+assert.equal(publicRoot.getAttribute("data-disabled"), null)
 assert.equal(trigger.getAttribute("aria-controls"), "catalog-revision-upload-slot")
 assert.equal(trigger.getAttribute("aria-expanded"), "false")
 assert.equal(trigger.disabled, false)
@@ -195,6 +200,7 @@ assert.equal(content.getAttribute("data-state"), "open")
 assert.equal(trigger.getAttribute("aria-controls"), content.id)
 assert.equal(trigger.getAttribute("aria-expanded"), "true")
 assert.equal(publicRoot.getAttribute("data-state"), "open")
+assert.equal(publicRoot.getAttribute("data-disabled"), null)
 assert.deepEqual(childIds(), [
   "catalog-header",
   "database-summary",
@@ -214,6 +220,7 @@ assert.ok(
 open.value = false
 await flushVue(nextTick)
 assert.equal(dom.window.document.querySelector("#catalog-revision-upload-slot"), null)
+assert.equal(publicRoot.getAttribute("data-state"), "closed")
 assert.deepEqual(childIds(), [
   "catalog-header",
   "database-summary",
@@ -225,9 +232,16 @@ disabled.value = true
 await flushVue(nextTick)
 assert.equal(trigger.disabled, true)
 assert.equal(trigger.getAttribute("data-disabled"), "")
+assert.equal(publicRoot.getAttribute("data-disabled"), "")
 trigger.click()
 await flushVue(nextTick)
 assert.deepEqual(requestedStates, [true, false])
+
+disabled.value = false
+await flushVue(nextTick)
+assert.equal(trigger.disabled, false)
+assert.equal(trigger.getAttribute("data-disabled"), null)
+assert.equal(publicRoot.getAttribute("data-disabled"), null)
 
 app.unmount()
 dom.window.close()
