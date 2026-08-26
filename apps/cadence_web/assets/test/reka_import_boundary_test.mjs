@@ -12,7 +12,7 @@ const adapterBoundary = "ui/reka/"
 const deferredFeatureImporters = new Map([
   [
     "CatalogArtifactShow.vue",
-    "deferred: portal/modal menu behavior needs a dedicated oracle; current IDREF defects remain",
+    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
   ],
   [
     "CatalogDatabaseTable.vue",
@@ -20,11 +20,11 @@ const deferredFeatureImporters = new Map([
   ],
   [
     "MissionOverview.vue",
-    "deferred: portal/modal menu behavior needs a dedicated oracle; current IDREF defects remain",
+    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
   ],
   [
     "SpacecraftList.vue",
-    "deferred: portal/modal menu behavior needs a dedicated oracle; current IDREF defects remain",
+    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
   ],
 ])
 
