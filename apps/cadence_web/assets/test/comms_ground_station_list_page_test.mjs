@@ -10,7 +10,7 @@ const scenarioLedger = [
   "Phoenix owns authentication, organization and mission scope, store loading, counts, and routes",
   "Phoenix owns ListParams parsing, matching, sorting, page clamping, visible rows, and URL patches",
   "Phoenix owns the complete root, header, breadcrumb, action, empty, card, and child presentation",
-  "CommsGroundStationListPage directly composes the immutable CommsGroundStationList child once",
+  "CommsGroundStationListPage composes shared Cadence shell components and the immutable child once",
   "the child receives rows, search, sort, sort_dir, page, page_size, and total_count unchanged",
   "the page root and inner nonempty wrapper retain their existing IDs and branch structure",
   "breadcrumb, setup, and row links retain LiveView redirect and push navigation attributes",
@@ -20,7 +20,7 @@ const scenarioLedger = [
   "search, sort, pagination, no-match, show, form, archive, and not-found outcomes stay exact",
   "handle_params recomputes the complete presentation after every URL-driven list-state change",
   "the authenticated comms route, mounts, action, and mission-sidebar layout stay unchanged",
-  "router, LiveView, tests, and the new parent use semantic source slices rather than broad hashes",
+  "router, LiveView, tests, page, and shared Cadence components use semantic source contracts",
 ]
 
 assert.equal(
@@ -33,6 +33,10 @@ assert.equal(scenarioLedger.length, 16)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const pagePath = resolve(__dirname, "../vue/CommsGroundStationListPage.vue")
 const childPath = resolve(__dirname, "../vue/CommsGroundStationList.vue")
+const breadcrumbsPath = resolve(__dirname, "../vue/ui/components/CadenceBreadcrumbs.vue")
+const pageHeaderPath = resolve(__dirname, "../vue/ui/components/CadencePageHeader.vue")
+const emptyStatePath = resolve(__dirname, "../vue/ui/components/CadenceEmptyState.vue")
+const pageShellTypesPath = resolve(__dirname, "../vue/ui/components/page_shell.ts")
 const liveViewPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/comms_ground_station_list_live.ex",
@@ -43,14 +47,27 @@ const liveViewTestPath = resolve(
 )
 const routerPath = resolve(__dirname, "../../lib/cadence_web/router.ex")
 
-const [pageSource, childSource, liveViewSource, liveViewTestSource, routerSource] =
-  await Promise.all([
-    readFile(pagePath, "utf8"),
-    readFile(childPath, "utf8"),
-    readFile(liveViewPath, "utf8"),
-    readFile(liveViewTestPath, "utf8"),
-    readFile(routerPath, "utf8"),
-  ])
+const [
+  pageSource,
+  childSource,
+  breadcrumbsSource,
+  pageHeaderSource,
+  emptyStateSource,
+  pageShellTypesSource,
+  liveViewSource,
+  liveViewTestSource,
+  routerSource,
+] = await Promise.all([
+  readFile(pagePath, "utf8"),
+  readFile(childPath, "utf8"),
+  readFile(breadcrumbsPath, "utf8"),
+  readFile(pageHeaderPath, "utf8"),
+  readFile(emptyStatePath, "utf8"),
+  readFile(pageShellTypesPath, "utf8"),
+  readFile(liveViewPath, "utf8"),
+  readFile(liveViewTestPath, "utf8"),
+  readFile(routerPath, "utf8"),
+])
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)
@@ -60,7 +77,7 @@ const sourceSlice = (source, start, end, label) => {
   return source.slice(startIndex, endIndex)
 }
 
-const assertBalancedTemplate = (source) => {
+const assertBalancedTemplate = (source, label) => {
   const stack = []
   const voidElements = new Set([
     "area",
@@ -81,13 +98,34 @@ const assertBalancedTemplate = (source) => {
     const name = match[1]
 
     if (token.startsWith("</")) {
-      assert.equal(stack.pop(), name, `${name} closes the current SFC element`)
+      assert.equal(stack.pop(), name, `${name} closes the current ${label} element`)
     } else if (!token.endsWith("/>") && !voidElements.has(name)) {
       stack.push(name)
     }
   }
 
-  assert.deepEqual(stack, [], "SFC template tags are balanced")
+  assert.deepEqual(stack, [], `${label} template tags are balanced`)
+}
+
+const sfcParts = (source, label) => {
+  const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
+  const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+  assert.ok(script, `${label} must have a TypeScript script setup block`)
+  assert.ok(template, `${label} must have a template block`)
+  assertBalancedTemplate(template, label)
+
+  return {script, template}
+}
+
+const assertInOrder = (source, contracts, label) => {
+  let previousIndex = -1
+
+  for (const contract of contracts) {
+    const index = source.indexOf(contract, previousIndex + 1)
+    assert.ok(index > previousIndex, `${label} preserves ${contract} in order`)
+    previousIndex = index
+  }
 }
 
 assert.equal(
@@ -96,20 +134,34 @@ assert.equal(
   "CommsGroundStationList.vue remains the explicitly immutable child",
 )
 
-const script = pageSource.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
-const template = pageSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
-
-assert.ok(script, "CommsGroundStationListPage.vue must have a TypeScript script setup block")
-assert.ok(template, "CommsGroundStationListPage.vue must have a template block")
-assertBalancedTemplate(template)
+const {script, template} = sfcParts(pageSource, "CommsGroundStationListPage.vue")
+const {script: breadcrumbsScript, template: breadcrumbsTemplate} = sfcParts(
+  breadcrumbsSource,
+  "CadenceBreadcrumbs.vue",
+)
+const {script: pageHeaderScript, template: pageHeaderTemplate} = sfcParts(
+  pageHeaderSource,
+  "CadencePageHeader.vue",
+)
+const {script: emptyStateScript, template: emptyStateTemplate} = sfcParts(
+  emptyStateSource,
+  "CadenceEmptyState.vue",
+)
 
 assert.match(script, /import CommsGroundStationList from "\.\/CommsGroundStationList\.vue"/)
+assert.match(script, /import CadenceEmptyState from "\.\/ui\/components\/CadenceEmptyState\.vue"/)
+assert.match(script, /import CadencePageHeader from "\.\/ui\/components\/CadencePageHeader\.vue"/)
 assert.match(
   script,
   /type GroundStationListProps = InstanceType<typeof CommsGroundStationList>\["\$props"\]/,
 )
+assert.match(script, /header: PageHeaderPresentation &/)
+assert.match(script, /new_ground_station: PageHeaderAction/)
+assert.match(script, /empty_state: EmptyStatePresentation \| null/)
 assert.match(script, /defineProps<\{presentation: Presentation\}>\(\)/)
 assert.equal(template.match(/<CommsGroundStationList\b/g)?.length, 1)
+assert.equal(template.match(/<CadencePageHeader\b/g)?.length, 1)
+assert.equal(template.match(/<CadenceEmptyState\b/g)?.length, 1)
 
 for (const childProp of [
   "rows",
@@ -130,24 +182,6 @@ for (const childProp of [
 
 for (const binding of [
   "props.presentation.root.attrs",
-  "props.presentation.header.attrs",
-  "props.presentation.header.body.attrs",
-  "props.presentation.header.content.attrs",
-  "props.presentation.header.breadcrumbs.attrs",
-  "item.separator.attrs",
-  "item.link.attrs",
-  "item.current.attrs",
-  "props.presentation.header.title.attrs",
-  "props.presentation.header.title.suffix.attrs",
-  "props.presentation.header.subtitle.attrs",
-  "props.presentation.header.actions.attrs",
-  "props.presentation.header.actions.new_ground_station.attrs",
-  "props.presentation.empty_state.attrs",
-  "props.presentation.empty_state.title.attrs",
-  "props.presentation.empty_state.description.attrs",
-  "props.presentation.empty_state.action_container.attrs",
-  "props.presentation.empty_state.action.attrs",
-  "props.presentation.empty_state.action.icon.attrs",
   "props.presentation.card.attrs",
   "props.presentation.card.body.attrs",
   "props.presentation.card.list_component.attrs",
@@ -155,22 +189,112 @@ for (const binding of [
   assert.ok(template.includes(`v-bind="${binding}"`), `${binding} stays DTO-owned`)
 }
 
-for (const textBinding of [
-  "item.separator.text",
-  "item.link.text",
-  "item.current.text",
-  "props.presentation.header.title.text",
-  "props.presentation.header.title.suffix.text",
-  "props.presentation.header.subtitle.text",
-  "props.presentation.header.actions.new_ground_station.text",
-  "props.presentation.empty_state.title.text",
-  "props.presentation.empty_state.description.text",
-  "props.presentation.empty_state.action.text",
+assertInOrder(
+  template,
+  [
+    'v-bind="props.presentation.root.attrs"',
+    "<CadencePageHeader",
+    ':header="props.presentation.header"',
+    ':action="props.presentation.header.actions.new_ground_station"',
+    "<CadenceEmptyState",
+    'v-if="props.presentation.empty_state"',
+    ':empty-state="props.presentation.empty_state"',
+    'v-else-if="props.presentation.card"',
+    'v-bind="props.presentation.card.attrs"',
+    'v-bind="props.presentation.card.body.attrs"',
+    'v-bind="props.presentation.card.list_component.attrs"',
+    "<CommsGroundStationList",
+  ],
+  "Ground Station page composition",
+)
+
+assert.match(breadcrumbsScript, /defineProps<\{breadcrumbs: BreadcrumbsPresentation\}>\(\)/)
+assertInOrder(
+  breadcrumbsTemplate,
+  [
+    '<nav v-bind="props.breadcrumbs.attrs">',
+    'v-for="item in props.breadcrumbs.items"',
+    'v-if="item.separator"',
+    'v-bind="item.separator.attrs"',
+    "{{ item.separator.text }}",
+    'v-if="item.link"',
+    'v-bind="item.link.attrs"',
+    "{{ item.link.text }}",
+    'v-if="item.current"',
+    'v-bind="item.current.attrs"',
+    "{{ item.current.text }}",
+  ],
+  "breadcrumb elements",
+)
+
+assert.match(pageHeaderScript, /import CadenceBreadcrumbs from "\.\/CadenceBreadcrumbs\.vue"/)
+assert.match(pageHeaderScript, /header: PageHeaderPresentation/)
+assert.match(pageHeaderScript, /action: PageHeaderAction/)
+assert.equal(pageHeaderTemplate.match(/<CadenceBreadcrumbs\b/g)?.length, 1)
+assertInOrder(
+  pageHeaderTemplate,
+  [
+    '<header v-bind="props.header.attrs">',
+    'v-bind="props.header.body.attrs"',
+    'v-bind="props.header.content.attrs"',
+    ':breadcrumbs="props.header.breadcrumbs"',
+    'v-bind="props.header.title.attrs"',
+    "{{ props.header.title.text }}",
+    'v-bind="props.header.title.suffix.attrs"',
+    "{{ props.header.title.suffix.text }}",
+    'v-bind="props.header.subtitle.attrs"',
+    "{{ props.header.subtitle.text }}",
+    'v-bind="props.header.actions.attrs"',
+    'v-bind="props.action.attrs"',
+    'v-if="props.action.icon"',
+    'v-bind="props.action.icon.attrs"',
+    "{{ props.action.text }}",
+  ],
+  "page-header elements",
+)
+
+assert.match(emptyStateScript, /defineProps<\{emptyState: EmptyStatePresentation\}>\(\)/)
+assertInOrder(
+  emptyStateTemplate,
+  [
+    '<div v-bind="props.emptyState.attrs">',
+    'v-bind="props.emptyState.title.attrs"',
+    "{{ props.emptyState.title.text }}",
+    'v-bind="props.emptyState.description.attrs"',
+    "{{ props.emptyState.description.text }}",
+    'v-bind="props.emptyState.action_container.attrs"',
+    'v-bind="props.emptyState.action.attrs"',
+    'v-bind="props.emptyState.action.icon.attrs"',
+    "{{ props.emptyState.action.text }}",
+  ],
+  "empty-state elements",
+)
+
+assert.match(pageShellTypesSource, /icon\?: ElementPresentation \| null/)
+assert.equal(
+  [breadcrumbsTemplate, pageHeaderTemplate, emptyStateTemplate].join("\n").match(/<a\b/g)
+    ?.length,
+  3,
+  "the extracted shell retains the three existing anchor positions",
+)
+
+for (const componentSource of [
+  breadcrumbsSource,
+  pageHeaderSource,
+  emptyStateSource,
+  pageShellTypesSource,
 ]) {
-  assert.ok(template.includes(`{{ ${textBinding} }}`), `${textBinding} stays DTO-owned`)
+  assert.doesNotMatch(componentSource, /reka-ui|ui\/reka/)
+  assert.doesNotMatch(
+    componentSource,
+    /\/missions|Ground Stations|No ground stations|New Ground Station|data-phx-link|phx-change|phx-click/,
+  )
+  assert.doesNotMatch(
+    componentSource,
+    /computed|ref\(|watch\(|fetch\(|defineEmits|useRoute|router|\.sort|\.filter|\.slice|Math\./,
+  )
 }
 
-assert.match(template, /v-if="props\.presentation\.empty_state"/)
 assert.match(template, /v-else-if="props\.presentation\.card"/)
 assert.match(
   template,
@@ -312,6 +436,12 @@ const presentationSource = sourceSlice(
   "  defp ground_station_table_row(ground_station, mission_id) do",
   "Ground Station List page presentation DTO",
 )
+const headerPresentationSource = sourceSlice(
+  liveViewSource,
+  "  defp header_presentation(mission, ground_station_count, new_ground_station_path) do",
+  "  defp breadcrumbs_presentation(mission) do",
+  "Ground Station List header presentation DTO",
+)
 
 for (const topLevelKey of ["root", "header", "empty_state", "card"]) {
   assert.ok(presentationSource.includes(`"${topLevelKey}" =>`), `${topLevelKey} stays in presentation`)
@@ -361,6 +491,12 @@ assert.match(presentationSource, /"data-phx-link" => "redirect"/)
 assert.match(presentationSource, /"data-phx-link-state" => "push"/)
 assert.match(presentationSource, /empty_state_presentation\(ground_stations_empty\?,/)
 assert.match(presentationSource, /card_presentation\(\s*ground_stations_empty\?,/)
+assert.match(headerPresentationSource, /"new_ground_station" => %\{/)
+assert.doesNotMatch(
+  headerPresentationSource,
+  /"icon" =>/,
+  "the Ground Station header action remains the icon-free optional-action case",
+)
 
 for (const childProp of [
   '"rows" => rows',
