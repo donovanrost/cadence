@@ -9,14 +9,14 @@ const scenarioLedger = [
   "Phoenix owns mission-scoped TransportStore loading, counts, empty/card selection, and row decisions",
   "Phoenix retains in-memory filtering, whitelisted sorting, pagination slicing and clamping, and patch URLs",
   "handle_params recomputes the complete presentation and every existing child prop",
-  "CommsTransportListPage directly composes the immutable CommsTransportList child exactly once",
-  "the page root, breadcrumbs, header, count, actions, empty state, card, child host, copy, and classes stay exact",
+  "CommsTransportListPage composes shared Cadence shell components and the immutable child once",
+  "the shared breadcrumbs, header, optional action icon, empty state, and page-owned card stay exact",
   "breadcrumb, create, and transport-detail links retain LiveView redirect navigation semantics",
   "the immutable child retains search, sort, pagination, and link event attributes",
   "all eleven pre-migration transport scenarios and their oracles remain one-for-one in the broad test file",
   "focused JSON-totality and raw HEEx attribute semantics are covered",
   "the authenticated comms route, mission mounts, and mission-sidebar layout remain unchanged",
-  "only the explicitly immutable child is hashed; other contracts use semantic source slices",
+  "only the immutable child is hashed; page and shared Cadence components use semantic contracts",
 ]
 
 assert.equal(
@@ -29,6 +29,10 @@ assert.equal(scenarioLedger.length, 12)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const pagePath = resolve(__dirname, "../vue/CommsTransportListPage.vue")
 const childPath = resolve(__dirname, "../vue/CommsTransportList.vue")
+const breadcrumbsPath = resolve(__dirname, "../vue/ui/components/CadenceBreadcrumbs.vue")
+const pageHeaderPath = resolve(__dirname, "../vue/ui/components/CadencePageHeader.vue")
+const emptyStatePath = resolve(__dirname, "../vue/ui/components/CadenceEmptyState.vue")
+const pageShellTypesPath = resolve(__dirname, "../vue/ui/components/page_shell.ts")
 const liveViewPath = resolve(
   __dirname,
   "../../lib/cadence_web/live/comms_transport_list_live.ex",
@@ -39,14 +43,27 @@ const liveViewTestPath = resolve(
 )
 const routerPath = resolve(__dirname, "../../lib/cadence_web/router.ex")
 
-const [pageSource, childSource, liveViewSource, liveViewTestSource, routerSource] =
-  await Promise.all([
-    readFile(pagePath, "utf8"),
-    readFile(childPath, "utf8"),
-    readFile(liveViewPath, "utf8"),
-    readFile(liveViewTestPath, "utf8"),
-    readFile(routerPath, "utf8"),
-  ])
+const [
+  pageSource,
+  childSource,
+  breadcrumbsSource,
+  pageHeaderSource,
+  emptyStateSource,
+  pageShellTypesSource,
+  liveViewSource,
+  liveViewTestSource,
+  routerSource,
+] = await Promise.all([
+  readFile(pagePath, "utf8"),
+  readFile(childPath, "utf8"),
+  readFile(breadcrumbsPath, "utf8"),
+  readFile(pageHeaderPath, "utf8"),
+  readFile(emptyStatePath, "utf8"),
+  readFile(pageShellTypesPath, "utf8"),
+  readFile(liveViewPath, "utf8"),
+  readFile(liveViewTestPath, "utf8"),
+  readFile(routerPath, "utf8"),
+])
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)
@@ -56,7 +73,7 @@ const sourceSlice = (source, start, end, label) => {
   return source.slice(startIndex, endIndex)
 }
 
-const assertBalancedTemplate = (source) => {
+const assertBalancedTemplate = (source, label) => {
   const stack = []
   const voidElements = new Set([
     "area",
@@ -76,13 +93,34 @@ const assertBalancedTemplate = (source) => {
     const name = match[1]
 
     if (token.startsWith("</")) {
-      assert.equal(stack.pop(), name, `${name} closes the current SFC element`)
+      assert.equal(stack.pop(), name, `${name} closes the current ${label} element`)
     } else if (!token.endsWith("/>") && !voidElements.has(name)) {
       stack.push(name)
     }
   }
 
-  assert.deepEqual(stack, [], "CommsTransportListPage.vue template tags are balanced")
+  assert.deepEqual(stack, [], `${label} template tags are balanced`)
+}
+
+const sfcParts = (source, label) => {
+  const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
+  const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
+
+  assert.ok(script, `${label} must have a TypeScript script setup block`)
+  assert.ok(template, `${label} must have a template block`)
+  assertBalancedTemplate(template, label)
+
+  return {script, template}
+}
+
+const assertInOrder = (source, contracts, label) => {
+  let previousIndex = -1
+
+  for (const contract of contracts) {
+    const index = source.indexOf(contract, previousIndex + 1)
+    assert.ok(index > previousIndex, `${label} preserves ${contract} in order`)
+    previousIndex = index
+  }
 }
 
 assert.equal(
@@ -91,71 +129,143 @@ assert.equal(
   "CommsTransportList.vue remains byte-for-byte immutable",
 )
 
-const script = pageSource.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
-const template = pageSource.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
-
-assert.ok(script, "CommsTransportListPage.vue must have a TypeScript script setup block")
-assert.ok(template, "CommsTransportListPage.vue must have a template block")
-assertBalancedTemplate(template)
+const {script, template} = sfcParts(pageSource, "CommsTransportListPage.vue")
+const {script: breadcrumbsScript, template: breadcrumbsTemplate} = sfcParts(
+  breadcrumbsSource,
+  "CadenceBreadcrumbs.vue",
+)
+const {script: pageHeaderScript, template: pageHeaderTemplate} = sfcParts(
+  pageHeaderSource,
+  "CadencePageHeader.vue",
+)
+const {script: emptyStateScript, template: emptyStateTemplate} = sfcParts(
+  emptyStateSource,
+  "CadenceEmptyState.vue",
+)
 
 assert.match(script, /^import CommsTransportList from "\.\/CommsTransportList\.vue"$/m)
 assert.equal(script.match(/import .*CommsTransportList\.vue/g)?.length, 1)
+assert.match(script, /import CadenceEmptyState from "\.\/ui\/components\/CadenceEmptyState\.vue"/)
+assert.match(script, /import CadencePageHeader from "\.\/ui\/components\/CadencePageHeader\.vue"/)
 assert.match(
   script,
   /type CommsTransportListProps = InstanceType<typeof CommsTransportList>\["\$props"\]/,
 )
+assert.match(script, /header: PageHeaderPresentation &/)
+assert.match(script, /new_transport: PageHeaderAction/)
+assert.match(script, /empty_state: EmptyStatePresentation \| null/)
 assert.match(script, /defineProps<\{presentation: Presentation\}>\(\)/)
 assert.doesNotMatch(script, /computed|ref\(|watch\(|fetch\(|defineEmits|useRoute|router/)
 
-const exactBindings = [
-  'v-bind="props.presentation.root.attrs"',
-  'v-bind="props.presentation.header.attrs"',
-  'v-bind="props.presentation.header.body.attrs"',
-  'v-bind="props.presentation.header.content.attrs"',
-  'v-bind="props.presentation.header.breadcrumbs.attrs"',
-  'v-for="item in props.presentation.header.breadcrumbs.items"',
-  'v-if="item.separator"',
-  'v-bind="item.separator.attrs"',
-  "{{ item.separator.text }}",
-  'v-if="item.link"',
-  'v-bind="item.link.attrs"',
-  "{{ item.link.text }}",
-  'v-if="item.current"',
-  'v-bind="item.current.attrs"',
-  "{{ item.current.text }}",
-  'v-bind="props.presentation.header.title.attrs"',
-  "{{ props.presentation.header.title.text }}",
-  'v-bind="props.presentation.header.title.suffix.attrs"',
-  "{{ props.presentation.header.title.suffix.text }}",
-  'v-bind="props.presentation.header.subtitle.attrs"',
-  "{{ props.presentation.header.subtitle.text }}",
-  'v-bind="props.presentation.header.actions.attrs"',
-  'v-bind="props.presentation.header.actions.new_transport.attrs"',
-  'v-bind="props.presentation.header.actions.new_transport.icon.attrs"',
-  "{{ props.presentation.header.actions.new_transport.text }}",
-  'v-if="props.presentation.empty_state"',
-  'v-bind="props.presentation.empty_state.attrs"',
-  'v-bind="props.presentation.empty_state.title.attrs"',
-  "{{ props.presentation.empty_state.title.text }}",
-  'v-bind="props.presentation.empty_state.description.attrs"',
-  "{{ props.presentation.empty_state.description.text }}",
-  'v-bind="props.presentation.empty_state.action_container.attrs"',
-  'v-bind="props.presentation.empty_state.action.attrs"',
-  'v-bind="props.presentation.empty_state.action.icon.attrs"',
-  "{{ props.presentation.empty_state.action.text }}",
-  'v-else-if="props.presentation.card"',
-  'v-bind="props.presentation.card.attrs"',
-  'v-bind="props.presentation.card.body.attrs"',
-  'v-bind="props.presentation.card.list_component.attrs"',
-  '<CommsTransportList v-bind="props.presentation.card.list_component.props" />',
-]
+assert.equal(template.match(/<CommsTransportList\b/g)?.length, 1)
+assert.equal(template.match(/<CadencePageHeader\b/g)?.length, 1)
+assert.equal(template.match(/<CadenceEmptyState\b/g)?.length, 1)
+assertInOrder(
+  template,
+  [
+    'v-bind="props.presentation.root.attrs"',
+    "<CadencePageHeader",
+    ':header="props.presentation.header"',
+    ':action="props.presentation.header.actions.new_transport"',
+    "<CadenceEmptyState",
+    'v-if="props.presentation.empty_state"',
+    ':empty-state="props.presentation.empty_state"',
+    'v-else-if="props.presentation.card"',
+    'v-bind="props.presentation.card.attrs"',
+    'v-bind="props.presentation.card.body.attrs"',
+    'v-bind="props.presentation.card.list_component.attrs"',
+    '<CommsTransportList v-bind="props.presentation.card.list_component.props" />',
+  ],
+  "transport page composition",
+)
 
-for (const binding of exactBindings) {
-  assert.ok(template.includes(binding), `CommsTransportListPage.vue preserves ${binding}`)
+assert.match(breadcrumbsScript, /defineProps<\{breadcrumbs: BreadcrumbsPresentation\}>\(\)/)
+assertInOrder(
+  breadcrumbsTemplate,
+  [
+    '<nav v-bind="props.breadcrumbs.attrs">',
+    'v-for="item in props.breadcrumbs.items"',
+    'v-if="item.separator"',
+    'v-bind="item.separator.attrs"',
+    "{{ item.separator.text }}",
+    'v-if="item.link"',
+    'v-bind="item.link.attrs"',
+    "{{ item.link.text }}",
+    'v-if="item.current"',
+    'v-bind="item.current.attrs"',
+    "{{ item.current.text }}",
+  ],
+  "breadcrumb elements",
+)
+
+assert.match(pageHeaderScript, /import CadenceBreadcrumbs from "\.\/CadenceBreadcrumbs\.vue"/)
+assert.match(pageHeaderScript, /header: PageHeaderPresentation/)
+assert.match(pageHeaderScript, /action: PageHeaderAction/)
+assert.equal(pageHeaderTemplate.match(/<CadenceBreadcrumbs\b/g)?.length, 1)
+assertInOrder(
+  pageHeaderTemplate,
+  [
+    '<header v-bind="props.header.attrs">',
+    'v-bind="props.header.body.attrs"',
+    'v-bind="props.header.content.attrs"',
+    ':breadcrumbs="props.header.breadcrumbs"',
+    'v-bind="props.header.title.attrs"',
+    "{{ props.header.title.text }}",
+    'v-bind="props.header.title.suffix.attrs"',
+    "{{ props.header.title.suffix.text }}",
+    'v-bind="props.header.subtitle.attrs"',
+    "{{ props.header.subtitle.text }}",
+    'v-bind="props.header.actions.attrs"',
+    'v-bind="props.action.attrs"',
+    'v-if="props.action.icon"',
+    'v-bind="props.action.icon.attrs"',
+    "{{ props.action.text }}",
+  ],
+  "page-header elements",
+)
+
+assert.match(emptyStateScript, /defineProps<\{emptyState: EmptyStatePresentation\}>\(\)/)
+assertInOrder(
+  emptyStateTemplate,
+  [
+    '<div v-bind="props.emptyState.attrs">',
+    'v-bind="props.emptyState.title.attrs"',
+    "{{ props.emptyState.title.text }}",
+    'v-bind="props.emptyState.description.attrs"',
+    "{{ props.emptyState.description.text }}",
+    'v-bind="props.emptyState.action_container.attrs"',
+    'v-bind="props.emptyState.action.attrs"',
+    'v-bind="props.emptyState.action.icon.attrs"',
+    "{{ props.emptyState.action.text }}",
+  ],
+  "empty-state elements",
+)
+
+assert.match(pageShellTypesSource, /icon\?: ElementPresentation \| null/)
+assert.equal(
+  [breadcrumbsTemplate, pageHeaderTemplate, emptyStateTemplate].join("\n").match(/<a\b/g)
+    ?.length,
+  3,
+  "the extracted shell retains the three existing anchor positions",
+)
+
+for (const componentSource of [
+  breadcrumbsSource,
+  pageHeaderSource,
+  emptyStateSource,
+  pageShellTypesSource,
+]) {
+  assert.doesNotMatch(componentSource, /reka-ui|ui\/reka/)
+  assert.doesNotMatch(
+    componentSource,
+    /\/missions|Transports|No transports|New Transport|data-phx-link|phx-change|phx-click/,
+  )
+  assert.doesNotMatch(
+    componentSource,
+    /computed|ref\(|watch\(|fetch\(|defineEmits|useRoute|router|\.sort|\.filter|\.slice|Math\./,
+  )
 }
 
-assert.equal(template.match(/<CommsTransportList\b/g)?.length, 1)
-assert.equal(template.match(/<a\b/g)?.length, 3)
 assert.doesNotMatch(
   pageSource,
   /\/missions|Transports|No transports|New Transport|Create the first transport|space-y-6|btn btn-primary|data-phx-link|phx-change|phx-click/,
@@ -260,6 +370,12 @@ const presentationSource = sourceSlice(
   "  defp transport_summary(transport) do",
   "transport-list page presentation DTO",
 )
+const headerPresentationSource = sourceSlice(
+  liveViewSource,
+  "  defp header_presentation(mission, transport_count, new_transport_path) do",
+  "  defp breadcrumbs_presentation(mission) do",
+  "transport-list header presentation DTO",
+)
 
 for (const text of [
   "Transports",
@@ -316,7 +432,12 @@ assert.match(presentationSource, /"data-phx-link-state" => "push"/)
 assert.match(presentationSource, /"aria-hidden" => "true"/)
 assert.match(presentationSource, /empty_state_presentation\(transports_empty\?, new_transport_path\)/)
 assert.match(presentationSource, /card_presentation\(transports_empty\?, rows, list, total\)/)
+assert.match(presentationSource, /"id" => "comms-transports-page"/)
+assert.match(presentationSource, /"id" => "new-transport-link"/)
 assert.match(presentationSource, /"id" => "transports-list-component"/)
+assert.match(headerPresentationSource, /"new_transport" => %\{/)
+assert.match(headerPresentationSource, /"icon" => %\{/)
+assert.match(headerPresentationSource, /"class" => "hero-plus h-4 w-4"/)
 
 for (const decision of [
   "defp transport_table_row(transport, mission_id)",
