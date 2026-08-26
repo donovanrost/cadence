@@ -1,67 +1,19 @@
 <script setup lang="ts">
 import ClipboardButton from "./ClipboardButton.vue"
-
-type AttrValue = string | number | boolean | null
-type Attrs = Record<string, AttrValue>
-
-type TextPresentation = {
-  class: string
-  text: string
-}
-
-type Row = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation & {attrs: Attrs}
-}
-
-type RowSection = {
-  attrs: Attrs
-  heading: TextPresentation
-  list_class: string
-  rows: Row[]
-}
+import DataLinkFormPresentation from "./data_link_inspector/FormPresentation.vue"
+import DataLinkRowSection from "./data_link_inspector/RowSection.vue"
+import type {
+  Attrs,
+  EffectPresentation as Effect,
+  FormPresentation,
+  RowPresentation as Row,
+  RowSectionPresentation as RowSection,
+  TextPresentation,
+} from "./data_link_inspector/presentation_types"
 
 type Outcome = {
   attrs: Attrs
   message: string | null
-}
-
-type Option = {
-  label: string
-  value: string
-  selected: boolean
-  disabled: boolean
-  title: string | null
-}
-
-type FormField = {
-  wrapper_class: string
-  label: TextPresentation
-  attrs: Attrs
-  options?: Option[]
-}
-
-type FormPresentation = {
-  attrs: Attrs
-  hidden_fields: Attrs[]
-  fields: FormField[]
-  confirmation: {
-    row: {attrs: Attrs}
-    input: {attrs: Attrs}
-    label: TextPresentation
-  }
-  submit: {
-    attrs: Attrs
-    icon_class: string
-    text: string
-  }
-}
-
-type Effect = {
-  attrs: Attrs
-  label: TextPresentation
-  summary: {attrs: Attrs; text: string}
 }
 
 type WorkflowExplanation = {
@@ -193,15 +145,7 @@ defineProps<{presentation: Presentation}>()
     {{ presentation.action_outcome.message }}
   </div>
 
-  <section v-if="presentation.selection" v-bind="presentation.selection.attrs">
-    <h3 :class="presentation.selection.heading.class">{{ presentation.selection.heading.text }}</h3>
-    <dl :class="presentation.selection.list_class">
-      <template v-for="row in presentation.selection.rows" :key="row.key">
-        <dt :class="row.label.class">{{ row.label.text }}</dt>
-        <dd :class="row.value.class" v-bind="row.value.attrs">{{ row.value.text }}</dd>
-      </template>
-    </dl>
-  </section>
+  <DataLinkRowSection v-if="presentation.selection" :presentation="presentation.selection" />
 
   <section
     v-if="presentation.workflow_explanation"
@@ -241,60 +185,12 @@ defineProps<{presentation: Presentation}>()
         {{ presentation.revision_decision.header.badge.text }}
       </span>
     </div>
-    <form v-bind="presentation.revision_decision.form.attrs">
-      <input
-        v-for="field in presentation.revision_decision.form.hidden_fields"
-        :key="String(field.id)"
-        v-bind="field"
-      >
-      <div
-        id="dashboard-revision-decision-effect-preview"
-        class="grid grid-cols-1 gap-1 text-[0.68rem] sm:grid-cols-2"
-      >
-        <div
-          v-for="effect in presentation.revision_decision.effects"
-          :key="String(effect.attrs['data-revision-decision-effect'])"
-          v-bind="effect.attrs"
-        >
-          <div :class="effect.label.class">{{ effect.label.text }}</div>
-          <div v-bind="effect.summary.attrs">{{ effect.summary.text }}</div>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 gap-2">
-        <div
-          v-for="field in presentation.revision_decision.form.fields"
-          :key="String(field.attrs.id)"
-          :class="field.wrapper_class"
-        >
-          <label>
-            <span :class="field.label.class">{{ field.label.text }}</span>
-            <select v-if="field.options" v-bind="field.attrs">
-              <option
-                v-for="option in field.options"
-                :key="option.value"
-                :value="option.value"
-                :selected="option.selected"
-                :disabled="option.disabled"
-                :title="option.title"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-            <input v-else v-bind="field.attrs">
-          </label>
-        </div>
-      </div>
-      <label v-bind="presentation.revision_decision.form.confirmation.row.attrs">
-        <input v-bind="presentation.revision_decision.form.confirmation.input.attrs">
-        <span :class="presentation.revision_decision.form.confirmation.label.class">
-          {{ presentation.revision_decision.form.confirmation.label.text }}
-        </span>
-      </label>
-      <button v-bind="presentation.revision_decision.form.submit.attrs">
-        <span :class="presentation.revision_decision.form.submit.icon_class"></span>
-        {{ presentation.revision_decision.form.submit.text }}
-      </button>
-    </form>
+    <DataLinkFormPresentation
+      :presentation="presentation.revision_decision.form"
+      :effects="presentation.revision_decision.effects"
+      effects_id="dashboard-revision-decision-effect-preview"
+      effect_key_attribute="data-revision-decision-effect"
+    />
   </section>
 
   <section v-if="presentation.late_data_policy" v-bind="presentation.late_data_policy.attrs">
@@ -317,60 +213,12 @@ defineProps<{presentation: Presentation}>()
     >
       {{ presentation.late_data_policy.action_outcome.message }}
     </div>
-    <form v-bind="presentation.late_data_policy.form.attrs">
-      <input
-        v-for="field in presentation.late_data_policy.form.hidden_fields"
-        :key="String(field.id)"
-        v-bind="field"
-      >
-      <div
-        id="dashboard-late-data-policy-effect-preview"
-        class="grid grid-cols-1 gap-1 text-[0.68rem] sm:grid-cols-2"
-      >
-        <div
-          v-for="effect in presentation.late_data_policy.effects"
-          :key="String(effect.attrs['data-late-data-policy-effect'])"
-          v-bind="effect.attrs"
-        >
-          <div :class="effect.label.class">{{ effect.label.text }}</div>
-          <div v-bind="effect.summary.attrs">{{ effect.summary.text }}</div>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 gap-2">
-        <div
-          v-for="field in presentation.late_data_policy.form.fields"
-          :key="String(field.attrs.id)"
-          :class="field.wrapper_class"
-        >
-          <label>
-            <span :class="field.label.class">{{ field.label.text }}</span>
-            <select v-if="field.options" v-bind="field.attrs">
-              <option
-                v-for="option in field.options"
-                :key="option.value"
-                :value="option.value"
-                :selected="option.selected"
-                :disabled="option.disabled"
-                :title="option.title"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-            <input v-else v-bind="field.attrs">
-          </label>
-        </div>
-      </div>
-      <label v-bind="presentation.late_data_policy.form.confirmation.row.attrs">
-        <input v-bind="presentation.late_data_policy.form.confirmation.input.attrs">
-        <span :class="presentation.late_data_policy.form.confirmation.label.class">
-          {{ presentation.late_data_policy.form.confirmation.label.text }}
-        </span>
-      </label>
-      <button v-bind="presentation.late_data_policy.form.submit.attrs">
-        <span :class="presentation.late_data_policy.form.submit.icon_class"></span>
-        {{ presentation.late_data_policy.form.submit.text }}
-      </button>
-    </form>
+    <DataLinkFormPresentation
+      :presentation="presentation.late_data_policy.form"
+      :effects="presentation.late_data_policy.effects"
+      effects_id="dashboard-late-data-policy-effect-preview"
+      effect_key_attribute="data-late-data-policy-effect"
+    />
   </section>
 
   <a
@@ -395,15 +243,7 @@ defineProps<{presentation: Presentation}>()
     </button>
   </section>
 
-  <section v-if="presentation.record" v-bind="presentation.record.attrs">
-    <h3 :class="presentation.record.heading.class">{{ presentation.record.heading.text }}</h3>
-    <dl :class="presentation.record.list_class">
-      <template v-for="row in presentation.record.rows" :key="row.key">
-        <dt :class="row.label.class">{{ row.label.text }}</dt>
-        <dd :class="row.value.class" v-bind="row.value.attrs">{{ row.value.text }}</dd>
-      </template>
-    </dl>
-  </section>
+  <DataLinkRowSection v-if="presentation.record" :presentation="presentation.record" />
 
   <section v-if="presentation.related" v-bind="presentation.related.attrs">
     <h3 :class="presentation.related.heading.class">{{ presentation.related.heading.text }}</h3>
@@ -431,15 +271,8 @@ defineProps<{presentation: Presentation}>()
     </div>
   </section>
 
-  <section v-if="presentation.runtime_context" v-bind="presentation.runtime_context.attrs">
-    <h3 :class="presentation.runtime_context.heading.class">
-      {{ presentation.runtime_context.heading.text }}
-    </h3>
-    <dl :class="presentation.runtime_context.list_class">
-      <template v-for="row in presentation.runtime_context.rows" :key="row.key">
-        <dt :class="row.label.class">{{ row.label.text }}</dt>
-        <dd :class="row.value.class" v-bind="row.value.attrs">{{ row.value.text }}</dd>
-      </template>
-    </dl>
-  </section>
+  <DataLinkRowSection
+    v-if="presentation.runtime_context"
+    :presentation="presentation.runtime_context"
+  />
 </template>

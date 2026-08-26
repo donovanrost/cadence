@@ -5,6 +5,13 @@ import {fileURLToPath} from "node:url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const vuePath = resolve(__dirname, "../vue/DataLinkInspectorPanel.vue")
+const rowSectionPath = resolve(__dirname, "../vue/data_link_inspector/RowSection.vue")
+const formPresentationPath = resolve(__dirname, "../vue/data_link_inspector/FormPresentation.vue")
+const effectsListPath = resolve(__dirname, "../vue/data_link_inspector/EffectsList.vue")
+const presentationTypesPath = resolve(
+  __dirname,
+  "../vue/data_link_inspector/presentation_types.ts"
+)
 const dashboardPanelPath = resolve(__dirname, "../vue/DashboardPanel.vue")
 const formComponentsPath = resolve(
   __dirname,
@@ -25,6 +32,10 @@ const viewportSmokePath = resolve(__dirname, "./dashboard_viewport_smoke.mjs")
 
 const [
   vueSource,
+  rowSectionSource,
+  formPresentationSource,
+  effectsListSource,
+  presentationTypesSource,
   dashboardPanelSource,
   formComponentsSource,
   presentationSource,
@@ -35,6 +46,10 @@ const [
   viewportSmokeSource
 ] = await Promise.all([
   readFile(vuePath, "utf8"),
+  readFile(rowSectionPath, "utf8"),
+  readFile(formPresentationPath, "utf8"),
+  readFile(effectsListPath, "utf8"),
+  readFile(presentationTypesPath, "utf8"),
   readFile(dashboardPanelPath, "utf8"),
   readFile(formComponentsPath, "utf8"),
   readFile(presentationPath, "utf8"),
@@ -140,10 +155,69 @@ assert.equal(
 assert.doesNotMatch(vueSource, /v-component|<\.vue/)
 assert.doesNotMatch(vueSource, /data-name/)
 
-assert.match(vueSource, /<form v-bind="presentation\.revision_decision\.form\.attrs">/)
-assert.match(vueSource, /<form v-bind="presentation\.late_data_policy\.form\.attrs">/)
-assert.match(vueSource, /v-bind="presentation\.revision_decision\.form\.confirmation\.input\.attrs"/)
-assert.match(vueSource, /v-bind="presentation\.late_data_policy\.form\.confirmation\.input\.attrs"/)
+assert.match(
+  vueSource,
+  /import DataLinkRowSection from "\.\/data_link_inspector\/RowSection\.vue"/
+)
+assert.match(
+  vueSource,
+  /import DataLinkFormPresentation from "\.\/data_link_inspector\/FormPresentation\.vue"/
+)
+assert.equal(
+  vueSource.match(/<DataLinkRowSection\b/g)?.length,
+  3,
+  "selection, record, and runtime context must share the row renderer one-for-one"
+)
+assert.equal(
+  vueSource.match(/<DataLinkFormPresentation\b/g)?.length,
+  2,
+  "revision decision and late-data policy must share the native form renderer one-for-one"
+)
+assert.match(vueSource, /v-if="presentation\.selection" :presentation="presentation\.selection"/)
+assert.match(vueSource, /v-if="presentation\.record" :presentation="presentation\.record"/)
+assert.match(vueSource, /v-if="presentation\.runtime_context"/)
+assert.match(vueSource, /:presentation="presentation\.runtime_context"/)
+assert.match(vueSource, /:presentation="presentation\.revision_decision\.form"/)
+assert.match(vueSource, /:effects="presentation\.revision_decision\.effects"/)
+assert.match(vueSource, /effects_id="dashboard-revision-decision-effect-preview"/)
+assert.match(vueSource, /effect_key_attribute="data-revision-decision-effect"/)
+assert.match(vueSource, /:presentation="presentation\.late_data_policy\.form"/)
+assert.match(vueSource, /:effects="presentation\.late_data_policy\.effects"/)
+assert.match(vueSource, /effects_id="dashboard-late-data-policy-effect-preview"/)
+assert.match(vueSource, /effect_key_attribute="data-late-data-policy-effect"/)
+assert.doesNotMatch(vueSource, /<form\b/)
+
+assert.match(rowSectionSource, /<section v-bind="presentation\.attrs">/)
+assert.match(rowSectionSource, /<template v-for="row in presentation\.rows" :key="row\.key">/)
+assert.match(rowSectionSource, /<dt :class="row\.label\.class">/)
+assert.match(rowSectionSource, /<dd :class="row\.value\.class" v-bind="row\.value\.attrs">/)
+
+assert.match(formPresentationSource, /<form v-bind="presentation\.attrs">/)
+assert.match(formPresentationSource, /v-for="field in presentation\.hidden_fields"/)
+assert.match(formPresentationSource, /:key="String\(field\.id\)"/)
+assert.match(formPresentationSource, /<EffectsList/)
+assert.match(formPresentationSource, /v-for="field in presentation\.fields"/)
+assert.match(formPresentationSource, /<select v-if="field\.options" v-bind="field\.attrs">/)
+assert.match(formPresentationSource, /:selected="option\.selected"/)
+assert.match(formPresentationSource, /:disabled="option\.disabled"/)
+assert.match(formPresentationSource, /:title="option\.title"/)
+assert.match(formPresentationSource, /<input v-else v-bind="field\.attrs">/)
+assert.match(formPresentationSource, /v-bind="presentation\.confirmation\.input\.attrs"/)
+assert.match(formPresentationSource, /<button v-bind="presentation\.submit\.attrs">/)
+
+assert.match(effectsListSource, /<div :id="id" class="grid grid-cols-1 gap-1 text-\[0\.68rem\] sm:grid-cols-2">/)
+assert.match(effectsListSource, /v-for="effect in effects"/)
+assert.match(effectsListSource, /:key="String\(effect\.attrs\[key_attribute\]\)"/)
+assert.match(effectsListSource, /v-bind="effect\.attrs"/)
+assert.match(effectsListSource, /v-bind="effect\.summary\.attrs"/)
+
+assert.match(presentationTypesSource, /export type RowSectionPresentation =/)
+assert.match(presentationTypesSource, /export type FormPresentation =/)
+assert.match(presentationTypesSource, /export type EffectPresentation =/)
+assert.doesNotMatch(
+  [vueSource, rowSectionSource, formPresentationSource, effectsListSource].join("\n"),
+  /from "reka-ui"|ui\/reka/
+)
 assert.match(presentationSource, /as: :revision_decision/)
 assert.match(presentationSource, /as: :late_data_policy/)
 assert.match(presentationSource, /"phx-submit" => "apply_revision_decision"/)
