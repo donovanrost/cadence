@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import {onBeforeUnmount, ref, watch} from "vue"
 
+import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vue"
+import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
+import ApplicationStats from "./application_host/ApplicationStats.vue"
+import type {
+  Diagnostics,
+  Navigation,
+  Stat,
+  StatusTone
+} from "./application_host/presentation_types"
 import StatusBadge from "./StatusBadge.vue"
 
-type StatusTone = "ready" | "attention" | "blocked" | "info"
-type DiagnosticSeverity = "error" | "warning" | "info"
 type PacketGroupState = "available" | "selected" | "invalid" | "unavailable"
 
 type Host = {
@@ -14,20 +21,6 @@ type Host = {
   application_installation_id: string
   surface_id: string
   renderer: "trusted" | "declarative"
-}
-
-type NavigationItem = {
-  id: string
-  surface_id: string
-  label: string
-  href: string
-  current: boolean
-}
-
-type Navigation = {
-  id: string
-  label: string
-  items: NavigationItem[]
 }
 
 type Confirmation = {
@@ -58,39 +51,6 @@ type ActionFeedback = {
   code: string
   label: string
   message: string
-}
-
-type Stat = {
-  id: string
-  stat_id: string
-  label: string
-  value: string
-  tone: StatusTone
-  tone_label: string
-}
-
-type DiagnosticItem = {
-  id: string
-  diagnostic_id: string
-  code: string
-  severity: DiagnosticSeverity
-  title: string
-  detail: string
-  value: string | null
-}
-
-type Diagnostics = {
-  id: string
-  items_id: string
-  role: "alert" | "status"
-  severity: DiagnosticSeverity
-  count: number
-  total_count: number
-  count_label: string
-  label: string
-  title: string
-  description: string | null
-  items: DiagnosticItem[]
 }
 
 type FormOption = {
@@ -457,30 +417,6 @@ const feedbackIcons = {
   error: "hero-exclamation-triangle"
 }
 
-const diagnosticHeaderIcons: Record<DiagnosticSeverity, string> = {
-  error: "hero-exclamation-triangle",
-  warning: "hero-exclamation-circle",
-  info: "hero-information-circle"
-}
-
-const diagnosticHeaderIconClasses: Record<DiagnosticSeverity, string> = {
-  error: "border-error/35 bg-error/10 text-error",
-  warning: "border-warning/35 bg-warning/10 text-warning",
-  info: "border-info/35 bg-info/10 text-info"
-}
-
-const diagnosticRailClasses: Record<DiagnosticSeverity, string> = {
-  error: "bg-error",
-  warning: "bg-warning",
-  info: "bg-info"
-}
-
-const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
-  error: "hero-x-circle text-error",
-  warning: "hero-exclamation-circle text-warning",
-  info: "hero-information-circle text-info"
-}
-
 const activityRailClasses: Record<StatusTone, string> = {
   blocked: "bg-error",
   attention: "bg-warning",
@@ -502,26 +438,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
     :data-application-host="host.dom_id"
     :data-host-renderer="host.renderer"
   >
-  <nav
-    v-if="navigation"
-    :id="navigation.id"
-    :aria-label="navigation.label"
-    class="mb-5 flex flex-wrap items-center gap-1 border-b border-base-300/70"
-  >
-    <a
-      v-for="item in navigation.items"
-      :id="item.id"
-      :key="item.surface_id"
-      :href="item.href"
-      data-phx-link="redirect"
-      data-phx-link-state="push"
-      :aria-current="item.current ? 'page' : undefined"
-      class="relative -mb-px border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors"
-      :class="item.current
-        ? 'border-primary text-primary'
-        : 'border-transparent text-base-content/55 hover:border-base-content/30 hover:text-base-content'"
-    >{{ item.label }}</a>
-  </nav>
+  <ApplicationNavigation v-if="navigation" :navigation="navigation" />
 
   <div v-if="declarative_surface" :id="declarative_surface.id" class="space-y-6">
     <header class="border-b border-primary/20 pb-4">
@@ -561,105 +478,15 @@ const packetRailClasses: Record<PacketGroupState, string> = {
       </div>
     </aside>
 
-    <section
+    <ApplicationStats
       v-if="declarative_surface.stats.length > 0"
-      id="application-surface-stats"
-      class="grid gap-4 md:grid-cols-3"
-    >
-      <section
-        v-for="stat in declarative_surface.stats"
-        :id="stat.id"
-        :key="stat.stat_id"
-        class="card border border-base-300 bg-base-200"
-      >
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="hud-label">{{ stat.label }}</p>
-              <p class="mt-2 text-2xl font-semibold">{{ stat.value }}</p>
-            </div>
-            <StatusBadge :status="stat.tone" :label="stat.tone_label" />
-          </div>
-        </div>
-      </section>
-    </section>
+      :stats="declarative_surface.stats"
+    />
 
-    <section
+    <ApplicationDiagnostics
       v-if="declarative_surface.diagnostics"
-      :id="declarative_surface.diagnostics.id"
-      :role="declarative_surface.diagnostics.role"
-      aria-live="polite"
-      :data-diagnostic-severity="declarative_surface.diagnostics.severity"
-      :data-diagnostic-count="declarative_surface.diagnostics.count"
-      :data-diagnostic-total="declarative_surface.diagnostics.total_count"
-      class="overflow-hidden border border-base-300/80 bg-base-200/30"
-    >
-      <header class="grid gap-4 border-b border-base-300/70 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-        <div
-          class="grid size-9 place-items-center border"
-          :class="diagnosticHeaderIconClasses[declarative_surface.diagnostics.severity]"
-        >
-          <span
-            class="size-4"
-            :class="diagnosticHeaderIcons[declarative_surface.diagnostics.severity]"
-            aria-hidden="true"
-          ></span>
-        </div>
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 class="text-sm font-semibold uppercase tracking-[0.14em]">
-              {{ declarative_surface.diagnostics.title }}
-            </h2>
-            <span class="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-base-content/45">
-              {{ declarative_surface.diagnostics.count_label }}
-            </span>
-          </div>
-          <p
-            v-if="declarative_surface.diagnostics.description"
-            class="mt-1 text-sm text-base-content/65"
-          >{{ declarative_surface.diagnostics.description }}</p>
-        </div>
-        <StatusBadge
-          :status="declarative_surface.diagnostics.severity === 'error'
-            ? 'blocked'
-            : declarative_surface.diagnostics.severity === 'warning' ? 'attention' : 'info'"
-          :label="declarative_surface.diagnostics.label"
-        />
-      </header>
-
-      <div :id="declarative_surface.diagnostics.items_id" class="divide-y divide-base-300/60">
-        <article
-          v-for="item in declarative_surface.diagnostics.items"
-          :id="item.id"
-          :key="item.diagnostic_id"
-          :data-diagnostic-code="item.code"
-          :data-diagnostic-severity="item.severity"
-          class="group grid grid-cols-[0.25rem_minmax(0,1fr)_auto] gap-4 px-4 py-3"
-        >
-          <span class="rounded-full" :class="diagnosticRailClasses[item.severity]"></span>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-mono text-[0.62rem] uppercase tracking-[0.13em] text-base-content/45">
-                {{ item.code }}
-              </span>
-              <h3 class="text-sm font-medium text-base-content">{{ item.title }}</h3>
-            </div>
-            <p class="mt-1 text-xs leading-5 text-base-content/60">{{ item.detail }}</p>
-          </div>
-          <div class="flex items-center gap-3 self-center">
-            <span
-              v-if="item.value"
-              class="max-w-56 truncate font-mono text-xs text-base-content/65"
-            >{{ item.value }}</span>
-            <span
-              class="size-4 shrink-0"
-              :class="diagnosticItemIcons[item.severity]"
-              aria-hidden="true"
-            ></span>
-          </div>
-        </article>
-      </div>
-    </section>
+      :diagnostics="declarative_surface.diagnostics"
+    />
 
     <section
       v-if="declarative_surface.form"
