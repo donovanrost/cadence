@@ -6,6 +6,7 @@ import {fileURLToPath} from "node:url"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/WidgetInspectPanel.vue")
 const csvButtonPath = resolve(testDirectory, "../vue/CsvDownloadButton.vue")
+const cadenceButtonPath = resolve(testDirectory, "../vue/ui/components/CadenceButton.vue")
 const serverPath = resolve(
   testDirectory,
   "../../lib/cadence_web/live/ops_dashboard_show_live/widget_inspect_panel_components.ex",
@@ -34,6 +35,7 @@ const liveTestPath = resolve(
 const [
   source,
   csvButtonSource,
+  cadenceButtonSource,
   serverSource,
   callerSource,
   panelTestSource,
@@ -43,6 +45,7 @@ const [
 ] = await Promise.all([
   readFile(componentPath, "utf8"),
   readFile(csvButtonPath, "utf8"),
+  readFile(cadenceButtonPath, "utf8"),
   readFile(serverPath, "utf8"),
   readFile(callerPath, "utf8"),
   readFile(panelTestPath, "utf8"),
@@ -196,10 +199,14 @@ cover("direct CSV child contract", () => {
   assert.match(serverSource, /"#\{slug\}-inspect\.csv"/)
   assert.equal((serverSource.match(/v-component="CsvDownloadButton"/g) || []).length, 0)
   assert.match(csvButtonSource, /id="dashboard-widget-inspect-download"/)
+  assert.match(csvButtonSource, /import CadenceButton from "\.\/ui\/components\/CadenceButton\.vue"/)
+  assert.equal((csvButtonSource.match(/<CadenceButton\b/g) || []).length, 1)
   assert.match(csvButtonSource, /type="button"/)
   assert.match(csvButtonSource, /:disabled="props\.disabled"/)
   assert.match(csvButtonSource, /@click="downloadCsv"/)
   assert.match(csvButtonSource, /Download CSV/)
+  assert.match(cadenceButtonSource, /h\("button", null, slots\.default\?\.\(\)\)/)
+  assert.doesNotMatch(cadenceButtonSource, /class=|<template>|h\("div"|h\("span"/)
 })
 
 cover("stats strip and every stat value", () => {
@@ -279,7 +286,7 @@ cover("stable selectors classes and accessibility", () => {
     "No samples in the current window.",
     "The CSV download contains the full window.",
   ]
-  const ownedSource = `${serverSource}\n${source}\n${csvButtonSource}`
+  const ownedSource = `${serverSource}\n${source}\n${csvButtonSource}\n${cadenceButtonSource}`
 
   for (const token of stableTokens) {
     assert.ok(ownedSource.includes(token), `missing stable contract token: ${token}`)
@@ -289,7 +296,8 @@ cover("stable selectors classes and accessibility", () => {
   assert.match(template, /<h3 :class=/)
   assert.match(template, /<table :class=/)
   assert.match(template, /<th :class=/)
-  assert.match(csvButtonSource, /<button[\s\S]*Download CSV[\s\S]*<\/button>/)
+  assert.match(csvButtonSource, /<CadenceButton[\s\S]*Download CSV[\s\S]*<\/CadenceButton>/)
+  assert.match(cadenceButtonSource, /h\("button", null, slots\.default\?\.\(\)\)/)
 })
 
 assert.deepEqual(coveredScenarios, scenarioLedger)
