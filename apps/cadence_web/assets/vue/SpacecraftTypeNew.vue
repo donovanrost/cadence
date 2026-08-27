@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
 
 type Breadcrumb = {
   label: string
@@ -275,11 +277,14 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <section :id="form.sections.identity.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.identity.number }}</span>
-          <h2 class="hud-label">{{ form.sections.identity.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.identity.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.identity.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.display_name.id"
@@ -300,11 +305,14 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
       </section>
 
       <section :id="form.sections.protocols.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.protocols.number }}</span>
-          <h2 class="hud-label">{{ form.sections.protocols.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.protocols.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.protocols.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.downlink_protocol.id"
@@ -352,13 +360,14 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
       </section>
 
       <section :id="form.sections.frame_parameters.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">
-            {{ form.sections.frame_parameters.number }}
-          </span>
-          <h2 class="hud-label">{{ form.sections.frame_parameters.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.frame_parameters.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.frame_parameters.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <p class="text-sm text-base-content/70">
           {{ form.sections.frame_parameters.description }}
@@ -464,11 +473,14 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
       </section>
 
       <section :id="form.sections.applications.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.applications.number }}</span>
-          <h2 class="hud-label">{{ form.sections.applications.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.applications.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.applications.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <p class="text-sm text-base-content/70">
           {{ form.sections.applications.description }}
@@ -508,7 +520,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
         </div>
       </section>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
           {{ form.actions.submit.label }}
         </button>
@@ -519,7 +531,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
           data-phx-link-state="push"
           class="btn btn-ghost"
         >{{ form.actions.cancel.label }}</a>
-      </div>
+      </CadenceFormActions>
     </form>
   </div>
 </template>
