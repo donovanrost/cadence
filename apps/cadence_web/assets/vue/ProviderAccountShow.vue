@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -459,8 +460,7 @@ const revokeGrant = (grant: Grant) => {
       </div>
 
       <aside class="space-y-4">
-        <section :id="configuration.id" class="card bg-base-200 border border-base-300">
-          <div class="card-body p-6">
+        <CadenceCard :id="configuration.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
             <p class="hud-label">{{ configuration.title }}</p>
             <div class="mt-3 divide-y divide-base-300">
               <CadenceDataRow
@@ -475,11 +475,9 @@ const revokeGrant = (grant: Grant) => {
                 </span>
               </CadenceDataRow>
             </div>
-          </div>
-        </section>
+        </CadenceCard>
 
-        <section :id="ingestion.id" class="card bg-base-200 border border-base-300">
-          <div class="card-body p-6">
+        <CadenceCard :id="ingestion.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
             <p class="hud-label">{{ ingestion.title }}</p>
             <div class="mt-3 divide-y divide-base-300">
               <template v-for="row in ingestion.rows" :key="row.label">
@@ -509,18 +507,15 @@ const revokeGrant = (grant: Grant) => {
             <p class="mt-3 text-xs text-base-content/50">
               {{ ingestion.description }}
             </p>
-          </div>
-        </section>
+        </CadenceCard>
 
-        <section :id="guardrails.id" class="card bg-base-200 border border-base-300">
-          <div class="card-body p-6">
+        <CadenceCard :id="guardrails.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
             <p class="hud-label">{{ guardrails.title }}</p>
             <pre
               class="mt-3 max-h-72 overflow-auto bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
               v-text="guardrails.json"
             ></pre>
-          </div>
-        </section>
+        </CadenceCard>
       </aside>
     </div>
 

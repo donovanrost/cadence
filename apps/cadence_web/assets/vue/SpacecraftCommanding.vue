@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 
 type Status = {
   tone: "info"
@@ -81,13 +82,13 @@ defineProps<{
     </header>
 
     <section class="grid gap-4 lg:grid-cols-3">
-      <section
+      <CadenceCard
         v-for="panel in panels"
         :id="panel.id"
         :key="panel.id"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="hud-label mb-2">{{ panel.title }}</p>
@@ -96,12 +97,10 @@ defineProps<{
             <StatusBadge :status="panel.status.tone" :label="panel.status.label" />
           </div>
           <p class="mt-3 text-sm text-base-content/70">{{ panel.description }}</p>
-        </div>
-      </section>
+      </CadenceCard>
     </section>
 
-    <section class="card bg-base-200 border border-base-300">
-      <div class="card-body p-6">
+    <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="hud-label mb-2">{{ readiness.eyebrow }}</p>
@@ -114,7 +113,6 @@ defineProps<{
             <StatusBadge :status="readiness.status.tone" :label="readiness.status.label" />
           </div>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>

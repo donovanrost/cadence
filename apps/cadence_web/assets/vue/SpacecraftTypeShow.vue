@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 type NavigationItem = {
   label: string
@@ -109,11 +110,11 @@ defineProps<{
       </div>
     </header>
 
-    <section
+    <CadenceCard
       id="spacecraft-profile-byte-interpretation"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">{{ labels.byte_interpretation }}</p>
         <div class="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
           <CadenceDataRow
@@ -166,14 +167,13 @@ defineProps<{
             </CadenceDataRow>
           </div>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       id="spacecraft-profile-applications"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">{{ labels.applications }}</p>
         <ul v-if="profile.applications.length > 0" class="mt-4 space-y-2">
           <li
@@ -189,15 +189,14 @@ defineProps<{
         <p v-else class="mt-4 text-sm text-base-content/50 italic">
           {{ labels.no_applications }}
         </p>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       v-if="versions.length > 1"
       id="spacecraft-profile-version-history-card"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">{{ labels.version_history }}</p>
         <table id="spacecraft-profile-version-history" class="table mt-3">
           <thead>
@@ -221,7 +220,6 @@ defineProps<{
             </tr>
           </tbody>
         </table>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>

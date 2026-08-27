@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -144,11 +145,11 @@ defineProps<{
       </div>
     </header>
 
-    <section
+    <CadenceCard
       :id="profile_binding.id"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div class="space-y-2">
             <p class="hud-label">{{ profile_binding.eyebrow }}</p>
@@ -205,15 +206,14 @@ defineProps<{
             class="text-primary hover:underline"
           >{{ profile_binding.profile_action.label }}</a>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       v-if="applications.visible"
       :id="applications.id"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">{{ applications.title }}</p>
         <div class="mt-3 space-y-3">
           <p class="text-sm text-base-content/70">{{ applications.description }}</p>
@@ -256,17 +256,16 @@ defineProps<{
             class="mt-3 inline-flex text-sm text-primary hover:underline"
           >{{ applications.view_action.label }} →</a>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
     <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-3">
-      <section
+      <CadenceCard
         v-for="card in workflow_cards"
         :id="card.id"
         :key="card.id"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <div class="flex items-start justify-between gap-3">
             <p class="hud-label">{{ card.title }}</p>
             <StatusBadge :status="card.status.tone" :label="card.status.label" />
@@ -279,12 +278,10 @@ defineProps<{
             data-phx-link-state="push"
             class="mt-4 inline-flex text-sm text-primary hover:underline"
           >{{ card.action.label }} →</a>
-        </div>
-      </section>
+      </CadenceCard>
     </section>
 
-    <section class="card bg-base-200 border border-base-300">
-      <div class="card-body p-6">
+    <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <p class="hud-label">{{ overview.title }}</p>
         <div class="mt-3 grid gap-x-8 gap-y-1 md:grid-cols-2">
           <CadenceDataRow
@@ -339,7 +336,6 @@ defineProps<{
             <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{{ overview.metadata_json }}</pre>
           </details>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>
