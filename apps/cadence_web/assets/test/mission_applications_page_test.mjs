@@ -86,6 +86,24 @@ const assertBalancedTemplate = (source) => {
 }
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const migratedCardOpen = `    <CadenceCard
+      v-for="application in applications"
+      :id="application.id"
+      :key="application.id"
+      class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
+    >
+`
+const predecessorCardOpen = `    <section
+      v-for="application in applications"
+      :id="application.id"
+      :key="application.id"
+      class="card border border-base-300 bg-base-200"
+    >
+      <div class="card-body p-6">`
+const migratedCardClose = "\n    </CadenceCard>"
+const predecessorCardClose = "      </div>\n    </section>"
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const migratedDataRowOpen = `          <CadenceDataRow
             v-for="fact in application.status.facts"
@@ -99,12 +117,31 @@ const predecessorDataRowOpen = `          <div v-for="fact in application.status
 const migratedDataRowClose = "\n          </CadenceDataRow>"
 const predecessorDataRowClose = "\n          </div>"
 
+assert.equal(occurrences(childSource, cardImport), 1)
+assert.equal(occurrences(childSource, "<CadenceCard"), 1)
+assert.equal(occurrences(childSource, migratedCardOpen), 1)
+assert.equal(occurrences(childSource, migratedCardClose), 1)
 assert.equal(occurrences(childSource, dataRowImport), 1)
 assert.equal(occurrences(childSource, "<CadenceDataRow"), 1)
 assert.equal(occurrences(childSource, migratedDataRowOpen), 1)
 assert.equal(occurrences(childSource, migratedDataRowClose), 1)
 
-const reconstructedChildSource = childSource
+const childSourceWithoutCardImport = childSource.replace(cardImport, "")
+const cardOpeningIndex = childSourceWithoutCardImport.indexOf(migratedCardOpen)
+const cardSlotStart = cardOpeningIndex + migratedCardOpen.length
+const cardClosingIndex = childSourceWithoutCardImport.indexOf(migratedCardClose, cardSlotStart)
+
+assert.ok(cardClosingIndex > cardSlotStart)
+
+const cardCallerSlot = childSourceWithoutCardImport.slice(cardSlotStart, cardClosingIndex)
+const reconstructedPreCardSource =
+  childSourceWithoutCardImport.slice(0, cardOpeningIndex) +
+  `${predecessorCardOpen}\n${cardCallerSlot}\n${predecessorCardClose}` +
+  childSourceWithoutCardImport.slice(cardClosingIndex + migratedCardClose.length)
+
+assert.doesNotMatch(reconstructedPreCardSource, /CadenceCard/)
+
+const reconstructedChildSource = reconstructedPreCardSource
   .replace(dataRowImport, "")
   .replace(migratedDataRowOpen, predecessorDataRowOpen)
   .replace(migratedDataRowClose, predecessorDataRowClose)

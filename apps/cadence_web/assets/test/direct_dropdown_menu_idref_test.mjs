@@ -40,6 +40,7 @@ const {transformSync} = integrationRequire("esbuild")
 const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
 const modalMenuPath = resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")
 const menuItemPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 
 const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Promise.all([
   loadSfc(modalMenuPath),
@@ -57,6 +58,7 @@ const definitions = [
     path: resolve(testDirectory, "../vue/SpacecraftList.vue"),
     subject: "row",
     menuItemCount: 2,
+    cardBoundaryCount: 0,
     wrapperClass: "",
     sha256: "b322bffd1e6082c1d7f18a942c3a5879e2751beceb2e3d0f41175d2a11e25669",
   },
@@ -65,6 +67,7 @@ const definitions = [
     path: resolve(testDirectory, "../vue/CatalogArtifactShow.vue"),
     subject: "run",
     menuItemCount: 1,
+    cardBoundaryCount: 2,
     wrapperClass: "cadence-overlay",
     sha256: "76dd24a2f09333ef871304a3d8de09530f099b6c683df822f1cf2040e227a6fa",
   },
@@ -73,10 +76,109 @@ const definitions = [
     path: resolve(testDirectory, "../vue/MissionOverview.vue"),
     subject: "row",
     menuItemCount: 2,
+    cardBoundaryCount: 2,
+    cardOpeningRewrites: [
+      {
+        current: `    <CadenceCard
+      v-for="card in overview.readiness_cards"
+      :key="card.title"
+      class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
+    >`,
+        predecessor: `    <section
+      v-for="card in overview.readiness_cards"
+      :key="card.title"
+      class="card bg-base-200 border border-base-300"
+    >
+      <div class="card-body p-6">`,
+      },
+      {
+        current: `  <CadenceCard
+    class="card bg-base-200 border border-base-300"
+    body-class="card-body p-6"
+  >`,
+        predecessor: `  <section class="card bg-base-200 border border-base-300">
+    <div class="card-body p-6">`,
+      },
+    ],
     wrapperClass: "cadence-overlay",
     sha256: "79c4f3777ad19171238631f3c8f546ec591891ed8f049164b8554c55ddeb1371",
   },
 ]
+
+const reconstructPreCardSource = (source, definition) => {
+  const expectedImportCount = definition.cardBoundaryCount === 0 ? 0 : 1
+
+  assert.equal(
+    source.split(cardImport).length - 1,
+    expectedImportCount,
+    `${definition.name} has the exact CadenceCard import count`,
+  )
+  assert.equal(
+    source.match(/^import CadenceCard\b/gm)?.length ?? 0,
+    expectedImportCount,
+    `${definition.name} has the exact CadenceCard import declaration count`,
+  )
+
+  let openingCount = 0
+  let reconstructedSource = source.replace(cardImport, "")
+
+  if (definition.cardOpeningRewrites) {
+    for (const {current, predecessor} of definition.cardOpeningRewrites) {
+      assert.equal(
+        reconstructedSource.split(current).length - 1,
+        1,
+        `${definition.name} CadenceCard boundary ${openingCount + 1} is exact and unique`,
+      )
+      openingCount += 1
+      reconstructedSource = reconstructedSource.replace(current, predecessor)
+    }
+  } else {
+    reconstructedSource = reconstructedSource.replace(
+      /^([ \t]*)<CadenceCard\b([\s\S]*?)>$/gm,
+      (_opening, indentation, attributes) => {
+        const bodyClass = /(?:\n[ \t]*| )body-class="card-body p-6"/
+
+        assert.match(
+          attributes,
+          bodyClass,
+          `${definition.name} CadenceCard boundary ${openingCount + 1} keeps its body class`,
+        )
+        assert.equal(
+          attributes.match(/body-class=/g)?.length,
+          1,
+          `${definition.name} CadenceCard boundary ${openingCount + 1} has one body class`,
+        )
+        openingCount += 1
+
+        return `${indentation}<section${attributes.replace(bodyClass, "")}>\n${indentation}  <div class="card-body p-6">`
+      },
+    )
+  }
+
+  let closingCount = 0
+  reconstructedSource = reconstructedSource.replace(
+    /^([ \t]*)<\/CadenceCard>$/gm,
+    (_closing, indentation) => {
+      closingCount += 1
+      return `${indentation}  </div>\n${indentation}</section>`
+    },
+  )
+
+  assert.equal(
+    openingCount,
+    definition.cardBoundaryCount,
+    `${definition.name} has the exact CadenceCard opening count`,
+  )
+  assert.equal(
+    closingCount,
+    definition.cardBoundaryCount,
+    `${definition.name} has the exact CadenceCard closing count`,
+  )
+  assert.doesNotMatch(reconstructedSource, /CadenceCard/)
+
+  return reconstructedSource
+}
 
 const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
   const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
@@ -109,10 +211,11 @@ const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
 
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
+  const preCardSource = reconstructPreCardSource(currentSource, definition)
   const source =
     definition.name === "CatalogArtifactShow"
-      ? reconstructCatalogArtifactShowPreDataRowSource(currentSource)
-      : currentSource
+      ? reconstructCatalogArtifactShowPreDataRowSource(preCardSource)
+      : preCardSource
   const parsed = parse(source, {filename: definition.path})
 
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
