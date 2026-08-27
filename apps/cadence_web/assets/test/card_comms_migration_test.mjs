@@ -14,8 +14,124 @@ assert.equal(
 const base = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const panelHeaderClass =
+  "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
+const occurrenceCount = (value, token) => value.split(token).length - 1
+const replaceExactlyOnce = (value, current, replacement, label) => {
+  assert.equal(occurrenceCount(value, current), 1, `${label} occurs exactly once`)
+  return value.replace(current, replacement)
+}
+const lines = (...sourceLines) => sourceLines.join("\n")
+const panelBoundaries = Object.freeze([
+  Object.freeze({
+    label: "service profile panel",
+    migrated: lines(
+      "        <CadencePanel",
+      '          :id="profiles.service.id"',
+      '          class="card bg-base-200 border border-base-300"',
+      `          header-class="${panelHeaderClass}"`,
+      "        >",
+      "          <template #header>",
+    ),
+    base: lines(
+      '        <section :id="profiles.service.id" class="card bg-base-200 border border-base-300">',
+      `          <div class="${panelHeaderClass}">`,
+    ),
+  }),
+  Object.freeze({
+    label: "delivery profile panel",
+    migrated: lines(
+      "        <CadencePanel",
+      '          :id="profiles.delivery.id"',
+      '          class="card bg-base-200 border border-base-300"',
+      `          header-class="${panelHeaderClass}"`,
+      "        >",
+      "          <template #header>",
+    ),
+    base: lines(
+      '        <section :id="profiles.delivery.id" class="card bg-base-200 border border-base-300">',
+      `          <div class="${panelHeaderClass}">`,
+    ),
+  }),
+])
+
+const peelCadencePanels = (source, filename) => {
+  if (filename === "CommsValidation.vue") {
+    let peeled = replaceExactlyOnce(source, panelImport, "", "CommsValidation.vue import reconstruction")
+
+    peeled = replaceExactlyOnce(
+      peeled,
+      lines(
+        "      <CadencePanel",
+        '        v-for="group in validation.finding_groups"',
+        '        :id="group.id"',
+        '        :key="group.id"',
+        '        class="card bg-base-200 border border-base-300"',
+        `        header-class="${panelHeaderClass}"`,
+        "      >",
+        "        <template #header>",
+      ),
+      lines(
+        "      <section",
+        '        v-for="group in validation.finding_groups"',
+        '        :id="group.id"',
+        '        :key="group.id"',
+        '        class="card bg-base-200 border border-base-300"',
+        "      >",
+        `        <div class="${panelHeaderClass}">`,
+      ),
+      "CommsValidation.vue opening reconstruction",
+    )
+    peeled = replaceExactlyOnce(
+      peeled,
+      '        </template>\n        <div class="card-body p-0">',
+      '        </div>\n        <div class="card-body p-0">',
+      "CommsValidation.vue header close reconstruction",
+    )
+    peeled = replaceExactlyOnce(
+      peeled,
+      "      </CadencePanel>",
+      "      </section>",
+      "CommsValidation.vue panel close reconstruction",
+    )
+
+    assert.doesNotMatch(peeled, /CadencePanel/)
+    return peeled
+  }
+
+  if (filename !== "CommsProviderShow.vue") return source
+
+  let peeled = replaceExactlyOnce(source, panelImport, "", "CadencePanel import")
+
+  for (const panelBoundary of panelBoundaries) {
+    peeled = replaceExactlyOnce(
+      peeled,
+      panelBoundary.migrated,
+      panelBoundary.base,
+      panelBoundary.label,
+    )
+  }
+
+  const headerClosing = '          </template>\n          <div class="card-body p-0">'
+  assert.equal(occurrenceCount(peeled, headerClosing), 2, "exactly two header slot closings peel")
+  peeled = peeled.replaceAll(
+    headerClosing,
+    '          </div>\n          <div class="card-body p-0">',
+  )
+
+  assert.equal(
+    occurrenceCount(peeled, "        </CadencePanel>"),
+    2,
+    "exactly two panel closings peel",
+  )
+  peeled = peeled.replaceAll("        </CadencePanel>", "        </section>")
+
+  assert.doesNotMatch(peeled, /CadencePanel/)
+  return peeled
+}
 
 const contracts = Object.freeze([
   Object.freeze({
@@ -99,8 +215,9 @@ for (const contract of contracts) {
     `${contract.filename} has no conventional raw immediate p-6 shell`,
   )
 
+  const predecessorSource = peelCadencePanels(source, contract.filename)
   let openingCount = 0
-  let reconstructed = source.replace(cardImport, "")
+  let reconstructed = predecessorSource.replace(cardImport, "")
 
   reconstructed = reconstructed.replace(
     /^([ \t]*)<CadenceCard\b([^>]*)>\n/gm,
