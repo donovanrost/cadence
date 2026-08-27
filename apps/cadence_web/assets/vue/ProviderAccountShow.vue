@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type EmptyPayload = Record<string, never>
@@ -462,12 +463,17 @@ const revokeGrant = (grant: Grant) => {
           <div class="card-body p-6">
             <p class="hud-label">{{ configuration.title }}</p>
             <div class="mt-3 divide-y divide-base-300">
-              <div v-for="row in configuration.rows" :key="row.label" class="hud-data-row">
-                <span class="hud-data-label">{{ row.label }}</span>
+              <CadenceDataRow
+                v-for="row in configuration.rows"
+                :key="row.label"
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="row.label"
+              >
                 <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
                   {{ row.value }}
                 </span>
-              </div>
+              </CadenceDataRow>
             </div>
           </div>
         </section>
@@ -478,19 +484,26 @@ const revokeGrant = (grant: Grant) => {
             <div class="mt-3 divide-y divide-base-300">
               <template v-for="row in ingestion.rows" :key="row.label">
                 <div v-if="row.wrapper_id" :id="row.wrapper_id">
-                  <div class="hud-data-row">
-                    <span class="hud-data-label">{{ row.label }}</span>
+                  <CadenceDataRow
+                    row-class="hud-data-row"
+                    label-class="hud-data-label"
+                    :label="row.label"
+                  >
                     <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
                       {{ row.value }}
                     </span>
-                  </div>
+                  </CadenceDataRow>
                 </div>
-                <div v-else class="hud-data-row">
-                  <span class="hud-data-label">{{ row.label }}</span>
+                <CadenceDataRow
+                  v-else
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="row.label"
+                >
                   <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
                     {{ row.value }}
                   </span>
-                </div>
+                </CadenceDataRow>
               </template>
             </div>
             <p class="mt-3 text-xs text-base-content/50">
@@ -522,12 +535,17 @@ const revokeGrant = (grant: Grant) => {
           :key="columnIndex"
           class="divide-y divide-base-300"
         >
-          <div v-for="row in column" :key="row.label" class="hud-data-row">
-            <span class="hud-data-label">{{ row.label }}</span>
+          <CadenceDataRow
+            v-for="row in column"
+            :key="row.label"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="row.label"
+          >
             <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
               {{ row.value }}
             </span>
-          </div>
+          </CadenceDataRow>
         </div>
       </div>
     </details>

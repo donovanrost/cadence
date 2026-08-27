@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 type NavigationItem = {
   label: string
   href: string
@@ -115,41 +116,54 @@ defineProps<{
       <div class="card-body p-6">
         <p class="hud-label">{{ labels.byte_interpretation }}</p>
         <div class="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ labels.downlink_protocol }}</span>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="labels.downlink_protocol"
+          >
             <span class="hud-data-value">
               <span class="uppercase">{{ profile.downlink_protocol }}</span>
             </span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ labels.uplink_protocol }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="labels.uplink_protocol"
+          >
             <span class="hud-data-value">
               <span class="uppercase">{{ profile.uplink_protocol }}</span>
             </span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ labels.packet_protocol }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="labels.packet_protocol"
+          >
             <span class="hud-data-value">{{ profile.packet_protocol }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ labels.lifecycle }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="labels.lifecycle"
+          >
             <span class="hud-data-value">{{ profile.lifecycle }}</span>
-          </div>
+          </CadenceDataRow>
         </div>
 
         <div v-if="profile.frame_parameters.length > 0" class="mt-5">
           <div class="hud-divider"></div>
           <p class="hud-label mb-3">{{ labels.frame_parameters }}</p>
           <div class="grid gap-x-8 gap-y-1 md:grid-cols-2">
-            <div
+            <CadenceDataRow
               v-for="parameter in profile.frame_parameters"
-              :id="parameter.id"
               :key="parameter.id"
-              class="hud-data-row"
+              :row-id="parameter.id"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="parameter.label"
             >
-              <span class="hud-data-label">{{ parameter.label }}</span>
               <span class="hud-data-value">{{ parameter.value }}</span>
-            </div>
+            </CadenceDataRow>
           </div>
         </div>
       </div>
