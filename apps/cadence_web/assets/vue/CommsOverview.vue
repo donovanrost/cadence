@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -79,11 +80,11 @@ defineProps<{overview: Overview}>()
 
 <template>
   <div id="comms-overview-content" class="space-y-6">
-    <section
+    <CadenceCard
       :id="overview.transport.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="hud-label mb-2">{{ overview.transport.eyebrow }}</p>
@@ -153,14 +154,13 @@ defineProps<{overview: Overview}>()
             >{{ overview.transport.add_label }}</a>
           </div>
         </template>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       :id="overview.validation.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="hud-label mb-2">{{ overview.validation.eyebrow }}</p>
@@ -221,7 +221,6 @@ defineProps<{overview: Overview}>()
             </div>
           </section>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -84,8 +85,7 @@ defineProps<{
     </header>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <p class="hud-label">{{ rule.section_title }}</p>
           <p class="text-sm text-base-content/70">
             {{ rule.description }}
@@ -119,11 +119,9 @@ defineProps<{
               </CadenceDataRow>
             </div>
           </details>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <p class="hud-label">Events</p>
           <div id="routing-rule-events" class="space-y-2">
             <div
@@ -135,8 +133,7 @@ defineProps<{
               <p class="mt-1 text-xs text-base-content/60">{{ event.occurred_at }}</p>
             </div>
           </div>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
   </div>
 </template>

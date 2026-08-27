@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type Breadcrumb = {
@@ -123,8 +124,7 @@ defineProps<{
     </div>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="hud-label mb-2">{{ transport.capability.eyebrow }}</p>
@@ -175,11 +175,9 @@ defineProps<{
               class="mt-3 max-h-96 overflow-auto font-mono text-xs text-base-content/70"
             >{{ transport.capability.diagnostics.json }}</pre>
           </details>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <p class="hud-label">{{ version_history.title }}</p>
           <div :id="version_history.id" phx-update="stream" class="space-y-1">
             <div v-for="version in version_history.rows" :id="version.id" :key="version.id">
@@ -194,8 +192,7 @@ defineProps<{
               </CadenceDataRow>
             </div>
           </div>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
   </div>
 </template>
