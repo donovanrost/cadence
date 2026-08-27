@@ -20,18 +20,66 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsGroundStationForm.vue")
 const source = await readFile(componentPath, "utf8")
+const extractionLedger = Object.freeze([
+  "all five CadenceField boundaries remain one-for-one",
+  "all three section headers reconstruct their exact native DOM",
+  "the action row reconstructs its exact native wrapper",
+  "native fields and validation events remain feature-owned",
+  "native submit and redirect controls remain feature-owned",
+  "the parent form retains submit prevention and save authority",
+])
 
 assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
+assert.match(source, /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m)
+assert.match(
+  source,
+  /^import CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"$/m,
+)
+assert.equal(extractionLedger.length, 6)
 assert.equal(source.match(/<CadenceField\b/g)?.length, 5)
+assert.equal(source.match(/<CadenceFormSectionHeader\b/g)?.length, 3)
+assert.equal(source.match(/<CadenceFormActions\b/g)?.length, 1)
 assert.equal(source.match(/<input\b/g)?.length, 4, "all four native inputs stay in the feature")
 assert.equal(source.match(/<textarea\b/g)?.length, 1, "the native textarea stays in the feature")
+assert.equal(source.match(/<button\b/g)?.length, 1, "the native submit button stays in the feature")
 assert.equal(source.match(/\bv-model="groundStation\./g)?.length, 5)
 assert.equal(source.match(/@input="validate"/g)?.length, 5)
 assert.match(source, /<form :id="form\.id" class="space-y-8" @submit\.prevent="save">/)
+assert.match(
+  source,
+  /<button :id="form\.actions\.submit\.id" type="submit" class="btn btn-primary">/,
+)
+assert.match(
+  source,
+  /:id="form\.actions\.cancel\.id"\n          :href="form\.actions\.cancel\.href"\n          data-phx-link="redirect"\n          data-phx-link-state="push"\n          class="btn btn-ghost"/,
+)
 
 let reconstructedSource = source.replace(
-  'import CadenceField from "./ui/components/CadenceField.vue"\n',
+  /import CadenceField from "\.\/ui\/components\/CadenceField\.vue"\nimport CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"\nimport CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"\n/,
   "",
+)
+let reconstructedSectionHeaders = 0
+reconstructedSource = reconstructedSource.replace(
+  /        <CadenceFormSectionHeader\n          wrapper-class="flex items-center gap-3"\n          :number="form\.sections\.(\w+)\.number"\n          number-class="hud-label text-primary\/70"\n          :title="form\.sections\.\1\.title"\n          title-class="hud-label"\n          divider-class="flex-1 h-px bg-base-300\/60"\n        \/>/g,
+  (_match, sectionKey) => {
+    reconstructedSectionHeaders += 1
+
+    return `        <div class="flex items-center gap-3">
+          <span class="hud-label text-primary/70">{{ form.sections.${sectionKey}.number }}</span>
+          <h2 class="hud-label">{{ form.sections.${sectionKey}.title }}</h2>
+          <div class="flex-1 h-px bg-base-300/60"></div>
+        </div>`
+  },
+)
+let reconstructedActionRows = 0
+reconstructedSource = reconstructedSource.replace(
+  /      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300\/60 pt-5">\n([\s\S]*?)\n      <\/CadenceFormActions>/g,
+  (_match, controls) => {
+    reconstructedActionRows += 1
+    return `      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+${controls}
+      </div>`
+  },
 )
 let reconstructedFields = 0
 reconstructedSource = reconstructedSource.replace(
@@ -54,9 +102,15 @@ ${originalControl}
 
 assert.equal(reconstructedFields, 5, "all five field extractions reconstruct one-for-one")
 assert.equal(
+  reconstructedSectionHeaders,
+  3,
+  "all three section-header extractions reconstruct one-for-one",
+)
+assert.equal(reconstructedActionRows, 1, "the action-row extraction reconstructs one-for-one")
+assert.equal(
   createHash("sha256").update(reconstructedSource).digest("hex"),
   "b7f80ed95e0adcace28277b6d31ef5c33d1ac8961ea47af048576feedb38173c",
-  "removing the transparent field boundary reconstructs the immutable canary source",
+  "removing the transparent field and form-chrome boundaries reconstructs the immutable canary source",
 )
 
 const deepFreeze = (value) => {
@@ -162,6 +216,33 @@ const Contract = defineComponent({
 const host = dom.window.document.querySelector("#ground-station-contract")
 const app = createApp(Contract)
 app.mount(host)
+
+const formElement = host.querySelector("#ground-station-form")
+const sectionHeaders = [...formElement.querySelectorAll(":scope > section")].map(
+  (section) => section.firstElementChild,
+)
+assert.deepEqual(
+  sectionHeaders.map((header) => header.outerHTML),
+  [
+    '<div class="flex items-center gap-3"><span class="hud-label text-primary/70">01</span><h2 class="hud-label">Identity</h2><div class="flex-1 h-px bg-base-300/60"></div></div>',
+    '<div class="flex items-center gap-3"><span class="hud-label text-primary/70">02</span><h2 class="hud-label">Network</h2><div class="flex-1 h-px bg-base-300/60"></div></div>',
+    '<div class="flex items-center gap-3"><span class="hud-label text-primary/70">03</span><h2 class="hud-label">Metadata</h2><div class="flex-1 h-px bg-base-300/60"></div></div>',
+  ],
+  "all three extracted headers retain exact tags, class order, copy, and sibling order",
+)
+
+const actionWrapper = formElement.lastElementChild
+const submitButton = host.querySelector("#ground-station-submit")
+const cancelLink = host.querySelector("#ground-station-cancel")
+assert.deepEqual(elementAttributes(actionWrapper), {
+  class: "flex items-center gap-3 border-t border-base-300/60 pt-5",
+})
+assert.deepEqual([...actionWrapper.childNodes].map((node) => node.nodeName), ["BUTTON", "A"])
+assert.deepEqual([...actionWrapper.children], [submitButton, cancelLink])
+assert.strictEqual(submitButton.parentElement, actionWrapper)
+assert.strictEqual(cancelLink.parentElement, actionWrapper)
+assert.equal(submitButton.textContent.trim(), "Save Ground Station")
+assert.equal(cancelLink.textContent, "Cancel")
 
 const nativeControls = [...host.querySelectorAll("form input, form textarea")]
 assert.deepEqual(
@@ -307,16 +388,16 @@ const expectedSaveValues = {
 assert.deepEqual(emitted.validate.at(-1), {ground_station: expectedSaveValues})
 
 const submitEvent = new dom.window.Event("submit", {bubbles: true, cancelable: true})
-host.querySelector("#ground-station-form").dispatchEvent(submitEvent)
+formElement.dispatchEvent(submitEvent)
 assert.equal(submitEvent.defaultPrevented, true)
 assert.deepEqual(emitted.save, [{ground_station: expectedSaveValues}])
 
 assert.deepEqual(
-  elementAttributes(host.querySelector("#ground-station-submit")),
+  elementAttributes(submitButton),
   {class: "btn btn-primary", id: "ground-station-submit", type: "submit"},
 )
 assert.deepEqual(
-  elementAttributes(host.querySelector("#ground-station-cancel")),
+  elementAttributes(cancelLink),
   {
     class: "btn btn-ghost",
     "data-phx-link": "redirect",
