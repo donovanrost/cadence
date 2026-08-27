@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+
 type Breadcrumb = {
   label: string
   href: string | null
@@ -141,12 +143,13 @@ defineProps<{
           </div>
 
           <div class="mt-6 space-y-1">
-            <div
+            <CadenceDataRow
               v-for="detail in transport.capability.details"
               :key="detail.label"
-              class="hud-data-row"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="detail.label"
             >
-              <span class="hud-data-label">{{ detail.label }}</span>
               <span :class="['hud-data-value', detail.mono && 'font-mono text-sm']">
                 <a
                   v-if="detail.href"
@@ -157,7 +160,7 @@ defineProps<{
                 >{{ detail.value }}</a>
                 <template v-else>{{ detail.value }}</template>
               </span>
-            </div>
+            </CadenceDataRow>
           </div>
 
           <details
@@ -180,12 +183,15 @@ defineProps<{
           <p class="hud-label">{{ version_history.title }}</p>
           <div :id="version_history.id" phx-update="stream" class="space-y-1">
             <div v-for="version in version_history.rows" :id="version.id" :key="version.id">
-              <div class="hud-data-row">
-                <span class="hud-data-label">{{ version.label }}</span>
+              <CadenceDataRow
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="version.label"
+              >
                 <span class="hud-data-value">
                   <span class="text-xs">{{ version.lifecycle_state }}</span>
                 </span>
-              </div>
+              </CadenceDataRow>
             </div>
           </div>
         </div>

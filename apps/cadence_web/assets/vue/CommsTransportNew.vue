@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -735,16 +736,17 @@ const statusClass = (status: "ready" | "attention") =>
                 v-if="form.provider_derived.configuration.rows.length > 0"
                 class="divide-y divide-base-300"
               >
-                <div
+                <CadenceDataRow
                   v-for="row in form.provider_derived.configuration.rows"
                   :key="row.label"
-                  class="hud-data-row"
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="row.label"
                 >
-                  <span class="hud-data-label">{{ row.label }}</span>
                   <span :class="['hud-data-value', row.mono && 'font-mono text-sm']">
                     {{ row.value }}
                   </span>
-                </div>
+                </CadenceDataRow>
               </div>
               <p v-else class="text-sm text-base-content/60">
                 {{ form.provider_derived.configuration.empty_text }}

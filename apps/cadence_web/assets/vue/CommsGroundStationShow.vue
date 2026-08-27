@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+
 type Breadcrumb = {
   label: string
   href: string | null
@@ -115,10 +117,15 @@ const archive = () => {
           </p>
 
           <div class="mt-6 space-y-1">
-            <div v-for="detail in ground_station.details" :key="detail.label" class="hud-data-row">
-              <span class="hud-data-label">{{ detail.label }}</span>
+            <CadenceDataRow
+              v-for="detail in ground_station.details"
+              :key="detail.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="detail.label"
+            >
               <span class="hud-data-value">{{ detail.value }}</span>
-            </div>
+            </CadenceDataRow>
           </div>
         </div>
       </section>
