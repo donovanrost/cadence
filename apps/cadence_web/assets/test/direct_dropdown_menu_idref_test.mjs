@@ -41,6 +41,42 @@ const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
 const modalMenuPath = resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")
 const menuItemPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+
+const spacecraftPanelMigrations = [
+  {
+    componentOpen: `    <CadencePanel
+      id="spacecraft-vehicles-card"
+      class="card border border-base-300 bg-base-200"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >`,
+    sectionOpen:
+      '    <section id="spacecraft-vehicles-card" class="card border border-base-300 bg-base-200">',
+    slotOpen: "      <template #header>",
+    headerOpen:
+      '      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">',
+    slotClose: "      </template>",
+    headerClose: "      </div>",
+    componentClose: "    </CadencePanel>",
+    sectionClose: "    </section>",
+  },
+  {
+    componentOpen: `    <CadencePanel
+      id="spacecraft-profiles-card"
+      class="card border border-base-300 bg-base-200"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >`,
+    sectionOpen:
+      '    <section id="spacecraft-profiles-card" class="card border border-base-300 bg-base-200">',
+    slotOpen: "      <template #header>",
+    headerOpen:
+      '      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">',
+    slotClose: "      </template>",
+    headerClose: "      </div>",
+    componentClose: "    </CadencePanel>",
+    sectionClose: "    </section>",
+  },
+]
 
 const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Promise.all([
   loadSfc(modalMenuPath),
@@ -180,6 +216,67 @@ const reconstructPreCardSource = (source, definition) => {
   return reconstructedSource
 }
 
+const replacePanelBoundaryAfter = (source, before, after, start, label) => {
+  const index = source.indexOf(before, start)
+  assert.notEqual(index, -1, `${label} exists after its panel opening`)
+
+  return {
+    source: source.slice(0, index) + after + source.slice(index + before.length),
+    next: index + after.length,
+  }
+}
+
+const reconstructSpacecraftListPrePanelSource = (source) => {
+  assert.equal(
+    source.split(panelImport).length - 1,
+    1,
+    "SpacecraftList has exactly one CadencePanel import to strip",
+  )
+  assert.equal(source.match(/<CadencePanel\b/g)?.length, 2)
+  assert.equal(source.match(/<\/CadencePanel>/g)?.length, 2)
+
+  let reconstructedSource = source.replace(panelImport, "")
+
+  for (const [index, migration] of spacecraftPanelMigrations.entries()) {
+    const label = `SpacecraftList CadencePanel boundary ${index + 1}`
+    let replacement = replacePanelBoundaryAfter(
+      reconstructedSource,
+      migration.componentOpen,
+      migration.sectionOpen,
+      0,
+      `${label} opening`,
+    )
+    reconstructedSource = replacement.source
+    replacement = replacePanelBoundaryAfter(
+      reconstructedSource,
+      migration.slotOpen,
+      migration.headerOpen,
+      replacement.next,
+      `${label} header opening`,
+    )
+    reconstructedSource = replacement.source
+    replacement = replacePanelBoundaryAfter(
+      reconstructedSource,
+      migration.slotClose,
+      migration.headerClose,
+      replacement.next,
+      `${label} header closing`,
+    )
+    reconstructedSource = replacement.source
+    replacement = replacePanelBoundaryAfter(
+      reconstructedSource,
+      migration.componentClose,
+      migration.sectionClose,
+      replacement.next,
+      `${label} closing`,
+    )
+    reconstructedSource = replacement.source
+  }
+
+  assert.doesNotMatch(reconstructedSource, /CadencePanel/)
+  return reconstructedSource
+}
+
 const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
   const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
   const dataRowBoundary =
@@ -212,10 +309,14 @@ const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
   const preCardSource = reconstructPreCardSource(currentSource, definition)
+  const prePanelSource =
+    definition.name === "SpacecraftList"
+      ? reconstructSpacecraftListPrePanelSource(preCardSource)
+      : preCardSource
   const source =
     definition.name === "CatalogArtifactShow"
-      ? reconstructCatalogArtifactShowPreDataRowSource(preCardSource)
-      : preCardSource
+      ? reconstructCatalogArtifactShowPreDataRowSource(prePanelSource)
+      : prePanelSource
   const parsed = parse(source, {filename: definition.path})
 
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
