@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Breadcrumb = {
   label: string
@@ -370,20 +371,22 @@ const statusClass = (status: "ready" | "attention") =>
           <h2 class="hud-label">{{ form.sections.identity.title }}</h2>
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
-        <div class="fieldset mb-3">
-          <label :for="form.fields.display_name.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>
-            <input
-              :id="form.fields.display_name.id"
-              :value="normalizedValue(values.display_name)"
-              :name="form.fields.display_name.name"
-              :type="form.fields.display_name.type"
-              :required="form.fields.display_name.required"
-              class="w-full input"
-              @input="updateValue('display_name', $event)"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.display_name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.display_name.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.display_name.id"
+            :value="normalizedValue(values.display_name)"
+            :name="form.fields.display_name.name"
+            :type="form.fields.display_name.type"
+            :required="form.fields.display_name.required"
+            class="w-full input"
+            @input="updateValue('display_name', $event)"
+          >
+        </CadenceField>
       </section>
 
       <section :id="form.sections.origin.id" class="space-y-4">
@@ -392,26 +395,28 @@ const statusClass = (status: "ready" | "attention") =>
           <h2 class="hud-label">{{ form.sections.origin.title }}</h2>
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
-        <div class="fieldset mb-3">
-          <label :for="form.fields.origin.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.origin.label }}</span>
-            <select
-              :id="form.fields.origin.id"
-              :value="normalizedValue(values.origin)"
-              :name="form.fields.origin.name"
-              :required="form.fields.origin.required"
-              class="w-full select"
-              @change="updateOrigin"
-            >
-              <option
-                v-for="option in form.fields.origin.options"
-                :key="option.value"
-                :value="option.value"
-                :disabled="option.disabled"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.origin.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.origin.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.origin.id"
+            :value="normalizedValue(values.origin)"
+            :name="form.fields.origin.name"
+            :required="form.fields.origin.required"
+            class="w-full select"
+            @change="updateOrigin"
+          >
+            <option
+              v-for="option in form.fields.origin.options"
+              :key="option.value"
+              :value="option.value"
+              :disabled="option.disabled"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
         <div class="grid gap-3 md:grid-cols-2">
           <div
             v-for="card in form.origin_cards"
@@ -434,26 +439,29 @@ const statusClass = (status: "ready" | "attention") =>
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div v-if="selectedOrigin === 'direct'" class="fieldset mb-3">
-          <label :for="form.fields.transport_kind.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.transport_kind.label }}</span>
-            <select
-              :id="form.fields.transport_kind.id"
-              :value="normalizedValue(values.transport_kind)"
-              :name="form.fields.transport_kind.name"
-              :required="form.fields.transport_kind.required"
-              class="w-full select"
-              @change="updateValue('transport_kind', $event)"
-            >
-              <option
-                v-for="option in form.fields.transport_kind.options"
-                :key="option.value"
-                :value="option.value"
-                :disabled="option.disabled"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          v-if="selectedOrigin === 'direct'"
+          :control-id="form.fields.transport_kind.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.transport_kind.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.transport_kind.id"
+            :value="normalizedValue(values.transport_kind)"
+            :name="form.fields.transport_kind.name"
+            :required="form.fields.transport_kind.required"
+            class="w-full select"
+            @change="updateValue('transport_kind', $event)"
+          >
+            <option
+              v-for="option in form.fields.transport_kind.options"
+              :key="option.value"
+              :value="option.value"
+              :disabled="option.disabled"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
         <template v-else>
           <div class="fieldset mb-3">
@@ -467,29 +475,29 @@ const statusClass = (status: "ready" | "attention") =>
               >
             </label>
           </div>
-          <div class="fieldset mb-3">
-            <label :for="form.fields.mission_provider_id.id">
-              <span class="hud-label block mb-1.5">
-                {{ form.fields.mission_provider_id.label }}
-              </span>
-              <select
-                :id="form.fields.mission_provider_id.id"
-                :value="normalizedValue(values.mission_provider_id)"
-                :name="form.fields.mission_provider_id.name"
-                :required="form.fields.mission_provider_id.required"
-                class="w-full select"
-                @change="updateValue('mission_provider_id', $event)"
-              >
-                <option value="">{{ form.fields.mission_provider_id.placeholder }}</option>
-                <option
-                  v-for="option in form.fields.mission_provider_id.options"
-                  :key="option.value"
-                  :value="option.value"
-                  :disabled="option.disabled"
-                >{{ option.label }}</option>
-              </select>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="form.fields.mission_provider_id.id"
+            wrapper-class="fieldset mb-3"
+            :label="form.fields.mission_provider_id.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <select
+              :id="form.fields.mission_provider_id.id"
+              :value="normalizedValue(values.mission_provider_id)"
+              :name="form.fields.mission_provider_id.name"
+              :required="form.fields.mission_provider_id.required"
+              class="w-full select"
+              @change="updateValue('mission_provider_id', $event)"
+            >
+              <option value="">{{ form.fields.mission_provider_id.placeholder }}</option>
+              <option
+                v-for="option in form.fields.mission_provider_id.options"
+                :key="option.value"
+                :value="option.value"
+                :disabled="option.disabled"
+              >{{ option.label }}</option>
+            </select>
+          </CadenceField>
           <div
             v-if="form.provider.empty_state.visible"
             :id="form.provider.empty_state.id"
@@ -550,44 +558,49 @@ const statusClass = (status: "ready" | "attention") =>
                     </span>
                   </label>
                 </div>
-                <div v-else class="fieldset mb-3">
-                  <label :for="field.id">
-                    <span class="hud-label block mb-1.5">{{ field.label }}</span>
-                    <select
-                      v-if="field.type === 'select'"
-                      :id="field.id"
-                      :value="normalizedValue(values[field.key])"
-                      :name="field.name"
-                      :required="field.required"
-                      class="w-full select"
-                      @change="updateConfigurationField(field, $event)"
-                    >
-                      <option
-                        v-for="option in field.options"
-                        :key="`${option.value}-${option.label}`"
-                        :value="option.value"
-                        :disabled="option.disabled"
-                      >{{ option.label }}</option>
-                    </select>
-                    <input
-                      v-else
-                      :id="field.id"
-                      :value="normalizedValue(values[field.key])"
-                      :name="field.name"
-                      :type="field.type"
-                      :placeholder="field.placeholder"
-                      :required="field.required"
-                      :step="field.step"
-                      :min="field.min"
-                      :max="field.max"
-                      class="w-full input"
-                      @input="updateConfigurationField(field, $event)"
-                    >
-                  </label>
-                  <p v-if="field.help" class="-mt-1 mb-3 text-xs text-base-content/55">
-                    {{ field.help }}
-                  </p>
-                </div>
+                <CadenceField
+                  v-else
+                  :control-id="field.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="field.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <select
+                    v-if="field.type === 'select'"
+                    :id="field.id"
+                    :value="normalizedValue(values[field.key])"
+                    :name="field.name"
+                    :required="field.required"
+                    class="w-full select"
+                    @change="updateConfigurationField(field, $event)"
+                  >
+                    <option
+                      v-for="option in field.options"
+                      :key="`${option.value}-${option.label}`"
+                      :value="option.value"
+                      :disabled="option.disabled"
+                    >{{ option.label }}</option>
+                  </select>
+                  <input
+                    v-else
+                    :id="field.id"
+                    :value="normalizedValue(values[field.key])"
+                    :name="field.name"
+                    :type="field.type"
+                    :placeholder="field.placeholder"
+                    :required="field.required"
+                    :step="field.step"
+                    :min="field.min"
+                    :max="field.max"
+                    class="w-full input"
+                    @input="updateConfigurationField(field, $event)"
+                  >
+                  <template v-if="field.help" #help>
+                    <p class="-mt-1 mb-3 text-xs text-base-content/55">
+                      {{ field.help }}
+                    </p>
+                  </template>
+                </CadenceField>
               </div>
             </template>
           </div>
@@ -619,53 +632,53 @@ const statusClass = (status: "ready" | "attention") =>
               >{{ form.provider.selected.status_label }}</span>
             </div>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.service_profile_id.id">
-                <span class="hud-label block mb-1.5">
-                  {{ form.fields.service_profile_id.label }}
-                </span>
-                <select
-                  :id="form.fields.service_profile_id.id"
-                  :value="normalizedValue(values.service_profile_id)"
-                  :name="form.fields.service_profile_id.name"
-                  :required="form.fields.service_profile_id.required"
-                  class="w-full select"
-                  @change="updateValue('service_profile_id', $event)"
-                >
-                  <option value="">{{ form.fields.service_profile_id.placeholder }}</option>
-                  <option
-                    v-for="option in form.fields.service_profile_id.options"
-                    :key="option.value"
-                    :value="option.value"
-                    :disabled="option.disabled"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.service_profile_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.service_profile_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.service_profile_id.id"
+                :value="normalizedValue(values.service_profile_id)"
+                :name="form.fields.service_profile_id.name"
+                :required="form.fields.service_profile_id.required"
+                class="w-full select"
+                @change="updateValue('service_profile_id', $event)"
+              >
+                <option value="">{{ form.fields.service_profile_id.placeholder }}</option>
+                <option
+                  v-for="option in form.fields.service_profile_id.options"
+                  :key="option.value"
+                  :value="option.value"
+                  :disabled="option.disabled"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.delivery_profile_id.id">
-                <span class="hud-label block mb-1.5">
-                  {{ form.fields.delivery_profile_id.label }}
-                </span>
-                <select
-                  :id="form.fields.delivery_profile_id.id"
-                  :value="normalizedValue(values.delivery_profile_id)"
-                  :name="form.fields.delivery_profile_id.name"
-                  :required="form.fields.delivery_profile_id.required"
-                  class="w-full select"
-                  @change="updateValue('delivery_profile_id', $event)"
-                >
-                  <option value="">{{ form.fields.delivery_profile_id.placeholder }}</option>
-                  <option
-                    v-for="option in form.fields.delivery_profile_id.options"
-                    :key="option.value"
-                    :value="option.value"
-                    :disabled="option.disabled"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.delivery_profile_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.delivery_profile_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.delivery_profile_id.id"
+                :value="normalizedValue(values.delivery_profile_id)"
+                :name="form.fields.delivery_profile_id.name"
+                :required="form.fields.delivery_profile_id.required"
+                class="w-full select"
+                @change="updateValue('delivery_profile_id', $event)"
+              >
+                <option value="">{{ form.fields.delivery_profile_id.placeholder }}</option>
+                <option
+                  v-for="option in form.fields.delivery_profile_id.options"
+                  :key="option.value"
+                  :value="option.value"
+                  :disabled="option.disabled"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
             <div
               v-if="form.provider.operator_summary"
