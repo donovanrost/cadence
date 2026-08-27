@@ -33,8 +33,69 @@ const shiftIndent = (source, spaces) =>
     )
     .join("\n")
 
+const formChromeImports =
+  'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"\n' +
+  'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"\n'
+const actionOpen =
+  '      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
+const originalActionOpen =
+  '      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
+const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const reconstructFormChromeSource = (
+  source,
+  {featureName, dividerClass, multilineNumberExpressions},
+) => {
+  assert.equal(occurrences(source, formChromeImports), 1, `${featureName} owns both imports`)
+
+  let reconstructed = source.replace(formChromeImports, "")
+  let reconstructedHeaders = 0
+  reconstructed = reconstructed.replace(
+    /^( +)<CadenceFormSectionHeader\n +wrapper-class="flex items-center gap-3"\n +:number="([^"]+)\.number"\n +number-class="hud-label text-primary\/70"\n +:title="\2\.title"\n +title-class="hud-label"\n +divider-class="([^"]+)"\n +\/>$/gm,
+    (_match, indent, expression, actualDividerClass) => {
+      reconstructedHeaders += 1
+      assert.equal(
+        actualDividerClass,
+        dividerClass,
+        `${featureName} preserves the ${expression} divider class order`,
+      )
+
+      const number = multilineNumberExpressions.has(expression)
+        ? `${indent}  <span class="hud-label text-primary/70">
+${indent}    {{ ${expression}.number }}
+${indent}  </span>`
+        : `${indent}  <span class="hud-label text-primary/70">{{ ${expression}.number }}</span>`
+
+      return `${indent}<div class="flex items-center gap-3">
+${number}
+${indent}  <h2 class="hud-label">{{ ${expression}.title }}</h2>
+${indent}  <div class="${dividerClass}"></div>
+${indent}</div>`
+    },
+  )
+
+  assert.equal(
+    reconstructedHeaders,
+    4,
+    `all four ${featureName} section headers reconstruct one-for-one`,
+  )
+  assert.equal(occurrences(reconstructed, actionOpen), 1, `${featureName} action row reconstructs`)
+  assert.equal(occurrences(reconstructed, "      </CadenceFormActions>"), 1)
+
+  return reconstructed
+    .replace(actionOpen, originalActionOpen)
+    .replace("      </CadenceFormActions>", "      </div>")
+}
+
 const reconstructProviderSource = (source) => {
-  let reconstructed = source.replace(
+  let reconstructed = reconstructFormChromeSource(source, {
+    featureName: "provider",
+    dividerClass: "h-px flex-1 bg-base-300/60",
+    multilineNumberExpressions: new Set([
+      "form.sections.credential_registry",
+      "form.sections.organization_guardrails",
+    ]),
+  }).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
   )
@@ -89,7 +150,11 @@ const multilineSpacecraftLabels = new Set([
 ])
 
 const reconstructSpacecraftSource = (source) => {
-  let reconstructed = source.replace(
+  let reconstructed = reconstructFormChromeSource(source, {
+    featureName: "spacecraft type",
+    dividerClass: "flex-1 h-px bg-base-300/60",
+    multilineNumberExpressions: new Set(["form.sections.frame_parameters"]),
+  }).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
   )
@@ -124,6 +189,16 @@ assert.match(providerSource, /^import CadenceField from "\.\/ui\/components\/Cad
 assert.equal(providerSource.match(/<CadenceField\b/g)?.length, 4)
 assert.match(
   providerSource,
+  /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m,
+)
+assert.match(
+  providerSource,
+  /^import CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"$/m,
+)
+assert.equal(providerSource.match(/<CadenceFormSectionHeader\b/g)?.length, 4)
+assert.equal(providerSource.match(/<CadenceFormActions\b/g)?.length, 1)
+assert.match(
+  providerSource,
   /<input\n        v-for="fieldKey in form\.hidden_field_keys"[\s\S]*?type="hidden"/,
   "provider hidden inputs remain feature-owned",
 )
@@ -135,6 +210,16 @@ assert.equal(
 
 assert.match(spacecraftSource, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
 assert.equal(spacecraftSource.match(/<CadenceField\b/g)?.length, 8)
+assert.match(
+  spacecraftSource,
+  /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m,
+)
+assert.match(
+  spacecraftSource,
+  /^import CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"$/m,
+)
+assert.equal(spacecraftSource.match(/<CadenceFormSectionHeader\b/g)?.length, 4)
+assert.equal(spacecraftSource.match(/<CadenceFormActions\b/g)?.length, 1)
 assert.match(
   spacecraftSource,
   /<input\n              :id="application\.id"\n              type="checkbox"[\s\S]*?@change="toggleApplication\(application\.key, \$event\)"/,
