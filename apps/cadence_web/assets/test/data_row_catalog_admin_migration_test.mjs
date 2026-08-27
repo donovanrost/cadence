@@ -13,6 +13,8 @@ assert.equal(
 const base = "608a300628437af68efa8d20941a2d9e8e5ea5ba"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const cardBodyClass = "card-body p-6"
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 
 const boundary = ({indent, directives = [], labelAttribute, labelMarkup, valueBinding}) => {
@@ -41,6 +43,7 @@ const foundations = Object.freeze([
   {
     file: "CatalogImportRunShow.vue",
     sha256: "1ac3fba753c110efca7b751dc43795dc5b7b758c4dbda7e9729875d83d18ae55",
+    cardBoundaryCount: 3,
     importBlock: dataRowImport,
     boundaries: [
       boundary({
@@ -66,6 +69,7 @@ const foundations = Object.freeze([
   {
     file: "CatalogRevisionShow.vue",
     sha256: "24952f5d2db70ceac1768bdb2255b96568cd5ffe00ef0847fc449ec80990c0b7",
+    cardBoundaryCount: 3,
     importBlock: `${dataRowImport}\n`,
     boundaries: [
       boundary({
@@ -87,6 +91,7 @@ const foundations = Object.freeze([
   {
     file: "AdminRuntime.vue",
     sha256: "e319d75441cd0ad9fe7e33c4f131edea3471283859b426d177e0b1aa8f0ea7e9",
+    cardBoundaryCount: 0,
     importBlock: dataRowImport,
     boundaries: [
       boundary({
@@ -113,34 +118,96 @@ let reconstructedBoundaryCount = 0
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
+  const expectedCardImportCount = foundation.cardBoundaryCount === 0 ? 0 : 1
 
   assert.equal(
-    source.split(foundation.importBlock).length - 1,
+    source.split(cardImport).length - 1,
+    expectedCardImportCount,
+    `${foundation.file} has its exact CadenceCard import count`,
+  )
+  assert.equal(
+    count(source, /^import CadenceCard\b/gm),
+    expectedCardImportCount,
+    `${foundation.file} has its exact CadenceCard import declaration count`,
+  )
+
+  let cardOpeningCount = 0
+  let dataRowSource = source.replace(cardImport, "")
+
+  dataRowSource = dataRowSource.replace(
+    /^([ \t]*)<CadenceCard\b([\s\S]*?)>$/gm,
+    (_opening, indentation, attributes) => {
+      const bodyAttributePattern = /(?:\n[ \t]*| )body-class="card-body p-6"/
+
+      assert.match(
+        attributes,
+        bodyAttributePattern,
+        `${foundation.file} CadenceCard boundary ${cardOpeningCount + 1} has the exact body class`,
+      )
+      assert.equal(
+        attributes.match(/body-class=/g)?.length,
+        1,
+        `${foundation.file} CadenceCard boundary ${cardOpeningCount + 1} has one body-class prop`,
+      )
+
+      cardOpeningCount += 1
+
+      return `${indentation}<section${attributes.replace(bodyAttributePattern, "")}>\n${indentation}  <div class="${cardBodyClass}">`
+    },
+  )
+
+  let cardClosingCount = 0
+  dataRowSource = dataRowSource.replace(
+    /^([ \t]*)<\/CadenceCard>$/gm,
+    (_closing, indentation) => {
+      cardClosingCount += 1
+      return `${indentation}  </div>\n${indentation}</section>`
+    },
+  )
+
+  assert.equal(
+    cardOpeningCount,
+    foundation.cardBoundaryCount,
+    `${foundation.file} has its exact p-6 card opening-boundary count`,
+  )
+  assert.equal(
+    cardClosingCount,
+    foundation.cardBoundaryCount,
+    `${foundation.file} has its exact p-6 card closing-boundary count`,
+  )
+  assert.doesNotMatch(
+    dataRowSource,
+    /CadenceCard/,
+    `${foundation.file} card reconstruction strips only its exact import and boundaries`,
+  )
+
+  assert.equal(
+    dataRowSource.split(foundation.importBlock).length - 1,
     1,
     `${foundation.file} imports CadenceDataRow exactly once`,
   )
   assert.equal(
-    count(source, /<CadenceDataRow\b/g),
+    count(dataRowSource, /<CadenceDataRow\b/g),
     foundation.boundaries.length,
     `${foundation.file} has exactly its expected CadenceDataRow boundaries`,
   )
   assert.equal(
-    count(source, /row-class="hud-data-row"/g),
+    count(dataRowSource, /row-class="hud-data-row"/g),
     foundation.boundaries.length,
     `${foundation.file} keeps every row class caller-authored`,
   )
   assert.equal(
-    count(source, /label-class="hud-data-label"/g),
+    count(dataRowSource, /label-class="hud-data-label"/g),
     foundation.boundaries.length,
     `${foundation.file} keeps every label class caller-authored`,
   )
   assert.doesNotMatch(
-    source,
+    dataRowSource,
     /<div\b[^>]*class="[^"]*\bhud-data-row\b[^"]*"[^>]*>/,
     `${foundation.file} has no raw hud-data-row root`,
   )
 
-  let reconstructed = source.replace(foundation.importBlock, "")
+  let reconstructed = dataRowSource.replace(foundation.importBlock, "")
 
   for (const expectedBoundary of foundation.boundaries) {
     const openingCount = reconstructed.split(expectedBoundary.opening).length - 1

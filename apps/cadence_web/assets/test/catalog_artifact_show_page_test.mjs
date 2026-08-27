@@ -81,19 +81,78 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "CatalogArtifactShowPage.vue template tags are balanced")
 }
 
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const cardBodyClass = "card-body p-6"
+
+assert.equal(
+  child.split(cardImport).length - 1,
+  1,
+  "the card import is added exactly once",
+)
+assert.equal(
+  child.match(/^import CadenceCard\b/gm)?.length,
+  1,
+  "the child has exactly one CadenceCard import declaration",
+)
+
+let cardOpeningCount = 0
+let childWithoutCards = child.replace(cardImport, "")
+
+childWithoutCards = childWithoutCards.replace(
+  /^([ \t]*)<CadenceCard\b([\s\S]*?)>$/gm,
+  (_opening, indentation, attributes) => {
+    const bodyAttributePattern = /(?:\n[ \t]*| )body-class="card-body p-6"/
+
+    assert.match(
+      attributes,
+      bodyAttributePattern,
+      `CadenceCard boundary ${cardOpeningCount + 1} keeps the exact p-6 body class`,
+    )
+    assert.equal(
+      attributes.match(/body-class=/g)?.length,
+      1,
+      `CadenceCard boundary ${cardOpeningCount + 1} keeps one body-class prop`,
+    )
+
+    cardOpeningCount += 1
+
+    return `${indentation}<section${attributes.replace(bodyAttributePattern, "")}>\n${indentation}  <div class="${cardBodyClass}">`
+  },
+)
+
+let cardClosingCount = 0
+childWithoutCards = childWithoutCards.replace(
+  /^([ \t]*)<\/CadenceCard>$/gm,
+  (_closing, indentation) => {
+    cardClosingCount += 1
+    return `${indentation}  </div>\n${indentation}</section>`
+  },
+)
+
+assert.equal(cardOpeningCount, 2, "exactly two p-6 card opening boundaries are peeled")
+assert.equal(cardClosingCount, 2, "exactly two p-6 card closing boundaries are peeled")
+assert.equal(
+  childWithoutCards.match(
+    /<section\n        v-else\n        id="catalog-artifact-runs-card"\n        class="card border border-base-300 bg-base-200"\n      >\n        <div class="card-body p-0">/g,
+  )?.length,
+  1,
+  "the raw p-0 runs table card remains exact after peeling only p-6 cards",
+)
+assert.doesNotMatch(childWithoutCards, /CadenceCard/)
+
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const dataRowBoundary =
   /          <CadenceDataRow\n            row-class="hud-data-row"\n            label-class="hud-data-label"\n            label="([^"]+)"\n          >([\s\S]*?)          <\/CadenceDataRow>/g
-const dataRowBoundaries = [...child.matchAll(dataRowBoundary)]
+const dataRowBoundaries = [...childWithoutCards.matchAll(dataRowBoundary)]
 
 assert.equal(
-  child.split(dataRowImport).length - 1,
+  childWithoutCards.split(dataRowImport).length - 1,
   1,
   "the data-row import is added exactly once",
 )
 assert.equal(dataRowBoundaries.length, 4, "exactly four data-row boundaries are added")
 
-const reconstructedBaseChild = child
+const reconstructedBaseChild = childWithoutCards
   .replace(dataRowImport, "")
   .replace(
     dataRowBoundary,
