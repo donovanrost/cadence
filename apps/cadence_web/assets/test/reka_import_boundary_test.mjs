@@ -9,30 +9,17 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueRoot = resolve(testDirectory, "../vue")
 const adapterBoundary = "ui/reka/"
 
-const deferredFeatureImporters = new Map([
-  [
-    "CatalogArtifactShow.vue",
-    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
-  ],
-  [
-    "CatalogDatabaseTable.vue",
-    "deferred: trigger/root ID ownership is incompatible with CadenceMenu",
-  ],
-  [
-    "MissionOverview.vue",
-    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
-  ],
-  [
-    "SpacecraftList.vue",
-    "temporarily direct: repaired bidirectional IDREFs are covered by direct_dropdown_menu_idref_test.mjs; CadenceMenu has incompatible non-portaled/dashboard overlay, modal, focus, and closed-DOM behavior",
-  ],
-])
+const deferredFeatureImporters = new Map()
 
 const migratedFeatureConsumers = Object.freeze([
+  "CatalogArtifactShow.vue",
+  "CatalogDatabaseTable.vue",
   "CatalogDatabaseShow.vue",
   "DashboardToolbarMenu.vue",
+  "MissionOverview.vue",
   "OpsContactRequirementShow.vue",
   "OpsDashboardDirectory.vue",
+  "SpacecraftList.vue",
   "WidgetForm.vue",
 ])
 
