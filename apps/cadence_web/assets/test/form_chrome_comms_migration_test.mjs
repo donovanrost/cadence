@@ -13,6 +13,12 @@ assert.equal(
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const rawReviewShell = `        <section
+          :id="form.review.configuration_summary_id"
+          class="card bg-base-200 border border-base-300"
+        >
+          <div class="card-body p-0">`
 const imports = Object.freeze([
   'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"',
   'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"',
@@ -29,6 +35,7 @@ const manifests = Object.freeze([
   Object.freeze({
     filename: "CommsProviderNew.vue",
     foundationHash: "f93e0166e7044a6e37b8a721b542d7eb39944c7dfcc6a274adc77fe042ee9094",
+    cardCount: 0,
     formOpen: '<form v-else :id="form.id" class="space-y-8" @submit.prevent="save">',
     nativeTagCounts: Object.freeze({form: 1, button: 1, a: 3, input: 3, select: 3}),
     headers: Object.freeze([
@@ -50,6 +57,7 @@ const manifests = Object.freeze([
   Object.freeze({
     filename: "CommsRoutingNew.vue",
     foundationHash: "2255683f05974961d89361772a97e53d6b607d5049f3320c8467e66838242e3d",
+    cardCount: 0,
     formOpen: '<form :id="form.id" class="space-y-8" @submit.prevent="save">',
     nativeTagCounts: Object.freeze({form: 1, button: 1, a: 2, input: 2, select: 4}),
     headers: Object.freeze([
@@ -61,6 +69,7 @@ const manifests = Object.freeze([
   Object.freeze({
     filename: "CommsTransportNew.vue",
     foundationHash: "f78d6f7e72e0fd01248a2adf39054030015f363fa25c588f848f3dc9a909cb20",
+    cardCount: 1,
     formOpen: '<form :id="form.id" class="space-y-8" @submit.prevent="save">',
     nativeTagCounts: Object.freeze({form: 1, button: 1, a: 3, input: 5, select: 6}),
     headers: Object.freeze([
@@ -109,6 +118,84 @@ const foundationDataRowOpening = `                <div
 const replaceOnce = (source, migrated, foundation, description) => {
   assert.equal(occurrences(source, migrated), 1, `${description} is inventoried exactly once`)
   return source.replace(migrated, foundation)
+}
+
+const reconstructCards = (source, manifest) => {
+  const expectedImportCount = manifest.cardCount === 0 ? 0 : 1
+  assert.equal(
+    occurrences(source, cardImport),
+    expectedImportCount,
+    `${manifest.filename} has its exact CadenceCard import count`,
+  )
+  assert.equal(
+    source.match(/<CadenceCard\b/g)?.length ?? 0,
+    manifest.cardCount,
+    `${manifest.filename} has its exact CadenceCard opening count`,
+  )
+  assert.equal(
+    occurrences(source, "</CadenceCard>"),
+    manifest.cardCount,
+    `${manifest.filename} has its exact CadenceCard closing count`,
+  )
+  assert.equal(
+    occurrences(source, 'body-class="card-body p-6"'),
+    manifest.cardCount,
+    `${manifest.filename} has one exact p-6 body boundary per card`,
+  )
+
+  if (manifest.filename === "CommsTransportNew.vue") {
+    assert.equal(occurrences(source, rawReviewShell), 1, "the raw p-0 review card stays exact")
+  }
+
+  let openingCount = 0
+  let reconstructed = source.replace(cardImport, "")
+
+  reconstructed = reconstructed.replace(
+    /^([ \t]*)<CadenceCard\b([^>]*)>\n/gm,
+    (_opening, indentation, rawAttributes) => {
+      openingCount += 1
+      assert.equal(
+        occurrences(rawAttributes, 'body-class="card-body p-6"'),
+        1,
+        `${manifest.filename} card boundary ${openingCount} owns one exact body class`,
+      )
+
+      const sectionAttributes = rawAttributes
+        .replace(/\n[ \t]*body-class="card-body p-6"/, "")
+        .replace(/ body-class="card-body p-6"/, "")
+
+      assert.doesNotMatch(sectionAttributes, /body-class=/)
+      return (
+        `${indentation}<section${sectionAttributes}>\n` +
+        `${indentation}  <div class="card-body p-6">\n`
+      )
+    },
+  )
+
+  assert.equal(openingCount, manifest.cardCount, `${manifest.filename} reconstructs every card opening`)
+
+  let closingCount = 0
+  reconstructed = reconstructed.replace(/^([ \t]*)<\/CadenceCard>$/gm, (_closing, indentation) => {
+    closingCount += 1
+    return `${indentation}  </div>\n${indentation}</section>`
+  })
+
+  assert.equal(closingCount, manifest.cardCount, `${manifest.filename} reconstructs every card closing`)
+
+  if (manifest.filename === "CommsTransportNew.vue") {
+    assert.equal(
+      occurrences(reconstructed, rawReviewShell),
+      1,
+      "the pre-card source keeps the raw p-0 review card",
+    )
+  }
+
+  assert.doesNotMatch(
+    reconstructed,
+    /CadenceCard/,
+    `${manifest.filename} pre-card source has no residual primitive`,
+  )
+  return reconstructed
 }
 
 const reconstructDataRow = (source) => {
@@ -227,8 +314,11 @@ for (const manifest of manifests) {
   assert.match(actionsSource, /data-phx-link="redirect"/)
   assert.match(actionsSource, /data-phx-link-state="push"/)
 
+  const preCardSource = reconstructCards(source, manifest)
   let reconstructed =
-    manifest.filename === "CommsTransportNew.vue" ? reconstructDataRow(source) : source
+    manifest.filename === "CommsTransportNew.vue"
+      ? reconstructDataRow(preCardSource)
+      : preCardSource
   for (const importLine of imports) {
     reconstructed = replaceOnce(
       reconstructed,
