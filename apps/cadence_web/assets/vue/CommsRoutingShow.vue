@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type Breadcrumb = {
@@ -91,10 +92,15 @@ defineProps<{
           </p>
 
           <div class="mt-6 space-y-1">
-            <div v-for="detail in rule.details" :key="detail.label" class="hud-data-row">
-              <span class="hud-data-label">{{ detail.label }}</span>
+            <CadenceDataRow
+              v-for="detail in rule.details"
+              :key="detail.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="detail.label"
+            >
               <span class="hud-data-value">{{ detail.value }}</span>
-            </div>
+            </CadenceDataRow>
           </div>
 
           <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
@@ -102,14 +108,15 @@ defineProps<{
               {{ rule.runtime_artifacts_title }}
             </summary>
             <div class="mt-3 space-y-1">
-              <div
+              <CadenceDataRow
                 v-for="artifact in rule.runtime_artifacts"
                 :key="artifact.label"
-                class="hud-data-row"
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="artifact.label"
               >
-                <span class="hud-data-label">{{ artifact.label }}</span>
                 <span class="hud-data-value">{{ artifact.value }}</span>
-              </div>
+              </CadenceDataRow>
             </div>
           </details>
         </div>

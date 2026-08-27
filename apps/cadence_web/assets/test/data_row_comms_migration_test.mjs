@@ -1,0 +1,272 @@
+import assert from "node:assert/strict"
+import {createHash} from "node:crypto"
+import {readFile} from "node:fs/promises"
+import {dirname, resolve} from "node:path"
+import {fileURLToPath} from "node:url"
+
+assert.equal(process.versions.node, "24.16.0", "comms data-row contracts use pinned Node 24.16.0")
+
+const lines = (...sourceLines) => sourceLines.join("\n")
+const boundary = (migrated, base) => Object.freeze({migrated, base})
+const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const testDirectory = dirname(fileURLToPath(import.meta.url))
+
+const contracts = Object.freeze([
+  Object.freeze({
+    filename: "CommsProviderShow.vue",
+    baseSha256: "157d7b85c82e4d1479815fa0641259e3e55396c4044c8c40c5d8c98b2d4658a0",
+    rowCount: 3,
+    importInsertion: dataRowImport,
+    boundaries: Object.freeze([
+      boundary(
+        lines(
+          "              <CadenceDataRow",
+          '                v-for="row in card.rows"',
+          '                :key="row.label"',
+          '                row-class="hud-data-row"',
+          '                label-class="hud-data-label"',
+          '                :label="row.label"',
+          "              >",
+        ),
+        lines(
+          '              <div v-for="row in card.rows" :key="row.label" class="hud-data-row">',
+          '                <span class="hud-data-label">{{ row.label }}</span>',
+        ),
+      ),
+      boundary(
+        lines(
+          "                <CadenceDataRow",
+          '                  row-class="hud-data-row"',
+          '                  label-class="hud-data-label"',
+          '                  :label="`v${version.version}`"',
+          "                >",
+        ),
+        lines(
+          '                <div class="hud-data-row">',
+          '                  <span class="hud-data-label">v{{ version.version }}</span>',
+        ),
+      ),
+      boundary(
+        lines(
+          "          <CadenceDataRow",
+          '            v-for="row in diagnostics.rows"',
+          '            :key="row.label"',
+          '            row-class="hud-data-row"',
+          '            label-class="hud-data-label"',
+          '            :label="row.label"',
+          "          >",
+        ),
+        lines(
+          '          <div v-for="row in diagnostics.rows" :key="row.label" class="hud-data-row">',
+          '            <span class="hud-data-label">{{ row.label }}</span>',
+        ),
+      ),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsTransportShow.vue",
+    baseSha256: "6130fc910f199cc63f132cd5de9e21b4a8500b20f617ed42391600017739cea1",
+    rowCount: 2,
+    importInsertion: `${dataRowImport}\n`,
+    boundaries: Object.freeze([
+      boundary(
+        lines(
+          "            <CadenceDataRow",
+          '              v-for="detail in transport.capability.details"',
+          '              :key="detail.label"',
+          '              row-class="hud-data-row"',
+          '              label-class="hud-data-label"',
+          '              :label="detail.label"',
+          "            >",
+        ),
+        lines(
+          "            <div",
+          '              v-for="detail in transport.capability.details"',
+          '              :key="detail.label"',
+          '              class="hud-data-row"',
+          "            >",
+          '              <span class="hud-data-label">{{ detail.label }}</span>',
+        ),
+      ),
+      boundary(
+        lines(
+          "              <CadenceDataRow",
+          '                row-class="hud-data-row"',
+          '                label-class="hud-data-label"',
+          '                :label="version.label"',
+          "              >",
+        ),
+        lines(
+          '              <div class="hud-data-row">',
+          '                <span class="hud-data-label">{{ version.label }}</span>',
+        ),
+      ),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsRoutingShow.vue",
+    baseSha256: "cc8afdb990f092f21b813b909c77ce09f8258f6f4f589d812e04727d510e594b",
+    rowCount: 2,
+    importInsertion: dataRowImport,
+    boundaries: Object.freeze([
+      boundary(
+        lines(
+          "            <CadenceDataRow",
+          '              v-for="detail in rule.details"',
+          '              :key="detail.label"',
+          '              row-class="hud-data-row"',
+          '              label-class="hud-data-label"',
+          '              :label="detail.label"',
+          "            >",
+        ),
+        lines(
+          '            <div v-for="detail in rule.details" :key="detail.label" class="hud-data-row">',
+          '              <span class="hud-data-label">{{ detail.label }}</span>',
+        ),
+      ),
+      boundary(
+        lines(
+          "              <CadenceDataRow",
+          '                v-for="artifact in rule.runtime_artifacts"',
+          '                :key="artifact.label"',
+          '                row-class="hud-data-row"',
+          '                label-class="hud-data-label"',
+          '                :label="artifact.label"',
+          "              >",
+        ),
+        lines(
+          "              <div",
+          '                v-for="artifact in rule.runtime_artifacts"',
+          '                :key="artifact.label"',
+          '                class="hud-data-row"',
+          "              >",
+          '                <span class="hud-data-label">{{ artifact.label }}</span>',
+        ),
+      ),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsGroundStationShow.vue",
+    baseSha256: "0af998eb9dec77dcc9572f163b83456bb249284e2a4bb9bb78c46bab2febfd70",
+    rowCount: 1,
+    importInsertion: `${dataRowImport}\n`,
+    boundaries: Object.freeze([
+      boundary(
+        lines(
+          "            <CadenceDataRow",
+          '              v-for="detail in ground_station.details"',
+          '              :key="detail.label"',
+          '              row-class="hud-data-row"',
+          '              label-class="hud-data-label"',
+          '              :label="detail.label"',
+          "            >",
+        ),
+        lines(
+          '            <div v-for="detail in ground_station.details" :key="detail.label" class="hud-data-row">',
+          '              <span class="hud-data-label">{{ detail.label }}</span>',
+        ),
+      ),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsTransportNew.vue",
+    baseSha256: "9aea9fcec003ae7713a636184b312812193f5f6d99de8d6d81c7b75e75b58e23",
+    rowCount: 1,
+    importInsertion: dataRowImport,
+    boundaries: Object.freeze([
+      boundary(
+        lines(
+          "                <CadenceDataRow",
+          '                  v-for="row in form.provider_derived.configuration.rows"',
+          '                  :key="row.label"',
+          '                  row-class="hud-data-row"',
+          '                  label-class="hud-data-label"',
+          '                  :label="row.label"',
+          "                >",
+        ),
+        lines(
+          "                <div",
+          '                  v-for="row in form.provider_derived.configuration.rows"',
+          '                  :key="row.label"',
+          '                  class="hud-data-row"',
+          "                >",
+          '                  <span class="hud-data-label">{{ row.label }}</span>',
+        ),
+      ),
+    ]),
+  }),
+])
+
+assert.equal(
+  contracts.reduce((total, contract) => total + contract.rowCount, 0),
+  9,
+  "the comms slice owns exactly nine data rows",
+)
+
+const occurrenceCount = (source, token) => source.split(token).length - 1
+const replaceExactlyOnce = (source, current, replacement, label) => {
+  assert.equal(occurrenceCount(source, current), 1, `${label} occurs exactly once`)
+  return source.replace(current, replacement)
+}
+
+for (const contract of contracts) {
+  const componentPath = resolve(testDirectory, `../vue/${contract.filename}`)
+  const source = await readFile(componentPath, "utf8")
+
+  assert.equal(occurrenceCount(source, dataRowImport), 1, `${contract.filename} imports CadenceDataRow once`)
+  assert.equal(
+    source.match(/<CadenceDataRow\b/g)?.length ?? 0,
+    contract.rowCount,
+    `${contract.filename} has its expected opening row boundaries`,
+  )
+  assert.equal(
+    occurrenceCount(source, "</CadenceDataRow>"),
+    contract.rowCount,
+    `${contract.filename} has its expected closing row boundaries`,
+  )
+  assert.equal(
+    occurrenceCount(source, 'row-class="hud-data-row"'),
+    contract.rowCount,
+    `${contract.filename} preserves every row class through the primitive`,
+  )
+  assert.equal(
+    occurrenceCount(source, 'label-class="hud-data-label"'),
+    contract.rowCount,
+    `${contract.filename} preserves every label class through the primitive`,
+  )
+  assert.doesNotMatch(
+    source,
+    /<div\b[^>]*\bclass="hud-data-row"/,
+    `${contract.filename} has no raw hud-data-row root`,
+  )
+  assert.equal(
+    contract.boundaries.length,
+    contract.rowCount,
+    `${contract.filename} declares every migrated row boundary`,
+  )
+
+  let reconstructedBase = replaceExactlyOnce(
+    source,
+    contract.importInsertion,
+    "",
+    `${contract.filename} import insertion`,
+  )
+
+  for (const [index, rowBoundary] of contract.boundaries.entries()) {
+    reconstructedBase = replaceExactlyOnce(
+      reconstructedBase,
+      rowBoundary.migrated,
+      rowBoundary.base,
+      `${contract.filename} row boundary ${index + 1}`,
+    )
+  }
+
+  reconstructedBase = reconstructedBase.replaceAll("</CadenceDataRow>", "</div>")
+
+  assert.doesNotMatch(reconstructedBase, /CadenceDataRow/)
+  assert.equal(
+    createHash("sha256").update(reconstructedBase).digest("hex"),
+    contract.baseSha256,
+    `${contract.filename} reconstructs its immutable base after removing only the import and expected boundaries`,
+  )
+}

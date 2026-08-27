@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
@@ -348,12 +349,17 @@ const archiveProvider = () => {
           <div class="card-body p-6">
             <p class="hud-label">{{ card.title }}</p>
             <div class="mt-3 divide-y divide-base-300">
-              <div v-for="row in card.rows" :key="row.label" class="hud-data-row">
-                <span class="hud-data-label">{{ row.label }}</span>
+              <CadenceDataRow
+                v-for="row in card.rows"
+                :key="row.label"
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="row.label"
+              >
                 <span :class="['hud-data-value', row.mono && 'font-mono text-sm']">
                   {{ row.value }}
                 </span>
-              </div>
+              </CadenceDataRow>
             </div>
           </div>
         </section>
@@ -393,10 +399,13 @@ const archiveProvider = () => {
                 :id="version.__dom_id"
                 :key="version.__dom_id"
               >
-                <div class="hud-data-row">
-                  <span class="hud-data-label">v{{ version.version }}</span>
+                <CadenceDataRow
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="`v${version.version}`"
+                >
                   <span class="hud-data-value">{{ version.lifecycle_state }}</span>
-                </div>
+                </CadenceDataRow>
               </div>
             </div>
           </div>
@@ -413,12 +422,17 @@ const archiveProvider = () => {
       </summary>
       <div class="mt-4 grid gap-4 lg:grid-cols-2">
         <div class="divide-y divide-base-300">
-          <div v-for="row in diagnostics.rows" :key="row.label" class="hud-data-row">
-            <span class="hud-data-label">{{ row.label }}</span>
+          <CadenceDataRow
+            v-for="row in diagnostics.rows"
+            :key="row.label"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="row.label"
+          >
             <span :class="['hud-data-value', row.mono && 'font-mono text-sm']">
               {{ row.value }}
             </span>
-          </div>
+          </CadenceDataRow>
         </div>
         <pre
           :id="diagnostics.json_id"
