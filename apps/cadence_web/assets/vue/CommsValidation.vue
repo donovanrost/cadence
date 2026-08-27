@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -108,18 +109,19 @@ defineProps<{validation: Validation}>()
     </CadenceCard>
 
     <div v-else :id="validation.findings_id" class="space-y-5">
-      <section
+      <CadencePanel
         v-for="group in validation.finding_groups"
         :id="group.id"
         :key="group.id"
         class="card bg-base-200 border border-base-300"
+        header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
       >
-        <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <template #header>
           <div>
             <h2 class="text-base font-semibold text-base-content">{{ group.title }}</h2>
             <p class="mt-1 text-xs text-base-content/70">{{ group.description }}</p>
           </div>
-        </div>
+        </template>
         <div class="card-body p-0">
           <div class="divide-y divide-base-300">
             <div
@@ -145,7 +147,7 @@ defineProps<{validation: Validation}>()
             </div>
           </div>
         </div>
-      </section>
+      </CadencePanel>
     </div>
   </div>
 </template>
