@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
@@ -113,12 +114,12 @@ const dispatch = (
 
 <template>
   <section id="spacecraft-applications-inventory" class="space-y-6">
-    <section
+    <CadenceCard
       v-if="props.profile.kind === 'missing'"
       :id="props.profile.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">{{ props.profile.label }}</p>
         <h2 class="mt-2 text-base font-semibold">{{ props.profile.title }}</h2>
         <p class="mt-1 text-sm text-base-content/70">{{ props.profile.description }}</p>
@@ -128,15 +129,14 @@ const dispatch = (
           data-phx-link-state="push"
           class="btn btn-primary btn-sm mt-5"
         >{{ props.profile.action.label }}</a>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       v-else
       :id="props.profile.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="hud-label">{{ props.profile.label }}</p>
@@ -147,21 +147,20 @@ const dispatch = (
           </div>
           <StatusBadge :status="props.profile.status.tone" :label="props.profile.status.label" />
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
     <section
       v-if="props.profile.kind === 'pinned' || props.applications.length > 0"
       id="spacecraft-applications-list"
       class="grid gap-4 lg:grid-cols-2"
     >
-      <section
+      <CadenceCard
         v-for="application in props.applications"
         :id="application.id"
         :key="application.id"
         class="card border border-base-300 bg-base-200"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="hud-label">{{ application.scope_label }}</p>
@@ -239,8 +238,7 @@ const dispatch = (
           <p v-if="application.unavailable_message" class="mt-5 text-xs text-base-content/50">
             {{ application.unavailable_message }}
           </p>
-        </div>
-      </section>
+      </CadenceCard>
     </section>
   </section>
 </template>

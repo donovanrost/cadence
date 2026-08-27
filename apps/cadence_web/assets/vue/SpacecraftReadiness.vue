@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -107,13 +108,13 @@ defineProps<{
     </header>
 
     <div class="grid gap-4 xl:grid-cols-2">
-      <section
+      <CadenceCard
         v-for="panel in panels"
         :id="panel.id"
         :key="panel.id"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <p class="hud-label">{{ panel.title }}</p>
             <StatusBadge :status="panel.status.tone" :label="panel.status.label" />
@@ -161,8 +162,7 @@ defineProps<{
             data-phx-link-state="push"
             class="btn btn-primary btn-sm mt-5"
           >{{ panel.action.label }}</a>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
   </div>
 </template>

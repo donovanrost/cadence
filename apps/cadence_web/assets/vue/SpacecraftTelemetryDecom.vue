@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 type PreflightState = "ready" | "attention" | "blocked"
@@ -323,8 +324,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
       </div>
     </header>
 
-    <section :id="card.id" class="card bg-base-200 border border-base-300">
-      <div class="card-body p-6">
+    <CadenceCard :id="card.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <div class="space-y-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -631,7 +631,6 @@ const buttonClasses: Record<ButtonVariant, string> = {
             </div>
           </div>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>
