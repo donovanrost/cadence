@@ -91,10 +91,46 @@ const manifests = Object.freeze([
 ])
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const migratedDataRowOpening = `                <CadenceDataRow
+                  v-for="row in form.provider_derived.configuration.rows"
+                  :key="row.label"
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="row.label"
+                >`
+const foundationDataRowOpening = `                <div
+                  v-for="row in form.provider_derived.configuration.rows"
+                  :key="row.label"
+                  class="hud-data-row"
+                >
+                  <span class="hud-data-label">{{ row.label }}</span>`
 
 const replaceOnce = (source, migrated, foundation, description) => {
   assert.equal(occurrences(source, migrated), 1, `${description} is inventoried exactly once`)
   return source.replace(migrated, foundation)
+}
+
+const reconstructDataRow = (source) => {
+  assert.equal(occurrences(source, dataRowImport), 1, "the transport imports CadenceDataRow once")
+  assert.equal(
+    occurrences(source, migratedDataRowOpening),
+    1,
+    "the transport has exactly one migrated data-row opening boundary",
+  )
+  assert.equal(
+    occurrences(source, "</CadenceDataRow>"),
+    1,
+    "the transport has exactly one migrated data-row closing boundary",
+  )
+
+  const reconstructed = source
+    .replace(dataRowImport, "")
+    .replace(migratedDataRowOpening, foundationDataRowOpening)
+    .replace("</CadenceDataRow>", "</div>")
+
+  assert.doesNotMatch(reconstructed, /CadenceDataRow/, "the pre-data-row source has no residual primitive")
+  return reconstructed
 }
 
 const migratedHeader = ({numberExpression, titleExpression, indent, dividerClass}) => {
@@ -191,7 +227,8 @@ for (const manifest of manifests) {
   assert.match(actionsSource, /data-phx-link="redirect"/)
   assert.match(actionsSource, /data-phx-link-state="push"/)
 
-  let reconstructed = source
+  let reconstructed =
+    manifest.filename === "CommsTransportNew.vue" ? reconstructDataRow(source) : source
   for (const importLine of imports) {
     reconstructed = replaceOnce(
       reconstructed,
