@@ -52,6 +52,7 @@ const paths = {
   presentationTypes: resolve(testDirectory, "../vue/application_host/presentation_types.ts"),
   statusBadge: resolve(testDirectory, "../vue/StatusBadge.vue"),
   cadenceBadge: resolve(testDirectory, "../vue/ui/components/CadenceBadge.vue"),
+  cadenceCard: resolve(testDirectory, "../vue/ui/components/CadenceCard.vue"),
 }
 const [
   applicationHostSource,
@@ -165,9 +166,12 @@ const loadSfc = async (componentPath, localModules = {}) => {
   const parsed = parse(source, {filename: componentPath})
 
   assert.deepEqual(parsed.errors, [], `${componentPath} parses with the pinned Vue compiler`)
-  assert.ok(parsed.descriptor.scriptSetup, `${componentPath} keeps a TypeScript setup block`)
-  assert.equal(parsed.descriptor.scriptSetup.lang, "ts")
-  assert.ok(parsed.descriptor.template, `${componentPath} keeps a template block`)
+  const script = parsed.descriptor.scriptSetup ?? parsed.descriptor.script
+  assert.ok(script, `${componentPath} keeps a TypeScript script block`)
+  assert.equal(script.lang, "ts")
+  if (parsed.descriptor.scriptSetup) {
+    assert.ok(parsed.descriptor.template, `${componentPath} keeps a template block`)
+  }
 
   const compiled = compileScript(parsed.descriptor, {
     id: `application-host-${componentPath.split("/").at(-1)}`,
@@ -192,17 +196,22 @@ const loadSfc = async (componentPath, localModules = {}) => {
 }
 
 const cadenceBadge = await loadSfc(paths.cadenceBadge)
+const cadenceCard = await loadSfc(paths.cadenceCard)
 const statusBadge = await loadSfc(paths.statusBadge, {
   "./ui/components/CadenceBadge.vue": cadenceBadge,
 })
 const navigation = await loadSfc(paths.navigation)
-const stats = await loadSfc(paths.stats, {"../StatusBadge.vue": statusBadge})
+const stats = await loadSfc(paths.stats, {
+  "../StatusBadge.vue": statusBadge,
+  "../ui/components/CadenceCard.vue": cadenceCard,
+})
 const diagnostics = await loadSfc(paths.diagnostics, {"../StatusBadge.vue": statusBadge})
 const applicationHost = await loadSfc(paths.applicationHost, {
   "./StatusBadge.vue": statusBadge,
   "./application_host/ApplicationDiagnostics.vue": diagnostics,
   "./application_host/ApplicationNavigation.vue": navigation,
   "./application_host/ApplicationStats.vue": stats,
+  "./ui/components/CadenceCard.vue": cadenceCard,
 })
 
 assert.deepEqual(Object.keys(navigation.default.props), ["navigation"])
