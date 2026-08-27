@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
+
 type Navigation = {
   organizations_href: string
   runtime_href: string
@@ -53,11 +55,11 @@ defineProps<{
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <section
+      <CadenceCard
         id="admin-home-organizations-card"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <p class="hud-label">{{ presentation.organizations.title }}</p>
           <p class="mt-2 font-mono text-3xl font-bold">{{ organization_count }}</p>
           <a
@@ -67,11 +69,13 @@ defineProps<{
             data-phx-link-state="push"
             class="btn btn-primary btn-sm mt-4 w-full"
           >{{ presentation.organizations.action_label }}</a>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section id="admin-home-users-card" class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard
+        id="admin-home-users-card"
+        class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
+      >
           <p class="hud-label">{{ presentation.users.title }}</p>
           <p class="mt-2 font-mono text-3xl font-bold">{{ user_count }}</p>
           <button
@@ -83,14 +87,13 @@ defineProps<{
             {{ presentation.users.action_label }}
             <span class="text-xs">{{ presentation.users.coming_soon }}</span>
           </button>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section
+      <CadenceCard
         id="admin-home-runtime-card"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <p class="hud-label">{{ presentation.runtime.title }}</p>
           <p class="mt-2 text-sm text-base-content/70">
             {{ presentation.runtime.description }}
@@ -102,8 +105,7 @@ defineProps<{
             data-phx-link-state="push"
             class="btn btn-primary btn-sm mt-4 w-full"
           >{{ presentation.runtime.action_label }}</a>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
 
     <section aria-labelledby="admin-home-quick-actions-title">
