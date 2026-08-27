@@ -27,13 +27,22 @@ const [providerSource, routingSource] = await Promise.all([
 
 for (const source of [providerSource, routingSource]) {
   assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
+  assert.match(source, /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m)
+  assert.match(
+    source,
+    /^import CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"$/m,
+  )
   assert.doesNotMatch(source, /(?:^|\s)class="fieldset mb-3"/)
 }
 
 assert.equal(providerSource.match(/<CadenceField\b/g)?.length, 5)
+assert.equal(providerSource.match(/<CadenceFormSectionHeader\b/g)?.length, 3)
+assert.equal(providerSource.match(/<CadenceFormActions\b/g)?.length, 1)
 assert.equal(providerSource.match(/<input\b/g)?.length, 3)
 assert.equal(providerSource.match(/<select\b/g)?.length, 3)
 assert.equal(routingSource.match(/<CadenceField\b/g)?.length, 6)
+assert.equal(routingSource.match(/<CadenceFormSectionHeader\b/g)?.length, 3)
+assert.equal(routingSource.match(/<CadenceFormActions\b/g)?.length, 1)
 assert.equal(routingSource.match(/<input\b/g)?.length, 2)
 assert.equal(routingSource.match(/<select\b/g)?.length, 4)
 
@@ -42,6 +51,100 @@ const indentControl = (control) =>
     .split("\n")
     .map((line) => `  ${line}`)
     .join("\n")
+
+const formChromeImports = [
+  'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"',
+  'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"',
+]
+const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const occurrences = (source, fragment) => source.split(fragment).length - 1
+const formChromeHeader = (
+  key,
+  numberExpression,
+  titleExpression,
+  {indent = 8, multilineNumber = false, dividerClass = "flex-1 h-px bg-base-300/60"} = {},
+) => ({key, numberExpression, titleExpression, indent, multilineNumber, dividerClass})
+
+const migratedHeader = ({numberExpression, titleExpression, indent, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  return `${spaces}<CadenceFormSectionHeader
+${spaces}  wrapper-class="flex items-center gap-3"
+${spaces}  :number="${numberExpression}"
+${spaces}  number-class="hud-label text-primary/70"
+${spaces}  :title="${titleExpression}"
+${spaces}  title-class="hud-label"
+${spaces}  divider-class="${dividerClass}"
+${spaces}/>`
+}
+
+const foundationHeader = ({numberExpression, titleExpression, indent, multilineNumber, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  const number = multilineNumber
+    ? `
+${spaces}    {{ ${numberExpression} }}
+${spaces}  `
+    : `{{ ${numberExpression} }}`
+
+  return `${spaces}<div class="flex items-center gap-3">
+${spaces}  <span class="hud-label text-primary/70">${number}</span>
+${spaces}  <h2 class="hud-label">{{ ${titleExpression} }}</h2>
+${spaces}  <div class="${dividerClass}"></div>
+${spaces}</div>`
+}
+
+const reconstructFormChrome = (source, feature, headers) => {
+  assert.equal(
+    occurrences(source, "<CadenceFormSectionHeader\n"),
+    headers.length,
+    `${feature} keeps every form-section header in the reconstruction ledger`,
+  )
+  assert.equal(
+    occurrences(source, `<CadenceFormActions wrapper-class="${actionWrapperClass}">`),
+    1,
+    `${feature} keeps its action row in the reconstruction ledger`,
+  )
+
+  let reconstructed = source
+  for (const importLine of formChromeImports) {
+    assert.equal(occurrences(reconstructed, `${importLine}\n`), 1)
+    reconstructed = reconstructed.replace(`${importLine}\n`, "")
+  }
+
+  for (const entry of headers) {
+    const migrated = migratedHeader(entry)
+    assert.equal(occurrences(reconstructed, migrated), 1, `${feature} ${entry.key} reconstructs once`)
+    reconstructed = reconstructed.replace(migrated, foundationHeader(entry))
+  }
+
+  const actionsOpen = `      <CadenceFormActions wrapper-class="${actionWrapperClass}">`
+  assert.equal(occurrences(reconstructed, actionsOpen), 1)
+  reconstructed = reconstructed.replace(actionsOpen, `      <div class="${actionWrapperClass}">`)
+  assert.equal(occurrences(reconstructed, "      </CadenceFormActions>"), 1)
+  reconstructed = reconstructed.replace("      </CadenceFormActions>", "      </div>")
+
+  return reconstructed
+}
+
+const routingHeaders = [
+  formChromeHeader("intent", "form.sections.intent.number", "form.sections.intent.title"),
+  formChromeHeader("transport", "form.sections.transport.number", "form.sections.transport.title"),
+  formChromeHeader("policy", "form.sections.policy.number", "form.sections.policy.title"),
+]
+const providerHeaders = [
+  formChromeHeader("binding", "form.sections.binding.number", "form.sections.binding.title"),
+  formChromeHeader(
+    "resource scope",
+    "form.sections.resource_scope.number",
+    "form.sections.resource_scope.title",
+    {multilineNumber: true},
+  ),
+  formChromeHeader(
+    "delivery policy",
+    "form.sections.delivery_policy.number",
+    "form.sections.delivery_policy.title",
+    {multilineNumber: true},
+  ),
+]
 
 const reconstructRoutingSource = (source) => {
   let reconstructedFields = 0
@@ -61,7 +164,7 @@ ${indentControl(control)}
     )
 
   assert.equal(reconstructedFields, 6, "all routing fields reconstruct one-for-one")
-  return reconstructed
+  return reconstructFormChrome(reconstructed, "routing", routingHeaders)
 }
 
 const reconstructProviderSource = (source) => {
@@ -126,7 +229,7 @@ ${indentControl(control)}
   )
 
   assert.equal(reconstructedFields, 5, "all provider field call sites reconstruct one-for-one")
-  return reconstructed
+  return reconstructFormChrome(reconstructed, "provider", providerHeaders)
 }
 
 assert.equal(
