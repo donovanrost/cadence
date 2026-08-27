@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Breadcrumb = {
   label: string
@@ -207,35 +208,39 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.display_name.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>
-            <input
-              :id="form.fields.display_name.id"
-              v-model="values.display_name"
-              :name="form.fields.display_name.name"
-              :type="form.fields.display_name.type"
-              :required="form.fields.display_name.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.display_name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.display_name.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.display_name.id"
+            v-model="values.display_name"
+            :name="form.fields.display_name.name"
+            :type="form.fields.display_name.type"
+            :required="form.fields.display_name.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.purpose_label.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.purpose_label.label }}</span>
-            <input
-              :id="form.fields.purpose_label.id"
-              v-model="values.purpose_label"
-              :name="form.fields.purpose_label.name"
-              :type="form.fields.purpose_label.type"
-              :required="form.fields.purpose_label.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.purpose_label.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.purpose_label.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.purpose_label.id"
+            v-model="values.purpose_label"
+            :name="form.fields.purpose_label.name"
+            :type="form.fields.purpose_label.type"
+            :required="form.fields.purpose_label.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
       </section>
 
       <section id="routing-rule-transport-section" class="space-y-4">
@@ -245,45 +250,49 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.spacecraft_id.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.spacecraft_id.label }}</span>
-            <select
-              :id="form.fields.spacecraft_id.id"
-              v-model="values.spacecraft_id"
-              :name="form.fields.spacecraft_id.name"
-              :required="form.fields.spacecraft_id.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.spacecraft"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.spacecraft_id.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.spacecraft_id.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.spacecraft_id.id"
+            v-model="values.spacecraft_id"
+            :name="form.fields.spacecraft_id.name"
+            :required="form.fields.spacecraft_id.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.spacecraft"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.transport_ref.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.transport_ref.label }}</span>
-            <select
-              :id="form.fields.transport_ref.id"
-              v-model="values.transport_ref"
-              :name="form.fields.transport_ref.name"
-              :required="form.fields.transport_ref.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.transports"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.transport_ref.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.transport_ref.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.transport_ref.id"
+            v-model="values.transport_ref"
+            :name="form.fields.transport_ref.name"
+            :required="form.fields.transport_ref.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.transports"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <section id="routing-rule-policy-section" class="space-y-4">
@@ -293,45 +302,49 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.direction.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.direction.label }}</span>
-            <select
-              :id="form.fields.direction.id"
-              v-model="values.direction"
-              :name="form.fields.direction.name"
-              :required="form.fields.direction.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.directions"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.direction.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.direction.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.direction.id"
+            v-model="values.direction"
+            :name="form.fields.direction.name"
+            :required="form.fields.direction.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.directions"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.role.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.role.label }}</span>
-            <select
-              :id="form.fields.role.id"
-              v-model="values.role"
-              :name="form.fields.role.name"
-              :required="form.fields.role.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.roles"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.role.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.role.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.role.id"
+            v-model="values.role"
+            :name="form.fields.role.name"
+            :required="form.fields.role.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.roles"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">

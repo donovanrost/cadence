@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Breadcrumb = {
   label: string
@@ -257,42 +258,42 @@ const save = () => emit("save", {provider: values()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div
+        <CadenceField
           v-for="field in fieldsFor(form.sections.binding)"
           :key="field.key"
-          class="fieldset mb-3"
+          :control-id="field.id"
+          wrapper-class="fieldset mb-3"
+          :label="field.label"
+          label-class="hud-label block mb-1.5"
         >
-          <label :for="field.id">
-            <span class="hud-label block mb-1.5">{{ field.label }}</span>
-            <select
-              v-if="field.type === 'select'"
-              :id="field.id"
-              v-model="provider[field.key]"
-              :name="field.name"
-              :required="field.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in field.options"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-            <input
-              v-else
-              :id="field.id"
-              v-model="provider[field.key]"
-              :name="field.name"
-              :type="field.type"
-              :required="field.required"
-              :placeholder="field.placeholder"
-              :min="field.min"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+          <select
+            v-if="field.type === 'select'"
+            :id="field.id"
+            v-model="provider[field.key]"
+            :name="field.name"
+            :required="field.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in field.options"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+          <input
+            v-else
+            :id="field.id"
+            v-model="provider[field.key]"
+            :name="field.name"
+            :type="field.type"
+            :required="field.required"
+            :placeholder="field.placeholder"
+            :min="field.min"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
         <div
           v-if="accounts.selected"
@@ -338,26 +339,26 @@ const save = () => emit("save", {provider: values()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div
+        <CadenceField
           v-for="field in fieldsFor(form.sections.resource_scope)"
           :key="field.key"
-          class="fieldset mb-3"
+          :control-id="field.id"
+          wrapper-class="fieldset mb-3"
+          :label="field.label"
+          label-class="hud-label block mb-1.5"
         >
-          <label :for="field.id">
-            <span class="hud-label block mb-1.5">{{ field.label }}</span>
-            <input
-              :id="field.id"
-              v-model="provider[field.key]"
-              :name="field.name"
-              :type="field.type"
-              :required="field.required"
-              :placeholder="field.placeholder"
-              :min="field.min"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+          <input
+            :id="field.id"
+            v-model="provider[field.key]"
+            :name="field.name"
+            :type="field.type"
+            :required="field.required"
+            :placeholder="field.placeholder"
+            :min="field.min"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
         <p :id="notes.resource_boundary.id" class="text-xs text-base-content/60">
           {{ notes.resource_boundary.text }}
         </p>
@@ -372,25 +373,27 @@ const save = () => emit("save", {provider: values()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.policy_mode.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.policy_mode.label }}</span>
-            <select
-              :id="form.fields.policy_mode.id"
-              v-model="provider.policy_mode"
-              :name="form.fields.policy_mode.name"
-              :required="form.fields.policy_mode.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in form.fields.policy_mode.options"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.policy_mode.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.policy_mode.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.policy_mode.id"
+            v-model="provider.policy_mode"
+            :name="form.fields.policy_mode.name"
+            :required="form.fields.policy_mode.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in form.fields.policy_mode.options"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
         <div
           v-if="visible(form.conditional.approval_guidance.visible_when)"
@@ -405,49 +408,49 @@ const save = () => emit("save", {provider: values()})
           :id="form.conditional.bounded_policy.id"
           class="grid gap-4 sm:grid-cols-2"
         >
-          <div
+          <CadenceField
             v-for="field in fieldsForKeys(form.conditional.bounded_policy.field_keys)"
             :key="field.key"
-            class="fieldset mb-3"
+            :control-id="field.id"
+            wrapper-class="fieldset mb-3"
+            :label="field.label"
+            label-class="hud-label block mb-1.5"
           >
-            <label :for="field.id">
-              <span class="hud-label block mb-1.5">{{ field.label }}</span>
-              <input
-                :id="field.id"
-                v-model="provider[field.key]"
-                :name="field.name"
-                :type="field.type"
-                :required="field.required"
-                :placeholder="field.placeholder"
-                :min="field.min"
-                class="w-full input"
-                @input="validate"
-              >
-            </label>
-          </div>
+            <input
+              :id="field.id"
+              v-model="provider[field.key]"
+              :name="field.name"
+              :type="field.type"
+              :required="field.required"
+              :placeholder="field.placeholder"
+              :min="field.min"
+              class="w-full input"
+              @input="validate"
+            >
+          </CadenceField>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.deadline_behavior.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.deadline_behavior.label }}
-            </span>
-            <select
-              :id="form.fields.deadline_behavior.id"
-              v-model="provider.deadline_behavior"
-              :name="form.fields.deadline_behavior.name"
-              :required="form.fields.deadline_behavior.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in form.fields.deadline_behavior.options"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.deadline_behavior.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.deadline_behavior.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.deadline_behavior.id"
+            v-model="provider.deadline_behavior"
+            :name="form.fields.deadline_behavior.name"
+            :required="form.fields.deadline_behavior.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in form.fields.deadline_behavior.options"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
