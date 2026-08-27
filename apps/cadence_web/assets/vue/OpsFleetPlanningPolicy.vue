@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, ref, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type Option = {
   label: string
@@ -467,8 +468,12 @@ const revokeGrant = () => {
 
   <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)] lg:p-7">
     <div class="min-w-0 space-y-5">
-      <section :id="page.manifest.id" class="border border-base-300 bg-base-200/15">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
+      <CadencePanel
+        :id="page.manifest.id"
+        class="border border-base-300 bg-base-200/15"
+        header-class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3"
+      >
+        <template #header>
           <div>
             <p class="hud-label">Current immutable version</p>
             <p class="mt-1 font-mono text-sm">{{ page.manifest.version_label }}</p>
@@ -479,7 +484,7 @@ const revokeGrant = () => {
           >
             {{ page.manifest.content_sha256 }}
           </p>
-        </div>
+        </template>
 
         <div v-if="page.manifest.sections.length > 0" class="grid md:grid-cols-2">
           <div
@@ -512,7 +517,7 @@ const revokeGrant = () => {
             {{ page.manifest.empty.copy }}
           </p>
         </div>
-      </section>
+      </CadencePanel>
 
       <section
         v-if="policy_form"
@@ -759,14 +764,18 @@ const revokeGrant = () => {
     </div>
 
     <aside class="min-w-0 space-y-5">
-      <section :id="grant_ledger.id" class="border border-base-300 bg-base-200/15">
-        <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+      <CadencePanel
+        :id="grant_ledger.id"
+        class="border border-base-300 bg-base-200/15"
+        header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"
+      >
+        <template #header>
           <div>
             <p class="hud-label">Automation grants</p>
             <p class="mt-1 text-xs text-base-content/50">Exact service + policy authority</p>
           </div>
           <span class="font-mono text-xs text-base-content/45">{{ grant_ledger.active_label }}</span>
-        </div>
+        </template>
         <div :id="grant_ledger.list_id">
           <div :id="grant_ledger.empty.id" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
             {{ grant_ledger.empty.copy }}
@@ -792,7 +801,7 @@ const revokeGrant = () => {
             </p>
           </div>
         </div>
-      </section>
+      </CadencePanel>
 
       <section
         v-if="grant_form"
