@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -92,20 +93,19 @@ defineProps<{validation: Validation}>()
       </div>
     </header>
 
-    <section
+    <CadenceCard
       v-if="validation.empty"
       :id="validation.empty_state.id"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
           <p class="hud-label">{{ validation.empty_state.title }}</p>
           <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
             {{ validation.empty_state.description }}
           </p>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
     <div v-else :id="validation.findings_id" class="space-y-5">
       <section

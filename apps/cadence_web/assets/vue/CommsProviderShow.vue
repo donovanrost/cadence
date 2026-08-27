@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -340,13 +341,13 @@ const archiveProvider = () => {
       </div>
 
       <aside class="space-y-4">
-        <section
+        <CadenceCard
           v-for="card in [details.configuration, details.delivery_policy]"
           :id="card.id"
           :key="card.id"
           class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
         >
-          <div class="card-body p-6">
             <p class="hud-label">{{ card.title }}</p>
             <div class="mt-3 divide-y divide-base-300">
               <CadenceDataRow
@@ -361,11 +362,9 @@ const archiveProvider = () => {
                 </span>
               </CadenceDataRow>
             </div>
-          </div>
-        </section>
+        </CadenceCard>
 
-        <section :id="details.capabilities.id" class="card bg-base-200 border border-base-300">
-          <div class="card-body p-6">
+        <CadenceCard :id="details.capabilities.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
             <p class="hud-label">{{ details.capabilities.title }}</p>
             <div class="mt-3 space-y-2">
               <div v-if="details.capabilities.empty" class="text-sm text-base-content/60">
@@ -383,11 +382,9 @@ const archiveProvider = () => {
                 />
               </div>
             </div>
-          </div>
-        </section>
+        </CadenceCard>
 
-        <section :id="details.version_history.id" class="card bg-base-200 border border-base-300">
-          <div class="card-body p-6">
+        <CadenceCard :id="details.version_history.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
             <p class="hud-label">{{ details.version_history.title }}</p>
             <div
               :id="details.version_history.stream_id"
@@ -408,8 +405,7 @@ const archiveProvider = () => {
                 </CadenceDataRow>
               </div>
             </div>
-          </div>
-        </section>
+        </CadenceCard>
       </aside>
     </div>
 

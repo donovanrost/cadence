@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type Breadcrumb = {
@@ -109,8 +110,7 @@ const archive = () => {
     </header>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <p class="hud-label">{{ ground_station.details_title }}</p>
           <p class="text-sm text-base-content/70">
             {{ ground_station.description }}
@@ -127,15 +127,12 @@ const archive = () => {
               <span class="hud-data-value">{{ detail.value }}</span>
             </CadenceDataRow>
           </div>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
+      <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
           <p class="hud-label">{{ ground_station.metadata_title }}</p>
           <pre class="overflow-x-auto font-mono text-xs text-base-content/70">{{ ground_station.metadata_json }}</pre>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
   </div>
 </template>

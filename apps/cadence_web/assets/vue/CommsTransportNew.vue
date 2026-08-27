@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
@@ -727,11 +728,11 @@ const statusClass = (status: "ready" | "attention") =>
             divider-class="h-px flex-1 bg-base-300/60"
           />
           <p class="text-sm text-base-content/65">{{ form.provider_derived.description }}</p>
-          <section
+          <CadenceCard
             :id="form.provider_derived.configuration.id"
             class="card bg-base-200 border border-base-300"
+            body-class="card-body p-6"
           >
-            <div class="card-body p-6">
               <div
                 v-if="form.provider_derived.configuration.rows.length > 0"
                 class="divide-y divide-base-300"
@@ -751,8 +752,7 @@ const statusClass = (status: "ready" | "attention") =>
               <p v-else class="text-sm text-base-content/60">
                 {{ form.provider_derived.configuration.empty_text }}
               </p>
-            </div>
-          </section>
+          </CadenceCard>
         </section>
       </template>
 
