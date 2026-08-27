@@ -4,6 +4,7 @@ import {onBeforeUnmount, ref, watch} from "vue"
 import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vue"
 import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
 import ApplicationStats from "./application_host/ApplicationStats.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import type {
   Diagnostics,
   Navigation,
@@ -488,12 +489,12 @@ const packetRailClasses: Record<PacketGroupState, string> = {
       :diagnostics="declarative_surface.diagnostics"
     />
 
-    <section
+    <CadenceCard
       v-if="declarative_surface.form"
       :id="declarative_surface.form.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div>
           <h2 class="text-base font-semibold">{{ declarative_surface.form.title }}</h2>
           <p
@@ -631,8 +632,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
             :disabled="declarative_surface.form.action.disabled"
           >{{ declarative_surface.form.action.label }}</button>
         </form>
-      </div>
-    </section>
+    </CadenceCard>
 
     <section
       v-if="declarative_surface.packet_bindings"
@@ -930,12 +930,12 @@ const packetRailClasses: Record<PacketGroupState, string> = {
       </div>
     </section>
 
-    <section
+    <CadenceCard
       v-if="declarative_surface.activity"
       :id="declarative_surface.activity.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div>
           <h2 class="text-base font-semibold">{{ declarative_surface.activity.title }}</h2>
           <p
@@ -984,8 +984,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
             </p>
           </article>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
   </div>
 </template>

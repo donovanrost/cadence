@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 
 type Page = {
   id: string
@@ -124,8 +125,11 @@ const decide = (event: SubmitEvent) => {
       </div>
     </header>
 
-    <section :id="page.list.card_id" class="card bg-base-200 border border-base-300">
-      <div class="card-body p-6">
+    <CadenceCard
+      :id="page.list.card_id"
+      class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
+    >
         <div :id="page.list.id" class="divide-y divide-base-300/30">
           <div
             :id="page.list.empty.id"
@@ -162,15 +166,14 @@ const decide = (event: SubmitEvent) => {
             </button>
           </div>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       v-if="selected"
       :id="form.panel_id"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <form :id="form.id" @submit.prevent="decide">
           <div class="fieldset mb-3">
             <label>
@@ -216,7 +219,6 @@ const decide = (event: SubmitEvent) => {
             </button>
           </div>
         </form>
-      </div>
-    </section>
+    </CadenceCard>
   </section>
 </template>
