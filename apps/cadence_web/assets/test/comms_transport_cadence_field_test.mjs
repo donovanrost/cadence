@@ -22,7 +22,14 @@ const componentPath = resolve(testDirectory, "../vue/CommsTransportNew.vue")
 const source = await readFile(componentPath, "utf8")
 
 assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
+assert.match(source, /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m)
+assert.match(
+  source,
+  /^import CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"$/m,
+)
 assert.equal(source.match(/<CadenceField\b/g)?.length, 7)
+assert.equal(source.match(/<CadenceFormSectionHeader\b/g)?.length, 7)
+assert.equal(source.match(/<CadenceFormActions\b/g)?.length, 1)
 assert.equal(source.match(/<input\b/g)?.length, 5, "all five native inputs stay in the feature")
 assert.equal(source.match(/<select\b/g)?.length, 6, "all six native selects stay in the feature")
 assert.match(
@@ -140,6 +147,103 @@ const extractionLedger = [
   },
 ]
 
+const formChromeImports = [
+  'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"',
+  'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"',
+]
+const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const occurrences = (value, fragment) => value.split(fragment).length - 1
+const formChromeHeader = (
+  key,
+  numberExpression,
+  titleExpression,
+  {indent = 8, multilineNumber = false, dividerClass = "flex-1 h-px bg-base-300/60"} = {},
+) => ({key, numberExpression, titleExpression, indent, multilineNumber, dividerClass})
+const formChromeHeaders = [
+  formChromeHeader("identity", "form.sections.identity.number", "form.sections.identity.title"),
+  formChromeHeader("origin", "form.sections.origin.number", "form.sections.origin.title"),
+  formChromeHeader("source", "form.sections.source.number", "form.sections.source.title"),
+  formChromeHeader("direct configuration", "section.number", "section.title", {indent: 10}),
+  formChromeHeader(
+    "provider capability",
+    "form.sections.provider_capability.number",
+    "form.sections.provider_capability.title",
+    {indent: 10, multilineNumber: true},
+  ),
+  formChromeHeader(
+    "provider derived",
+    "form.provider_derived.number",
+    "form.provider_derived.title",
+    {indent: 10, dividerClass: "h-px flex-1 bg-base-300/60"},
+  ),
+  formChromeHeader(
+    "review",
+    "form.sections.review.number",
+    "form.sections.review.title",
+    {dividerClass: "h-px flex-1 bg-base-300/60"},
+  ),
+]
+
+const migratedHeader = ({numberExpression, titleExpression, indent, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  return `${spaces}<CadenceFormSectionHeader
+${spaces}  wrapper-class="flex items-center gap-3"
+${spaces}  :number="${numberExpression}"
+${spaces}  number-class="hud-label text-primary/70"
+${spaces}  :title="${titleExpression}"
+${spaces}  title-class="hud-label"
+${spaces}  divider-class="${dividerClass}"
+${spaces}/>`
+}
+
+const foundationHeader = ({numberExpression, titleExpression, indent, multilineNumber, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  const number = multilineNumber
+    ? `
+${spaces}    {{ ${numberExpression} }}
+${spaces}  `
+    : `{{ ${numberExpression} }}`
+
+  return `${spaces}<div class="flex items-center gap-3">
+${spaces}  <span class="hud-label text-primary/70">${number}</span>
+${spaces}  <h2 class="hud-label">{{ ${titleExpression} }}</h2>
+${spaces}  <div class="${dividerClass}"></div>
+${spaces}</div>`
+}
+
+const reconstructFormChrome = (value) => {
+  assert.equal(
+    occurrences(value, "<CadenceFormSectionHeader\n"),
+    formChromeHeaders.length,
+    "all seven transport form-section headers stay in the reconstruction ledger",
+  )
+  assert.equal(
+    occurrences(value, `<CadenceFormActions wrapper-class="${actionWrapperClass}">`),
+    1,
+    "the transport action row stays in the reconstruction ledger",
+  )
+
+  let reconstructed = value
+  for (const importLine of formChromeImports) {
+    assert.equal(occurrences(reconstructed, `${importLine}\n`), 1)
+    reconstructed = reconstructed.replace(`${importLine}\n`, "")
+  }
+
+  for (const entry of formChromeHeaders) {
+    const migrated = migratedHeader(entry)
+    assert.equal(occurrences(reconstructed, migrated), 1, `${entry.key} reconstructs once`)
+    reconstructed = reconstructed.replace(migrated, foundationHeader(entry))
+  }
+
+  const actionsOpen = `      <CadenceFormActions wrapper-class="${actionWrapperClass}">`
+  assert.equal(occurrences(reconstructed, actionsOpen), 1)
+  reconstructed = reconstructed.replace(actionsOpen, `      <div class="${actionWrapperClass}">`)
+  assert.equal(occurrences(reconstructed, "      </CadenceFormActions>"), 1)
+  reconstructed = reconstructed.replace("      </CadenceFormActions>", "      </div>")
+
+  return reconstructed
+}
+
 let reconstructedSource = source.replace(
   'import CadenceField from "./ui/components/CadenceField.vue"\n',
   "",
@@ -183,6 +287,8 @@ ${entry.indent}</div>`
     original +
     reconstructedSource.slice(end + close.length)
 }
+
+reconstructedSource = reconstructFormChrome(reconstructedSource)
 
 assert.equal(
   createHash("sha256").update(reconstructedSource).digest("hex"),
