@@ -22,6 +22,7 @@ assert.equal(scenarios.length, 5)
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPaths = {
+  card: resolve(testDirectory, "../vue/ui/components/CadenceCard.vue"),
   dataRow: resolve(testDirectory, "../vue/ui/components/CadenceDataRow.vue"),
   artifactShow: resolve(testDirectory, "../vue/CatalogArtifactShow.vue"),
 }
@@ -67,6 +68,7 @@ const loadSfc = async (componentPath, localModules = {}) => {
   }
 }
 
+const cardSfc = await loadSfc(componentPaths.card)
 const dataRowSfc = await loadSfc(componentPaths.dataRow)
 const CadenceDataRow = dataRowSfc.component
 
@@ -189,6 +191,7 @@ const StatusBadgeOracle = defineComponent({
 const componentModule = (component) => ({__esModule: true, default: component})
 const artifactShowSfc = await loadSfc(componentPaths.artifactShow, {
   "./StatusBadge.vue": componentModule(StatusBadgeOracle),
+  "./ui/components/CadenceCard.vue": cardSfc.module,
   "./ui/components/CadenceDataRow.vue": dataRowSfc.module,
   "./ui/reka/CadenceMenuItem.vue": componentModule(passthrough("CadenceMenuItemOracle")),
   "./ui/reka/CadenceModalMenu.vue": componentModule(ModalMenuOracle),
