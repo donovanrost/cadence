@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
@@ -249,8 +250,12 @@ const archiveProvider = () => {
 
     <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div class="space-y-4">
-        <section :id="profiles.service.id" class="card bg-base-200 border border-base-300">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="profiles.service.id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <h2 class="text-base font-semibold text-base-content">
                 {{ profiles.service.heading }}
@@ -259,7 +264,7 @@ const archiveProvider = () => {
                 {{ profiles.service.subtitle }}
               </p>
             </div>
-          </div>
+          </template>
           <div class="card-body p-0">
             <div v-if="profiles.service.empty" class="p-6 text-sm text-base-content/60">
               {{ profiles.service.empty_copy }}
@@ -290,10 +295,14 @@ const archiveProvider = () => {
               </tbody>
             </table>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="profiles.delivery.id" class="card bg-base-200 border border-base-300">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="profiles.delivery.id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <h2 class="text-base font-semibold text-base-content">
                 {{ profiles.delivery.heading }}
@@ -302,7 +311,7 @@ const archiveProvider = () => {
                 {{ profiles.delivery.subtitle }}
               </p>
             </div>
-          </div>
+          </template>
           <div class="card-body p-0">
             <div v-if="profiles.delivery.empty" class="p-6 text-sm text-base-content/60">
               {{ profiles.delivery.empty_copy }}
@@ -337,7 +346,7 @@ const archiveProvider = () => {
               </tbody>
             </table>
           </div>
-        </section>
+        </CadencePanel>
       </div>
 
       <aside class="space-y-4">
