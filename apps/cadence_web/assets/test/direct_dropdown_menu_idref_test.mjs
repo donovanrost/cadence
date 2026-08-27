@@ -78,8 +78,41 @@ const definitions = [
   },
 ]
 
+const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
+  const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+  const dataRowBoundary =
+    /          <CadenceDataRow\n            row-class="hud-data-row"\n            label-class="hud-data-label"\n            label="([^"]+)"\n          >([\s\S]*?)          <\/CadenceDataRow>/g
+  const dataRowBoundaries = [...source.matchAll(dataRowBoundary)]
+
+  assert.equal(
+    source.split(dataRowImport).length - 1,
+    1,
+    "CatalogArtifactShow has exactly one CadenceDataRow import to strip",
+  )
+  assert.equal(
+    dataRowBoundaries.length,
+    4,
+    "CatalogArtifactShow has exactly four CadenceDataRow boundaries to strip",
+  )
+
+  const reconstructedSource = source
+    .replace(dataRowImport, "")
+    .replace(
+      dataRowBoundary,
+      (_, label, callerSlot) =>
+        `          <div class="hud-data-row">\n            <span class="hud-data-label">${label}</span>${callerSlot}          </div>`,
+    )
+
+  assert.doesNotMatch(reconstructedSource, /CadenceDataRow/)
+  return reconstructedSource
+}
+
 const compileSfc = async (definition) => {
-  const source = await readFile(definition.path, "utf8")
+  const currentSource = await readFile(definition.path, "utf8")
+  const source =
+    definition.name === "CatalogArtifactShow"
+      ? reconstructCatalogArtifactShowPreDataRowSource(currentSource)
+      : currentSource
   const parsed = parse(source, {filename: definition.path})
 
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
