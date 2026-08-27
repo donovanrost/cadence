@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type Option = {
   label: string
@@ -248,11 +249,11 @@ const activeError = computed(() =>
 
     <div class="mx-auto max-w-5xl p-5 lg:p-7">
       <form :id="form.id" class="space-y-5" @submit.prevent="save">
-        <section :id="journey.outcome.id" class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-5 py-3">
+        <CadencePanel :id="journey.outcome.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-5 py-3">
+          <template #header>
             <p class="hud-label">{{ journey.outcome.step }} / {{ journey.outcome.title }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.outcome.copy }}</p>
-          </div>
+          </template>
           <div class="grid gap-x-5 p-5 md:grid-cols-2">
             <div class="fieldset mb-3">
               <label :for="form.fields.spacecraft_id.id">
@@ -334,13 +335,13 @@ const activeError = computed(() =>
               </label>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="journey.horizon.id" class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-5 py-3">
+        <CadencePanel :id="journey.horizon.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-5 py-3">
+          <template #header>
             <p class="hud-label">{{ journey.horizon.step }} / {{ journey.horizon.title }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.horizon.copy }}</p>
-          </div>
+          </template>
           <div class="grid gap-x-5 p-5 md:grid-cols-2">
             <div class="fieldset mb-3">
               <label :for="form.fields.earliest_start.id">
@@ -470,7 +471,7 @@ const activeError = computed(() =>
               </label>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
         <details :id="journey.advanced.id" class="border border-base-300 bg-base-200/20">
           <summary class="cursor-pointer px-5 py-4 text-sm font-semibold">

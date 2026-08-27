@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type Option = {
   label: string
@@ -286,11 +287,12 @@ const cancel = (reservation: Reservation) => {
     </header>
 
     <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
-      <section
+      <CadencePanel
         :id="page.contact_ledger.id"
         class="border border-base-300 bg-base-200/20 shadow-sm"
+        header-class="flex flex-col gap-3 border-b border-base-300 px-4 py-3 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div class="flex flex-col gap-3 border-b border-base-300 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+        <template #header>
           <div>
             <p class="hud-label">{{ page.contact_ledger.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ page.contact_ledger.title }}</h2>
@@ -308,7 +310,7 @@ const cancel = (reservation: Reservation) => {
             <span :class="[page.contact_ledger.timeline_action.icon, 'h-4 w-4']"></span>
             {{ page.contact_ledger.timeline_action.label }}
           </a>
-        </div>
+        </template>
         <div :id="page.contact_ledger.rows_id">
           <div
             :id="page.contact_ledger.empty.id"
@@ -369,12 +371,12 @@ const cancel = (reservation: Reservation) => {
             </a>
           </article>
         </div>
-      </section>
+      </CadencePanel>
 
       <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)]">
         <div class="min-w-0 space-y-5">
-          <section class="border border-base-300 bg-base-200/35 shadow-sm">
-            <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <CadencePanel class="border border-base-300 bg-base-200/35 shadow-sm" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+            <template #header>
               <div>
                 <p class="hud-label">{{ page.opportunity_search.eyebrow }}</p>
                 <p class="mt-1 text-sm text-base-content/60">
@@ -382,7 +384,7 @@ const cancel = (reservation: Reservation) => {
                 </p>
               </div>
               <span :class="[page.opportunity_search.icon, 'h-5 w-5 text-primary/60']"></span>
-            </div>
+            </template>
 
             <form
               :id="search.id"
@@ -495,10 +497,10 @@ const cancel = (reservation: Reservation) => {
                 <span :class="[readiness.action.icon, 'h-3 w-3']"></span>
               </a>
             </div>
-          </section>
+          </CadencePanel>
 
-          <section class="border border-base-300 bg-base-200/20">
-            <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <CadencePanel class="border border-base-300 bg-base-200/20" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+            <template #header>
               <div>
                 <p class="hud-label">{{ page.opportunities.eyebrow }}</p>
                 <p class="mt-1 text-sm text-base-content/60">
@@ -508,7 +510,7 @@ const cancel = (reservation: Reservation) => {
               <span :id="page.opportunities.count.id" class="font-mono text-sm text-primary">
                 {{ page.opportunities.count.value }}
               </span>
-            </div>
+            </template>
 
             <div :id="page.opportunities.rows_id">
               <div
@@ -564,7 +566,7 @@ const cancel = (reservation: Reservation) => {
                 </button>
               </article>
             </div>
-          </section>
+          </CadencePanel>
         </div>
 
         <aside class="min-w-0 border border-base-300 bg-base-200/25 lg:sticky lg:top-0 lg:self-start">
