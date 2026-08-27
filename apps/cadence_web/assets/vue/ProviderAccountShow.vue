@@ -3,6 +3,7 @@ import {reactive, watch} from "vue"
 
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type EmptyPayload = Record<string, never>
@@ -312,13 +313,17 @@ const revokeGrant = (grant: Grant) => {
 
     <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
       <div class="space-y-4">
-        <section :id="page.grants.card_id" class="card bg-base-200 border border-base-300">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.grants.card_id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <h2 class="text-base font-semibold text-base-content">{{ page.grants.heading }}</h2>
               <p class="mt-1 text-xs text-base-content/70">{{ page.grants.subtitle }}</p>
             </div>
-          </div>
+          </template>
           <div class="card-body p-0">
             <div :id="page.grants.stream_id" class="divide-y divide-base-300">
               <div
@@ -364,10 +369,14 @@ const revokeGrant = (grant: Grant) => {
               </div>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="page.grant_form_card.id" class="card bg-base-200 border border-base-300">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.grant_form_card.id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <h2 class="text-base font-semibold text-base-content">
                 {{ page.grant_form_card.heading }}
@@ -376,7 +385,7 @@ const revokeGrant = (grant: Grant) => {
                 {{ page.grant_form_card.subtitle }}
               </p>
             </div>
-          </div>
+          </template>
           <div class="card-body p-6">
             <form :id="grant_form.id" class="space-y-4" @submit.prevent="grantMission">
               <div
@@ -427,15 +436,19 @@ const revokeGrant = (grant: Grant) => {
               </div>
             </form>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="page.audit.card_id" class="card bg-base-200 border border-base-300">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.audit.card_id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <h2 class="text-base font-semibold text-base-content">{{ page.audit.heading }}</h2>
               <p class="mt-1 text-xs text-base-content/70">{{ page.audit.subtitle }}</p>
             </div>
-          </div>
+          </template>
           <div class="card-body p-0">
             <div :id="page.audit.stream_id" class="divide-y divide-base-300">
               <div
@@ -456,7 +469,7 @@ const revokeGrant = (grant: Grant) => {
               </div>
             </div>
           </div>
-        </section>
+        </CadencePanel>
       </div>
 
       <aside class="space-y-4">

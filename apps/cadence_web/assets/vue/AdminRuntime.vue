@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type FilterKey =
   | "dashboard_id"
@@ -244,15 +245,18 @@ const updateFilter = (key: FilterKey, event: Event) => {
       </div>
     </div>
 
-    <section class="card bg-base-200 border border-base-300">
-      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+    <CadencePanel
+      class="card bg-base-200 border border-base-300"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >
+      <template #header>
         <div>
           <h2 class="text-base font-semibold text-base-content">Decision Filters</h2>
           <p class="mt-1 text-xs text-base-content/70">
             Filter durable decision history and runtime-health fallback rows by dashboard, mission, invalidation boundary, context reason, or impacted placement.
           </p>
         </div>
-      </div>
+      </template>
       <div class="card-body p-6">
         <form
           id="admin-runtime-filter-form"
@@ -293,16 +297,19 @@ const updateFilter = (key: FilterKey, event: Event) => {
           </div>
         </form>
       </div>
-    </section>
+    </CadencePanel>
 
-    <section class="card bg-base-200 border border-base-300">
-      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+    <CadencePanel
+      class="card bg-base-200 border border-base-300"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >
+      <template #header>
         <div>
           <h2 class="text-base font-semibold text-base-content">
             Dashboard Invalidation Decisions
           </h2>
         </div>
-      </div>
+      </template>
       <div class="card-body p-0">
         <table id="admin-runtime-decisions-table" class="table table-sm">
           <thead>
@@ -406,7 +413,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
           </tbody>
         </table>
       </div>
-    </section>
+    </CadencePanel>
 
     <div
       v-if="selection.missing"
@@ -442,12 +449,13 @@ const updateFilter = (key: FilterKey, event: Event) => {
       </div>
     </div>
 
-    <section
+    <CadencePanel
       v-if="selection.detail"
       :id="selection.detail.id"
       class="card bg-base-200 border border-base-300"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
     >
-      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+      <template #header>
         <div>
           <h2 class="text-base font-semibold text-base-content">Decision Detail</h2>
           <p class="mt-1 text-xs text-base-content/70">{{ selection.detail.subtitle }}</p>
@@ -463,7 +471,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
             <span class="hero-x-mark h-3.5 w-3.5" aria-hidden="true"></span> Close
           </a>
         </div>
-      </div>
+      </template>
       <div class="card-body p-6">
         <div
           :id="selection.detail.evidence.id"
@@ -522,6 +530,6 @@ const updateFilter = (key: FilterKey, event: Event) => {
           </div>
         </div>
       </div>
-    </section>
+    </CadencePanel>
   </div>
 </template>
