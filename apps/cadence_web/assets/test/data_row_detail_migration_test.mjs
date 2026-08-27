@@ -9,6 +9,39 @@ assert.equal(process.versions.node, "24.16.0", "detail migration uses pinned Nod
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const panelHeaderClass =
+  "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+
+const peelCadencePanels = (source, name) => {
+  if (name !== "ProviderAccountShow.vue") return source
+
+  let reconstructed = source.replace(panelImport, "")
+
+  for (const id of ["page.grants.card_id", "page.grant_form_card.id", "page.audit.card_id"]) {
+    reconstructed = reconstructed.replace(
+      `        <CadencePanel
+          :id="${id}"
+          class="card bg-base-200 border border-base-300"
+          header-class="${panelHeaderClass}"
+        >
+          <template #header>`,
+      `        <section :id="${id}" class="card bg-base-200 border border-base-300">
+          <div class="${panelHeaderClass}">`,
+    )
+  }
+
+  return reconstructed
+    .replaceAll(
+      '          </template>\n          <div class="card-body p-0">',
+      '          </div>\n          <div class="card-body p-0">',
+    )
+    .replace(
+      '          </template>\n          <div class="card-body p-6">',
+      '          </div>\n          <div class="card-body p-6">',
+    )
+    .replaceAll("        </CadencePanel>", "        </section>")
+}
 
 const boundary = ({indent, attributes, baseOpen, label}) => ({
   componentOpen: [
@@ -329,10 +362,11 @@ for (const file of files) {
   assert.equal(source.match(/row-class="hud-data-row(?:\s[^"]*)?"/g)?.length, file.rowCount)
   assert.equal(source.match(rawRowRoot)?.length ?? 0, 0, `${file.name} has no raw row roots`)
 
-  let reconstructed = reconstructCards(source, file.cardCount, file.name).replace(
-    dataRowImport,
-    "",
-  )
+  let reconstructed = reconstructCards(
+    peelCadencePanels(source, file.name),
+    file.cardCount,
+    file.name,
+  ).replace(dataRowImport, "")
 
   for (const rowBoundary of file.boundaries) {
     reconstructed = reconstructBoundary(reconstructed, rowBoundary, file.name)
