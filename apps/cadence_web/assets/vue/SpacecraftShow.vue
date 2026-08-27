@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -286,33 +287,48 @@ defineProps<{
       <div class="card-body p-6">
         <p class="hud-label">{{ overview.title }}</p>
         <div class="mt-3 grid gap-x-8 gap-y-1 md:grid-cols-2">
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ overview.scid.label }}</span>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="overview.scid.label"
+          >
             <span class="hud-data-value">{{ overview.scid.value }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ overview.display_name.label }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="overview.display_name.label"
+          >
             <span class="hud-data-value">{{ overview.display_name.value }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ overview.spacecraft_id.label }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="overview.spacecraft_id.label"
+          >
             <span class="hud-data-value">
               <span class="text-xs">{{ overview.spacecraft_id.value }}</span>
             </span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">{{ overview.mission.label }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="overview.mission.label"
+          >
             <a
               :href="overview.mission.href"
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="hud-data-value text-primary hover:underline"
             >{{ overview.mission.value }}</a>
-          </div>
-          <div class="hud-data-row md:col-span-2">
-            <span class="hud-data-label">{{ overview.organization_id.label }}</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row md:col-span-2"
+            label-class="hud-data-label"
+            :label="overview.organization_id.label"
+          >
             <span class="hud-data-value text-xs">{{ overview.organization_id.value }}</span>
-          </div>
+          </CadenceDataRow>
         </div>
 
         <div v-if="overview.metadata_json !== null" class="pt-2">
