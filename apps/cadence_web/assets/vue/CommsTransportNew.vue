@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
 
 type Breadcrumb = {
   label: string
@@ -366,11 +368,14 @@ const statusClass = (status: "ready" | "attention") =>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <section :id="form.sections.identity.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.identity.number }}</span>
-          <h2 class="hud-label">{{ form.sections.identity.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.identity.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.identity.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
         <CadenceField
           :control-id="form.fields.display_name.id"
           wrapper-class="fieldset mb-3"
@@ -390,11 +395,14 @@ const statusClass = (status: "ready" | "attention") =>
       </section>
 
       <section :id="form.sections.origin.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.origin.number }}</span>
-          <h2 class="hud-label">{{ form.sections.origin.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.origin.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.origin.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
         <CadenceField
           :control-id="form.fields.origin.id"
           wrapper-class="fieldset mb-3"
@@ -433,11 +441,14 @@ const statusClass = (status: "ready" | "attention") =>
       </section>
 
       <section :id="form.sections.source.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.source.number }}</span>
-          <h2 class="hud-label">{{ form.sections.source.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.source.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.source.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           v-if="selectedOrigin === 'direct'"
@@ -530,11 +541,14 @@ const statusClass = (status: "ready" | "attention") =>
           :key="section.id"
           class="space-y-4"
         >
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">{{ section.number }}</span>
-            <h2 class="hud-label">{{ section.title }}</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <CadenceFormSectionHeader
+            wrapper-class="flex items-center gap-3"
+            :number="section.number"
+            number-class="hud-label text-primary/70"
+            :title="section.title"
+            title-class="hud-label"
+            divider-class="flex-1 h-px bg-base-300/60"
+          />
           <p v-if="section.description" class="text-sm text-base-content/65">
             {{ section.description }}
           </p>
@@ -609,13 +623,14 @@ const statusClass = (status: "ready" | "attention") =>
 
       <template v-else>
         <section :id="form.sections.provider_capability.id" class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">
-              {{ form.sections.provider_capability.number }}
-            </span>
-            <h2 class="hud-label">{{ form.sections.provider_capability.title }}</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <CadenceFormSectionHeader
+            wrapper-class="flex items-center gap-3"
+            :number="form.sections.provider_capability.number"
+            number-class="hud-label text-primary/70"
+            :title="form.sections.provider_capability.title"
+            title-class="hud-label"
+            divider-class="flex-1 h-px bg-base-300/60"
+          />
           <div :id="form.provider.profile_fields_id" class="space-y-4">
             <div
               v-if="form.provider.selected"
@@ -702,11 +717,14 @@ const statusClass = (status: "ready" | "attention") =>
         </section>
 
         <section :id="form.provider_derived.id" class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">{{ form.provider_derived.number }}</span>
-            <h2 class="hud-label">{{ form.provider_derived.title }}</h2>
-            <div class="h-px flex-1 bg-base-300/60"></div>
-          </div>
+          <CadenceFormSectionHeader
+            wrapper-class="flex items-center gap-3"
+            :number="form.provider_derived.number"
+            number-class="hud-label text-primary/70"
+            :title="form.provider_derived.title"
+            title-class="hud-label"
+            divider-class="h-px flex-1 bg-base-300/60"
+          />
           <p class="text-sm text-base-content/65">{{ form.provider_derived.description }}</p>
           <section
             :id="form.provider_derived.configuration.id"
@@ -737,11 +755,14 @@ const statusClass = (status: "ready" | "attention") =>
       </template>
 
       <section :id="form.sections.review.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.review.number }}</span>
-          <h2 class="hud-label">{{ form.sections.review.title }}</h2>
-          <div class="h-px flex-1 bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.review.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.review.title"
+          title-class="hud-label"
+          divider-class="h-px flex-1 bg-base-300/60"
+        />
 
         <section
           :id="form.review.configuration_summary_id"
@@ -796,7 +817,7 @@ const statusClass = (status: "ready" | "attention") =>
         </details>
       </section>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button
           :id="form.actions.submit.id"
           type="submit"
@@ -812,7 +833,7 @@ const statusClass = (status: "ready" | "attention") =>
           data-phx-link-state="push"
           class="btn btn-ghost"
         >{{ form.actions.cancel.label }}</a>
-      </div>
+      </CadenceFormActions>
     </form>
   </div>
 </template>

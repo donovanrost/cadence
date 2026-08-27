@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
 
 type Breadcrumb = {
   label: string
@@ -202,11 +204,14 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <section id="routing-rule-intent-section" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.intent.number }}</span>
-          <h2 class="hud-label">{{ form.sections.intent.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.intent.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.intent.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.display_name.id"
@@ -244,11 +249,14 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
       </section>
 
       <section id="routing-rule-transport-section" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.transport.number }}</span>
-          <h2 class="hud-label">{{ form.sections.transport.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.transport.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.transport.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.spacecraft_id.id"
@@ -296,11 +304,14 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
       </section>
 
       <section id="routing-rule-policy-section" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.policy.number }}</span>
-          <h2 class="hud-label">{{ form.sections.policy.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.policy.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.policy.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.direction.id"
@@ -347,7 +358,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
         </CadenceField>
       </section>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
           {{ form.actions.submit.label }}
         </button>
@@ -358,7 +369,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
           data-phx-link-state="push"
           class="btn btn-ghost"
         >{{ form.actions.cancel.label }}</a>
-      </div>
+      </CadenceFormActions>
     </form>
   </div>
 </template>

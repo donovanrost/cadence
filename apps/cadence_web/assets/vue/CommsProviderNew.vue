@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
 
 type Breadcrumb = {
   label: string
@@ -252,11 +254,14 @@ const save = () => emit("save", {provider: values()})
 
     <form v-else :id="form.id" class="space-y-8" @submit.prevent="save">
       <section :id="form.sections.binding.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">{{ form.sections.binding.number }}</span>
-          <h2 class="hud-label">{{ form.sections.binding.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.binding.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.binding.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           v-for="field in fieldsFor(form.sections.binding)"
@@ -331,13 +336,14 @@ const save = () => emit("save", {provider: values()})
       </section>
 
       <section :id="form.sections.resource_scope.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">
-            {{ form.sections.resource_scope.number }}
-          </span>
-          <h2 class="hud-label">{{ form.sections.resource_scope.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.resource_scope.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.resource_scope.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           v-for="field in fieldsFor(form.sections.resource_scope)"
@@ -365,13 +371,14 @@ const save = () => emit("save", {provider: values()})
       </section>
 
       <section :id="form.sections.delivery_policy.id" class="space-y-4">
-        <div class="flex items-center gap-3">
-          <span class="hud-label text-primary/70">
-            {{ form.sections.delivery_policy.number }}
-          </span>
-          <h2 class="hud-label">{{ form.sections.delivery_policy.title }}</h2>
-          <div class="flex-1 h-px bg-base-300/60"></div>
-        </div>
+        <CadenceFormSectionHeader
+          wrapper-class="flex items-center gap-3"
+          :number="form.sections.delivery_policy.number"
+          number-class="hud-label text-primary/70"
+          :title="form.sections.delivery_policy.title"
+          title-class="hud-label"
+          divider-class="flex-1 h-px bg-base-300/60"
+        />
 
         <CadenceField
           :control-id="form.fields.policy_mode.id"
@@ -453,7 +460,7 @@ const save = () => emit("save", {provider: values()})
         </CadenceField>
       </section>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
           {{ form.actions.submit.label }}
         </button>
@@ -464,7 +471,7 @@ const save = () => emit("save", {provider: values()})
           data-phx-link-state="push"
           class="btn btn-ghost"
         >{{ form.actions.cancel.label }}</a>
-      </div>
+      </CadenceFormActions>
     </form>
   </div>
 </template>

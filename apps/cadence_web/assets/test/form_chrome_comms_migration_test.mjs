@@ -1,0 +1,232 @@
+import assert from "node:assert/strict"
+import {createHash} from "node:crypto"
+import {readFile} from "node:fs/promises"
+import {dirname, resolve} from "node:path"
+import {fileURLToPath} from "node:url"
+import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
+
+assert.equal(
+  process.versions.node,
+  expectedNodeVersion,
+  `Comms form-chrome migration contracts use pinned Node ${expectedNodeVersion}`,
+)
+
+const testDirectory = dirname(fileURLToPath(import.meta.url))
+const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const imports = Object.freeze([
+  'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"',
+  'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"',
+])
+
+const header = (
+  key,
+  numberExpression,
+  titleExpression,
+  {indent = 8, multilineNumber = false, dividerClass = "flex-1 h-px bg-base-300/60"} = {},
+) => ({key, numberExpression, titleExpression, indent, multilineNumber, dividerClass})
+
+const manifests = Object.freeze([
+  Object.freeze({
+    filename: "CommsProviderNew.vue",
+    foundationHash: "f93e0166e7044a6e37b8a721b542d7eb39944c7dfcc6a274adc77fe042ee9094",
+    formOpen: '<form v-else :id="form.id" class="space-y-8" @submit.prevent="save">',
+    nativeTagCounts: Object.freeze({form: 1, button: 1, a: 3, input: 3, select: 3}),
+    headers: Object.freeze([
+      header("binding", "form.sections.binding.number", "form.sections.binding.title"),
+      header(
+        "resource-scope",
+        "form.sections.resource_scope.number",
+        "form.sections.resource_scope.title",
+        {multilineNumber: true},
+      ),
+      header(
+        "delivery-policy",
+        "form.sections.delivery_policy.number",
+        "form.sections.delivery_policy.title",
+        {multilineNumber: true},
+      ),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsRoutingNew.vue",
+    foundationHash: "2255683f05974961d89361772a97e53d6b607d5049f3320c8467e66838242e3d",
+    formOpen: '<form :id="form.id" class="space-y-8" @submit.prevent="save">',
+    nativeTagCounts: Object.freeze({form: 1, button: 1, a: 2, input: 2, select: 4}),
+    headers: Object.freeze([
+      header("intent", "form.sections.intent.number", "form.sections.intent.title"),
+      header("transport", "form.sections.transport.number", "form.sections.transport.title"),
+      header("policy", "form.sections.policy.number", "form.sections.policy.title"),
+    ]),
+  }),
+  Object.freeze({
+    filename: "CommsTransportNew.vue",
+    foundationHash: "f78d6f7e72e0fd01248a2adf39054030015f363fa25c588f848f3dc9a909cb20",
+    formOpen: '<form :id="form.id" class="space-y-8" @submit.prevent="save">',
+    nativeTagCounts: Object.freeze({form: 1, button: 1, a: 3, input: 5, select: 6}),
+    headers: Object.freeze([
+      header("identity", "form.sections.identity.number", "form.sections.identity.title"),
+      header("origin", "form.sections.origin.number", "form.sections.origin.title"),
+      header("source", "form.sections.source.number", "form.sections.source.title"),
+      header("direct-configuration", "section.number", "section.title", {indent: 10}),
+      header(
+        "provider-capability",
+        "form.sections.provider_capability.number",
+        "form.sections.provider_capability.title",
+        {indent: 10, multilineNumber: true},
+      ),
+      header(
+        "provider-derived",
+        "form.provider_derived.number",
+        "form.provider_derived.title",
+        {indent: 10, dividerClass: "h-px flex-1 bg-base-300/60"},
+      ),
+      header(
+        "review",
+        "form.sections.review.number",
+        "form.sections.review.title",
+        {dividerClass: "h-px flex-1 bg-base-300/60"},
+      ),
+    ]),
+  }),
+])
+
+const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const replaceOnce = (source, migrated, foundation, description) => {
+  assert.equal(occurrences(source, migrated), 1, `${description} is inventoried exactly once`)
+  return source.replace(migrated, foundation)
+}
+
+const migratedHeader = ({numberExpression, titleExpression, indent, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  return `${spaces}<CadenceFormSectionHeader
+${spaces}  wrapper-class="flex items-center gap-3"
+${spaces}  :number="${numberExpression}"
+${spaces}  number-class="hud-label text-primary/70"
+${spaces}  :title="${titleExpression}"
+${spaces}  title-class="hud-label"
+${spaces}  divider-class="${dividerClass}"
+${spaces}/>`
+}
+
+const foundationHeader = ({numberExpression, titleExpression, indent, multilineNumber, dividerClass}) => {
+  const spaces = " ".repeat(indent)
+  const number = multilineNumber
+    ? `
+${spaces}    {{ ${numberExpression} }}
+${spaces}  `
+    : `{{ ${numberExpression} }}`
+
+  return `${spaces}<div class="flex items-center gap-3">
+${spaces}  <span class="hud-label text-primary/70">${number}</span>
+${spaces}  <h2 class="hud-label">{{ ${titleExpression} }}</h2>
+${spaces}  <div class="${dividerClass}"></div>
+${spaces}</div>`
+}
+
+assert.equal(manifests.length, 3, "all three exclusively owned Comms features are inventoried")
+assert.equal(
+  manifests.reduce((count, manifest) => count + manifest.headers.length, 0),
+  13,
+  "all thirteen exact section-header call sites are inventoried",
+)
+
+for (const manifest of manifests) {
+  const componentPath = resolve(testDirectory, `../vue/${manifest.filename}`)
+  const source = await readFile(componentPath, "utf8")
+
+  for (const importLine of imports) {
+    assert.equal(occurrences(source, `${importLine}\n`), 1, `${manifest.filename} owns ${importLine}`)
+  }
+
+  assert.equal(
+    occurrences(source, "<CadenceFormSectionHeader\n"),
+    manifest.headers.length,
+    `${manifest.filename} has no unlisted section-header migrations`,
+  )
+  assert.equal(
+    occurrences(source, `<CadenceFormActions wrapper-class="${actionWrapperClass}">`),
+    1,
+    `${manifest.filename} has its one exact action-wrapper migration`,
+  )
+  assert.equal(
+    occurrences(source, '<div class="flex items-center gap-3">'),
+    0,
+    `${manifest.filename} retains no repeated native section-header wrapper`,
+  )
+  assert.equal(
+    occurrences(source, `<div class="${actionWrapperClass}">`),
+    0,
+    `${manifest.filename} retains no repeated native action wrapper`,
+  )
+
+  for (const [tag, expectedCount] of Object.entries(manifest.nativeTagCounts)) {
+    assert.equal(
+      source.match(new RegExp(`<${tag}\\b`, "g"))?.length ?? 0,
+      expectedCount,
+      `${manifest.filename} keeps every native ${tag} call site in the caller`,
+    )
+  }
+
+  assert.equal(occurrences(source, manifest.formOpen), 1, `${manifest.filename} keeps parent save authority`)
+  const formStart = source.indexOf(manifest.formOpen)
+  const formEnd = source.indexOf("    </form>", formStart)
+  assert.ok(formStart >= 0 && formEnd > formStart, `${manifest.filename} retains its caller-owned form`)
+  const formSource = source.slice(formStart, formEnd)
+  const actionsStart = formSource.indexOf(
+    `<CadenceFormActions wrapper-class="${actionWrapperClass}">`,
+  )
+  const actionsEnd = formSource.indexOf("</CadenceFormActions>", actionsStart)
+  assert.ok(
+    actionsStart >= 0 && actionsEnd > actionsStart,
+    `${manifest.filename} keeps the action boundary inside the parent form`,
+  )
+  const actionsSource = formSource.slice(actionsStart, actionsEnd)
+  assert.match(actionsSource, /<button\b/, `${manifest.filename} keeps the native button in the caller`)
+  assert.match(actionsSource, /<a\b/, `${manifest.filename} keeps the native anchor in the caller`)
+  assert.match(actionsSource, /:id="form\.actions\.submit\.id"/)
+  assert.match(actionsSource, /type="submit"/)
+  assert.match(actionsSource, /:id="form\.actions\.cancel\.id"/)
+  assert.match(actionsSource, /:href="form\.actions\.cancel\.href"/)
+  assert.match(actionsSource, /data-phx-link="redirect"/)
+  assert.match(actionsSource, /data-phx-link-state="push"/)
+
+  let reconstructed = source
+  for (const importLine of imports) {
+    reconstructed = replaceOnce(
+      reconstructed,
+      `${importLine}\n`,
+      "",
+      `${manifest.filename} ${importLine}`,
+    )
+  }
+  for (const site of manifest.headers) {
+    reconstructed = replaceOnce(
+      reconstructed,
+      migratedHeader(site),
+      foundationHeader(site),
+      `${manifest.filename} ${site.key} section header`,
+    )
+  }
+
+  reconstructed = replaceOnce(
+    reconstructed,
+    `      <CadenceFormActions wrapper-class="${actionWrapperClass}">`,
+    `      <div class="${actionWrapperClass}">`,
+    `${manifest.filename} action wrapper opening`,
+  )
+  reconstructed = replaceOnce(
+    reconstructed,
+    "      </CadenceFormActions>",
+    "      </div>",
+    `${manifest.filename} action wrapper closing`,
+  )
+
+  assert.equal(
+    createHash("sha256").update(reconstructed).digest("hex"),
+    manifest.foundationHash,
+    `${manifest.filename} reconstructs its immutable foundation-base source byte-for-byte`,
+  )
+}
+
+console.log("form_chrome_comms_migration_test passed")
