@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -103,8 +104,12 @@ defineProps<{
       </a>
     </div>
 
-    <section id="spacecraft-vehicles-card" class="card border border-base-300 bg-base-200">
-      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+    <CadencePanel
+      id="spacecraft-vehicles-card"
+      class="card border border-base-300 bg-base-200"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >
+      <template #header>
         <div>
           <h2 class="text-base font-semibold text-base-content">Vehicles</h2>
           <p class="mt-1 text-xs text-base-content/70">{{ roster.subtitle }}</p>
@@ -119,7 +124,7 @@ defineProps<{
             <span class="hero-plus h-4 w-4"></span> New spacecraft
           </a>
         </div>
-      </div>
+      </template>
 
       <div class="card-body" :class="roster.fleet_empty ? 'p-6' : 'p-0'">
         <div
@@ -315,10 +320,14 @@ defineProps<{
           </div>
         </template>
       </div>
-    </section>
+    </CadencePanel>
 
-    <section id="spacecraft-profiles-card" class="card border border-base-300 bg-base-200">
-      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+    <CadencePanel
+      id="spacecraft-profiles-card"
+      class="card border border-base-300 bg-base-200"
+      header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+    >
+      <template #header>
         <div>
           <h2 class="text-base font-semibold text-base-content">Profiles</h2>
           <p class="mt-1 text-xs text-base-content/70">{{ profiles.subtitle }}</p>
@@ -333,7 +342,7 @@ defineProps<{
             <span class="hero-plus h-4 w-4"></span> New profile
           </a>
         </div>
-      </div>
+      </template>
 
       <div class="card-body" :class="profiles.empty ? 'p-6' : 'p-0'">
         <div
@@ -420,6 +429,6 @@ defineProps<{
           </div>
         </template>
       </div>
-    </section>
+    </CadencePanel>
   </div>
 </template>

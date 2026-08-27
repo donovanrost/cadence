@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadencePanel from "./ui/components/CadencePanel.vue"
+
 type ControlTone = "warning" | "muted" | "quiet"
 type CoverageTone = "warning" | "quiet"
 
@@ -175,15 +177,16 @@ const coverageToneClasses: Record<CoverageTone, string> = {
     </header>
 
     <div class="mx-auto max-w-[100rem] space-y-5 p-5 lg:p-7">
-      <section
+      <CadencePanel
         id="fleet-planning-control-strip"
         class="grid border border-base-300 bg-base-200/20 md:grid-cols-4"
+        header-class="border-b border-base-300 px-4 py-4 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
       >
-        <div
+        <template
           v-for="metric in control_metrics"
           :id="metric.id"
           :key="metric.id"
-          class="border-b border-base-300 px-4 py-4 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
+          #header
         >
           <p class="hud-label">{{ metric.label }}</p>
           <p
@@ -195,8 +198,8 @@ const coverageToneClasses: Record<CoverageTone, string> = {
             {{ metric.value }}
           </p>
           <p class="mt-0.5 text-xs text-base-content/45">{{ metric.detail }}</p>
-        </div>
-      </section>
+        </template>
+      </CadencePanel>
 
       <section
         v-if="stopped_policy"
@@ -222,8 +225,11 @@ const coverageToneClasses: Record<CoverageTone, string> = {
       </section>
 
       <div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.55fr)]">
-        <section class="min-w-0 border border-base-300 bg-base-200/15">
-          <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="min-w-0 border border-base-300 bg-base-200/15"
+          header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
             <div>
               <p class="hud-label">{{ ledger.eyebrow }}</p>
               <p class="mt-1 text-sm text-base-content/55">
@@ -231,7 +237,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
               </p>
             </div>
             <span class="font-mono text-xs text-base-content/45">{{ ledger.count_label }}</span>
-          </div>
+          </template>
 
           <div
             v-if="ledger.empty"
@@ -297,13 +303,17 @@ const coverageToneClasses: Record<CoverageTone, string> = {
               ></span>
             </a>
           </div>
-        </section>
+        </CadencePanel>
 
         <aside class="space-y-5">
-          <section :id="journey.id" class="border border-base-300 bg-base-200/15">
-            <div class="border-b border-base-300 px-4 py-3">
+          <CadencePanel
+            :id="journey.id"
+            class="border border-base-300 bg-base-200/15"
+            header-class="border-b border-base-300 px-4 py-3"
+          >
+            <template #header>
               <p class="hud-label">{{ journey.eyebrow }}</p>
-            </div>
+            </template>
             <ol class="divide-y divide-base-300">
               <li
                 v-for="step in journey.steps"
@@ -320,7 +330,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
                 </div>
               </li>
             </ol>
-          </section>
+          </CadencePanel>
 
           <section
             :id="recurring_demand.id"

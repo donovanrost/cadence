@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type EmptyPayload = Record<string, never>
 type StringMap = Record<string, string>
@@ -1309,17 +1310,18 @@ const deploymentFields = [
           </section>
 
           <aside class="space-y-4">
-            <section class="card bg-base-200 border border-base-300">
-              <div
-                class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
-              >
+            <CadencePanel
+              class="card bg-base-200 border border-base-300"
+              header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+            >
+              <template #header>
                 <div>
                   <h2 class="text-base font-semibold text-base-content">
                     {{ page.sources.heading }}
                   </h2>
                   <p class="mt-1 text-xs text-base-content/70">{{ page.sources.subtitle }}</p>
                 </div>
-              </div>
+              </template>
               <div class="card-body p-0">
                 <div
                   v-if="page.sources.rows.length === 0"
@@ -1441,12 +1443,13 @@ const deploymentFields = [
                   </div>
                 </div>
               </div>
-            </section>
+            </CadencePanel>
 
-            <section class="card bg-base-200 border border-base-300">
-              <div
-                class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
-              >
+            <CadencePanel
+              class="card bg-base-200 border border-base-300"
+              header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+            >
+              <template #header>
                 <div>
                   <h2 class="text-base font-semibold text-base-content">
                     {{ page.deployment_runs.heading }}
@@ -1455,7 +1458,7 @@ const deploymentFields = [
                     {{ page.deployment_runs.subtitle }}
                   </p>
                 </div>
-              </div>
+              </template>
               <div class="card-body p-0">
                 <div
                   v-if="page.deployment_runs.rows.length === 0"
@@ -1520,9 +1523,9 @@ const deploymentFields = [
                   </div>
                 </div>
               </div>
-            </section>
+            </CadencePanel>
 
-            <section
+            <CadencePanel
               v-for="list in [
                 page.activity.binding_events,
                 page.activity.source_events,
@@ -1530,15 +1533,14 @@ const deploymentFields = [
               ]"
               :key="list.id"
               class="card bg-base-200 border border-base-300"
+              header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
             >
-              <div
-                class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
-              >
+              <template #header>
                 <div>
                   <h2 class="text-base font-semibold text-base-content">{{ list.heading }}</h2>
                   <p class="mt-1 text-xs text-base-content/70">{{ list.subtitle }}</p>
                 </div>
-              </div>
+              </template>
               <div class="card-body p-0">
                 <div :id="list.id" class="divide-y divide-base-300/70">
                   <div
@@ -1575,7 +1577,7 @@ const deploymentFields = [
                   </div>
                 </div>
               </div>
-            </section>
+            </CadencePanel>
           </aside>
         </div>
       </div>
