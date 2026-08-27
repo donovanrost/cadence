@@ -86,6 +86,7 @@ const assertBalancedTemplate = (source) => {
 }
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const migratedDataRowOpen = `            <CadenceDataRow
               v-for="fact in application.status.facts"
@@ -98,13 +99,88 @@ const predecessorDataRowOpen = `            <div v-for="fact in application.stat
               <span class="hud-data-label">{{ fact.label }}</span>`
 const migratedDataRowClose = "\n            </CadenceDataRow>"
 const predecessorDataRowClose = "\n            </div>"
+const multilineCardOpen = /^([ ]*)<CadenceCard$/
+const inlineCardOpen = /^([ ]*)<CadenceCard ([^\n]+) body-class="card-body p-6">$/
+const cardClose = /^([ ]*)<\/CadenceCard>$/
+
+const reconstructCards = (source, expectedCardCount) => {
+  assert.equal(occurrences(source, cardImport), 1)
+  assert.equal(occurrences(source, "<CadenceCard"), expectedCardCount)
+  assert.equal(occurrences(source, "</CadenceCard>"), expectedCardCount)
+
+  const lines = source.replace(cardImport, "").split("\n")
+  const reconstructed = []
+  let openingCount = 0
+  let closingCount = 0
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const multiline = line.match(multilineCardOpen)
+    const inline = line.match(inlineCardOpen)
+    const closing = line.match(cardClose)
+
+    if (multiline) {
+      const indent = multiline[1]
+      const attributes = []
+
+      index += 1
+      while (lines[index] !== `${indent}  body-class="card-body p-6"`) {
+        assert.ok(lines[index]?.startsWith(`${indent}  `))
+        attributes.push(lines[index])
+        index += 1
+      }
+
+      index += 1
+      assert.equal(lines[index], `${indent}>`)
+      assert.ok(attributes.length > 0)
+      reconstructed.push(
+        `${indent}<section`,
+        ...attributes,
+        `${indent}>`,
+        `${indent}  <div class="card-body p-6">`,
+      )
+      openingCount += 1
+      continue
+    }
+
+    if (inline) {
+      const [, indent, attributes] = inline
+
+      reconstructed.push(
+        `${indent}<section ${attributes}>`,
+        `${indent}  <div class="card-body p-6">`,
+      )
+      openingCount += 1
+      continue
+    }
+
+    if (closing) {
+      const indent = closing[1]
+
+      reconstructed.push(`${indent}  </div>`, `${indent}</section>`)
+      closingCount += 1
+      continue
+    }
+
+    reconstructed.push(line)
+  }
+
+  assert.equal(openingCount, expectedCardCount)
+  assert.equal(closingCount, expectedCardCount)
+
+  const reconstructedSource = reconstructed.join("\n")
+
+  assert.doesNotMatch(reconstructedSource, /CadenceCard/)
+
+  return reconstructedSource
+}
 
 assert.equal(occurrences(childSource, dataRowImport), 1)
 assert.equal(occurrences(childSource, "<CadenceDataRow"), 1)
 assert.equal(occurrences(childSource, migratedDataRowOpen), 1)
 assert.equal(occurrences(childSource, migratedDataRowClose), 1)
 
-const reconstructedChildSource = childSource
+const reconstructedChildSource = reconstructCards(childSource, 3)
   .replace(dataRowImport, "")
   .replace(migratedDataRowOpen, predecessorDataRowOpen)
   .replace(migratedDataRowClose, predecessorDataRowClose)
