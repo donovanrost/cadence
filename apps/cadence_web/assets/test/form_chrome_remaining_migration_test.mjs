@@ -16,6 +16,135 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const actionImport = 'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"'
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+
+const contactPlanPanels = [
+  {
+    currentOpen:
+      '        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">',
+    originalOpen: '        <section class="border border-base-300 bg-base-200/20">',
+    headerClass: "border-b border-base-300 px-4 py-3",
+  },
+  {
+    currentOpen:
+      '        <CadencePanel\n          v-if="page.unsatisfied !== null"\n          :id="page.unsatisfied.id"\n          class="border border-warning/40 bg-warning/5"\n          header-class="border-b border-warning/30 px-4 py-3"\n        >',
+    originalOpen:
+      '        <section\n          v-if="page.unsatisfied !== null"\n          :id="page.unsatisfied.id"\n          class="border border-warning/40 bg-warning/5"\n        >',
+    headerClass: "border-b border-warning/30 px-4 py-3",
+  },
+  {
+    currentOpen:
+      '        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">',
+    originalOpen: '        <section class="border border-base-300 bg-base-200/20">',
+    headerClass: "border-b border-base-300 px-4 py-3",
+  },
+  {
+    currentOpen:
+      '        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">',
+    originalOpen: '        <section class="border border-base-300 bg-base-200/20">',
+    headerClass: "border-b border-base-300 px-4 py-3",
+  },
+]
+
+const occurrences = (source, needle) => source.split(needle).length - 1
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const peelPanel = (source, panel, path) => {
+  const panelIndent = panel.currentOpen.match(/^(\s*)<CadencePanel/)?.[1]
+  assert.notEqual(panelIndent, undefined, `${path}: panel indentation is frozen`)
+  const headerIndent = `${panelIndent}  `
+  const pattern = new RegExp(
+    `${escapeRegExp(panel.currentOpen)}\\n${escapeRegExp(headerIndent)}<template #header>([\\s\\S]*?)\\n${escapeRegExp(headerIndent)}</template>([\\s\\S]*?)\\n${escapeRegExp(panelIndent)}</CadencePanel>`,
+  )
+  const match = pattern.exec(source)
+
+  assert.notEqual(match, null, `${path}: exact migrated panel boundary exists`)
+
+  const replacement =
+    `${panel.originalOpen}\n${headerIndent}<div class="${panel.headerClass}">` +
+    `${match[1]}\n${headerIndent}</div>${match[2]}\n${panelIndent}</section>`
+
+  return source.slice(0, match.index) + replacement + source.slice(match.index + match[0].length)
+}
+
+const reconstructContactPlanBase = (migratedSource) => {
+  let source = migratedSource.replace(cadencePanelImport, "")
+
+  for (const panel of contactPlanPanels) {
+    source = peelPanel(source, panel, "OpsContactPlanShow.vue")
+  }
+
+  return source
+}
+
+const reconstructContactRequirementBase = (migratedSource, expectedPanels) => {
+  let source = migratedSource.replace(cadencePanelImport, "")
+  let reconstructedPanels = 0
+
+  while (source.includes("<CadencePanel")) {
+    const panelStart = source.indexOf("<CadencePanel")
+    const lineStart = source.lastIndexOf("\n", panelStart) + 1
+    const panelIndent = source.slice(lineStart, panelStart)
+    const panelOpenEnd = source.indexOf(">", panelStart) + 1
+    const panelOpen = source.slice(panelStart, panelOpenEnd)
+    const inlineHeaderClass = panelOpen.match(/ header-class="([^"]+)">$/)
+    const multilineHeaderClass = panelOpen.match(/\n([ \t]*)header-class="([^"]+)"\n[ \t]*>$/)
+
+    assert.ok(
+      inlineHeaderClass || multilineHeaderClass,
+      "each CadencePanel opening must carry one reconstructable header-class",
+    )
+
+    const headerClass = inlineHeaderClass?.[1] ?? multilineHeaderClass[2]
+    const baseOpen = inlineHeaderClass
+      ? panelOpen
+          .replace("<CadencePanel", "<section")
+          .replace(` header-class="${headerClass}"`, "")
+      : panelOpen
+          .replace("<CadencePanel", "<section")
+          .replace(`${multilineHeaderClass[1]}header-class="${headerClass}"\n`, "")
+    const slotIndent = `${panelIndent}  `
+    const slotOpen = `${slotIndent}<template #header>`
+    const slotStart = source.indexOf(slotOpen, panelOpenEnd)
+    const slotEnd = slotStart + slotOpen.length
+    const slotClose = `\n${slotIndent}</template>`
+    const slotCloseStart = source.indexOf(slotClose, slotEnd)
+    const slotCloseEnd = slotCloseStart + slotClose.length
+    const panelClose = `\n${panelIndent}</CadencePanel>`
+    const panelCloseStart = source.indexOf(panelClose, slotCloseEnd)
+    const panelCloseEnd = panelCloseStart + panelClose.length
+
+    assert.notEqual(slotStart, -1, "each CadencePanel must open an immediate header slot")
+    assert.notEqual(slotCloseStart, -1, "each CadencePanel header slot must close")
+    assert.notEqual(panelCloseStart, -1, "each CadencePanel must close")
+
+    source =
+      source.slice(0, panelStart) +
+      baseOpen +
+      source.slice(panelOpenEnd, slotStart) +
+      `${slotIndent}<div class="${headerClass}">` +
+      source.slice(slotEnd, slotCloseStart) +
+      `\n${slotIndent}</div>` +
+      source.slice(slotCloseEnd, panelCloseStart) +
+      `\n${panelIndent}</section>` +
+      source.slice(panelCloseEnd)
+
+    reconstructedPanels += 1
+  }
+
+  assert.equal(reconstructedPanels, expectedPanels, "all expected panels must reconstruct")
+  assert.equal(occurrences(source, "CadencePanel"), 0, "reconstruction must remove CadencePanel")
+  return source
+}
+
+const reconstructPanels = (source, file) => {
+  if (file === "OpsContactPlanShow.vue") return reconstructContactPlanBase(source)
+  if (file === "OpsContactRequirementShow.vue") {
+    return reconstructContactRequirementBase(source, 4)
+  }
+
+  return source
+}
 
 const foundations = Object.freeze([
   {
@@ -88,7 +217,7 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
-  let reconstructedSource = source
+  let reconstructedSource = reconstructPanels(source, foundation.file)
   let reconstructedImports = 0
   let reconstructedActionRows = 0
 

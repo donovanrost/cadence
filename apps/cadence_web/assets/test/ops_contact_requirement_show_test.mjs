@@ -58,6 +58,72 @@ const inclusiveSourceSlice = (sourceText, start, end, label) => {
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const occurrences = (sourceText, needle) => sourceText.split(needle).length - 1
+
+const reconstructPanelBase = (migratedSource, expectedPanels) => {
+  let sourceText = migratedSource.replace(cadencePanelImport, "")
+  let reconstructedPanels = 0
+
+  while (sourceText.includes("<CadencePanel")) {
+    const panelStart = sourceText.indexOf("<CadencePanel")
+    const lineStart = sourceText.lastIndexOf("\n", panelStart) + 1
+    const panelIndent = sourceText.slice(lineStart, panelStart)
+    const panelOpenEnd = sourceText.indexOf(">", panelStart) + 1
+    const panelOpen = sourceText.slice(panelStart, panelOpenEnd)
+    const inlineHeaderClass = panelOpen.match(/ header-class="([^"]+)">$/)
+    const multilineHeaderClass = panelOpen.match(/\n([ \t]*)header-class="([^"]+)"\n[ \t]*>$/)
+
+    assert.ok(
+      inlineHeaderClass || multilineHeaderClass,
+      "each CadencePanel opening must carry one reconstructable header-class",
+    )
+
+    const headerClass = inlineHeaderClass?.[1] ?? multilineHeaderClass[2]
+    const baseOpen = inlineHeaderClass
+      ? panelOpen
+          .replace("<CadencePanel", "<section")
+          .replace(` header-class="${headerClass}"`, "")
+      : panelOpen
+          .replace("<CadencePanel", "<section")
+          .replace(`${multilineHeaderClass[1]}header-class="${headerClass}"\n`, "")
+    const slotIndent = `${panelIndent}  `
+    const slotOpen = `${slotIndent}<template #header>`
+    const slotStart = sourceText.indexOf(slotOpen, panelOpenEnd)
+    const slotEnd = slotStart + slotOpen.length
+    const slotClose = `\n${slotIndent}</template>`
+    const slotCloseStart = sourceText.indexOf(slotClose, slotEnd)
+    const slotCloseEnd = slotCloseStart + slotClose.length
+    const panelClose = `\n${panelIndent}</CadencePanel>`
+    const panelCloseStart = sourceText.indexOf(panelClose, slotCloseEnd)
+    const panelCloseEnd = panelCloseStart + panelClose.length
+
+    assert.notEqual(slotStart, -1, "each CadencePanel must open an immediate header slot")
+    assert.notEqual(slotCloseStart, -1, "each CadencePanel header slot must close")
+    assert.notEqual(panelCloseStart, -1, "each CadencePanel must close")
+
+    sourceText =
+      sourceText.slice(0, panelStart) +
+      baseOpen +
+      sourceText.slice(panelOpenEnd, slotStart) +
+      `${slotIndent}<div class="${headerClass}">` +
+      sourceText.slice(slotEnd, slotCloseStart) +
+      `\n${slotIndent}</div>` +
+      sourceText.slice(slotCloseEnd, panelCloseStart) +
+      `\n${panelIndent}</section>` +
+      sourceText.slice(panelCloseEnd)
+
+    reconstructedPanels += 1
+  }
+
+  assert.equal(reconstructedPanels, expectedPanels, "all expected panels must reconstruct")
+  assert.equal(
+    occurrences(sourceText, "CadencePanel"),
+    0,
+    "reconstruction must remove CadencePanel",
+  )
+  return sourceText
+}
 
 const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -111,7 +177,7 @@ assert.doesNotMatch(toggleMarkup, /@click|@update:model-value|v-model|\bas-child
 
 // Normalize only the reviewed import and toggle subtree back to the pre-migration marker.
 // Its hash proves the rest of this large component is byte-for-byte unchanged.
-const normalizedComponentScaffold = source
+const normalizedComponentScaffold = reconstructPanelBase(source, 4)
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n\n', "")
   .replace(toggleMarkup, "              <!-- opportunity-toggle -->")
 
