@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadencePanel from "./ui/components/CadencePanel.vue"
+
 type Action = {
   id: string
   label: string
@@ -142,11 +144,11 @@ defineProps<{
 
     <div class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7">
       <div class="min-w-0 space-y-5">
-        <section :id="record.window.id" class="border border-base-300 bg-base-200/25">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="record.window.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ record.window.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.window.title }}</h2>
-          </div>
+          </template>
           <div class="grid gap-px bg-base-300 sm:grid-cols-2 xl:grid-cols-4">
             <div
               v-for="fact in record.window.facts"
@@ -157,13 +159,13 @@ defineProps<{
               <p class="mt-2 font-mono text-xs text-base-content/75">{{ fact.value }}</p>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="record.paths.id" class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="record.paths.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ record.paths.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.paths.title }}</h2>
-          </div>
+          </template>
           <div :id="record.paths.list_id" class="divide-y divide-base-300">
             <div
               v-if="record.paths.empty"
@@ -200,28 +202,28 @@ defineProps<{
               </article>
             </template>
           </div>
-        </section>
+        </CadencePanel>
       </div>
 
       <aside class="min-w-0 space-y-5">
-        <section :id="record.lineage.id" class="border border-base-300 bg-base-200/25">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="record.lineage.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ record.lineage.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.lineage.title }}</h2>
-          </div>
+          </template>
           <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-3 p-4 text-xs">
             <template v-for="field in record.lineage.fields" :key="field.label">
               <dt class="text-base-content/45">{{ field.label }}</dt>
               <dd :class="field.class">{{ field.value }}</dd>
             </template>
           </dl>
-        </section>
+        </CadencePanel>
 
-        <section :id="record.context.id" class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="record.context.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ record.context.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.context.title }}</h2>
-          </div>
+          </template>
           <div class="space-y-4 p-4 text-xs">
             <div>
               <p class="hud-label">{{ record.context.intents.label }}</p>
@@ -251,7 +253,7 @@ defineProps<{
               </ul>
             </div>
           </div>
-        </section>
+        </CadencePanel>
       </aside>
     </div>
   </main>

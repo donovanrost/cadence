@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type EmptyPayload = Record<string, never>
 
@@ -286,13 +287,13 @@ const executePlan = () => emit("execute-plan", {})
           </div>
         </section>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">Selected provider windows</p>
             <p class="mt-1 text-sm text-base-content/55">
               These immutable snapshots are the only opportunities execution may reserve.
             </p>
-          </div>
+          </template>
           <div :id="page.selections.id">
             <div
               :id="page.selections.empty.id"
@@ -324,16 +325,17 @@ const executePlan = () => emit("execute-plan", {})
               </div>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section
+        <CadencePanel
           v-if="page.unsatisfied !== null"
           :id="page.unsatisfied.id"
           class="border border-warning/40 bg-warning/5"
+          header-class="border-b border-warning/30 px-4 py-3"
         >
-          <div class="border-b border-warning/30 px-4 py-3">
+          <template #header>
             <p class="hud-label text-warning">{{ page.unsatisfied.heading }}</p>
-          </div>
+          </template>
           <div class="space-y-3 p-4">
             <div
               v-for="requirement in page.unsatisfied.requirements"
@@ -348,7 +350,7 @@ const executePlan = () => emit("execute-plan", {})
               >{{ failure }}</p>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
         <details :id="page.policy.id" class="border border-base-300 bg-base-200/20">
           <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
@@ -369,11 +371,11 @@ const executePlan = () => emit("execute-plan", {})
           </div>
         </details>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.execution.heading }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ page.execution.description }}</p>
-          </div>
+          </template>
           <div :id="page.execution.id">
             <div
               :id="page.execution.empty.id"
@@ -405,7 +407,7 @@ const executePlan = () => emit("execute-plan", {})
               </div>
             </div>
           </div>
-        </section>
+        </CadencePanel>
       </div>
 
       <aside class="min-w-0 space-y-5">
@@ -509,10 +511,10 @@ const executePlan = () => emit("execute-plan", {})
           >{{ page.decision.admin_required.message }}</p>
         </section>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.approval_evidence.heading }}</p>
-          </div>
+          </template>
           <div :id="page.approval_evidence.id">
             <div
               :id="page.approval_evidence.empty.id"
@@ -536,7 +538,7 @@ const executePlan = () => emit("execute-plan", {})
               </p>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
         <section class="border border-base-300 bg-base-200/20 p-4">
           <p class="hud-label">{{ page.rationale.heading }}</p>

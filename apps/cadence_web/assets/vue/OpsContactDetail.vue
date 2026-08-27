@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type LabelValue = {
   label: string
@@ -293,15 +294,15 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
       class="mx-auto grid max-w-[96rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,0.62fr)] lg:p-7"
     >
       <main class="min-w-0 space-y-5">
-        <section :id="page.values.id" class="border border-base-300 bg-base-200/20">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="page.values.id" class="border border-base-300 bg-base-200/20" header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+          <template #header>
             <div>
               <p class="hud-label">{{ page.values.eyebrow }}</p>
               <h2 class="mt-1 text-base font-semibold">{{ page.values.heading }}</h2>
               <p class="mt-1 text-xs text-base-content/55">{{ page.values.copy }}</p>
             </div>
             <span class="hero-table-cells h-5 w-5 text-primary/60"></span>
-          </div>
+          </template>
 
           <div class="overflow-x-auto">
             <table class="w-full min-w-[48rem] table-fixed border-collapse text-left text-xs">
@@ -343,13 +344,13 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               </tbody>
             </table>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section :id="page.changes.id" class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="page.changes.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.changes.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ page.changes.heading }}</h2>
-          </div>
+          </template>
 
           <div :id="page.changes.timeline_id" phx-update="stream">
             <div
@@ -520,13 +521,13 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               </div>
             </article>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.audit.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ page.audit.heading }}</h2>
-          </div>
+          </template>
           <ol :id="page.audit.timeline_id" phx-update="stream">
             <li
               :id="page.audit.empty.id"
@@ -559,15 +560,15 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               </div>
             </li>
           </ol>
-        </section>
+        </CadencePanel>
       </main>
 
       <aside class="min-w-0 space-y-5 xl:sticky xl:top-0 xl:self-start">
-        <section :id="page.binding_chain.id" class="border border-base-300 bg-base-200/25">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel :id="page.binding_chain.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.binding_chain.eyebrow }}</p>
             <h2 class="mt-1 text-sm font-semibold">{{ page.binding_chain.heading }}</h2>
-          </div>
+          </template>
           <dl class="divide-y divide-base-300/70 text-xs">
             <div v-for="row in page.binding_chain.rows" :key="row.label" class="px-4 py-3">
               <dt class="hud-label">{{ row.label }}</dt>
@@ -576,13 +577,13 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               </dd>
             </div>
           </dl>
-        </section>
+        </CadencePanel>
 
-        <section class="border border-base-300 bg-base-200/25">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.lifecycle.eyebrow }}</p>
             <h2 class="mt-1 text-sm font-semibold">{{ page.lifecycle.heading }}</h2>
-          </div>
+          </template>
           <div class="grid grid-cols-2 gap-px bg-base-300/70">
             <div
               v-for="row in page.lifecycle.rows"
@@ -595,7 +596,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               >{{ row.value }}</p>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
         <details
           v-if="page.admin_diagnostics !== undefined"
