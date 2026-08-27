@@ -153,6 +153,43 @@ const formChromeImports = [
 ]
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
 const occurrences = (value, fragment) => value.split(fragment).length - 1
+const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const migratedDataRowOpening = `                <CadenceDataRow
+                  v-for="row in form.provider_derived.configuration.rows"
+                  :key="row.label"
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="row.label"
+                >`
+const foundationDataRowOpening = `                <div
+                  v-for="row in form.provider_derived.configuration.rows"
+                  :key="row.label"
+                  class="hud-data-row"
+                >
+                  <span class="hud-data-label">{{ row.label }}</span>`
+
+const reconstructDataRow = (value) => {
+  assert.equal(occurrences(value, dataRowImport), 1, "the transport imports CadenceDataRow once")
+  assert.equal(
+    occurrences(value, migratedDataRowOpening),
+    1,
+    "the transport has exactly one migrated data-row opening boundary",
+  )
+  assert.equal(
+    occurrences(value, "</CadenceDataRow>"),
+    1,
+    "the transport has exactly one migrated data-row closing boundary",
+  )
+
+  const reconstructed = value
+    .replace(dataRowImport, "")
+    .replace(migratedDataRowOpening, foundationDataRowOpening)
+    .replace("</CadenceDataRow>", "</div>")
+
+  assert.doesNotMatch(reconstructed, /CadenceDataRow/, "the pre-data-row source has no residual primitive")
+  return reconstructed
+}
+
 const formChromeHeader = (
   key,
   numberExpression,
@@ -244,7 +281,7 @@ const reconstructFormChrome = (value) => {
   return reconstructed
 }
 
-let reconstructedSource = source.replace(
+let reconstructedSource = reconstructDataRow(source).replace(
   'import CadenceField from "./ui/components/CadenceField.vue"\n',
   "",
 )
