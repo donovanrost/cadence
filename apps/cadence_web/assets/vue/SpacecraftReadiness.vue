@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 
@@ -121,10 +122,15 @@ defineProps<{
           <p class="mt-1 text-sm text-base-content/70">{{ panel.description }}</p>
 
           <div class="mt-5 space-y-1">
-            <div v-for="detail in panel.details" :key="detail.label" class="hud-data-row">
-              <span class="hud-data-label">{{ detail.label }}</span>
+            <CadenceDataRow
+              v-for="detail in panel.details"
+              :key="detail.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="detail.label"
+            >
               <span class="hud-data-value">{{ detail.value }}</span>
-            </div>
+            </CadenceDataRow>
 
             <div v-if="panel.application_list !== null" :id="panel.application_list.id">
               <p
@@ -138,10 +144,13 @@ defineProps<{
                 :id="application.id"
                 :key="application.application_key"
               >
-                <div class="hud-data-row">
-                  <span class="hud-data-label">{{ application.display_name }}</span>
+                <CadenceDataRow
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="application.display_name"
+                >
                   <span class="hud-data-value">{{ application.status.label }}</span>
-                </div>
+                </CadenceDataRow>
               </div>
             </div>
           </div>
