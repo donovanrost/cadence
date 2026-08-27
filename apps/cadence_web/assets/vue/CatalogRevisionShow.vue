@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+
 type Breadcrumb = {
   label: string
   href: string | null
@@ -101,8 +103,13 @@ const valueClasses: Record<DetailRow["style"], string> = {
         <div class="card-body p-6">
           <p class="hud-label">{{ provenance.title }}</p>
           <div class="mt-3 divide-y divide-base-300">
-            <div v-for="row in provenance.rows" :key="row.label" class="hud-data-row">
-              <span class="hud-data-label">{{ row.label }}</span>
+            <CadenceDataRow
+              v-for="row in provenance.rows"
+              :key="row.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="row.label"
+            >
               <span class="hud-data-value" :class="valueClasses[row.style]">
                 <a
                   v-if="row.href !== null && row.value !== null"
@@ -113,7 +120,7 @@ const valueClasses: Record<DetailRow["style"], string> = {
                 >{{ row.value }}</a>
                 <span v-else>{{ row.value ?? "—" }}</span>
               </span>
-            </div>
+            </CadenceDataRow>
           </div>
         </div>
       </section>
@@ -140,12 +147,17 @@ const valueClasses: Record<DetailRow["style"], string> = {
       <div class="card-body p-6">
         <p class="hud-label">{{ mission_model.title }}</p>
         <div v-if="mission_model.available" class="mt-3 divide-y divide-base-300">
-          <div v-for="row in mission_model.rows" :key="row.label" class="hud-data-row">
-            <span class="hud-data-label">{{ row.label }}</span>
+          <CadenceDataRow
+            v-for="row in mission_model.rows"
+            :key="row.label"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="row.label"
+          >
             <span class="hud-data-value" :class="valueClasses[row.style]">
               {{ row.value ?? "—" }}
             </span>
-          </div>
+          </CadenceDataRow>
         </div>
         <p v-else class="mt-2 text-sm text-base-content/60">
           {{ mission_model.empty_message }}

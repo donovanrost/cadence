@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type Breadcrumb = {
   label: string
@@ -118,20 +119,29 @@ defineProps<{
       <div class="card-body p-6">
         <p class="hud-label">Mission Model</p>
         <div class="divide-y divide-base-300">
-          <div class="hud-data-row">
-            <span class="hud-data-label">Revision</span>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Revision"
+          >
             <span class="hud-data-value font-mono text-sm">{{ mission_model.revision_id }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Declarations</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Declarations"
+          >
             <span class="hud-data-value font-mono text-sm">
               {{ mission_model.declaration_count }}
             </span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Plans</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Plans"
+          >
             <span class="hud-data-value font-mono text-sm">{{ mission_model.plan_count }}</span>
-          </div>
+          </CadenceDataRow>
         </div>
       </div>
     </section>

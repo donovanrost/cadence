@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type FilterKey =
   | "dashboard_id"
@@ -477,15 +478,20 @@ const updateFilter = (key: FilterKey, event: Event) => {
           >
             <p class="hud-label">{{ group.label }}</p>
             <div class="min-w-0">
-              <div v-for="fact in group.facts" :key="fact.key" class="hud-data-row">
-                <span class="hud-data-label">{{ fact.label }}</span>
+              <CadenceDataRow
+                v-for="fact in group.facts"
+                :key="fact.key"
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="fact.label"
+              >
                 <span class="hud-data-value">
                   <span
                     class="break-all"
                     :data-runtime-decision-detail-field="fact.key"
                   >{{ fact.value }}</span>
                 </span>
-              </div>
+              </CadenceDataRow>
             </div>
           </div>
         </div>
@@ -498,12 +504,17 @@ const updateFilter = (key: FilterKey, event: Event) => {
           >
             <p class="hud-label">{{ section.label }}</p>
             <div :id="section.id" class="mt-3">
-              <div v-for="pair in section.pairs" :key="pair.key" class="hud-data-row">
-                <span class="hud-data-label">{{ pair.label }}</span>
+              <CadenceDataRow
+                v-for="pair in section.pairs"
+                :key="pair.key"
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="pair.label"
+              >
                 <span class="hud-data-value">
                   <span class="break-all">{{ pair.value }}</span>
                 </span>
-              </div>
+              </CadenceDataRow>
               <p v-if="section.pairs.length === 0" class="text-sm text-base-content/60">
                 {{ section.empty_copy }}
               </p>
