@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 
 type Breadcrumb = {
   label: string
@@ -201,7 +202,7 @@ const save = () => {
         </label>
       </div>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button id="invite-submit" type="submit" class="btn btn-primary">
           {{ page.submit_label }}
         </button>
@@ -212,7 +213,7 @@ const save = () => {
           data-phx-link-state="push"
           class="btn btn-ghost"
         >{{ page.cancel_label }}</a>
-      </div>
+      </CadenceFormActions>
     </form>
   </div>
 </template>
