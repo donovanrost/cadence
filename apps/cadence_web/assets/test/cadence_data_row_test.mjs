@@ -73,19 +73,30 @@ const CadenceDataRow = dataRowSfc.component
 assert.ok(dataRowSfc.descriptor.script, "CadenceDataRow keeps a native render-function script")
 assert.equal(dataRowSfc.descriptor.scriptSetup, null)
 assert.equal(dataRowSfc.descriptor.template, null)
-assert.deepEqual(Object.keys(CadenceDataRow.props).sort(), ["label", "labelClass", "rowClass"])
+assert.deepEqual(Object.keys(CadenceDataRow.props).sort(), [
+  "label",
+  "labelClass",
+  "rowClass",
+  "rowId",
+])
 assert.equal(CadenceDataRow.inheritAttrs, false)
 
-for (const prop of Object.values(CadenceDataRow.props)) {
+for (const propName of ["label", "labelClass", "rowClass"]) {
+  const prop = CadenceDataRow.props[propName]
+
   assert.equal(prop.required, true)
   assert.equal(prop.type, String)
 }
+assert.equal(CadenceDataRow.props.rowId.required, undefined)
+assert.equal(CadenceDataRow.props.rowId.default, undefined)
+assert.equal(CadenceDataRow.props.rowId.type, String)
 
 assert.doesNotMatch(dataRowSfc.source, /<template>|ref\(|reactive\(|computed\(|watch\(|emit/)
 assert.equal(dataRowSfc.source.match(/h\("div"/g)?.length, 1)
 assert.equal(dataRowSfc.source.match(/h\("span"/g)?.length, 1)
 
-const {Fragment, createApp, defineComponent, h, nextTick} = integrationRequire("vue")
+const {Fragment, createApp, defineComponent, h, nextTick, ref} = integrationRequire("vue")
+const rowId = ref("cadence-data-row-present")
 const PrimitiveOracle = defineComponent({
   name: "CadenceDataRowPrimitiveOracle",
   setup() {
@@ -93,6 +104,7 @@ const PrimitiveOracle = defineComponent({
       h(
         CadenceDataRow,
         {
+          rowId: rowId.value,
           rowClass: "row-first row-second",
           labelClass: "label-first label-second",
           label: "<Label & safe>",
@@ -120,11 +132,14 @@ primitiveApp.mount(dom.window.document.querySelector("#app"))
 await flushVue(nextTick)
 
 const primitiveRow = dom.window.document.querySelector("#app > div")
+const primitiveOuterHtml = (idAttribute = "") =>
+  `<div${idAttribute} class="row-first row-second"><span class="label-first label-second">&lt;Label &amp; safe&gt;</span><span class="caller-value">&lt;Caller &amp; safe&gt;</span><a href="/runs/one?left=1&amp;right=2" data-phx-link="redirect" data-phx-link-state="push">View &lt;run&gt;</a></div>`
 
 assert.equal(
   primitiveRow.outerHTML,
-  '<div class="row-first row-second"><span class="label-first label-second">&lt;Label &amp; safe&gt;</span><span class="caller-value">&lt;Caller &amp; safe&gt;</span><a href="/runs/one?left=1&amp;right=2" data-phx-link="redirect" data-phx-link-state="push">View &lt;run&gt;</a></div>',
+  primitiveOuterHtml(' id="cadence-data-row-present"'),
 )
+assert.equal(primitiveRow.id, "cadence-data-row-present")
 assert.equal(primitiveRow.childNodes.length, 3)
 assert.deepEqual(
   [...primitiveRow.children].map((element) => [element.tagName, element.className]),
@@ -134,6 +149,18 @@ assert.deepEqual(
     ["A", ""],
   ],
 )
+
+rowId.value = "cadence-data-row-updated"
+await flushVue(nextTick)
+
+assert.equal(primitiveRow.id, "cadence-data-row-updated")
+assert.equal(primitiveRow.outerHTML, primitiveOuterHtml(' id="cadence-data-row-updated"'))
+
+rowId.value = undefined
+await flushVue(nextTick)
+
+assert.equal(primitiveRow.hasAttribute("id"), false)
+assert.equal(primitiveRow.outerHTML, primitiveOuterHtml())
 assert.doesNotThrow(() => primitiveApp.unmount())
 
 const passthrough = (name) =>
