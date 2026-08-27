@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -82,24 +83,25 @@ defineProps<{
   </header>
 
   <div class="grid gap-4 md:grid-cols-3">
-    <section
+    <CadenceCard
       v-for="card in overview.readiness_cards"
       :key="card.title"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <p class="hud-label">{{ card.title }}</p>
           <StatusBadge :status="card.status.tone" :label="card.status.label" />
         </div>
         <p class="mt-3 mc-value-large text-base-content">{{ card.value }}</p>
         <p class="mt-2 text-sm text-base-content/70">{{ card.description }}</p>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 
-  <section class="card bg-base-200 border border-base-300">
-    <div class="card-body p-6">
+  <CadenceCard
+    class="card bg-base-200 border border-base-300"
+    body-class="card-body p-6"
+  >
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="hud-label mb-2">{{ overview.setup.eyebrow }}</p>
@@ -218,6 +220,5 @@ defineProps<{
           </tbody>
         </table>
       </div>
-    </div>
-  </section>
+  </CadenceCard>
 </template>

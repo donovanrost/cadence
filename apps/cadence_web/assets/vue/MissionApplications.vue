@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
@@ -86,13 +87,13 @@ const dispatch = (
 
 <template>
   <section id="mission-applications-list" class="grid gap-4 lg:grid-cols-2">
-    <section
+    <CadenceCard
       v-for="application in applications"
       :id="application.id"
       :key="application.id"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="hud-label">{{ application.scope_label }}</p>
@@ -170,7 +171,6 @@ const dispatch = (
         <p v-if="application.unavailable_message" class="mt-5 text-xs text-base-content/50">
           {{ application.unavailable_message }}
         </p>
-      </div>
-    </section>
+    </CadenceCard>
   </section>
 </template>
