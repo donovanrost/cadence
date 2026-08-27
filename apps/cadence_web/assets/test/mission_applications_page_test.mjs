@@ -85,8 +85,34 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "MissionApplicationsPage.vue template tags are balanced")
 }
 
+const occurrences = (source, fragment) => source.split(fragment).length - 1
+const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const migratedDataRowOpen = `          <CadenceDataRow
+            v-for="fact in application.status.facts"
+            :key="fact.id"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="fact.label"
+          >`
+const predecessorDataRowOpen = `          <div v-for="fact in application.status.facts" :key="fact.id" class="hud-data-row">
+            <span class="hud-data-label">{{ fact.label }}</span>`
+const migratedDataRowClose = "\n          </CadenceDataRow>"
+const predecessorDataRowClose = "\n          </div>"
+
+assert.equal(occurrences(childSource, dataRowImport), 1)
+assert.equal(occurrences(childSource, "<CadenceDataRow"), 1)
+assert.equal(occurrences(childSource, migratedDataRowOpen), 1)
+assert.equal(occurrences(childSource, migratedDataRowClose), 1)
+
+const reconstructedChildSource = childSource
+  .replace(dataRowImport, "")
+  .replace(migratedDataRowOpen, predecessorDataRowOpen)
+  .replace(migratedDataRowClose, predecessorDataRowClose)
+
+assert.doesNotMatch(reconstructedChildSource, /CadenceDataRow/)
+
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  createHash("sha256").update(reconstructedChildSource).digest("hex"),
   "5bcfc94dbb88b0ed01fe9b67ea77b6e58d0ca226a93d3255c3416ba3a6a0e49f",
   "MissionApplications.vue remains byte-for-byte immutable",
 )
