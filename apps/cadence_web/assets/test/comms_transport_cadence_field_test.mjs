@@ -153,6 +153,12 @@ const formChromeImports = [
 ]
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
 const occurrences = (value, fragment) => value.split(fragment).length - 1
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const rawReviewShell = `        <section
+          :id="form.review.configuration_summary_id"
+          class="card bg-base-200 border border-base-300"
+        >
+          <div class="card-body p-0">`
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const migratedDataRowOpening = `                <CadenceDataRow
                   v-for="row in form.provider_derived.configuration.rows"
@@ -167,6 +173,64 @@ const foundationDataRowOpening = `                <div
                   class="hud-data-row"
                 >
                   <span class="hud-data-label">{{ row.label }}</span>`
+
+const reconstructCards = (value) => {
+  assert.equal(occurrences(value, cardImport), 1, "the transport imports CadenceCard once")
+  assert.equal(
+    value.match(/<CadenceCard\b/g)?.length ?? 0,
+    1,
+    "the transport has exactly one migrated p-6 card opening boundary",
+  )
+  assert.equal(
+    occurrences(value, "</CadenceCard>"),
+    1,
+    "the transport has exactly one migrated p-6 card closing boundary",
+  )
+  assert.equal(
+    occurrences(value, 'body-class="card-body p-6"'),
+    1,
+    "the transport has exactly one migrated p-6 card body boundary",
+  )
+  assert.equal(occurrences(value, rawReviewShell), 1, "the raw p-0 review card stays exact")
+
+  let openingCount = 0
+  let reconstructed = value.replace(cardImport, "")
+
+  reconstructed = reconstructed.replace(
+    /^([ \t]*)<CadenceCard\b([^>]*)>\n/gm,
+    (_opening, indentation, rawAttributes) => {
+      openingCount += 1
+      assert.equal(
+        occurrences(rawAttributes, 'body-class="card-body p-6"'),
+        1,
+        "the transport card boundary owns one exact body class",
+      )
+
+      const sectionAttributes = rawAttributes
+        .replace(/\n[ \t]*body-class="card-body p-6"/, "")
+        .replace(/ body-class="card-body p-6"/, "")
+
+      assert.doesNotMatch(sectionAttributes, /body-class=/)
+      return (
+        `${indentation}<section${sectionAttributes}>\n` +
+        `${indentation}  <div class="card-body p-6">\n`
+      )
+    },
+  )
+
+  assert.equal(openingCount, 1, "the transport reconstructs its one card opening")
+
+  let closingCount = 0
+  reconstructed = reconstructed.replace(/^([ \t]*)<\/CadenceCard>$/gm, (_closing, indentation) => {
+    closingCount += 1
+    return `${indentation}  </div>\n${indentation}</section>`
+  })
+
+  assert.equal(closingCount, 1, "the transport reconstructs its one card closing")
+  assert.equal(occurrences(reconstructed, rawReviewShell), 1, "the pre-card source keeps the raw p-0 card")
+  assert.doesNotMatch(reconstructed, /CadenceCard/, "the pre-card source has no residual primitive")
+  return reconstructed
+}
 
 const reconstructDataRow = (value) => {
   assert.equal(occurrences(value, dataRowImport), 1, "the transport imports CadenceDataRow once")
@@ -281,7 +345,7 @@ const reconstructFormChrome = (value) => {
   return reconstructed
 }
 
-let reconstructedSource = reconstructDataRow(source).replace(
+let reconstructedSource = reconstructDataRow(reconstructCards(source)).replace(
   'import CadenceField from "./ui/components/CadenceField.vue"\n',
   "",
 )

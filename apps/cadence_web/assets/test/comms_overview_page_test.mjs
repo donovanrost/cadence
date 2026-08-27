@@ -80,8 +80,68 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "SFC template tags are balanced")
 }
 
+const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const occurrenceCount = (source, token) => source.split(token).length - 1
+const reconstructCards = (source, expectedCount, label) => {
+  assert.equal(occurrenceCount(source, cardImport), 1, `${label} imports CadenceCard exactly once`)
+  assert.equal(
+    source.match(/<CadenceCard\b/g)?.length ?? 0,
+    expectedCount,
+    `${label} has its exact CadenceCard opening count`,
+  )
+  assert.equal(
+    occurrenceCount(source, "</CadenceCard>"),
+    expectedCount,
+    `${label} has its exact CadenceCard closing count`,
+  )
+  assert.equal(
+    occurrenceCount(source, 'body-class="card-body p-6"'),
+    expectedCount,
+    `${label} has one exact p-6 body boundary per card`,
+  )
+
+  let openingCount = 0
+  let reconstructed = source.replace(cardImport, "")
+
+  reconstructed = reconstructed.replace(
+    /^([ \t]*)<CadenceCard\b([^>]*)>\n/gm,
+    (_opening, indentation, rawAttributes) => {
+      openingCount += 1
+      assert.equal(
+        occurrenceCount(rawAttributes, 'body-class="card-body p-6"'),
+        1,
+        `${label} card boundary ${openingCount} owns one exact body class`,
+      )
+
+      const sectionAttributes = rawAttributes
+        .replace(/\n[ \t]*body-class="card-body p-6"/, "")
+        .replace(/ body-class="card-body p-6"/, "")
+
+      assert.doesNotMatch(sectionAttributes, /body-class=/)
+      return (
+        `${indentation}<section${sectionAttributes}>\n` +
+        `${indentation}  <div class="card-body p-6">\n`
+      )
+    },
+  )
+
+  assert.equal(openingCount, expectedCount, `${label} reconstructs every card opening`)
+
+  let closingCount = 0
+  reconstructed = reconstructed.replace(/^([ \t]*)<\/CadenceCard>$/gm, (_closing, indentation) => {
+    closingCount += 1
+    return `${indentation}  </div>\n${indentation}</section>`
+  })
+
+  assert.equal(closingCount, expectedCount, `${label} reconstructs every card closing`)
+  assert.doesNotMatch(reconstructed, /CadenceCard/, `${label} pre-card source has no residual primitive`)
+  return reconstructed
+}
+
+const preCardChildSource = reconstructCards(childSource, 2, "CommsOverview.vue")
+
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  createHash("sha256").update(preCardChildSource).digest("hex"),
   "2c377d7c0f5904311de59a10dd517b21175ecef95eb1b5d8df5a6474932d9a96",
   "CommsOverview.vue remains the explicitly immutable child",
 )
