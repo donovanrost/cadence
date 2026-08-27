@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type Breadcrumb = {
@@ -96,11 +97,11 @@ const valueClasses: Record<DetailRow["style"], string> = {
     </header>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <section
+      <CadenceCard
         :id="provenance.id"
         class="card border border-base-300 bg-base-200 lg:col-span-2"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <p class="hud-label">{{ provenance.title }}</p>
           <div class="mt-3 divide-y divide-base-300">
             <CadenceDataRow
@@ -122,11 +123,9 @@ const valueClasses: Record<DetailRow["style"], string> = {
               </span>
             </CadenceDataRow>
           </div>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section :id="runtime_usage.id" class="card border border-base-300 bg-base-200">
-        <div class="card-body p-6">
+      <CadenceCard :id="runtime_usage.id" class="card border border-base-300 bg-base-200" body-class="card-body p-6">
           <p class="hud-label">{{ runtime_usage.title }}</p>
           <p :id="runtime_usage.summary_id" class="mt-2 text-sm text-base-content/60">
             {{ runtime_usage.summary }}
@@ -139,12 +138,10 @@ const valueClasses: Record<DetailRow["style"], string> = {
           >
             {{ runtime_usage.action.label }}
           </button>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
 
-    <section :id="mission_model.id" class="card border border-base-300 bg-base-200">
-      <div class="card-body p-6">
+    <CadenceCard :id="mission_model.id" class="card border border-base-300 bg-base-200" body-class="card-body p-6">
         <p class="hud-label">{{ mission_model.title }}</p>
         <div v-if="mission_model.available" class="mt-3 divide-y divide-base-300">
           <CadenceDataRow
@@ -162,7 +159,6 @@ const valueClasses: Record<DetailRow["style"], string> = {
         <p v-else class="mt-2 text-sm text-base-content/60">
           {{ mission_model.empty_message }}
         </p>
-      </div>
-    </section>
+    </CadenceCard>
   </div>
 </template>
