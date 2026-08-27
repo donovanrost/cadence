@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type EmptyPayload = Record<string, never>
 
@@ -335,8 +336,8 @@ const repairFleetRun = () => {
         </div>
       </section>
 
-      <section :id="page.horizon.id" class="border border-base-300 bg-base-200/15">
-        <div class="grid gap-3 border-b border-base-300 px-4 py-3 md:grid-cols-[1fr_auto] md:items-end">
+      <CadencePanel :id="page.horizon.id" class="border border-base-300 bg-base-200/15" header-class="grid gap-3 border-b border-base-300 px-4 py-3 md:grid-cols-[1fr_auto] md:items-end">
+        <template #header>
           <div>
             <p class="hud-label">{{ page.horizon.label }}</p>
             <p class="mt-1 font-mono text-xs tabular-nums">
@@ -346,7 +347,7 @@ const repairFleetRun = () => {
           <p class="font-mono text-[0.65rem] text-base-content/45">
             {{ page.horizon.counts }}
           </p>
-        </div>
+        </template>
         <div class="relative min-h-28 overflow-x-auto px-4 py-5">
           <div class="absolute left-4 right-4 top-1/2 h-px bg-base-300"></div>
           <div
@@ -381,16 +382,16 @@ const repairFleetRun = () => {
             </div>
           </div>
         </div>
-      </section>
+      </CadencePanel>
 
       <div class="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(23rem,0.65fr)]">
         <div class="min-w-0 space-y-5">
-          <section :id="page.coverage.id" class="border border-base-300 bg-base-200/15">
-            <div class="grid grid-cols-[minmax(12rem,1fr)_7rem_7rem_8rem] border-b border-base-300 px-4 py-2 font-mono text-[0.58rem] uppercase tracking-wider text-base-content/45">
+          <CadencePanel :id="page.coverage.id" class="border border-base-300 bg-base-200/15" header-class="grid grid-cols-[minmax(12rem,1fr)_7rem_7rem_8rem] border-b border-base-300 px-4 py-2 font-mono text-[0.58rem] uppercase tracking-wider text-base-content/45">
+            <template #header>
               <span v-for="column in page.coverage.columns" :key="column">
                 {{ column }}
               </span>
-            </div>
+            </template>
             <div :id="page.coverage.list_id">
               <div
                 :id="page.coverage.empty.id"
@@ -424,13 +425,14 @@ const repairFleetRun = () => {
                 </span>
               </div>
             </div>
-          </section>
+          </CadencePanel>
 
-          <section
+          <CadencePanel
             :id="page.decision_inspector.id"
             class="border border-base-300 bg-base-200/15"
+            header-class="flex items-end justify-between border-b border-base-300 px-4 py-3"
           >
-            <div class="flex items-end justify-between border-b border-base-300 px-4 py-3">
+            <template #header>
               <div>
                 <p class="hud-label">{{ page.decision_inspector.label }}</p>
                 <p class="mt-1 text-sm text-base-content/55">
@@ -440,7 +442,7 @@ const repairFleetRun = () => {
               <span class="font-mono text-xs text-base-content/45">
                 {{ page.decision_inspector.count }}
               </span>
-            </div>
+            </template>
             <div :id="page.decision_inspector.list_id">
               <div
                 :id="page.decision_inspector.empty.id"
@@ -486,18 +488,19 @@ const repairFleetRun = () => {
                 </div>
               </details>
             </div>
-          </section>
+          </CadencePanel>
         </div>
 
         <aside class="min-w-0 space-y-5">
-          <section
+          <CadencePanel
             v-if="page.exception_queue.visible"
             :id="page.exception_queue.id"
             class="border border-warning/35 bg-warning/[0.035]"
+            header-class="border-b border-warning/25 px-4 py-3"
           >
-            <div class="border-b border-warning/25 px-4 py-3">
+            <template #header>
               <p class="hud-label text-warning">{{ page.exception_queue.label }}</p>
-            </div>
+            </template>
             <div :id="page.exception_queue.list_id">
               <div :id="page.exception_queue.empty_id" class="hidden only:block"></div>
               <div
@@ -514,15 +517,16 @@ const repairFleetRun = () => {
                 </p>
               </div>
             </div>
-          </section>
+          </CadencePanel>
 
-          <section
+          <CadencePanel
             :id="page.resource_pressure.id"
             class="border border-base-300 bg-base-200/15"
+            header-class="border-b border-base-300 px-4 py-3"
           >
-            <div class="border-b border-base-300 px-4 py-3">
+            <template #header>
               <p class="hud-label">{{ page.resource_pressure.label }}</p>
-            </div>
+            </template>
             <div :id="page.resource_pressure.list_id">
               <div
                 :id="page.resource_pressure.empty.id"
@@ -560,15 +564,16 @@ const repairFleetRun = () => {
                 </div>
               </div>
             </div>
-          </section>
+          </CadencePanel>
 
-          <section
+          <CadencePanel
             v-if="page.automation.visible"
             class="border border-base-300 bg-base-200/15"
+            header-class="border-b border-base-300 px-4 py-3"
           >
-            <div class="border-b border-base-300 px-4 py-3">
+            <template #header>
               <p class="hud-label">{{ page.automation.label }}</p>
-            </div>
+            </template>
             <div :id="page.automation.list_id">
               <div :id="page.automation.empty_id" class="hidden only:block"></div>
               <div
@@ -581,7 +586,7 @@ const repairFleetRun = () => {
                 <span :class="action.lifecycle.class">{{ action.lifecycle.label }}</span>
               </div>
             </div>
-          </section>
+          </CadencePanel>
 
           <section
             v-if="repair_form"
