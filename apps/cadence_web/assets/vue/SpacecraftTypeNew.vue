@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Breadcrumb = {
   label: string
@@ -280,20 +281,22 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.display_name.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>
-            <input
-              :id="form.fields.display_name.id"
-              v-model="values.display_name"
-              :name="form.fields.display_name.name"
-              :type="form.fields.display_name.type"
-              :required="form.fields.display_name.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.display_name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.display_name.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.display_name.id"
+            v-model="values.display_name"
+            :name="form.fields.display_name.name"
+            :type="form.fields.display_name.type"
+            :required="form.fields.display_name.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
       </section>
 
       <section :id="form.sections.protocols.id" class="space-y-4">
@@ -303,49 +306,49 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
           <div class="flex-1 h-px bg-base-300/60"></div>
         </div>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.downlink_protocol.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.downlink_protocol.label }}
-            </span>
-            <select
-              :id="form.fields.downlink_protocol.id"
-              v-model="values.downlink_protocol"
-              :name="form.fields.downlink_protocol.name"
-              :required="form.fields.downlink_protocol.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.downlink_protocols"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.downlink_protocol.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.downlink_protocol.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.downlink_protocol.id"
+            v-model="values.downlink_protocol"
+            :name="form.fields.downlink_protocol.name"
+            :required="form.fields.downlink_protocol.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.downlink_protocols"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.uplink_protocol.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.uplink_protocol.label }}
-            </span>
-            <select
-              :id="form.fields.uplink_protocol.id"
-              v-model="values.uplink_protocol"
-              :name="form.fields.uplink_protocol.name"
-              :required="form.fields.uplink_protocol.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.uplink_protocols"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.uplink_protocol.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.uplink_protocol.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.uplink_protocol.id"
+            v-model="values.uplink_protocol"
+            :name="form.fields.uplink_protocol.name"
+            :required="form.fields.uplink_protocol.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.uplink_protocols"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <section :id="form.sections.frame_parameters.id" class="space-y-4">
@@ -361,96 +364,103 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
           {{ form.sections.frame_parameters.description }}
         </p>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.frame_size.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.frame_size.label }}</span>
-            <input
-              :id="form.fields.frame_size.id"
-              v-model="values.frame_size"
-              :name="form.fields.frame_size.name"
-              :type="form.fields.frame_size.type"
-              :required="form.fields.frame_size.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.frame_size.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.frame_size.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.frame_size.id"
+            v-model="values.frame_size"
+            :name="form.fields.frame_size.name"
+            :type="form.fields.frame_size.type"
+            :required="form.fields.frame_size.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div v-if="frameFieldVisible('secondary_header_length')" class="fieldset mb-3">
-          <label :for="form.fields.secondary_header_length.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.secondary_header_length.label }}
-            </span>
-            <input
-              :id="form.fields.secondary_header_length.id"
-              v-model="values.secondary_header_length"
-              :name="form.fields.secondary_header_length.name"
-              :type="form.fields.secondary_header_length.type"
-              :required="form.fields.secondary_header_length.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          v-if="frameFieldVisible('secondary_header_length')"
+          :control-id="form.fields.secondary_header_length.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.secondary_header_length.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.secondary_header_length.id"
+            v-model="values.secondary_header_length"
+            :name="form.fields.secondary_header_length.name"
+            :type="form.fields.secondary_header_length.type"
+            :required="form.fields.secondary_header_length.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div v-if="frameFieldVisible('insert_zone_length')" class="fieldset mb-3">
-          <label :for="form.fields.insert_zone_length.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.insert_zone_length.label }}
-            </span>
-            <input
-              :id="form.fields.insert_zone_length.id"
-              v-model="values.insert_zone_length"
-              :name="form.fields.insert_zone_length.name"
-              :type="form.fields.insert_zone_length.type"
-              :required="form.fields.insert_zone_length.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          v-if="frameFieldVisible('insert_zone_length')"
+          :control-id="form.fields.insert_zone_length.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.insert_zone_length.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.insert_zone_length.id"
+            v-model="values.insert_zone_length"
+            :name="form.fields.insert_zone_length.name"
+            :type="form.fields.insert_zone_length.type"
+            :required="form.fields.insert_zone_length.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div v-if="frameFieldVisible('truncated_primary_header')" class="fieldset mb-3">
-          <label :for="form.fields.truncated_primary_header.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.truncated_primary_header.label }}
-            </span>
-            <select
-              :id="form.fields.truncated_primary_header.id"
-              v-model="values.truncated_primary_header"
-              :name="form.fields.truncated_primary_header.name"
-              :required="form.fields.truncated_primary_header.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.truncated_primary_headers"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          v-if="frameFieldVisible('truncated_primary_header')"
+          :control-id="form.fields.truncated_primary_header.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.truncated_primary_header.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.truncated_primary_header.id"
+            v-model="values.truncated_primary_header"
+            :name="form.fields.truncated_primary_header.name"
+            :required="form.fields.truncated_primary_header.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.truncated_primary_headers"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.ocf_length.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.ocf_length.label }}</span>
-            <select
-              :id="form.fields.ocf_length.id"
-              v-model="values.ocf_length"
-              :name="form.fields.ocf_length.name"
-              :required="form.fields.ocf_length.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in options.operational_control_fields"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.ocf_length.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.ocf_length.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.ocf_length.id"
+            v-model="values.ocf_length"
+            :name="form.fields.ocf_length.name"
+            :required="form.fields.ocf_length.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in options.operational_control_fields"
+              :key="option.value"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <section :id="form.sections.applications.id" class="space-y-4">
