@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 
 type EmptyPayload = Record<string, never>
@@ -213,8 +214,8 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
           </div>
         </section>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <template #header>
             <div>
               <p class="hud-label">{{ page.planning.heading }}</p>
               <p class="mt-1 text-sm text-base-content/55">
@@ -227,7 +228,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
             >
               {{ page.planning.run_state.label }}
             </span>
-          </div>
+          </template>
           <p
             v-if="page.planning.error.message"
             :id="page.planning.error.id"
@@ -265,10 +266,10 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               </div>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <template #header>
             <div>
               <p class="hud-label">{{ page.opportunities.heading }}</p>
               <p class="mt-1 text-sm text-base-content/55">
@@ -281,7 +282,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
             >
               {{ page.opportunities.selected_count.label }}
             </span>
-          </div>
+          </template>
           <div :id="page.opportunities.list.id">
             <div
               :id="page.opportunities.list.empty.id"
@@ -354,14 +355,14 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               {{ page.opportunities.create_action.label }}
             </button>
           </div>
-        </section>
+        </CadencePanel>
       </div>
 
       <aside class="min-w-0 space-y-5">
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.journey.heading }}</p>
-          </div>
+          </template>
           <div class="space-y-3 p-4 text-sm">
             <div
               v-for="step in page.journey.steps"
@@ -379,12 +380,12 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               <span class="font-mono text-xs">{{ step.state }}</span>
             </div>
           </div>
-        </section>
+        </CadencePanel>
 
-        <section class="border border-base-300 bg-base-200/20">
-          <div class="border-b border-base-300 px-4 py-3">
+        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ page.versions.heading }}</p>
-          </div>
+          </template>
           <div :id="page.versions.id">
             <div
               v-for="version in requirement_versions"
@@ -404,7 +405,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               </p>
             </div>
           </div>
-        </section>
+        </CadencePanel>
       </aside>
     </div>
   </section>

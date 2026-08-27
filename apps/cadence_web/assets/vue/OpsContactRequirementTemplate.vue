@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type Option = {label: string; value: string}
 
@@ -203,14 +204,14 @@ const fieldClass = (field: FormField) => [
     </header>
 
     <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7">
-      <section class="min-w-0 border border-base-300 bg-base-200/15">
-        <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+      <CadencePanel class="min-w-0 border border-base-300 bg-base-200/15" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+        <template #header>
           <div>
             <p class="hud-label">{{ ledger.eyebrow }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ ledger.copy }}</p>
           </div>
           <span class="font-mono text-xs text-base-content/45">{{ ledger.count_label }}</span>
-        </div>
+        </template>
 
         <div v-if="ledger.empty" :id="ledger.empty.id" class="px-6 py-16 text-center">
           <span :class="[ledger.empty.icon, 'mx-auto h-8 w-8 text-primary/35']"></span>
@@ -274,18 +275,19 @@ const fieldClass = (field: FormField) => [
             </div>
           </div>
         </div>
-      </section>
+      </CadencePanel>
 
       <aside class="min-w-0">
-        <section
+        <CadencePanel
           v-if="template_form"
           :id="template_form.panel_id"
           class="border border-base-300 bg-base-200/15"
+          header-class="border-b border-base-300 px-4 py-3"
         >
-          <div class="border-b border-base-300 px-4 py-3">
+          <template #header>
             <p class="hud-label">{{ template_form.header.eyebrow }}</p>
             <p class="mt-1 text-xs text-base-content/50">{{ template_form.header.copy }}</p>
-          </div>
+          </template>
           <form :id="template_form.id" class="space-y-5 p-4" @submit.prevent="createTemplate">
             <div class="fieldset mb-3">
               <label :for="template_form.fields.spacecraft_id.id">
@@ -647,7 +649,7 @@ const fieldClass = (field: FormField) => [
               {{ template_form.submit.label }}
             </button>
           </form>
-        </section>
+        </CadencePanel>
 
         <p
           v-if="authorization.admin_required"
