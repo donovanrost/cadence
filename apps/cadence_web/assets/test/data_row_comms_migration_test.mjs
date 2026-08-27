@@ -10,6 +10,9 @@ const lines = (...sourceLines) => sourceLines.join("\n")
 const boundary = (migrated, base) => Object.freeze({migrated, base})
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const panelHeaderClass =
+  "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const rawReviewShell = `        <section
           :id="form.review.configuration_summary_id"
           class="card bg-base-200 border border-base-300"
@@ -219,6 +222,70 @@ const replaceExactlyOnce = (source, current, replacement, label) => {
   assert.equal(occurrenceCount(source, current), 1, `${label} occurs exactly once`)
   return source.replace(current, replacement)
 }
+const panelBoundaries = Object.freeze([
+  Object.freeze({
+    label: "service profile panel",
+    migrated: lines(
+      "        <CadencePanel",
+      '          :id="profiles.service.id"',
+      '          class="card bg-base-200 border border-base-300"',
+      `          header-class="${panelHeaderClass}"`,
+      "        >",
+      "          <template #header>",
+    ),
+    base: lines(
+      '        <section :id="profiles.service.id" class="card bg-base-200 border border-base-300">',
+      `          <div class="${panelHeaderClass}">`,
+    ),
+  }),
+  Object.freeze({
+    label: "delivery profile panel",
+    migrated: lines(
+      "        <CadencePanel",
+      '          :id="profiles.delivery.id"',
+      '          class="card bg-base-200 border border-base-300"',
+      `          header-class="${panelHeaderClass}"`,
+      "        >",
+      "          <template #header>",
+    ),
+    base: lines(
+      '        <section :id="profiles.delivery.id" class="card bg-base-200 border border-base-300">',
+      `          <div class="${panelHeaderClass}">`,
+    ),
+  }),
+])
+
+const peelCadencePanels = (source, filename) => {
+  if (filename !== "CommsProviderShow.vue") return source
+
+  let peeled = replaceExactlyOnce(source, panelImport, "", "CadencePanel import")
+
+  for (const panelBoundary of panelBoundaries) {
+    peeled = replaceExactlyOnce(
+      peeled,
+      panelBoundary.migrated,
+      panelBoundary.base,
+      panelBoundary.label,
+    )
+  }
+
+  const headerClosing = '          </template>\n          <div class="card-body p-0">'
+  assert.equal(occurrenceCount(peeled, headerClosing), 2, "exactly two header slot closings peel")
+  peeled = peeled.replaceAll(
+    headerClosing,
+    '          </div>\n          <div class="card-body p-0">',
+  )
+
+  assert.equal(
+    occurrenceCount(peeled, "        </CadencePanel>"),
+    2,
+    "exactly two panel closings peel",
+  )
+  peeled = peeled.replaceAll("        </CadencePanel>", "        </section>")
+
+  assert.doesNotMatch(peeled, /CadencePanel/)
+  return peeled
+}
 
 const reconstructCards = (source, contract) => {
   assert.equal(
@@ -333,8 +400,9 @@ for (const contract of contracts) {
     `${contract.filename} declares every migrated row boundary`,
   )
 
+  const predecessorSource = peelCadencePanels(source, contract.filename)
   let reconstructedBase = replaceExactlyOnce(
-    reconstructCards(source, contract),
+    reconstructCards(predecessorSource, contract),
     contract.importInsertion,
     "",
     `${contract.filename} import insertion`,
