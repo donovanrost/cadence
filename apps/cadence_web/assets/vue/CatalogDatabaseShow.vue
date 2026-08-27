@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
 import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
 import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
@@ -120,21 +121,17 @@ const emit = defineEmits<{
     </header>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <section class="card border border-base-300 bg-base-200 lg:col-span-2">
-        <div class="card-body p-6">
+      <CadenceCard class="card border border-base-300 bg-base-200 lg:col-span-2" body-class="card-body p-6">
           <p class="hud-label">Database</p>
           <p class="mt-2 text-sm text-base-content/70">{{ database.description }}</p>
-        </div>
-      </section>
+      </CadenceCard>
 
-      <section class="card border border-base-300 bg-base-200">
-        <div class="card-body p-6">
+      <CadenceCard class="card border border-base-300 bg-base-200" body-class="card-body p-6">
           <p class="hud-label">Runtime usage</p>
           <p id="catalog-runtime-usage-summary" class="mt-2 text-sm text-base-content/60">
             {{ database.runtime_usage_summary }}
           </p>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
 
     <CadenceCollapsibleContent>
@@ -150,8 +147,7 @@ const emit = defineEmits<{
       </div>
     </CadenceCollapsibleContent>
 
-    <section id="catalog-revision-history" class="card border border-base-300 bg-base-200">
-      <div class="card-body p-6">
+    <CadenceCard id="catalog-revision-history" class="card border border-base-300 bg-base-200" body-class="card-body p-6">
         <p class="hud-label">Revision history</p>
         <p
           v-if="revisions.length === 0"
@@ -189,11 +185,9 @@ const emit = defineEmits<{
             </tr>
           </tbody>
         </table>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section id="catalog-import-attempts" class="card border border-base-300 bg-base-200">
-      <div class="card-body p-6">
+    <CadenceCard id="catalog-import-attempts" class="card border border-base-300 bg-base-200" body-class="card-body p-6">
         <p class="hud-label">Import attempts</p>
         <p
           v-if="import_runs.length === 0"
@@ -228,8 +222,7 @@ const emit = defineEmits<{
             </tr>
           </tbody>
         </table>
-      </div>
-    </section>
+    </CadenceCard>
     </div>
   </CadenceCollapsible>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type Breadcrumb = {
@@ -90,8 +91,7 @@ defineProps<{
       </div>
     </header>
 
-    <section class="card bg-base-200 border border-base-300">
-      <div class="card-body p-6">
+    <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <div class="text-sm space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-base-content/60">Importer</span>
@@ -108,15 +108,14 @@ defineProps<{
             <span>{{ run_details.completed_at }}</span>
           </div>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
-    <section
+    <CadenceCard
       v-if="mission_model"
       :id="mission_model.id"
       class="card bg-base-200 border border-base-300"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">Mission Model</p>
         <div class="divide-y divide-base-300">
           <CadenceDataRow
@@ -143,16 +142,15 @@ defineProps<{
             <span class="hud-data-value font-mono text-sm">{{ mission_model.plan_count }}</span>
           </CadenceDataRow>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
     <div v-if="diagnostic_groups.length !== 0" class="space-y-3">
-      <section
+      <CadenceCard
         v-for="group in diagnostic_groups"
         :key="group.title"
         class="card bg-base-200 border border-base-300"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <p class="hud-label">{{ group.title }}</p>
           <ul class="space-y-2">
             <li
@@ -171,8 +169,7 @@ defineProps<{
               >{{ diagnostic.path }}</p>
             </li>
           </ul>
-        </div>
-      </section>
+      </CadenceCard>
     </div>
 
     <div

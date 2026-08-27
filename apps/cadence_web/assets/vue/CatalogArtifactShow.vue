@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
@@ -36,11 +37,11 @@ const emit = defineEmits<{
 
 <template>
   <div id="catalog-artifact-show-content" class="space-y-6">
-    <section
+    <CadenceCard
       id="catalog-artifact-metadata-card"
       class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
     >
-      <div class="card-body p-6">
         <p class="hud-label">Artifact</p>
 
         <div class="divide-y divide-base-300">
@@ -93,21 +94,19 @@ const emit = defineEmits<{
             <span class="hero-arrow-path h-4 w-4"></span> Re-import
           </button>
         </div>
-      </div>
-    </section>
+    </CadenceCard>
 
     <section id="catalog-artifact-runs-section">
       <p class="hud-label mb-2">Import runs</p>
 
-      <section
+      <CadenceCard
         v-if="runs.length === 0"
         id="catalog-artifact-runs-empty"
         class="card border border-base-300 bg-base-200"
+        body-class="card-body p-6"
       >
-        <div class="card-body p-6">
           <p class="text-sm text-base-content/60">No runs yet.</p>
-        </div>
-      </section>
+      </CadenceCard>
 
       <section
         v-else
