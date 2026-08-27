@@ -1,0 +1,106 @@
+import assert from "node:assert/strict"
+import {readFile} from "node:fs/promises"
+import {dirname, resolve} from "node:path"
+import {fileURLToPath} from "node:url"
+import {
+  expectedNodeVersion,
+  installDom,
+  integrationRequire,
+} from "./reka_adapter_test_support.mjs"
+
+assert.equal(
+  process.versions.node,
+  expectedNodeVersion,
+  `CadenceField contracts use pinned Node ${expectedNodeVersion}`,
+)
+
+const testDirectory = dirname(fileURLToPath(import.meta.url))
+const componentPath = resolve(testDirectory, "../vue/ui/components/CadenceField.vue")
+const source = await readFile(componentPath, "utf8")
+const dom = installDom('<div id="field-contract"></div>')
+const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
+const parsed = parse(source, {filename: componentPath})
+
+assert.deepEqual(parsed.errors, [], "CadenceField.vue parses with the pinned Vue compiler")
+assert.ok(parsed.descriptor.script, "CadenceField keeps its typed render-function block")
+assert.equal(parsed.descriptor.script.lang, "ts")
+assert.equal(parsed.descriptor.scriptSetup, null)
+assert.equal(parsed.descriptor.template, null, "CadenceField adds no template boundary")
+assert.doesNotMatch(source, /\bv-model(?::model-value)?=|@(?:input|change|submit)|<input|<select|<textarea/)
+assert.doesNotMatch(source, /\b(?:computed|reactive|ref|watch)\s*\(|\bfetch\s*\(/)
+
+const compiled = compileScript(parsed.descriptor, {id: "cadence-field-contract"})
+const {transformSync} = integrationRequire("esbuild")
+const transformed = transformSync(compiled.content, {
+  format: "cjs",
+  loader: "ts",
+  platform: "node",
+  target: "node24",
+})
+const loadedModule = {exports: {}}
+const evaluate = new Function("require", "module", "exports", transformed.code)
+evaluate(integrationRequire, loadedModule, loadedModule.exports)
+const CadenceField = loadedModule.exports.default
+const {createApp, defineComponent, h} = integrationRequire("vue")
+
+let nativeControl = null
+const inputEvents = []
+const Contract = defineComponent({
+  setup() {
+    return () =>
+      h(
+        CadenceField,
+        {
+          controlId: "ground_station_id",
+          wrapperClass: "fieldset mb-3",
+          label: "Ground Station ID",
+          labelClass: "hud-label block mb-1.5",
+        },
+        {
+          default: () =>
+            h("input", {
+              ref: (element) => {
+                nativeControl = element
+              },
+              id: "ground_station_id",
+              name: "ground_station[ground_station_id]",
+              type: "text",
+              value: "dss-14",
+              required: true,
+              disabled: true,
+              placeholder: "DSS-14",
+              class: "w-full input",
+              onInput: (event) => inputEvents.push(event.currentTarget),
+            }),
+          help: () => h("p", {class: "mt-1 text-xs"}, "Server-authored help"),
+          errors: () => [
+            h("p", {class: "mt-1.5 text-sm text-error"}, "can't be blank"),
+            h("p", {class: "mt-1.5 text-sm text-error"}, "has already been taken"),
+          ],
+        },
+      )
+  },
+})
+
+const host = dom.window.document.querySelector("#field-contract")
+const app = createApp(Contract)
+app.mount(host)
+
+const root = host.firstElementChild
+const input = root.querySelector("input")
+
+assert.strictEqual(input, nativeControl, "the slotted native control keeps its DOM identity")
+assert.equal(
+  root.outerHTML,
+  '<div class="fieldset mb-3"><label for="ground_station_id"><span class="hud-label block mb-1.5">Ground Station ID</span><input id="ground_station_id" name="ground_station[ground_station_id]" type="text" required="" disabled="" placeholder="DSS-14" class="w-full input" value="dss-14"></label><p class="mt-1 text-xs">Server-authored help</p><p class="mt-1.5 text-sm text-error">can\'t be blank</p><p class="mt-1.5 text-sm text-error">has already been taken</p></div>',
+  "wrapper, label, label text, native control, help, and errors render without extra nodes",
+)
+
+input.dispatchEvent(new dom.window.Event("input", {bubbles: true}))
+assert.deepEqual(inputEvents, [input], "native input events reach the owning consumer unchanged")
+
+app.unmount()
+assert.equal(host.children.length, 0)
+dom.window.close()
+
+console.log("cadence_field_test passed")
