@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Breadcrumb = {
   label: string
@@ -249,45 +250,45 @@ const save = () => emit("save", {provider_account: values()})
           <div class="h-px flex-1 bg-base-300/60"></div>
         </div>
 
-        <div
+        <CadenceField
           v-for="field in fieldsFor(form.sections.network_identity)"
           :key="field.key"
-          class="fieldset mb-3"
+          :control-id="field.id"
+          wrapper-class="fieldset mb-3"
+          :label="fieldLabel(field)"
+          label-class="hud-label mb-1.5 block"
         >
-          <label :for="field.id">
-            <span class="hud-label mb-1.5 block">{{ fieldLabel(field) }}</span>
-            <select
-              v-if="field.type === 'select'"
-              :id="field.id"
-              v-model="providerAccount[field.key]"
-              :name="field.name"
-              :required="field.required"
-              class="select w-full"
-              @change="validate"
-            >
-              <option
-                v-for="option in field.options"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-                :disabled="option.disabled"
-              >{{ option.label }}</option>
-            </select>
-            <input
-              v-else
-              :id="field.id"
-              v-model="providerAccount[field.key]"
-              :name="field.name"
-              :type="field.type"
-              :placeholder="fieldPlaceholder(field)"
-              :required="field.required"
-              :min="field.min"
-              :max="field.max"
-              :step="field.step"
-              class="input w-full"
-              @input="validate"
-            >
-          </label>
-        </div>
+          <select
+            v-if="field.type === 'select'"
+            :id="field.id"
+            v-model="providerAccount[field.key]"
+            :name="field.name"
+            :required="field.required"
+            class="select w-full"
+            @change="validate"
+          >
+            <option
+              v-for="option in field.options"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+              :disabled="option.disabled"
+            >{{ option.label }}</option>
+          </select>
+          <input
+            v-else
+            :id="field.id"
+            v-model="providerAccount[field.key]"
+            :name="field.name"
+            :type="field.type"
+            :placeholder="fieldPlaceholder(field)"
+            :required="field.required"
+            :min="field.min"
+            :max="field.max"
+            :step="field.step"
+            class="input w-full"
+            @input="validate"
+          >
+        </CadenceField>
 
         <div
           :id="form.connector.selected.id"
@@ -346,58 +347,60 @@ const save = () => emit("save", {provider_account: values()})
 
           <div :id="section.fields_id" class="grid gap-x-4 sm:grid-cols-2">
             <template v-for="field in section.fields" :key="field.key">
-              <div
+              <CadenceField
                 v-if="visible(field)"
                 :id="field.wrapper_id"
-                class="fieldset mb-3"
+                :control-id="field.id"
+                wrapper-class="fieldset mb-3"
+                :label="fieldLabel(field)"
+                label-class="hud-label mb-1.5 block"
               >
-                <label :for="field.id">
-                  <span class="hud-label mb-1.5 block">{{ fieldLabel(field) }}</span>
-                  <select
-                    v-if="field.type === 'select'"
-                    :id="field.id"
-                    v-model="providerAccount[field.key]"
-                    :name="field.name"
-                    :required="field.required"
-                    class="select w-full"
-                    @change="validate"
-                  >
-                    <option
-                      v-for="option in field.options"
-                      :key="`${option.value}-${option.label}`"
-                      :value="option.value"
-                      :disabled="option.disabled"
-                    >{{ option.label }}</option>
-                  </select>
-                  <textarea
-                    v-else-if="field.type === 'textarea'"
-                    :id="field.id"
-                    v-model="providerAccount[field.key]"
-                    :name="field.name"
-                    :placeholder="fieldPlaceholder(field)"
-                    :required="field.required"
-                    class="textarea w-full"
-                    @input="validate"
-                  ></textarea>
-                  <input
-                    v-else
-                    :id="field.id"
-                    v-model="providerAccount[field.key]"
-                    :name="field.name"
-                    :type="field.type"
-                    :placeholder="fieldPlaceholder(field)"
-                    :required="field.required"
-                    :min="field.min"
-                    :max="field.max"
-                    :step="field.step"
-                    class="input w-full"
-                    @input="validate"
-                  >
-                </label>
-                <p v-if="field.help" class="-mt-1 mb-3 text-xs text-base-content/55">
-                  {{ field.help }}
-                </p>
-              </div>
+                <select
+                  v-if="field.type === 'select'"
+                  :id="field.id"
+                  v-model="providerAccount[field.key]"
+                  :name="field.name"
+                  :required="field.required"
+                  class="select w-full"
+                  @change="validate"
+                >
+                  <option
+                    v-for="option in field.options"
+                    :key="`${option.value}-${option.label}`"
+                    :value="option.value"
+                    :disabled="option.disabled"
+                  >{{ option.label }}</option>
+                </select>
+                <textarea
+                  v-else-if="field.type === 'textarea'"
+                  :id="field.id"
+                  v-model="providerAccount[field.key]"
+                  :name="field.name"
+                  :placeholder="fieldPlaceholder(field)"
+                  :required="field.required"
+                  class="textarea w-full"
+                  @input="validate"
+                ></textarea>
+                <input
+                  v-else
+                  :id="field.id"
+                  v-model="providerAccount[field.key]"
+                  :name="field.name"
+                  :type="field.type"
+                  :placeholder="fieldPlaceholder(field)"
+                  :required="field.required"
+                  :min="field.min"
+                  :max="field.max"
+                  :step="field.step"
+                  class="input w-full"
+                  @input="validate"
+                >
+                <template #help>
+                  <p v-if="field.help" class="-mt-1 mb-3 text-xs text-base-content/55">
+                    {{ field.help }}
+                  </p>
+                </template>
+              </CadenceField>
             </template>
           </div>
         </section>
@@ -412,45 +415,45 @@ const save = () => emit("save", {provider_account: values()})
           <div class="h-px flex-1 bg-base-300/60"></div>
         </div>
 
-        <div
+        <CadenceField
           v-for="field in fieldsFor(form.sections.credential_registry)"
           :key="field.key"
-          class="fieldset mb-3"
+          :control-id="field.id"
+          wrapper-class="fieldset mb-3"
+          :label="fieldLabel(field)"
+          label-class="hud-label mb-1.5 block"
         >
-          <label :for="field.id">
-            <span class="hud-label mb-1.5 block">{{ fieldLabel(field) }}</span>
-            <select
-              v-if="field.type === 'select'"
-              :id="field.id"
-              v-model="providerAccount[field.key]"
-              :name="field.name"
-              :required="field.required"
-              class="select w-full"
-              @change="validate"
-            >
-              <option
-                v-for="option in field.options"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-                :disabled="option.disabled"
-              >{{ option.label }}</option>
-            </select>
-            <input
-              v-else
-              :id="field.id"
-              v-model="providerAccount[field.key]"
-              :name="field.name"
-              :type="field.type"
-              :placeholder="fieldPlaceholder(field)"
-              :required="field.required"
-              :min="field.min"
-              :max="field.max"
-              :step="field.step"
-              class="input w-full"
-              @input="validate"
-            >
-          </label>
-        </div>
+          <select
+            v-if="field.type === 'select'"
+            :id="field.id"
+            v-model="providerAccount[field.key]"
+            :name="field.name"
+            :required="field.required"
+            class="select w-full"
+            @change="validate"
+          >
+            <option
+              v-for="option in field.options"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+              :disabled="option.disabled"
+            >{{ option.label }}</option>
+          </select>
+          <input
+            v-else
+            :id="field.id"
+            v-model="providerAccount[field.key]"
+            :name="field.name"
+            :type="field.type"
+            :placeholder="fieldPlaceholder(field)"
+            :required="field.required"
+            :min="field.min"
+            :max="field.max"
+            :step="field.step"
+            class="input w-full"
+            @input="validate"
+          >
+        </CadenceField>
 
         <p :id="form.credential_note.id" class="text-xs text-base-content/60">
           {{ form.credential_note.text }}
@@ -466,28 +469,28 @@ const save = () => emit("save", {provider_account: values()})
           <div class="h-px flex-1 bg-base-300/60"></div>
         </div>
 
-        <div
+        <CadenceField
           v-for="field in fieldsFor(form.sections.organization_guardrails)"
           :key="field.key"
-          class="fieldset mb-3"
+          :control-id="field.id"
+          wrapper-class="fieldset mb-3"
+          :label="fieldLabel(field)"
+          label-class="hud-label mb-1.5 block"
         >
-          <label :for="field.id">
-            <span class="hud-label mb-1.5 block">{{ fieldLabel(field) }}</span>
-            <input
-              :id="field.id"
-              v-model="providerAccount[field.key]"
-              :name="field.name"
-              :type="field.type"
-              :placeholder="fieldPlaceholder(field)"
-              :required="field.required"
-              :min="field.min"
-              :max="field.max"
-              :step="field.step"
-              class="input w-full"
-              @input="validate"
-            >
-          </label>
-        </div>
+          <input
+            :id="field.id"
+            v-model="providerAccount[field.key]"
+            :name="field.name"
+            :type="field.type"
+            :placeholder="fieldPlaceholder(field)"
+            :required="field.required"
+            :min="field.min"
+            :max="field.max"
+            :step="field.step"
+            class="input w-full"
+            @input="validate"
+          >
+        </CadenceField>
       </section>
 
       <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
