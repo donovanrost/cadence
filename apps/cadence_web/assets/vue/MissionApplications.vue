@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
 type ButtonVariant = "primary" | "secondary" | "danger"
@@ -103,10 +104,15 @@ const dispatch = (
         <p class="mt-3 text-sm text-base-content/70">{{ application.description }}</p>
 
         <div class="mt-5 space-y-1">
-          <div v-for="fact in application.status.facts" :key="fact.id" class="hud-data-row">
-            <span class="hud-data-label">{{ fact.label }}</span>
+          <CadenceDataRow
+            v-for="fact in application.status.facts"
+            :key="fact.id"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="fact.label"
+          >
             <span class="hud-data-value">{{ fact.value || "—" }}</span>
-          </div>
+          </CadenceDataRow>
         </div>
 
         <div class="mt-5 flex flex-wrap items-center gap-2">
