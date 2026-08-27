@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -43,24 +44,36 @@ const emit = defineEmits<{
         <p class="hud-label">Artifact</p>
 
         <div class="divide-y divide-base-300">
-          <div class="hud-data-row">
-            <span class="hud-data-label">Format</span>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Format"
+          >
             <span class="hud-data-value font-mono text-sm">{{ artifact.format_key }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Media type</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Media type"
+          >
             <span class="hud-data-value font-mono text-sm">{{ artifact.media_type }}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Content SHA-256</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Content SHA-256"
+          >
             <span class="hud-data-value">
               <span class="break-all font-mono text-xs">{{ artifact.content_sha256 }}</span>
             </span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Uploaded at</span>
+          </CadenceDataRow>
+          <CadenceDataRow
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            label="Uploaded at"
+          >
             <span class="hud-data-value">{{ artifact.uploaded_at }}</span>
-          </div>
+          </CadenceDataRow>
         </div>
 
         <div class="flex items-center gap-3 pt-2">

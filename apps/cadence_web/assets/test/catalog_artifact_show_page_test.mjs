@@ -81,10 +81,32 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "CatalogArtifactShowPage.vue template tags are balanced")
 }
 
+const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const dataRowBoundary =
+  /          <CadenceDataRow\n            row-class="hud-data-row"\n            label-class="hud-data-label"\n            label="([^"]+)"\n          >([\s\S]*?)          <\/CadenceDataRow>/g
+const dataRowBoundaries = [...child.matchAll(dataRowBoundary)]
+
 assert.equal(
-  createHash("sha256").update(child).digest("hex"),
+  child.split(dataRowImport).length - 1,
+  1,
+  "the data-row import is added exactly once",
+)
+assert.equal(dataRowBoundaries.length, 4, "exactly four data-row boundaries are added")
+
+const reconstructedBaseChild = child
+  .replace(dataRowImport, "")
+  .replace(
+    dataRowBoundary,
+    (_, label, callerSlot) =>
+      `          <div class="hud-data-row">\n            <span class="hud-data-label">${label}</span>${callerSlot}          </div>`,
+  )
+
+assert.doesNotMatch(reconstructedBaseChild, /CadenceDataRow/)
+
+assert.equal(
+  createHash("sha256").update(reconstructedBaseChild).digest("hex"),
   "76dd24a2f09333ef871304a3d8de09530f099b6c683df822f1cf2040e227a6fa",
-  "CatalogArtifactShow.vue remains the explicitly audited child",
+  "CatalogArtifactShow.vue reconstructs the frozen base after stripping only the import and four boundaries",
 )
 
 const script = page.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
