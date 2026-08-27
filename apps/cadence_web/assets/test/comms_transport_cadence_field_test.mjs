@@ -1,0 +1,814 @@
+import assert from "node:assert/strict"
+import {createHash} from "node:crypto"
+import {readFile} from "node:fs/promises"
+import {dirname, resolve} from "node:path"
+import {fileURLToPath} from "node:url"
+import {
+  elementAttributes,
+  expectedNodeVersion,
+  installDom,
+  integrationRequire,
+  loadSfc,
+} from "./reka_adapter_test_support.mjs"
+
+assert.equal(
+  process.versions.node,
+  expectedNodeVersion,
+  `CommsTransportNew contracts use pinned Node ${expectedNodeVersion}`,
+)
+
+const testDirectory = dirname(fileURLToPath(import.meta.url))
+const componentPath = resolve(testDirectory, "../vue/CommsTransportNew.vue")
+const source = await readFile(componentPath, "utf8")
+
+assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
+assert.equal(source.match(/<CadenceField\b/g)?.length, 7)
+assert.equal(source.match(/<input\b/g)?.length, 5, "all five native inputs stay in the feature")
+assert.equal(source.match(/<select\b/g)?.length, 6, "all six native selects stay in the feature")
+assert.match(
+  source,
+  /<div class="fieldset mb-3">\n            <label :for="form\.fields\.transport_kind\.provider_managed_id">\n              <input\n                :id="form\.fields\.transport_kind\.provider_managed_id \?\? undefined"/,
+  "the provider-managed hidden transport-kind shell stays manual",
+)
+assert.match(
+  source,
+  /<div v-if="field\.type === 'checkbox'" class="fieldset mb-3">\n                  <label class="flex cursor-pointer items-start gap-3">\n                    <input type="hidden" :name="field\.name" value="false">\n                    <input[\s\S]*?type="checkbox"[\s\S]*?<\/label>\n                <\/div>/,
+  "the hidden-false and checkbox shell stays manual",
+)
+
+const extractionLedger = [
+  {
+    name: "display name",
+    indent: "        ",
+    open: `        <CadenceField
+          :control-id="form.fields.display_name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.display_name.label"
+          label-class="hud-label block mb-1.5"
+        >`,
+    oldOpen: '        <div class="fieldset mb-3">',
+    controlId: "form.fields.display_name.id",
+    label: '            <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>',
+  },
+  {
+    name: "configuration owner",
+    indent: "        ",
+    open: `        <CadenceField
+          :control-id="form.fields.origin.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.origin.label"
+          label-class="hud-label block mb-1.5"
+        >`,
+    oldOpen: '        <div class="fieldset mb-3">',
+    controlId: "form.fields.origin.id",
+    label: '            <span class="hud-label block mb-1.5">{{ form.fields.origin.label }}</span>',
+  },
+  {
+    name: "direct transport kind",
+    indent: "        ",
+    open: `        <CadenceField
+          v-if="selectedOrigin === 'direct'"
+          :control-id="form.fields.transport_kind.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.transport_kind.label"
+          label-class="hud-label block mb-1.5"
+        >`,
+    oldOpen: `        <div v-if="selectedOrigin === 'direct'" class="fieldset mb-3">`,
+    controlId: "form.fields.transport_kind.id",
+    label:
+      '            <span class="hud-label block mb-1.5">{{ form.fields.transport_kind.label }}</span>',
+  },
+  {
+    name: "mission provider",
+    indent: "          ",
+    open: `          <CadenceField
+            :control-id="form.fields.mission_provider_id.id"
+            wrapper-class="fieldset mb-3"
+            :label="form.fields.mission_provider_id.label"
+            label-class="hud-label block mb-1.5"
+          >`,
+    oldOpen: '          <div class="fieldset mb-3">',
+    controlId: "form.fields.mission_provider_id.id",
+    label: `              <span class="hud-label block mb-1.5">
+                {{ form.fields.mission_provider_id.label }}
+              </span>`,
+  },
+  {
+    name: "dynamic non-checkbox configuration field",
+    indent: "                ",
+    open: `                <CadenceField
+                  v-else
+                  :control-id="field.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="field.label"
+                  label-class="hud-label block mb-1.5"
+                >`,
+    oldOpen: '                <div v-else class="fieldset mb-3">',
+    controlId: "field.id",
+    label: '                    <span class="hud-label block mb-1.5">{{ field.label }}</span>',
+    help: true,
+  },
+  {
+    name: "service profile",
+    indent: "            ",
+    open: `            <CadenceField
+              :control-id="form.fields.service_profile_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.service_profile_id.label"
+              label-class="hud-label block mb-1.5"
+            >`,
+    oldOpen: '            <div class="fieldset mb-3">',
+    controlId: "form.fields.service_profile_id.id",
+    label: `                <span class="hud-label block mb-1.5">
+                  {{ form.fields.service_profile_id.label }}
+                </span>`,
+  },
+  {
+    name: "delivery profile",
+    indent: "            ",
+    open: `            <CadenceField
+              :control-id="form.fields.delivery_profile_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.delivery_profile_id.label"
+              label-class="hud-label block mb-1.5"
+            >`,
+    oldOpen: '            <div class="fieldset mb-3">',
+    controlId: "form.fields.delivery_profile_id.id",
+    label: `                <span class="hud-label block mb-1.5">
+                  {{ form.fields.delivery_profile_id.label }}
+                </span>`,
+  },
+]
+
+let reconstructedSource = source.replace(
+  'import CadenceField from "./ui/components/CadenceField.vue"\n',
+  "",
+)
+
+for (const entry of extractionLedger) {
+  const start = reconstructedSource.indexOf(entry.open)
+  assert.notEqual(start, -1, `${entry.name} has its exact ledger opening`)
+  const close = `\n${entry.indent}</CadenceField>`
+  const end = reconstructedSource.indexOf(close, start + entry.open.length)
+  assert.notEqual(end, -1, `${entry.name} has its exact ledger closing`)
+  let controls = reconstructedSource.slice(start + entry.open.length, end)
+  let oldHelp = ""
+
+  if (entry.help) {
+    const help = `
+${entry.indent}  <template v-if="field.help" #help>
+${entry.indent}    <p class="-mt-1 mb-3 text-xs text-base-content/55">
+${entry.indent}      {{ field.help }}
+${entry.indent}    </p>
+${entry.indent}  </template>`
+    assert.ok(controls.endsWith(help), "dynamic help keeps the exact CadenceField slot ledger")
+    controls = controls.slice(0, -help.length)
+    oldHelp = `
+${entry.indent}  <p v-if="field.help" class="-mt-1 mb-3 text-xs text-base-content/55">
+${entry.indent}    {{ field.help }}
+${entry.indent}  </p>`
+  }
+
+  const shiftedControls = controls.replaceAll(
+    `\n${entry.indent}  `,
+    `\n${entry.indent}    `,
+  )
+  const original = `${entry.oldOpen}
+${entry.indent}  <label :for="${entry.controlId}">
+${entry.label}${shiftedControls}
+${entry.indent}  </label>${oldHelp}
+${entry.indent}</div>`
+  reconstructedSource =
+    reconstructedSource.slice(0, start) +
+    original +
+    reconstructedSource.slice(end + close.length)
+}
+
+assert.equal(
+  createHash("sha256").update(reconstructedSource).digest("hex"),
+  "0dd9bfdf2e943ea49f1254313c0a4828c9a337ac9a4e6a608f596d17bfa435e2",
+  "removing the seven transparent field boundaries reconstructs the immutable base source",
+)
+
+const option = (label, value, disabled = false) => ({label, value, disabled})
+const fieldIds = {
+  display_name: "transport-display-name",
+  origin: "transport-origin",
+  transport_kind: "transport-kind",
+  mission_provider_id: "transport-provider",
+  service_profile_id: "transport-service-profile",
+  delivery_profile_id: "transport-delivery-profile",
+}
+const field = (key, type, label, value, overrides = {}) => ({
+  key,
+  id: fieldIds[key],
+  name: `transport[${key}]`,
+  type,
+  label,
+  required: true,
+  placeholder: null,
+  options: [],
+  value,
+  provider_managed_id: null,
+  ...overrides,
+})
+const configurationField = (key, type, label, value, overrides = {}) => ({
+  key,
+  wrapper_id: `transport-direct-configuration-field-${key.replaceAll("_", "-")}`,
+  id: `transport-direct-configuration-input-${key.replaceAll("_", "-")}`,
+  name: `transport[${key}]`,
+  type,
+  label,
+  required: false,
+  placeholder: null,
+  help: null,
+  step: null,
+  min: null,
+  max: null,
+  default: "",
+  value,
+  options: [],
+  visible: true,
+  visible_when: null,
+  ...overrides,
+})
+
+const initialValues = {
+  display_name: "Relay TCP",
+  origin: "direct",
+  transport_kind: "tcp_socket",
+  mission_provider_id: "provider-1",
+  service_profile_id: "service-1",
+  delivery_profile_id: "delivery-1",
+  tcp_mode: "listen",
+  host: "0.0.0.0",
+  port: "5001",
+  framing_mode: "raw",
+  frame_size: "64",
+  reconnect_policy: "always",
+  tls_enabled: "false",
+}
+
+const formWithValues = (values) => ({
+  id: "transport-form",
+  selected_origin: values.origin,
+  can_submit: true,
+  sections: {
+    identity: {id: "transport-identity-section", number: "01", title: "Identity"},
+    origin: {id: "transport-origin-section", number: "02", title: "Origin"},
+    source: {id: "transport-source-section", number: "03", title: "Source"},
+    provider_capability: {id: "transport-capability-section", number: "04", title: "Capability"},
+    review: {id: "transport-summary-section", number: "06", title: "Review"},
+  },
+  fields: {
+    display_name: field("display_name", "text", "Display Name", values.display_name),
+    origin: field("origin", "select", "Configuration Owner", values.origin, {
+      options: [
+        option("Direct — configured in Cadence", "direct"),
+        option("Ground Station Provider", "provider_managed"),
+      ],
+    }),
+    transport_kind: field("transport_kind", "select", "Transport Kind", values.transport_kind, {
+      options: [option("TCP socket", "tcp_socket"), option("UDP", "udp")],
+      provider_managed_id: "transport-kind-provider-managed",
+    }),
+    mission_provider_id: field(
+      "mission_provider_id",
+      "select",
+      "Ground Network Provider",
+      values.mission_provider_id,
+      {
+        placeholder: "Select a validated provider",
+        options: [option("Deep Space Network · v4", "provider-1"), option("Near Space · v2", "provider-2")],
+      },
+    ),
+    service_profile_id: field(
+      "service_profile_id",
+      "select",
+      "Service Profile",
+      values.service_profile_id,
+      {
+        placeholder: "Select service",
+        options: [option("Realtime telemetry · v3", "service-1"), option("Realtime telemetry · v4", "service-2")],
+      },
+    ),
+    delivery_profile_id: field(
+      "delivery_profile_id",
+      "select",
+      "Delivery Profile",
+      values.delivery_profile_id,
+      {
+        placeholder: "Select delivery",
+        options: [option("Streaming to Cadence", "delivery-1"), option("Buffered delivery", "delivery-2")],
+      },
+    ),
+  },
+  origin_cards: [
+    {value: "direct", label: "Direct", description: "Cadence owns the endpoint."},
+    {
+      value: "provider_managed",
+      label: "Ground Station Provider",
+      description: "Provider profiles own runtime setup.",
+    },
+  ],
+  direct_configuration: {
+    id: "transport-direct-configuration",
+    kind: "transport_kind",
+    description: "Cadence owns this endpoint, framing boundary, and reconnect behavior.",
+    active: values.origin === "direct",
+    sections: [
+      {
+        id: "transport-capability-section",
+        fields_id: "transport-capability-section-fields",
+        number: "04",
+        title: "TCP Capability",
+        description: null,
+        fields: [
+          configurationField("tcp_mode", "select", "TCP Mode", values.tcp_mode, {
+            options: [option("Listen", "listen"), option("Connect", "connect")],
+          }),
+          configurationField("host", "text", "Host", values.host, {
+            placeholder: "0.0.0.0",
+            required: true,
+            help: "Bind or remote host, depending on TCP mode.",
+          }),
+          configurationField("port", "number", "Port", values.port, {
+            required: true,
+            step: 1,
+            min: 1,
+            max: 65535,
+          }),
+        ],
+      },
+      {
+        id: "transport-framing-section",
+        fields_id: "transport-framing-section-fields",
+        number: "05",
+        title: "Framing",
+        description: null,
+        fields: [
+          configurationField("framing_mode", "select", "Framing Mode", values.framing_mode, {
+            options: [option("Raw", "raw"), option("Fixed size", "fixed_size")],
+          }),
+          configurationField("frame_size", "number", "Frame Size", values.frame_size, {
+            step: 1,
+            min: 1,
+            visible: values.framing_mode === "fixed_size",
+            visible_when: {field: "framing_mode", equals: "fixed_size"},
+          }),
+        ],
+      },
+      {
+        id: "transport-reliability-section",
+        fields_id: "transport-reliability-section-fields",
+        number: "05B",
+        title: "Reliability",
+        description: null,
+        fields: [
+          configurationField(
+            "reconnect_policy",
+            "select",
+            "Reconnect Policy",
+            values.reconnect_policy,
+            {
+              options: [option("Always", "always"), option("Never", "never")],
+              visible: values.tcp_mode === "connect",
+              visible_when: {field: "tcp_mode", equals: "connect"},
+            },
+          ),
+          configurationField("tls_enabled", "checkbox", "Enable TLS", values.tls_enabled),
+        ],
+      },
+    ],
+  },
+  provider: {
+    active: values.origin === "provider_managed",
+    profile_fields_id: "transport-provider-profile-fields",
+    ready_count: 2,
+    selected: {
+      display_name: "Deep Space Network",
+      version: 4,
+      status: "ready",
+      status_label: "Profiles synced",
+    },
+    empty_state: {
+      id: "transport-provider-empty-state",
+      visible: false,
+      message: "No validated providers.",
+      action: {label: "Review providers", href: "/missions/mission-1/comms/providers"},
+    },
+    operator_summary: {
+      id: "transport-provider-operator-summary",
+      label: "Operator Summary",
+      text: "Streaming to Cadence",
+      endpoint: "127.0.0.1:5100",
+    },
+    derivation_error: null,
+  },
+  provider_derived: {
+    active: values.origin === "provider_managed",
+    id: "transport-provider-derived-section",
+    number: "05",
+    title: "Provider-Derived Runtime",
+    description: "Runtime configuration remains provider-owned.",
+    configuration: {
+      id: "transport-provider-derived-configuration",
+      rows: [{label: "Endpoint", value: "127.0.0.1:5100", mono: true}],
+      empty_text: null,
+    },
+  },
+  review: {
+    configuration_summary_id: "transport-configuration-summary",
+    ownership: {label: "Ownership", value: "Direct", source: "Cadence"},
+    readiness: {
+      label: "Readiness",
+      status: "ready",
+      value: "Ready to save",
+      endpoint: "0.0.0.0:5001",
+    },
+    error: null,
+    error_id: "transport-form-error",
+    diagnostics: {
+      id: "transport-admin-diagnostics",
+      label: "Administrator Diagnostics",
+      json_id: "transport-admin-diagnostics-json",
+      json: "{}",
+    },
+  },
+  actions: {
+    submit: {id: "create-transport-button", label: "Create Transport"},
+    cancel: {
+      id: "cancel-transport-link",
+      label: "Cancel",
+      href: "/missions/mission-1/comms/transports",
+    },
+  },
+})
+
+const deepFreeze = (value) => {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    Object.values(value).forEach(deepFreeze)
+  }
+
+  return value
+}
+
+const dom = installDom('<div id="transport-contract"></div>')
+for (const globalName of [
+  "Document",
+  "ShadowRoot",
+  "HTMLFormElement",
+  "HTMLInputElement",
+  "HTMLSelectElement",
+  "FormData",
+]) {
+  Object.defineProperty(globalThis, globalName, {
+    configurable: true,
+    value: dom.window[globalName],
+  })
+}
+
+const {component: CommsTransportNew} = await loadSfc(componentPath)
+const {createApp, defineComponent, h, nextTick, reactive} = integrationRequire("vue")
+let currentValues = {...initialValues}
+const liveProps = reactive({
+  page: deepFreeze({
+    id: "comms-transport-new-page",
+    title: "New Transport",
+    subtitle: "Describe a durable byte-moving capability.",
+    breadcrumbs: [
+      {label: "Mission One", href: "/missions/mission-1"},
+      {label: "Transports", href: "/missions/mission-1/comms/transports"},
+      {label: "New Transport", href: null},
+    ],
+  }),
+  form: deepFreeze(formWithValues(currentValues)),
+})
+const emitted = {validate: [], save: []}
+const Contract = defineComponent({
+  setup() {
+    return () =>
+      h(CommsTransportNew, {
+        page: liveProps.page,
+        form: liveProps.form,
+        onValidate: (payload) => emitted.validate.push(payload),
+        onSave: (payload) => emitted.save.push(payload),
+      })
+  },
+})
+
+const host = dom.window.document.querySelector("#transport-contract")
+const app = createApp(Contract)
+app.mount(host)
+
+const form = host.querySelector("#transport-form")
+const control = (id) => host.querySelector(`#${id}`)
+const assertFieldShell = (nativeControl, label, help = null) => {
+  const nativeLabel = nativeControl.parentElement
+  const wrapper = nativeLabel.parentElement
+  assert.equal(wrapper.tagName, "DIV")
+  assert.deepEqual(elementAttributes(wrapper), {class: "fieldset mb-3"})
+  assert.deepEqual(elementAttributes(nativeLabel), {for: nativeControl.id})
+  assert.deepEqual(
+    [...nativeLabel.children].map((child) => child.tagName),
+    ["SPAN", nativeControl.tagName],
+  )
+  assert.deepEqual(elementAttributes(nativeLabel.firstElementChild), {
+    class: "hud-label block mb-1.5",
+  })
+  assert.equal(nativeLabel.firstElementChild.textContent, label)
+  assert.deepEqual(
+    [...wrapper.children].map((child) => child.tagName),
+    help === null ? ["LABEL"] : ["LABEL", "P"],
+  )
+  if (help !== null) assert.equal(wrapper.lastElementChild.textContent.trim(), help)
+  return wrapper
+}
+
+const displayName = control("transport-display-name")
+const origin = control("transport-origin")
+const transportKind = control("transport-kind")
+const tcpMode = control("transport-direct-configuration-input-tcp-mode")
+const hostInput = control("transport-direct-configuration-input-host")
+const port = control("transport-direct-configuration-input-port")
+const framingMode = control("transport-direct-configuration-input-framing-mode")
+const tls = control("transport-direct-configuration-input-tls-enabled")
+
+assertFieldShell(displayName, "Display Name")
+assertFieldShell(origin, "Configuration Owner")
+assertFieldShell(transportKind, "Transport Kind")
+assertFieldShell(tcpMode, "TCP Mode")
+assertFieldShell(hostInput, "Host", "Bind or remote host, depending on TCP mode.")
+assertFieldShell(port, "Port")
+assertFieldShell(framingMode, "Framing Mode")
+assert.deepEqual(elementAttributes(displayName), {
+  class: "w-full input",
+  id: "transport-display-name",
+  name: "transport[display_name]",
+  required: "",
+  type: "text",
+  value: "Relay TCP",
+})
+assert.deepEqual(elementAttributes(transportKind), {
+  class: "w-full select",
+  id: "transport-kind",
+  name: "transport[transport_kind]",
+  required: "",
+  value: "tcp_socket",
+})
+
+const checkboxFieldset = tls.closest(".fieldset")
+const checkboxLabel = checkboxFieldset.querySelector("label")
+const checkboxControls = checkboxLabel.querySelectorAll("input")
+assert.deepEqual(elementAttributes(checkboxFieldset), {class: "fieldset mb-3"})
+assert.deepEqual(elementAttributes(checkboxLabel), {
+  class: "flex cursor-pointer items-start gap-3",
+})
+assert.deepEqual(
+  [...checkboxLabel.children].map((child) => child.tagName),
+  ["INPUT", "INPUT", "SPAN"],
+)
+assert.deepEqual(elementAttributes(checkboxControls[0]), {
+  name: "transport[tls_enabled]",
+  type: "hidden",
+  value: "false",
+})
+assert.deepEqual(elementAttributes(checkboxControls[1]), {
+  class: "checkbox checkbox-sm mt-0.5",
+  id: "transport-direct-configuration-input-tls-enabled",
+  name: "transport[tls_enabled]",
+  type: "checkbox",
+  value: "true",
+})
+assert.deepEqual(new dom.window.FormData(form).getAll("transport[tls_enabled]"), ["false"])
+
+const directPayload = (values) => ({
+  transport: {
+    display_name: values.display_name,
+    origin: "direct",
+    transport_kind: values.transport_kind,
+    tcp_mode: values.tcp_mode,
+    host: values.host,
+    port: values.port,
+    framing_mode: values.framing_mode,
+    ...(values.framing_mode === "fixed_size" ? {frame_size: values.frame_size} : {}),
+    ...(values.tcp_mode === "connect" ? {reconnect_policy: values.reconnect_policy} : {}),
+    tls_enabled: values.tls_enabled,
+  },
+})
+const patchForm = async (overrides) => {
+  currentValues = {...currentValues, ...overrides}
+  liveProps.form = deepFreeze(formWithValues(currentValues))
+  await nextTick()
+}
+
+displayName.value = "Relay TCP Edited"
+displayName.dispatchEvent(new dom.window.Event("input", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, display_name: "Relay TCP Edited"}
+assert.deepEqual(emitted.validate.at(-1), directPayload(currentValues))
+
+liveProps.form = deepFreeze(formWithValues(initialValues))
+await nextTick()
+assert.equal(displayName.value, "Relay TCP Edited", "a stale patch does not erase local typing")
+await patchForm({})
+assert.strictEqual(control("transport-display-name"), displayName)
+assert.strictEqual(control("transport-origin"), origin)
+assert.strictEqual(control("transport-kind"), transportKind)
+
+transportKind.value = "udp"
+transportKind.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, transport_kind: "udp"}
+assert.deepEqual(emitted.validate.at(-1), directPayload(currentValues))
+await patchForm({})
+assert.strictEqual(control("transport-kind"), transportKind)
+
+transportKind.value = "tcp_socket"
+transportKind.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, transport_kind: "tcp_socket"}
+assert.deepEqual(emitted.validate.at(-1), directPayload(currentValues))
+await patchForm({})
+
+tcpMode.value = "connect"
+tcpMode.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, tcp_mode: "connect"}
+assert.deepEqual(emitted.validate.at(-1), {
+  transport: {
+    display_name: currentValues.display_name,
+    origin: "direct",
+    transport_kind: "tcp_socket",
+    tcp_mode: "connect",
+    host: "0.0.0.0",
+    port: "5001",
+    framing_mode: "raw",
+    tls_enabled: "false",
+  },
+})
+const reconnectPolicy = control("transport-direct-configuration-input-reconnect-policy")
+assertFieldShell(reconnectPolicy, "Reconnect Policy")
+await patchForm({})
+assert.strictEqual(control("transport-direct-configuration-input-reconnect-policy"), reconnectPolicy)
+
+framingMode.value = "fixed_size"
+framingMode.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, framing_mode: "fixed_size"}
+const framingValidation = directPayload(currentValues)
+delete framingValidation.transport.frame_size
+assert.deepEqual(emitted.validate.at(-1), framingValidation)
+const frameSize = control("transport-direct-configuration-input-frame-size")
+assertFieldShell(frameSize, "Frame Size")
+await patchForm({})
+assert.strictEqual(control("transport-direct-configuration-input-frame-size"), frameSize)
+
+frameSize.value = "128"
+frameSize.dispatchEvent(new dom.window.Event("input", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, frame_size: "128"}
+assert.deepEqual(emitted.validate.at(-1), directPayload(currentValues))
+await patchForm({})
+
+tls.checked = true
+tls.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, tls_enabled: "true"}
+assert.deepEqual(emitted.validate.at(-1), directPayload(currentValues))
+assert.deepEqual(new dom.window.FormData(form).getAll("transport[tls_enabled]"), ["false", "true"])
+await patchForm({})
+
+const directNodeIds = [
+  "transport-display-name",
+  "transport-origin",
+  "transport-kind",
+  "transport-direct-configuration-input-tcp-mode",
+  "transport-direct-configuration-input-host",
+  "transport-direct-configuration-input-port",
+  "transport-direct-configuration-input-framing-mode",
+  "transport-direct-configuration-input-frame-size",
+  "transport-direct-configuration-input-reconnect-policy",
+  "transport-direct-configuration-input-tls-enabled",
+]
+const directNodes = directNodeIds.map(control)
+await patchForm({display_name: "Authoritative Relay", host: "relay.example", port: "6000", tls_enabled: "false"})
+assert.deepEqual(directNodeIds.map(control), directNodes, "direct native nodes survive reconciliation")
+assert.equal(displayName.value, "Authoritative Relay")
+assert.equal(hostInput.value, "relay.example")
+assert.equal(port.value, "6000")
+assert.equal(tls.checked, false)
+assert.deepEqual(new dom.window.FormData(form).getAll("transport[tls_enabled]"), ["false"])
+
+const directSubmit = new dom.window.Event("submit", {bubbles: true, cancelable: true})
+form.dispatchEvent(directSubmit)
+assert.equal(directSubmit.defaultPrevented, true)
+assert.deepEqual(emitted.save, [directPayload(currentValues)])
+
+await patchForm({
+  origin: "provider_managed",
+  mission_provider_id: "provider-1",
+  service_profile_id: "service-1",
+  delivery_profile_id: "delivery-1",
+})
+assert.strictEqual(control("transport-display-name"), displayName)
+assert.strictEqual(control("transport-origin"), origin)
+assert.equal(control("transport-direct-configuration-input-host"), null)
+
+const hiddenKind = control("transport-kind-provider-managed")
+const hiddenKindLabel = hiddenKind.parentElement
+const hiddenKindFieldset = hiddenKindLabel.parentElement
+assert.deepEqual(elementAttributes(hiddenKindFieldset), {class: "fieldset mb-3"})
+assert.deepEqual(elementAttributes(hiddenKindLabel), {for: "transport-kind-provider-managed"})
+assert.deepEqual([...hiddenKindLabel.children].map((child) => child.tagName), ["INPUT"])
+assert.deepEqual(elementAttributes(hiddenKind), {
+  class: "w-full input",
+  id: "transport-kind-provider-managed",
+  name: "transport[transport_kind]",
+  type: "hidden",
+  value: "tcp_socket",
+})
+
+const missionProvider = control("transport-provider")
+const serviceProfile = control("transport-service-profile")
+const deliveryProfile = control("transport-delivery-profile")
+assertFieldShell(missionProvider, "Ground Network Provider")
+assertFieldShell(serviceProfile, "Service Profile")
+assertFieldShell(deliveryProfile, "Delivery Profile")
+assert.deepEqual(
+  [...serviceProfile.options].map(({textContent, value, disabled}) => ({
+    label: textContent,
+    value,
+    disabled,
+  })),
+  [
+    {label: "Select service", value: "", disabled: false},
+    {label: "Realtime telemetry · v3", value: "service-1", disabled: false},
+    {label: "Realtime telemetry · v4", value: "service-2", disabled: false},
+  ],
+)
+
+const providerPayload = (values) => ({
+  transport: {
+    display_name: values.display_name,
+    origin: "provider_managed",
+    transport_kind: values.transport_kind,
+    mission_provider_id: values.mission_provider_id,
+    service_profile_id: values.service_profile_id,
+    delivery_profile_id: values.delivery_profile_id,
+  },
+})
+
+missionProvider.value = "provider-2"
+missionProvider.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, mission_provider_id: "provider-2"}
+assert.deepEqual(emitted.validate.at(-1), providerPayload(currentValues))
+await patchForm({})
+
+serviceProfile.value = "service-2"
+serviceProfile.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, service_profile_id: "service-2"}
+assert.deepEqual(emitted.validate.at(-1), providerPayload(currentValues))
+await patchForm({})
+
+deliveryProfile.value = "delivery-2"
+deliveryProfile.dispatchEvent(new dom.window.Event("change", {bubbles: true}))
+await nextTick()
+currentValues = {...currentValues, delivery_profile_id: "delivery-2"}
+assert.deepEqual(emitted.validate.at(-1), providerPayload(currentValues))
+await patchForm({})
+assert.deepEqual(
+  [
+    control("transport-provider"),
+    control("transport-service-profile"),
+    control("transport-delivery-profile"),
+  ],
+  [missionProvider, serviceProfile, deliveryProfile],
+  "provider profile native nodes survive prop acknowledgements",
+)
+
+const providerSubmit = new dom.window.Event("submit", {bubbles: true, cancelable: true})
+form.dispatchEvent(providerSubmit)
+assert.equal(providerSubmit.defaultPrevented, true)
+assert.deepEqual(emitted.save, [directPayload({...currentValues, origin: "direct"}), providerPayload(currentValues)])
+assert.deepEqual(elementAttributes(control("create-transport-button")), {
+  class: "btn btn-primary",
+  id: "create-transport-button",
+  type: "submit",
+})
+assert.deepEqual(elementAttributes(control("cancel-transport-link")), {
+  class: "btn btn-ghost",
+  "data-phx-link": "redirect",
+  "data-phx-link-state": "push",
+  href: "/missions/mission-1/comms/transports",
+  id: "cancel-transport-link",
+})
+
+app.unmount()
+assert.equal(host.children.length, 0)
+dom.window.close()
+
+console.log("comms_transport_cadence_field_test passed")
