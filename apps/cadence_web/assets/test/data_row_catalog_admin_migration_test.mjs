@@ -16,9 +16,20 @@ const vueDirectory = resolve(testDirectory, "../vue")
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const cardBodyClass = "card-body p-6"
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+
+const peelCadencePageHeaderFrame = source =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const peelCadencePanels = (source, file) => {
   if (file !== "AdminRuntime.vue") return source
@@ -168,7 +179,10 @@ for (const foundation of foundations) {
   )
 
   let cardOpeningCount = 0
-  let dataRowSource = peelCadencePanels(source, foundation.file).replace(cardImport, "")
+  let dataRowSource = peelCadencePanels(
+    peelCadencePageHeaderFrame(source),
+    foundation.file,
+  ).replace(cardImport, "")
 
   dataRowSource = dataRowSource.replace(
     /^([ \t]*)<CadenceCard\b([\s\S]*?)>$/gm,
