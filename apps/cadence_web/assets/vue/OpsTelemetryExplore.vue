@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
 import {onBeforeUnmount, reactive, ref, watch} from "vue"
 
 type Row = {
@@ -567,97 +568,111 @@ onBeforeUnmount(() => {
           <input v-model="filterValues.limit_mode" type="hidden" name="explore[limit_mode]">
 
           <div class="grid gap-3 lg:grid-cols-[minmax(12rem,1.25fr)_minmax(10rem,1fr)_9rem_10rem_10rem_8rem_auto] lg:items-end">
-            <div class="fieldset">
-              <label :for="filter_form.fields.point_id.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.point_id.label }}</span>
-                <select
-                  :id="filter_form.fields.point_id.id"
-                  v-model="filterValues.point_id"
-                  :name="filter_form.fields.point_id.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.point_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.spacecraft_id.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.spacecraft_id.label }}</span>
-                <select
-                  :id="filter_form.fields.spacecraft_id.id"
-                  v-model="filterValues.spacecraft_id"
-                  :name="filter_form.fields.spacecraft_id.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.spacecraft_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.time_mode.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.time_mode.label }}</span>
-                <select
-                  :id="filter_form.fields.time_mode.id"
-                  v-model="filterValues.time_mode"
-                  :name="filter_form.fields.time_mode.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.time_mode.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.from.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.from.label }}</span>
-                <input
-                  :id="filter_form.fields.from.id"
-                  v-model="filterValues.from"
-                  :name="filter_form.fields.from.name"
-                  :type="filter_form.fields.from.type"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.to.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.to.label }}</span>
-                <input
-                  :id="filter_form.fields.to.id"
-                  v-model="filterValues.to"
-                  :name="filter_form.fields.to.name"
-                  :type="filter_form.fields.to.type"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.order.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.order.label }}</span>
-                <select
-                  :id="filter_form.fields.order.id"
-                  v-model="filterValues.order"
-                  :name="filter_form.fields.order.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.order.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="filter_form.fields.point_id.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.point_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.point_id.id"
+                v-model="filterValues.point_id"
+                :name="filter_form.fields.point_id.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.point_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.spacecraft_id.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.spacecraft_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.spacecraft_id.id"
+                v-model="filterValues.spacecraft_id"
+                :name="filter_form.fields.spacecraft_id.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.spacecraft_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.time_mode.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.time_mode.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.time_mode.id"
+                v-model="filterValues.time_mode"
+                :name="filter_form.fields.time_mode.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.time_mode.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.from.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.from.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="filter_form.fields.from.id"
+                v-model="filterValues.from"
+                :name="filter_form.fields.from.name"
+                :type="filter_form.fields.from.type"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.to.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.to.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="filter_form.fields.to.id"
+                v-model="filterValues.to"
+                :name="filter_form.fields.to.name"
+                :type="filter_form.fields.to.type"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.order.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.order.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.order.id"
+                v-model="filterValues.order"
+                :name="filter_form.fields.order.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.order.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
             <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <div class="fieldset">
-                <label :for="filter_form.fields.limit.id">
-                  <span class="hud-label block mb-1.5">{{ filter_form.fields.limit.label }}</span>
-                  <input
-                    :id="filter_form.fields.limit.id"
-                    v-model="filterValues.limit"
-                    :name="filter_form.fields.limit.name"
-                    :type="filter_form.fields.limit.type"
-                    :min="filter_form.fields.limit.min"
-                    :max="filter_form.fields.limit.max"
-                    class="w-full input"
-                  >
-                </label>
-              </div>
+              <CadenceField
+                :control-id="filter_form.fields.limit.id"
+                wrapper-class="fieldset"
+                :label="filter_form.fields.limit.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="filter_form.fields.limit.id"
+                  v-model="filterValues.limit"
+                  :name="filter_form.fields.limit.name"
+                  :type="filter_form.fields.limit.type"
+                  :min="filter_form.fields.limit.min"
+                  :max="filter_form.fields.limit.max"
+                  class="w-full input"
+                >
+              </CadenceField>
               <button :id="filter_form.submit.id" type="submit" class="btn btn-primary btn-sm">
                 <span :class="[filter_form.submit.icon, 'h-4 w-4']" aria-hidden="true"></span>
                 {{ filter_form.submit.label }}
@@ -665,84 +680,96 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div class="fieldset">
-              <label :for="filter_form.fields.realm.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.realm.label }}</span>
-                <select
-                  :id="filter_form.fields.realm.id"
-                  v-model="filterValues.realm"
-                  :name="filter_form.fields.realm.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.realm.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.logical_source.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.logical_source.label }}</span>
-                <select
-                  :id="filter_form.fields.logical_source.id"
-                  v-model="filterValues.logical_source"
-                  :name="filter_form.fields.logical_source.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.logical_source.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.data_source_id.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.data_source_id.label }}</span>
-                <select
-                  :id="filter_form.fields.data_source_id.id"
-                  v-model="filterValues.data_source_id"
-                  :name="filter_form.fields.data_source_id.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.data_source_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.source_binding_id.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.source_binding_id.label }}</span>
-                <select
-                  :id="filter_form.fields.source_binding_id.id"
-                  v-model="filterValues.source_binding_id"
-                  :name="filter_form.fields.source_binding_id.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.source_binding_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.selection_view.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.selection_view.label }}</span>
-                <select
-                  :id="filter_form.fields.selection_view.id"
-                  v-model="filterValues.selection_view"
-                  :name="filter_form.fields.selection_view.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.selection_view.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset">
-              <label :for="filter_form.fields.validity_state.id">
-                <span class="hud-label block mb-1.5">{{ filter_form.fields.validity_state.label }}</span>
-                <select
-                  :id="filter_form.fields.validity_state.id"
-                  v-model="filterValues.validity_state"
-                  :name="filter_form.fields.validity_state.name"
-                  class="w-full select"
-                >
-                  <option v-for="option in filter_form.fields.validity_state.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="filter_form.fields.realm.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.realm.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.realm.id"
+                v-model="filterValues.realm"
+                :name="filter_form.fields.realm.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.realm.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.logical_source.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.logical_source.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.logical_source.id"
+                v-model="filterValues.logical_source"
+                :name="filter_form.fields.logical_source.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.logical_source.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.data_source_id.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.data_source_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.data_source_id.id"
+                v-model="filterValues.data_source_id"
+                :name="filter_form.fields.data_source_id.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.data_source_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.source_binding_id.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.source_binding_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.source_binding_id.id"
+                v-model="filterValues.source_binding_id"
+                :name="filter_form.fields.source_binding_id.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.source_binding_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.selection_view.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.selection_view.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.selection_view.id"
+                v-model="filterValues.selection_view"
+                :name="filter_form.fields.selection_view.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.selection_view.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="filter_form.fields.validity_state.id"
+              wrapper-class="fieldset"
+              :label="filter_form.fields.validity_state.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="filter_form.fields.validity_state.id"
+                v-model="filterValues.validity_state"
+                :name="filter_form.fields.validity_state.name"
+                class="w-full select"
+              >
+                <option v-for="option in filter_form.fields.validity_state.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </CadenceField>
           </div>
         </form>
 
@@ -800,45 +827,51 @@ onBeforeUnmount(() => {
                   <h3 class="hud-label">Stage in dashboard</h3>
                   <span class="font-mono text-[0.65rem] text-base-content/45">{{ authoring.form.note }}</span>
                 </div>
-                <div class="fieldset">
-                  <label :for="authoring.form.fields.dashboard_id.id">
-                    <span class="hud-label block mb-1.5">{{ authoring.form.fields.dashboard_id.label }}</span>
-                    <select
-                      :id="authoring.form.fields.dashboard_id.id"
-                      v-model="addToDashboardValues.dashboard_id"
-                      :name="authoring.form.fields.dashboard_id.name"
-                      class="w-full select"
-                    >
-                      <option v-for="option in authoring.form.fields.dashboard_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="fieldset">
-                  <label :for="authoring.form.fields.widget_type.id">
-                    <span class="hud-label block mb-1.5">{{ authoring.form.fields.widget_type.label }}</span>
-                    <select
-                      :id="authoring.form.fields.widget_type.id"
-                      v-model="addToDashboardValues.widget_type"
-                      :name="authoring.form.fields.widget_type.name"
-                      class="w-full select"
-                    >
-                      <option v-for="option in authoring.form.fields.widget_type.options" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="fieldset">
-                  <label :for="authoring.form.fields.title.id">
-                    <span class="hud-label block mb-1.5">{{ authoring.form.fields.title.label }}</span>
-                    <input
-                      :id="authoring.form.fields.title.id"
-                      v-model="addToDashboardValues.title"
-                      :name="authoring.form.fields.title.name"
-                      :type="authoring.form.fields.title.type"
-                      :placeholder="authoring.form.fields.title.placeholder"
-                      class="w-full input"
-                    >
-                  </label>
-                </div>
+                <CadenceField
+                  :control-id="authoring.form.fields.dashboard_id.id"
+                  wrapper-class="fieldset"
+                  :label="authoring.form.fields.dashboard_id.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <select
+                    :id="authoring.form.fields.dashboard_id.id"
+                    v-model="addToDashboardValues.dashboard_id"
+                    :name="authoring.form.fields.dashboard_id.name"
+                    class="w-full select"
+                  >
+                    <option v-for="option in authoring.form.fields.dashboard_id.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                </CadenceField>
+                <CadenceField
+                  :control-id="authoring.form.fields.widget_type.id"
+                  wrapper-class="fieldset"
+                  :label="authoring.form.fields.widget_type.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <select
+                    :id="authoring.form.fields.widget_type.id"
+                    v-model="addToDashboardValues.widget_type"
+                    :name="authoring.form.fields.widget_type.name"
+                    class="w-full select"
+                  >
+                    <option v-for="option in authoring.form.fields.widget_type.options" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                </CadenceField>
+                <CadenceField
+                  :control-id="authoring.form.fields.title.id"
+                  wrapper-class="fieldset"
+                  :label="authoring.form.fields.title.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="authoring.form.fields.title.id"
+                    v-model="addToDashboardValues.title"
+                    :name="authoring.form.fields.title.name"
+                    :type="authoring.form.fields.title.type"
+                    :placeholder="authoring.form.fields.title.placeholder"
+                    class="w-full input"
+                  >
+                </CadenceField>
                 <button :id="authoring.form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
                   <span :class="[authoring.form.submit.icon, 'h-4 w-4']" aria-hidden="true"></span>
                   {{ authoring.form.submit.label }}
