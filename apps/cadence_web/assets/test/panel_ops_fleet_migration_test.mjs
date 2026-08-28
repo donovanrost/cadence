@@ -11,6 +11,12 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const cadencePageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
+const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
+const opsPageHeaderOpen =
+  '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 
 const files = [
   {
@@ -83,6 +89,7 @@ const files = [
   {
     name: "OpsFleetPlanning.vue",
     panels: 3,
+    opsPageHeader: true,
     sha256: "807d7a9b33db0044832785fc03655737f9e8885ce56bbecf2d20705185294644",
     importText: `${cadencePanelImport}\n`,
     rawVariants: [
@@ -152,6 +159,7 @@ const files = [
   {
     name: "OpsFleetPlanningPolicy.vue",
     panels: 2,
+    opsPageHeader: true,
     sha256: "3ce5cb561e6c1495fd263b18c2c932fc19d200432d2e529fdef6eec7a09db711",
     rawVariants: ['    <aside class="min-w-0 space-y-5">'],
     migrations: [
@@ -238,6 +246,25 @@ const replaceOnce = (source, before, after, label) => {
   return source.replace(before, after)
 }
 
+const peelPageHeaderFrame = (source, name) => {
+  assert.equal(countExact(source, cadencePageHeaderFrameImport), 1, `${name} page header import count`)
+  assert.equal(countExact(source, cadencePageHeaderFrameOpen), 1, `${name} page header open count`)
+  assert.equal(countExact(source, cadencePageHeaderFrameClose), 1, `${name} page header close count`)
+
+  const predecessorCompatibleSource = source
+    .replace(cadencePageHeaderFrameImport, "")
+    .replace(cadencePageHeaderFrameOpen, opsPageHeaderOpen)
+    .replace(cadencePageHeaderFrameClose, "</header>")
+
+  assert.equal(
+    countExact(predecessorCompatibleSource, "CadencePageHeaderFrame"),
+    0,
+    `${name} predecessor source has no residual CadencePageHeaderFrame`
+  )
+
+  return predecessorCompatibleSource
+}
+
 const replaceOnceAfter = (source, before, after, start, label) => {
   const index = source.indexOf(before, start)
   assert.notEqual(index, -1, `${label} exists after its panel opening`)
@@ -263,12 +290,20 @@ for (const file of files) {
   assert.equal(countExact(source, "#header"), file.panels, `${file.name} header slot count`)
   assert.equal(file.migrations.length, file.panels, `${file.name} frozen migration ledger count`)
 
+  const predecessorCompatibleSource = file.opsPageHeader
+    ? peelPageHeaderFrame(source, file.name)
+    : source
+
   for (const rawVariant of file.rawVariants) {
-    assert.equal(countExact(source, rawVariant), 1, `${file.name} keeps raw variant exactly once`)
+    assert.equal(
+      countExact(predecessorCompatibleSource, rawVariant),
+      1,
+      `${file.name} keeps raw variant exactly once`
+    )
   }
 
   let reconstructed = replaceOnce(
-    source,
+    predecessorCompatibleSource,
     file.importText ?? cadencePanelImport,
     "",
     `${file.name} CadencePanel import`,

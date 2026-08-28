@@ -9,6 +9,12 @@ const {parse} = integrationRequire("@vue/compiler-sfc")
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"'
+const cadencePageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
+const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
+const opsPageHeaderOpen =
+  '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 const assetsRoot = fileURLToPath(new URL("../", import.meta.url))
 
 assert.equal(process.execPath, pinnedNode)
@@ -154,6 +160,25 @@ const files = [
 const countLiteral = (source, literal) => source.split(literal).length - 1
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
+const peelPageHeaderFrame = (source, path) => {
+  assert.equal(countLiteral(source, cadencePageHeaderFrameImport), 1, `${path}: page header import count`)
+  assert.equal(countLiteral(source, cadencePageHeaderFrameOpen), 1, `${path}: page header open count`)
+  assert.equal(countLiteral(source, cadencePageHeaderFrameClose), 1, `${path}: page header close count`)
+
+  const predecessorCompatibleSource = source
+    .replace(cadencePageHeaderFrameImport, "")
+    .replace(cadencePageHeaderFrameOpen, opsPageHeaderOpen)
+    .replace(cadencePageHeaderFrameClose, "</header>")
+
+  assert.equal(
+    predecessorCompatibleSource.includes("CadencePageHeaderFrame"),
+    false,
+    `${path}: predecessor source has no residual CadencePageHeaderFrame`
+  )
+
+  return predecessorCompatibleSource
+}
+
 const peelPanel = (source, panel, path) => {
   const panelIndent = panel.currentOpen.match(/^(\s*)<CadencePanel/)?.[1]
   assert.notEqual(panelIndent, undefined, `${path}: panel indentation is frozen`)
@@ -205,14 +230,20 @@ for (const file of files) {
     )
   }
 
+  const predecessorCompatibleSource = peelPageHeaderFrame(source, file.path)
+
   for (const rawVariant of file.rawVariants) {
-    assert.equal(countLiteral(source, rawVariant), 1, `${file.path}: raw variant remains exact`)
+    assert.equal(
+      countLiteral(predecessorCompatibleSource, rawVariant),
+      1,
+      `${file.path}: raw variant remains exact`
+    )
   }
 
-  let reconstructed = source.replace(file.importInsertion, "")
+  let reconstructed = predecessorCompatibleSource.replace(file.importInsertion, "")
   assert.equal(
     reconstructed.length,
-    source.length - file.importInsertion.length,
+    predecessorCompatibleSource.length - file.importInsertion.length,
     `${file.path}: exact import insertion peels once`
   )
 
