@@ -3,6 +3,7 @@ import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
 import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
 import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
@@ -157,7 +158,7 @@ const emit = defineEmits<{
         >
           No revisions yet.
         </p>
-        <table v-else id="catalog-revisions-table" class="table">
+        <CadenceTableFrame v-else id="catalog-revisions-table">
           <thead>
             <tr>
               <th class="hud-label">Revision</th>
@@ -185,7 +186,7 @@ const emit = defineEmits<{
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
     </CadenceCard>
 
     <CadenceCard id="catalog-import-attempts" class="card border border-base-300 bg-base-200" body-class="card-body p-6">
@@ -197,7 +198,7 @@ const emit = defineEmits<{
         >
           No import attempts yet.
         </p>
-        <table v-else id="catalog-import-runs-table" class="table">
+        <CadenceTableFrame v-else id="catalog-import-runs-table">
           <thead>
             <tr>
               <th class="hud-label">Status</th>
@@ -222,7 +223,7 @@ const emit = defineEmits<{
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
     </CadenceCard>
     </div>
   </CadenceCollapsible>
