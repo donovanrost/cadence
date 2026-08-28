@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Header = {
   id: string
@@ -402,63 +403,67 @@ const updateStageVersion = (event: Event) => {
         >
           <p class="hud-label">{{ stage_form.eyebrow }}</p>
 
-          <div class="fieldset mb-3">
-            <label :for="stage_form.fields.dashboard_id.id">
-              <span class="hud-label block mb-1.5">
-                {{ stage_form.fields.dashboard_id.label }}
-              </span>
-              <select
-                :id="stage_form.fields.dashboard_id.id"
-                v-model="stageForm.dashboard_id"
-                :name="stage_form.fields.dashboard_id.name"
-                :required="stage_form.fields.dashboard_id.required"
-                class="w-full select"
-              >
-                <option value="">{{ stage_form.fields.dashboard_id.placeholder }}</option>
-                <option
-                  v-for="option in dashboard_options"
-                  :key="option.value"
-                  :value="option.value"
-                >{{ option.label }}</option>
-              </select>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="stage_form.fields.dashboard_id.id"
+            wrapper-class="fieldset mb-3"
+            :label="stage_form.fields.dashboard_id.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <select
+              :id="stage_form.fields.dashboard_id.id"
+              v-model="stageForm.dashboard_id"
+              :name="stage_form.fields.dashboard_id.name"
+              :required="stage_form.fields.dashboard_id.required"
+              class="w-full select"
+            >
+              <option value="">{{ stage_form.fields.dashboard_id.placeholder }}</option>
+              <option
+                v-for="option in dashboard_options"
+                :key="option.value"
+                :value="option.value"
+              >{{ option.label }}</option>
+            </select>
+          </CadenceField>
 
-          <div class="fieldset mb-3">
-            <label :for="stage_form.fields.item_id.id">
-              <span class="hud-label block mb-1.5">{{ stage_form.fields.item_id.label }}</span>
-              <select
-                :id="stage_form.fields.item_id.id"
-                v-model="stageForm.item_id"
-                :name="stage_form.fields.item_id.name"
-                :required="stage_form.fields.item_id.required"
-                class="w-full select"
-              >
-                <option value="">{{ stage_form.fields.item_id.placeholder }}</option>
-                <option
-                  v-for="option in library_options"
-                  :key="option.value"
-                  :value="option.value"
-                >{{ option.label }}</option>
-              </select>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="stage_form.fields.item_id.id"
+            wrapper-class="fieldset mb-3"
+            :label="stage_form.fields.item_id.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <select
+              :id="stage_form.fields.item_id.id"
+              v-model="stageForm.item_id"
+              :name="stage_form.fields.item_id.name"
+              :required="stage_form.fields.item_id.required"
+              class="w-full select"
+            >
+              <option value="">{{ stage_form.fields.item_id.placeholder }}</option>
+              <option
+                v-for="option in library_options"
+                :key="option.value"
+                :value="option.value"
+              >{{ option.label }}</option>
+            </select>
+          </CadenceField>
 
-          <div class="fieldset mb-3">
-            <label :for="stage_form.fields.version.id">
-              <span class="hud-label block mb-1.5">{{ stage_form.fields.version.label }}</span>
-              <input
-                :id="stage_form.fields.version.id"
-                :value="stageForm.version"
-                :name="stage_form.fields.version.name"
-                :type="stage_form.fields.version.type"
-                :required="stage_form.fields.version.required"
-                :min="stage_form.fields.version.min"
-                class="w-full input"
-                @input="updateStageVersion"
-              >
-            </label>
-          </div>
+          <CadenceField
+            :control-id="stage_form.fields.version.id"
+            wrapper-class="fieldset mb-3"
+            :label="stage_form.fields.version.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <input
+              :id="stage_form.fields.version.id"
+              :value="stageForm.version"
+              :name="stage_form.fields.version.name"
+              :type="stage_form.fields.version.type"
+              :required="stage_form.fields.version.required"
+              :min="stage_form.fields.version.min"
+              class="w-full input"
+              @input="updateStageVersion"
+            >
+          </CadenceField>
 
           <button :id="stage_form.action.id" type="submit" class="btn btn-primary btn-sm">
             {{ stage_form.action.label }}
@@ -480,65 +485,67 @@ const updateStageVersion = (event: Event) => {
             class="mt-4 space-y-3"
             @submit.prevent="createLibraryItem"
           >
-            <div class="fieldset mb-3">
-              <label :for="create_form.fields.name.id">
-                <span class="hud-label block mb-1.5">{{ create_form.fields.name.label }}</span>
-                <input
-                  :id="create_form.fields.name.id"
-                  v-model="createForm.name"
-                  :name="create_form.fields.name.name"
-                  :type="create_form.fields.name.type"
-                  :required="create_form.fields.name.required"
-                  class="w-full input"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="create_form.fields.name.id"
+              wrapper-class="fieldset mb-3"
+              :label="create_form.fields.name.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="create_form.fields.name.id"
+                v-model="createForm.name"
+                :name="create_form.fields.name.name"
+                :type="create_form.fields.name.type"
+                :required="create_form.fields.name.required"
+                class="w-full input"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="create_form.fields.description.id">
-                <span class="hud-label block mb-1.5">
-                  {{ create_form.fields.description.label }}
-                </span>
-                <textarea
-                  :id="create_form.fields.description.id"
-                  v-model="createForm.description"
-                  :name="create_form.fields.description.name"
-                  :required="create_form.fields.description.required"
-                  class="w-full textarea"
-                ></textarea>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="create_form.fields.description.id"
+              wrapper-class="fieldset mb-3"
+              :label="create_form.fields.description.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="create_form.fields.description.id"
+                v-model="createForm.description"
+                :name="create_form.fields.description.name"
+                :required="create_form.fields.description.required"
+                class="w-full textarea"
+              ></textarea>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="create_form.fields.change_summary.id">
-                <span class="hud-label block mb-1.5">
-                  {{ create_form.fields.change_summary.label }}
-                </span>
-                <input
-                  :id="create_form.fields.change_summary.id"
-                  v-model="createForm.change_summary"
-                  :name="create_form.fields.change_summary.name"
-                  :type="create_form.fields.change_summary.type"
-                  :required="create_form.fields.change_summary.required"
-                  class="w-full input"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="create_form.fields.change_summary.id"
+              wrapper-class="fieldset mb-3"
+              :label="create_form.fields.change_summary.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="create_form.fields.change_summary.id"
+                v-model="createForm.change_summary"
+                :name="create_form.fields.change_summary.name"
+                :type="create_form.fields.change_summary.type"
+                :required="create_form.fields.change_summary.required"
+                class="w-full input"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="create_form.fields.widget_json.id">
-                <span class="hud-label block mb-1.5">
-                  {{ create_form.fields.widget_json.label }}
-                </span>
-                <textarea
-                  :id="create_form.fields.widget_json.id"
-                  v-model="createForm.widget_json"
-                  :name="create_form.fields.widget_json.name"
-                  :required="create_form.fields.widget_json.required"
-                  class="textarea textarea-bordered min-h-72 w-full font-mono text-xs"
-                ></textarea>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="create_form.fields.widget_json.id"
+              wrapper-class="fieldset mb-3"
+              :label="create_form.fields.widget_json.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="create_form.fields.widget_json.id"
+                v-model="createForm.widget_json"
+                :name="create_form.fields.widget_json.name"
+                :required="create_form.fields.widget_json.required"
+                class="textarea textarea-bordered min-h-72 w-full font-mono text-xs"
+              ></textarea>
+            </CadenceField>
 
             <button :id="create_form.action.id" type="submit" class="btn btn-primary btn-sm">
               {{ create_form.action.label }}
@@ -561,56 +568,58 @@ const updateStageVersion = (event: Event) => {
             class="mt-4 space-y-3"
             @submit.prevent="addLibraryVersion"
           >
-            <div class="fieldset mb-3">
-              <label :for="version_form.fields.item_id.id">
-                <span class="hud-label block mb-1.5">{{ version_form.fields.item_id.label }}</span>
-                <select
-                  :id="version_form.fields.item_id.id"
-                  v-model="versionForm.item_id"
-                  :name="version_form.fields.item_id.name"
-                  :required="version_form.fields.item_id.required"
-                  class="w-full select"
-                >
-                  <option value="">{{ version_form.fields.item_id.placeholder }}</option>
-                  <option
-                    v-for="option in library_options"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="version_form.fields.item_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="version_form.fields.item_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="version_form.fields.item_id.id"
+                v-model="versionForm.item_id"
+                :name="version_form.fields.item_id.name"
+                :required="version_form.fields.item_id.required"
+                class="w-full select"
+              >
+                <option value="">{{ version_form.fields.item_id.placeholder }}</option>
+                <option
+                  v-for="option in library_options"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="version_form.fields.change_summary.id">
-                <span class="hud-label block mb-1.5">
-                  {{ version_form.fields.change_summary.label }}
-                </span>
-                <input
-                  :id="version_form.fields.change_summary.id"
-                  v-model="versionForm.change_summary"
-                  :name="version_form.fields.change_summary.name"
-                  :type="version_form.fields.change_summary.type"
-                  :required="version_form.fields.change_summary.required"
-                  class="w-full input"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="version_form.fields.change_summary.id"
+              wrapper-class="fieldset mb-3"
+              :label="version_form.fields.change_summary.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="version_form.fields.change_summary.id"
+                v-model="versionForm.change_summary"
+                :name="version_form.fields.change_summary.name"
+                :type="version_form.fields.change_summary.type"
+                :required="version_form.fields.change_summary.required"
+                class="w-full input"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="version_form.fields.widget_json.id">
-                <span class="hud-label block mb-1.5">
-                  {{ version_form.fields.widget_json.label }}
-                </span>
-                <textarea
-                  :id="version_form.fields.widget_json.id"
-                  v-model="versionForm.widget_json"
-                  :name="version_form.fields.widget_json.name"
-                  :required="version_form.fields.widget_json.required"
-                  class="textarea textarea-bordered min-h-72 w-full font-mono text-xs"
-                ></textarea>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="version_form.fields.widget_json.id"
+              wrapper-class="fieldset mb-3"
+              :label="version_form.fields.widget_json.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="version_form.fields.widget_json.id"
+                v-model="versionForm.widget_json"
+                :name="version_form.fields.widget_json.name"
+                :required="version_form.fields.widget_json.required"
+                class="textarea textarea-bordered min-h-72 w-full font-mono text-xs"
+              ></textarea>
+            </CadenceField>
 
             <button :id="version_form.action.id" type="submit" class="btn btn-primary btn-sm">
               {{ version_form.action.label }}

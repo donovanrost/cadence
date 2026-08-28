@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import {reactive, watch} from "vue"
 
 type EmptyState = {
@@ -328,68 +329,72 @@ const archiveDashboard = () => {
           class="space-y-5 border border-base-300 bg-base-200/20 p-5"
           @submit.prevent="saveSettings"
         >
-          <div class="fieldset mb-3">
-            <label :for="settings_form.fields.name.id">
-              <span class="hud-label block mb-1.5">{{ settings_form.fields.name.label }}</span>
-              <input
-                :id="settings_form.fields.name.id"
-                v-model="settings.name"
-                :name="settings_form.fields.name.name"
-                :type="settings_form.fields.name.type"
-                :required="settings_form.fields.name.required"
-                class="w-full input"
-                @input="validateSettings"
-              >
-            </label>
-          </div>
+          <CadenceField
+            :control-id="settings_form.fields.name.id"
+            wrapper-class="fieldset mb-3"
+            :label="settings_form.fields.name.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <input
+              :id="settings_form.fields.name.id"
+              v-model="settings.name"
+              :name="settings_form.fields.name.name"
+              :type="settings_form.fields.name.type"
+              :required="settings_form.fields.name.required"
+              class="w-full input"
+              @input="validateSettings"
+            >
+          </CadenceField>
 
-          <div class="fieldset mb-3">
-            <label :for="settings_form.fields.description.id">
-              <span class="hud-label block mb-1.5">
-                {{ settings_form.fields.description.label }}
-              </span>
-              <textarea
-                :id="settings_form.fields.description.id"
-                v-model="settings.description"
-                :name="settings_form.fields.description.name"
-                :required="settings_form.fields.description.required"
-                class="w-full textarea"
-                @input="validateSettings"
-              ></textarea>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="settings_form.fields.description.id"
+            wrapper-class="fieldset mb-3"
+            :label="settings_form.fields.description.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <textarea
+              :id="settings_form.fields.description.id"
+              v-model="settings.description"
+              :name="settings_form.fields.description.name"
+              :required="settings_form.fields.description.required"
+              class="w-full textarea"
+              @input="validateSettings"
+            ></textarea>
+          </CadenceField>
 
-          <div class="fieldset mb-3">
-            <label :for="settings_form.fields.tags.id">
-              <span class="hud-label block mb-1.5">{{ settings_form.fields.tags.label }}</span>
-              <input
-                :id="settings_form.fields.tags.id"
-                v-model="settings.tags"
-                :name="settings_form.fields.tags.name"
-                :type="settings_form.fields.tags.type"
-                :required="settings_form.fields.tags.required"
-                :placeholder="settings_form.fields.tags.placeholder"
-                class="w-full input"
-                @input="validateSettings"
-              >
-            </label>
-          </div>
+          <CadenceField
+            :control-id="settings_form.fields.tags.id"
+            wrapper-class="fieldset mb-3"
+            :label="settings_form.fields.tags.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <input
+              :id="settings_form.fields.tags.id"
+              v-model="settings.tags"
+              :name="settings_form.fields.tags.name"
+              :type="settings_form.fields.tags.type"
+              :required="settings_form.fields.tags.required"
+              :placeholder="settings_form.fields.tags.placeholder"
+              class="w-full input"
+              @input="validateSettings"
+            >
+          </CadenceField>
 
-          <div class="fieldset mb-3">
-            <label :for="settings_form.fields.defaults_json.id">
-              <span class="hud-label block mb-1.5">
-                {{ settings_form.fields.defaults_json.label }}
-              </span>
-              <textarea
-                :id="settings_form.fields.defaults_json.id"
-                v-model="settings.defaults_json"
-                :name="settings_form.fields.defaults_json.name"
-                :required="settings_form.fields.defaults_json.required"
-                class="textarea textarea-bordered min-h-64 w-full font-mono text-xs"
-                @input="validateSettings"
-              ></textarea>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="settings_form.fields.defaults_json.id"
+            wrapper-class="fieldset mb-3"
+            :label="settings_form.fields.defaults_json.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <textarea
+              :id="settings_form.fields.defaults_json.id"
+              v-model="settings.defaults_json"
+              :name="settings_form.fields.defaults_json.name"
+              :required="settings_form.fields.defaults_json.required"
+              class="textarea textarea-bordered min-h-64 w-full font-mono text-xs"
+              @input="validateSettings"
+            ></textarea>
+          </CadenceField>
 
           <div class="flex justify-end">
             <button
@@ -411,43 +416,43 @@ const archiveDashboard = () => {
             class="mt-4 grid gap-3 sm:grid-cols-2"
             @submit.prevent="createShare"
           >
-            <div class="fieldset mb-3">
-              <label :for="share_form.fields.data_visibility.id">
-                <span class="hud-label block mb-1.5">
-                  {{ share_form.fields.data_visibility.label }}
-                </span>
-                <select
-                  :id="share_form.fields.data_visibility.id"
-                  v-model="share.data_visibility"
-                  :name="share_form.fields.data_visibility.name"
-                  :required="share_form.fields.data_visibility.required"
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in share_form.fields.data_visibility.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label :for="share_form.fields.expires_in_hours.id">
-                <span class="hud-label block mb-1.5">
-                  {{ share_form.fields.expires_in_hours.label }}
-                </span>
-                <input
-                  :id="share_form.fields.expires_in_hours.id"
-                  v-model="share.expires_in_hours"
-                  :name="share_form.fields.expires_in_hours.name"
-                  :type="share_form.fields.expires_in_hours.type"
-                  :required="share_form.fields.expires_in_hours.required"
-                  :min="share_form.fields.expires_in_hours.min"
-                  :placeholder="share_form.fields.expires_in_hours.placeholder"
-                  class="w-full input"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="share_form.fields.data_visibility.id"
+              wrapper-class="fieldset mb-3"
+              :label="share_form.fields.data_visibility.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="share_form.fields.data_visibility.id"
+                v-model="share.data_visibility"
+                :name="share_form.fields.data_visibility.name"
+                :required="share_form.fields.data_visibility.required"
+                class="w-full select"
+              >
+                <option
+                  v-for="option in share_form.fields.data_visibility.options"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              :control-id="share_form.fields.expires_in_hours.id"
+              wrapper-class="fieldset mb-3"
+              :label="share_form.fields.expires_in_hours.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="share_form.fields.expires_in_hours.id"
+                v-model="share.expires_in_hours"
+                :name="share_form.fields.expires_in_hours.name"
+                :type="share_form.fields.expires_in_hours.type"
+                :required="share_form.fields.expires_in_hours.required"
+                :min="share_form.fields.expires_in_hours.min"
+                :placeholder="share_form.fields.expires_in_hours.placeholder"
+                class="w-full input"
+              >
+            </CadenceField>
             <button
               :id="share_form.submit.id"
               type="submit"
@@ -500,26 +505,26 @@ const archiveDashboard = () => {
             class="mt-4 flex items-end gap-3"
             @submit.prevent="createSnapshot"
           >
-            <div class="fieldset mb-3">
-              <label :for="snapshot_form.fields.data_visibility.id">
-                <span class="hud-label block mb-1.5">
-                  {{ snapshot_form.fields.data_visibility.label }}
-                </span>
-                <select
-                  :id="snapshot_form.fields.data_visibility.id"
-                  v-model="snapshot.data_visibility"
-                  :name="snapshot_form.fields.data_visibility.name"
-                  :required="snapshot_form.fields.data_visibility.required"
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in snapshot_form.fields.data_visibility.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="snapshot_form.fields.data_visibility.id"
+              wrapper-class="fieldset mb-3"
+              :label="snapshot_form.fields.data_visibility.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="snapshot_form.fields.data_visibility.id"
+                v-model="snapshot.data_visibility"
+                :name="snapshot_form.fields.data_visibility.name"
+                :required="snapshot_form.fields.data_visibility.required"
+                class="w-full select"
+              >
+                <option
+                  v-for="option in snapshot_form.fields.data_visibility.options"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
             <button
               :id="snapshot_form.submit.id"
               type="submit"

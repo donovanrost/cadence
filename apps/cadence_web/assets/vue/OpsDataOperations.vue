@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type NavigationAction = {
   id: string
@@ -436,24 +437,26 @@ const requestCorrection = (action: Action) => {
               class="mt-4 space-y-3"
               @submit.prevent="recordRequest"
             >
-              <div class="fieldset mb-3">
-                <label :for="request_form.fields.workflow.id">
-                  <span class="hud-label block mb-1.5">{{ request_form.fields.workflow.label }}</span>
-                  <select
-                    :id="request_form.fields.workflow.id"
-                    v-model="requestValues.workflow"
-                    :name="request_form.fields.workflow.name"
-                    class="w-full select"
-                    @change="validateRequest"
-                  >
-                    <option
-                      v-for="option in request_form.fields.workflow.options"
-                      :key="option.value"
-                      :value="option.value"
-                    >{{ option.label }}</option>
-                  </select>
-                </label>
-              </div>
+              <CadenceField
+                :control-id="request_form.fields.workflow.id"
+                wrapper-class="fieldset mb-3"
+                :label="request_form.fields.workflow.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <select
+                  :id="request_form.fields.workflow.id"
+                  v-model="requestValues.workflow"
+                  :name="request_form.fields.workflow.name"
+                  class="w-full select"
+                  @change="validateRequest"
+                >
+                  <option
+                    v-for="option in request_form.fields.workflow.options"
+                    :key="option.value"
+                    :value="option.value"
+                  >{{ option.label }}</option>
+                </select>
+              </CadenceField>
 
               <div
                 v-for="fieldKey in primaryRequestFieldKeys"
@@ -494,19 +497,21 @@ const requestCorrection = (action: Action) => {
                 </div>
               </div>
 
-              <div class="fieldset mb-3">
-                <label :for="request_form.fields.reason.id">
-                  <span class="hud-label block mb-1.5">{{ request_form.fields.reason.label }}</span>
-                  <input
-                    :id="request_form.fields.reason.id"
-                    v-model="requestValues.reason"
-                    :name="request_form.fields.reason.name"
-                    type="text"
-                    class="w-full input"
-                    @input="validateRequest"
-                  >
-                </label>
-              </div>
+              <CadenceField
+                :control-id="request_form.fields.reason.id"
+                wrapper-class="fieldset mb-3"
+                :label="request_form.fields.reason.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="request_form.fields.reason.id"
+                  v-model="requestValues.reason"
+                  :name="request_form.fields.reason.name"
+                  type="text"
+                  class="w-full input"
+                  @input="validateRequest"
+                >
+              </CadenceField>
 
               <div class="fieldset mb-3">
                 <label class="flex cursor-pointer items-start gap-3">
