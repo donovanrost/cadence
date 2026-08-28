@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -106,7 +107,7 @@ const save = () => {
 
 <template>
   <div id="admin-organization-invite-page" class="space-y-6 max-w-xl">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -134,7 +135,7 @@ const save = () => {
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <form id="invite-form" class="space-y-4" @submit.prevent="save">
       <div class="fieldset mb-3">

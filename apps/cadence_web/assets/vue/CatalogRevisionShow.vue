@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -63,7 +64,7 @@ const valueClasses: Record<DetailRow["style"], string> = {
 
 <template>
   <div id="catalog-revision-show-surface" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -94,7 +95,7 @@ const valueClasses: Record<DetailRow["style"], string> = {
           </span>
         </h1>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <CadenceCard

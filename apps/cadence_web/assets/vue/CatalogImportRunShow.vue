@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -57,7 +58,7 @@ defineProps<{
 
 <template>
   <div id="catalog-import-run-show-surface" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -89,7 +90,7 @@ defineProps<{
           </h1>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <div class="text-sm space-y-1">

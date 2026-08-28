@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CatalogUploadForm from "./CatalogUploadForm.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -35,7 +36,7 @@ const emit = defineEmits<{
 
 <template>
   <div :id="page.id" class="space-y-6 max-w-2xl">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -64,7 +65,7 @@ const emit = defineEmits<{
           </h1>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CatalogUploadForm
       :form="form"
