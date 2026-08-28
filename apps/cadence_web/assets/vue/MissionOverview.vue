@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -137,7 +138,7 @@ defineProps<{
           </div>
         </div>
 
-        <table v-else id="mission-spacecraft-readiness" class="table">
+        <CadenceTableFrame v-else id="mission-spacecraft-readiness">
           <thead>
             <tr>
               <th class="hud-label">Spacecraft</th>
@@ -219,7 +220,7 @@ defineProps<{
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
       </div>
   </CadenceCard>
 </template>

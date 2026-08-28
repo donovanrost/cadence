@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -175,7 +176,7 @@ defineProps<{
             </form>
           </div>
 
-          <table id="spacecraft-vehicles-table" class="table">
+          <CadenceTableFrame id="spacecraft-vehicles-table">
             <thead>
               <tr>
                 <th
@@ -286,7 +287,7 @@ defineProps<{
                 </td>
               </tr>
             </tbody>
-          </table>
+          </CadenceTableFrame>
 
           <p
             v-if="roster.filtered_empty"
@@ -367,7 +368,7 @@ defineProps<{
         </div>
 
         <template v-else>
-          <table id="spacecraft-profiles-preview-table" class="table">
+          <CadenceTableFrame id="spacecraft-profiles-preview-table">
             <thead>
               <tr>
                 <th class="hud-label">Name</th>
@@ -417,7 +418,7 @@ defineProps<{
                 </td>
               </tr>
             </tbody>
-          </table>
+          </CadenceTableFrame>
 
           <div v-if="profiles.truncated" class="border-t border-base-300 px-4 py-3 text-right">
             <a

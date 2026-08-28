@@ -3,6 +3,7 @@ import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "info" | "ready" | "attention" | "blocked"
@@ -270,7 +271,7 @@ const archiveProvider = () => {
             <div v-if="profiles.service.empty" class="p-6 text-sm text-base-content/60">
               {{ profiles.service.empty_copy }}
             </div>
-            <table v-else :id="profiles.service.table_id" class="table">
+            <CadenceTableFrame v-else :id="profiles.service.table_id">
               <thead>
                 <tr>
                   <th v-for="column in profiles.service.columns" :key="column" class="hud-label">
@@ -294,7 +295,7 @@ const archiveProvider = () => {
                   </td>
                 </tr>
               </tbody>
-            </table>
+            </CadenceTableFrame>
           </div>
         </CadencePanel>
 
@@ -317,7 +318,7 @@ const archiveProvider = () => {
             <div v-if="profiles.delivery.empty" class="p-6 text-sm text-base-content/60">
               {{ profiles.delivery.empty_copy }}
             </div>
-            <table v-else :id="profiles.delivery.table_id" class="table">
+            <CadenceTableFrame v-else :id="profiles.delivery.table_id">
               <thead>
                 <tr>
                   <th v-for="column in profiles.delivery.columns" :key="column" class="hud-label">
@@ -345,7 +346,7 @@ const archiveProvider = () => {
                   </td>
                 </tr>
               </tbody>
-            </table>
+            </CadenceTableFrame>
           </div>
         </CadencePanel>
       </div>

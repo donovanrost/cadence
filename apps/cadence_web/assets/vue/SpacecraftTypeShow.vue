@@ -2,6 +2,7 @@
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 type NavigationItem = {
   label: string
   href: string
@@ -199,7 +200,7 @@ defineProps<{
       body-class="card-body p-6"
     >
         <p class="hud-label">{{ labels.version_history }}</p>
-        <table id="spacecraft-profile-version-history" class="table mt-3">
+        <CadenceTableFrame id="spacecraft-profile-version-history" class="mt-3">
           <thead>
             <tr>
               <th class="hud-label">{{ labels.version }}</th>
@@ -220,7 +221,7 @@ defineProps<{
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
     </CadenceCard>
   </div>
 </template>
