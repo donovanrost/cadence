@@ -11,6 +11,9 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceValidationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceValidationMessageCounts = new Map([["OpsFleetPlanningPolicy.vue", 16]])
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
@@ -271,6 +274,59 @@ const replaceOnce = (source, before, after, label) => {
   return source.replace(before, after)
 }
 
+const peelCadenceValidationMessages = (source, name) => {
+  const expectedMessages = cadenceValidationMessageCounts.get(name) ?? 0
+  const expectedImports = expectedMessages > 0 ? 1 : 0
+
+  assert.equal(
+    countExact(source, cadenceValidationMessageImport),
+    expectedImports,
+    `${name} has its expected CadenceValidationMessage import count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "<CadenceValidationMessage"),
+    expectedMessages,
+    `${name} has its expected CadenceValidationMessage opening count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "</CadenceValidationMessage>"),
+    expectedMessages,
+    `${name} has its expected CadenceValidationMessage closing count before peeling`,
+  )
+
+  let replacements = 0
+  const predecessorCompatibleSource = source
+    .replace(cadenceValidationMessageImport, "")
+    .replace(
+      /<CadenceValidationMessage(\s+v-for="error in [^"]+\.errors"\s+:key="error"\s*)>/g,
+      (_, attributes) => {
+        replacements += 1
+
+        if (!attributes.includes("\n")) {
+          return `<p${attributes} class="mt-1.5 text-sm text-error">`
+        }
+
+        const closingNewline = attributes.lastIndexOf("\n")
+        const beforeClosingIndent = attributes.slice(0, closingNewline)
+        const closingIndent = attributes.slice(closingNewline + 1)
+        const previousNewline = beforeClosingIndent.lastIndexOf("\n")
+        const attributeIndent = beforeClosingIndent.slice(previousNewline + 1).match(/^ */)[0]
+
+        return `<p${beforeClosingIndent}\n${attributeIndent}class="mt-1.5 text-sm text-error"\n${closingIndent}>`
+      },
+    )
+    .replaceAll("</CadenceValidationMessage>", "</p>")
+
+  assert.equal(replacements, expectedMessages, `${name} peels every validation message`)
+  assert.equal(
+    countExact(predecessorCompatibleSource, "CadenceValidationMessage"),
+    0,
+    `${name} predecessor source has no residual CadenceValidationMessage`,
+  )
+
+  return predecessorCompatibleSource
+}
+
 const peelCadenceFields = (source, name) => {
   const fields = cadenceFieldsByFile.get(name) ?? []
   const expectedImportCount = fields.length > 0 ? 1 : 0
@@ -467,7 +523,10 @@ for (const file of files) {
   assert.equal(countExact(source, "#header"), file.panels, `${file.name} header slot count`)
   assert.equal(file.migrations.length, file.panels, `${file.name} frozen migration ledger count`)
 
-  const fieldCompatibleSource = peelCadenceFields(source, file.name)
+  const fieldCompatibleSource = peelCadenceFields(
+    peelCadenceValidationMessages(source, file.name),
+    file.name,
+  )
   const predecessorCompatibleSource = peelTableFrames(
     file.opsPageHeader ? peelPageHeaderFrame(fieldCompatibleSource, file.name) : fieldCompatibleSource,
     file.name,

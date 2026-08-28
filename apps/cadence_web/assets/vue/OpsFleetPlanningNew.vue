@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import {reactive, watch} from "vue"
 
 type Header = {
@@ -208,11 +209,10 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
                 @input="validateFleetRun"
               >
               <template #errors>
-                <p
+                <CadenceValidationMessage
                   v-for="error in form.fields.horizon_start.errors"
                   :key="error"
-                  class="mt-1.5 text-sm text-error"
-                >{{ error }}</p>
+                >{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
@@ -235,11 +235,10 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
                 @input="validateFleetRun"
               >
               <template #errors>
-                <p
+                <CadenceValidationMessage
                   v-for="error in form.fields.horizon_end.errors"
                   :key="error"
-                  class="mt-1.5 text-sm text-error"
-                >{{ error }}</p>
+                >{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
           </div>

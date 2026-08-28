@@ -11,6 +11,12 @@ assert.equal(
 
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceValidationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceValidationMessageCounts = new Map([
+  ["OpsFleetPlanningNew.vue", 2],
+  ["OpsFleetPlanningPolicy.vue", 16]
+])
 const componentImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
 const rawOpening =
@@ -106,6 +112,59 @@ const callers = [
 
 const occurrences = (source, token) => source.split(token).length - 1
 const sha256 = source => createHash("sha256").update(source).digest("hex")
+
+const peelCadenceValidationMessages = (source, name) => {
+  const expectedMessages = cadenceValidationMessageCounts.get(name) ?? 0
+  const expectedImports = expectedMessages > 0 ? 1 : 0
+
+  assert.equal(
+    occurrences(source, cadenceValidationMessageImport),
+    expectedImports,
+    `${name}: exact CadenceValidationMessage import count before peeling`
+  )
+  assert.equal(
+    occurrences(source, "<CadenceValidationMessage"),
+    expectedMessages,
+    `${name}: exact CadenceValidationMessage opening count before peeling`
+  )
+  assert.equal(
+    occurrences(source, "</CadenceValidationMessage>"),
+    expectedMessages,
+    `${name}: exact CadenceValidationMessage closing count before peeling`
+  )
+
+  let replacements = 0
+  const predecessorCompatibleSource = source
+    .replace(cadenceValidationMessageImport, "")
+    .replace(
+      /<CadenceValidationMessage(\s+v-for="error in [^"]+\.errors"\s+:key="error"\s*)>/g,
+      (_, attributes) => {
+        replacements += 1
+
+        if (!attributes.includes("\n")) {
+          return `<p${attributes} class="mt-1.5 text-sm text-error">`
+        }
+
+        const closingNewline = attributes.lastIndexOf("\n")
+        const beforeClosingIndent = attributes.slice(0, closingNewline)
+        const closingIndent = attributes.slice(closingNewline + 1)
+        const previousNewline = beforeClosingIndent.lastIndexOf("\n")
+        const attributeIndent = beforeClosingIndent.slice(previousNewline + 1).match(/^ */)[0]
+
+        return `<p${beforeClosingIndent}\n${attributeIndent}class="mt-1.5 text-sm text-error"\n${closingIndent}>`
+      }
+    )
+    .replaceAll("</CadenceValidationMessage>", "</p>")
+
+  assert.equal(replacements, expectedMessages, `${name}: every validation message is peeled`)
+  assert.equal(
+    occurrences(predecessorCompatibleSource, "CadenceValidationMessage"),
+    0,
+    `${name}: predecessor source has no residual CadenceValidationMessage`
+  )
+
+  return predecessorCompatibleSource
+}
 
 const peelCadenceFields = (source, caller) => {
   const fields = caller.fields ?? []
@@ -228,7 +287,10 @@ for (const caller of callers) {
     assert.equal(occurrences(source, 'variant="ops"'), 1, "expected one ops variant")
     assert.doesNotMatch(source, /<header\b/, "expected no residual native header")
 
-    const predecessorCompatibleSource = peelCadenceFields(source, caller)
+    const predecessorCompatibleSource = peelCadenceFields(
+      peelCadenceValidationMessages(source, caller.file),
+      caller
+    )
     const reconstructed = predecessorCompatibleSource
       .replace(`${componentImport}\n`, "")
       .replace(migratedOpening, parentOpening)
