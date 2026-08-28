@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 
 type Navigation = {
@@ -41,7 +42,7 @@ defineProps<{
 
 <template>
   <div id="admin-home" class="space-y-8">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
@@ -52,7 +53,7 @@ defineProps<{
           </p>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <CadenceCard
