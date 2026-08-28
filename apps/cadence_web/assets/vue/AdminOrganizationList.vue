@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+
 type OrganizationRow = {
   id: string
   display_name: string
@@ -10,7 +12,7 @@ defineProps<{rows: OrganizationRow[]}>()
 </script>
 
 <template>
-  <table id="admin-orgs-table" class="table">
+  <CadenceTableFrame id="admin-orgs-table">
     <thead>
       <tr>
         <th class="hud-label">Name</th>
@@ -35,5 +37,5 @@ defineProps<{rows: OrganizationRow[]}>()
         <td class="font-mono text-sm">{{ row.slug }}</td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>

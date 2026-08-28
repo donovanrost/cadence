@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type MissionRow = {
   id: string
@@ -16,7 +17,7 @@ defineProps<{rows: MissionRow[]}>()
 </script>
 
 <template>
-  <table id="mission-list-table" class="table">
+  <CadenceTableFrame id="mission-list-table">
     <thead>
       <tr>
         <th class="hud-label">Mission</th>
@@ -47,5 +48,5 @@ defineProps<{rows: MissionRow[]}>()
         </td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>

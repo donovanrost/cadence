@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -31,7 +32,7 @@ defineProps<{rows: DatabaseRow[]}>()
 </script>
 
 <template>
-  <table id="catalog-databases-table" class="table">
+  <CadenceTableFrame id="catalog-databases-table">
     <thead>
       <tr>
         <th>Database</th>
@@ -118,5 +119,5 @@ defineProps<{rows: DatabaseRow[]}>()
         </td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>

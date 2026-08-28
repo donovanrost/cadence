@@ -2,6 +2,7 @@
 import { computed } from "vue";
 
 import StatusBadge from "./StatusBadge.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
 
 type TransportRow = {
   id: string;
@@ -70,7 +71,7 @@ const lastVisible = computed(() =>
       </form>
     </div>
 
-    <table id="transports-table" class="table">
+    <CadenceTableFrame id="transports-table">
       <thead>
         <tr>
           <th
@@ -144,7 +145,7 @@ const lastVisible = computed(() =>
           </td>
         </tr>
       </tbody>
-    </table>
+    </CadenceTableFrame>
 
     <p
       v-if="total_count === 0"

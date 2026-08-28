@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type ProviderRow = {
   id: string
@@ -20,7 +21,7 @@ defineProps<{rows: ProviderRow[]}>()
 </script>
 
 <template>
-  <table id="mission-providers-table" class="table">
+  <CadenceTableFrame id="mission-providers-table">
     <thead>
       <tr>
         <th class="hud-label">Provider</th>
@@ -62,5 +63,5 @@ defineProps<{rows: ProviderRow[]}>()
         <td class="font-mono text-sm">{{ row.version }}</td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>
