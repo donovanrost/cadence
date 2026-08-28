@@ -55,6 +55,25 @@ const inclusiveSourceSlice = (sourceText, start, end, label) => {
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const opsPageHeaderOpen = '    <CadencePageHeaderFrame variant="ops">'
+const opsPageHeaderBaseOpen =
+  '    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
+const opsPageHeaderClose = "    </CadencePageHeaderFrame>"
+const opsPageHeaderBaseClose = "    </header>"
+const occurrences = (sourceText, needle) => sourceText.split(needle).length - 1
+
+const reconstructPageHeaderBase = (migratedSource) => {
+  assert.equal(occurrences(migratedSource, pageHeaderImport), 1)
+  assert.equal(occurrences(migratedSource, opsPageHeaderOpen), 1)
+  assert.equal(occurrences(migratedSource, opsPageHeaderClose), 1)
+
+  return migratedSource
+    .replace(pageHeaderImport, "")
+    .replace(opsPageHeaderOpen, opsPageHeaderBaseOpen)
+    .replace(opsPageHeaderClose, opsPageHeaderBaseClose)
+}
 
 const script = source.match(/<script setup lang="ts">\n([\s\S]*?)\n<\/script>/)?.[1]
 const template = source.match(/<template>\n([\s\S]*?)\n<\/template>/)?.[1]
@@ -151,7 +170,7 @@ const originalButtonMarkup = `            <button
             >
               <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
             </button>`
-const normalizedComponent = source
+const normalizedComponent = reconstructPageHeaderBase(source)
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
   .replace("const toggleDashboardStar = (row: DirectoryRow) => {", "const toggleStar = (row: DirectoryRow) => {")
   .replace(toggleMarkup, originalButtonMarkup)

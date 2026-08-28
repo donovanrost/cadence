@@ -8,6 +8,12 @@ import {fileURLToPath} from "node:url"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const compactPageHeaderOpen = '    <CadencePageHeaderFrame variant="compact">'
+const compactPageHeaderBaseOpen = '    <header class="border-b border-primary/20 pb-4">'
+const compactPageHeaderClose = "    </CadencePageHeaderFrame>"
+const compactPageHeaderBaseClose = "    </header>"
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
@@ -177,10 +183,31 @@ const fixtures = [
 
 for (const fixture of fixtures) {
   const filename = fileURLToPath(new URL(`../vue/${fixture.name}`, import.meta.url))
-  const source = readFileSync(filename, "utf8")
-  const parsed = parse(source, {filename})
+  const currentSource = readFileSync(filename, "utf8")
+  const parsed = parse(currentSource, {filename})
 
   assert.deepEqual(parsed.errors, [], `${fixture.name} must parse with the Vue compiler`)
+  let source = replaceExact(
+    currentSource,
+    pageHeaderImport,
+    "",
+    1,
+    `${fixture.name} page header import reconstruction`
+  )
+  source = replaceExact(
+    source,
+    compactPageHeaderOpen,
+    compactPageHeaderBaseOpen,
+    1,
+    `${fixture.name} page header opening reconstruction`
+  )
+  source = replaceExact(
+    source,
+    compactPageHeaderClose,
+    compactPageHeaderBaseClose,
+    1,
+    `${fixture.name} page header close reconstruction`
+  )
   assert.equal(occurrenceCount(source, panelImport), 1, `${fixture.name} import count`)
   assert.equal(
     occurrenceCount(source, "<CadencePanel\n"),

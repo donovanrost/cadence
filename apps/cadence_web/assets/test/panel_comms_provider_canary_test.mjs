@@ -10,17 +10,30 @@ assert.equal(process.versions.node, "24.16.0", "panel canary uses pinned Node 24
 const base = "88137bfa2ea69aaedfa0c5d3882e763dae0d09db"
 const baseByteLength = 13677
 const baseSha256 = "84771fcb6fde91f9a0ee782b206d473c638aeb19ea14bab55b40e93ddd61fc34"
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const compactPageHeaderOpen = '    <CadencePageHeaderFrame variant="compact">'
+const compactPageHeaderBaseOpen = '    <header class="border-b border-primary/20 pb-4">'
+const compactPageHeaderClose = "    </CadencePageHeaderFrame>"
+const compactPageHeaderBaseClose = "    </header>"
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const headerClass = "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsProviderShow.vue")
-const source = await readFile(componentPath, "utf8")
+const currentSource = await readFile(componentPath, "utf8")
 const {parse} = integrationRequire("@vue/compiler-sfc")
-const parsed = parse(source, {filename: componentPath})
+const parsed = parse(currentSource, {filename: componentPath})
 
 assert.deepEqual(parsed.errors, [], "migrated CommsProviderShow parses with the pinned Vue compiler")
 assert.ok(parsed.descriptor.scriptSetup, "CommsProviderShow retains its script setup boundary")
 assert.ok(parsed.descriptor.template, "CommsProviderShow retains its template boundary")
+assert.equal(currentSource.split(pageHeaderImport).length - 1, 1, "page header import reconstructs")
+assert.equal(currentSource.split(compactPageHeaderOpen).length - 1, 1, "page header opening reconstructs")
+assert.equal(currentSource.split(compactPageHeaderClose).length - 1, 1, "page header close reconstructs")
+const source = currentSource
+  .replace(pageHeaderImport, "")
+  .replace(compactPageHeaderOpen, compactPageHeaderBaseOpen)
+  .replace(compactPageHeaderClose, compactPageHeaderBaseClose)
 assert.equal(source.split(panelImport).length - 1, 1, "CadencePanel is imported exactly once")
 assert.equal(source.match(/<CadencePanel\b/g)?.length, 2, "exactly two panel boundaries open")
 assert.equal(source.split("</CadencePanel>").length - 1, 2, "exactly two panel boundaries close")
