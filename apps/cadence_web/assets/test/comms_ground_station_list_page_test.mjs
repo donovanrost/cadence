@@ -129,7 +129,34 @@ const assertInOrder = (source, contracts, label) => {
 }
 
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  childSource.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "CommsGroundStationList.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CommsGroundStationList.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChildSource = childSource
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
+  .replace(
+    '    <CadenceTableFrame id="ground-stations-table">',
+    '    <table id="ground-stations-table" class="table">',
+  )
+  .replace("    </CadenceTableFrame>", "    </table>")
+
+assert.doesNotMatch(
+  predecessorChildSource,
+  /CadenceTableFrame/,
+  "CommsGroundStationList.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChildSource).digest("hex"),
   "a30c8122f8314e4e386708e1f2ba6a4bf163dc763a3879bd1f8034894d709a2e",
   "CommsGroundStationList.vue remains the explicitly immutable child",
 )

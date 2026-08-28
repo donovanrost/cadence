@@ -79,7 +79,34 @@ const assertBalancedTemplate = (source) => {
 }
 
 assert.equal(
-  createHash("sha256").update(child).digest("hex"),
+  child.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "CatalogDatabaseTable.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  child.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CatalogDatabaseTable.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChild = child
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
+  .replace(
+    '  <CadenceTableFrame id="catalog-databases-table">',
+    '  <table id="catalog-databases-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorChild,
+  /CadenceTableFrame/,
+  "CatalogDatabaseTable.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChild).digest("hex"),
   "97cf3163799f89d80e6f254d5ae84e3ee0177d9992dcd89e9b1b3b12b7dca2fd",
   "CatalogDatabaseTable.vue remains the explicitly reviewed child",
 )
@@ -160,7 +187,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(component, /v-html|<\.vue|v-component=/)
 
 assert.match(child, /import StatusBadge from "\.\/StatusBadge\.vue"/)
-assert.match(child, /id="catalog-databases-table" class="table"/)
+assert.match(predecessorChild, /id="catalog-databases-table" class="table"/)
 assert.match(child, /:id="row\.id"/)
 assert.match(child, /:id="row\.actions_id"/)
 assert.equal(child.match(/data-phx-link="redirect"/g)?.length, 4)

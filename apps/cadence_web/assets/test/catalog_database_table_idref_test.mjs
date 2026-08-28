@@ -36,7 +36,34 @@ const contentSlot = source.match(/<template #content="\{open\}">([\s\S]*?)<\/tem
 const contentRootTag = contentSlot?.match(/<div\b[\s\S]*?>/)?.[0]
 
 assert.equal(
-  createHash("sha256").update(source).digest("hex"),
+  source.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "CatalogDatabaseTable has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  source.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CatalogDatabaseTable has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorSource = source
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
+  .replace(
+    '  <CadenceTableFrame id="catalog-databases-table">',
+    '  <table id="catalog-databases-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorSource,
+  /CadenceTableFrame/,
+  "CatalogDatabaseTable predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorSource).digest("hex"),
   "97cf3163799f89d80e6f254d5ae84e3ee0177d9992dcd89e9b1b3b12b7dca2fd",
 )
 assert.equal(menuTag, '<CadenceModalMenu side="bottom" align="end" :side-offset="4">')
@@ -87,8 +114,14 @@ const StatusBadge = defineComponent({
   props: ["status", "label"],
   setup: (props) => () => h("span", props.label),
 })
+const CadenceTableFrame = defineComponent({
+  inheritAttrs: false,
+  setup: (_, {attrs, slots}) => () =>
+    h("table", {...attrs, class: ["table", attrs.class]}, slots.default?.()),
+})
 const localRequire = (specifier) => {
   if (specifier === "./StatusBadge.vue") return StatusBadge
+  if (specifier === "./ui/components/CadenceTableFrame.vue") return CadenceTableFrame
   if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
   if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
   return integrationRequire(specifier)

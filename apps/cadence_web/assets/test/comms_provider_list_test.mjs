@@ -79,7 +79,34 @@ const assertBalancedTemplate = (source) => {
 }
 
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  childSource.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "CommsProviderTable.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CommsProviderTable.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChildSource = childSource
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
+  .replace(
+    '  <CadenceTableFrame id="mission-providers-table">',
+    '  <table id="mission-providers-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorChildSource,
+  /CadenceTableFrame/,
+  "CommsProviderTable.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChildSource).digest("hex"),
   "16515b3198ae4f3ebafe6ddce55d0e035a393bd029958576d3a5cb921cfda581",
   "CommsProviderTable.vue remains byte-for-byte immutable",
 )

@@ -40,7 +40,34 @@ const [component, missionTable, liveView, presentation, router, liveViewTest] =
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 
 assert.equal(
-  sha256(missionTable),
+  missionTable.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "MissionTable.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  missionTable.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "MissionTable.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorMissionTable = missionTable
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
+  .replace(
+    '  <CadenceTableFrame id="mission-list-table">',
+    '  <table id="mission-list-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorMissionTable,
+  /CadenceTableFrame/,
+  "MissionTable.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  sha256(predecessorMissionTable),
   "6589381280b0a77895a3a8beaaa6bbad01b247ce91f136624af7fefab64d7a6f",
   "MissionTable.vue remains byte-identical to the frozen source",
 )

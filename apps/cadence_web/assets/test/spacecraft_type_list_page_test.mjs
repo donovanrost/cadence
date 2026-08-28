@@ -98,7 +98,34 @@ const assertBalancedTemplate = (source, label) => {
 }
 
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  childSource.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "SpacecraftTypeList.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "SpacecraftTypeList.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChildSource = childSource
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n\n', "")
+  .replace(
+    '  <CadenceTableFrame id="spacecraft-profiles-table">',
+    '  <table id="spacecraft-profiles-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorChildSource,
+  /CadenceTableFrame/,
+  "SpacecraftTypeList.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChildSource).digest("hex"),
   "2537026b313d3dff90a164531a2c100846c0a181658505178b2248f01e32088d",
   "SpacecraftTypeList.vue remains byte-for-byte immutable",
 )
