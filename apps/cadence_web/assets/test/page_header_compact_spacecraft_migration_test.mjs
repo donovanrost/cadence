@@ -12,6 +12,7 @@ const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const componentImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const tableFrameImport =
   'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const frameOpening = '<CadencePageHeaderFrame variant="compact">'
@@ -48,6 +49,32 @@ const tableFrameBoundaries = Object.freeze({
     tableClosing: "        </table>",
   }),
 })
+const cadenceFieldBoundaries = Object.freeze({
+  "apps/cadence_web/assets/vue/SpacecraftNew.vue": Object.freeze([
+    Object.freeze({name: "display name", indent: "        ", fieldKey: "display_name"}),
+    Object.freeze({name: "SCID", indent: "        ", fieldKey: "scid"}),
+    Object.freeze({
+      name: "spacecraft type",
+      indent: "        ",
+      fieldKey: "spacecraft_type_id",
+      multilineLabel: true,
+    }),
+  ]),
+  "apps/cadence_web/assets/vue/SpacecraftEdit.vue": Object.freeze([
+    Object.freeze({name: "display name", indent: "        ", fieldKey: "display_name"}),
+    Object.freeze({name: "SCID", indent: "        ", fieldKey: "scid"}),
+    Object.freeze({
+      name: "spacecraft type",
+      indent: "        ",
+      fieldKey: "spacecraft_type_id",
+      multilineLabel: true,
+    }),
+  ]),
+  "apps/cadence_web/assets/vue/MissionNew.vue": Object.freeze([
+    Object.freeze({name: "display name", indent: "      ", fieldKey: "display_name"}),
+    Object.freeze({name: "slug", indent: "      ", fieldKey: "slug"}),
+  ]),
+})
 
 function occurrences(source, needle) {
   return source.split(needle).length - 1
@@ -55,6 +82,72 @@ function occurrences(source, needle) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function cadenceFieldOpening(boundary) {
+  const expression = `form.fields.${boundary.fieldKey}`
+  return `${boundary.indent}<CadenceField
+${boundary.indent}  :control-id="${expression}.id"
+${boundary.indent}  wrapper-class="fieldset mb-3"
+${boundary.indent}  :label="${expression}.label"
+${boundary.indent}  label-class="hud-label block mb-1.5"
+${boundary.indent}>`
+}
+
+function cadenceFieldLabel(boundary) {
+  const expression = `form.fields.${boundary.fieldKey}.label`
+  if (!boundary.multilineLabel) {
+    return `${boundary.indent}    <span class="hud-label block mb-1.5">{{ ${expression} }}</span>`
+  }
+
+  return `${boundary.indent}    <span class="hud-label block mb-1.5">
+${boundary.indent}      {{ ${expression} }}
+${boundary.indent}    </span>`
+}
+
+function peelCadenceField(source, caller) {
+  const boundaries = cadenceFieldBoundaries[caller]
+  if (!boundaries) return source
+
+  assert.equal(occurrences(source, cadenceFieldImport), 1, "expected exactly one field import")
+  assert.equal(
+    source.match(/^import CadenceField\b/gm)?.length,
+    1,
+    "expected exactly one field import declaration",
+  )
+  assert.equal(
+    source.match(/<CadenceField\b/g)?.length,
+    boundaries.length,
+    "expected the exact compatible field-frame inventory",
+  )
+
+  let peeled = source.replace(cadenceFieldImport, "")
+  for (const boundary of boundaries) {
+    const opening = cadenceFieldOpening(boundary)
+    assert.equal(occurrences(peeled, opening), 1, `expected one exact ${boundary.name} opening`)
+
+    const start = peeled.indexOf(opening)
+    const closing = `\n${boundary.indent}</CadenceField>`
+    const end = peeled.indexOf(closing, start + opening.length)
+    assert.notEqual(end, -1, `expected one exact ${boundary.name} closing`)
+
+    const callerOwnedControl = peeled.slice(start + opening.length, end)
+    const originalControl = callerOwnedControl.replaceAll(
+      `\n${boundary.indent}  `,
+      `\n${boundary.indent}    `,
+    )
+    const expression = `form.fields.${boundary.fieldKey}`
+    const original = `${boundary.indent}<div class="fieldset mb-3">
+${boundary.indent}  <label :for="${expression}.id">
+${cadenceFieldLabel(boundary)}${originalControl}
+${boundary.indent}  </label>
+${boundary.indent}</div>`
+
+    peeled = peeled.slice(0, start) + original + peeled.slice(end + closing.length)
+  }
+
+  assert.doesNotMatch(peeled, /CadenceField/)
+  return peeled
 }
 
 function peelTableFrame(source, caller) {
@@ -97,7 +190,7 @@ test("compact spacecraft and mission page-header migration is exact", async (t) 
       const importInsertion = caller.endsWith("/SpacecraftRouting.vue")
         ? `${componentImport}\n\n`
         : `${componentImport}\n`
-      const reconstructed = peelTableFrame(source, caller)
+      const reconstructed = peelTableFrame(peelCadenceField(source, caller), caller)
         .replace(importInsertion, "")
         .replace(frameOpening, nativeOpening)
         .replace(frameClosing, nativeClosing)
