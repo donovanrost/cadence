@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {onMounted, reactive, ref, watch} from "vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Organization = {
   organization_id: string
@@ -93,7 +94,7 @@ const issueServiceIdentity = () => {
 
 <template>
   <main id="admin-organization-detail" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <nav
         aria-label="Breadcrumb"
         class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
@@ -147,7 +148,7 @@ const issueServiceIdentity = () => {
           >Invite User</a>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid gap-6 xl:grid-cols-2">
       <section id="admin-organization-members" aria-labelledby="admin-organization-members-title">

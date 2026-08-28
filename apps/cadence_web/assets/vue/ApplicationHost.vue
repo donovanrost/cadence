@@ -5,6 +5,7 @@ import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vu
 import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
 import ApplicationStats from "./application_host/ApplicationStats.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import type {
   Diagnostics,
   Navigation,
@@ -442,7 +443,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
   <ApplicationNavigation v-if="navigation" :navigation="navigation" />
 
   <div v-if="declarative_surface" :id="declarative_surface.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <h1 class="text-2xl font-bold tracking-tight text-base-content">
         {{ declarative_surface.page.title }}
       </h1>
@@ -450,7 +451,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
         v-if="declarative_surface.page.subtitle"
         class="mt-1 max-w-3xl text-sm text-base-content/70"
       >{{ declarative_surface.page.subtitle }}</p>
-    </header>
+    </CadencePageHeaderFrame>
 
     <aside
       v-if="declarative_surface.action_feedback"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -72,7 +73,7 @@ const save = () => emit("save", {organization: values()})
 
 <template>
   <div id="admin-organization-new-page" class="space-y-6 max-w-xl">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -99,7 +100,7 @@ const save = () => emit("save", {organization: values()})
           {{ page.title }}
         </h1>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <form id="org-form" class="space-y-4" @submit.prevent="save">
       <div class="fieldset mb-3">

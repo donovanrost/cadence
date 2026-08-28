@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type FilterKey =
@@ -194,7 +195,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
     :data-runtime-decision-filter-affected-placement="filters.values.affected_placement_id"
     :data-runtime-selected-decision-state="summary.selected_decision_state"
   >
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -231,7 +232,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
           </button>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
       <div
