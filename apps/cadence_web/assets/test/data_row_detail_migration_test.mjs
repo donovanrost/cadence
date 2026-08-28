@@ -12,6 +12,7 @@ const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRo
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const tableFrameImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 
@@ -23,6 +24,53 @@ const peelCadencePageHeaderFrame = source =>
       '<header class="border-b border-primary/20 pb-4">',
     )
     .replace("</CadencePageHeaderFrame>", "</header>")
+
+const peelCadenceTableFrames = (source, name) => {
+  const boundaries =
+    name === "SpacecraftTypeShow.vue"
+      ? [
+          {
+            migrated:
+              '        <CadenceTableFrame id="spacecraft-profile-version-history" class="mt-3">',
+            base:
+              '        <table id="spacecraft-profile-version-history" class="table mt-3">',
+          },
+        ]
+      : []
+  const importCount = boundaries.length > 0 ? 1 : 0
+
+  assert.equal(
+    source.split(tableFrameImport).length - 1,
+    importCount,
+    `${name} has its expected CadenceTableFrame import count before peeling`,
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length ?? 0,
+    boundaries.length,
+    `${name} has its expected CadenceTableFrame opening count before peeling`,
+  )
+  assert.equal(
+    source.split("</CadenceTableFrame>").length - 1,
+    boundaries.length,
+    `${name} has its expected CadenceTableFrame closing count before peeling`,
+  )
+
+  let reconstructed = source.replace(tableFrameImport, "")
+
+  for (const tableBoundary of boundaries) {
+    assert.equal(
+      reconstructed.split(tableBoundary.migrated).length - 1,
+      1,
+      `${name} keeps each exact CadenceTableFrame opening before peeling`,
+    )
+    reconstructed = reconstructed.replace(tableBoundary.migrated, tableBoundary.base)
+  }
+
+  reconstructed = reconstructed.replaceAll("</CadenceTableFrame>", "</table>")
+  assert.doesNotMatch(reconstructed, /CadenceTableFrame/)
+
+  return reconstructed
+}
 
 const peelCadencePanels = (source, name) => {
   if (name !== "ProviderAccountShow.vue") return source
@@ -374,7 +422,10 @@ for (const file of files) {
   assert.equal(source.match(rawRowRoot)?.length ?? 0, 0, `${file.name} has no raw row roots`)
 
   let reconstructed = reconstructCards(
-    peelCadencePanels(peelCadencePageHeaderFrame(source), file.name),
+    peelCadencePanels(
+      peelCadencePageHeaderFrame(peelCadenceTableFrames(source, file.name)),
+      file.name,
+    ),
     file.cardCount,
     file.name,
   ).replace(dataRowImport, "")
@@ -396,7 +447,7 @@ const spacecraftType = await readFile(files[2].path, "utf8")
 const reconstructedSpacecraftType = files[2].boundaries.reduce(
   (source, rowBoundary) => reconstructBoundary(source, rowBoundary, files[2].name),
   reconstructCards(
-    peelCadencePageHeaderFrame(spacecraftType),
+    peelCadencePageHeaderFrame(peelCadenceTableFrames(spacecraftType, files[2].name)),
     files[2].cardCount,
     files[2].name,
   ).replace(dataRowImport, ""),

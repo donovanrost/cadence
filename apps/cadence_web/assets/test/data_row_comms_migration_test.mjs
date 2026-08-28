@@ -13,6 +13,7 @@ const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRo
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const tableFrameImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const rawReviewShell = `        <section
@@ -233,6 +234,55 @@ const replaceExactlyOnce = (source, current, replacement, label) => {
   assert.equal(occurrenceCount(source, current), 1, `${label} occurs exactly once`)
   return source.replace(current, replacement)
 }
+const tableFrameBoundaries = Object.freeze({
+  "CommsProviderShow.vue": Object.freeze([
+    boundary(
+      '            <CadenceTableFrame v-else :id="profiles.service.table_id">',
+      '            <table v-else :id="profiles.service.table_id" class="table">',
+    ),
+    boundary(
+      '            <CadenceTableFrame v-else :id="profiles.delivery.table_id">',
+      '            <table v-else :id="profiles.delivery.table_id" class="table">',
+    ),
+  ]),
+})
+
+const peelCadenceTableFrames = (source, filename) => {
+  const boundaries = tableFrameBoundaries[filename] ?? []
+  const importCount = boundaries.length > 0 ? 1 : 0
+
+  assert.equal(
+    occurrenceCount(source, tableFrameImport),
+    importCount,
+    `${filename} has its expected CadenceTableFrame import count before peeling`,
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length ?? 0,
+    boundaries.length,
+    `${filename} has its expected CadenceTableFrame opening count before peeling`,
+  )
+  assert.equal(
+    occurrenceCount(source, "</CadenceTableFrame>"),
+    boundaries.length,
+    `${filename} has its expected CadenceTableFrame closing count before peeling`,
+  )
+
+  let peeled = source.replace(tableFrameImport, "")
+
+  for (const [index, tableBoundary] of boundaries.entries()) {
+    peeled = replaceExactlyOnce(
+      peeled,
+      tableBoundary.migrated,
+      tableBoundary.base,
+      `${filename} table frame boundary ${index + 1}`,
+    )
+  }
+
+  peeled = peeled.replaceAll("</CadenceTableFrame>", "</table>")
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+
+  return peeled
+}
 const panelBoundaries = Object.freeze([
   Object.freeze({
     label: "service profile panel",
@@ -412,7 +462,7 @@ for (const contract of contracts) {
   )
 
   const predecessorSource = peelCadencePanels(
-    peelCadencePageHeaderFrame(source),
+    peelCadencePageHeaderFrame(peelCadenceTableFrames(source, contract.filename)),
     contract.filename,
   )
   let reconstructedBase = replaceExactlyOnce(
