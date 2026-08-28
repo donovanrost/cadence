@@ -16,6 +16,16 @@ const baseSha256 = "909f1e8f46beb46fc544f33e67a70901cdd3e5be8cebce9ce1dab9141769
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const adminHomePath = resolve(testDirectory, "../vue/AdminHome.vue")
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n\n'
+const pageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const peelPageHeaderFrame = (value) =>
+  value
+    .replace(pageHeaderFrameImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const source = await readFile(adminHomePath, "utf8")
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
@@ -90,7 +100,7 @@ assert.match(
   /<a\s+id="admin-home-create-organization-link"[\s\S]*?<section\s+class="card bg-base-200 border border-base-300 hud-corners hover-glow-cyan transition-glow hover:bg-\[linear-gradient\(var\(--state-hover\),var\(--state-hover\)\)\]"/,
 )
 
-let reconstructed = source.replace(cardImport, "")
+let reconstructed = peelPageHeaderFrame(source).replace(cardImport, "")
 
 for (const boundary of boundaries) {
   assert.equal(

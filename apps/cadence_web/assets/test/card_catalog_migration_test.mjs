@@ -7,6 +7,8 @@ import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const foundationBase = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const importLine = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const pageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const bodyClass = "card-body p-6"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const {compileTemplate, parse} = integrationRequire("@vue/compiler-sfc")
@@ -35,6 +37,14 @@ const migrations = Object.freeze([
 ])
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const peelPageHeaderFrame = (source) =>
+  source
+    .replace(pageHeaderFrameImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const reconstructBaseSource = (source, boundaryCount, file) => {
   assert.equal(
@@ -97,7 +107,11 @@ const sources = new Map()
 for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
   const source = await readFile(componentPath, "utf8")
-  const reconstructed = reconstructBaseSource(source, migration.boundaryCount, migration.file)
+  const reconstructed = reconstructBaseSource(
+    peelPageHeaderFrame(source),
+    migration.boundaryCount,
+    migration.file,
+  )
 
   assert.equal(
     sha256(reconstructed),
