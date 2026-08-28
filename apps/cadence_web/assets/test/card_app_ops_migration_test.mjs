@@ -15,6 +15,39 @@ const base = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
+const peelTableFrame = (source, name) => {
+  if (name !== "MissionOverview") return source
+
+  const frameOpening = '        <CadenceTableFrame v-else id="mission-spacecraft-readiness">'
+  const tableOpening = '        <table v-else id="mission-spacecraft-readiness" class="table">'
+  const frameClosing = "        </CadenceTableFrame>"
+  const tableClosing = "        </table>"
+
+  assert.equal(
+    source.split(tableFrameImport).length - 1,
+    1,
+    "MissionOverview imports CadenceTableFrame exactly once",
+  )
+  assert.equal(
+    count(source, /^import CadenceTableFrame\b/gm),
+    1,
+    "MissionOverview has exactly one CadenceTableFrame import declaration",
+  )
+  assert.equal(count(source, /<CadenceTableFrame\b/g), 1, "MissionOverview has one table frame")
+  assert.equal(count(source, /<\/CadenceTableFrame>/g), 1, "MissionOverview closes one table frame")
+  assert.equal(source.split(frameOpening).length - 1, 1, "MissionOverview table opening is exact")
+  assert.equal(source.split(frameClosing).length - 1, 1, "MissionOverview table closing is exact")
+
+  const peeled = source
+    .replace(tableFrameImport, "")
+    .replace(frameOpening, tableOpening)
+    .replace(frameClosing, tableClosing)
+
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
+}
 const peelPageHeaderFrame = (source) =>
   source
     .replace(pageHeaderFrameImport, "")
@@ -233,7 +266,10 @@ for (const entry of migrationLedger) {
     /<section\b[^>]*class="[^"]*\bcard\b[^"]*"[^>]*>\s*<div class="card-body p-6">/,
   )
 
-  let reconstructed = peelPageHeaderFrame(source).replace(entry.cardImport, "")
+  let reconstructed = peelPageHeaderFrame(peelTableFrame(source, entry.name)).replace(
+    entry.cardImport,
+    "",
+  )
 
   for (const boundary of entry.boundaries) {
     assert.equal(

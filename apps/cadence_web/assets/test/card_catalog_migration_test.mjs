@@ -9,6 +9,8 @@ const foundationBase = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const importLine = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const bodyClass = "card-body p-6"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const {compileTemplate, parse} = integrationRequire("@vue/compiler-sfc")
@@ -37,6 +39,65 @@ const migrations = Object.freeze([
 ])
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const occurrences = (source, value) => source.split(value).length - 1
+const tableFrameBoundaries = Object.freeze({
+  "CatalogArtifactShow.vue": Object.freeze({
+    openings: Object.freeze([
+      Object.freeze({
+        frame: '          <CadenceTableFrame id="catalog-artifact-runs-table">',
+        table: '          <table id="catalog-artifact-runs-table" class="table">',
+      }),
+    ]),
+    frameClosing: "          </CadenceTableFrame>",
+    tableClosing: "          </table>",
+  }),
+  "CatalogDatabaseShow.vue": Object.freeze({
+    openings: Object.freeze([
+      Object.freeze({
+        frame: '        <CadenceTableFrame v-else id="catalog-revisions-table">',
+        table: '        <table v-else id="catalog-revisions-table" class="table">',
+      }),
+      Object.freeze({
+        frame: '        <CadenceTableFrame v-else id="catalog-import-runs-table">',
+        table: '        <table v-else id="catalog-import-runs-table" class="table">',
+      }),
+    ]),
+    frameClosing: "        </CadenceTableFrame>",
+    tableClosing: "        </table>",
+  }),
+})
+const peelTableFrames = (source, file) => {
+  const boundary = tableFrameBoundaries[file]
+  if (!boundary) return source
+
+  assert.equal(occurrences(source, tableFrameImport), 1, `${file} imports CadenceTableFrame once`)
+  assert.equal(
+    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    1,
+    `${file} has exactly one CadenceTableFrame import declaration`,
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length,
+    boundary.openings.length,
+    `${file} has its exact table-frame opening count`,
+  )
+  assert.equal(
+    occurrences(source, boundary.frameClosing),
+    boundary.openings.length,
+    `${file} has its exact table-frame closing count`,
+  )
+
+  let peeled = source.replace(tableFrameImport, "")
+
+  for (const opening of boundary.openings) {
+    assert.equal(occurrences(peeled, opening.frame), 1, `${file} table-frame opening is exact`)
+    peeled = peeled.replace(opening.frame, opening.table)
+  }
+
+  peeled = peeled.replaceAll(boundary.frameClosing, boundary.tableClosing)
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
+}
 const peelPageHeaderFrame = (source) =>
   source
     .replace(pageHeaderFrameImport, "")
@@ -108,7 +169,7 @@ for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
   const source = await readFile(componentPath, "utf8")
   const reconstructed = reconstructBaseSource(
-    peelPageHeaderFrame(source),
+    peelPageHeaderFrame(peelTableFrames(source, migration.file)),
     migration.boundaryCount,
     migration.file,
   )

@@ -17,11 +17,50 @@ const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
+const peelTableFrame = (source, name) => {
+  if (name !== "SpacecraftTypeShow") return source
+
+  const frameOpening =
+    '        <CadenceTableFrame id="spacecraft-profile-version-history" class="mt-3">'
+  const tableOpening =
+    '        <table id="spacecraft-profile-version-history" class="table mt-3">'
+  const frameClosing = "        </CadenceTableFrame>"
+  const tableClosing = "        </table>"
+
+  assert.equal(
+    source.split(tableFrameImport).length - 1,
+    1,
+    "SpacecraftTypeShow imports CadenceTableFrame exactly once",
+  )
+  assert.equal(
+    count(source, /^import CadenceTableFrame\b/gm),
+    1,
+    "SpacecraftTypeShow has exactly one CadenceTableFrame import declaration",
+  )
+  assert.equal(count(source, /<CadenceTableFrame\b/g), 1, "SpacecraftTypeShow has one table frame")
+  assert.equal(
+    count(source, /<\/CadenceTableFrame>/g),
+    1,
+    "SpacecraftTypeShow closes one table frame",
+  )
+  assert.equal(source.split(frameOpening).length - 1, 1, "SpacecraftTypeShow table opening is exact")
+  assert.equal(source.split(frameClosing).length - 1, 1, "SpacecraftTypeShow table closing is exact")
+
+  const peeled = source
+    .replace(tableFrameImport, "")
+    .replace(frameOpening, tableOpening)
+    .replace(frameClosing, tableClosing)
+
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
+}
 const peelPageHeaderFrame = (source) =>
   source
     .replace(pageHeaderFrameImport, "")
@@ -249,7 +288,7 @@ for (const file of files) {
   )
 
   const reconstructed = reconstructBase(
-    peelCadencePanels(peelPageHeaderFrame(source), file.name),
+    peelCadencePanels(peelPageHeaderFrame(peelTableFrame(source, file.name)), file.name),
     file.boundaryCount,
     file.name,
   )
