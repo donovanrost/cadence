@@ -44,10 +44,16 @@ const pageHeaderFramePath = resolve(
   testDirectory,
   "../vue/ui/components/CadencePageHeaderFrame.vue",
 )
+const tableFramePath = resolve(
+  testDirectory,
+  "../vue/ui/components/CadenceTableFrame.vue",
+)
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const tableImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 
 const loadPageHeaderFrame = async () => {
   const source = await readFile(pageHeaderFramePath, "utf8")
@@ -56,6 +62,31 @@ const loadPageHeaderFrame = async () => {
 
   const compiled = compileScript(parsed.descriptor, {
     id: "direct-dropdown-page-header-frame",
+  })
+  const transformed = transformSync(compiled.content, {
+    format: "cjs",
+    loader: "ts",
+    platform: "node",
+    target: "node24",
+  })
+  const loadedModule = {exports: {}}
+
+  new Function("require", "module", "exports", transformed.code)(
+    integrationRequire,
+    loadedModule,
+    loadedModule.exports,
+  )
+
+  return loadedModule.exports.default
+}
+
+const loadTableFrame = async () => {
+  const source = await readFile(tableFramePath, "utf8")
+  const parsed = parse(source, {filename: tableFramePath})
+  if (parsed.errors.length > 0) throw parsed.errors[0]
+
+  const compiled = compileScript(parsed.descriptor, {
+    id: "direct-dropdown-table-frame",
   })
   const transformed = transformSync(compiled.content, {
     format: "cjs",
@@ -113,10 +144,12 @@ const [
   {component: CadenceModalMenu},
   {component: CadenceMenuItem},
   CadencePageHeaderFrame,
+  CadenceTableFrame,
 ] = await Promise.all([
   loadSfc(modalMenuPath),
   loadSfc(menuItemPath),
   loadPageHeaderFrame(),
+  loadTableFrame(),
 ])
 
 const StatusBadge = defineComponent({
@@ -131,6 +164,20 @@ const definitions = [
     subject: "row",
     menuItemCount: 2,
     cardBoundaryCount: 0,
+    tableOpeningRewrites: [
+      {
+        current: '          <CadenceTableFrame id="spacecraft-vehicles-table">',
+        predecessor: '          <table id="spacecraft-vehicles-table" class="table">',
+      },
+      {
+        current:
+          '          <CadenceTableFrame id="spacecraft-profiles-preview-table">',
+        predecessor:
+          '          <table id="spacecraft-profiles-preview-table" class="table">',
+      },
+    ],
+    tableClosing: "          </CadenceTableFrame>",
+    nativeTableClosing: "          </table>",
     wrapperClass: "",
     sha256: "b322bffd1e6082c1d7f18a942c3a5879e2751beceb2e3d0f41175d2a11e25669",
   },
@@ -140,6 +187,15 @@ const definitions = [
     subject: "run",
     menuItemCount: 1,
     cardBoundaryCount: 2,
+    tableOpeningRewrites: [
+      {
+        current: '          <CadenceTableFrame id="catalog-artifact-runs-table">',
+        predecessor:
+          '          <table id="catalog-artifact-runs-table" class="table">',
+      },
+    ],
+    tableClosing: "          </CadenceTableFrame>",
+    nativeTableClosing: "          </table>",
     wrapperClass: "cadence-overlay",
     sha256: "76dd24a2f09333ef871304a3d8de09530f099b6c683df822f1cf2040e227a6fa",
   },
@@ -149,6 +205,16 @@ const definitions = [
     subject: "row",
     menuItemCount: 2,
     cardBoundaryCount: 2,
+    tableOpeningRewrites: [
+      {
+        current:
+          '        <CadenceTableFrame v-else id="mission-spacecraft-readiness">',
+        predecessor:
+          '        <table v-else id="mission-spacecraft-readiness" class="table">',
+      },
+    ],
+    tableClosing: "        </CadenceTableFrame>",
+    nativeTableClosing: "        </table>",
     cardOpeningRewrites: [
       {
         current: `    <CadenceCard
@@ -342,6 +408,49 @@ const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
   return reconstructedSource
 }
 
+const reconstructPreTableSource = (source, definition) => {
+  const expectedFrameCount = definition.tableOpeningRewrites.length
+
+  assert.equal(
+    source.split(tableImport).length - 1,
+    1,
+    `${definition.name} has exactly one CadenceTableFrame import to strip`,
+  )
+  assert.equal(
+    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    1,
+    `${definition.name} has exactly one CadenceTableFrame import declaration`,
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length,
+    expectedFrameCount,
+    `${definition.name} has the exact CadenceTableFrame opening count`,
+  )
+  assert.equal(
+    source.split(definition.tableClosing).length - 1,
+    expectedFrameCount,
+    `${definition.name} has the exact CadenceTableFrame closing count`,
+  )
+
+  let reconstructedSource = source.replace(tableImport, "")
+
+  for (const [index, rewrite] of definition.tableOpeningRewrites.entries()) {
+    assert.equal(
+      reconstructedSource.split(rewrite.current).length - 1,
+      1,
+      `${definition.name} CadenceTableFrame boundary ${index + 1} is exact and unique`,
+    )
+    reconstructedSource = reconstructedSource.replace(rewrite.current, rewrite.predecessor)
+  }
+
+  reconstructedSource = reconstructedSource
+    .split(definition.tableClosing)
+    .join(definition.nativeTableClosing)
+
+  assert.doesNotMatch(reconstructedSource, /CadenceTableFrame/)
+  return reconstructedSource
+}
+
 const reconstructMissionOverviewPrePageHeaderSource = source =>
   source
     .replace(pageHeaderImport, "")
@@ -367,10 +476,11 @@ const compileSfc = async (definition) => {
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
   assert.ok(parsed.descriptor.scriptSetup, `${definition.name} keeps its setup script`)
   assert.ok(parsed.descriptor.template, `${definition.name} keeps its template`)
+  const preTableSource = reconstructPreTableSource(source, definition)
   const predecessorSource =
     definition.name === "MissionOverview"
-      ? reconstructMissionOverviewPrePageHeaderSource(source)
-      : source
+      ? reconstructMissionOverviewPrePageHeaderSource(preTableSource)
+      : preTableSource
   assert.equal(createHash("sha256").update(predecessorSource).digest("hex"), definition.sha256)
   assert.match(source, /import CadenceModalMenu from "\.\/ui\/reka\/CadenceModalMenu\.vue"/)
   assert.match(source, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
@@ -410,6 +520,7 @@ const compileSfc = async (definition) => {
     if (specifier === "./ui/components/CadencePageHeaderFrame.vue") {
       return CadencePageHeaderFrame
     }
+    if (specifier === "./ui/components/CadenceTableFrame.vue") return CadenceTableFrame
     if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
     if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
     return integrationRequire(specifier)

@@ -39,7 +39,25 @@ const profileCallerTestPath = resolve(
   "../../test/cadence_web/live/spacecraft_profile_live_test.exs",
 )
 const routerPath = resolve(__dirname, "../../lib/cadence_web/router.ex")
+const tableImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+
+const spacecraftTableMigrations = [
+  {
+    componentOpen: '          <CadenceTableFrame id="spacecraft-vehicles-table">',
+    tableOpen: '          <table id="spacecraft-vehicles-table" class="table">',
+  },
+  {
+    componentOpen:
+      '          <CadenceTableFrame id="spacecraft-profiles-preview-table">',
+    tableOpen:
+      '          <table id="spacecraft-profiles-preview-table" class="table">',
+  },
+]
+
+const tableComponentClose = "          </CadenceTableFrame>"
+const nativeTableClose = "          </table>"
 
 const spacecraftPanelMigrations = [
   {
@@ -140,6 +158,42 @@ const replacePanelBoundaryAfter = (source, before, after, start, label) => {
   }
 }
 
+const reconstructSpacecraftListPreTableSource = (source) => {
+  assert.equal(
+    source.split(tableImport).length - 1,
+    1,
+    "SpacecraftList has exactly one CadenceTableFrame import to strip",
+  )
+  assert.equal(
+    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    1,
+    "SpacecraftList has exactly one CadenceTableFrame import declaration",
+  )
+  assert.equal(source.match(/<CadenceTableFrame\b/g)?.length, 2)
+  assert.equal(source.split(tableComponentClose).length - 1, 2)
+
+  let reconstructedSource = source.replace(tableImport, "")
+
+  for (const [index, migration] of spacecraftTableMigrations.entries()) {
+    assert.equal(
+      reconstructedSource.split(migration.componentOpen).length - 1,
+      1,
+      `SpacecraftList CadenceTableFrame boundary ${index + 1} is exact and unique`,
+    )
+    reconstructedSource = reconstructedSource.replace(
+      migration.componentOpen,
+      migration.tableOpen,
+    )
+  }
+
+  reconstructedSource = reconstructedSource
+    .split(tableComponentClose)
+    .join(nativeTableClose)
+
+  assert.doesNotMatch(reconstructedSource, /CadenceTableFrame/)
+  return reconstructedSource
+}
+
 const reconstructSpacecraftListPrePanelSource = (source) => {
   assert.equal(
     source.split(panelImport).length - 1,
@@ -191,7 +245,9 @@ const reconstructSpacecraftListPrePanelSource = (source) => {
   return reconstructedSource
 }
 
-const childSource = reconstructSpacecraftListPrePanelSource(currentChildSource)
+const childSource = reconstructSpacecraftListPrePanelSource(
+  reconstructSpacecraftListPreTableSource(currentChildSource),
+)
 
 assert.equal(
   createHash("sha256").update(childSource).digest("hex"),
