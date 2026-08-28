@@ -57,7 +57,34 @@ const [
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 
 assert.equal(
-  sha256(immutableChild),
+  immutableChild.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "AdminOrganizationList.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  immutableChild.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "AdminOrganizationList.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorImmutableChild = immutableChild
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n\n', "")
+  .replace(
+    '  <CadenceTableFrame id="admin-orgs-table">',
+    '  <table id="admin-orgs-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorImmutableChild,
+  /CadenceTableFrame/,
+  "AdminOrganizationList.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  sha256(predecessorImmutableChild),
   "a40163d97f403117e58ccc4e2338c76d1e1c5c5d96cac636e4651d30cf3ebcaf",
   "AdminOrganizationList.vue remains byte-identical to the frozen source",
 )

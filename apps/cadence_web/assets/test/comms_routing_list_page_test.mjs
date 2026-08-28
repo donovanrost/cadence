@@ -99,7 +99,34 @@ const assertBalancedTemplate = (source, label) => {
 }
 
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  childSource.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
+  )?.length,
+  1,
+  "CommsRoutingList.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CommsRoutingList.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChildSource = childSource
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n\n', "")
+  .replace(
+    '  <CadenceTableFrame id="routing-rules-table">',
+    '  <table id="routing-rules-table" class="table">',
+  )
+  .replace("  </CadenceTableFrame>", "  </table>")
+
+assert.doesNotMatch(
+  predecessorChildSource,
+  /CadenceTableFrame/,
+  "CommsRoutingList.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChildSource).digest("hex"),
   "ad0e9cddc6ae751f00f92eac67cd81a6412d75c9d443a21054802ce57eb7bc09",
   "CommsRoutingList.vue remains byte-for-byte immutable",
 )

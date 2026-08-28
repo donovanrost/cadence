@@ -124,7 +124,34 @@ const assertInOrder = (source, contracts, label) => {
 }
 
 assert.equal(
-  createHash("sha256").update(childSource).digest("hex"),
+  childSource.match(
+    /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue";$/gm,
+  )?.length,
+  1,
+  "CommsTransportList.vue has one CadenceTableFrame import before compatibility peeling",
+)
+assert.equal(
+  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  2,
+  "CommsTransportList.vue has one CadenceTableFrame boundary before compatibility peeling",
+)
+
+const predecessorChildSource = childSource
+  .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";\n', "")
+  .replace(
+    '    <CadenceTableFrame id="transports-table">',
+    '    <table id="transports-table" class="table">',
+  )
+  .replace("    </CadenceTableFrame>", "    </table>")
+
+assert.doesNotMatch(
+  predecessorChildSource,
+  /CadenceTableFrame/,
+  "CommsTransportList.vue predecessor has no residual CadenceTableFrame shell",
+)
+
+assert.equal(
+  createHash("sha256").update(predecessorChildSource).digest("hex"),
   "7a9ad282915fd8aa8e9d3ed1f2663a9b7170ce4e89cc2c96ff29acf260c019c3",
   "CommsTransportList.vue remains byte-for-byte immutable",
 )
