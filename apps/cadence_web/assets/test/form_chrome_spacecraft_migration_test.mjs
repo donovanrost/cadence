@@ -16,6 +16,7 @@ const {parse} = integrationRequire("@vue/compiler-sfc")
 const formChromeImports =
   'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"\n' +
   'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"\n'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const reconstructPageHeaderSource = (source) =>
@@ -34,6 +35,96 @@ const actionOpen =
   '      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
 const originalActionOpen =
   '      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
+
+const singleLineLabel = (indent, expression) =>
+  `${indent}    <span class="hud-label block mb-1.5">{{ ${expression} }}</span>`
+
+const multilineLabel = (indent, expression) =>
+  `${indent}    <span class="hud-label block mb-1.5">
+${indent}      {{ ${expression} }}
+${indent}    </span>`
+
+const cadenceField = (name, indent, fieldKey, labelSource) => ({
+  name,
+  indent,
+  controlId: `form.fields.${fieldKey}.id`,
+  labelExpression: `form.fields.${fieldKey}.label`,
+  labelSource,
+})
+
+const newCadenceFields = Object.freeze([
+  cadenceField(
+    "display name",
+    "        ",
+    "display_name",
+    singleLineLabel("        ", "form.fields.display_name.label"),
+  ),
+  cadenceField(
+    "SCID",
+    "        ",
+    "scid",
+    singleLineLabel("        ", "form.fields.scid.label"),
+  ),
+  cadenceField(
+    "spacecraft type",
+    "        ",
+    "spacecraft_type_id",
+    multilineLabel("        ", "form.fields.spacecraft_type_id.label"),
+  ),
+])
+
+const migratedCadenceFieldOpening = (entry) =>
+  `${entry.indent}<CadenceField
+${entry.indent}  :control-id="${entry.controlId}"
+${entry.indent}  wrapper-class="fieldset mb-3"
+${entry.indent}  :label="${entry.labelExpression}"
+${entry.indent}  label-class="hud-label block mb-1.5"
+${entry.indent}>`
+
+const peelCadenceField = (source, entry, featureName) => {
+  const opening = migratedCadenceFieldOpening(entry)
+  assert.equal(
+    occurrences(source, opening),
+    1,
+    `${featureName} inventories the ${entry.name} CadenceField opening exactly once`,
+  )
+
+  const start = source.indexOf(opening)
+  const close = `\n${entry.indent}</CadenceField>`
+  const end = source.indexOf(close, start + opening.length)
+  assert.notEqual(end, -1, `${featureName} inventories the ${entry.name} closing exactly once`)
+
+  const callerOwnedControl = source.slice(start + opening.length, end)
+  const originalControl = callerOwnedControl.replaceAll(
+    `\n${entry.indent}  `,
+    `\n${entry.indent}    `,
+  )
+  const original = `${entry.indent}<div class="fieldset mb-3">
+${entry.indent}  <label :for="${entry.controlId}">
+${entry.labelSource}${originalControl}
+${entry.indent}  </label>
+${entry.indent}</div>`
+
+  return source.slice(0, start) + original + source.slice(end + close.length)
+}
+
+const peelNewCadenceFieldSource = (source, featureName) => {
+  if (featureName !== "SpacecraftNew" && featureName !== "SpacecraftEdit") return source
+
+  assert.equal(
+    occurrences(source, cadenceFieldImport),
+    1,
+    `${featureName} owns the later CadenceField import exactly once`,
+  )
+
+  let peeled = source.replace(cadenceFieldImport, "")
+  for (const entry of newCadenceFields) {
+    peeled = peelCadenceField(peeled, entry, featureName)
+  }
+
+  assert.doesNotMatch(peeled, /CadenceField/, `${featureName} removes only the later field layer`)
+  return peeled
+}
 
 const singleLineHeader = (indent, expression, dividerClass) =>
   `${indent}<div class="flex items-center gap-3">
@@ -240,7 +331,9 @@ assert.equal(
 
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, fixture.path)
-  const source = reconstructPageHeaderSource(await readFile(componentPath, "utf8"))
+  const source = reconstructPageHeaderSource(
+    peelNewCadenceFieldSource(await readFile(componentPath, "utf8"), fixture.name),
+  )
   const parsed = parse(source, {filename: componentPath})
 
   assert.deepEqual(parsed.errors, [], `${fixture.name} parses with the pinned Vue compiler`)

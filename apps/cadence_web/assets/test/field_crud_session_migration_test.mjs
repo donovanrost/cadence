@@ -18,15 +18,6 @@ const repositoryDirectory = resolve(testDirectory, "../../../..")
 const vueDirectory = resolve(testDirectory, "../vue")
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 
-assert.equal(
-  execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: repositoryDirectory,
-    encoding: "utf8",
-  }).trim(),
-  baseIdentity,
-  "the reconstruction oracle stays pinned to the requested HEAD",
-)
-
 const occurrences = (source, fragment) => source.split(fragment).length - 1
 const digest = (source) => createHash("sha256").update(source).digest("hex")
 
@@ -211,12 +202,12 @@ let frameCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(vueDirectory, fixture.filename)
   const source = await readFile(componentPath, "utf8")
-  const headSource = execFileSync("git", ["show", `HEAD:${fixture.repositoryPath}`], {
+  const baseSource = execFileSync("git", ["show", `${baseIdentity}:${fixture.repositoryPath}`], {
     cwd: repositoryDirectory,
     encoding: "utf8",
   })
 
-  assert.equal(digest(headSource), fixture.headSha256, `${fixture.filename} HEAD hash is frozen`)
+  assert.equal(digest(baseSource), fixture.headSha256, `${fixture.filename} base hash is frozen`)
   assert.equal(
     occurrences(source, cadenceFieldImport),
     1,
@@ -255,13 +246,13 @@ for (const fixture of fixtures) {
 
   assert.equal(
     reconstructedSource,
-    headSource,
-    `${fixture.filename} reconstructs its HEAD source byte-for-byte`,
+    baseSource,
+    `${fixture.filename} reconstructs its immutable base source byte-for-byte`,
   )
   assert.equal(
     digest(reconstructedSource),
     fixture.headSha256,
-    `${fixture.filename} reconstruction preserves its immutable HEAD SHA-256`,
+    `${fixture.filename} reconstruction preserves its immutable base SHA-256`,
   )
 
   importCount += occurrences(source, cadenceFieldImport)
