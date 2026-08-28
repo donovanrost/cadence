@@ -12,6 +12,8 @@ const importLine =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const tableFrameImport =
   'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
+const validationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const frameOpening = '<CadencePageHeaderFrame variant="compact">'
 const frameClosing = "</CadencePageHeaderFrame>"
 const nativeOpening = '<header class="border-b border-primary/20 pb-4">'
@@ -66,6 +68,28 @@ function occurrences(source, value) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function peelValidationMessage(source, caller) {
+  if (caller !== "apps/cadence_web/assets/vue/ApplicationHost.vue") return source
+
+  return source
+    .replace(validationMessageImport, "")
+    .replace(
+      `                <CadenceValidationMessage
+                  v-for="error in field.errors"
+                  :key="error"
+                >`,
+      `                <p
+                  v-for="error in field.errors"
+                  :key="error"
+                  class="mt-1.5 text-sm text-error"
+                >`
+    )
+    .replace(
+      "                >{{ error }}</CadenceValidationMessage>",
+      "                >{{ error }}</p>"
+    )
 }
 
 function peelTableFrames(source, caller) {
@@ -133,7 +157,7 @@ for (const caller of callers) {
     `${caller} must have no residual native compact page header`
   )
 
-  const reconstructed = peelTableFrames(source, caller)
+  const reconstructed = peelTableFrames(peelValidationMessage(source, caller), caller)
     .replace(importLine, "")
     .replace(frameOpening, nativeOpening)
     .replace(frameClosing, nativeClosing)

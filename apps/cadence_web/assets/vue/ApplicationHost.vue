@@ -6,6 +6,7 @@ import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
 import ApplicationStats from "./application_host/ApplicationStats.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import type {
   Diagnostics,
   Navigation,
@@ -601,11 +602,10 @@ const packetRailClasses: Record<PacketGroupState, string> = {
                   {{ field.reference.result_summary }}
                 </p>
 
-                <p
+                <CadenceValidationMessage
                   v-for="error in field.errors"
                   :key="error"
-                  class="mt-1.5 text-sm text-error"
-                >{{ error }}</p>
+                >{{ error }}</CadenceValidationMessage>
               </div>
               <p
                 v-if="field.help"
