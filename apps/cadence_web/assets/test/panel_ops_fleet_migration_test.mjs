@@ -10,6 +10,7 @@ assert.equal(process.versions.node, "24.16.0", "migration contracts use pinned N
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
@@ -19,6 +20,28 @@ const cadenceTableFrameImport =
   'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const opsPageHeaderOpen =
   '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
+
+const cadenceFieldsByFile = new Map([
+  [
+    "OpsFleetPlanningPolicy.vue",
+    [
+      {expression: "policy_form.fields.max_contacts", indent: 16},
+      {expression: "policy_form.fields.max_estimated_cost_micros", indent: 16},
+      {expression: "policy_form.fields.currency", indent: 16},
+      {expression: "policy_form.fields.critical_contact_reserve", indent: 16},
+      {expression: "policy_form.fields.automation_mode", indent: 16},
+      {expression: "approval_form.reason", indent: 10},
+      {expression: "grant_form.fields.service_identity_id", indent: 12},
+      {expression: "grant_form.fields.maximum_horizon_hours", indent: 14},
+      {expression: "grant_form.fields.maximum_contacts", indent: 14},
+      {expression: "grant_form.fields.maximum_execution_concurrency", indent: 14},
+      {expression: "grant_form.fields.valid_days", indent: 14},
+      {expression: "grant_form.fields.approval_reason", indent: 12},
+      {expression: "revocation_form.fields.automation_grant_id", indent: 12},
+      {expression: "revocation_form.fields.reason", indent: 12}
+    ]
+  ]
+])
 
 const files = [
   {
@@ -248,6 +271,100 @@ const replaceOnce = (source, before, after, label) => {
   return source.replace(before, after)
 }
 
+const peelCadenceFields = (source, name) => {
+  const fields = cadenceFieldsByFile.get(name) ?? []
+  const expectedImportCount = fields.length > 0 ? 1 : 0
+
+  assert.equal(
+    countExact(source, cadenceFieldImport),
+    expectedImportCount,
+    `${name} has its expected CadenceField import count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "<CadenceField\n"),
+    fields.length,
+    `${name} has its exact CadenceField opening count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "</CadenceField>"),
+    fields.length,
+    `${name} has its exact CadenceField closing count before peeling`,
+  )
+
+  let predecessorCompatibleSource = source.replace(cadenceFieldImport, "")
+
+  for (const field of fields) {
+    const spaces = " ".repeat(field.indent)
+    const migratedOpening = `${spaces}<CadenceField
+${spaces}  :control-id="${field.expression}.id"
+${spaces}  wrapper-class="fieldset mb-3"
+${spaces}  :label="${field.expression}.label"
+${spaces}  label-class="hud-label block mb-1.5"
+${spaces}>`
+    const migratedClosing = `\n${spaces}</CadenceField>`
+
+    assert.equal(
+      countExact(predecessorCompatibleSource, migratedOpening),
+      1,
+      `${name}: ${field.expression} has one exact CadenceField opening`,
+    )
+
+    const start = predecessorCompatibleSource.indexOf(migratedOpening)
+    const closeStart = predecessorCompatibleSource.indexOf(
+      migratedClosing,
+      start + migratedOpening.length,
+    )
+    assert.notEqual(
+      closeStart,
+      -1,
+      `${name}: ${field.expression} has one exact CadenceField closing`,
+    )
+
+    let controls = predecessorCompatibleSource.slice(
+      start + migratedOpening.length,
+      closeStart,
+    )
+    const errorsOpen = `\n${spaces}  <template #errors>`
+    const errorsClose = `\n${spaces}  </template>`
+    const errorsStart = controls.lastIndexOf(errorsOpen)
+
+    assert.notEqual(
+      errorsStart,
+      -1,
+      `${name}: ${field.expression} keeps its exact error slot`,
+    )
+    assert.ok(
+      controls.endsWith(errorsClose),
+      `${name}: ${field.expression} error slot closes last`,
+    )
+
+    const errors = controls
+      .slice(errorsStart + errorsOpen.length, -errorsClose.length)
+      .replaceAll(`\n${spaces}    `, `\n${spaces}  `)
+    controls = controls.slice(0, errorsStart)
+
+    const shiftedControls = controls.replaceAll(`\n${spaces}  `, `\n${spaces}    `)
+    const original = `${spaces}<div class="fieldset mb-3">
+${spaces}  <label :for="${field.expression}.id">
+${spaces}    <span class="hud-label block mb-1.5">{{ ${field.expression}.label }}</span>${shiftedControls}
+${spaces}  </label>${errors}
+${spaces}</div>`
+
+    predecessorCompatibleSource =
+      predecessorCompatibleSource.slice(0, start) +
+      original +
+      predecessorCompatibleSource.slice(closeStart + migratedClosing.length)
+  }
+
+  assert.equal(
+    countExact(predecessorCompatibleSource, "CadenceField"),
+    0,
+    `${name} predecessor source has no residual CadenceField`,
+  )
+
+  return predecessorCompatibleSource
+}
+
 const peelTableFrames = (source, name) => {
   const boundaries =
     name === "SpacecraftList.vue"
@@ -350,8 +467,9 @@ for (const file of files) {
   assert.equal(countExact(source, "#header"), file.panels, `${file.name} header slot count`)
   assert.equal(file.migrations.length, file.panels, `${file.name} frozen migration ledger count`)
 
+  const fieldCompatibleSource = peelCadenceFields(source, file.name)
   const predecessorCompatibleSource = peelTableFrames(
-    file.opsPageHeader ? peelPageHeaderFrame(source, file.name) : source,
+    file.opsPageHeader ? peelPageHeaderFrame(fieldCompatibleSource, file.name) : fieldCompatibleSource,
     file.name,
   )
 

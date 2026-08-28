@@ -28,12 +28,78 @@ const replaceAt = (value, start, before, after, label) => {
 }
 
 const importLine = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
 const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
 const opsPageHeaderOpen =
   '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
+
+const cadenceFields = [
+  {expression: "repair_form.fields.horizon_start", indent: 14},
+  {expression: "repair_form.fields.horizon_end", indent: 14}
+]
+
+const peelCadenceFields = value => {
+  assert.equal(count(value, cadenceFieldImport), 1, `${relativePath}: CadenceField import count`)
+  assert.equal(count(value, "<CadenceField\n"), 2, `${relativePath}: CadenceField open count`)
+  assert.equal(count(value, "</CadenceField>"), 2, `${relativePath}: CadenceField close count`)
+
+  let predecessorCompatibleSource = value.replace(cadenceFieldImport, "")
+
+  for (const field of cadenceFields) {
+    const spaces = " ".repeat(field.indent)
+    const migratedOpening = `${spaces}<CadenceField
+${spaces}  :control-id="${field.expression}.id"
+${spaces}  wrapper-class="fieldset mb-3"
+${spaces}  :label="${field.expression}.label"
+${spaces}  label-class="hud-label block mb-1.5"
+${spaces}>`
+    const migratedClosing = `\n${spaces}</CadenceField>`
+
+    assert.equal(
+      count(predecessorCompatibleSource, migratedOpening),
+      1,
+      `${relativePath}: ${field.expression} exact CadenceField opening`
+    )
+
+    const start = predecessorCompatibleSource.indexOf(migratedOpening)
+    const closeStart = predecessorCompatibleSource.indexOf(
+      migratedClosing,
+      start + migratedOpening.length
+    )
+    assert.notEqual(
+      closeStart,
+      -1,
+      `${relativePath}: ${field.expression} exact CadenceField closing`
+    )
+
+    const controls = predecessorCompatibleSource
+      .slice(start + migratedOpening.length, closeStart)
+      .replaceAll(`\n${spaces}  `, `\n${spaces}    `)
+    const original = `${spaces}<div class="fieldset mb-3">
+${spaces}  <label :for="${field.expression}.id">
+${spaces}    <span class="hud-label block mb-1.5">
+${spaces}      {{ ${field.expression}.label }}
+${spaces}    </span>${controls}
+${spaces}  </label>
+${spaces}</div>`
+
+    predecessorCompatibleSource =
+      predecessorCompatibleSource.slice(0, start) +
+      original +
+      predecessorCompatibleSource.slice(closeStart + migratedClosing.length)
+  }
+
+  assert.equal(
+    count(predecessorCompatibleSource, "CadenceField"),
+    0,
+    `${relativePath}: predecessor source has no residual CadenceField`
+  )
+
+  return predecessorCompatibleSource
+}
 
 const peelPageHeaderFrame = (value) => {
   assert.equal(count(value, cadencePageHeaderFrameImport), 1, `${relativePath}: page header import count`)
@@ -170,7 +236,7 @@ const rawSectionHeader = `  <section
   >
     <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">`
 
-const predecessorCompatibleSource = peelPageHeaderFrame(source)
+const predecessorCompatibleSource = peelPageHeaderFrame(peelCadenceFields(source))
 
 assert.equal(
   count(predecessorCompatibleSource, rawSectionHeader),
