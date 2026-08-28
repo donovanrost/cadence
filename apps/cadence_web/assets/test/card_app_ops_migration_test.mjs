@@ -17,6 +17,29 @@ const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const tableFrameImport =
   'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
+const validationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const peelValidationMessage = (source, name) => {
+  if (name !== "ApplicationHost") return source
+
+  return source
+    .replace(validationMessageImport, "")
+    .replace(
+      `                <CadenceValidationMessage
+                  v-for="error in field.errors"
+                  :key="error"
+                >`,
+      `                <p
+                  v-for="error in field.errors"
+                  :key="error"
+                  class="mt-1.5 text-sm text-error"
+                >`,
+    )
+    .replace(
+      "                >{{ error }}</CadenceValidationMessage>",
+      "                >{{ error }}</p>",
+    )
+}
 const peelTableFrame = (source, name) => {
   if (name !== "MissionOverview") return source
 
@@ -266,10 +289,9 @@ for (const entry of migrationLedger) {
     /<section\b[^>]*class="[^"]*\bcard\b[^"]*"[^>]*>\s*<div class="card-body p-6">/,
   )
 
-  let reconstructed = peelPageHeaderFrame(peelTableFrame(source, entry.name)).replace(
-    entry.cardImport,
-    "",
-  )
+  let reconstructed = peelPageHeaderFrame(
+    peelTableFrame(peelValidationMessage(source, entry.name), entry.name),
+  ).replace(entry.cardImport, "")
 
   for (const boundary of entry.boundaries) {
     assert.equal(

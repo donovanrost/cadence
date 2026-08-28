@@ -211,6 +211,7 @@ const stats = await loadSfc(paths.stats, {
   "../ui/components/CadenceCard.vue": cadenceCard,
 })
 const diagnostics = await loadSfc(paths.diagnostics, {"../StatusBadge.vue": statusBadge})
+const cadenceValidationMessage = {default: {name: "CadenceValidationMessage"}}
 const applicationHost = await loadSfc(paths.applicationHost, {
   "./StatusBadge.vue": statusBadge,
   "./application_host/ApplicationDiagnostics.vue": diagnostics,
@@ -218,6 +219,7 @@ const applicationHost = await loadSfc(paths.applicationHost, {
   "./application_host/ApplicationStats.vue": stats,
   "./ui/components/CadenceCard.vue": cadenceCard,
   "./ui/components/CadencePageHeaderFrame.vue": cadencePageHeaderFrame,
+  "./ui/components/CadenceValidationMessage.vue": cadenceValidationMessage,
 })
 
 assert.deepEqual(Object.keys(navigation.default.props), ["navigation"])
