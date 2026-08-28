@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 
 type CloneSource = {
@@ -170,35 +171,39 @@ const save = () => emit("save", payload())
         class="mt-7 space-y-6 border border-base-300 bg-base-200/20 p-5"
         @submit.prevent="save"
       >
-        <div class="fieldset mb-3">
-          <label :for="form.name.id">
-            <span class="hud-label block mb-1.5">{{ form.name.label }}</span>
-            <input
-              :id="form.name.id"
-              v-model="dashboard.name"
-              :name="form.name.name"
-              :type="form.name.type"
-              :required="form.name.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.name.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.name.id"
+            v-model="dashboard.name"
+            :name="form.name.name"
+            :type="form.name.type"
+            :required="form.name.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.description.id">
-            <span class="hud-label block mb-1.5">{{ form.description.label }}</span>
-            <input
-              :id="form.description.id"
-              v-model="dashboard.description"
-              :name="form.description.name"
-              :type="form.description.type"
-              :required="form.description.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.description.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.description.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.description.id"
+            v-model="dashboard.description"
+            :name="form.description.name"
+            :type="form.description.type"
+            :required="form.description.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
         <div v-if="form.document_json !== null" class="fieldset mb-3">
           <label :for="form.document_json.id">
