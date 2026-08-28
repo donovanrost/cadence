@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+
 type RoutingRuleRow = {
   id: string
   display_name: string
@@ -14,7 +16,7 @@ defineProps<{rows: RoutingRuleRow[]}>()
 </script>
 
 <template>
-  <table id="routing-rules-table" class="table">
+  <CadenceTableFrame id="routing-rules-table">
     <thead>
       <tr>
         <th class="hud-label">Rule</th>
@@ -47,5 +49,5 @@ defineProps<{rows: RoutingRuleRow[]}>()
         <td class="font-mono text-sm uppercase text-base-content/70">{{ row.role }}</td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>

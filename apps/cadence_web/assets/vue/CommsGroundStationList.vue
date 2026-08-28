@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed} from "vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type GroundStationRow = {
   id: string
@@ -55,7 +56,7 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
       </form>
     </div>
 
-    <table id="ground-stations-table" class="table">
+    <CadenceTableFrame id="ground-stations-table">
       <thead>
         <tr>
           <th
@@ -103,7 +104,7 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
           <td class="font-mono text-sm text-base-content/70">{{ row.ground_station_id }}</td>
         </tr>
       </tbody>
-    </table>
+    </CadenceTableFrame>
 
     <p
       v-if="total_count === 0"

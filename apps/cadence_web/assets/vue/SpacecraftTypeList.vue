@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+
 type SpacecraftProfileRow = {
   id: string
   display_name: string
@@ -13,7 +15,7 @@ defineProps<{rows: SpacecraftProfileRow[]}>()
 </script>
 
 <template>
-  <table id="spacecraft-profiles-table" class="table">
+  <CadenceTableFrame id="spacecraft-profiles-table">
     <thead>
       <tr>
         <th class="hud-label">Name</th>
@@ -48,5 +50,5 @@ defineProps<{rows: SpacecraftProfileRow[]}>()
         <td class="text-sm text-base-content/70">{{ row.applications }}</td>
       </tr>
     </tbody>
-  </table>
+  </CadenceTableFrame>
 </template>
