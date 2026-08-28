@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {onMounted, reactive, ref, watch} from "vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type Organization = {
   organization_id: string
@@ -166,7 +167,7 @@ const issueServiceIdentity = () => {
         </div>
 
         <div v-else class="overflow-x-auto border border-base-300 bg-base-200">
-          <table id="org-members-table" class="table">
+          <CadenceTableFrame id="org-members-table">
             <thead>
               <tr>
                 <th class="hud-label">User</th>
@@ -187,7 +188,7 @@ const issueServiceIdentity = () => {
                 </td>
               </tr>
             </tbody>
-          </table>
+          </CadenceTableFrame>
         </div>
       </section>
 
@@ -260,7 +261,7 @@ const issueServiceIdentity = () => {
       </div>
 
       <div class="overflow-x-auto border border-base-300 bg-base-200">
-        <table id="service-identities-table" class="table">
+        <CadenceTableFrame id="service-identities-table">
           <thead>
             <tr>
               <th class="hud-label">Name</th>
@@ -287,7 +288,7 @@ const issueServiceIdentity = () => {
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
       </div>
 
       <form

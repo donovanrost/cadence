@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -114,7 +115,7 @@ const emit = defineEmits<{
         class="card border border-base-300 bg-base-200"
       >
         <div class="card-body p-0">
-          <table id="catalog-artifact-runs-table" class="table">
+          <CadenceTableFrame id="catalog-artifact-runs-table">
             <thead>
               <tr>
                 <th class="hud-label">Status</th>
@@ -165,7 +166,7 @@ const emit = defineEmits<{
                 </td>
               </tr>
             </tbody>
-          </table>
+          </CadenceTableFrame>
         </div>
       </section>
     </section>
