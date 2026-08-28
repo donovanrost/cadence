@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import {computed, reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -256,85 +257,93 @@ const activeError = computed(() =>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.outcome.copy }}</p>
           </template>
           <div class="grid gap-x-5 p-5 md:grid-cols-2">
-            <div class="fieldset mb-3">
-              <label :for="form.fields.spacecraft_id.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.spacecraft_id.label }}</span>
-                <select
-                  :id="form.fields.spacecraft_id.id"
-                  v-model="contactRequirement.spacecraft_id"
-                  :name="form.fields.spacecraft_id.name"
-                  :required="form.fields.spacecraft_id.required"
-                  class="w-full select"
-                  @change="validate"
-                >
-                  <option
-                    v-for="option in form.fields.spacecraft_id.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.spacecraft_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.spacecraft_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.spacecraft_id.id"
+                v-model="contactRequirement.spacecraft_id"
+                :name="form.fields.spacecraft_id.name"
+                :required="form.fields.spacecraft_id.required"
+                class="w-full select"
+                @change="validate"
+              >
+                <option
+                  v-for="option in form.fields.spacecraft_id.options ?? []"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.contact_intent.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.contact_intent.label }}</span>
-                <select
-                  :id="form.fields.contact_intent.id"
-                  v-model="contactRequirement.contact_intent"
-                  :name="form.fields.contact_intent.name"
-                  :required="form.fields.contact_intent.required"
-                  class="w-full select"
-                  @change="validate"
-                >
-                  <option
-                    v-for="option in form.fields.contact_intent.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.contact_intent.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.contact_intent.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.contact_intent.id"
+                v-model="contactRequirement.contact_intent"
+                :name="form.fields.contact_intent.name"
+                :required="form.fields.contact_intent.required"
+                class="w-full select"
+                @change="validate"
+              >
+                <option
+                  v-for="option in form.fields.contact_intent.options ?? []"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.success_measure.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.success_measure.label }}</span>
-                <select
-                  :id="form.fields.success_measure.id"
-                  v-model="contactRequirement.success_measure"
-                  :name="form.fields.success_measure.name"
-                  :required="form.fields.success_measure.required"
-                  class="w-full select"
-                  @change="validate"
-                >
-                  <option
-                    v-for="option in form.fields.success_measure.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.success_measure.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.success_measure.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.success_measure.id"
+                v-model="contactRequirement.success_measure"
+                :name="form.fields.success_measure.name"
+                :required="form.fields.success_measure.required"
+                class="w-full select"
+                @change="validate"
+              >
+                <option
+                  v-for="option in form.fields.success_measure.options ?? []"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.priority.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.priority.label }}</span>
-                <select
-                  :id="form.fields.priority.id"
-                  v-model="contactRequirement.priority"
-                  :name="form.fields.priority.name"
-                  :required="form.fields.priority.required"
-                  class="w-full select"
-                  @change="validate"
-                >
-                  <option
-                    v-for="option in form.fields.priority.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.priority.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.priority.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="form.fields.priority.id"
+                v-model="contactRequirement.priority"
+                :name="form.fields.priority.name"
+                :required="form.fields.priority.required"
+                class="w-full select"
+                @change="validate"
+              >
+                <option
+                  v-for="option in form.fields.priority.options ?? []"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
           </div>
         </CadencePanel>
 
@@ -344,133 +353,139 @@ const activeError = computed(() =>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.horizon.copy }}</p>
           </template>
           <div class="grid gap-x-5 p-5 md:grid-cols-2">
-            <div class="fieldset mb-3">
-              <label :for="form.fields.earliest_start.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.earliest_start.label }}</span>
-                <input
-                  :id="form.fields.earliest_start.id"
-                  v-model="contactRequirement.earliest_start"
-                  :name="form.fields.earliest_start.name"
-                  :type="form.fields.earliest_start.type"
-                  :required="form.fields.earliest_start.required"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.earliest_start.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.earliest_start.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.earliest_start.id"
+                v-model="contactRequirement.earliest_start"
+                :name="form.fields.earliest_start.name"
+                :type="form.fields.earliest_start.type"
+                :required="form.fields.earliest_start.required"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.latest_end.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.latest_end.label }}</span>
-                <input
-                  :id="form.fields.latest_end.id"
-                  v-model="contactRequirement.latest_end"
-                  :name="form.fields.latest_end.name"
-                  :type="form.fields.latest_end.type"
-                  :required="form.fields.latest_end.required"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.latest_end.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.latest_end.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.latest_end.id"
+                v-model="contactRequirement.latest_end"
+                :name="form.fields.latest_end.name"
+                :type="form.fields.latest_end.type"
+                :required="form.fields.latest_end.required"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
             <div
               v-if="progressiveVisible(journey.progressive.minimum_data_volume)"
               :id="journey.progressive.minimum_data_volume.id"
             >
-              <div class="fieldset mb-3">
-                <label :for="form.fields.minimum_data_volume_bytes.id">
-                  <span class="hud-label block mb-1.5">
-                    {{ form.fields.minimum_data_volume_bytes.label }}
-                  </span>
-                  <input
-                    :id="form.fields.minimum_data_volume_bytes.id"
-                    v-model="contactRequirement.minimum_data_volume_bytes"
-                    :name="form.fields.minimum_data_volume_bytes.name"
-                    :type="form.fields.minimum_data_volume_bytes.type"
-                    :required="form.fields.minimum_data_volume_bytes.required"
-                    :min="form.fields.minimum_data_volume_bytes.min"
-                    class="w-full input"
-                    @input="validate"
-                  >
-                </label>
-              </div>
+              <CadenceField
+                :control-id="form.fields.minimum_data_volume_bytes.id"
+                wrapper-class="fieldset mb-3"
+                :label="form.fields.minimum_data_volume_bytes.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="form.fields.minimum_data_volume_bytes.id"
+                  v-model="contactRequirement.minimum_data_volume_bytes"
+                  :name="form.fields.minimum_data_volume_bytes.name"
+                  :type="form.fields.minimum_data_volume_bytes.type"
+                  :required="form.fields.minimum_data_volume_bytes.required"
+                  :min="form.fields.minimum_data_volume_bytes.min"
+                  class="w-full input"
+                  @input="validate"
+                >
+              </CadenceField>
             </div>
 
             <div
               v-if="progressiveVisible(journey.progressive.minimum_duration)"
               :id="journey.progressive.minimum_duration.id"
             >
-              <div class="fieldset mb-3">
-                <label :for="form.fields.minimum_duration_seconds.id">
-                  <span class="hud-label block mb-1.5">
-                    {{ form.fields.minimum_duration_seconds.label }}
-                  </span>
-                  <input
-                    :id="form.fields.minimum_duration_seconds.id"
-                    v-model="contactRequirement.minimum_duration_seconds"
-                    :name="form.fields.minimum_duration_seconds.name"
-                    :type="form.fields.minimum_duration_seconds.type"
-                    :required="form.fields.minimum_duration_seconds.required"
-                    :min="form.fields.minimum_duration_seconds.min"
-                    class="w-full input"
-                    @input="validate"
-                  >
-                </label>
-              </div>
-            </div>
-
-            <div class="fieldset mb-3">
-              <label :for="form.fields.preferred_duration_seconds.id">
-                <span class="hud-label block mb-1.5">
-                  {{ form.fields.preferred_duration_seconds.label }}
-                </span>
+              <CadenceField
+                :control-id="form.fields.minimum_duration_seconds.id"
+                wrapper-class="fieldset mb-3"
+                :label="form.fields.minimum_duration_seconds.label"
+                label-class="hud-label block mb-1.5"
+              >
                 <input
-                  :id="form.fields.preferred_duration_seconds.id"
-                  v-model="contactRequirement.preferred_duration_seconds"
-                  :name="form.fields.preferred_duration_seconds.name"
-                  :type="form.fields.preferred_duration_seconds.type"
-                  :required="form.fields.preferred_duration_seconds.required"
-                  :min="form.fields.preferred_duration_seconds.min"
+                  :id="form.fields.minimum_duration_seconds.id"
+                  v-model="contactRequirement.minimum_duration_seconds"
+                  :name="form.fields.minimum_duration_seconds.name"
+                  :type="form.fields.minimum_duration_seconds.type"
+                  :required="form.fields.minimum_duration_seconds.required"
+                  :min="form.fields.minimum_duration_seconds.min"
                   class="w-full input"
                   @input="validate"
                 >
-              </label>
+              </CadenceField>
             </div>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.contact_count.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.contact_count.label }}</span>
-                <input
-                  :id="form.fields.contact_count.id"
-                  v-model="contactRequirement.contact_count"
-                  :name="form.fields.contact_count.name"
-                  :type="form.fields.contact_count.type"
-                  :required="form.fields.contact_count.required"
-                  :min="form.fields.contact_count.min"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.preferred_duration_seconds.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.preferred_duration_seconds.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.preferred_duration_seconds.id"
+                v-model="contactRequirement.preferred_duration_seconds"
+                :name="form.fields.preferred_duration_seconds.name"
+                :type="form.fields.preferred_duration_seconds.type"
+                :required="form.fields.preferred_duration_seconds.required"
+                :min="form.fields.preferred_duration_seconds.min"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.minimum_separation_seconds.id">
-                <span class="hud-label block mb-1.5">
-                  {{ form.fields.minimum_separation_seconds.label }}
-                </span>
-                <input
-                  :id="form.fields.minimum_separation_seconds.id"
-                  v-model="contactRequirement.minimum_separation_seconds"
-                  :name="form.fields.minimum_separation_seconds.name"
-                  :type="form.fields.minimum_separation_seconds.type"
-                  :required="form.fields.minimum_separation_seconds.required"
-                  :min="form.fields.minimum_separation_seconds.min"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.contact_count.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.contact_count.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.contact_count.id"
+                v-model="contactRequirement.contact_count"
+                :name="form.fields.contact_count.name"
+                :type="form.fields.contact_count.type"
+                :required="form.fields.contact_count.required"
+                :min="form.fields.contact_count.min"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
+
+            <CadenceField
+              :control-id="form.fields.minimum_separation_seconds.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.minimum_separation_seconds.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.minimum_separation_seconds.id"
+                v-model="contactRequirement.minimum_separation_seconds"
+                :name="form.fields.minimum_separation_seconds.name"
+                :type="form.fields.minimum_separation_seconds.type"
+                :required="form.fields.minimum_separation_seconds.required"
+                :min="form.fields.minimum_separation_seconds.min"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
           </div>
         </CadencePanel>
 
@@ -480,69 +495,77 @@ const activeError = computed(() =>
             <span class="ml-2 font-normal text-base-content/45">{{ journey.advanced.copy }}</span>
           </summary>
           <div class="grid gap-x-5 border-t border-base-300 p-5 md:grid-cols-2">
-            <div class="fieldset mb-3">
-              <label :for="form.fields.allowed_providers.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.allowed_providers.label }}</span>
-                <input
-                  :id="form.fields.allowed_providers.id"
-                  v-model="contactRequirement.allowed_providers"
-                  :name="form.fields.allowed_providers.name"
-                  :type="form.fields.allowed_providers.type"
-                  :required="form.fields.allowed_providers.required"
-                  :placeholder="form.fields.allowed_providers.placeholder"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.allowed_providers.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.allowed_providers.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.allowed_providers.id"
+                v-model="contactRequirement.allowed_providers"
+                :name="form.fields.allowed_providers.name"
+                :type="form.fields.allowed_providers.type"
+                :required="form.fields.allowed_providers.required"
+                :placeholder="form.fields.allowed_providers.placeholder"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.excluded_providers.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.excluded_providers.label }}</span>
-                <input
-                  :id="form.fields.excluded_providers.id"
-                  v-model="contactRequirement.excluded_providers"
-                  :name="form.fields.excluded_providers.name"
-                  :type="form.fields.excluded_providers.type"
-                  :required="form.fields.excluded_providers.required"
-                  :placeholder="form.fields.excluded_providers.placeholder"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.excluded_providers.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.excluded_providers.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.excluded_providers.id"
+                v-model="contactRequirement.excluded_providers"
+                :name="form.fields.excluded_providers.name"
+                :type="form.fields.excluded_providers.type"
+                :required="form.fields.excluded_providers.required"
+                :placeholder="form.fields.excluded_providers.placeholder"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.allowed_stations.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.allowed_stations.label }}</span>
-                <input
-                  :id="form.fields.allowed_stations.id"
-                  v-model="contactRequirement.allowed_stations"
-                  :name="form.fields.allowed_stations.name"
-                  :type="form.fields.allowed_stations.type"
-                  :required="form.fields.allowed_stations.required"
-                  :placeholder="form.fields.allowed_stations.placeholder"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.allowed_stations.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.allowed_stations.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.allowed_stations.id"
+                v-model="contactRequirement.allowed_stations"
+                :name="form.fields.allowed_stations.name"
+                :type="form.fields.allowed_stations.type"
+                :required="form.fields.allowed_stations.required"
+                :placeholder="form.fields.allowed_stations.placeholder"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.excluded_stations.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.excluded_stations.label }}</span>
-                <input
-                  :id="form.fields.excluded_stations.id"
-                  v-model="contactRequirement.excluded_stations"
-                  :name="form.fields.excluded_stations.name"
-                  :type="form.fields.excluded_stations.type"
-                  :required="form.fields.excluded_stations.required"
-                  :placeholder="form.fields.excluded_stations.placeholder"
-                  class="w-full input"
-                  @input="validate"
-                >
-              </label>
-            </div>
+            <CadenceField
+              :control-id="form.fields.excluded_stations.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.excluded_stations.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.excluded_stations.id"
+                v-model="contactRequirement.excluded_stations"
+                :name="form.fields.excluded_stations.name"
+                :type="form.fields.excluded_stations.type"
+                :required="form.fields.excluded_stations.required"
+                :placeholder="form.fields.excluded_stations.placeholder"
+                class="w-full input"
+                @input="validate"
+              >
+            </CadenceField>
           </div>
         </details>
 
@@ -550,21 +573,23 @@ const activeError = computed(() =>
           :id="journey.rationale.id"
           class="border border-base-300 bg-base-200/20 p-5"
         >
-          <div class="fieldset mb-3">
-            <label :for="form.fields.rationale.id">
-              <span class="hud-label block mb-1.5">{{ form.fields.rationale.label }}</span>
-              <textarea
-                :id="form.fields.rationale.id"
-                v-model="contactRequirement.rationale"
-                :name="form.fields.rationale.name"
-                :required="form.fields.rationale.required"
-                :placeholder="form.fields.rationale.placeholder"
-                :maxlength="form.fields.rationale.maxlength"
-                class="w-full textarea"
-                @input="validate"
-              ></textarea>
-            </label>
-          </div>
+          <CadenceField
+            :control-id="form.fields.rationale.id"
+            wrapper-class="fieldset mb-3"
+            :label="form.fields.rationale.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <textarea
+              :id="form.fields.rationale.id"
+              v-model="contactRequirement.rationale"
+              :name="form.fields.rationale.name"
+              :required="form.fields.rationale.required"
+              :placeholder="form.fields.rationale.placeholder"
+              :maxlength="form.fields.rationale.maxlength"
+              class="w-full textarea"
+              @input="validate"
+            ></textarea>
+          </CadenceField>
           <p v-if="activeError" :id="activeError.id" class="mt-2 text-sm text-error">
             {{ activeError.message }}
           </p>
