@@ -58,8 +58,26 @@ const inclusiveSourceSlice = (sourceText, start, end, label) => {
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const opsPageHeaderOpen = '    <CadencePageHeaderFrame variant="ops">'
+const opsPageHeaderBaseOpen =
+  '    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
+const opsPageHeaderClose = "    </CadencePageHeaderFrame>"
+const opsPageHeaderBaseClose = "    </header>"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const occurrences = (sourceText, needle) => sourceText.split(needle).length - 1
+
+const reconstructPageHeaderBase = (migratedSource) => {
+  assert.equal(occurrences(migratedSource, pageHeaderImport), 1)
+  assert.equal(occurrences(migratedSource, opsPageHeaderOpen), 1)
+  assert.equal(occurrences(migratedSource, opsPageHeaderClose), 1)
+
+  return migratedSource
+    .replace(pageHeaderImport, "")
+    .replace(opsPageHeaderOpen, opsPageHeaderBaseOpen)
+    .replace(opsPageHeaderClose, opsPageHeaderBaseClose)
+}
 
 const reconstructPanelBase = (migratedSource, expectedPanels) => {
   let sourceText = migratedSource.replace(cadencePanelImport, "")
@@ -177,7 +195,7 @@ assert.doesNotMatch(toggleMarkup, /@click|@update:model-value|v-model|\bas-child
 
 // Normalize only the reviewed import and toggle subtree back to the pre-migration marker.
 // Its hash proves the rest of this large component is byte-for-byte unchanged.
-const normalizedComponentScaffold = reconstructPanelBase(source, 4)
+const normalizedComponentScaffold = reconstructPanelBase(reconstructPageHeaderBase(source), 4)
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n\n', "")
   .replace(toggleMarkup, "              <!-- opportunity-toggle -->")
 
