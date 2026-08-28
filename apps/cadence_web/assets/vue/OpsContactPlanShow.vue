@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {ref, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -221,7 +222,7 @@ const executePlan = () => emit("execute-plan", {})
 
 <template>
   <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[96rem]">
         <a
           :href="page.back_action.href"
@@ -257,7 +258,7 @@ const executePlan = () => emit("execute-plan", {})
           </button>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div
       class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.7fr)] lg:p-7"

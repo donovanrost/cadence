@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 type JourneyStep = {
   number: string
   label: string
@@ -59,7 +60,7 @@ defineProps<{
 
 <template>
   <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[96rem] flex-col gap-5 md:flex-row md:items-end md:justify-between">
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
@@ -81,7 +82,7 @@ defineProps<{
           {{ page.header.create_action.label }}
         </a>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
       <div class="mb-5 grid border border-base-300 bg-base-200/25 sm:grid-cols-4">

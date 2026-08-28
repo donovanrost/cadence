@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type Action = {
@@ -93,7 +94,7 @@ defineProps<{
 
 <template>
   <main :id="record.id" class="min-h-0 flex-1 overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[90rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="min-w-0">
           <a
@@ -140,7 +141,7 @@ defineProps<{
           </a>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7">
       <div class="min-w-0 space-y-5">
