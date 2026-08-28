@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -131,7 +132,7 @@ const save = () => emit("save", {ground_station: values()})
 
 <template>
   <div :id="page.id" class="space-y-6 max-w-2xl" :data-mode="mode">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -161,7 +162,7 @@ const save = () => emit("save", {ground_station: values()})
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <section :id="form.sections.identity.id" class="space-y-4">

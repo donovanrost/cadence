@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
@@ -336,7 +337,7 @@ const statusClass = (status: "ready" | "attention") =>
 
 <template>
   <div :id="page.id" class="mx-auto max-w-4xl space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -366,7 +367,7 @@ const statusClass = (status: "ready" | "attention") =>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <section :id="form.sections.identity.id" class="space-y-4">

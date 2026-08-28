@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
@@ -53,7 +54,7 @@ defineProps<{validation: Validation}>()
 
 <template>
   <div :id="validation.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -92,7 +93,7 @@ defineProps<{validation: Validation}>()
           <StatusBadge :status="validation.status.tone" :label="validation.status.label" />
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CadenceCard
       v-if="validation.empty"
