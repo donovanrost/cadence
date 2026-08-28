@@ -13,6 +13,16 @@ assert.equal(
 
 const base = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const pageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const peelPageHeaderFrame = (source) =>
+  source
+    .replace(pageHeaderFrameImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 
@@ -223,7 +233,7 @@ for (const entry of migrationLedger) {
     /<section\b[^>]*class="[^"]*\bcard\b[^"]*"[^>]*>\s*<div class="card-body p-6">/,
   )
 
-  let reconstructed = source.replace(entry.cardImport, "")
+  let reconstructed = peelPageHeaderFrame(source).replace(entry.cardImport, "")
 
   for (const boundary of entry.boundaries) {
     assert.equal(

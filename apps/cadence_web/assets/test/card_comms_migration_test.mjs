@@ -15,6 +15,8 @@ const base = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const pageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
@@ -25,6 +27,14 @@ const replaceExactlyOnce = (value, current, replacement, label) => {
   return value.replace(current, replacement)
 }
 const lines = (...sourceLines) => sourceLines.join("\n")
+const peelPageHeaderFrame = (source) =>
+  source
+    .replace(pageHeaderFrameImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const panelBoundaries = Object.freeze([
   Object.freeze({
     label: "service profile panel",
@@ -215,7 +225,10 @@ for (const contract of contracts) {
     `${contract.filename} has no conventional raw immediate p-6 shell`,
   )
 
-  const predecessorSource = peelCadencePanels(source, contract.filename)
+  const predecessorSource = peelCadencePanels(
+    peelPageHeaderFrame(source),
+    contract.filename,
+  )
   let openingCount = 0
   let reconstructed = predecessorSource.replace(cardImport, "")
 

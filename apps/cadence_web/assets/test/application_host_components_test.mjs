@@ -53,6 +53,10 @@ const paths = {
   statusBadge: resolve(testDirectory, "../vue/StatusBadge.vue"),
   cadenceBadge: resolve(testDirectory, "../vue/ui/components/CadenceBadge.vue"),
   cadenceCard: resolve(testDirectory, "../vue/ui/components/CadenceCard.vue"),
+  cadencePageHeaderFrame: resolve(
+    testDirectory,
+    "../vue/ui/components/CadencePageHeaderFrame.vue",
+  ),
 }
 const [
   applicationHostSource,
@@ -197,6 +201,7 @@ const loadSfc = async (componentPath, localModules = {}) => {
 
 const cadenceBadge = await loadSfc(paths.cadenceBadge)
 const cadenceCard = await loadSfc(paths.cadenceCard)
+const cadencePageHeaderFrame = await loadSfc(paths.cadencePageHeaderFrame)
 const statusBadge = await loadSfc(paths.statusBadge, {
   "./ui/components/CadenceBadge.vue": cadenceBadge,
 })
@@ -212,6 +217,7 @@ const applicationHost = await loadSfc(paths.applicationHost, {
   "./application_host/ApplicationNavigation.vue": navigation,
   "./application_host/ApplicationStats.vue": stats,
   "./ui/components/CadenceCard.vue": cadenceCard,
+  "./ui/components/CadencePageHeaderFrame.vue": cadencePageHeaderFrame,
 })
 
 assert.deepEqual(Object.keys(navigation.default.props), ["navigation"])
