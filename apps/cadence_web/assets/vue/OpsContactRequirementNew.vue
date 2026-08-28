@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {computed, reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -225,7 +226,7 @@ const activeError = computed(() =>
 
 <template>
   <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-5xl">
         <a
           :id="actions.back.id"
@@ -245,7 +246,7 @@ const activeError = computed(() =>
           {{ page.description }}
         </p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto max-w-5xl p-5 lg:p-7">
       <form :id="form.id" class="space-y-5" @submit.prevent="save">

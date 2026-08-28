@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -182,7 +183,7 @@ const fieldClass = (field: FormField) => [
 
 <template>
   <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[100rem]">
         <a
           :href="page.back.href"
@@ -201,7 +202,7 @@ const fieldClass = (field: FormField) => [
           <p class="mt-2 max-w-3xl text-sm text-base-content/60">{{ page.header.copy }}</p>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7">
       <CadencePanel class="min-w-0 border border-base-300 bg-base-200/15" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
