@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
+
 type Attributes = Record<string, string>
 
 type CompactInputPresentation = {
@@ -61,13 +63,12 @@ defineProps<{presentation: Presentation}>()
         </span>
         <input v-bind="presentation.reason.input_attrs">
       </label>
-      <p
+      <CadenceValidationMessage
         v-for="(error, index) in presentation.reason.errors"
         :key="`reason-error-${index}`"
-        class="mt-1.5 text-sm text-error"
       >
         {{ error }}
-      </p>
+      </CadenceValidationMessage>
     </div>
 
     <div v-bind="presentation.source_fields.attrs">
@@ -80,13 +81,12 @@ defineProps<{presentation: Presentation}>()
           <span v-bind="field.label.attrs">{{ field.label.text }}</span>
           <input v-bind="field.input_attrs">
         </label>
-        <p
+        <CadenceValidationMessage
           v-for="(error, index) in field.errors"
           :key="`${field.input_attrs.id}-error-${index}`"
-          class="mt-1.5 text-sm text-error"
         >
           {{ error }}
-        </p>
+        </CadenceValidationMessage>
       </div>
     </div>
 
