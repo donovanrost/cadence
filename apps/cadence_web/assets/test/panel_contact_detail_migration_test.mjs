@@ -11,6 +11,7 @@ const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/b
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
 const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
 const opsPageHeaderOpen =
@@ -23,6 +24,7 @@ assert.equal(process.versions.node, "24.16.0")
 const files = [
   {
     path: "vue/OpsContactDetail.vue",
+    fieldFrames: 3,
     panelCount: 5,
     baseSha256: "c9bb6fb1cf04d664600ad9965e8927c00da816d38774a7df62faa1bd58e049d4",
     importInsertion: `${cadencePanelImport}\n`,
@@ -73,6 +75,7 @@ const files = [
   },
   {
     path: "vue/OpsContactPlanShow.vue",
+    fieldFrames: 3,
     panelCount: 4,
     baseSha256: "4705f28ee4c3bc0a590e6db181c37b6e780192d7d37c5d0bb9b986faee2dd9e5",
     importInsertion: `${cadencePanelImport}\n`,
@@ -116,6 +119,7 @@ const files = [
   },
   {
     path: "vue/OpsContactRecord.vue",
+    fieldFrames: 0,
     panelCount: 4,
     baseSha256: "27ba5df055cf368437c556338ccc89d8982f8a34896c0702cfd00eba50c5c00a",
     importInsertion: `${cadencePanelImport}\n\n`,
@@ -159,6 +163,60 @@ const files = [
 
 const countLiteral = (source, literal) => source.split(literal).length - 1
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const multilineLabels = new Set([
+  "change.decision_forms.approval.reason.label",
+  "change.decision_forms.rejection.reason.label",
+  "change.decision_forms.acknowledgment.reason.label",
+  "admin_controls.approve_form.field.label",
+  "admin_controls.rejection.form.field.label",
+  "form.fields.minimum_data_volume_bytes.label",
+  "form.fields.minimum_duration_seconds.label",
+  "form.fields.preferred_duration_seconds.label",
+  "form.fields.minimum_separation_seconds.label",
+])
+const cadenceFieldFrame =
+  /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
+
+const peelCadenceFields = (source, path, expectedFrames) => {
+  const expectedImports = expectedFrames === 0 ? 0 : 1
+  assert.equal(countLiteral(source, cadenceFieldImport), expectedImports, `${path}: field import count`)
+  assert.equal(countLiteral(source, "<CadenceField\n"), expectedFrames, `${path}: field open count`)
+  assert.equal(countLiteral(source, "</CadenceField>"), expectedFrames, `${path}: field close count`)
+
+  let reconstructedFrames = 0
+  const reconstructed = source
+    .replace(cadenceFieldImport, "")
+    .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
+      let control = body
+      let originalErrors = ""
+      const errorsOpen = `\n${indent}  <template #errors>\n`
+      const errorsStart = body.indexOf(errorsOpen)
+
+      if (errorsStart !== -1) {
+        const errorsClose = `\n${indent}  </template>`
+        assert.ok(body.endsWith(errorsClose), `${path}: errors slot closes exactly`)
+        control = body.slice(0, errorsStart)
+        const errorSource = body.slice(errorsStart + errorsOpen.length, -errorsClose.length)
+        assert.ok(errorSource.startsWith(`${indent}    `), `${path}: error stays caller-owned`)
+        originalErrors = `\n${errorSource.slice(2)}`
+      }
+
+      const originalControl = control
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n")
+      const originalSpan = multilineLabels.has(label)
+        ? `${indent}    <span class="hud-label block mb-1.5">\n${indent}      {{ ${label} }}\n${indent}    </span>`
+        : `${indent}    <span class="hud-label block mb-1.5">{{ ${label} }}</span>`
+
+      reconstructedFrames += 1
+      return `${indent}<div class="fieldset mb-3">\n${indent}  <label :for="${controlId}">\n${originalSpan}\n${originalControl}\n${indent}  </label>${originalErrors}\n${indent}</div>`
+    })
+
+  assert.equal(reconstructedFrames, expectedFrames, `${path}: reconstructs every field frame`)
+  assert.equal(countLiteral(reconstructed, "CadenceField"), 0, `${path}: no residual CadenceField`)
+  return reconstructed
+}
 
 const peelPageHeaderFrame = (source, path) => {
   assert.equal(countLiteral(source, cadencePageHeaderFrameImport), 1, `${path}: page header import count`)
@@ -230,7 +288,8 @@ for (const file of files) {
     )
   }
 
-  const predecessorCompatibleSource = peelPageHeaderFrame(source, file.path)
+  const fieldCompatibleSource = peelCadenceFields(source, file.path, file.fieldFrames)
+  const predecessorCompatibleSource = peelPageHeaderFrame(fieldCompatibleSource, file.path)
 
   for (const rawVariant of file.rawVariants) {
     assert.equal(
