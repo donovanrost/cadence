@@ -24,6 +24,20 @@ const [providerSource, routingSource] = await Promise.all([
   readFile(providerPath, "utf8"),
   readFile(routingPath, "utf8"),
 ])
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (source) =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 for (const source of [providerSource, routingSource]) {
   assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
@@ -148,7 +162,7 @@ const providerHeaders = [
 
 const reconstructRoutingSource = (source) => {
   let reconstructedFields = 0
-  const reconstructed = source
+  const reconstructed = reconstructPageHeaderSource(source)
     .replace('import CadenceField from "./ui/components/CadenceField.vue"\n', "")
     .replace(
       /        <CadenceField\n          :control-id="form\.fields\.(\w+)\.id"\n          wrapper-class="fieldset mb-3"\n          :label="form\.fields\.\1\.label"\n          label-class="hud-label block mb-1\.5"\n        >\n([\s\S]*?)\n        <\/CadenceField>/g,
@@ -169,7 +183,7 @@ ${indentControl(control)}
 
 const reconstructProviderSource = (source) => {
   let reconstructedFields = 0
-  let reconstructed = source.replace(
+  let reconstructed = reconstructPageHeaderSource(source).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
   )

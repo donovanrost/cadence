@@ -13,6 +13,20 @@ assert.equal(
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (source) =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const rawReviewShell = `        <section
           :id="form.review.configuration_summary_id"
@@ -314,7 +328,7 @@ for (const manifest of manifests) {
   assert.match(actionsSource, /data-phx-link="redirect"/)
   assert.match(actionsSource, /data-phx-link-state="push"/)
 
-  const preCardSource = reconstructCards(source, manifest)
+  const preCardSource = reconstructCards(reconstructPageHeaderSource(source), manifest)
   let reconstructed =
     manifest.filename === "CommsTransportNew.vue"
       ? reconstructDataRow(preCardSource)

@@ -23,6 +23,20 @@ const [providerSource, spacecraftSource] = await Promise.all([
   readFile(providerPath, "utf8"),
   readFile(spacecraftPath, "utf8"),
 ])
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (source) =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const shiftIndent = (source, spaces) =>
@@ -88,7 +102,7 @@ ${indent}</div>`
 }
 
 const reconstructProviderSource = (source) => {
-  let reconstructed = reconstructFormChromeSource(source, {
+  let reconstructed = reconstructFormChromeSource(reconstructPageHeaderSource(source), {
     featureName: "provider",
     dividerClass: "h-px flex-1 bg-base-300/60",
     multilineNumberExpressions: new Set([
@@ -150,7 +164,7 @@ const multilineSpacecraftLabels = new Set([
 ])
 
 const reconstructSpacecraftSource = (source) => {
-  let reconstructed = reconstructFormChromeSource(source, {
+  let reconstructed = reconstructFormChromeSource(reconstructPageHeaderSource(source), {
     featureName: "spacecraft type",
     dividerClass: "flex-1 h-px bg-base-300/60",
     multilineNumberExpressions: new Set(["form.sections.frame_parameters"]),
