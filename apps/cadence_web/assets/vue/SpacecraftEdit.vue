@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -180,35 +181,39 @@ const save = () => emit("save", {spacecraft: values()})
           divider-class="flex-1 h-px bg-base-300/60"
         />
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.display_name.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>
-            <input
-              :id="form.fields.display_name.id"
-              v-model="spacecraft.display_name"
-              :name="form.fields.display_name.name"
-              :type="form.fields.display_name.type"
-              :required="form.fields.display_name.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.display_name.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.display_name.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.display_name.id"
+            v-model="spacecraft.display_name"
+            :name="form.fields.display_name.name"
+            :type="form.fields.display_name.type"
+            :required="form.fields.display_name.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.scid.id">
-            <span class="hud-label block mb-1.5">{{ form.fields.scid.label }}</span>
-            <input
-              :id="form.fields.scid.id"
-              v-model="spacecraft.scid"
-              :name="form.fields.scid.name"
-              :type="form.fields.scid.type"
-              :required="form.fields.scid.required"
-              class="w-full input"
-              @input="validate"
-            >
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.scid.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.scid.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="form.fields.scid.id"
+            v-model="spacecraft.scid"
+            :name="form.fields.scid.name"
+            :type="form.fields.scid.type"
+            :required="form.fields.scid.required"
+            class="w-full input"
+            @input="validate"
+          >
+        </CadenceField>
       </section>
 
       <section :id="form.sections.profile.id" class="space-y-4">
@@ -221,27 +226,27 @@ const save = () => emit("save", {spacecraft: values()})
           divider-class="flex-1 h-px bg-base-300/60"
         />
 
-        <div class="fieldset mb-3">
-          <label :for="form.fields.spacecraft_type_id.id">
-            <span class="hud-label block mb-1.5">
-              {{ form.fields.spacecraft_type_id.label }}
-            </span>
-            <select
-              :id="form.fields.spacecraft_type_id.id"
-              v-model="spacecraft.spacecraft_type_id"
-              :name="form.fields.spacecraft_type_id.name"
-              :required="form.fields.spacecraft_type_id.required"
-              class="w-full select"
-              @change="validate"
-            >
-              <option
-                v-for="option in profile_options.options"
-                :key="`${option.value}-${option.label}`"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-        </div>
+        <CadenceField
+          :control-id="form.fields.spacecraft_type_id.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.fields.spacecraft_type_id.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="form.fields.spacecraft_type_id.id"
+            v-model="spacecraft.spacecraft_type_id"
+            :name="form.fields.spacecraft_type_id.name"
+            :required="form.fields.spacecraft_type_id.required"
+            class="w-full select"
+            @change="validate"
+          >
+            <option
+              v-for="option in profile_options.options"
+              :key="`${option.value}-${option.label}`"
+              :value="option.value"
+            >{{ option.label }}</option>
+          </select>
+        </CadenceField>
       </section>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">

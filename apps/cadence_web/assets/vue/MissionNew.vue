@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
@@ -118,35 +119,39 @@ const save = () => emit("save", payload())
     </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-6" @submit.prevent="save">
-      <div class="fieldset mb-3">
-        <label :for="form.fields.display_name.id">
-          <span class="hud-label block mb-1.5">{{ form.fields.display_name.label }}</span>
-          <input
-            :id="form.fields.display_name.id"
-            v-model="values.display_name"
-            :name="form.fields.display_name.name"
-            :type="form.fields.display_name.type"
-            :required="form.fields.display_name.required"
-            class="w-full input"
-            @input="validate"
-          >
-        </label>
-      </div>
+      <CadenceField
+        :control-id="form.fields.display_name.id"
+        wrapper-class="fieldset mb-3"
+        :label="form.fields.display_name.label"
+        label-class="hud-label block mb-1.5"
+      >
+        <input
+          :id="form.fields.display_name.id"
+          v-model="values.display_name"
+          :name="form.fields.display_name.name"
+          :type="form.fields.display_name.type"
+          :required="form.fields.display_name.required"
+          class="w-full input"
+          @input="validate"
+        >
+      </CadenceField>
 
-      <div class="fieldset mb-3">
-        <label :for="form.fields.slug.id">
-          <span class="hud-label block mb-1.5">{{ form.fields.slug.label }}</span>
-          <input
-            :id="form.fields.slug.id"
-            v-model="values.slug"
-            :name="form.fields.slug.name"
-            :type="form.fields.slug.type"
-            :required="form.fields.slug.required"
-            class="w-full input"
-            @input="validate"
-          >
-        </label>
-      </div>
+      <CadenceField
+        :control-id="form.fields.slug.id"
+        wrapper-class="fieldset mb-3"
+        :label="form.fields.slug.label"
+        label-class="hud-label block mb-1.5"
+      >
+        <input
+          :id="form.fields.slug.id"
+          v-model="values.slug"
+          :name="form.fields.slug.name"
+          :type="form.fields.slug.type"
+          :required="form.fields.slug.required"
+          class="w-full input"
+          @input="validate"
+        >
+      </CadenceField>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
