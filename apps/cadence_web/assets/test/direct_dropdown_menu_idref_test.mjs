@@ -40,8 +40,39 @@ const {transformSync} = integrationRequire("esbuild")
 const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
 const modalMenuPath = resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")
 const menuItemPath = resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")
+const pageHeaderFramePath = resolve(
+  testDirectory,
+  "../vue/ui/components/CadencePageHeaderFrame.vue",
+)
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+
+const loadPageHeaderFrame = async () => {
+  const source = await readFile(pageHeaderFramePath, "utf8")
+  const parsed = parse(source, {filename: pageHeaderFramePath})
+  if (parsed.errors.length > 0) throw parsed.errors[0]
+
+  const compiled = compileScript(parsed.descriptor, {
+    id: "direct-dropdown-page-header-frame",
+  })
+  const transformed = transformSync(compiled.content, {
+    format: "cjs",
+    loader: "ts",
+    platform: "node",
+    target: "node24",
+  })
+  const loadedModule = {exports: {}}
+
+  new Function("require", "module", "exports", transformed.code)(
+    integrationRequire,
+    loadedModule,
+    loadedModule.exports,
+  )
+
+  return loadedModule.exports.default
+}
 
 const spacecraftPanelMigrations = [
   {
@@ -78,9 +109,14 @@ const spacecraftPanelMigrations = [
   },
 ]
 
-const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Promise.all([
+const [
+  {component: CadenceModalMenu},
+  {component: CadenceMenuItem},
+  CadencePageHeaderFrame,
+] = await Promise.all([
   loadSfc(modalMenuPath),
   loadSfc(menuItemPath),
+  loadPageHeaderFrame(),
 ])
 
 const StatusBadge = defineComponent({
@@ -306,6 +342,15 @@ const reconstructCatalogArtifactShowPreDataRowSource = (source) => {
   return reconstructedSource
 }
 
+const reconstructMissionOverviewPrePageHeaderSource = source =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
+
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
   const preCardSource = reconstructPreCardSource(currentSource, definition)
@@ -322,7 +367,11 @@ const compileSfc = async (definition) => {
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
   assert.ok(parsed.descriptor.scriptSetup, `${definition.name} keeps its setup script`)
   assert.ok(parsed.descriptor.template, `${definition.name} keeps its template`)
-  assert.equal(createHash("sha256").update(source).digest("hex"), definition.sha256)
+  const predecessorSource =
+    definition.name === "MissionOverview"
+      ? reconstructMissionOverviewPrePageHeaderSource(source)
+      : source
+  assert.equal(createHash("sha256").update(predecessorSource).digest("hex"), definition.sha256)
   assert.match(source, /import CadenceModalMenu from "\.\/ui\/reka\/CadenceModalMenu\.vue"/)
   assert.match(source, /import CadenceMenuItem from "\.\/ui\/reka\/CadenceMenuItem\.vue"/)
   assert.equal(source.match(/<CadenceModalMenu\b/g)?.length, 1)
@@ -358,6 +407,9 @@ const compileSfc = async (definition) => {
   const loadedModule = {exports: {}}
   const localRequire = (specifier) => {
     if (specifier === "./StatusBadge.vue") return StatusBadge
+    if (specifier === "./ui/components/CadencePageHeaderFrame.vue") {
+      return CadencePageHeaderFrame
+    }
     if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
     if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
     return integrationRequire(specifier)

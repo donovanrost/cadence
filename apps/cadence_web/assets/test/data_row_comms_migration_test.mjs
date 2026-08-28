@@ -10,6 +10,8 @@ const lines = (...sourceLines) => sourceLines.join("\n")
 const boundary = (migrated, base) => Object.freeze({migrated, base})
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
@@ -19,6 +21,15 @@ const rawReviewShell = `        <section
         >
           <div class="card-body p-0">`
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+
+const peelCadencePageHeaderFrame = source =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const contracts = Object.freeze([
   Object.freeze({
@@ -400,7 +411,10 @@ for (const contract of contracts) {
     `${contract.filename} declares every migrated row boundary`,
   )
 
-  const predecessorSource = peelCadencePanels(source, contract.filename)
+  const predecessorSource = peelCadencePanels(
+    peelCadencePageHeaderFrame(source),
+    contract.filename,
+  )
   let reconstructedBase = replaceExactlyOnce(
     reconstructCards(predecessorSource, contract),
     contract.importInsertion,

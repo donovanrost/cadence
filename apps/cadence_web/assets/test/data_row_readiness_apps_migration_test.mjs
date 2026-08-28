@@ -25,6 +25,18 @@ assert.equal(scenarioLedger.length, 7)
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const peelCadencePageHeaderFrame = (source, filename) =>
+  filename === "SpacecraftReadiness.vue"
+    ? source
+        .replace(pageHeaderImport, "")
+        .replace(
+          '<CadencePageHeaderFrame variant="compact">',
+          '<header class="border-b border-primary/20 pb-4">',
+        )
+        .replace("</CadencePageHeaderFrame>", "</header>")
+    : source
 const fixtures = [
   {
     filename: "SpacecraftReadiness.vue",
@@ -221,10 +233,11 @@ for (const fixture of fixtures) {
     `${fixture.filename} has no raw label spans`,
   )
 
-  let reconstructedSource = reconstructCards(source, fixture.cardCount, fixture.filename).replace(
-    dataRowImport,
-    "",
-  )
+  let reconstructedSource = reconstructCards(
+    peelCadencePageHeaderFrame(source, fixture.filename),
+    fixture.cardCount,
+    fixture.filename,
+  ).replace(dataRowImport, "")
 
   for (const boundary of fixture.boundaries) {
     assert.equal(

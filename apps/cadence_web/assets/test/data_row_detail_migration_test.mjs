@@ -9,9 +9,20 @@ assert.equal(process.versions.node, "24.16.0", "detail migration uses pinned Nod
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+
+const peelCadencePageHeaderFrame = source =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const peelCadencePanels = (source, name) => {
   if (name !== "ProviderAccountShow.vue") return source
@@ -363,7 +374,7 @@ for (const file of files) {
   assert.equal(source.match(rawRowRoot)?.length ?? 0, 0, `${file.name} has no raw row roots`)
 
   let reconstructed = reconstructCards(
-    peelCadencePanels(source, file.name),
+    peelCadencePanels(peelCadencePageHeaderFrame(source), file.name),
     file.cardCount,
     file.name,
   ).replace(dataRowImport, "")
@@ -384,7 +395,11 @@ for (const file of files) {
 const spacecraftType = await readFile(files[2].path, "utf8")
 const reconstructedSpacecraftType = files[2].boundaries.reduce(
   (source, rowBoundary) => reconstructBoundary(source, rowBoundary, files[2].name),
-  reconstructCards(spacecraftType, files[2].cardCount, files[2].name).replace(dataRowImport, ""),
+  reconstructCards(
+    peelCadencePageHeaderFrame(spacecraftType),
+    files[2].cardCount,
+    files[2].name,
+  ).replace(dataRowImport, ""),
 )
 
 assert.equal(spacecraftType.match(/:row-id="parameter\.id"/g)?.length, 1)
