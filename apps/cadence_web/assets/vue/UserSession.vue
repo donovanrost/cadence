@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type Page = {
   id: string
@@ -107,40 +108,44 @@ const validateField = (field: keyof UserValues, event: Event) => {
     <form :id="form.id" :action="form.action" :method="form.method">
       <input type="hidden" :name="form.csrf.name" :value="form.csrf.value" hidden>
 
-      <div class="fieldset mb-3">
-        <label :for="form.fields.email.id">
-          <span class="hud-label block mb-1.5">{{ form.fields.email.label }}</span>
-          <input
-            :id="form.fields.email.id"
-            :value="user.email"
-            :name="form.fields.email.name"
-            :type="form.fields.email.type"
-            :placeholder="form.fields.email.placeholder"
-            :required="form.fields.email.required"
-            :autocomplete="form.fields.email.autocomplete"
-            :autofocus="form.fields.email.autofocus"
-            class="w-full input"
-            @input="validateField('email', $event)"
-          >
-        </label>
-      </div>
+      <CadenceField
+        :control-id="form.fields.email.id"
+        wrapper-class="fieldset mb-3"
+        :label="form.fields.email.label"
+        label-class="hud-label block mb-1.5"
+      >
+        <input
+          :id="form.fields.email.id"
+          :value="user.email"
+          :name="form.fields.email.name"
+          :type="form.fields.email.type"
+          :placeholder="form.fields.email.placeholder"
+          :required="form.fields.email.required"
+          :autocomplete="form.fields.email.autocomplete"
+          :autofocus="form.fields.email.autofocus"
+          class="w-full input"
+          @input="validateField('email', $event)"
+        >
+      </CadenceField>
 
-      <div class="fieldset mb-3">
-        <label :for="form.fields.password.id">
-          <span class="hud-label block mb-1.5">{{ form.fields.password.label }}</span>
-          <input
-            :id="form.fields.password.id"
-            :value="user.password"
-            :name="form.fields.password.name"
-            :type="form.fields.password.type"
-            :placeholder="form.fields.password.placeholder"
-            :required="form.fields.password.required"
-            :autocomplete="form.fields.password.autocomplete"
-            class="w-full input"
-            @input="validateField('password', $event)"
-          >
-        </label>
-      </div>
+      <CadenceField
+        :control-id="form.fields.password.id"
+        wrapper-class="fieldset mb-3"
+        :label="form.fields.password.label"
+        label-class="hud-label block mb-1.5"
+      >
+        <input
+          :id="form.fields.password.id"
+          :value="user.password"
+          :name="form.fields.password.name"
+          :type="form.fields.password.type"
+          :placeholder="form.fields.password.placeholder"
+          :required="form.fields.password.required"
+          :autocomplete="form.fields.password.autocomplete"
+          class="w-full input"
+          @input="validateField('password', $event)"
+        >
+      </CadenceField>
 
       <button
         :id="form.submit.id"
