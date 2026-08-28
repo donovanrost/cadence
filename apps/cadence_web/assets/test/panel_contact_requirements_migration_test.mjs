@@ -9,6 +9,7 @@ const pinnedNodeVersion = "v24.16.0"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
 const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
 const opsPageHeaderOpen =
@@ -20,6 +21,7 @@ const {parse} = integrationRequire("@vue/compiler-sfc")
 const files = [
   {
     name: "OpsContactRequirementNew.vue",
+    fieldFrames: 16,
     panels: 2,
     sha256: "890819f865f916664f51708fa64f8533d261ac62a6f5e8deeaff1fc7e413c658",
     headerClasses: {
@@ -28,6 +30,7 @@ const files = [
   },
   {
     name: "OpsContactRequirementShow.vue",
+    fieldFrames: 0,
     panels: 4,
     sha256: "d47dbbd37e5798262464e30ae78220608f61c6eafbf383da4ea8f59c265130a4",
     headerClasses: {
@@ -37,6 +40,7 @@ const files = [
   },
   {
     name: "OpsContactRequirementTemplate.vue",
+    fieldFrames: 15,
     panels: 2,
     sha256: "929c036b0ccc55901458734c14d03af68a8f820e2f3fa27eb6d709c6d5507e31",
     headerClasses: {
@@ -46,6 +50,7 @@ const files = [
   },
   {
     name: "OpsContactSchedule.vue",
+    fieldFrames: 0,
     panels: 3,
     sha256: "5470be3cd3a98de00f121eb2913c2b5a037643e846591b9bd91e0df02e62818e",
     headerClasses: {
@@ -62,6 +67,60 @@ const rawScheduleAsideSha256 = "7ee7b82e26ada81562fda604c5d51fe9e501f55933b621de
 
 const occurrences = (source, needle) => source.split(needle).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const multilineLabels = new Set([
+  "change.decision_forms.approval.reason.label",
+  "change.decision_forms.rejection.reason.label",
+  "change.decision_forms.acknowledgment.reason.label",
+  "admin_controls.approve_form.field.label",
+  "admin_controls.rejection.form.field.label",
+  "form.fields.minimum_data_volume_bytes.label",
+  "form.fields.minimum_duration_seconds.label",
+  "form.fields.preferred_duration_seconds.label",
+  "form.fields.minimum_separation_seconds.label",
+])
+const cadenceFieldFrame =
+  /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
+
+const peelCadenceFields = (source, name, expectedFrames) => {
+  const expectedImports = expectedFrames === 0 ? 0 : 1
+  assert.equal(occurrences(source, cadenceFieldImport), expectedImports, `${name} field import count`)
+  assert.equal(occurrences(source, "<CadenceField\n"), expectedFrames, `${name} field open count`)
+  assert.equal(occurrences(source, "</CadenceField>"), expectedFrames, `${name} field close count`)
+
+  let reconstructedFrames = 0
+  const reconstructed = source
+    .replace(cadenceFieldImport, "")
+    .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
+      let control = body
+      let originalErrors = ""
+      const errorsOpen = `\n${indent}  <template #errors>\n`
+      const errorsStart = body.indexOf(errorsOpen)
+
+      if (errorsStart !== -1) {
+        const errorsClose = `\n${indent}  </template>`
+        assert.ok(body.endsWith(errorsClose), `${name} errors slot closes exactly`)
+        control = body.slice(0, errorsStart)
+        const errorSource = body.slice(errorsStart + errorsOpen.length, -errorsClose.length)
+        assert.ok(errorSource.startsWith(`${indent}    `), `${name} error stays caller-owned`)
+        originalErrors = `\n${errorSource.slice(2)}`
+      }
+
+      const originalControl = control
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n")
+      const originalSpan = multilineLabels.has(label)
+        ? `${indent}    <span class="hud-label block mb-1.5">\n${indent}      {{ ${label} }}\n${indent}    </span>`
+        : `${indent}    <span class="hud-label block mb-1.5">{{ ${label} }}</span>`
+
+      reconstructedFrames += 1
+      return `${indent}<div class="fieldset mb-3">\n${indent}  <label :for="${controlId}">\n${originalSpan}\n${originalControl}\n${indent}  </label>${originalErrors}\n${indent}</div>`
+    })
+
+  assert.equal(reconstructedFrames, expectedFrames, `${name} reconstructs every field frame`)
+  assert.equal(occurrences(reconstructed, "CadenceField"), 0, `${name} has no residual CadenceField`)
+  return reconstructed
+}
 
 const peelPageHeaderFrame = (source, name) => {
   assert.equal(occurrences(source, cadencePageHeaderFrameImport), 1, `${name} page header import count`)
@@ -174,7 +233,8 @@ for (const file of files) {
     )
   }
 
-  const predecessorCompatibleSource = peelPageHeaderFrame(source, file.name)
+  const fieldCompatibleSource = peelCadenceFields(source, file.name, file.fieldFrames)
+  const predecessorCompatibleSource = peelPageHeaderFrame(fieldCompatibleSource, file.name)
 
   if (file.name === "OpsContactSchedule.vue") {
     assert.equal(sha256(extractRawScheduleAside(predecessorCompatibleSource)), rawScheduleAsideSha256)

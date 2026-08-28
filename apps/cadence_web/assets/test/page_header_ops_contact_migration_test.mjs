@@ -8,6 +8,7 @@ const expectedNodeVersion = "24.16.0"
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const importLine =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const nativeOpening =
   '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 const frameOpening = '<CadencePageHeaderFrame variant="ops">'
@@ -30,6 +31,29 @@ const callers = {
   "OpsContactRequirementList.vue":
     "0b211aec3c1bc284a9db8d93ccc822b8188b7f012a1567848ef89a4b09a85fab",
 }
+const cadenceFieldFrames = {
+  "OpsContactRequirementNew.vue": 16,
+  "OpsContactRequirementShow.vue": 0,
+  "OpsContactPlanShow.vue": 3,
+  "OpsContactRequirementTemplate.vue": 15,
+  "OpsContactSchedule.vue": 0,
+  "OpsContactDetail.vue": 3,
+  "OpsContactRecord.vue": 0,
+  "OpsContactRequirementList.vue": 0,
+}
+const multilineLabels = new Set([
+  "change.decision_forms.approval.reason.label",
+  "change.decision_forms.rejection.reason.label",
+  "change.decision_forms.acknowledgment.reason.label",
+  "admin_controls.approve_form.field.label",
+  "admin_controls.rejection.form.field.label",
+  "form.fields.minimum_data_volume_bytes.label",
+  "form.fields.minimum_duration_seconds.label",
+  "form.fields.preferred_duration_seconds.label",
+  "form.fields.minimum_separation_seconds.label",
+])
+const cadenceFieldFrame =
+  /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
 
 assert.equal(
   process.versions.node,
@@ -42,6 +66,47 @@ const sha256 = source => createHash("sha256").update(source).digest("hex")
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 
+const peelCadenceFields = (source, filename, expectedFrames) => {
+  const expectedImports = expectedFrames === 0 ? 0 : 1
+  assert.equal(count(source, cadenceFieldImport), expectedImports, `${filename} field import count`)
+  assert.equal(count(source, "<CadenceField\n"), expectedFrames, `${filename} field open count`)
+  assert.equal(count(source, "</CadenceField>"), expectedFrames, `${filename} field close count`)
+
+  let reconstructedFrames = 0
+  const reconstructed = source
+    .replace(cadenceFieldImport, "")
+    .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
+      let control = body
+      let originalErrors = ""
+      const errorsOpen = `\n${indent}  <template #errors>\n`
+      const errorsStart = body.indexOf(errorsOpen)
+
+      if (errorsStart !== -1) {
+        const errorsClose = `\n${indent}  </template>`
+        assert.ok(body.endsWith(errorsClose), `${filename} errors slot closes exactly`)
+        control = body.slice(0, errorsStart)
+        const errorSource = body.slice(errorsStart + errorsOpen.length, -errorsClose.length)
+        assert.ok(errorSource.startsWith(`${indent}    `), `${filename} error stays caller-owned`)
+        originalErrors = `\n${errorSource.slice(2)}`
+      }
+
+      const originalControl = control
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n")
+      const originalSpan = multilineLabels.has(label)
+        ? `${indent}    <span class="hud-label block mb-1.5">\n${indent}      {{ ${label} }}\n${indent}    </span>`
+        : `${indent}    <span class="hud-label block mb-1.5">{{ ${label} }}</span>`
+
+      reconstructedFrames += 1
+      return `${indent}<div class="fieldset mb-3">\n${indent}  <label :for="${controlId}">\n${originalSpan}\n${originalControl}\n${indent}  </label>${originalErrors}\n${indent}</div>`
+    })
+
+  assert.equal(reconstructedFrames, expectedFrames, `${filename} reconstructs every field frame`)
+  assert.equal(count(reconstructed, "CadenceField"), 0, `${filename} has no residual CadenceField`)
+  return reconstructed
+}
+
 for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const source = await readFile(resolve(vueDirectory, filename), "utf8")
 
@@ -50,7 +115,7 @@ for (const [filename, expectedParentHash] of Object.entries(callers)) {
   assert.equal(count(source, frameClosing), 1, `${filename} closes exactly one ops frame`)
   assert.doesNotMatch(source, /<header(?:\s|>)/, `${filename} has no residual native header`)
 
-  const reconstructed = source
+  const reconstructed = peelCadenceFields(source, filename, cadenceFieldFrames[filename])
     .replace(`${importLine}\n`, "")
     .replace(frameOpening, nativeOpening)
     .replace(frameClosing, "</header>")

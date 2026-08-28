@@ -19,6 +19,20 @@ const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const multilineLabels = new Set([
+  "change.decision_forms.approval.reason.label",
+  "change.decision_forms.rejection.reason.label",
+  "change.decision_forms.acknowledgment.reason.label",
+  "admin_controls.approve_form.field.label",
+  "admin_controls.rejection.form.field.label",
+  "form.fields.minimum_data_volume_bytes.label",
+  "form.fields.minimum_duration_seconds.label",
+  "form.fields.preferred_duration_seconds.label",
+  "form.fields.minimum_separation_seconds.label",
+])
+const cadenceFieldFrame =
+  /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
 const reconstructPageHeaderSource = (source) =>
   source
     .replace(pageHeaderImport, "")
@@ -62,6 +76,47 @@ const contactPlanPanels = [
 
 const occurrences = (source, needle) => source.split(needle).length - 1
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const peelCadenceFields = (source, file, expectedFrames) => {
+  const expectedImports = expectedFrames === 0 ? 0 : 1
+  assert.equal(occurrences(source, cadenceFieldImport), expectedImports, `${file} field import count`)
+  assert.equal(occurrences(source, "<CadenceField\n"), expectedFrames, `${file} field open count`)
+  assert.equal(occurrences(source, "</CadenceField>"), expectedFrames, `${file} field close count`)
+
+  let reconstructedFrames = 0
+  const reconstructed = source
+    .replace(cadenceFieldImport, "")
+    .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
+      let control = body
+      let originalErrors = ""
+      const errorsOpen = `\n${indent}  <template #errors>\n`
+      const errorsStart = body.indexOf(errorsOpen)
+
+      if (errorsStart !== -1) {
+        const errorsClose = `\n${indent}  </template>`
+        assert.ok(body.endsWith(errorsClose), `${file} errors slot closes exactly`)
+        control = body.slice(0, errorsStart)
+        const errorSource = body.slice(errorsStart + errorsOpen.length, -errorsClose.length)
+        assert.ok(errorSource.startsWith(`${indent}    `), `${file} error stays caller-owned`)
+        originalErrors = `\n${errorSource.slice(2)}`
+      }
+
+      const originalControl = control
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n")
+      const originalSpan = multilineLabels.has(label)
+        ? `${indent}    <span class="hud-label block mb-1.5">\n${indent}      {{ ${label} }}\n${indent}    </span>`
+        : `${indent}    <span class="hud-label block mb-1.5">{{ ${label} }}</span>`
+
+      reconstructedFrames += 1
+      return `${indent}<div class="fieldset mb-3">\n${indent}  <label :for="${controlId}">\n${originalSpan}\n${originalControl}\n${indent}  </label>${originalErrors}\n${indent}</div>`
+    })
+
+  assert.equal(reconstructedFrames, expectedFrames, `${file} reconstructs every field frame`)
+  assert.equal(occurrences(reconstructed, "CadenceField"), 0, `${file} has no residual CadenceField`)
+  return reconstructed
+}
 
 const peelPanel = (source, panel, path) => {
   const panelIndent = panel.currentOpen.match(/^(\s*)<CadencePanel/)?.[1]
@@ -163,6 +218,7 @@ const reconstructPanels = (source, file) => {
 const foundations = Object.freeze([
   {
     file: "OpsContactPlanShow.vue",
+    fieldFrames: 3,
     sha256: "4705f28ee4c3bc0a590e6db181c37b6e780192d7d37c5d0bb9b986faee2dd9e5",
     actionIndent: null,
     native: {buttons: 4, anchors: 2, inputs: 0, selects: 0, textareas: 3, hidden: 0, forms: 3},
@@ -176,6 +232,7 @@ const foundations = Object.freeze([
   },
   {
     file: "OpsContactRequirementShow.vue",
+    fieldFrames: 0,
     sha256: "d47dbbd37e5798262464e30ae78220608f61c6eafbf383da4ea8f59c265130a4",
     actionIndent: null,
     native: {buttons: 3, anchors: 1, inputs: 0, selects: 0, textareas: 0, hidden: 0, forms: 0},
@@ -189,6 +246,7 @@ const foundations = Object.freeze([
   },
   {
     file: "AdminOrganizationInvite.vue",
+    fieldFrames: 0,
     sha256: "4bac43ea822f4df4df3aea3387d95d34f2e50d3946ae12074c7a0785b2f90f9c",
     actionIndent: "      ",
     native: {buttons: 1, anchors: 2, inputs: 4, selects: 1, textareas: 0, hidden: 1, forms: 1},
@@ -196,6 +254,7 @@ const foundations = Object.freeze([
   },
   {
     file: "AdminOrganizationNew.vue",
+    fieldFrames: 0,
     sha256: "76fe8a8f7a9940ddd80a2b1762fb03788b41365dc4edc5c271abbac28bb83a35",
     actionIndent: "      ",
     native: {buttons: 1, anchors: 2, inputs: 2, selects: 0, textareas: 0, hidden: 0, forms: 1},
@@ -203,6 +262,7 @@ const foundations = Object.freeze([
   },
   {
     file: "MissionNew.vue",
+    fieldFrames: 2,
     sha256: "9104fbebeba9ff9952a7fe0471401a9af4a3dee9dcb1d5621a0c2dd0cdd8fda1",
     actionIndent: "      ",
     native: {buttons: 1, anchors: 2, inputs: 2, selects: 0, textareas: 0, hidden: 0, forms: 1},
@@ -210,6 +270,7 @@ const foundations = Object.freeze([
   },
   {
     file: "OpsDashboardNew.vue",
+    fieldFrames: 2,
     sha256: "1a8769bbd84d14ec2a06f5522c474ffd6a4dc609606259725020845c741a2a45",
     actionIndent: "        ",
     native: {buttons: 1, anchors: 1, inputs: 2, selects: 0, textareas: 1, hidden: 0, forms: 1},
@@ -231,7 +292,10 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
-  let reconstructedSource = reconstructPanels(reconstructPageHeaderSource(source), foundation.file)
+  let reconstructedSource = reconstructPanels(
+    reconstructPageHeaderSource(peelCadenceFields(source, foundation.file, foundation.fieldFrames)),
+    foundation.file,
+  )
   let reconstructedImports = 0
   let reconstructedActionRows = 0
 
