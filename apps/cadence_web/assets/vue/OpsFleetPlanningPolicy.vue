@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import {reactive, ref, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -556,11 +557,10 @@ const revokeGrant = () => {
                       @input="validatePolicy"
                     >
                   </label>
-                  <p
+                  <CadenceValidationMessage
                     v-for="error in policy_form.fields[fieldKey].errors"
                     :key="error"
-                    class="mt-1.5 text-sm text-error"
-                  >{{ error }}</p>
+                  >{{ error }}</CadenceValidationMessage>
                 </div>
               </div>
             </div>
@@ -585,7 +585,7 @@ const revokeGrant = () => {
                     @input="validatePolicy"
                   >
                   <template #errors>
-                    <p v-for="error in policy_form.fields.max_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in policy_form.fields.max_contacts.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -605,7 +605,7 @@ const revokeGrant = () => {
                     @input="validatePolicy"
                   >
                   <template #errors>
-                    <p v-for="error in policy_form.fields.max_estimated_cost_micros.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in policy_form.fields.max_estimated_cost_micros.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -624,7 +624,7 @@ const revokeGrant = () => {
                     @input="validatePolicy"
                   >
                   <template #errors>
-                    <p v-for="error in policy_form.fields.currency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in policy_form.fields.currency.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -645,7 +645,7 @@ const revokeGrant = () => {
                     @input="validatePolicy"
                   >
                   <template #errors>
-                    <p v-for="error in policy_form.fields.critical_contact_reserve.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in policy_form.fields.critical_contact_reserve.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
               </div>
@@ -674,7 +674,7 @@ const revokeGrant = () => {
                     >{{ option.label }}</option>
                   </select>
                   <template #errors>
-                    <p v-for="error in policy_form.fields.automation_mode.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in policy_form.fields.automation_mode.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -696,7 +696,7 @@ const revokeGrant = () => {
                       @input="validatePolicy"
                     >
                   </label>
-                  <p v-for="error in policy_form.fields[fieldKey].errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in policy_form.fields[fieldKey].errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </div>
               </div>
 
@@ -779,7 +779,7 @@ const revokeGrant = () => {
               :class="['w-full textarea', approval_form.reason.errors.length > 0 && 'textarea-error']"
             ></textarea>
             <template #errors>
-              <p v-for="error in approval_form.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+              <CadenceValidationMessage v-for="error in approval_form.reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
             </template>
           </CadenceField>
           <button :id="approval_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
@@ -864,7 +864,7 @@ const revokeGrant = () => {
                 >{{ option.label }}</option>
               </select>
               <template #errors>
-                <p v-for="error in grant_form.fields.service_identity_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in grant_form.fields.service_identity_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
@@ -886,7 +886,7 @@ const revokeGrant = () => {
                   @input="validateGrant"
                 >
                 <template #errors>
-                  <p v-for="error in grant_form.fields.maximum_horizon_hours.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_horizon_hours.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </template>
               </CadenceField>
 
@@ -907,7 +907,7 @@ const revokeGrant = () => {
                   @input="validateGrant"
                 >
                 <template #errors>
-                  <p v-for="error in grant_form.fields.maximum_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_contacts.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </template>
               </CadenceField>
 
@@ -928,7 +928,7 @@ const revokeGrant = () => {
                   @input="validateGrant"
                 >
                 <template #errors>
-                  <p v-for="error in grant_form.fields.maximum_execution_concurrency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_execution_concurrency.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </template>
               </CadenceField>
 
@@ -949,7 +949,7 @@ const revokeGrant = () => {
                   @input="validateGrant"
                 >
                 <template #errors>
-                  <p v-for="error in grant_form.fields.valid_days.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in grant_form.fields.valid_days.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </template>
               </CadenceField>
             </div>
@@ -969,7 +969,7 @@ const revokeGrant = () => {
                 @input="validateGrant"
               ></textarea>
               <template #errors>
-                <p v-for="error in grant_form.fields.approval_reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in grant_form.fields.approval_reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
@@ -1014,7 +1014,7 @@ const revokeGrant = () => {
                 >{{ option.label }}</option>
               </select>
               <template #errors>
-                <p v-for="error in revocation_form.fields.automation_grant_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in revocation_form.fields.automation_grant_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
@@ -1032,7 +1032,7 @@ const revokeGrant = () => {
                 :class="['w-full textarea', revocation_form.fields.reason.errors.length > 0 && 'textarea-error']"
               ></textarea>
               <template #errors>
-                <p v-for="error in revocation_form.fields.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in revocation_form.fields.reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
