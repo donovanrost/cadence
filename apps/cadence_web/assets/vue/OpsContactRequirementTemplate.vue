@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -312,7 +313,7 @@ const fieldClass = (field: FormField) => [
                 >{{ option.label }}</option>
               </select>
               <template #errors>
-                <p v-for="error in template_form.fields.spacecraft_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in template_form.fields.spacecraft_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 
@@ -339,7 +340,7 @@ const fieldClass = (field: FormField) => [
                     >{{ option.label }}</option>
                   </select>
                   <template #errors>
-                    <p v-for="error in template_form.fields.schedule_type.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.schedule_type.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -359,7 +360,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.anchor_at.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.anchor_at.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -377,7 +378,7 @@ const fieldClass = (field: FormField) => [
                       @input="validateTemplate"
                     >
                   </label>
-                  <p v-for="error in template_form.fields.interval_minutes.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in template_form.fields.interval_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </div>
 
                 <div v-if="template.schedule_type === 'daily'" class="fieldset mb-3">
@@ -394,7 +395,7 @@ const fieldClass = (field: FormField) => [
                       @input="validateTemplate"
                     >
                   </label>
-                  <p v-for="error in template_form.fields.time_utc.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in template_form.fields.time_utc.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </div>
 
                 <CadenceField
@@ -413,7 +414,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.window_offset_minutes.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.window_offset_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -434,7 +435,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.window_duration_minutes.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.window_duration_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
               </div>
@@ -459,7 +460,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.contact_intent.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.contact_intent.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -483,7 +484,7 @@ const fieldClass = (field: FormField) => [
                     >{{ option.label }}</option>
                   </select>
                   <template #errors>
-                    <p v-for="error in template_form.fields.success_measure.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.success_measure.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -503,7 +504,7 @@ const fieldClass = (field: FormField) => [
                       @input="validateTemplate"
                     >
                   </label>
-                  <p v-for="error in template_form.fields.minimum_duration_seconds.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in template_form.fields.minimum_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </div>
 
                 <div v-if="template.success_measure === 'minimum_data_volume'" class="fieldset mb-3">
@@ -519,7 +520,7 @@ const fieldClass = (field: FormField) => [
                       @input="validateTemplate"
                     >
                   </label>
-                  <p v-for="error in template_form.fields.minimum_data_volume_bytes.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  <CadenceValidationMessage v-for="error in template_form.fields.minimum_data_volume_bytes.errors" :key="error">{{ error }}</CadenceValidationMessage>
                 </div>
 
                 <CadenceField
@@ -539,7 +540,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.contact_count.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.contact_count.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -563,7 +564,7 @@ const fieldClass = (field: FormField) => [
                     >{{ option.label }}</option>
                   </select>
                   <template #errors>
-                    <p v-for="error in template_form.fields.priority.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.priority.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
 
@@ -587,7 +588,7 @@ const fieldClass = (field: FormField) => [
                     >{{ option.label }}</option>
                   </select>
                   <template #errors>
-                    <p v-for="error in template_form.fields.approval_mode.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.approval_mode.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
               </div>
@@ -614,7 +615,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.preferred_duration_seconds.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.preferred_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
                 <CadenceField
@@ -634,7 +635,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.minimum_separation_seconds.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_separation_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
               </div>
@@ -662,7 +663,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.maximum_occurrences_per_run.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.maximum_occurrences_per_run.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
                 <CadenceField
@@ -682,7 +683,7 @@ const fieldClass = (field: FormField) => [
                     @input="validateTemplate"
                   >
                   <template #errors>
-                    <p v-for="error in template_form.fields.maximum_lookback_hours.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                    <CadenceValidationMessage v-for="error in template_form.fields.maximum_lookback_hours.errors" :key="error">{{ error }}</CadenceValidationMessage>
                   </template>
                 </CadenceField>
               </div>
@@ -703,7 +704,7 @@ const fieldClass = (field: FormField) => [
                 @input="validateTemplate"
               ></textarea>
               <template #errors>
-                <p v-for="error in template_form.fields.rationale.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                <CadenceValidationMessage v-for="error in template_form.fields.rationale.errors" :key="error">{{ error }}</CadenceValidationMessage>
               </template>
             </CadenceField>
 

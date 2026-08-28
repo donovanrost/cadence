@@ -9,6 +9,10 @@ const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const importLine =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceValidationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceValidationMessageSite =
+  /^( *)<CadenceValidationMessage v-for="error in template_form\.fields\.([a-z_]+)\.errors" :key="error">\{\{ error \}\}<\/CadenceValidationMessage>$/gm
 const nativeOpening =
   '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 const frameOpening = '<CadencePageHeaderFrame variant="ops">'
@@ -63,6 +67,14 @@ assert.equal(
 
 const count = (source, token) => source.split(token).length - 1
 const sha256 = source => createHash("sha256").update(source).digest("hex")
+const peelCadenceValidationMessages = (source) =>
+  source
+    .replace(cadenceValidationMessageImport, "")
+    .replace(
+      cadenceValidationMessageSite,
+      (_match, indent, field) =>
+        `${indent}<p v-for="error in template_form.fields.${field}.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>`,
+    )
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 
@@ -115,7 +127,11 @@ for (const [filename, expectedParentHash] of Object.entries(callers)) {
   assert.equal(count(source, frameClosing), 1, `${filename} closes exactly one ops frame`)
   assert.doesNotMatch(source, /<header(?:\s|>)/, `${filename} has no residual native header`)
 
-  const reconstructed = peelCadenceFields(source, filename, cadenceFieldFrames[filename])
+  const reconstructed = peelCadenceFields(
+    peelCadenceValidationMessages(source),
+    filename,
+    cadenceFieldFrames[filename],
+  )
     .replace(`${importLine}\n`, "")
     .replace(frameOpening, nativeOpening)
     .replace(frameClosing, "</header>")

@@ -10,6 +10,10 @@ const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePan
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceValidationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceValidationMessageSite =
+  /^( *)<CadenceValidationMessage v-for="error in template_form\.fields\.([a-z_]+)\.errors" :key="error">\{\{ error \}\}<\/CadenceValidationMessage>$/gm
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
 const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
 const opsPageHeaderOpen =
@@ -67,6 +71,14 @@ const rawScheduleAsideSha256 = "7ee7b82e26ada81562fda604c5d51fe9e501f55933b621de
 
 const occurrences = (source, needle) => source.split(needle).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const peelCadenceValidationMessages = (source) =>
+  source
+    .replace(cadenceValidationMessageImport, "")
+    .replace(
+      cadenceValidationMessageSite,
+      (_match, indent, field) =>
+        `${indent}<p v-for="error in template_form.fields.${field}.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>`,
+    )
 const multilineLabels = new Set([
   "change.decision_forms.approval.reason.label",
   "change.decision_forms.rejection.reason.label",
@@ -233,7 +245,11 @@ for (const file of files) {
     )
   }
 
-  const fieldCompatibleSource = peelCadenceFields(source, file.name, file.fieldFrames)
+  const fieldCompatibleSource = peelCadenceFields(
+    peelCadenceValidationMessages(source),
+    file.name,
+    file.fieldFrames,
+  )
   const predecessorCompatibleSource = peelPageHeaderFrame(fieldCompatibleSource, file.name)
 
   if (file.name === "OpsContactSchedule.vue") {

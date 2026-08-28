@@ -21,8 +21,21 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceValidationMessageImport =
+  'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceValidationMessageSite =
+  /^( *)<CadenceValidationMessage v-for="error in template_form\.fields\.([a-z_]+)\.errors" :key="error">\{\{ error \}\}<\/CadenceValidationMessage>$/gm
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const peelCadenceValidationMessages = (source) =>
+  source
+    .replace(cadenceValidationMessageImport, "")
+    .replace(
+      cadenceValidationMessageSite,
+      (_match, indent, field) =>
+        `${indent}<p v-for="error in template_form.fields.${field}.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>`,
+    )
 
 const callers = Object.freeze([
   {
@@ -70,7 +83,7 @@ const reconstructHeadSource = (migratedSource, caller) => {
   assert.equal(occurrences(migratedSource, cadenceFieldImport), 1, `${caller.file} import count`)
 
   let reconstructedFrames = 0
-  const reconstructed = migratedSource
+  const reconstructed = peelCadenceValidationMessages(migratedSource)
     .replace(cadenceFieldImport, "")
     .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
       let control = body
@@ -164,20 +177,25 @@ const excludedTemplateShells = Object.freeze([
 ])
 
 const templateSource = sources.get("OpsContactRequirementTemplate.vue")
+const templatePredecessorSource = peelCadenceValidationMessages(templateSource)
 for (const excluded of excludedTemplateShells) {
-  assert.equal(occurrences(templateSource, excluded.opening), 1, "excluded conditional shell remains once")
-  const start = templateSource.indexOf(excluded.opening)
+  assert.equal(
+    occurrences(templatePredecessorSource, excluded.opening),
+    1,
+    "excluded conditional shell remains once",
+  )
+  const start = templatePredecessorSource.indexOf(excluded.opening)
   const close = "\n                </div>"
-  const end = templateSource.indexOf(close, start)
+  const end = templatePredecessorSource.indexOf(close, start)
 
   assert.notEqual(end, -1, "excluded conditional shell remains closed")
   assert.equal(
-    sha256(templateSource.slice(start, end + close.length)),
+    sha256(templatePredecessorSource.slice(start, end + close.length)),
     excluded.sha256,
     "excluded conditional shell remains byte-for-byte unchanged",
   )
 }
-assert.equal(occurrences(templateSource, '<label :for="template_form.fields.'), 4)
+assert.equal(occurrences(templatePredecessorSource, '<label :for="template_form.fields.'), 4)
 
 const dom = installDom('<div id="contact-field-compile"></div>')
 try {
