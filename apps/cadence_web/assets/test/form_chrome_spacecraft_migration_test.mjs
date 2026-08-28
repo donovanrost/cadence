@@ -16,6 +16,20 @@ const {parse} = integrationRequire("@vue/compiler-sfc")
 const formChromeImports =
   'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"\n' +
   'import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (source) =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const actionOpen =
   '      <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
 const originalActionOpen =
@@ -226,7 +240,7 @@ assert.equal(
 
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, fixture.path)
-  const source = await readFile(componentPath, "utf8")
+  const source = reconstructPageHeaderSource(await readFile(componentPath, "utf8"))
   const parsed = parse(source, {filename: componentPath})
 
   assert.deepEqual(parsed.errors, [], `${fixture.name} parses with the pinned Vue compiler`)

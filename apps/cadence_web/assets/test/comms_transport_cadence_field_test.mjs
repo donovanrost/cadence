@@ -20,6 +20,20 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsTransportNew.vue")
 const source = await readFile(componentPath, "utf8")
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (value) =>
+  value
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 assert.match(source, /^import CadenceField from "\.\/ui\/components\/CadenceField\.vue"$/m)
 assert.match(source, /^import CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"$/m)
@@ -345,7 +359,9 @@ const reconstructFormChrome = (value) => {
   return reconstructed
 }
 
-let reconstructedSource = reconstructDataRow(reconstructCards(source)).replace(
+let reconstructedSource = reconstructDataRow(
+  reconstructCards(reconstructPageHeaderSource(source)),
+).replace(
   'import CadenceField from "./ui/components/CadenceField.vue"\n',
   "",
 )

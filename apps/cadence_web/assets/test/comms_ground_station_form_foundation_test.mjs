@@ -20,6 +20,20 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsGroundStationForm.vue")
 const source = await readFile(componentPath, "utf8")
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (value) =>
+  value
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 const extractionLedger = Object.freeze([
   "all five CadenceField boundaries remain one-for-one",
   "all three section headers reconstruct their exact native DOM",
@@ -54,7 +68,7 @@ assert.match(
   /:id="form\.actions\.cancel\.id"\n          :href="form\.actions\.cancel\.href"\n          data-phx-link="redirect"\n          data-phx-link-state="push"\n          class="btn btn-ghost"/,
 )
 
-let reconstructedSource = source.replace(
+let reconstructedSource = reconstructPageHeaderSource(source).replace(
   /import CadenceField from "\.\/ui\/components\/CadenceField\.vue"\nimport CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"\nimport CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"\n/,
   "",
 )

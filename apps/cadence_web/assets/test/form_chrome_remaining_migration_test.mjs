@@ -17,6 +17,20 @@ const vueDirectory = resolve(testDirectory, "../vue")
 const actionImport = 'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"'
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const pageHeaderImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const reconstructPageHeaderSource = (source) =>
+  source
+    .replace(pageHeaderImport, "")
+    .replace(
+      '<CadencePageHeaderFrame variant="compact">',
+      '<header class="border-b border-primary/20 pb-4">',
+    )
+    .replace(
+      '<CadencePageHeaderFrame variant="ops">',
+      '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
+    )
+    .replace("</CadencePageHeaderFrame>", "</header>")
 
 const contactPlanPanels = [
   {
@@ -217,7 +231,7 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
-  let reconstructedSource = reconstructPanels(source, foundation.file)
+  let reconstructedSource = reconstructPanels(reconstructPageHeaderSource(source), foundation.file)
   let reconstructedImports = 0
   let reconstructedActionRows = 0
 
