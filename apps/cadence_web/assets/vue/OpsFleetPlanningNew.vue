@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 
 type Header = {
@@ -159,7 +160,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
 
 <template>
   <section :id="header.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-5xl">
         <a
           :id="header.back.id"
@@ -176,7 +177,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
           {{ header.copy }}
         </p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-7">
       <section class="border border-base-300 bg-base-200/15 p-5">

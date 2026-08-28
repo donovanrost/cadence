@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {computed} from "vue"
 
 type Page = {
@@ -99,10 +100,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
 </script>
 
 <template>
-  <header
-    v-if="surface === 'header'"
-    class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7"
-  >
+  <CadencePageHeaderFrame v-if="surface === 'header'" variant="ops">
     <div class="mx-auto flex max-w-[100rem] items-end justify-between gap-4">
       <div>
         <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
@@ -135,7 +133,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
         </a>
       </div>
     </div>
-  </header>
+  </CadencePageHeaderFrame>
 
   <nav v-if="surface === 'versions'" class="space-y-3" aria-label="Dashboard versions">
     <div class="flex items-center justify-between">

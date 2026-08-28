@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 
 type EmptyState = {
@@ -297,7 +298,7 @@ const archiveDashboard = () => {
 
 <template>
   <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-5xl items-end justify-between gap-4">
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
@@ -316,7 +317,7 @@ const archiveDashboard = () => {
           class="btn btn-ghost btn-sm"
         >{{ page.header.viewer.label }}</a>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div
       class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:p-7"
