@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
@@ -54,7 +55,7 @@ const archive = () => {
 
 <template>
   <div class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -107,7 +108,7 @@ const archive = () => {
           >{{ actions.archive.label }}</button>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
       <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">

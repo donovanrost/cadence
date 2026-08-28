@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
@@ -69,7 +70,7 @@ defineProps<{
 
 <template>
   <div id="comms-transport-show-surface" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -109,7 +110,7 @@ defineProps<{
           {{ transport.transport_id }}
         </p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
       <div

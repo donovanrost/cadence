@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -206,7 +207,7 @@ const save = () => emit("save", {provider: values()})
 
 <template>
   <div :id="page.id" class="max-w-3xl space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -234,7 +235,7 @@ const save = () => emit("save", {provider: values()})
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div
       v-if="accounts.empty"
