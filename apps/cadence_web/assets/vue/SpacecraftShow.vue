@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -103,7 +104,7 @@ defineProps<{
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -143,7 +144,7 @@ defineProps<{
           </h1>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CadenceCard
       :id="profile_binding.id"

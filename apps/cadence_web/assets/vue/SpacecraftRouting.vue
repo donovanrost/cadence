@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+
 type Breadcrumb = {
   label: string
   href: string | null
@@ -41,7 +43,7 @@ defineProps<{page: Page}>()
 
 <template>
   <div class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -86,7 +88,7 @@ defineProps<{page: Page}>()
           </a>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div
       v-if="page.rows.length === 0"

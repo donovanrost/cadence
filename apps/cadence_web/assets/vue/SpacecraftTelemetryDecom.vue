@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 type PreflightState = "ready" | "attention" | "blocked"
@@ -292,7 +293,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
           <nav
@@ -322,7 +323,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CadenceCard :id="card.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
         <div class="space-y-4">

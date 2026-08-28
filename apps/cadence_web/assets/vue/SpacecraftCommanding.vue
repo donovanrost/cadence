@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Status = {
   tone: "info"
@@ -45,7 +46,7 @@ defineProps<{
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -79,7 +80,7 @@ defineProps<{
           <StatusBadge :status="page.status.tone" :label="page.status.label" />
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <section class="grid gap-4 lg:grid-cols-3">
       <CadenceCard
