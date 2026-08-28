@@ -7,6 +7,12 @@ import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNodeVersion = "v24.16.0"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const cadencePageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
+const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
+const opsPageHeaderOpen =
+  '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
@@ -56,6 +62,25 @@ const rawScheduleAsideSha256 = "7ee7b82e26ada81562fda604c5d51fe9e501f55933b621de
 
 const occurrences = (source, needle) => source.split(needle).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+
+const peelPageHeaderFrame = (source, name) => {
+  assert.equal(occurrences(source, cadencePageHeaderFrameImport), 1, `${name} page header import count`)
+  assert.equal(occurrences(source, cadencePageHeaderFrameOpen), 1, `${name} page header open count`)
+  assert.equal(occurrences(source, cadencePageHeaderFrameClose), 1, `${name} page header close count`)
+
+  const predecessorCompatibleSource = source
+    .replace(cadencePageHeaderFrameImport, "")
+    .replace(cadencePageHeaderFrameOpen, opsPageHeaderOpen)
+    .replace(cadencePageHeaderFrameClose, "</header>")
+
+  assert.equal(
+    occurrences(predecessorCompatibleSource, "CadencePageHeaderFrame"),
+    0,
+    `${name} predecessor source has no residual CadencePageHeaderFrame`
+  )
+
+  return predecessorCompatibleSource
+}
 
 const extractRawScheduleAside = (source) => {
   const start = source.indexOf(rawScheduleAsideStart)
@@ -149,11 +174,13 @@ for (const file of files) {
     )
   }
 
+  const predecessorCompatibleSource = peelPageHeaderFrame(source, file.name)
+
   if (file.name === "OpsContactSchedule.vue") {
-    assert.equal(sha256(extractRawScheduleAside(source)), rawScheduleAsideSha256)
+    assert.equal(sha256(extractRawScheduleAside(predecessorCompatibleSource)), rawScheduleAsideSha256)
   }
 
-  const reconstructed = reconstructBase(source, file.panels)
+  const reconstructed = reconstructBase(predecessorCompatibleSource, file.panels)
   assert.equal(sha256(reconstructed), file.sha256, `${file.name} frozen base SHA-256`)
 
   if (file.name === "OpsContactSchedule.vue") {

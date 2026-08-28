@@ -28,6 +28,31 @@ const replaceAt = (value, start, before, after, label) => {
 }
 
 const importLine = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const cadencePageHeaderFrameImport =
+  'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
+const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
+const opsPageHeaderOpen =
+  '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
+
+const peelPageHeaderFrame = (value) => {
+  assert.equal(count(value, cadencePageHeaderFrameImport), 1, `${relativePath}: page header import count`)
+  assert.equal(count(value, cadencePageHeaderFrameOpen), 1, `${relativePath}: page header open count`)
+  assert.equal(count(value, cadencePageHeaderFrameClose), 1, `${relativePath}: page header close count`)
+
+  const predecessorCompatibleSource = value
+    .replace(cadencePageHeaderFrameImport, "")
+    .replace(cadencePageHeaderFrameOpen, opsPageHeaderOpen)
+    .replace(cadencePageHeaderFrameClose, "</header>")
+
+  assert.equal(
+    count(predecessorCompatibleSource, "CadencePageHeaderFrame"),
+    0,
+    `${relativePath}: predecessor source has no residual CadencePageHeaderFrame`
+  )
+
+  return predecessorCompatibleSource
+}
 
 const panels = [
   {
@@ -145,9 +170,15 @@ const rawSectionHeader = `  <section
   >
     <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">`
 
-assert.equal(count(source, rawSectionHeader), 1, `${relativePath}: raw section > header variant`)
+const predecessorCompatibleSource = peelPageHeaderFrame(source)
+
 assert.equal(
-  count(source, '        <aside class="min-w-0 space-y-5">'),
+  count(predecessorCompatibleSource, rawSectionHeader),
+  1,
+  `${relativePath}: raw section > header variant`
+)
+assert.equal(
+  count(predecessorCompatibleSource, '        <aside class="min-w-0 space-y-5">'),
   1,
   `${relativePath}: raw aside root`
 )
@@ -156,7 +187,7 @@ const {descriptor, errors} = parse(source, {filename})
 assert.equal(errors.length, 0, `${relativePath}: Vue compiler errors: ${errors.join("\n")}`)
 assert.ok(descriptor.template, `${relativePath}: missing template block`)
 
-let reconstructed = source
+let reconstructed = predecessorCompatibleSource
 
 for (const panel of panels) {
   const migratedPrefix = `${panel.migratedOpen}\n${panel.indent}  <template #header>\n`
