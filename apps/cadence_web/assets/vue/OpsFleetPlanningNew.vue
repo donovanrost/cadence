@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 
@@ -188,51 +189,59 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
           @submit.prevent="createFleetRun"
         >
           <div class="grid gap-4 sm:grid-cols-2">
-            <div class="fieldset mb-3">
-              <label :for="form.fields.horizon_start.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.horizon_start.label }}</span>
-                <input
-                  :id="form.fields.horizon_start.id"
-                  v-model="fleetRun.horizon_start"
-                  :name="form.fields.horizon_start.name"
-                  :type="form.fields.horizon_start.type"
-                  :required="form.fields.horizon_start.required"
-                  :class="[
-                    'w-full input',
-                    form.fields.horizon_start.errors.length > 0 && 'input-error'
-                  ]"
-                  @input="validateFleetRun"
-                >
-              </label>
-              <p
-                v-for="error in form.fields.horizon_start.errors"
-                :key="error"
-                class="mt-1.5 text-sm text-error"
-              >{{ error }}</p>
-            </div>
+            <CadenceField
+              :control-id="form.fields.horizon_start.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.horizon_start.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.horizon_start.id"
+                v-model="fleetRun.horizon_start"
+                :name="form.fields.horizon_start.name"
+                :type="form.fields.horizon_start.type"
+                :required="form.fields.horizon_start.required"
+                :class="[
+                  'w-full input',
+                  form.fields.horizon_start.errors.length > 0 && 'input-error'
+                ]"
+                @input="validateFleetRun"
+              >
+              <template #errors>
+                <p
+                  v-for="error in form.fields.horizon_start.errors"
+                  :key="error"
+                  class="mt-1.5 text-sm text-error"
+                >{{ error }}</p>
+              </template>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="form.fields.horizon_end.id">
-                <span class="hud-label block mb-1.5">{{ form.fields.horizon_end.label }}</span>
-                <input
-                  :id="form.fields.horizon_end.id"
-                  v-model="fleetRun.horizon_end"
-                  :name="form.fields.horizon_end.name"
-                  :type="form.fields.horizon_end.type"
-                  :required="form.fields.horizon_end.required"
-                  :class="[
-                    'w-full input',
-                    form.fields.horizon_end.errors.length > 0 && 'input-error'
-                  ]"
-                  @input="validateFleetRun"
-                >
-              </label>
-              <p
-                v-for="error in form.fields.horizon_end.errors"
-                :key="error"
-                class="mt-1.5 text-sm text-error"
-              >{{ error }}</p>
-            </div>
+            <CadenceField
+              :control-id="form.fields.horizon_end.id"
+              wrapper-class="fieldset mb-3"
+              :label="form.fields.horizon_end.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                :id="form.fields.horizon_end.id"
+                v-model="fleetRun.horizon_end"
+                :name="form.fields.horizon_end.name"
+                :type="form.fields.horizon_end.type"
+                :required="form.fields.horizon_end.required"
+                :class="[
+                  'w-full input',
+                  form.fields.horizon_end.errors.length > 0 && 'input-error'
+                ]"
+                @input="validateFleetRun"
+              >
+              <template #errors>
+                <p
+                  v-for="error in form.fields.horizon_end.errors"
+                  :key="error"
+                  class="mt-1.5 text-sm text-error"
+                >{{ error }}</p>
+              </template>
+            </CadenceField>
           </div>
 
           <div class="fieldset mb-3">

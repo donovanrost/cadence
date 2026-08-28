@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, ref, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
@@ -567,95 +568,115 @@ const revokeGrant = () => {
             <div>
               <p class="hud-label">Capacity & budget</p>
               <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div class="fieldset mb-3">
-                  <label :for="policy_form.fields.max_contacts.id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields.max_contacts.label }}</span>
-                    <input
-                      :id="policy_form.fields.max_contacts.id"
-                      v-model.number="policy.max_contacts"
-                      :name="policy_form.fields.max_contacts.name"
-                      type="number"
-                      :min="policy_form.fields.max_contacts.min ?? undefined"
-                      :required="policy_form.fields.max_contacts.required"
-                      :class="['w-full input', policy_form.fields.max_contacts.errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <p v-for="error in policy_form.fields.max_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-                </div>
+                <CadenceField
+                  :control-id="policy_form.fields.max_contacts.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields.max_contacts.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="policy_form.fields.max_contacts.id"
+                    v-model.number="policy.max_contacts"
+                    :name="policy_form.fields.max_contacts.name"
+                    type="number"
+                    :min="policy_form.fields.max_contacts.min ?? undefined"
+                    :required="policy_form.fields.max_contacts.required"
+                    :class="['w-full input', policy_form.fields.max_contacts.errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <p v-for="error in policy_form.fields.max_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  </template>
+                </CadenceField>
 
-                <div class="fieldset mb-3">
-                  <label :for="policy_form.fields.max_estimated_cost_micros.id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields.max_estimated_cost_micros.label }}</span>
-                    <input
-                      :id="policy_form.fields.max_estimated_cost_micros.id"
-                      v-model.number="policy.max_estimated_cost_micros"
-                      :name="policy_form.fields.max_estimated_cost_micros.name"
-                      type="number"
-                      :min="policy_form.fields.max_estimated_cost_micros.min ?? undefined"
-                      :class="['w-full input', policy_form.fields.max_estimated_cost_micros.errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <p v-for="error in policy_form.fields.max_estimated_cost_micros.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-                </div>
+                <CadenceField
+                  :control-id="policy_form.fields.max_estimated_cost_micros.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields.max_estimated_cost_micros.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="policy_form.fields.max_estimated_cost_micros.id"
+                    v-model.number="policy.max_estimated_cost_micros"
+                    :name="policy_form.fields.max_estimated_cost_micros.name"
+                    type="number"
+                    :min="policy_form.fields.max_estimated_cost_micros.min ?? undefined"
+                    :class="['w-full input', policy_form.fields.max_estimated_cost_micros.errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <p v-for="error in policy_form.fields.max_estimated_cost_micros.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  </template>
+                </CadenceField>
 
-                <div class="fieldset mb-3">
-                  <label :for="policy_form.fields.currency.id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields.currency.label }}</span>
-                    <input
-                      :id="policy_form.fields.currency.id"
-                      v-model="policy.currency"
-                      :name="policy_form.fields.currency.name"
-                      type="text"
-                      :class="['w-full input', policy_form.fields.currency.errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <p v-for="error in policy_form.fields.currency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-                </div>
+                <CadenceField
+                  :control-id="policy_form.fields.currency.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields.currency.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="policy_form.fields.currency.id"
+                    v-model="policy.currency"
+                    :name="policy_form.fields.currency.name"
+                    type="text"
+                    :class="['w-full input', policy_form.fields.currency.errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <p v-for="error in policy_form.fields.currency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  </template>
+                </CadenceField>
 
-                <div class="fieldset mb-3">
-                  <label :for="policy_form.fields.critical_contact_reserve.id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields.critical_contact_reserve.label }}</span>
-                    <input
-                      :id="policy_form.fields.critical_contact_reserve.id"
-                      v-model.number="policy.critical_contact_reserve"
-                      :name="policy_form.fields.critical_contact_reserve.name"
-                      type="number"
-                      :min="policy_form.fields.critical_contact_reserve.min ?? undefined"
-                      :required="policy_form.fields.critical_contact_reserve.required"
-                      :class="['w-full input', policy_form.fields.critical_contact_reserve.errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <p v-for="error in policy_form.fields.critical_contact_reserve.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-                </div>
+                <CadenceField
+                  :control-id="policy_form.fields.critical_contact_reserve.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields.critical_contact_reserve.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="policy_form.fields.critical_contact_reserve.id"
+                    v-model.number="policy.critical_contact_reserve"
+                    :name="policy_form.fields.critical_contact_reserve.name"
+                    type="number"
+                    :min="policy_form.fields.critical_contact_reserve.min ?? undefined"
+                    :required="policy_form.fields.critical_contact_reserve.required"
+                    :class="['w-full input', policy_form.fields.critical_contact_reserve.errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <p v-for="error in policy_form.fields.critical_contact_reserve.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  </template>
+                </CadenceField>
               </div>
             </div>
 
             <div>
               <p class="hud-label">Automation & repair</p>
               <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div class="fieldset mb-3">
-                  <label :for="policy_form.fields.automation_mode.id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields.automation_mode.label }}</span>
-                    <select
-                      :id="policy_form.fields.automation_mode.id"
-                      v-model="policy.automation_mode"
-                      :name="policy_form.fields.automation_mode.name"
-                      :class="['w-full select', policy_form.fields.automation_mode.errors.length > 0 && 'select-error']"
-                      @change="validatePolicy"
-                    >
-                      <option
-                        v-for="option in policy_form.fields.automation_mode.options"
-                        :key="option.value"
-                        :value="option.value"
-                      >{{ option.label }}</option>
-                    </select>
-                  </label>
-                  <p v-for="error in policy_form.fields.automation_mode.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-                </div>
+                <CadenceField
+                  :control-id="policy_form.fields.automation_mode.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields.automation_mode.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <select
+                    :id="policy_form.fields.automation_mode.id"
+                    v-model="policy.automation_mode"
+                    :name="policy_form.fields.automation_mode.name"
+                    :class="['w-full select', policy_form.fields.automation_mode.errors.length > 0 && 'select-error']"
+                    @change="validatePolicy"
+                  >
+                    <option
+                      v-for="option in policy_form.fields.automation_mode.options"
+                      :key="option.value"
+                      :value="option.value"
+                    >{{ option.label }}</option>
+                  </select>
+                  <template #errors>
+                    <p v-for="error in policy_form.fields.automation_mode.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                  </template>
+                </CadenceField>
 
                 <div
                   v-for="fieldKey in automationPolicyFieldKeys"
@@ -744,19 +765,23 @@ const revokeGrant = () => {
           Approval invalidates grants tied to an older policy version and changes the boundary for future runs.
         </p>
         <form :id="approval_form.id" class="mt-4" @submit.prevent="approvePolicy">
-          <div class="fieldset mb-3">
-            <label :for="approval_form.reason.id">
-              <span class="hud-label block mb-1.5">{{ approval_form.reason.label }}</span>
-              <textarea
-                :id="approval_form.reason.id"
-                v-model="approvalReason"
-                :name="approval_form.reason.name"
-                :required="approval_form.reason.required"
-                :class="['w-full textarea', approval_form.reason.errors.length > 0 && 'textarea-error']"
-              ></textarea>
-            </label>
-            <p v-for="error in approval_form.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-          </div>
+          <CadenceField
+            :control-id="approval_form.reason.id"
+            wrapper-class="fieldset mb-3"
+            :label="approval_form.reason.label"
+            label-class="hud-label block mb-1.5"
+          >
+            <textarea
+              :id="approval_form.reason.id"
+              v-model="approvalReason"
+              :name="approval_form.reason.name"
+              :required="approval_form.reason.required"
+              :class="['w-full textarea', approval_form.reason.errors.length > 0 && 'textarea-error']"
+            ></textarea>
+            <template #errors>
+              <p v-for="error in approval_form.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+            </template>
+          </CadenceField>
           <button :id="approval_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
             {{ approval_form.submit.label }}
           </button>
@@ -818,111 +843,135 @@ const revokeGrant = () => {
             class="space-y-4 border-t border-base-300 p-4"
             @submit.prevent="issueGrant"
           >
-            <div class="fieldset mb-3">
-              <label :for="grant_form.fields.service_identity_id.id">
-                <span class="hud-label block mb-1.5">{{ grant_form.fields.service_identity_id.label }}</span>
-                <select
-                  :id="grant_form.fields.service_identity_id.id"
-                  v-model="grant.service_identity_id"
-                  :name="grant_form.fields.service_identity_id.name"
-                  :required="grant_form.fields.service_identity_id.required"
-                  :class="['w-full select', grant_form.fields.service_identity_id.errors.length > 0 && 'select-error']"
-                  @change="validateGrant"
-                >
-                  <option
-                    v-for="option in grant_form.fields.service_identity_id.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-              <p v-for="error in grant_form.fields.service_identity_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-            </div>
+            <CadenceField
+              :control-id="grant_form.fields.service_identity_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="grant_form.fields.service_identity_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="grant_form.fields.service_identity_id.id"
+                v-model="grant.service_identity_id"
+                :name="grant_form.fields.service_identity_id.name"
+                :required="grant_form.fields.service_identity_id.required"
+                :class="['w-full select', grant_form.fields.service_identity_id.errors.length > 0 && 'select-error']"
+                @change="validateGrant"
+              >
+                <option
+                  v-for="option in grant_form.fields.service_identity_id.options"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+              <template #errors>
+                <p v-for="error in grant_form.fields.service_identity_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+              </template>
+            </CadenceField>
 
             <div class="grid gap-3 sm:grid-cols-2">
-              <div class="fieldset mb-3">
-                <label :for="grant_form.fields.maximum_horizon_hours.id">
-                  <span class="hud-label block mb-1.5">{{ grant_form.fields.maximum_horizon_hours.label }}</span>
-                  <input
-                    :id="grant_form.fields.maximum_horizon_hours.id"
-                    v-model.number="grant.maximum_horizon_hours"
-                    :name="grant_form.fields.maximum_horizon_hours.name"
-                    type="number"
-                    :min="grant_form.fields.maximum_horizon_hours.min ?? undefined"
-                    :required="grant_form.fields.maximum_horizon_hours.required"
-                    :class="['w-full input', grant_form.fields.maximum_horizon_hours.errors.length > 0 && 'input-error']"
-                    @input="validateGrant"
-                  >
-                </label>
-                <p v-for="error in grant_form.fields.maximum_horizon_hours.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-              </div>
-
-              <div class="fieldset mb-3">
-                <label :for="grant_form.fields.maximum_contacts.id">
-                  <span class="hud-label block mb-1.5">{{ grant_form.fields.maximum_contacts.label }}</span>
-                  <input
-                    :id="grant_form.fields.maximum_contacts.id"
-                    v-model.number="grant.maximum_contacts"
-                    :name="grant_form.fields.maximum_contacts.name"
-                    type="number"
-                    :min="grant_form.fields.maximum_contacts.min ?? undefined"
-                    :required="grant_form.fields.maximum_contacts.required"
-                    :class="['w-full input', grant_form.fields.maximum_contacts.errors.length > 0 && 'input-error']"
-                    @input="validateGrant"
-                  >
-                </label>
-                <p v-for="error in grant_form.fields.maximum_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-              </div>
-
-              <div class="fieldset mb-3">
-                <label :for="grant_form.fields.maximum_execution_concurrency.id">
-                  <span class="hud-label block mb-1.5">{{ grant_form.fields.maximum_execution_concurrency.label }}</span>
-                  <input
-                    :id="grant_form.fields.maximum_execution_concurrency.id"
-                    v-model.number="grant.maximum_execution_concurrency"
-                    :name="grant_form.fields.maximum_execution_concurrency.name"
-                    type="number"
-                    :min="grant_form.fields.maximum_execution_concurrency.min ?? undefined"
-                    :required="grant_form.fields.maximum_execution_concurrency.required"
-                    :class="['w-full input', grant_form.fields.maximum_execution_concurrency.errors.length > 0 && 'input-error']"
-                    @input="validateGrant"
-                  >
-                </label>
-                <p v-for="error in grant_form.fields.maximum_execution_concurrency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-              </div>
-
-              <div class="fieldset mb-3">
-                <label :for="grant_form.fields.valid_days.id">
-                  <span class="hud-label block mb-1.5">{{ grant_form.fields.valid_days.label }}</span>
-                  <input
-                    :id="grant_form.fields.valid_days.id"
-                    v-model.number="grant.valid_days"
-                    :name="grant_form.fields.valid_days.name"
-                    type="number"
-                    :min="grant_form.fields.valid_days.min ?? undefined"
-                    :required="grant_form.fields.valid_days.required"
-                    :class="['w-full input', grant_form.fields.valid_days.errors.length > 0 && 'input-error']"
-                    @input="validateGrant"
-                  >
-                </label>
-                <p v-for="error in grant_form.fields.valid_days.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-              </div>
-            </div>
-
-            <div class="fieldset mb-3">
-              <label :for="grant_form.fields.approval_reason.id">
-                <span class="hud-label block mb-1.5">{{ grant_form.fields.approval_reason.label }}</span>
-                <textarea
-                  :id="grant_form.fields.approval_reason.id"
-                  v-model="grant.approval_reason"
-                  :name="grant_form.fields.approval_reason.name"
-                  :required="grant_form.fields.approval_reason.required"
-                  :class="['w-full textarea', grant_form.fields.approval_reason.errors.length > 0 && 'textarea-error']"
+              <CadenceField
+                :control-id="grant_form.fields.maximum_horizon_hours.id"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields.maximum_horizon_hours.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="grant_form.fields.maximum_horizon_hours.id"
+                  v-model.number="grant.maximum_horizon_hours"
+                  :name="grant_form.fields.maximum_horizon_hours.name"
+                  type="number"
+                  :min="grant_form.fields.maximum_horizon_hours.min ?? undefined"
+                  :required="grant_form.fields.maximum_horizon_hours.required"
+                  :class="['w-full input', grant_form.fields.maximum_horizon_hours.errors.length > 0 && 'input-error']"
                   @input="validateGrant"
-                ></textarea>
-              </label>
-              <p v-for="error in grant_form.fields.approval_reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                >
+                <template #errors>
+                  <p v-for="error in grant_form.fields.maximum_horizon_hours.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                </template>
+              </CadenceField>
+
+              <CadenceField
+                :control-id="grant_form.fields.maximum_contacts.id"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields.maximum_contacts.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="grant_form.fields.maximum_contacts.id"
+                  v-model.number="grant.maximum_contacts"
+                  :name="grant_form.fields.maximum_contacts.name"
+                  type="number"
+                  :min="grant_form.fields.maximum_contacts.min ?? undefined"
+                  :required="grant_form.fields.maximum_contacts.required"
+                  :class="['w-full input', grant_form.fields.maximum_contacts.errors.length > 0 && 'input-error']"
+                  @input="validateGrant"
+                >
+                <template #errors>
+                  <p v-for="error in grant_form.fields.maximum_contacts.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                </template>
+              </CadenceField>
+
+              <CadenceField
+                :control-id="grant_form.fields.maximum_execution_concurrency.id"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields.maximum_execution_concurrency.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="grant_form.fields.maximum_execution_concurrency.id"
+                  v-model.number="grant.maximum_execution_concurrency"
+                  :name="grant_form.fields.maximum_execution_concurrency.name"
+                  type="number"
+                  :min="grant_form.fields.maximum_execution_concurrency.min ?? undefined"
+                  :required="grant_form.fields.maximum_execution_concurrency.required"
+                  :class="['w-full input', grant_form.fields.maximum_execution_concurrency.errors.length > 0 && 'input-error']"
+                  @input="validateGrant"
+                >
+                <template #errors>
+                  <p v-for="error in grant_form.fields.maximum_execution_concurrency.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                </template>
+              </CadenceField>
+
+              <CadenceField
+                :control-id="grant_form.fields.valid_days.id"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields.valid_days.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="grant_form.fields.valid_days.id"
+                  v-model.number="grant.valid_days"
+                  :name="grant_form.fields.valid_days.name"
+                  type="number"
+                  :min="grant_form.fields.valid_days.min ?? undefined"
+                  :required="grant_form.fields.valid_days.required"
+                  :class="['w-full input', grant_form.fields.valid_days.errors.length > 0 && 'input-error']"
+                  @input="validateGrant"
+                >
+                <template #errors>
+                  <p v-for="error in grant_form.fields.valid_days.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+                </template>
+              </CadenceField>
             </div>
+
+            <CadenceField
+              :control-id="grant_form.fields.approval_reason.id"
+              wrapper-class="fieldset mb-3"
+              :label="grant_form.fields.approval_reason.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="grant_form.fields.approval_reason.id"
+                v-model="grant.approval_reason"
+                :name="grant_form.fields.approval_reason.name"
+                :required="grant_form.fields.approval_reason.required"
+                :class="['w-full textarea', grant_form.fields.approval_reason.errors.length > 0 && 'textarea-error']"
+                @input="validateGrant"
+              ></textarea>
+              <template #errors>
+                <p v-for="error in grant_form.fields.approval_reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+              </template>
+            </CadenceField>
 
             <button :id="grant_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
               {{ grant_form.submit.label }}
@@ -945,39 +994,47 @@ const revokeGrant = () => {
             class="space-y-3 border-t border-error/20 p-4"
             @submit.prevent="revokeGrant"
           >
-            <div class="fieldset mb-3">
-              <label :for="revocation_form.fields.automation_grant_id.id">
-                <span class="hud-label block mb-1.5">{{ revocation_form.fields.automation_grant_id.label }}</span>
-                <select
-                  :id="revocation_form.fields.automation_grant_id.id"
-                  v-model="revocation.automation_grant_id"
-                  :name="revocation_form.fields.automation_grant_id.name"
-                  :required="revocation_form.fields.automation_grant_id.required"
-                  :class="['w-full select', revocation_form.fields.automation_grant_id.errors.length > 0 && 'select-error']"
-                >
-                  <option
-                    v-for="option in revocation_form.fields.automation_grant_id.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-              <p v-for="error in revocation_form.fields.automation_grant_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-            </div>
+            <CadenceField
+              :control-id="revocation_form.fields.automation_grant_id.id"
+              wrapper-class="fieldset mb-3"
+              :label="revocation_form.fields.automation_grant_id.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                :id="revocation_form.fields.automation_grant_id.id"
+                v-model="revocation.automation_grant_id"
+                :name="revocation_form.fields.automation_grant_id.name"
+                :required="revocation_form.fields.automation_grant_id.required"
+                :class="['w-full select', revocation_form.fields.automation_grant_id.errors.length > 0 && 'select-error']"
+              >
+                <option
+                  v-for="option in revocation_form.fields.automation_grant_id.options"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+              <template #errors>
+                <p v-for="error in revocation_form.fields.automation_grant_id.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+              </template>
+            </CadenceField>
 
-            <div class="fieldset mb-3">
-              <label :for="revocation_form.fields.reason.id">
-                <span class="hud-label block mb-1.5">{{ revocation_form.fields.reason.label }}</span>
-                <textarea
-                  :id="revocation_form.fields.reason.id"
-                  v-model="revocation.reason"
-                  :name="revocation_form.fields.reason.name"
-                  :required="revocation_form.fields.reason.required"
-                  :class="['w-full textarea', revocation_form.fields.reason.errors.length > 0 && 'textarea-error']"
-                ></textarea>
-              </label>
-              <p v-for="error in revocation_form.fields.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
-            </div>
+            <CadenceField
+              :control-id="revocation_form.fields.reason.id"
+              wrapper-class="fieldset mb-3"
+              :label="revocation_form.fields.reason.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="revocation_form.fields.reason.id"
+                v-model="revocation.reason"
+                :name="revocation_form.fields.reason.name"
+                :required="revocation_form.fields.reason.required"
+                :class="['w-full textarea', revocation_form.fields.reason.errors.length > 0 && 'textarea-error']"
+              ></textarea>
+              <template #errors>
+                <p v-for="error in revocation_form.fields.reason.errors" :key="error" class="mt-1.5 text-sm text-error">{{ error }}</p>
+              </template>
+            </CadenceField>
 
             <button :id="revocation_form.submit.id" type="submit" class="btn btn-error btn-sm w-full">
               {{ revocation_form.submit.label }}

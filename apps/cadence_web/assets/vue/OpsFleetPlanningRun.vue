@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
@@ -603,36 +604,36 @@ const repairFleetRun = () => {
               class="mt-4 space-y-3"
               @submit.prevent="repairFleetRun"
             >
-              <div class="fieldset mb-3">
-                <label :for="repair_form.fields.horizon_start.id">
-                  <span class="hud-label block mb-1.5">
-                    {{ repair_form.fields.horizon_start.label }}
-                  </span>
-                  <input
-                    :id="repair_form.fields.horizon_start.id"
-                    v-model="repair.horizon_start"
-                    :name="repair_form.fields.horizon_start.name"
-                    :type="repair_form.fields.horizon_start.type"
-                    :required="repair_form.fields.horizon_start.required"
-                    class="w-full input"
-                  >
-                </label>
-              </div>
-              <div class="fieldset mb-3">
-                <label :for="repair_form.fields.horizon_end.id">
-                  <span class="hud-label block mb-1.5">
-                    {{ repair_form.fields.horizon_end.label }}
-                  </span>
-                  <input
-                    :id="repair_form.fields.horizon_end.id"
-                    v-model="repair.horizon_end"
-                    :name="repair_form.fields.horizon_end.name"
-                    :type="repair_form.fields.horizon_end.type"
-                    :required="repair_form.fields.horizon_end.required"
-                    class="w-full input"
-                  >
-                </label>
-              </div>
+              <CadenceField
+                :control-id="repair_form.fields.horizon_start.id"
+                wrapper-class="fieldset mb-3"
+                :label="repair_form.fields.horizon_start.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="repair_form.fields.horizon_start.id"
+                  v-model="repair.horizon_start"
+                  :name="repair_form.fields.horizon_start.name"
+                  :type="repair_form.fields.horizon_start.type"
+                  :required="repair_form.fields.horizon_start.required"
+                  class="w-full input"
+                >
+              </CadenceField>
+              <CadenceField
+                :control-id="repair_form.fields.horizon_end.id"
+                wrapper-class="fieldset mb-3"
+                :label="repair_form.fields.horizon_end.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="repair_form.fields.horizon_end.id"
+                  v-model="repair.horizon_end"
+                  :name="repair_form.fields.horizon_end.name"
+                  :type="repair_form.fields.horizon_end.type"
+                  :required="repair_form.fields.horizon_end.required"
+                  class="w-full input"
+                >
+              </CadenceField>
               <button
                 :id="repair_form.submit.id"
                 type="submit"
