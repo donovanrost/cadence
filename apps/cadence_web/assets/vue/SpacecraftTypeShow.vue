@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 type NavigationItem = {
   label: string
   href: string
@@ -70,7 +71,7 @@ defineProps<{
 
 <template>
   <div id="spacecraft-profile-show-surface" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div>
         <nav
           aria-label="Breadcrumb"
@@ -108,7 +109,7 @@ defineProps<{
           </span>
         </h1>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <CadenceCard
       id="spacecraft-profile-byte-interpretation"

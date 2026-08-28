@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 
@@ -68,7 +69,7 @@ defineProps<{
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <header class="border-b border-primary/20 pb-4">
+    <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
           <nav
@@ -105,7 +106,7 @@ defineProps<{
           <StatusBadge :status="page.status.tone" :label="page.status.label" />
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="grid gap-4 xl:grid-cols-2">
       <CadenceCard

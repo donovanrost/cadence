@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -68,7 +69,7 @@ defineProps<{
 </script>
 
 <template>
-  <header class="border-b border-primary/20 pb-4">
+  <CadencePageHeaderFrame variant="compact">
     <div>
       <div>
         <p class="hud-label">{{ overview.mission.eyebrow }}</p>
@@ -80,7 +81,7 @@ defineProps<{
         </p>
       </div>
     </div>
-  </header>
+  </CadencePageHeaderFrame>
 
   <div class="grid gap-4 md:grid-cols-3">
     <CadenceCard
