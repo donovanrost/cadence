@@ -15,6 +15,8 @@ const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
 const cadencePageHeaderFrameClose = "</CadencePageHeaderFrame>"
+const cadenceTableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const opsPageHeaderOpen =
   '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">'
 
@@ -246,6 +248,64 @@ const replaceOnce = (source, before, after, label) => {
   return source.replace(before, after)
 }
 
+const peelTableFrames = (source, name) => {
+  const boundaries =
+    name === "SpacecraftList.vue"
+      ? [
+          {
+            componentOpen: '          <CadenceTableFrame id="spacecraft-vehicles-table">',
+            tableOpen: '          <table id="spacecraft-vehicles-table" class="table">',
+          },
+          {
+            componentOpen:
+              '          <CadenceTableFrame id="spacecraft-profiles-preview-table">',
+            tableOpen:
+              '          <table id="spacecraft-profiles-preview-table" class="table">',
+          },
+        ]
+      : []
+  const importCount = boundaries.length > 0 ? 1 : 0
+
+  assert.equal(
+    countExact(source, cadenceTableFrameImport),
+    importCount,
+    `${name} has its expected CadenceTableFrame import count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "<CadenceTableFrame"),
+    boundaries.length,
+    `${name} has its expected CadenceTableFrame opening count before peeling`,
+  )
+  assert.equal(
+    countExact(source, "</CadenceTableFrame>"),
+    boundaries.length,
+    `${name} has its expected CadenceTableFrame closing count before peeling`,
+  )
+
+  let predecessorCompatibleSource = source.replace(cadenceTableFrameImport, "")
+
+  for (const [index, boundary] of boundaries.entries()) {
+    predecessorCompatibleSource = replaceOnce(
+      predecessorCompatibleSource,
+      boundary.componentOpen,
+      boundary.tableOpen,
+      `${name} table frame ${index + 1} opening boundary`,
+    )
+  }
+
+  predecessorCompatibleSource = predecessorCompatibleSource.replaceAll(
+    "</CadenceTableFrame>",
+    "</table>",
+  )
+  assert.equal(
+    countExact(predecessorCompatibleSource, "CadenceTableFrame"),
+    0,
+    `${name} predecessor source has no residual CadenceTableFrame`,
+  )
+
+  return predecessorCompatibleSource
+}
+
 const peelPageHeaderFrame = (source, name) => {
   assert.equal(countExact(source, cadencePageHeaderFrameImport), 1, `${name} page header import count`)
   assert.equal(countExact(source, cadencePageHeaderFrameOpen), 1, `${name} page header open count`)
@@ -290,9 +350,10 @@ for (const file of files) {
   assert.equal(countExact(source, "#header"), file.panels, `${file.name} header slot count`)
   assert.equal(file.migrations.length, file.panels, `${file.name} frozen migration ledger count`)
 
-  const predecessorCompatibleSource = file.opsPageHeader
-    ? peelPageHeaderFrame(source, file.name)
-    : source
+  const predecessorCompatibleSource = peelTableFrames(
+    file.opsPageHeader ? peelPageHeaderFrame(source, file.name) : source,
+    file.name,
+  )
 
   for (const rawVariant of file.rawVariants) {
     assert.equal(

@@ -17,6 +17,7 @@ const compactPageHeaderBaseOpen = '    <header class="border-b border-primary/20
 const compactPageHeaderClose = "    </CadencePageHeaderFrame>"
 const compactPageHeaderBaseClose = "    </header>"
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const tableFrameImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const headerClass = "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsProviderShow.vue")
@@ -30,10 +31,24 @@ assert.ok(parsed.descriptor.template, "CommsProviderShow retains its template bo
 assert.equal(currentSource.split(pageHeaderImport).length - 1, 1, "page header import reconstructs")
 assert.equal(currentSource.split(compactPageHeaderOpen).length - 1, 1, "page header opening reconstructs")
 assert.equal(currentSource.split(compactPageHeaderClose).length - 1, 1, "page header close reconstructs")
+assert.equal(currentSource.split(tableFrameImport).length - 1, 1, "table frame import reconstructs")
+assert.equal(currentSource.match(/<CadenceTableFrame\b/g)?.length, 2, "exactly two table frames open")
+assert.equal(currentSource.split("</CadenceTableFrame>").length - 1, 2, "exactly two table frames close")
 const source = currentSource
   .replace(pageHeaderImport, "")
   .replace(compactPageHeaderOpen, compactPageHeaderBaseOpen)
   .replace(compactPageHeaderClose, compactPageHeaderBaseClose)
+  .replace(tableFrameImport, "")
+  .replace(
+    '            <CadenceTableFrame v-else :id="profiles.service.table_id">',
+    '            <table v-else :id="profiles.service.table_id" class="table">',
+  )
+  .replace(
+    '            <CadenceTableFrame v-else :id="profiles.delivery.table_id">',
+    '            <table v-else :id="profiles.delivery.table_id" class="table">',
+  )
+  .replaceAll("</CadenceTableFrame>", "</table>")
+assert.doesNotMatch(source, /CadenceTableFrame/)
 assert.equal(source.split(panelImport).length - 1, 1, "CadencePanel is imported exactly once")
 assert.equal(source.match(/<CadencePanel\b/g)?.length, 2, "exactly two panel boundaries open")
 assert.equal(source.split("</CadencePanel>").length - 1, 2, "exactly two panel boundaries close")

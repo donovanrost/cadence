@@ -24,6 +24,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPaths = {
   card: resolve(testDirectory, "../vue/ui/components/CadenceCard.vue"),
   dataRow: resolve(testDirectory, "../vue/ui/components/CadenceDataRow.vue"),
+  tableFrame: resolve(testDirectory, "../vue/ui/components/CadenceTableFrame.vue"),
   artifactShow: resolve(testDirectory, "../vue/CatalogArtifactShow.vue"),
 }
 const dom = installDom('<div id="app"></div>')
@@ -70,6 +71,7 @@ const loadSfc = async (componentPath, localModules = {}) => {
 
 const cardSfc = await loadSfc(componentPaths.card)
 const dataRowSfc = await loadSfc(componentPaths.dataRow)
+const tableFrameSfc = await loadSfc(componentPaths.tableFrame)
 const CadenceDataRow = dataRowSfc.component
 
 assert.ok(dataRowSfc.descriptor.script, "CadenceDataRow keeps a native render-function script")
@@ -193,6 +195,7 @@ const artifactShowSfc = await loadSfc(componentPaths.artifactShow, {
   "./StatusBadge.vue": componentModule(StatusBadgeOracle),
   "./ui/components/CadenceCard.vue": cardSfc.module,
   "./ui/components/CadenceDataRow.vue": dataRowSfc.module,
+  "./ui/components/CadenceTableFrame.vue": tableFrameSfc.module,
   "./ui/reka/CadenceMenuItem.vue": componentModule(passthrough("CadenceMenuItemOracle")),
   "./ui/reka/CadenceModalMenu.vue": componentModule(ModalMenuOracle),
 })
