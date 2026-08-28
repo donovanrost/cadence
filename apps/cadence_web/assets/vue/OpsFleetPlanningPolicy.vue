@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, ref, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -438,7 +439,7 @@ const revokeGrant = () => {
 </script>
 
 <template>
-  <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+  <CadencePageHeaderFrame variant="ops">
     <div class="mx-auto max-w-[100rem]">
       <a
         :href="page.back.href"
@@ -464,7 +465,7 @@ const revokeGrant = () => {
         </span>
       </div>
     </div>
-  </header>
+  </CadencePageHeaderFrame>
 
   <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)] lg:p-7">
     <div class="min-w-0 space-y-5">

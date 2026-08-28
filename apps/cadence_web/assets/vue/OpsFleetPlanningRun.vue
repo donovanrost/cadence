@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -260,7 +261,7 @@ const repairFleetRun = () => {
     :aria-busy="planning"
     class="h-full overflow-y-auto bg-base-100"
   >
-    <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">
+    <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[110rem]">
         <a
           :href="page.back.href"
@@ -312,7 +313,7 @@ const repairFleetRun = () => {
           </div>
         </div>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto max-w-[110rem] space-y-5 p-5 lg:p-7">
       <section
