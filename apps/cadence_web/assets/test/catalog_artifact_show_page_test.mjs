@@ -81,6 +81,48 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "CatalogArtifactShowPage.vue template tags are balanced")
 }
 
+const tableImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
+const tableOpening =
+  '          <CadenceTableFrame id="catalog-artifact-runs-table">'
+const nativeTableOpening =
+  '          <table id="catalog-artifact-runs-table" class="table">'
+const tableClosing = "          </CadenceTableFrame>"
+const nativeTableClosing = "          </table>"
+
+assert.equal(
+  child.split(tableImport).length - 1,
+  1,
+  "the table-frame import is added exactly once",
+)
+assert.equal(
+  child.match(/^import CadenceTableFrame\b/gm)?.length,
+  1,
+  "the child has exactly one CadenceTableFrame import declaration",
+)
+assert.equal(
+  child.split(tableOpening).length - 1,
+  1,
+  "the child has exactly one catalog runs table-frame opening",
+)
+assert.equal(
+  child.match(/<CadenceTableFrame\b/g)?.length,
+  1,
+  "the child has exactly one table-frame opening",
+)
+assert.equal(
+  child.split(tableClosing).length - 1,
+  1,
+  "the child has exactly one table-frame closing",
+)
+
+const childWithoutTableFrame = child
+  .replace(tableImport, "")
+  .replace(tableOpening, nativeTableOpening)
+  .replace(tableClosing, nativeTableClosing)
+
+assert.doesNotMatch(childWithoutTableFrame, /CadenceTableFrame/)
+
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const cardBodyClass = "card-body p-6"
 
@@ -96,7 +138,7 @@ assert.equal(
 )
 
 let cardOpeningCount = 0
-let childWithoutCards = child.replace(cardImport, "")
+let childWithoutCards = childWithoutTableFrame.replace(cardImport, "")
 
 childWithoutCards = childWithoutCards.replace(
   /^([ \t]*)<CadenceCard\b([\s\S]*?)>$/gm,
