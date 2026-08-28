@@ -17,6 +17,8 @@ const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
@@ -27,6 +29,58 @@ const replaceExactlyOnce = (value, current, replacement, label) => {
   return value.replace(current, replacement)
 }
 const lines = (...sourceLines) => sourceLines.join("\n")
+const peelTableFrames = (source, filename) => {
+  if (filename !== "CommsProviderShow.vue") return source
+
+  const openings = Object.freeze([
+    Object.freeze({
+      frame: '            <CadenceTableFrame v-else :id="profiles.service.table_id">',
+      table: '            <table v-else :id="profiles.service.table_id" class="table">',
+    }),
+    Object.freeze({
+      frame: '            <CadenceTableFrame v-else :id="profiles.delivery.table_id">',
+      table: '            <table v-else :id="profiles.delivery.table_id" class="table">',
+    }),
+  ])
+  const frameClosing = "            </CadenceTableFrame>"
+  const tableClosing = "            </table>"
+
+  assert.equal(
+    occurrenceCount(source, tableFrameImport),
+    1,
+    "CommsProviderShow.vue imports CadenceTableFrame exactly once",
+  )
+  assert.equal(
+    count(source, /^import CadenceTableFrame\b/gm),
+    1,
+    "CommsProviderShow.vue has exactly one CadenceTableFrame import declaration",
+  )
+  assert.equal(
+    count(source, /<CadenceTableFrame\b/g),
+    openings.length,
+    "CommsProviderShow.vue has exactly two table-frame openings",
+  )
+  assert.equal(
+    occurrenceCount(source, frameClosing),
+    openings.length,
+    "CommsProviderShow.vue has exactly two table-frame closings",
+  )
+
+  let peeled = source.replace(tableFrameImport, "")
+
+  for (const opening of openings) {
+    peeled = replaceExactlyOnce(
+      peeled,
+      opening.frame,
+      opening.table,
+      "CommsProviderShow.vue table opening reconstruction",
+    )
+  }
+
+  peeled = peeled.replaceAll(frameClosing, tableClosing)
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
+}
 const peelPageHeaderFrame = (source) =>
   source
     .replace(pageHeaderFrameImport, "")
@@ -226,7 +280,7 @@ for (const contract of contracts) {
   )
 
   const predecessorSource = peelCadencePanels(
-    peelPageHeaderFrame(source),
+    peelPageHeaderFrame(peelTableFrames(source, contract.filename)),
     contract.filename,
   )
   let openingCount = 0

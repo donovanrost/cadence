@@ -10,6 +10,8 @@ const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/b
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const importLine =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const frameOpening = '<CadencePageHeaderFrame variant="compact">'
 const frameClosing = "</CadencePageHeaderFrame>"
 const nativeOpening = '<header class="border-b border-primary/20 pb-4">'
@@ -25,6 +27,38 @@ const callers = [
   "apps/cadence_web/assets/vue/AdminOrganizationShow.vue",
   "apps/cadence_web/assets/vue/ApplicationHost.vue"
 ]
+const tableFrameBoundaries = Object.freeze({
+  "apps/cadence_web/assets/vue/CatalogDatabaseShow.vue": Object.freeze({
+    openings: Object.freeze([
+      Object.freeze({
+        frame: '        <CadenceTableFrame v-else id="catalog-revisions-table">',
+        table: '        <table v-else id="catalog-revisions-table" class="table">',
+      }),
+      Object.freeze({
+        frame: '        <CadenceTableFrame v-else id="catalog-import-runs-table">',
+        table: '        <table v-else id="catalog-import-runs-table" class="table">',
+      }),
+    ]),
+    frameClosing: "        </CadenceTableFrame>",
+    tableClosing: "        </table>",
+  }),
+  "apps/cadence_web/assets/vue/AdminOrganizationShow.vue": Object.freeze({
+    openings: Object.freeze([
+      Object.freeze({
+        frame: '          <CadenceTableFrame id="org-members-table">',
+        table: '          <table id="org-members-table" class="table">',
+      }),
+      Object.freeze({
+        frame: '        <CadenceTableFrame id="service-identities-table">',
+        table: '        <table id="service-identities-table" class="table">',
+      }),
+    ]),
+    closings: Object.freeze([
+      Object.freeze({frame: "          </CadenceTableFrame>", table: "          </table>"}),
+      Object.freeze({frame: "        </CadenceTableFrame>", table: "        </table>"}),
+    ]),
+  }),
+})
 
 function occurrences(source, value) {
   return source.split(value).length - 1
@@ -32,6 +66,52 @@ function occurrences(source, value) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function peelTableFrames(source, caller) {
+  const boundary = tableFrameBoundaries[caller]
+  if (!boundary) return source
+
+  assert.equal(occurrences(source, tableFrameImport), 1, `${caller} must have one table import`)
+  assert.equal(
+    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    1,
+    `${caller} must have one table import declaration`
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length,
+    boundary.openings.length,
+    `${caller} must have its exact table-frame count`
+  )
+  assert.equal(
+    source.match(/<\/CadenceTableFrame>/g)?.length,
+    boundary.openings.length,
+    `${caller} must close every table frame`
+  )
+
+  let peeled = source.replace(tableFrameImport, "")
+
+  for (const opening of boundary.openings) {
+    assert.equal(occurrences(peeled, opening.frame), 1, `${caller} table opening must be exact`)
+    peeled = peeled.replace(opening.frame, opening.table)
+  }
+
+  if (boundary.closings) {
+    for (const closing of boundary.closings) {
+      assert.equal(occurrences(peeled, closing.frame), 1, `${caller} table closing must be exact`)
+      peeled = peeled.replace(closing.frame, closing.table)
+    }
+  } else {
+    assert.equal(
+      occurrences(peeled, boundary.frameClosing),
+      boundary.openings.length,
+      `${caller} table closings must be exact`
+    )
+    peeled = peeled.replaceAll(boundary.frameClosing, boundary.tableClosing)
+  }
+
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
 }
 
 assert.equal(process.versions.node, "24.16.0", "migration proof requires Node 24.16.0")
@@ -53,7 +133,7 @@ for (const caller of callers) {
     `${caller} must have no residual native compact page header`
   )
 
-  const reconstructed = source
+  const reconstructed = peelTableFrames(source, caller)
     .replace(importLine, "")
     .replace(frameOpening, nativeOpening)
     .replace(frameClosing, nativeClosing)

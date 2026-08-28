@@ -12,6 +12,8 @@ const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const componentImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
+const tableFrameImport =
+  'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const frameOpening = '<CadencePageHeaderFrame variant="compact">'
 const frameClosing = "</CadencePageHeaderFrame>"
 const nativeOpening = '<header class="border-b border-primary/20 pb-4">'
@@ -30,6 +32,22 @@ const callers = [
   "apps/cadence_web/assets/vue/MissionOverview.vue",
   "apps/cadence_web/assets/vue/OpsActivationRequests.vue",
 ]
+const tableFrameBoundaries = Object.freeze({
+  "apps/cadence_web/assets/vue/SpacecraftTypeShow.vue": Object.freeze({
+    frameOpening:
+      '        <CadenceTableFrame id="spacecraft-profile-version-history" class="mt-3">',
+    tableOpening:
+      '        <table id="spacecraft-profile-version-history" class="table mt-3">',
+    frameClosing: "        </CadenceTableFrame>",
+    tableClosing: "        </table>",
+  }),
+  "apps/cadence_web/assets/vue/MissionOverview.vue": Object.freeze({
+    frameOpening: '        <CadenceTableFrame v-else id="mission-spacecraft-readiness">',
+    tableOpening: '        <table v-else id="mission-spacecraft-readiness" class="table">',
+    frameClosing: "        </CadenceTableFrame>",
+    tableClosing: "        </table>",
+  }),
+})
 
 function occurrences(source, needle) {
   return source.split(needle).length - 1
@@ -37,6 +55,33 @@ function occurrences(source, needle) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function peelTableFrame(source, caller) {
+  const boundary = tableFrameBoundaries[caller]
+  if (!boundary) return source
+
+  assert.equal(occurrences(source, tableFrameImport), 1, "expected exactly one table import")
+  assert.equal(
+    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    1,
+    "expected exactly one table import declaration",
+  )
+  assert.equal(
+    source.match(/<CadenceTableFrame\b/g)?.length,
+    1,
+    "expected exactly one table frame",
+  )
+  assert.equal(occurrences(source, boundary.frameClosing), 1, "expected one table-frame closing")
+  assert.equal(occurrences(source, boundary.frameOpening), 1, "expected one exact table opening")
+
+  const peeled = source
+    .replace(tableFrameImport, "")
+    .replace(boundary.frameOpening, boundary.tableOpening)
+    .replace(boundary.frameClosing, boundary.tableClosing)
+
+  assert.doesNotMatch(peeled, /CadenceTableFrame/)
+  return peeled
 }
 
 test("compact spacecraft and mission page-header migration is exact", async (t) => {
@@ -52,7 +97,7 @@ test("compact spacecraft and mission page-header migration is exact", async (t) 
       const importInsertion = caller.endsWith("/SpacecraftRouting.vue")
         ? `${componentImport}\n\n`
         : `${componentImport}\n`
-      const reconstructed = source
+      const reconstructed = peelTableFrame(source, caller)
         .replace(importInsertion, "")
         .replace(frameOpening, nativeOpening)
         .replace(frameClosing, nativeClosing)
