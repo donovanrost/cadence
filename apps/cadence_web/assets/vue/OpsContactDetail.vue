@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -424,21 +425,21 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       type="hidden"
                       :value="change.decision_forms.approval.proposal_hash.value"
                     >
-                    <div class="fieldset mb-3">
-                      <label :for="change.decision_forms.approval.reason.id">
-                        <span class="hud-label block mb-1.5">
-                          {{ change.decision_forms.approval.reason.label }}
-                        </span>
-                        <textarea
-                          :id="change.decision_forms.approval.reason.id"
-                          :name="change.decision_forms.approval.reason.name"
-                          :required="change.decision_forms.approval.reason.required"
-                          :value="decisionReasons[reasonKey(change, 'approval')]"
-                          class="w-full textarea"
-                          @input="updateReason(change, 'approval', $event)"
-                        ></textarea>
-                      </label>
-                    </div>
+                    <CadenceField
+                      :control-id="change.decision_forms.approval.reason.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="change.decision_forms.approval.reason.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <textarea
+                        :id="change.decision_forms.approval.reason.id"
+                        :name="change.decision_forms.approval.reason.name"
+                        :required="change.decision_forms.approval.reason.required"
+                        :value="decisionReasons[reasonKey(change, 'approval')]"
+                        class="w-full textarea"
+                        @input="updateReason(change, 'approval', $event)"
+                      ></textarea>
+                    </CadenceField>
                     <button
                       :id="change.decision_forms.approval.submit.id"
                       type="submit"
@@ -458,21 +459,21 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       type="hidden"
                       :value="change.decision_forms.rejection.proposal_hash.value"
                     >
-                    <div class="fieldset mb-3">
-                      <label :for="change.decision_forms.rejection.reason.id">
-                        <span class="hud-label block mb-1.5">
-                          {{ change.decision_forms.rejection.reason.label }}
-                        </span>
-                        <textarea
-                          :id="change.decision_forms.rejection.reason.id"
-                          :name="change.decision_forms.rejection.reason.name"
-                          :required="change.decision_forms.rejection.reason.required"
-                          :value="decisionReasons[reasonKey(change, 'rejection')]"
-                          class="w-full textarea"
-                          @input="updateReason(change, 'rejection', $event)"
-                        ></textarea>
-                      </label>
-                    </div>
+                    <CadenceField
+                      :control-id="change.decision_forms.rejection.reason.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="change.decision_forms.rejection.reason.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <textarea
+                        :id="change.decision_forms.rejection.reason.id"
+                        :name="change.decision_forms.rejection.reason.name"
+                        :required="change.decision_forms.rejection.reason.required"
+                        :value="decisionReasons[reasonKey(change, 'rejection')]"
+                        class="w-full textarea"
+                        @input="updateReason(change, 'rejection', $event)"
+                      ></textarea>
+                    </CadenceField>
                     <button
                       :id="change.decision_forms.rejection.submit.id"
                       type="submit"
@@ -498,21 +499,21 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                     type="hidden"
                     :value="change.decision_forms.acknowledgment.proposal_hash.value"
                   >
-                  <div class="fieldset mb-3">
-                    <label :for="change.decision_forms.acknowledgment.reason.id">
-                      <span class="hud-label block mb-1.5">
-                        {{ change.decision_forms.acknowledgment.reason.label }}
-                      </span>
-                      <textarea
-                        :id="change.decision_forms.acknowledgment.reason.id"
-                        :name="change.decision_forms.acknowledgment.reason.name"
-                        :required="change.decision_forms.acknowledgment.reason.required"
-                        :value="decisionReasons[reasonKey(change, 'acknowledgment')]"
-                        class="w-full textarea"
-                        @input="updateReason(change, 'acknowledgment', $event)"
-                      ></textarea>
-                    </label>
-                  </div>
+                  <CadenceField
+                    :control-id="change.decision_forms.acknowledgment.reason.id"
+                    wrapper-class="fieldset mb-3"
+                    :label="change.decision_forms.acknowledgment.reason.label"
+                    label-class="hud-label block mb-1.5"
+                  >
+                    <textarea
+                      :id="change.decision_forms.acknowledgment.reason.id"
+                      :name="change.decision_forms.acknowledgment.reason.name"
+                      :required="change.decision_forms.acknowledgment.reason.required"
+                      :value="decisionReasons[reasonKey(change, 'acknowledgment')]"
+                      class="w-full textarea"
+                      @input="updateReason(change, 'acknowledgment', $event)"
+                    ></textarea>
+                  </CadenceField>
                   <button
                     :id="change.decision_forms.acknowledgment.submit.id"
                     type="submit"

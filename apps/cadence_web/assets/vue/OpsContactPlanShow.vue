@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import {ref, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -419,18 +420,20 @@ const executePlan = () => emit("execute-plan", {})
           <p class="hud-label">{{ page.submission.heading }}</p>
           <p class="mt-2 text-sm text-base-content/55">{{ page.submission.description }}</p>
           <form :id="submission_form.id" class="mt-4" @submit.prevent="submitPlan">
-            <div class="fieldset mb-3">
-              <label :for="submission_form.field.id">
-                <span class="hud-label block mb-1.5">{{ submission_form.field.label }}</span>
-                <textarea
-                  :id="submission_form.field.id"
-                  v-model="submissionReason"
-                  :name="submission_form.field.name"
-                  :required="submission_form.field.required"
-                  class="w-full textarea"
-                ></textarea>
-              </label>
-            </div>
+            <CadenceField
+              :control-id="submission_form.field.id"
+              wrapper-class="fieldset mb-3"
+              :label="submission_form.field.label"
+              label-class="hud-label block mb-1.5"
+            >
+              <textarea
+                :id="submission_form.field.id"
+                v-model="submissionReason"
+                :name="submission_form.field.name"
+                :required="submission_form.field.required"
+                class="w-full textarea"
+              ></textarea>
+            </CadenceField>
             <button
               :id="submission_form.action.id"
               type="submit"
@@ -451,20 +454,20 @@ const executePlan = () => emit("execute-plan", {})
               class="mt-4"
               @submit.prevent="approvePlan"
             >
-              <div class="fieldset mb-3">
-                <label :for="admin_controls.approve_form.field.id">
-                  <span class="hud-label block mb-1.5">
-                    {{ admin_controls.approve_form.field.label }}
-                  </span>
-                  <textarea
-                    :id="admin_controls.approve_form.field.id"
-                    v-model="approvalReason"
-                    :name="admin_controls.approve_form.field.name"
-                    :required="admin_controls.approve_form.field.required"
-                    class="w-full textarea"
-                  ></textarea>
-                </label>
-              </div>
+              <CadenceField
+                :control-id="admin_controls.approve_form.field.id"
+                wrapper-class="fieldset mb-3"
+                :label="admin_controls.approve_form.field.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <textarea
+                  :id="admin_controls.approve_form.field.id"
+                  v-model="approvalReason"
+                  :name="admin_controls.approve_form.field.name"
+                  :required="admin_controls.approve_form.field.required"
+                  class="w-full textarea"
+                ></textarea>
+              </CadenceField>
               <button
                 :id="admin_controls.approve_form.action.id"
                 type="submit"
@@ -483,20 +486,20 @@ const executePlan = () => emit("execute-plan", {})
                 class="mt-3"
                 @submit.prevent="rejectPlan"
               >
-                <div class="fieldset mb-3">
-                  <label :for="admin_controls.rejection.form.field.id">
-                    <span class="hud-label block mb-1.5">
-                      {{ admin_controls.rejection.form.field.label }}
-                    </span>
-                    <textarea
-                      :id="admin_controls.rejection.form.field.id"
-                      v-model="rejectionReason"
-                      :name="admin_controls.rejection.form.field.name"
-                      :required="admin_controls.rejection.form.field.required"
-                      class="w-full textarea"
-                    ></textarea>
-                  </label>
-                </div>
+                <CadenceField
+                  :control-id="admin_controls.rejection.form.field.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="admin_controls.rejection.form.field.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <textarea
+                    :id="admin_controls.rejection.form.field.id"
+                    v-model="rejectionReason"
+                    :name="admin_controls.rejection.form.field.name"
+                    :required="admin_controls.rejection.form.field.required"
+                    class="w-full textarea"
+                  ></textarea>
+                </CadenceField>
                 <button
                   :id="admin_controls.rejection.form.action.id"
                   type="submit"
