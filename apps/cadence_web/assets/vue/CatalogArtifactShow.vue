@@ -109,66 +109,65 @@ const emit = defineEmits<{
           <p class="text-sm text-base-content/60">No runs yet.</p>
       </CadenceCard>
 
-      <section
+      <CadenceCard
         v-else
         id="catalog-artifact-runs-card"
         class="card border border-base-300 bg-base-200"
+        body-class="card-body p-0"
       >
-        <div class="card-body p-0">
-          <CadenceTableFrame id="catalog-artifact-runs-table">
-            <thead>
-              <tr>
-                <th class="hud-label">Status</th>
-                <th class="hud-label">Started</th>
-                <th class="hud-label">Completed</th>
-                <th class="hud-label text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="catalog-artifact-runs-table-body">
-              <tr v-for="run in runs" :id="run.id" :key="run.id">
-                <td>
-                  <StatusBadge :status="run.status" :label="run.status_label" />
-                </td>
-                <td class="text-sm text-base-content/70">{{ run.started_at }}</td>
-                <td class="text-sm text-base-content/70">{{ run.completed_at }}</td>
-                <td class="text-right">
-                  <div :id="run.actions_id" class="cadence-overlay">
-                    <CadenceModalMenu side="bottom" align="end" :side-offset="4">
-                      <template #trigger="{open}">
-                        <button
-                          :id="`${run.actions_id}-trigger`"
-                          type="button"
-                          class="btn btn-ghost btn-xs"
-                          aria-label="Actions"
-                          :aria-controls="open ? `${run.actions_id}-menu` : undefined"
-                        >
-                          <span class="hero-ellipsis-vertical h-5 w-5"></span>
-                        </button>
-                      </template>
-                      <template #content="{open}">
-                        <div
-                          :id="`${run.actions_id}-menu`"
-                          :aria-labelledby="`${run.actions_id}-trigger`"
-                          class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
-                        >
-                          <CadenceMenuItem :active="open">
-                            <a
-                              :href="run.href"
-                              data-phx-link="redirect"
-                              data-phx-link-state="push"
-                              class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
-                            >View run</a>
-                          </CadenceMenuItem>
-                        </div>
-                      </template>
-                    </CadenceModalMenu>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </CadenceTableFrame>
-        </div>
-      </section>
+        <CadenceTableFrame id="catalog-artifact-runs-table">
+          <thead>
+            <tr>
+              <th class="hud-label">Status</th>
+              <th class="hud-label">Started</th>
+              <th class="hud-label">Completed</th>
+              <th class="hud-label text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="catalog-artifact-runs-table-body">
+            <tr v-for="run in runs" :id="run.id" :key="run.id">
+              <td>
+                <StatusBadge :status="run.status" :label="run.status_label" />
+              </td>
+              <td class="text-sm text-base-content/70">{{ run.started_at }}</td>
+              <td class="text-sm text-base-content/70">{{ run.completed_at }}</td>
+              <td class="text-right">
+                <div :id="run.actions_id" class="cadence-overlay">
+                  <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+                    <template #trigger="{open}">
+                      <button
+                        :id="`${run.actions_id}-trigger`"
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        aria-label="Actions"
+                        :aria-controls="open ? `${run.actions_id}-menu` : undefined"
+                      >
+                        <span class="hero-ellipsis-vertical h-5 w-5"></span>
+                      </button>
+                    </template>
+                    <template #content="{open}">
+                      <div
+                        :id="`${run.actions_id}-menu`"
+                        :aria-labelledby="`${run.actions_id}-trigger`"
+                        class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+                      >
+                        <CadenceMenuItem :active="open">
+                          <a
+                            :href="run.href"
+                            data-phx-link="redirect"
+                            data-phx-link-state="push"
+                            class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
+                          >View run</a>
+                        </CadenceMenuItem>
+                      </div>
+                    </template>
+                  </CadenceModalMenu>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </CadenceTableFrame>
+      </CadenceCard>
     </section>
   </div>
 </template>

@@ -5,6 +5,7 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
+import {peelResidualCadenceCard} from "./residual_cadence_cards_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -27,10 +28,11 @@ const peelPageHeaderFrame = (value) =>
       '<header class="border-b border-primary/20 pb-4">',
     )
     .replace("</CadencePageHeaderFrame>", "</header>")
-const source = peelCadencePageTitle(
+const source = peelResidualCadenceCard(
   await readFile(adminHomePath, "utf8"),
   "AdminHome.vue",
 )
+const pageTitleCompatibleSource = peelCadencePageTitle(source, "AdminHome.vue")
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 
@@ -104,7 +106,7 @@ assert.match(
   /<a\s+id="admin-home-create-organization-link"[\s\S]*?<section\s+class="card bg-base-200 border border-base-300 hud-corners hover-glow-cyan transition-glow hover:bg-\[linear-gradient\(var\(--state-hover\),var\(--state-hover\)\)\]"/,
 )
 
-let reconstructed = peelPageHeaderFrame(source).replace(cardImport, "")
+let reconstructed = peelPageHeaderFrame(pageTitleCompatibleSource).replace(cardImport, "")
 
 for (const boundary of boundaries) {
   assert.equal(

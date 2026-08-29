@@ -38,6 +38,7 @@ import {
   peelCadencePageTitle,
   sha256,
 } from "./page_title_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -63,7 +64,14 @@ assert.throws(
 
 for (const entry of pageTitleMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
+  const residualCardCompatibleCurrent = peelResidualCadenceCardBeforeOlderLayers(
+    current,
+    entry.file,
+  )
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(
+    residualCardCompatibleCurrent,
+    entry.file,
+  )
   const predecessor = execFileSync(
     "git",
     ["-C", repositoryRoot, "show", `${pageTitlePredecessorCommit}:apps/cadence_web/assets/vue/${entry.file}`],

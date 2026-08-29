@@ -10,6 +10,7 @@ import {
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -334,7 +335,8 @@ const sources = new Map()
 
 for (const contract of contracts) {
   const componentPath = resolve(testDirectory, `../vue/${contract.filename}`)
-  const source = await readFile(componentPath, "utf8")
+  const currentSource = await readFile(componentPath, "utf8")
+  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, contract.filename)
   const preEmptyStateFrameSource = emptyStateFrameCallers.has(contract.filename)
     ? peelCadenceEmptyStateFrames(source, contract.filename)
     : source
