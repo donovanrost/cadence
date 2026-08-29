@@ -4,6 +4,7 @@ import {execFileSync} from "node:child_process"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {expectedNodeVersion, loadSfc} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
@@ -263,6 +264,9 @@ let frameCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(vueDirectory, fixture.filename)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(fixture.filename)
+    ? peelCadencePageTitle(source, fixture.filename)
+    : source
   const baseSource = execFileSync("git", ["show", `${baseIdentity}:${fixture.repositoryPath}`], {
     cwd: repositoryDirectory,
     encoding: "utf8",
@@ -299,7 +303,7 @@ for (const fixture of fixtures) {
 
   let reconstructedSource = peelCadenceBreadcrumbs(
     peelCadenceDetailsFrames(
-      peelCadenceNoticeFrames(source, fixture.filename),
+      peelCadenceNoticeFrames(pageTitleCompatibleSource, fixture.filename),
       fixture.filename === "CommsTransportNew.vue" ? 1 : 0,
       fixture.filename,
     ),

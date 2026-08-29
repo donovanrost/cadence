@@ -4,6 +4,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 type Breadcrumb = {
   label: string
@@ -80,12 +81,12 @@ defineProps<{
               >{{ breadcrumb.label }}</a>
             </template>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             Import run
             <span class="ml-3 font-mono text-base text-base-content/60">
               <StatusBadge :status="status.tone" :label="status.label" />
             </span>
-          </h1>
+          </CadencePageTitle>
         </div>
       </div>
     </CadencePageHeaderFrame>

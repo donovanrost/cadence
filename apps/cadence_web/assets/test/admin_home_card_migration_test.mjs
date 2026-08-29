@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
 
 assert.equal(
@@ -26,7 +27,10 @@ const peelPageHeaderFrame = (value) =>
       '<header class="border-b border-primary/20 pb-4">',
     )
     .replace("</CadencePageHeaderFrame>", "</header>")
-const source = await readFile(adminHomePath, "utf8")
+const source = peelCadencePageTitle(
+  await readFile(adminHomePath, "utf8"),
+  "AdminHome.vue",
+)
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 

@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -111,7 +112,10 @@ assert.match(
 )
 
 let reconstructedSource = reconstructPageHeaderSource(
-  peelCadenceBreadcrumbs(source, "CommsGroundStationForm.vue"),
+  peelCadenceBreadcrumbs(
+    peelCadencePageTitle(source, "CommsGroundStationForm.vue"),
+    "CommsGroundStationForm.vue",
+  ),
 ).replace(
   /import CadenceField from "\.\/ui\/components\/CadenceField\.vue"\nimport CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"\nimport CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"\n/,
   "",

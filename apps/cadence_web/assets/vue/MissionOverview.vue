@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
@@ -74,9 +75,9 @@ defineProps<{
     <div>
       <div>
         <p class="hud-label">{{ overview.mission.eyebrow }}</p>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+        <CadencePageTitle>
           {{ overview.mission.display_name }}
-        </h1>
+        </CadencePageTitle>
         <p class="mt-1 max-w-3xl text-sm text-base-content/70">
           {{ overview.mission.slug }}
         </p>

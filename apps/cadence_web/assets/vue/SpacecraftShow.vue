@@ -4,6 +4,7 @@ import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -129,7 +130,7 @@ defineProps<{
               <span v-else class="text-primary/90">{{ breadcrumb.label }}</span>
             </template>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.header.title }}
             <span class="ml-3 font-mono text-base text-base-content/60">
               <span
@@ -140,7 +141,7 @@ defineProps<{
                 {{ page.header.title_suffix.label }}
               </span>
             </span>
-          </h1>
+          </CadencePageTitle>
         </div>
       </div>
     </CadencePageHeaderFrame>

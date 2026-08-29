@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -423,7 +424,10 @@ let reconstructedSource = reconstructDataRow(
     reconstructPageHeaderSource(
       peelCadenceBreadcrumbs(
         peelCadenceDetailsFrame(
-          peelCadenceNoticeFrames(source, "CommsTransportNew.vue"),
+          peelCadenceNoticeFrames(
+            peelCadencePageTitle(source, "CommsTransportNew.vue"),
+            "CommsTransportNew.vue",
+          ),
           "CommsTransportNew.vue",
         ),
         "CommsTransportNew.vue",

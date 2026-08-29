@@ -3,6 +3,7 @@ import StatusBadge from "./StatusBadge.vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 type Status = {
   tone: "info"
@@ -69,9 +70,9 @@ defineProps<{
             </template>
           </CadenceBreadcrumbs>
           <p class="hud-label">{{ page.eyebrow }}</p>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.title }}
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
         <div class="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { peelCadencePageTitle } from "./page_title_test_support.mjs";
 import {
   expectedNodeVersion,
   integrationRequire,
@@ -141,6 +142,7 @@ for (const fixture of fixtures) {
   const caller = `apps/cadence_web/assets/vue/${fixture.filename}`;
   const componentPath = resolve(repoRoot, caller);
   const source = await readFile(componentPath, "utf8");
+  const pageTitleCompatibleSource = peelCadencePageTitle(source, fixture.filename);
   const parentSource = execFileSync(
     "git",
     ["-C", repoRoot, "show", `${parent}:${caller}`],
@@ -211,7 +213,7 @@ ${fixture.indent}>`;
     replaceExactlyOnce(
       replaceExactlyOnce(
         peelCadenceDetailsFrames(
-          source,
+          pageTitleCompatibleSource,
           fixture.filename === "SpacecraftShow.vue" ? 1 : 0,
           fixture.filename
         ),

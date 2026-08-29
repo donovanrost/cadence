@@ -3,6 +3,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 type NavigationItem = {
   label: string
@@ -100,13 +101,13 @@ defineProps<{
           <span class="text-primary/90">{{ navigation.current.label }}</span>
         </CadenceBreadcrumbs>
 
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+        <CadencePageTitle>
           {{ profile.display_name }}
           <span class="ml-3 font-mono text-base text-base-content/60">
             <span class="mc-value-medium text-base-content">{{ profile.version }}</span>
             <span class="hud-label">{{ profile.lifecycle }}</span>
           </span>
-        </h1>
+        </CadencePageTitle>
       </div>
     </CadencePageHeaderFrame>
 

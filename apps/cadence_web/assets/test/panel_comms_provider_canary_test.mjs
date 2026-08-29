@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "panel canary uses pinned Node 24.16.0")
@@ -16,6 +17,8 @@ const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const compactPageHeaderOpen = '    <CadencePageHeaderFrame variant="compact">'
 const compactPageHeaderBaseOpen = '    <header class="border-b border-primary/20 pb-4">'
 const compactPageHeaderClose = "    </CadencePageHeaderFrame>"
@@ -67,6 +70,20 @@ ${indent}>`
   return peeled
 }
 
+function peelCadenceDetailsFrame(value) {
+  assert.equal(occurrences(value, detailsFrameImport), 1, "details frame import reconstructs")
+  assert.equal(value.match(/<CadenceDetailsFrame\b/g)?.length, 1)
+  assert.equal(occurrences(value, "</CadenceDetailsFrame>"), 1)
+
+  const peeled = value
+    .replace(detailsFrameImport, "")
+    .replace("<CadenceDetailsFrame", "<details")
+    .replace("</CadenceDetailsFrame>", "</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
+
 const currentSource = await readFile(componentPath, "utf8")
 const {parse} = integrationRequire("@vue/compiler-sfc")
 const parsed = parse(currentSource, {filename: componentPath})
@@ -80,7 +97,12 @@ assert.equal(currentSource.split(compactPageHeaderClose).length - 1, 1, "page he
 assert.equal(currentSource.split(tableFrameImport).length - 1, 1, "table frame import reconstructs")
 assert.equal(currentSource.match(/<CadenceTableFrame\b/g)?.length, 2, "exactly two table frames open")
 assert.equal(currentSource.split("</CadenceTableFrame>").length - 1, 2, "exactly two table frames close")
-const source = peelCadenceBreadcrumbs(currentSource, "CommsProviderShow.vue")
+const source = peelCadenceBreadcrumbs(
+  peelCadenceDetailsFrame(
+    peelCadencePageTitle(currentSource, "CommsProviderShow.vue"),
+  ),
+  "CommsProviderShow.vue",
+)
   .replace(pageHeaderImport, "")
   .replace(compactPageHeaderOpen, compactPageHeaderBaseOpen)
   .replace(compactPageHeaderClose, compactPageHeaderBaseClose)

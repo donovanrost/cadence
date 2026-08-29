@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
@@ -276,10 +277,14 @@ let totalBoundaries = 0
 
 for (const entry of migrationLedger) {
   const source = await readFile(entry.path, "utf8")
+  const filename = `${entry.name}.vue`
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
+    ? peelCadencePageTitle(source, filename)
+    : source
   const prePaginationSource =
     entry.name === "ApplicationHost"
-      ? peelCadencePaginationFrame(source, "ApplicationHost.vue")
-      : source
+      ? peelCadencePaginationFrame(pageTitleCompatibleSource, "ApplicationHost.vue")
+      : pageTitleCompatibleSource
 
   assert.equal(
     source.split(entry.cardImport).length - 1,

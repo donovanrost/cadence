@@ -5,6 +5,7 @@ import {createHash} from "node:crypto"
 import {readFileSync} from "node:fs"
 import {fileURLToPath} from "node:url"
 
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
@@ -257,12 +258,13 @@ for (const fixture of fixtures) {
   const filename = fileURLToPath(new URL(`../vue/${fixture.name}`, import.meta.url))
   const currentSource = readFileSync(filename, "utf8")
   const parsed = parse(currentSource, {filename})
+  const pageTitleCompatibleSource = peelCadencePageTitle(currentSource, fixture.name)
 
   assert.deepEqual(parsed.errors, [], `${fixture.name} must parse with the Vue compiler`)
   let source = replaceExact(
     peelCadenceBreadcrumbs(
       peelCadenceDetailsFrames(
-        currentSource,
+        pageTitleCompatibleSource,
         fixture.name === "ProviderAccountShow.vue" ? 1 : 0,
         fixture.name,
       ),

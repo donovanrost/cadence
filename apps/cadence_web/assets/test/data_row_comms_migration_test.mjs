@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "comms data-row contracts use pinned Node 24.16.0")
@@ -498,6 +499,7 @@ const reconstructCards = (source, contract) => {
 for (const contract of contracts) {
   const componentPath = resolve(testDirectory, `../vue/${contract.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = peelCadencePageTitle(source, contract.filename)
 
   assert.equal(occurrenceCount(source, dataRowImport), 1, `${contract.filename} imports CadenceDataRow once`)
   assert.equal(
@@ -536,7 +538,7 @@ for (const contract of contracts) {
       peelCadenceTableFrames(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            peelCadenceNoticeFrames(source, contract.filename),
+            peelCadenceNoticeFrames(pageTitleCompatibleSource, contract.filename),
             detailsFrameCounts[contract.filename] ?? 0,
             contract.filename,
           ),

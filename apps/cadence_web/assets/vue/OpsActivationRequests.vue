@@ -2,6 +2,7 @@
 import {ref, watch} from "vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 type Page = {
   id: string
@@ -118,9 +119,9 @@ const decide = (event: SubmitEvent) => {
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.heading }}
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
       </div>
