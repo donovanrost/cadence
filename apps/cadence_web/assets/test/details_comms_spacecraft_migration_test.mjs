@@ -9,6 +9,7 @@ import {
   installDom,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const baseIdentity = "f9f36bb729e9f9abb1a2d01c3924bddf3d7eb99a"
@@ -188,10 +189,11 @@ try {
       `${caller.file} summary and every descendant remain byte-for-byte caller-owned`,
     )
 
+    const noticePeeledSource = peelCadenceNoticeFrames(source, caller.file)
     const reconstructed = replaceExact(
       replaceExact(
         replaceExact(
-          source,
+          noticePeeledSource,
           detailsFrameImport,
           "",
           1,

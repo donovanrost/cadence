@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -401,13 +402,13 @@ const save = () => emit("save", {provider: values()})
           </select>
         </CadenceField>
 
-        <div
+        <CadenceNoticeFrame
           v-if="visible(form.conditional.approval_guidance.visible_when)"
+          tone="info"
           :id="form.conditional.approval_guidance.id"
-          class="border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70"
         >
           {{ form.conditional.approval_guidance.text }}
-        </div>
+        </CadenceNoticeFrame>
 
         <div
           v-if="visible(form.conditional.bounded_policy.visible_when)"

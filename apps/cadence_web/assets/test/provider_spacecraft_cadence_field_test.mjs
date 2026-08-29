@@ -4,11 +4,13 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  elementAttributes,
   expectedNodeVersion,
   installDom,
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -144,7 +146,12 @@ ${indent}</div>`
 
 const reconstructProviderSource = (source) => {
   let reconstructed = reconstructFormChromeSource(
-    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, "ProviderAccountNew.vue")),
+    reconstructPageHeaderSource(
+      peelCadenceBreadcrumbs(
+        peelCadenceNoticeFrames(source, "ProviderAccountNew.vue"),
+        "ProviderAccountNew.vue",
+      ),
+    ),
     {
     featureName: "provider",
     dividerClass: "h-px flex-1 bg-base-300/60",
@@ -601,6 +608,15 @@ const ProviderContract = defineComponent({
 const providerHost = dom.window.document.querySelector("#provider-contract")
 const providerApp = createApp(ProviderContract)
 providerApp.mount(providerHost)
+
+const providerBoundary = providerHost.querySelector("#provider-boundary")
+assert.equal(providerBoundary.tagName, "DIV")
+assert.deepEqual(elementAttributes(providerBoundary), {
+  class: "border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70",
+  id: "provider-boundary",
+})
+assert.deepEqual([...providerBoundary.childNodes].map((node) => node.nodeName), ["#text"])
+assert.equal(providerBoundary.textContent.trim(), "Server owns provider selection.")
 
 const providerWrappers = [...providerHost.querySelectorAll("form .fieldset")]
 assert.equal(providerWrappers.length, 8, "every rendered provider field uses the foundation")

@@ -11,6 +11,7 @@ import {
   expectedNodeVersion,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs";
+import { peelCadenceNoticeFrames } from "./notice_frame_test_support.mjs";
 
 const pinnedNode =
   "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node";
@@ -261,7 +262,7 @@ for (const fixture of fixtures) {
     replaceExact(
       replaceExact(
         peelCadenceDetailsFrames(
-          source,
+          peelCadenceNoticeFrames(source, fixture.filename),
           detailsFrameCounts[fixture.filename] ?? 0,
           fixture.filename
         ),

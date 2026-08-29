@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -313,12 +314,12 @@ const save = () => emit("save", {provider_account: values()})
           >{{ form.connector.selected.client_key }}</span>
         </div>
 
-        <div
+        <CadenceNoticeFrame
+          tone="info"
           :id="form.connector.boundary.id"
-          class="border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70"
         >
           {{ form.connector.boundary.text }}
-        </div>
+        </CadenceNoticeFrame>
       </section>
 
       <div

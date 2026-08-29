@@ -2,6 +2,7 @@
 import {computed, reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
@@ -511,10 +512,10 @@ const statusClass = (status: "ready" | "attention") =>
               >{{ option.label }}</option>
             </select>
           </CadenceField>
-          <div
+          <CadenceNoticeFrame
             v-if="form.provider.empty_state.visible"
+            tone="warning"
             :id="form.provider.empty_state.id"
-            class="border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70"
           >
             {{ form.provider.empty_state.message }}
             <a
@@ -523,7 +524,7 @@ const statusClass = (status: "ready" | "attention") =>
               data-phx-link-state="push"
               class="ml-1 text-primary hover:underline"
             >{{ form.provider.empty_state.action.label }}</a>
-          </div>
+          </CadenceNoticeFrame>
         </template>
       </section>
 
@@ -708,13 +709,13 @@ const statusClass = (status: "ready" | "attention") =>
                 {{ form.provider.operator_summary.endpoint }}
               </p>
             </div>
-            <div
+            <CadenceNoticeFrame
               v-if="form.provider.derivation_error"
+              tone="warning"
               id="transport-provider-derivation-error"
-              class="border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70"
             >
               {{ form.provider.derivation_error }}
-            </div>
+            </CadenceNoticeFrame>
           </div>
         </section>
 

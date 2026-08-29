@@ -10,6 +10,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -171,6 +172,22 @@ const formChromeImports = [
 ]
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
 const occurrences = (value, fragment) => value.split(fragment).length - 1
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
+
+const peelCadenceDetailsFrame = (value, label) => {
+  assert.equal(occurrences(value, detailsFrameImport), 1, `${label} details import count`)
+  assert.equal(value.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, 1, `${label} details opening count`)
+  assert.equal(occurrences(value, "</CadenceDetailsFrame>"), 1, `${label} details closing count`)
+
+  const peeled = value
+    .replace(detailsFrameImport, "")
+    .replace("<CadenceDetailsFrame", "<details")
+    .replace("</CadenceDetailsFrame>", "</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (value, label) => {
   const importCount = occurrences(value, breadcrumbsImport)
@@ -403,7 +420,15 @@ const reconstructFormChrome = (value) => {
 
 let reconstructedSource = reconstructDataRow(
   reconstructCards(
-    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, "CommsTransportNew.vue")),
+    reconstructPageHeaderSource(
+      peelCadenceBreadcrumbs(
+        peelCadenceDetailsFrame(
+          peelCadenceNoticeFrames(source, "CommsTransportNew.vue"),
+          "CommsTransportNew.vue",
+        ),
+        "CommsTransportNew.vue",
+      ),
+    ),
   ),
 ).replace(
   'import CadenceField from "./ui/components/CadenceField.vue"\n',
@@ -1056,6 +1081,65 @@ assert.deepEqual(
   [missionProvider, serviceProfile, deliveryProfile],
   "provider profile native nodes survive prop acknowledgements",
 )
+
+const noticeForm = formWithValues(currentValues)
+noticeForm.provider.empty_state.visible = true
+noticeForm.provider.derivation_error = "Provider derivation failed."
+liveProps.form = deepFreeze(noticeForm)
+await nextTick()
+
+const providerEmptyState = control("transport-provider-empty-state")
+assert.equal(providerEmptyState.tagName, "DIV")
+assert.deepEqual(elementAttributes(providerEmptyState), {
+  class: "border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70",
+  id: "transport-provider-empty-state",
+})
+assert.deepEqual(
+  [...providerEmptyState.childNodes].map((node) => node.nodeName),
+  ["#text", "A"],
+)
+assert.equal(providerEmptyState.childNodes[0].textContent.trim(), "No validated providers.")
+const providerRedirect = providerEmptyState.querySelector("a")
+assert.deepEqual(elementAttributes(providerRedirect), {
+  class: "ml-1 text-primary hover:underline",
+  "data-phx-link": "redirect",
+  "data-phx-link-state": "push",
+  href: "/missions/mission-1/comms/providers",
+})
+assert.equal(providerRedirect.textContent, "Review providers")
+
+const providerDerivationError = control("transport-provider-derivation-error")
+assert.equal(providerDerivationError.tagName, "DIV")
+assert.deepEqual(elementAttributes(providerDerivationError), {
+  class: "border-l-2 border-warning/60 bg-warning/10 px-4 py-3 text-sm text-base-content/70",
+  id: "transport-provider-derivation-error",
+})
+assert.deepEqual(
+  [...providerDerivationError.childNodes].map((node) => node.nodeName),
+  ["#text"],
+)
+assert.equal(providerDerivationError.textContent.trim(), "Provider derivation failed.")
+
+const reconciledNoticeForm = formWithValues(currentValues)
+reconciledNoticeForm.provider.empty_state.visible = true
+reconciledNoticeForm.provider.empty_state.message = "No validated providers remain."
+reconciledNoticeForm.provider.derivation_error = "Provider derivation still failed."
+liveProps.form = deepFreeze(reconciledNoticeForm)
+await nextTick()
+assert.strictEqual(control("transport-provider-empty-state").querySelector("a"), providerRedirect)
+assert.equal(
+  control("transport-provider-empty-state").childNodes[0].textContent.trim(),
+  "No validated providers remain.",
+)
+assert.equal(
+  control("transport-provider-derivation-error").textContent.trim(),
+  "Provider derivation still failed.",
+)
+
+liveProps.form = deepFreeze(formWithValues(currentValues))
+await nextTick()
+assert.equal(control("transport-provider-empty-state"), null)
+assert.equal(control("transport-provider-derivation-error"), null)
 
 const providerSubmit = new dom.window.Event("submit", {bubbles: true, cancelable: true})
 form.dispatchEvent(providerSubmit)

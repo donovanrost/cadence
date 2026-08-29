@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -375,7 +376,10 @@ for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, fixture.path)
   const source = reconstructPageHeaderSource(
     peelNewCadenceFieldSource(
-      peelCadenceBreadcrumbs(await readFile(componentPath, "utf8"), fixture.name),
+      peelCadenceBreadcrumbs(
+        peelCadenceNoticeFrames(await readFile(componentPath, "utf8"), `${fixture.name}.vue`),
+        fixture.name,
+      ),
       fixture.name,
     ),
   )
