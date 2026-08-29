@@ -17,6 +17,7 @@ import {
   compactHeaderBodyMigrations,
   peelCadenceCompactPageHeaderBodyFrame,
 } from "./compact_page_header_body_frame_test_support.mjs";
+import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs";
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -78,11 +79,12 @@ assert.equal(
   225,
   "the exact predecessor owns 225 Vue SFCs"
 );
-assert.equal(successorVuePaths.length, 227, "the successor owns 227 Vue SFCs");
+assert.equal(successorVuePaths.length, 228, "the successor owns 228 Vue SFCs");
 assert.deepEqual(
   successorVuePaths.filter((path) => !predecessorVuePaths.includes(path)),
   [
     compactHeaderBodyFramePath,
+    opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   ],
   "the current tree adds only the audited frame paths"
@@ -1218,5 +1220,5 @@ contractApp.unmount();
 dom.window.close();
 
 console.log(
-  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-227 SFC inventory)"
+  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-228 SFC inventory)"
 );

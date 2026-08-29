@@ -18,6 +18,7 @@ import {
   peelCompactTableFrames,
   predecessorCadenceTableFrameCallers,
 } from "./compact_table_frame_test_support.mjs"
+import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs"
 import {
   peelCadenceDefinitionListPanelBeforeOlderLayers,
 } from "./definition_list_panel_test_support.mjs"
@@ -84,6 +85,7 @@ const allowedPostPredecessorVuePaths = Object.freeze([
   compactHeaderBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceDiagnosticsSectionFrame.vue",
+  opsListBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
 ])
@@ -94,12 +96,12 @@ const postPredecessorVuePaths = currentVuePaths.filter(
 assert.deepEqual(
   postPredecessorVuePaths,
   allowedPostPredecessorVuePaths,
-  "exactly five explicitly allowed SFCs were added after the frozen predecessor",
+  "exactly six explicitly allowed SFCs were added after the frozen predecessor",
 )
 assert.deepEqual(
   currentVuePaths,
   [...predecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
-  "the audit covers the full current tree: every frozen predecessor SFC plus five allowed additions",
+  "the audit covers the full current tree: every frozen predecessor SFC plus six allowed additions",
 )
 assert.equal(predecessorVuePaths.length, 222, "the frozen audit covers exactly 222 Vue SFCs")
 

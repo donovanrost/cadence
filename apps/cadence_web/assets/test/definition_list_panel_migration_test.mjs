@@ -38,10 +38,11 @@ import {
   opsListFrameCallerNames,
   peelCadenceOpsListFrame,
 } from "./ops_list_frame_test_support.mjs"
+import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 224-SFC predecessor and recursive 227-SFC current tree add only the audited primitives",
+  "the fixed 224-SFC predecessor and recursive 228-SFC current tree add only the audited primitives",
   "all current SFCs parse and compile with the actual pinned Vue compiler",
   "the predecessor tree classifies exactly two native shells and the current tree has no third",
   "the fixed predecessor commit, blob, byte length, and SHA-256 remain exact",
@@ -110,10 +111,11 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 224, "the immediate predecessor freezes 224 SFCs")
-assert.equal(currentVuePaths.length, 227, "the recursive current inventory includes 227 SFCs")
+assert.equal(currentVuePaths.length, 228, "the recursive current inventory includes 228 SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
   definitionListPanelPrimitiveRepositoryPath,
+  opsListBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
 ])
 assert.deepEqual(
@@ -122,6 +124,7 @@ assert.deepEqual(
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
     definitionListPanelPrimitiveRepositoryPath,
+    opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   ].sort(),
   "the audited primitives are the only current-tree additions",
