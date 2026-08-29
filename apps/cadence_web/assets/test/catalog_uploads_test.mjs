@@ -182,8 +182,13 @@ assert.match(uploadForm, /:disabled="submit_disabled"/)
 assert.doesNotMatch(uploadForm, /fetch\(|axios|useRouter|useRoute|window\.location/)
 
 assert.match(databaseNew, /^import CatalogUploadForm from "\.\/CatalogUploadForm\.vue"$/m)
+assert.match(
+  databaseNew,
+  /^import CadenceFormPageFrame from "\.\/ui\/components\/CadenceFormPageFrame\.vue"$/m,
+)
 assert.equal(databaseNew.match(/<CatalogUploadForm\b/g)?.length, 1)
-assert.match(databaseNew, /<div :id="page\.id" class="space-y-6 max-w-2xl">/)
+assert.match(databaseNew, /<CadenceFormPageFrame :id="page\.id">/)
+assert.doesNotMatch(databaseNew, /<div :id="page\.id" class="space-y-6 max-w-2xl">/)
 assert.match(databaseNew, /@validate="emit\('validate', \$event\)"/)
 assert.match(databaseNew, /@cancel-upload="emit\('cancel-upload', \$event\)"/)
 assert.match(databaseNew, /:id="page\.cancel\.id"/)

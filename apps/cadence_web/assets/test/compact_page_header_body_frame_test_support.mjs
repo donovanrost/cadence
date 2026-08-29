@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { peelCadenceNarrowFormPageFrameBeforeOlderLayers } from "./narrow_form_page_frame_test_support.mjs";
+import { peelCadenceFormPageFrameBeforeOlderLayers } from "./form_page_frame_test_support.mjs";
 
 export const compactHeaderBodyBase = "41063fbbb2bcdcb5c509929b6550b0689a210838";
 export const compactHeaderBodyFrameClass =
@@ -311,8 +312,12 @@ export const peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers = (
   caller
 ) => {
   const file = caller.split("/").at(-1);
-  const narrowFormCompatibleSource = peelCadenceNarrowFormPageFrameBeforeOlderLayers(
+  const formPageCompatibleSource = peelCadenceFormPageFrameBeforeOlderLayers(
     source,
+    caller,
+  );
+  const narrowFormCompatibleSource = peelCadenceNarrowFormPageFrameBeforeOlderLayers(
+    formPageCompatibleSource,
     caller,
   );
   if (!compactHeaderBodyCallerNames.includes(file)) return narrowFormCompatibleSource;

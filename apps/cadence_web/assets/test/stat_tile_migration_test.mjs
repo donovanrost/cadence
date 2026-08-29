@@ -98,10 +98,11 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 229, "the current-tree gate includes exactly 229 Vue SFCs")
+assert.equal(currentVuePaths.length, 230, "the current-tree gate includes exactly 230 Vue SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
   definitionListPanelRepositoryPath,
+  "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
   narrowFormPageFramePath,
   opsListBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
@@ -113,6 +114,7 @@ assert.deepEqual(
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
     definitionListPanelRepositoryPath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
     narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",

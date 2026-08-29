@@ -6,6 +6,7 @@ import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -133,7 +134,7 @@ const save = () => emit("save", {ground_station: values()})
 </script>
 
 <template>
-  <div :id="page.id" class="space-y-6 max-w-2xl" :data-mode="mode">
+  <CadenceFormPageFrame :id="page.id" :data-mode="mode">
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
@@ -304,5 +305,5 @@ const save = () => emit("save", {ground_station: values()})
         >{{ form.actions.cancel.label }}</a>
       </CadenceFormActions>
     </form>
-  </div>
+  </CadenceFormPageFrame>
 </template>
