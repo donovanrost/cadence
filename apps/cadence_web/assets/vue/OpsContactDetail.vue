@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import {reactive, watch} from "vue"
@@ -600,7 +601,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
           </div>
         </CadencePanel>
 
-        <details
+        <CadenceDetailsFrame
           v-if="page.admin_diagnostics !== undefined"
           :id="page.admin_diagnostics.id"
           class="border border-base-300 bg-base-200/25"
@@ -625,7 +626,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
             {{ page.admin_diagnostics.link.label }}
             <span class="hero-arrow-up-right h-3 w-3"></span>
           </a>
-        </details>
+        </CadenceDetailsFrame>
       </aside>
     </div>
   </section>

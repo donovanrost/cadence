@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import {computed, reactive, watch} from "vue"
@@ -489,7 +490,7 @@ const activeError = computed(() =>
           </div>
         </CadencePanel>
 
-        <details :id="journey.advanced.id" class="border border-base-300 bg-base-200/20">
+        <CadenceDetailsFrame :id="journey.advanced.id" class="border border-base-300 bg-base-200/20">
           <summary class="cursor-pointer px-5 py-4 text-sm font-semibold">
             {{ journey.advanced.title }}
             <span class="ml-2 font-normal text-base-content/45">{{ journey.advanced.copy }}</span>
@@ -567,7 +568,7 @@ const activeError = computed(() =>
               >
             </CadenceField>
           </div>
-        </details>
+        </CadenceDetailsFrame>
 
         <section
           :id="journey.rationale.id"

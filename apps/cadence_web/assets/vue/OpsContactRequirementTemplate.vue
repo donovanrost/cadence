@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
@@ -594,7 +595,7 @@ const fieldClass = (field: FormField) => [
               </div>
             </div>
 
-            <details :id="template_form.outcome_details.id" class="border border-base-300">
+            <CadenceDetailsFrame :id="template_form.outcome_details.id" class="border border-base-300">
               <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
                 {{ template_form.outcome_details.summary }}
               </summary>
@@ -639,9 +640,9 @@ const fieldClass = (field: FormField) => [
                   </template>
                 </CadenceField>
               </div>
-            </details>
+            </CadenceDetailsFrame>
 
-            <details :id="template_form.catchup_details.id" class="border border-base-300">
+            <CadenceDetailsFrame :id="template_form.catchup_details.id" class="border border-base-300">
               <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
                 {{ template_form.catchup_details.summary }}
               </summary>
@@ -687,7 +688,7 @@ const fieldClass = (field: FormField) => [
                   </template>
                 </CadenceField>
               </div>
-            </details>
+            </CadenceDetailsFrame>
 
             <CadenceField
               :control-id="template_form.fields.rationale.id"
