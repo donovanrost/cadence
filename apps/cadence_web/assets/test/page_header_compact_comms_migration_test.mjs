@@ -5,6 +5,9 @@ import {readFileSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import test from "node:test"
+import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
@@ -170,9 +173,11 @@ for (const caller of callers) {
     assert.doesNotMatch(source, /<header\b/, "expected no residual native header")
 
     const filename = caller.slice(caller.lastIndexOf("/") + 1)
+    const compactHeaderBodyCompatibleSource =
+      peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(source, filename)
     const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
-      ? peelCadencePageTitle(source, filename)
-      : source
+      ? peelCadencePageTitle(compactHeaderBodyCompatibleSource, filename)
+      : compactHeaderBodyCompatibleSource
     const reconstructed = peelTableFrames(
       peelCadenceBreadcrumbs(
         peelCadenceDetailsFrames(

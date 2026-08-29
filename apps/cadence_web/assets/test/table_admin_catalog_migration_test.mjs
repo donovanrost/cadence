@@ -5,6 +5,9 @@ import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   hoverTableRowCallerNames,
   peelCadenceHoverTableRows,
 } from "./hover_table_row_test_support.mjs"
@@ -122,7 +125,12 @@ for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path)
   const currentSource = readFileSync(componentPath, "utf8")
   const file = caller.path.split("/").at(-1)
-  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, file)
+  const compactHeaderBodyCompatibleSource =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(currentSource, file)
+  const source = peelResidualCadenceCardBeforeOlderLayers(
+    compactHeaderBodyCompatibleSource,
+    file,
+  )
   const preHoverTableRowSource = hoverTableRowCallers.has(file)
     ? peelCadenceHoverTableRows(source, file)
     : source

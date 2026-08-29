@@ -2,6 +2,7 @@
 import StatusBadge from "./StatusBadge.vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
@@ -72,8 +73,8 @@ defineProps<{
 <template>
   <div :id="page.id" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.breadcrumbs"
@@ -100,11 +101,11 @@ defineProps<{
             </span>
           </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-        </div>
-        <div class="flex items-center gap-2">
+        </template>
+        <template #actions>
           <StatusBadge :status="page.status.tone" :label="page.status.label" />
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid gap-4 xl:grid-cols-2">

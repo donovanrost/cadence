@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -46,8 +47,8 @@ defineProps<{page: Page}>()
 <template>
   <div class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.breadcrumbs"
@@ -73,9 +74,9 @@ defineProps<{page: Page}>()
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ page.subtitle }}
           </p>
-        </div>
+        </template>
 
-        <div class="flex items-center gap-2">
+        <template #actions>
           <a
             :id="page.new_rule.id"
             :href="page.new_rule.href"
@@ -85,8 +86,8 @@ defineProps<{page: Page}>()
           >
             <span class="hero-plus h-4 w-4"></span> {{ page.new_rule.label }}
           </a>
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div

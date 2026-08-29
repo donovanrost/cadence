@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
@@ -166,8 +167,8 @@ const archiveProvider = () => {
 <template>
   <div :id="provider.page_id" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in navigation.breadcrumbs"
@@ -202,9 +203,9 @@ const archiveProvider = () => {
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ provider.provider_id }}
           </p>
-        </div>
+        </template>
 
-        <div class="flex items-center gap-2">
+        <template #actions>
           <button
             :id="actions.validate.id"
             type="button"
@@ -235,8 +236,8 @@ const archiveProvider = () => {
           >
             {{ actions.archive.label }}
           </button>
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">

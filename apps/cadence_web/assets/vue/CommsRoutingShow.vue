@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
@@ -50,8 +51,8 @@ defineProps<{
 <template>
   <div id="comms-routing-show-surface" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in navigation.breadcrumbs"
@@ -77,12 +78,12 @@ defineProps<{
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ rule.routing_rule_id }}
           </p>
-        </div>
+        </template>
 
-        <div class="flex items-center gap-2">
+        <template #actions>
           <StatusBadge :status="rule.state.tone" :label="rule.state.label" />
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">

@@ -5,6 +5,9 @@ import {readFileSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import test from "node:test"
 import {fileURLToPath} from "node:url"
+import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
 import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "expected pinned Node 24.16.0")
@@ -252,7 +255,12 @@ test("compact spacecraft and mission page-header migration is exact", async (t) 
       const importInsertion = caller.endsWith("/SpacecraftRouting.vue")
         ? `${componentImport}\n\n`
         : `${componentImport}\n`
-      const pageTitleCompatibleSource = peelCadencePageTitle(source, caller)
+      const compactHeaderBodyCompatibleSource =
+        peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(source, caller)
+      const pageTitleCompatibleSource = peelCadencePageTitle(
+        compactHeaderBodyCompatibleSource,
+        caller,
+      )
       const reconstructed = peelTableFrame(
         peelCadenceField(
           peelCadenceBreadcrumbs(

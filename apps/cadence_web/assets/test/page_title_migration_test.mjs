@@ -7,6 +7,9 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   elementAttributes,
   expectedNodeVersion,
   installDom,
@@ -67,8 +70,10 @@ assert.throws(
 
 for (const entry of pageTitleMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const compactHeaderBodyCompatibleCurrent =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, entry.file)
   const residualCardCompatibleCurrent = peelResidualCadenceCardBeforeOlderLayers(
-    current,
+    compactHeaderBodyCompatibleCurrent,
     entry.file,
   )
   const contactSummaryCompatibleCurrent = peelContactSummaryBand(
@@ -103,8 +108,10 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const compactHeaderBodyCompatibleCurrent =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, entry.file)
   const definitionListCompatibleCurrent = peelCadenceDefinitionListPanelBeforeOlderLayers(
-    current,
+    compactHeaderBodyCompatibleCurrent,
     entry.file,
   )
   const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
