@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import vm from "node:vm"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const scenarioLedger = [
@@ -198,7 +199,10 @@ assert.doesNotMatch(toggleMarkup, /@click|@update:model-value|v-model|\bas-child
 // Its hash proves the rest of this large component is byte-for-byte unchanged.
 const normalizedComponentScaffold = reconstructPanelBase(
   reconstructPageHeaderBase(
-    peelCadenceOpsViewport(source, "OpsContactRequirementShow.vue"),
+    peelCadenceOpsViewport(
+      peelContactSummaryBand(source, "OpsContactRequirementShow.vue"),
+      "OpsContactRequirementShow.vue",
+    ),
   ),
   4,
 )

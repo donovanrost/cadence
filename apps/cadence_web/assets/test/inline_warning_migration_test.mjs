@@ -12,6 +12,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {
   inlineWarningCallerLedger,
   peelCadenceInlineWarnings,
@@ -58,9 +59,10 @@ assert.doesNotMatch(componentSource, /\b(?:tone|role|aria-live|aria-atomic)\b/)
 
 for (const caller of callerPaths) {
   const source = await readFile(caller.path, "utf8")
+  const contactSummaryCompatibleSource = peelContactSummaryBand(source, caller.filename)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.filename)
-    ? peelCadenceOpsViewport(source, caller.filename)
-    : source
+    ? peelCadenceOpsViewport(contactSummaryCompatibleSource, caller.filename)
+    : contactSummaryCompatibleSource
   peelCadenceInlineWarnings(opsViewportCompatibleSource, caller.filename)
   assert.equal(source.split("<CadenceInlineWarning\n").length - 1, 1)
   assert.equal(source.split("</CadenceInlineWarning>").length - 1, 1)

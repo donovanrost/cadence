@@ -202,19 +202,19 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
 
     <div class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.65fr)] lg:p-7">
       <div class="min-w-0 space-y-5">
-        <section :id="page.horizon.id" class="border border-base-300 bg-base-200/20">
-          <div class="grid gap-4 p-4 sm:grid-cols-3">
+        <CadencePanel :id="page.horizon.id" class="border border-base-300 bg-base-200/20" header-class="grid gap-4 p-4 sm:grid-cols-3">
+          <template #header>
             <div v-for="field in page.horizon.fields" :key="field.label">
               <p class="hud-label">{{ field.label }}</p>
               <p :class="field.class">
                 {{ field.value }}
               </p>
             </div>
-          </div>
+          </template>
           <div class="border-t border-base-300 px-4 py-3 text-sm text-base-content/60">
             {{ page.horizon.rationale }}
           </div>
-        </section>
+        </CadencePanel>
 
         <CadencePanel class="border border-base-300 bg-base-200/20" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
           <template #header>

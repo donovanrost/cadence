@@ -13,6 +13,7 @@ import {
   installDom,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {
   excludedOpsViewportVariants,
   opsViewportCallerNames,
@@ -189,9 +190,10 @@ assert.deepEqual(
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 for (const entry of opsViewportMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
   const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(entry.file)
-    ? peelCadenceOpsAuthorHeader(current, entry.file)
-    : current
+    ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
+    : contactSummaryCompatibleCurrent
   const predecessor = execFileSync(
     "git",
     [

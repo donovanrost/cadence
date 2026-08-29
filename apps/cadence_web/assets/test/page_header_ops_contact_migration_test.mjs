@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -152,9 +153,10 @@ const peelCadenceFields = (source, filename, expectedFrames) => {
 
 for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const source = await readFile(resolve(vueDirectory, filename), "utf8")
+  const contactSummaryCompatibleSource = peelContactSummaryBand(source, filename)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
-    ? peelCadenceOpsViewport(source, filename)
-    : source
+    ? peelCadenceOpsViewport(contactSummaryCompatibleSource, filename)
+    : contactSummaryCompatibleSource
 
   assert.equal(count(source, importLine), 1, `${filename} has exactly one frame import`)
   assert.equal(count(source, frameOpening), 1, `${filename} has exactly one ops frame`)
