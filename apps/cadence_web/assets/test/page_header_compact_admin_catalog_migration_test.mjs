@@ -4,6 +4,7 @@ import {execFileSync} from "node:child_process"
 import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   hoverTableRowCallerNames,
   peelCadenceHoverTableRows,
@@ -195,9 +196,12 @@ assert.equal(
 for (const caller of callers) {
   const source = readFileSync(resolve(repositoryRoot, caller), "utf8")
   const file = caller.split("/").at(-1)
-  const preHoverTableRowSource = hoverTableRowCallers.has(file)
-    ? peelCadenceHoverTableRows(source, file)
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(file)
+    ? peelCadencePageTitle(source, file)
     : source
+  const preHoverTableRowSource = hoverTableRowCallers.has(file)
+    ? peelCadenceHoverTableRows(pageTitleCompatibleSource, file)
+    : pageTitleCompatibleSource
   const prePaginationSource =
     caller === "apps/cadence_web/assets/vue/ApplicationHost.vue"
       ? peelCadencePaginationFrame(preHoverTableRowSource, caller)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
@@ -77,12 +78,12 @@ defineProps<{validation: Validation}>()
             </template>
           </CadenceBreadcrumbs>
 
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ validation.title }}
             <span class="ml-3 font-mono text-base text-base-content/60">
               {{ validation.finding_count_suffix }}
             </span>
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ validation.subtitle }}
           </p>

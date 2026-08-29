@@ -2,6 +2,7 @@
 import CatalogUploadForm from "./CatalogUploadForm.vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 type Breadcrumb = {
   label: string
@@ -58,9 +59,9 @@ const emit = defineEmits<{
               >{{ breadcrumb.label }}</a>
             </template>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.heading }}
-          </h1>
+          </CadencePageTitle>
         </div>
       </div>
     </CadencePageHeaderFrame>

@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { pageTitleCallerNames, peelCadencePageTitle } from "./page_title_test_support.mjs";
 import {
   expectedNodeVersion,
   integrationRequire,
@@ -180,6 +181,9 @@ for (const fixture of fixtures) {
   const repositoryPath = `apps/cadence_web/assets/vue/${fixture.filename}`;
   const componentPath = resolve(repositoryRoot, repositoryPath);
   const source = readFileSync(componentPath, "utf8");
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(fixture.filename)
+    ? peelCadencePageTitle(source, fixture.filename)
+    : source;
   const parentSource = execFileSync(
     "git",
     ["-C", repositoryRoot, "show", `${parent}:${repositoryPath}`],
@@ -262,7 +266,7 @@ for (const fixture of fixtures) {
     replaceExact(
       replaceExact(
         peelCadenceDetailsFrames(
-          peelCadenceNoticeFrames(source, fixture.filename),
+          peelCadenceNoticeFrames(pageTitleCompatibleSource, fixture.filename),
           detailsFrameCounts[fixture.filename] ?? 0,
           fixture.filename
         ),

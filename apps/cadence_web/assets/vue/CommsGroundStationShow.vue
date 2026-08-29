@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 
@@ -78,12 +79,12 @@ const archive = () => {
             </template>
           </CadenceBreadcrumbs>
 
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ ground_station.display_name }}
             <span class="ml-3 font-mono text-base text-base-content/60">
               {{ ground_station.lifecycle_state }}
             </span>
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ ground_station.ground_station_id }}
           </p>

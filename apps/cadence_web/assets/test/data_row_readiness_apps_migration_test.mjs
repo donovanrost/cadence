@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
@@ -245,6 +246,9 @@ assert.equal(
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(fixture.filename)
+    ? peelCadencePageTitle(source, fixture.filename)
+    : source
   const parsed = parse(source, {filename: componentPath})
 
   assert.deepEqual(parsed.errors, [], `${fixture.filename} parses with the pinned Vue compiler`)
@@ -277,7 +281,7 @@ for (const fixture of fixtures) {
 
   let reconstructedSource = reconstructCards(
     peelCadencePageHeaderFrame(
-      peelCadenceBreadcrumbs(source, fixture.filename),
+      peelCadenceBreadcrumbs(pageTitleCompatibleSource, fixture.filename),
       fixture.filename,
     ),
     fixture.cardCount,

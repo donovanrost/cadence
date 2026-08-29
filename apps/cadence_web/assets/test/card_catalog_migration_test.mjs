@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const foundationBase = "00c264585863a89a76d55484b777a7e73eda7fa5"
@@ -210,9 +211,15 @@ const sources = new Map()
 for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(migration.file)
+    ? peelCadencePageTitle(source, migration.file)
+    : source
   const reconstructed = reconstructBaseSource(
     peelPageHeaderFrame(
-      peelTableFrames(peelCadenceBreadcrumbs(source, migration.file), migration.file),
+      peelTableFrames(
+        peelCadenceBreadcrumbs(pageTitleCompatibleSource, migration.file),
+        migration.file,
+      ),
     ),
     migration.boundaryCount,
     migration.file,

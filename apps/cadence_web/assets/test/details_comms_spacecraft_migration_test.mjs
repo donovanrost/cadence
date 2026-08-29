@@ -4,6 +4,7 @@ import {execFileSync} from "node:child_process"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   expectedNodeVersion,
   installDom,
@@ -189,7 +190,10 @@ try {
       `${caller.file} summary and every descendant remain byte-for-byte caller-owned`,
     )
 
-    const noticePeeledSource = peelCadenceNoticeFrames(source, caller.file)
+    const noticePeeledSource = peelCadenceNoticeFrames(
+      peelCadencePageTitle(source, caller.file),
+      caller.file,
+    )
     const reconstructed = replaceExact(
       replaceExact(
         replaceExact(

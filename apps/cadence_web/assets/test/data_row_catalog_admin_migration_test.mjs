@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -208,6 +209,9 @@ let reconstructedBoundaryCount = 0
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(foundation.file)
+    ? peelCadencePageTitle(source, foundation.file)
+    : source
   const expectedCardImportCount = foundation.cardBoundaryCount === 0 ? 0 : 1
 
   assert.equal(
@@ -223,7 +227,9 @@ for (const foundation of foundations) {
 
   let cardOpeningCount = 0
   let dataRowSource = peelCadencePanels(
-    peelCadencePageHeaderFrame(peelCadenceBreadcrumbs(source, foundation.file)),
+    peelCadencePageHeaderFrame(
+      peelCadenceBreadcrumbs(pageTitleCompatibleSource, foundation.file),
+    ),
     foundation.file,
   ).replace(cardImport, "")
 

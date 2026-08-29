@@ -3,6 +3,7 @@ import {ref, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 type PreflightState = "ready" | "attention" | "blocked"
@@ -315,9 +316,9 @@ const buttonClasses: Record<ButtonVariant, string> = {
               >{{ breadcrumb.label }}</a>
             </template>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.title }}
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
         </div>
       </div>

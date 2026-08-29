@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
@@ -374,10 +375,15 @@ assert.equal(
 
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, fixture.path)
+  const currentSource = await readFile(componentPath, "utf8")
+  const filename = `${fixture.name}.vue`
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
+    ? peelCadencePageTitle(currentSource, filename)
+    : currentSource
   const source = reconstructPageHeaderSource(
     peelNewCadenceFieldSource(
       peelCadenceBreadcrumbs(
-        peelCadenceNoticeFrames(await readFile(componentPath, "utf8"), `${fixture.name}.vue`),
+        peelCadenceNoticeFrames(pageTitleCompatibleSource, filename),
         fixture.name,
       ),
       fixture.name,

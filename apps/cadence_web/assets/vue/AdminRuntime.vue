@@ -3,6 +3,7 @@ import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type FilterKey =
@@ -209,12 +210,12 @@ const updateFilter = (key: FilterKey, event: Event) => {
             <span class="text-base-content/20" aria-hidden="true">/</span>
             <span class="text-primary/90">Runtime Diagnostics</span>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             Runtime Diagnostics
             <span class="ml-3 font-mono text-base text-base-content/60">
               {{ summary.decision_count }} decisions
             </span>
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             Process-local runtime health for support workflows, including dashboard invalidation decisions emitted by open dashboards.
           </p>

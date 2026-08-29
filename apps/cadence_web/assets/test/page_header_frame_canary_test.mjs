@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -43,6 +44,10 @@ const migrations = Object.freeze([
 
 for (const migration of migrations) {
   const source = await readFile(migration.path, "utf8")
+  const filename = migration.path.split("/").at(-1)
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
+    ? peelCadencePageTitle(source, filename)
+    : source
 
   assert.equal(source.split(migration.importLine).length - 1, 1, `${migration.name} import count`)
   assert.equal(source.split(migration.opening).length - 1, 1, `${migration.name} opening count`)
@@ -50,7 +55,7 @@ for (const migration of migrations) {
   assert.equal(count(source, /<CadencePageHeaderFrame\b/g), 1, `${migration.name} frame count`)
   assert.equal(count(source, /<header\b/g), 0, `${migration.name} has no residual native header`)
 
-  const reconstructed = source
+  const reconstructed = pageTitleCompatibleSource
     .replace(migration.importLine, "")
     .replace(migration.opening, migration.originalOpening)
     .replace(migration.closing, migration.originalClosing)

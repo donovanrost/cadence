@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -216,7 +217,12 @@ const multilineSpacecraftLabels = new Set([
 
 const reconstructSpacecraftSource = (source) => {
   let reconstructed = reconstructFormChromeSource(
-    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, "SpacecraftTypeNew.vue")),
+    reconstructPageHeaderSource(
+      peelCadenceBreadcrumbs(
+        peelCadencePageTitle(source, "SpacecraftTypeNew.vue"),
+        "SpacecraftTypeNew.vue",
+      ),
+    ),
     {
     featureName: "spacecraft type",
     dividerClass: "flex-1 h-px bg-base-300/60",

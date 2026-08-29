@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "detail migration uses pinned Node 24.16.0")
 
@@ -481,6 +482,7 @@ const reconstructBoundary = (source, rowBoundary, fileName) => {
 
 for (const file of files) {
   const source = await readFile(file.path, "utf8")
+  const pageTitleCompatibleSource = peelCadencePageTitle(source, file.name)
 
   assert.equal(file.boundaries.length, file.rowCount)
   assert.equal(source.split(dataRowImport).length - 1, 1, `${file.name} adds one import`)
@@ -494,7 +496,7 @@ for (const file of files) {
         peelCadenceTableFrames(
           peelCadenceBreadcrumbs(
             peelCadenceDetailsFrames(
-              source,
+              pageTitleCompatibleSource,
               detailsFrameCounts[file.name] ?? 0,
               file.name,
             ),

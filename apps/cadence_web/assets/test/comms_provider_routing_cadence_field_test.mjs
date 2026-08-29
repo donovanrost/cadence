@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -206,7 +207,10 @@ const providerHeaders = [
 const reconstructRoutingSource = (source) => {
   let reconstructedFields = 0
   const reconstructed = reconstructPageHeaderSource(
-    peelCadenceBreadcrumbs(source, "CommsRoutingNew.vue"),
+    peelCadenceBreadcrumbs(
+      peelCadencePageTitle(source, "CommsRoutingNew.vue"),
+      "CommsRoutingNew.vue",
+    ),
   )
     .replace('import CadenceField from "./ui/components/CadenceField.vue"\n', "")
     .replace(

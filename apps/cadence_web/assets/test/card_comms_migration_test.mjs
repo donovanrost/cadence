@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
@@ -329,6 +330,9 @@ const sources = new Map()
 for (const contract of contracts) {
   const componentPath = resolve(testDirectory, `../vue/${contract.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(contract.filename)
+    ? peelCadencePageTitle(source, contract.filename)
+    : source
   sources.set(contract.filename, {componentPath, source})
 
   assert.equal(
@@ -362,7 +366,7 @@ for (const contract of contracts) {
       peelTableFrames(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            peelCadenceNoticeFrames(source, contract.filename),
+            peelCadenceNoticeFrames(pageTitleCompatibleSource, contract.filename),
             detailsFrameCounts[contract.filename] ?? 0,
             contract.filename,
           ),

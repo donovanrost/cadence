@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
@@ -333,6 +334,9 @@ assert.equal(
 for (const manifest of manifests) {
   const componentPath = resolve(testDirectory, `../vue/${manifest.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(manifest.filename)
+    ? peelCadencePageTitle(source, manifest.filename)
+    : source
 
   for (const importLine of imports) {
     assert.equal(occurrences(source, `${importLine}\n`), 1, `${manifest.filename} owns ${importLine}`)
@@ -394,7 +398,7 @@ for (const manifest of manifests) {
     reconstructPageHeaderSource(
       peelCadenceBreadcrumbs(
         peelCadenceDetailsFrames(
-          peelCadenceNoticeFrames(source, manifest.filename),
+          peelCadenceNoticeFrames(pageTitleCompatibleSource, manifest.filename),
           manifest.filename === "CommsTransportNew.vue" ? 1 : 0,
           manifest.filename,
         ),

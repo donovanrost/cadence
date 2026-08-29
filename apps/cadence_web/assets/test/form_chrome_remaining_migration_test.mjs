@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
 
@@ -354,12 +355,15 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(foundation.file)
+    ? peelCadencePageTitle(source, foundation.file)
+    : source
   let reconstructedSource = reconstructPanels(
     reconstructPageHeaderSource(
       peelCadenceFields(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            peelCadenceInlineWarnings(source, foundation.file),
+            peelCadenceInlineWarnings(pageTitleCompatibleSource, foundation.file),
             foundation.file === "OpsContactPlanShow.vue" ? 2 : 0,
             foundation.file,
           ),

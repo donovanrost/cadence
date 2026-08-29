@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
@@ -251,14 +252,14 @@ const revokeGrant = (grant: Grant) => {
               >{{ breadcrumb.label }}</a>
             </template>
           </CadenceBreadcrumbs>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          <CadencePageTitle>
             {{ page.header.title }}
             <span class="ml-3 font-mono text-base text-base-content/60">
               <span class="font-mono text-xs text-base-content/60">
                 {{ page.header.config_label }}
               </span>
             </span>
-          </h1>
+          </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ page.header.subtitle }}
           </p>

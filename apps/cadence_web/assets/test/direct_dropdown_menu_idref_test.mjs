@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   assertPinnedAdapterRuntime,
   flushVue,
@@ -500,13 +501,17 @@ const reconstructMissionOverviewPrePageHeaderSource = source =>
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
   const reconstructNewerPresentationFrames = (inputSource) => {
+    const filename = `${definition.name}.vue`
+    const prePageTitleSource = pageTitleCallerNames.includes(filename)
+      ? peelCadencePageTitle(inputSource, filename)
+      : inputSource
     const prePaginationSource =
       definition.name === "SpacecraftList"
         ? peelCadencePaginationFrame(
-            peelCadenceListToolbarFrame(inputSource, "SpacecraftList.vue"),
+            peelCadenceListToolbarFrame(prePageTitleSource, "SpacecraftList.vue"),
             "SpacecraftList.vue",
           )
-        : inputSource
+        : prePageTitleSource
     const preCardSource = reconstructPreCardSource(prePaginationSource, definition)
     const prePanelSource =
       definition.name === "SpacecraftList"

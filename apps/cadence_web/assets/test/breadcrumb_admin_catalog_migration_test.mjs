@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pageTitleCallerNames, peelCadencePageTitle } from "./page_title_test_support.mjs";
 import {
   hoverTableRowCallerNames,
   peelCadenceHoverTableRows,
@@ -127,9 +128,12 @@ for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path);
   const source = readFileSync(componentPath, "utf8");
   const file = caller.path.split("/").at(-1);
-  const preHoverTableRowSource = hoverTableRowCallers.has(file)
-    ? peelCadenceHoverTableRows(source, file)
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(file)
+    ? peelCadencePageTitle(source, file)
     : source;
+  const preHoverTableRowSource = hoverTableRowCallers.has(file)
+    ? peelCadenceHoverTableRows(pageTitleCompatibleSource, file)
+    : pageTitleCompatibleSource;
   const parentSource = execFileSync(
     "git",
     ["show", `${baseCommit}:${caller.path}`],

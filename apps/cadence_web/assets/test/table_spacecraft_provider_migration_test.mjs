@@ -6,6 +6,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
 import {
   hoverTableRowCallerNames,
@@ -186,9 +187,12 @@ let instanceCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.filename}`)
   const source = await readFile(componentPath, "utf8")
-  const preHoverTableRowSource = hoverTableRowCallers.has(fixture.filename)
-    ? peelCadenceHoverTableRows(source, fixture.filename)
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(fixture.filename)
+    ? peelCadencePageTitle(source, fixture.filename)
     : source
+  const preHoverTableRowSource = hoverTableRowCallers.has(fixture.filename)
+    ? peelCadenceHoverTableRows(pageTitleCompatibleSource, fixture.filename)
+    : pageTitleCompatibleSource
   const prePaginationSource =
     fixture.filename === "SpacecraftList.vue"
       ? peelCadencePaginationFrame(

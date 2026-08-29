@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 assert.equal(
@@ -332,6 +333,9 @@ const reconstructBase = (source, expectedBoundaries, name) => {
 for (const file of files) {
   const sourcePath = resolve(testDirectory, `../vue/${file.filename}`)
   const source = await readFile(sourcePath, "utf8")
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(file.filename)
+    ? peelCadencePageTitle(source, file.filename)
+    : source
 
   assert.equal(
     count(source, /<CadenceCard\b/g),
@@ -360,7 +364,7 @@ for (const file of files) {
         peelTableFrame(
           peelCadenceBreadcrumbs(
             peelCadenceDetailsFrames(
-              source,
+              pageTitleCompatibleSource,
               detailsFrameCounts[file.filename] ?? 0,
               file.name,
             ),
