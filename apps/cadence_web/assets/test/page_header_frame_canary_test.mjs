@@ -7,6 +7,10 @@ import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
+import {
+  opsListFrameCallerNames,
+  peelCadenceOpsListFrame,
+} from "./ops_list_frame_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
@@ -50,7 +54,10 @@ const migrations = Object.freeze([
 for (const migration of migrations) {
   const currentSource = await readFile(migration.path, "utf8")
   const filename = migration.path.split("/").at(-1)
-  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, filename)
+  const opsListCompatibleSource = opsListFrameCallerNames.includes(filename)
+    ? peelCadenceOpsListFrame(currentSource, filename)
+    : currentSource
+  const source = peelResidualCadenceCardBeforeOlderLayers(opsListCompatibleSource, filename)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
     ? peelCadenceOpsViewport(source, filename)
     : source

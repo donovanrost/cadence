@@ -2,6 +2,7 @@
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
 type Option = {
@@ -340,7 +341,7 @@ const clearCommandFocus = () => {
         </button>
       </div>
 
-      <section class="overflow-hidden border border-base-300 bg-base-100">
+      <CadenceOpsListFrame>
         <div :id="page.rows_id">
           <div
             :id="empty.id"
@@ -427,7 +428,7 @@ const clearCommandFocus = () => {
             </CadenceDetailsFrame>
           </article>
         </div>
-      </section>
+      </CadenceOpsListFrame>
     </div>
   </CadenceOpsViewport>
 </template>

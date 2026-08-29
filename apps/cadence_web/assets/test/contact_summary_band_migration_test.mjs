@@ -129,6 +129,7 @@ assert.deepEqual(
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
+    "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
   ].sort(),
   "the current SFC path cohort adds only the compact header body, definition-list, and stat-tile primitives",

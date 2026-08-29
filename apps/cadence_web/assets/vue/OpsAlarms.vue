@@ -2,6 +2,7 @@
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
 
 type Severity = "critical" | "warning" | "info" | "nominal"
 
@@ -295,7 +296,7 @@ const resetFilters = () => {
         </button>
       </div>
 
-      <section class="overflow-hidden border border-base-300 bg-base-100">
+      <CadenceOpsListFrame>
         <div :id="page.conditions_id">
           <div
             :id="empty.id"
@@ -363,7 +364,7 @@ const resetFilters = () => {
             </div>
           </article>
         </div>
-      </section>
+      </CadenceOpsListFrame>
     </div>
   </CadenceOpsViewport>
 </template>

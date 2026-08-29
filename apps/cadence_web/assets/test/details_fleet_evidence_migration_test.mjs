@@ -6,6 +6,10 @@ import {
   expectedNodeVersion,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {
+  opsListFrameCallerNames,
+  peelCadenceOpsListFrame,
+} from "./ops_list_frame_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
@@ -118,7 +122,10 @@ for (const caller of callers) {
     `${caller.name}: excludes residual native details targets`,
   )
 
-  const reconstructed = peelCadenceOpsViewport(source, caller.name)
+  const opsListCompatibleSource = opsListFrameCallerNames.includes(caller.name)
+    ? peelCadenceOpsListFrame(source, caller.name)
+    : source
+  const reconstructed = peelCadenceOpsViewport(opsListCompatibleSource, caller.name)
     .replace(componentImport, "")
     .replace(caller.migratedOpening, caller.nativeOpening)
     .replace(caller.migratedClosing, caller.nativeClosing)

@@ -8,6 +8,10 @@ import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
+import {
+  opsListFrameCallerNames,
+  peelCadenceOpsListFrame,
+} from "./ops_list_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -359,8 +363,11 @@ ${spaces}</div>`
 for (const caller of callers) {
   test(`${caller.file} has one ops page-header frame and reconstructs ${parent}`, async () => {
     const source = await readFile(new URL(`../vue/${caller.file}`, import.meta.url), "utf8")
+    const opsListCompatibleSource = opsListFrameCallerNames.includes(caller.file)
+      ? peelCadenceOpsListFrame(source, caller.file)
+      : source
     const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
-      source,
+      opsListCompatibleSource,
       caller.file,
     )
     const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.file)
