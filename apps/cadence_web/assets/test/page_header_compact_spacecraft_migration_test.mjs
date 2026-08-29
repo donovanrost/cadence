@@ -10,6 +10,10 @@ assert.equal(process.versions.node, "24.16.0", "expected pinned Node 24.16.0")
 
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const componentImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
@@ -82,6 +86,43 @@ function occurrences(source, needle) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function peelCadenceBreadcrumbs(source, label) {
+  const importCount = occurrences(source, breadcrumbsImport)
+  const openingCount = occurrences(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(source, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(source, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
 }
 
 function cadenceFieldOpening(boundary) {
@@ -190,7 +231,10 @@ test("compact spacecraft and mission page-header migration is exact", async (t) 
       const importInsertion = caller.endsWith("/SpacecraftRouting.vue")
         ? `${componentImport}\n\n`
         : `${componentImport}\n`
-      const reconstructed = peelTableFrame(peelCadenceField(source, caller), caller)
+      const reconstructed = peelTableFrame(
+        peelCadenceField(peelCadenceBreadcrumbs(source, caller), caller),
+        caller,
+      )
         .replace(importInsertion, "")
         .replace(frameOpening, nativeOpening)
         .replace(frameClosing, nativeClosing)

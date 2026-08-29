@@ -23,6 +23,10 @@ assert.equal(
 assert.equal(scenarioLedger.length, 7)
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const pageHeaderImport =
@@ -112,6 +116,44 @@ const fixtures = [
 ]
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const peelCadenceBreadcrumbs = (source, label) => {
+  const importCount = occurrences(source, breadcrumbsImport)
+  const openingCount = occurrences(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(source, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(source, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
+
 const multilineCardOpen = /^([ ]*)<CadenceCard$/
 const inlineCardOpen = /^([ ]*)<CadenceCard ([^\n]+) body-class="card-body p-6">$/
 const cardClose = /^([ ]*)<\/CadenceCard>$/
@@ -234,7 +276,10 @@ for (const fixture of fixtures) {
   )
 
   let reconstructedSource = reconstructCards(
-    peelCadencePageHeaderFrame(source, fixture.filename),
+    peelCadencePageHeaderFrame(
+      peelCadenceBreadcrumbs(source, fixture.filename),
+      fixture.filename,
+    ),
     fixture.cardCount,
     fixture.filename,
   ).replace(dataRowImport, "")
