@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceFormSectionFrameBeforeOlderLayers} from "./form_section_frame_test_support.mjs"
 
 export const formPageFramePredecessorCommit =
   "e41d4381a93779d093788bc4c4200cdcce597f29"
@@ -88,24 +89,28 @@ export const formPageFrameMigrationFor = caller => {
 
 export const peelCadenceFormPageFrame = (source, caller) => {
   const migrationEntry = formPageFrameMigrationFor(caller)
+  const formSectionFrameCompatibleSource = peelCadenceFormSectionFrameBeforeOlderLayers(
+    source,
+    caller,
+  )
 
   assert.equal(
-    occurrences(source, formPageFrameImport),
+    occurrences(formSectionFrameCompatibleSource, formPageFrameImport),
     1,
     `${migrationEntry.file} form page frame import`,
   )
   assert.equal(
-    occurrences(source, migrationEntry.opening),
+    occurrences(formSectionFrameCompatibleSource, migrationEntry.opening),
     1,
     `${migrationEntry.file} form page frame opening`,
   )
   assert.equal(
-    occurrences(source, migrationEntry.closing),
+    occurrences(formSectionFrameCompatibleSource, migrationEntry.closing),
     1,
     `${migrationEntry.file} form page frame closing`,
   )
 
-  const predecessor = source
+  const predecessor = formSectionFrameCompatibleSource
     .replace(formPageFrameImport, "")
     .replace(migrationEntry.opening, migrationEntry.predecessorOpening)
     .replace(migrationEntry.closing, migrationEntry.predecessorClosing)

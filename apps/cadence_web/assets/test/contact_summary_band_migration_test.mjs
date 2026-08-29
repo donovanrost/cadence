@@ -130,6 +130,7 @@ assert.deepEqual(
   [
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceFormSectionFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
     narrowFormPageFramePath,
     opsListBodyFramePath,

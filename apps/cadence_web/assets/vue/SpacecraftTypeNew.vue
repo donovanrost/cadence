@@ -6,6 +6,7 @@ import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
 
 type Breadcrumb = {
@@ -277,7 +278,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
     </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
-      <section :id="form.sections.identity.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.identity.number"
@@ -303,9 +304,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             @input="validate"
           >
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.protocols.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.protocols.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.protocols.number"
@@ -358,9 +359,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             >{{ option.label }}</option>
           </select>
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.frame_parameters.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.frame_parameters.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.frame_parameters.number"
@@ -471,9 +472,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             >{{ option.label }}</option>
           </select>
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.applications.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.applications.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.applications.number"
@@ -519,7 +520,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             </div>
           </label>
         </div>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">

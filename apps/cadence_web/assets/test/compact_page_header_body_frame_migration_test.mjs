@@ -26,6 +26,9 @@ import {
   peelCadenceFormPageFrameBeforeOlderLayers,
 } from "./form_page_frame_test_support.mjs";
 import {
+  peelCadenceFormSectionFrameBeforeOlderLayers,
+} from "./form_section_frame_test_support.mjs";
+import {
   elementAttributes,
   expectedNodeVersion,
   flushVue,
@@ -86,13 +89,14 @@ assert.equal(
   225,
   "the exact predecessor owns 225 Vue SFCs"
 );
-assert.equal(successorVuePaths.length, 232, "the successor owns 232 Vue SFCs");
+assert.equal(successorVuePaths.length, 233, "the successor owns 233 Vue SFCs");
 assert.deepEqual(
   successorVuePaths.filter((path) => !predecessorVuePaths.includes(path)),
   [
     compactHeaderBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
+    "apps/cadence_web/assets/vue/ui/components/CadenceFormSectionFrame.vue",
     narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
@@ -247,7 +251,10 @@ for (const exclusion of compactHeaderBodyExclusions) {
   const compatibleCurrent = Buffer.from(
     peelCadenceNarrowFormPageFrameBeforeOlderLayers(
       peelCadenceFormPageFrameBeforeOlderLayers(
-        current.toString("utf8"),
+        peelCadenceFormSectionFrameBeforeOlderLayers(
+          current.toString("utf8"),
+          exclusion.file,
+        ),
         exclusion.file,
       ),
       exclusion.file,

@@ -6,6 +6,7 @@ import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -245,7 +246,7 @@ const save = () => emit("save", {provider_account: values()})
         :value="providerAccount[fieldKey]"
       >
 
-      <section :id="form.sections.network_identity.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.network_identity.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.network_identity.number"
@@ -320,7 +321,7 @@ const save = () => emit("save", {provider_account: values()})
         >
           {{ form.connector.boundary.text }}
         </CadenceNoticeFrame>
-      </section>
+      </CadenceFormSectionFrame>
 
       <div
         :id="form.connector.configuration.id"
@@ -334,11 +335,10 @@ const save = () => emit("save", {provider_account: values()})
           {{ form.connector.configuration.description }}
         </p>
 
-        <section
+        <CadenceFormSectionFrame
           v-for="section in form.connector.configuration.sections"
           :id="section.id"
           :key="section.id"
-          class="space-y-4"
         >
           <CadenceFormSectionHeader
             wrapper-class="flex items-center gap-3"
@@ -411,10 +411,10 @@ const save = () => emit("save", {provider_account: values()})
               </CadenceField>
             </template>
           </div>
-        </section>
+        </CadenceFormSectionFrame>
       </div>
 
-      <section :id="form.sections.credential_registry.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.credential_registry.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.credential_registry.number"
@@ -467,9 +467,9 @@ const save = () => emit("save", {provider_account: values()})
         <p :id="form.credential_note.id" class="text-xs text-base-content/60">
           {{ form.credential_note.text }}
         </p>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.organization_guardrails.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.organization_guardrails.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.organization_guardrails.number"
@@ -501,7 +501,7 @@ const save = () => emit("save", {provider_account: values()})
             @input="validate"
           >
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">

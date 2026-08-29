@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceFormSectionFrameBeforeOlderLayers} from "./form_section_frame_test_support.mjs"
 
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
@@ -79,31 +80,35 @@ export const residualCadenceCardMigrationFor = (caller) => {
 
 export const peelResidualCadenceCard = (source, caller) => {
   const migration = residualCadenceCardMigrationFor(caller)
+  const formSectionFrameCompatibleSource = peelCadenceFormSectionFrameBeforeOlderLayers(
+    source,
+    caller,
+  )
 
   assert.equal(
-    occurrences(source, cardImport),
+    occurrences(formSectionFrameCompatibleSource, cardImport),
     1,
     `${migration.file} retains its one pre-existing CadenceCard import`,
   )
   assert.equal(
-    source.match(/^import CadenceCard\b/gm)?.length,
+    formSectionFrameCompatibleSource.match(/^import CadenceCard\b/gm)?.length,
     1,
     `${migration.file} retains one CadenceCard import declaration`,
   )
   assert.equal(
-    occurrences(source, migration.opening),
+    occurrences(formSectionFrameCompatibleSource, migration.opening),
     1,
     `${migration.file} has exactly one residual CadenceCard opening boundary`,
   )
 
-  const openingIndex = source.indexOf(migration.opening)
+  const openingIndex = formSectionFrameCompatibleSource.indexOf(migration.opening)
   const slotStart = openingIndex + migration.opening.length
   const closingToken = `\n${migration.closing}`
-  const closingIndex = source.indexOf(closingToken, slotStart)
+  const closingIndex = formSectionFrameCompatibleSource.indexOf(closingToken, slotStart)
 
   assert.ok(closingIndex > slotStart, `${migration.file} residual CadenceCard closes after its slot`)
 
-  const callerSlot = source.slice(slotStart, closingIndex)
+  const callerSlot = formSectionFrameCompatibleSource.slice(slotStart, closingIndex)
 
   assert.doesNotMatch(
     callerSlot,
@@ -122,11 +127,11 @@ export const peelResidualCadenceCard = (source, caller) => {
     .map((line) => `  ${line}`)
     .join("\n")
   const predecessor =
-    source.slice(0, openingIndex) +
+    formSectionFrameCompatibleSource.slice(0, openingIndex) +
     migration.predecessorOpening +
     predecessorSlot +
     `\n${migration.predecessorClosing}` +
-    source.slice(closingIndex + closingToken.length)
+    formSectionFrameCompatibleSource.slice(closingIndex + closingToken.length)
 
   assert.equal(
     occurrences(predecessor, cardImport),

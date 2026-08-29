@@ -7,6 +7,7 @@ import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFra
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -171,7 +172,7 @@ const save = () => emit("save", {spacecraft: values()})
     </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
-      <section :id="form.sections.identity.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.identity.number"
@@ -214,9 +215,9 @@ const save = () => emit("save", {spacecraft: values()})
             @input="validate"
           >
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.profile.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.profile.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.profile.number"
@@ -259,7 +260,7 @@ const save = () => emit("save", {spacecraft: values()})
           >{{ profile_options.empty_state.action.label }}</a>
           {{ profile_options.empty_state.suffix }}
         </p>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">

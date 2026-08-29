@@ -49,6 +49,9 @@ import {
   sha256,
 } from "./page_title_test_support.mjs"
 import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
+import {
+  peelCadenceFormSectionFrameBeforeOlderLayers,
+} from "./form_section_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -112,9 +115,13 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const formSectionFrameCompatibleCurrent = peelCadenceFormSectionFrameBeforeOlderLayers(
+    current,
+    entry.file,
+  )
   const opsListCompatibleCurrent = opsListFrameCallerNames.includes(entry.file)
-    ? peelCadenceOpsListFrame(current, entry.file)
-    : current
+    ? peelCadenceOpsListFrame(formSectionFrameCompatibleCurrent, entry.file)
+    : formSectionFrameCompatibleCurrent
   const compactHeaderBodyCompatibleCurrent = peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(
     opsListCompatibleCurrent,
     entry.file,
