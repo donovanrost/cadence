@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import {reactive, ref, watch} from "vue"
@@ -719,7 +720,7 @@ const revokeGrant = () => {
               </div>
             </div>
 
-            <details :id="policy_form.redundancy.id" class="border border-base-300">
+            <CadenceDetailsFrame :id="policy_form.redundancy.id" class="border border-base-300">
               <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
                 {{ policy_form.redundancy.summary }}
               </summary>
@@ -746,7 +747,7 @@ const revokeGrant = () => {
                   </label>
                 </div>
               </div>
-            </details>
+            </CadenceDetailsFrame>
 
             <button :id="policy_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
               {{ policy_form.submit.label }}
@@ -834,7 +835,7 @@ const revokeGrant = () => {
         :id="grant_form.panel_id"
         class="border border-base-300 bg-base-200/15"
       >
-        <details>
+        <CadenceDetailsFrame>
           <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
             Issue bounded authority
           </summary>
@@ -977,7 +978,7 @@ const revokeGrant = () => {
               {{ grant_form.submit.label }}
             </button>
           </form>
-        </details>
+        </CadenceDetailsFrame>
       </section>
 
       <section
@@ -985,7 +986,7 @@ const revokeGrant = () => {
         :id="revocation_form.panel_id"
         class="border border-error/25 bg-error/[0.025]"
       >
-        <details>
+        <CadenceDetailsFrame>
           <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-error">
             Revoke automation authority
           </summary>
@@ -1040,7 +1041,7 @@ const revokeGrant = () => {
               {{ revocation_form.submit.label }}
             </button>
           </form>
-        </details>
+        </CadenceDetailsFrame>
       </section>
 
       <p

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 
 type Header = {
@@ -338,7 +339,7 @@ const updateStageVersion = (event: Event) => {
             >{{ version.badge.label }}</span>
           </div>
 
-          <details :id="entry.details.id" class="mt-3 border-t border-base-300/60 pt-3">
+          <CadenceDetailsFrame :id="entry.details.id" class="mt-3 border-t border-base-300/60 pt-3">
             <summary
               :id="entry.details.summary_id"
               class="cursor-pointer hud-label hover:text-primary"
@@ -391,7 +392,7 @@ const updateStageVersion = (event: Event) => {
                 </ul>
               </section>
             </div>
-          </details>
+          </CadenceDetailsFrame>
         </article>
       </div>
 
