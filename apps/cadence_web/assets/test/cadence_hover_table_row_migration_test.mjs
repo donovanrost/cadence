@@ -9,6 +9,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {
   excludedHoverTableRowFiles,
   hoverTableRowCallerNames,
@@ -202,7 +203,7 @@ for (const exclusion of excludedHoverTableRowFiles) {
   const source = await readFile(resolve(vueDirectory, exclusion.file), "utf8")
   const predecessorCompatibleSource = pageTitleCallerNames.includes(exclusion.file)
     ? peelCadencePageTitle(source, exclusion.file)
-    : source
+    : peelCompactTableFrames(source, exclusion.file)
   const uniqueFragments = new Set(exclusion.fragments)
 
   assert.equal(

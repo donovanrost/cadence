@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 
 export const paginationFrameClass =
   "flex items-center justify-between border-t border-base-300 px-4 py-2"
@@ -86,31 +87,32 @@ export const paginationFrameMigrationFor = (caller) => {
 
 export const peelCadencePaginationFrame = (source, caller) => {
   const migration = paginationFrameMigrationFor(caller)
+  const predecessorCompatibleSource = peelCompactTableFrames(source, caller)
 
   assert.equal(
-    occurrences(source, migration.importLine),
+    occurrences(predecessorCompatibleSource, migration.importLine),
     1,
     `${migration.file} has one exact CadencePaginationFrame import`,
   )
   assert.equal(
-    source.match(/^import CadencePaginationFrame\b/gm)?.length,
+    predecessorCompatibleSource.match(/^import CadencePaginationFrame\b/gm)?.length,
     1,
     `${migration.file} has one CadencePaginationFrame import declaration`,
   )
   assert.equal(
-    occurrences(source, migration.opening),
+    occurrences(predecessorCompatibleSource, migration.opening),
     1,
     `${migration.file} has one exact CadencePaginationFrame opening`,
   )
   assert.equal(
-    occurrences(source, migration.closing),
+    occurrences(predecessorCompatibleSource, migration.closing),
     1,
     `${migration.file} has one exact CadencePaginationFrame closing`,
   )
-  assert.equal(source.match(/<CadencePaginationFrame\b/g)?.length, 1)
-  assert.equal(source.match(/<\/CadencePaginationFrame>/g)?.length, 1)
+  assert.equal(predecessorCompatibleSource.match(/<CadencePaginationFrame\b/g)?.length, 1)
+  assert.equal(predecessorCompatibleSource.match(/<\/CadencePaginationFrame>/g)?.length, 1)
 
-  const predecessor = source
+  const predecessor = predecessorCompatibleSource
     .replace(migration.importLine, "")
     .replace(migration.opening, migration.predecessorOpening)
     .replace(migration.closing, migration.predecessorClosing)

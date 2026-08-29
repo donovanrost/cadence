@@ -61,6 +61,7 @@ const paths = {
     testDirectory,
     "../vue/ui/components/CadencePageHeaderFrame.vue",
   ),
+  cadenceTableFrame: resolve(testDirectory, "../vue/ui/components/CadenceTableFrame.vue"),
 }
 const [
   applicationHostSource,
@@ -207,6 +208,7 @@ const cadenceBadge = await loadSfc(paths.cadenceBadge)
 const cadenceCard = await loadSfc(paths.cadenceCard)
 const cadencePaginationFrame = await loadSfc(paths.cadencePaginationFrame)
 const cadencePageHeaderFrame = await loadSfc(paths.cadencePageHeaderFrame)
+const cadenceTableFrame = await loadSfc(paths.cadenceTableFrame)
 const statusBadge = await loadSfc(paths.statusBadge, {
   "./ui/components/CadenceBadge.vue": cadenceBadge,
 })
@@ -225,6 +227,7 @@ const applicationHost = await loadSfc(paths.applicationHost, {
   "./ui/components/CadenceCard.vue": cadenceCard,
   "./ui/components/CadencePaginationFrame.vue": cadencePaginationFrame,
   "./ui/components/CadencePageHeaderFrame.vue": cadencePageHeaderFrame,
+  "./ui/components/CadenceTableFrame.vue": cadenceTableFrame,
   "./ui/components/CadenceValidationMessage.vue": cadenceValidationMessage,
 })
 

@@ -7,6 +7,7 @@ import {
   installDom,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -288,9 +289,10 @@ const peelCadenceValidationMessages = (source, name) => {
 }
 
 const reconstructSource = (file, source) => {
+  const compactTableCompatibleSource = peelCompactTableFrames(source, file.name)
   source = opsViewportCallerNames.includes(file.name)
-    ? peelCadenceOpsViewport(source, file.name)
-    : source
+    ? peelCadenceOpsViewport(compactTableCompatibleSource, file.name)
+    : compactTableCompatibleSource
   let reconstructed = peelCadenceValidationMessages(
     peelCadenceDetailsFrames(
       peelCadenceCollapsible(peelCadenceInlineWarnings(source, file.name), file.name),
