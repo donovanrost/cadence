@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = [
   "the complete Spacecraft List page is one non-SSR LiveVue parent with one presentation prop",
@@ -246,7 +247,9 @@ const reconstructSpacecraftListPrePanelSource = (source) => {
 }
 
 const childSource = reconstructSpacecraftListPrePanelSource(
-  reconstructSpacecraftListPreTableSource(currentChildSource),
+  reconstructSpacecraftListPreTableSource(
+    peelCadencePaginationFrame(currentChildSource, "SpacecraftList.vue"),
+  ),
 )
 
 assert.equal(

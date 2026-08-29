@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = [
   "the complete transport-list page is one non-SSR LiveVue parent with one presentation prop",
@@ -123,20 +124,25 @@ const assertInOrder = (source, contracts, label) => {
   }
 }
 
+const prePaginationChildSource = peelCadencePaginationFrame(
+  childSource,
+  "CommsTransportList.vue",
+)
+
 assert.equal(
-  childSource.match(
+  prePaginationChildSource.match(
     /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue";$/gm,
   )?.length,
   1,
   "CommsTransportList.vue has one CadenceTableFrame import before compatibility peeling",
 )
 assert.equal(
-  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  prePaginationChildSource.match(/<\/?CadenceTableFrame\b/g)?.length,
   2,
   "CommsTransportList.vue has one CadenceTableFrame boundary before compatibility peeling",
 )
 
-const predecessorChildSource = childSource
+const predecessorChildSource = prePaginationChildSource
   .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";\n', "")
   .replace(
     '    <CadenceTableFrame id="transports-table">',
@@ -206,7 +212,7 @@ assertInOrder(
   "transport page composition",
 )
 
-assert.match(breadcrumbsScript, /defineProps<\{breadcrumbs: BreadcrumbsPresentation\}>\(\)/)
+assert.match(breadcrumbsScript, /defineProps<\{breadcrumbs\?: BreadcrumbsPresentation\}>\(\)/)
 assertInOrder(
   breadcrumbsTemplate,
   [

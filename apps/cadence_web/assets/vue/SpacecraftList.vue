@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
@@ -296,10 +297,9 @@ defineProps<{
             No spacecraft match the current search or filter.
           </p>
 
-          <div
+          <CadencePaginationFrame
             v-if="roster.pagination_visible"
             id="spacecraft-roster-pagination"
-            class="flex items-center justify-between border-t border-base-300 px-4 py-2"
           >
             <span class="font-mono text-xs text-base-content/70">{{ roster.range_label }}</span>
             <div class="flex items-center gap-1">
@@ -318,7 +318,7 @@ defineProps<{
                 :disabled="roster.next_disabled"
               >Next</button>
             </div>
-          </div>
+          </CadencePaginationFrame>
         </template>
       </div>
     </CadencePanel>

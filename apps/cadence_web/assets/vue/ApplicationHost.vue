@@ -5,6 +5,7 @@ import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vu
 import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
 import ApplicationStats from "./application_host/ApplicationStats.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import type {
@@ -904,10 +905,9 @@ const packetRailClasses: Record<PacketGroupState, string> = {
         </table>
       </div>
 
-      <div
+      <CadencePaginationFrame
         v-if="declarative_surface.table.pagination.visible"
         :id="declarative_surface.table.pagination.id"
-        class="flex items-center justify-between border-t border-base-300 px-4 py-2"
       >
         <span class="font-mono text-xs text-base-content/70">
           {{ declarative_surface.table.pagination.range_label }}
@@ -928,7 +928,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
             @click="paginate(declarative_surface.table.pagination.next_page)"
           >{{ declarative_surface.table.pagination.next_label }}</button>
         </div>
-      </div>
+      </CadencePaginationFrame>
     </section>
 
     <CadenceCard

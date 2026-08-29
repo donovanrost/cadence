@@ -4,6 +4,7 @@ import {execFileSync} from "node:child_process"
 import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
@@ -188,6 +189,10 @@ assert.equal(
 
 for (const caller of callers) {
   const source = readFileSync(resolve(repositoryRoot, caller), "utf8")
+  const prePaginationSource =
+    caller === "apps/cadence_web/assets/vue/ApplicationHost.vue"
+      ? peelCadencePaginationFrame(source, caller)
+      : source
 
   assert.equal(occurrences(source, importLine), 1, `${caller} must have one frame import`)
   assert.equal(occurrences(source, frameOpening), 1, `${caller} must have one compact frame`)
@@ -199,7 +204,7 @@ for (const caller of callers) {
   )
 
   const reconstructed = peelTableFrames(
-    peelValidationMessage(peelCadenceBreadcrumbs(source, caller), caller),
+    peelValidationMessage(peelCadenceBreadcrumbs(prePaginationSource, caller), caller),
     caller
   )
     .replace(importLine, "")

@@ -2,6 +2,7 @@
 import { computed } from "vue";
 
 import StatusBadge from "./StatusBadge.vue";
+import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
 
 type TransportRow = {
@@ -154,10 +155,9 @@ const lastVisible = computed(() =>
       No transports match the current search.
     </p>
 
-    <div
+    <CadencePaginationFrame
       v-if="total_count > page_size"
       id="transports-pagination"
-      class="flex items-center justify-between border-t border-base-300 px-4 py-2"
     >
       <span class="font-mono text-xs text-base-content/70">
         {{ firstVisible }}–{{ lastVisible }} of {{ total_count }}
@@ -182,6 +182,6 @@ const lastVisible = computed(() =>
           Next
         </button>
       </div>
-    </div>
+    </CadencePaginationFrame>
   </div>
 </template>

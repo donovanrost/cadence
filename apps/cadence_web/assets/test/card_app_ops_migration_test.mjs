@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -275,6 +276,10 @@ let totalBoundaries = 0
 
 for (const entry of migrationLedger) {
   const source = await readFile(entry.path, "utf8")
+  const prePaginationSource =
+    entry.name === "ApplicationHost"
+      ? peelCadencePaginationFrame(source, "ApplicationHost.vue")
+      : source
 
   assert.equal(
     source.split(entry.cardImport).length - 1,
@@ -290,7 +295,7 @@ for (const entry of migrationLedger) {
   )
 
   let reconstructed = peelPageHeaderFrame(
-    peelTableFrame(peelValidationMessage(source, entry.name), entry.name),
+    peelTableFrame(peelValidationMessage(prePaginationSource, entry.name), entry.name),
   ).replace(entry.cardImport, "")
 
   for (const boundary of entry.boundaries) {

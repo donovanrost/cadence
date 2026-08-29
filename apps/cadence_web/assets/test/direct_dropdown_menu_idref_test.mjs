@@ -10,6 +10,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
   "the actual three direct-dropdown SFCs compile and mount with two rows each",
@@ -462,7 +463,11 @@ const reconstructMissionOverviewPrePageHeaderSource = source =>
 
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
-  const preCardSource = reconstructPreCardSource(currentSource, definition)
+  const prePaginationSource =
+    definition.name === "SpacecraftList"
+      ? peelCadencePaginationFrame(currentSource, "SpacecraftList.vue")
+      : currentSource
+  const preCardSource = reconstructPreCardSource(prePaginationSource, definition)
   const prePanelSource =
     definition.name === "SpacecraftList"
       ? reconstructSpacecraftListPrePanelSource(preCardSource)

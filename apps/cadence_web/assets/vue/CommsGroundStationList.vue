@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed} from "vue"
+import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type GroundStationRow = {
@@ -113,10 +114,9 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
       No ground stations match the current search.
     </p>
 
-    <div
+    <CadencePaginationFrame
       v-if="total_count > page_size"
       id="ground-stations-pagination"
-      class="flex items-center justify-between border-t border-base-300 px-4 py-2"
     >
       <span class="font-mono text-xs text-base-content/70">
         {{ firstVisible }}–{{ lastVisible }} of {{ total_count }}
@@ -141,6 +141,6 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
           Next
         </button>
       </div>
-    </div>
+    </CadencePaginationFrame>
   </div>
 </template>
