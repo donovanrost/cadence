@@ -17,6 +17,12 @@ assert.equal(
 )
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const cadenceCollapsibleImports = Object.freeze([
+  'import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"\n',
+  'import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"\n',
+  'import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"\n',
+])
+const frozenPolicyDetailsOpening = '<details :open="policy_form.open">'
 const validationImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const cadenceDetailsFrameImport =
@@ -24,6 +30,54 @@ const cadenceDetailsFrameImport =
 const validationClass = "mt-1.5 text-sm text-error"
 const countExact = (source, value) => source.split(value).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const policyCollapsibleOpening = `        <CadenceCollapsible
+          :content-id="policy_form.id"
+          :open="policy_form.open"
+          client-seeded
+          :seed-epoch="\`\${policy_form.id}:\${policy_form.open}\`"
+          :unmount-on-hide="false"
+        >
+          <div>
+            <CadenceCollapsibleTrigger>
+              <button type="button" class="cursor-pointer px-4 py-3 text-sm font-semibold">
+                {{ policy_form.summary }}
+              </button>
+            </CadenceCollapsibleTrigger>
+            <CadenceCollapsibleContent>`
+const policyNativeOpening = `        ${frozenPolicyDetailsOpening}
+          <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
+            {{ policy_form.summary }}
+          </summary>`
+const policyCollapsibleClosing = `            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>`
+
+assert.equal(
+  sha256(frozenPolicyDetailsOpening),
+  "1c3488bb5db768112ced67f1d1fd2a24716270c13e7ecaf78d4a1afd4f102310",
+  "the retired policy details opening remains frozen byte-for-byte",
+)
+
+const peelCadenceCollapsible = (source, name) => {
+  if (name !== "OpsFleetPlanningPolicy.vue") return source
+
+  for (const importLine of cadenceCollapsibleImports) {
+    assert.equal(countExact(source, importLine), 1, `${name}: exact collapsible import count`)
+  }
+  assert.equal(countExact(source, policyCollapsibleOpening), 1, `${name}: exact collapsible opening`)
+  assert.equal(countExact(source, policyCollapsibleClosing), 1, `${name}: exact collapsible closing`)
+
+  let peeled = source
+  for (const importLine of cadenceCollapsibleImports) peeled = peeled.replace(importLine, "")
+  peeled = peeled
+    .replace(policyCollapsibleOpening, policyNativeOpening)
+    .replace(policyCollapsibleClosing, "        </details>")
+
+  assert.doesNotMatch(peeled, /CadenceCollapsible(?:Content|Trigger)?/)
+  assert.equal(countExact(peeled, `        ${frozenPolicyDetailsOpening}`), 1)
+  return peeled
+}
+
 const cadenceDetailsFrameCounts = Object.freeze({
   "OpsFleetPlanningNew.vue": 1,
   "OpsFleetPlanningPolicy.vue": 3,
@@ -117,7 +171,7 @@ ${spaces}>{{ error }}</${tag}>`
 const reconstructPredecessor = (file) => {
   assert.equal(countExact(file.source, validationImport), 1, `${file.name}: exact import count`)
   let reconstructed = peelCadenceDetailsFrames(
-    file.source,
+    peelCadenceCollapsible(file.source, file.name),
     cadenceDetailsFrameCounts[file.name],
     file.name,
   ).replace(validationImport, "")
