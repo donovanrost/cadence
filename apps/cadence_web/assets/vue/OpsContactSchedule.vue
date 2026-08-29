@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
@@ -677,7 +678,7 @@ const cancel = (reservation: Reservation) => {
                 </p>
               </div>
 
-              <details
+              <CadenceDetailsFrame
                 v-if="reservation.diagnostics"
                 :id="reservation.diagnostics.id"
                 class="mt-3 border-t border-base-300/60 pt-3"
@@ -691,7 +692,7 @@ const cancel = (reservation: Reservation) => {
                     <dd class="inline">{{ row.value }}</dd>
                   </div>
                 </dl>
-              </details>
+              </CadenceDetailsFrame>
             </article>
           </div>
         </aside>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import {ref, watch} from "vue"
@@ -354,7 +355,7 @@ const executePlan = () => emit("execute-plan", {})
           </div>
         </CadencePanel>
 
-        <details :id="page.policy.id" class="border border-base-300 bg-base-200/20">
+        <CadenceDetailsFrame :id="page.policy.id" class="border border-base-300 bg-base-200/20">
           <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
             {{ page.policy.summary }}
           </summary>
@@ -371,7 +372,7 @@ const executePlan = () => emit("execute-plan", {})
               <p class="mt-1 text-xs text-base-content/55">{{ selection.policy_summary }}</p>
             </div>
           </div>
-        </details>
+        </CadenceDetailsFrame>
 
         <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
           <template #header>
@@ -474,7 +475,7 @@ const executePlan = () => emit("execute-plan", {})
                 class="btn btn-primary btn-sm w-full"
               >{{ admin_controls.approve_form.action.label }}</button>
             </form>
-            <details
+            <CadenceDetailsFrame
               :id="admin_controls.rejection.id"
               class="mt-3 border-t border-base-300 pt-3"
             >
@@ -506,7 +507,7 @@ const executePlan = () => emit("execute-plan", {})
                   class="btn btn-ghost btn-sm w-full text-error"
                 >{{ admin_controls.rejection.form.action.label }}</button>
               </form>
-            </details>
+            </CadenceDetailsFrame>
           </template>
           <p
             v-else-if="page.decision.admin_required !== null"
