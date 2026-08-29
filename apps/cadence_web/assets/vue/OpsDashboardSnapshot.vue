@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+
 type DefinitionItem = {
   label: string
   value: number | string
@@ -28,7 +30,7 @@ defineProps<{snapshot: DashboardSnapshot}>()
 </script>
 
 <template>
-  <section :id="snapshot.id" class="h-full overflow-y-auto bg-base-100 p-6">
+  <CadenceOpsViewport :id="snapshot.id" class="p-6">
     <div class="mx-auto max-w-4xl space-y-5">
       <header class="border border-primary/30 bg-base-200/30 p-6">
         <p class="hud-label">{{ snapshot.eyebrow }}</p>
@@ -60,5 +62,5 @@ defineProps<{snapshot: DashboardSnapshot}>()
         {{ snapshot.action.label }}
       </a>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

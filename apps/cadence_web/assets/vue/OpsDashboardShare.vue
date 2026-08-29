@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+
 type RuntimeContextEntry = {
   key: string
   value: string
@@ -29,7 +31,7 @@ defineProps<{share: DashboardShare}>()
 </script>
 
 <template>
-  <section :id="share.id" class="h-full overflow-y-auto bg-base-100 p-6">
+  <CadenceOpsViewport :id="share.id" class="p-6">
     <div class="mx-auto max-w-3xl border border-primary/30 bg-base-200/30 p-6">
       <p class="hud-label">{{ share.eyebrow }}</p>
       <h1 class="mt-2 text-2xl font-semibold">{{ share.title }}</h1>
@@ -60,5 +62,5 @@ defineProps<{share: DashboardShare}>()
         {{ share.action.label }}
       </a>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

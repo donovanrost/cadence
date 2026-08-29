@@ -18,6 +18,10 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {
+  paddedOpsViewportCallerNames,
+  peelPaddedOpsViewport,
+} from "./padded_ops_viewport_test_support.mjs"
+import {
   excludedPageTitles,
   pageTitleCallerNames,
   pageTitleClass,
@@ -77,7 +81,13 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const compactTableCompatibleSource = peelCompactTableFrames(current, entry.file)
+  const paddedOpsViewportCompatibleSource = paddedOpsViewportCallerNames.includes(entry.file)
+    ? peelPaddedOpsViewport(current, entry.file)
+    : current
+  const compactTableCompatibleSource = peelCompactTableFrames(
+    paddedOpsViewportCompatibleSource,
+    entry.file,
+  )
   const source = opsViewportCallerNames.includes(entry.file)
     ? peelCadenceOpsViewport(compactTableCompatibleSource, entry.file)
     : compactTableCompatibleSource
