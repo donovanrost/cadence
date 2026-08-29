@@ -44,7 +44,15 @@ const git = (args, options = {}) =>
     ...options,
   });
 
-assert.equal(git(["rev-parse", "HEAD"]).trim(), compactHeaderBodyBase);
+assert.equal(
+  git(["rev-parse", "--verify", `${compactHeaderBodyBase}^{commit}`]).trim(),
+  compactHeaderBodyBase,
+  "the frozen predecessor resolves to its exact commit object"
+);
+assert.doesNotThrow(
+  () => git(["merge-base", "--is-ancestor", compactHeaderBodyBase, "HEAD"]),
+  "the frozen predecessor is an ancestor of current HEAD"
+);
 assert.equal(compactHeaderBodyMigrations.length, 10);
 assert.equal(compactHeaderBodyExclusions.length, 23);
 
