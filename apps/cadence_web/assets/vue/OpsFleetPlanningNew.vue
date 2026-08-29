@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -162,7 +163,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
 </script>
 
 <template>
-  <section :id="header.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="header.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-5xl">
         <a
@@ -331,5 +332,5 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
         </CadenceDetailsFrame>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNodeVersion = "v24.16.0"
@@ -273,7 +274,7 @@ for (const file of files) {
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        peelCadenceInlineWarnings(source, file.name),
+        peelCadenceInlineWarnings(peelCadenceOpsViewport(source, file.name), file.name),
         cadenceDetailsFrameCounts[file.name] ?? 0,
         file.name,
       ),

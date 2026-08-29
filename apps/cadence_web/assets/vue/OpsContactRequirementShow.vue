@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
@@ -159,7 +160,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[96rem]">
         <a
@@ -409,5 +410,5 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
         </CadencePanel>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

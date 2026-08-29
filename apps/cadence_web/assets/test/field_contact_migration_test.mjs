@@ -9,6 +9,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 
@@ -107,6 +108,7 @@ const cadenceFieldFrame =
   /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
 
 const reconstructHeadSource = (migratedSource, caller) => {
+  migratedSource = peelCadenceOpsViewport(migratedSource, caller.file)
   migratedSource = peelCadenceInlineWarnings(migratedSource, caller.file)
   assert.equal(occurrences(migratedSource, cadenceFieldImport), 1, `${caller.file} import count`)
 
@@ -213,7 +215,10 @@ const excludedTemplateShells = Object.freeze([
 const templateSource = sources.get("OpsContactRequirementTemplate.vue")
 const templatePredecessorSource = peelCadenceValidationMessages(
   peelCadenceDetailsFrames(
-    peelCadenceInlineWarnings(templateSource, "OpsContactRequirementTemplate.vue"),
+    peelCadenceInlineWarnings(
+      peelCadenceOpsViewport(templateSource, "OpsContactRequirementTemplate.vue"),
+      "OpsContactRequirementTemplate.vue",
+    ),
     cadenceDetailsFrameCounts["OpsContactRequirementTemplate.vue"],
     "OpsContactRequirementTemplate.vue",
   ),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
@@ -244,7 +245,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div
         class="mx-auto flex max-w-[96rem] flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"
@@ -629,5 +630,5 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
         </CadenceDetailsFrame>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -224,7 +225,7 @@ const executePlan = () => emit("execute-plan", {})
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[96rem]">
         <a
@@ -555,5 +556,5 @@ const executePlan = () => emit("execute-plan", {})
         </section>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
@@ -167,7 +168,7 @@ const resetFilters = () => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -364,5 +365,5 @@ const resetFilters = () => {
         </div>
       </section>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

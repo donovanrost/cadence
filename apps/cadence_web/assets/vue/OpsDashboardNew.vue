@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
@@ -141,7 +142,7 @@ const save = () => emit("save", payload())
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <div class="mx-auto max-w-3xl px-6 py-12 lg:py-16">
       <div class="border-l-2 border-primary pl-4">
         <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
@@ -237,5 +238,5 @@ const save = () => emit("save", payload())
         </CadenceFormActions>
       </form>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

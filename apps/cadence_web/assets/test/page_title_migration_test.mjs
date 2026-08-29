@@ -13,6 +13,10 @@ import {
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
 import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
+import {
   excludedPageTitles,
   pageTitleCallerNames,
   pageTitleClass,
@@ -71,7 +75,10 @@ for (const entry of pageTitleMigrations) {
 
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
-  const source = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const source = opsViewportCallerNames.includes(entry.file)
+    ? peelCadenceOpsViewport(current, entry.file)
+    : current
 
   assert.equal(sha256(source), entry.sha256, `${entry.file} remains byte-frozen`)
   assert.equal(occurrences(source, entry.opening), entry.count, `${entry.file} exact excluded title`)

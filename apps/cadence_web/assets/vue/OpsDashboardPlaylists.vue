@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {reactive, watch} from "vue"
 
 type Page = {
@@ -169,7 +170,7 @@ const updateDwellSeconds = (event: Event) => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <header class="border-b border-primary/20 bg-base-200/70 px-6 py-5 hud-grid">
       <div class="mx-auto max-w-6xl">
         <p class="hud-label">{{ page.eyebrow }}</p>
@@ -300,5 +301,5 @@ const updateDwellSeconds = (event: Event) => {
         </form>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

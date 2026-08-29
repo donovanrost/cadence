@@ -8,6 +8,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -284,6 +288,9 @@ const peelCadenceValidationMessages = (source, name) => {
 }
 
 const reconstructSource = (file, source) => {
+  source = opsViewportCallerNames.includes(file.name)
+    ? peelCadenceOpsViewport(source, file.name)
+    : source
   let reconstructed = peelCadenceValidationMessages(
     peelCadenceDetailsFrames(
       peelCadenceCollapsible(peelCadenceInlineWarnings(source, file.name), file.name),

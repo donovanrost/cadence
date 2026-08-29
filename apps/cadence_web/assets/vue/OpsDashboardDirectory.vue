@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
@@ -185,7 +186,7 @@ const restoreDashboard = (row: DirectoryRow) => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[100rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -420,5 +421,5 @@ const restoreDashboard = (row: DirectoryRow) => {
         </article>
       </div>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

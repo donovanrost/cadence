@@ -8,6 +8,10 @@ import {
   installDom,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -278,7 +282,9 @@ for (const component of loadedComponents) {
     `${file} has no residual eligible literal field shell`,
   )
 
-  let reconstructed = source
+  let reconstructed = opsViewportCallerNames.includes(file)
+    ? peelCadenceOpsViewport(source, file)
+    : source
   if (file === "OpsDashboardLibrary.vue") {
     reconstructed = peelCadenceCollapsibles(reconstructed, file)
   }

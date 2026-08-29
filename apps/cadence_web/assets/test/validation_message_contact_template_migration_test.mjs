@@ -10,6 +10,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const inlineWarningClass = "border-l-2 border-warning px-3 text-xs text-warning"
@@ -89,7 +90,10 @@ assert.equal(
 validationMessageSite.lastIndex = 0
 let reconstructedSites = 0
 const predecessorSource = peelCadenceDetailsFrames(
-  peelCadenceInlineWarnings(source, "OpsContactRequirementTemplate.vue"),
+  peelCadenceInlineWarnings(
+    peelCadenceOpsViewport(source, "OpsContactRequirementTemplate.vue"),
+    "OpsContactRequirementTemplate.vue",
+  ),
 )
   .replace(validationMessageImport, "")
   .replace(validationMessageSite, (_match, indent, field) => {
