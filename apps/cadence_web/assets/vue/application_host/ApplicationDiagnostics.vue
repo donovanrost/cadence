@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "../StatusBadge.vue"
+import CadenceDiagnosticsSectionFrame from "../ui/components/CadenceDiagnosticsSectionFrame.vue"
 import type {DiagnosticSeverity, Diagnostics} from "./presentation_types"
 
 defineProps<{diagnostics: Diagnostics}>()
@@ -30,16 +31,15 @@ const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
 </script>
 
 <template>
-  <section
+  <CadenceDiagnosticsSectionFrame
     :id="diagnostics.id"
     :role="diagnostics.role"
     aria-live="polite"
     :data-diagnostic-severity="diagnostics.severity"
     :data-diagnostic-count="diagnostics.count"
     :data-diagnostic-total="diagnostics.total_count"
-    class="overflow-hidden border border-base-300/80 bg-base-200/30"
   >
-    <header class="grid gap-4 border-b border-base-300/70 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+    <template #header>
       <div
         class="grid size-9 place-items-center border"
         :class="diagnosticHeaderIconClasses[diagnostics.severity]"
@@ -70,7 +70,7 @@ const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
           : diagnostics.severity === 'warning' ? 'attention' : 'info'"
         :label="diagnostics.label"
       />
-    </header>
+    </template>
 
     <div :id="diagnostics.items_id" class="divide-y divide-base-300/60">
       <article
@@ -104,5 +104,5 @@ const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
         </div>
       </article>
     </div>
-  </section>
+  </CadenceDiagnosticsSectionFrame>
 </template>

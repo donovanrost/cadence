@@ -53,6 +53,10 @@ const paths = {
   statusBadge: resolve(testDirectory, "../vue/StatusBadge.vue"),
   cadenceBadge: resolve(testDirectory, "../vue/ui/components/CadenceBadge.vue"),
   cadenceCard: resolve(testDirectory, "../vue/ui/components/CadenceCard.vue"),
+  cadenceDiagnosticsSectionFrame: resolve(
+    testDirectory,
+    "../vue/ui/components/CadenceDiagnosticsSectionFrame.vue",
+  ),
   cadencePaginationFrame: resolve(
     testDirectory,
     "../vue/ui/components/CadencePaginationFrame.vue",
@@ -206,6 +210,7 @@ const loadSfc = async (componentPath, localModules = {}) => {
 
 const cadenceBadge = await loadSfc(paths.cadenceBadge)
 const cadenceCard = await loadSfc(paths.cadenceCard)
+const cadenceDiagnosticsSectionFrame = await loadSfc(paths.cadenceDiagnosticsSectionFrame)
 const cadencePaginationFrame = await loadSfc(paths.cadencePaginationFrame)
 const cadencePageHeaderFrame = await loadSfc(paths.cadencePageHeaderFrame)
 const cadenceTableFrame = await loadSfc(paths.cadenceTableFrame)
@@ -217,7 +222,10 @@ const stats = await loadSfc(paths.stats, {
   "../StatusBadge.vue": statusBadge,
   "../ui/components/CadenceCard.vue": cadenceCard,
 })
-const diagnostics = await loadSfc(paths.diagnostics, {"../StatusBadge.vue": statusBadge})
+const diagnostics = await loadSfc(paths.diagnostics, {
+  "../StatusBadge.vue": statusBadge,
+  "../ui/components/CadenceDiagnosticsSectionFrame.vue": cadenceDiagnosticsSectionFrame,
+})
 const cadenceValidationMessage = {default: {name: "CadenceValidationMessage"}}
 const applicationHost = await loadSfc(paths.applicationHost, {
   "./StatusBadge.vue": statusBadge,

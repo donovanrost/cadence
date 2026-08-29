@@ -2,6 +2,7 @@
 import {ref, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceDiagnosticsSectionFrame from "./ui/components/CadenceDiagnosticsSectionFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -425,16 +426,15 @@ const buttonClasses: Record<ButtonVariant, string> = {
                 </div>
 
                 <div v-if="preview.diagnostics" class="mt-3">
-                  <section
+                  <CadenceDiagnosticsSectionFrame
                     :id="preview.diagnostics.id"
                     :role="preview.diagnostics.role"
                     aria-live="polite"
                     :data-diagnostic-severity="preview.diagnostics.severity"
                     :data-diagnostic-count="preview.diagnostics.count"
                     :data-diagnostic-total="preview.diagnostics.total_count"
-                    class="overflow-hidden border border-base-300/80 bg-base-200/30"
                   >
-                  <header class="grid gap-4 border-b border-base-300/70 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                  <template #header>
                     <div
                       class="grid size-9 place-items-center border"
                       :class="diagnosticHeaderIconClasses[preview.diagnostics.severity]"
@@ -462,7 +462,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
                       class="inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide"
                       :class="diagnosticBadgeClasses[preview.diagnostics.severity]"
                     >{{ preview.diagnostics.label }}</span>
-                  </header>
+                  </template>
 
                   <div :id="preview.diagnostics.items_id" class="divide-y divide-base-300/60">
                     <article
@@ -501,7 +501,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
                       </div>
                     </article>
                   </div>
-                  </section>
+                  </CadenceDiagnosticsSectionFrame>
                 </div>
               </template>
             </div>
