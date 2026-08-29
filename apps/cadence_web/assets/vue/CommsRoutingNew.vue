@@ -6,6 +6,7 @@ import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
 
 type Breadcrumb = {
@@ -204,7 +205,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
     </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
-      <section id="routing-rule-intent-section" class="space-y-4">
+      <CadenceFormSectionFrame id="routing-rule-intent-section">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.intent.number"
@@ -247,9 +248,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             @input="validate"
           >
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section id="routing-rule-transport-section" class="space-y-4">
+      <CadenceFormSectionFrame id="routing-rule-transport-section">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.transport.number"
@@ -302,9 +303,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             >{{ option.label }}</option>
           </select>
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section id="routing-rule-policy-section" class="space-y-4">
+      <CadenceFormSectionFrame id="routing-rule-policy-section">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.policy.number"
@@ -357,7 +358,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             >{{ option.label }}</option>
           </select>
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">

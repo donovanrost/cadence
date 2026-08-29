@@ -6,6 +6,7 @@ import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -253,7 +254,7 @@ const save = () => emit("save", {provider: values()})
     </div>
 
     <form v-else :id="form.id" class="space-y-8" @submit.prevent="save">
-      <section :id="form.sections.binding.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.binding.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.binding.number"
@@ -333,9 +334,9 @@ const save = () => emit("save", {provider: values()})
             {{ notes.secret_boundary.text }}
           </p>
         </div>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.resource_scope.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.resource_scope.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.resource_scope.number"
@@ -368,9 +369,9 @@ const save = () => emit("save", {provider: values()})
         <p :id="notes.resource_boundary.id" class="text-xs text-base-content/60">
           {{ notes.resource_boundary.text }}
         </p>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.delivery_policy.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.delivery_policy.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.delivery_policy.number"
@@ -458,7 +459,7 @@ const save = () => emit("save", {provider: values()})
             >{{ option.label }}</option>
           </select>
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">

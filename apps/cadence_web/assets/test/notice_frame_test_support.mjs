@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceFormSectionFrameBeforeOlderLayers} from "./form_section_frame_test_support.mjs"
 
 const noticeFrameImport =
   'import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"\n'
@@ -120,20 +121,28 @@ export const noticeFrameCallerLedger = Object.freeze({
 export const peelCadenceNoticeFrames = (source, filename) => {
   const contract = noticeFrameCallerLedger[filename]
   if (!contract) return source
+  const formSectionFrameCompatibleSource = peelCadenceFormSectionFrameBeforeOlderLayers(
+    source,
+    filename,
+  )
 
-  assert.equal(occurrences(source, noticeFrameImport), 1, `${filename} notice import count`)
   assert.equal(
-    occurrences(source, "<CadenceNoticeFrame\n"),
+    occurrences(formSectionFrameCompatibleSource, noticeFrameImport),
+    1,
+    `${filename} notice import count`,
+  )
+  assert.equal(
+    occurrences(formSectionFrameCompatibleSource, "<CadenceNoticeFrame\n"),
     contract.boundaries.length,
     `${filename} notice opening count`,
   )
   assert.equal(
-    occurrences(source, "</CadenceNoticeFrame>"),
+    occurrences(formSectionFrameCompatibleSource, "</CadenceNoticeFrame>"),
     contract.boundaries.length,
     `${filename} notice closing count`,
   )
 
-  let reconstructed = source.replace(noticeFrameImport, "")
+  let reconstructed = formSectionFrameCompatibleSource.replace(noticeFrameImport, "")
 
   for (const [index, contractBoundary] of contract.boundaries.entries()) {
     assert.equal(

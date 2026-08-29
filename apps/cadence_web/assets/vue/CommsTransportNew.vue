@@ -10,6 +10,7 @@ import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -371,7 +372,7 @@ const statusClass = (status: "ready" | "attention") =>
     </CadencePageHeaderFrame>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
-      <section :id="form.sections.identity.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.identity.number"
@@ -396,9 +397,9 @@ const statusClass = (status: "ready" | "attention") =>
             @input="updateValue('display_name', $event)"
           >
         </CadenceField>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.origin.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.origin.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.origin.number"
@@ -442,9 +443,9 @@ const statusClass = (status: "ready" | "attention") =>
             <p class="mt-2 text-sm text-base-content/65">{{ card.description }}</p>
           </div>
         </div>
-      </section>
+      </CadenceFormSectionFrame>
 
-      <section :id="form.sections.source.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.source.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.source.number"
@@ -527,7 +528,7 @@ const statusClass = (status: "ready" | "attention") =>
             >{{ form.provider.empty_state.action.label }}</a>
           </CadenceNoticeFrame>
         </template>
-      </section>
+      </CadenceFormSectionFrame>
 
       <div
         v-if="selectedOrigin === 'direct'"
@@ -539,11 +540,10 @@ const statusClass = (status: "ready" | "attention") =>
           {{ form.direct_configuration.description }}
         </p>
 
-        <section
+        <CadenceFormSectionFrame
           v-for="section in form.direct_configuration.sections"
           :id="section.id"
           :key="section.id"
-          class="space-y-4"
         >
           <CadenceFormSectionHeader
             wrapper-class="flex items-center gap-3"
@@ -622,11 +622,11 @@ const statusClass = (status: "ready" | "attention") =>
               </div>
             </template>
           </div>
-        </section>
+        </CadenceFormSectionFrame>
       </div>
 
       <template v-else>
-        <section :id="form.sections.provider_capability.id" class="space-y-4">
+        <CadenceFormSectionFrame :id="form.sections.provider_capability.id">
           <CadenceFormSectionHeader
             wrapper-class="flex items-center gap-3"
             :number="form.sections.provider_capability.number"
@@ -718,9 +718,9 @@ const statusClass = (status: "ready" | "attention") =>
               {{ form.provider.derivation_error }}
             </CadenceNoticeFrame>
           </div>
-        </section>
+        </CadenceFormSectionFrame>
 
-        <section :id="form.provider_derived.id" class="space-y-4">
+        <CadenceFormSectionFrame :id="form.provider_derived.id">
           <CadenceFormSectionHeader
             wrapper-class="flex items-center gap-3"
             :number="form.provider_derived.number"
@@ -755,10 +755,10 @@ const statusClass = (status: "ready" | "attention") =>
                 {{ form.provider_derived.configuration.empty_text }}
               </p>
           </CadenceCard>
-        </section>
+        </CadenceFormSectionFrame>
       </template>
 
-      <section :id="form.sections.review.id" class="space-y-4">
+      <CadenceFormSectionFrame :id="form.sections.review.id">
         <CadenceFormSectionHeader
           wrapper-class="flex items-center gap-3"
           :number="form.sections.review.number"
@@ -818,7 +818,7 @@ const statusClass = (status: "ready" | "attention") =>
             class="mt-3 max-h-96 overflow-auto font-mono text-xs text-base-content/70"
           >{{ form.review.diagnostics.json }}</pre>
         </CadenceDetailsFrame>
-      </section>
+      </CadenceFormSectionFrame>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
         <button

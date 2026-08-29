@@ -112,12 +112,13 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 224, "the immediate predecessor freezes 224 SFCs")
-assert.equal(currentVuePaths.length, 232, "the recursive current inventory includes 232 SFCs")
+assert.equal(currentVuePaths.length, 233, "the recursive current inventory includes 233 SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
   definitionListPanelPrimitiveRepositoryPath,
   "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
+  "apps/cadence_web/assets/vue/ui/components/CadenceFormSectionFrame.vue",
   narrowFormPageFramePath,
   opsListBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
@@ -130,6 +131,7 @@ assert.deepEqual(
     compactHeaderBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
     definitionListPanelPrimitiveRepositoryPath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceFormSectionFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
     narrowFormPageFramePath,
     opsListBodyFramePath,
