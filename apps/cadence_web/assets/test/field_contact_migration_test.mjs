@@ -9,6 +9,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {
+  conditionalKeyedCadenceFieldCounts,
+  peelConditionalKeyedCadenceFields,
+} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
@@ -109,6 +113,7 @@ const cadenceFieldFrame =
   /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
 
 const reconstructHeadSource = (migratedSource, caller) => {
+  migratedSource = peelConditionalKeyedCadenceFields(migratedSource, caller.file)
   migratedSource = peelContactSummaryBand(migratedSource, caller.file)
   migratedSource = peelCadenceOpsViewport(migratedSource, caller.file)
   migratedSource = peelCadenceInlineWarnings(migratedSource, caller.file)
@@ -166,18 +171,20 @@ const sources = new Map(
 
 for (const caller of callers) {
   const source = sources.get(caller.file)
+  const currentFrames = caller.frames + (conditionalKeyedCadenceFieldCounts[caller.file] ?? 0)
+  const currentErrors = caller.errors + (conditionalKeyedCadenceFieldCounts[caller.file] ?? 0)
 
   assert.equal(occurrences(source, cadenceFieldImport), 1, `${caller.file} exact import count`)
-  assert.equal(occurrences(source, "<CadenceField\n"), caller.frames, `${caller.file} open count`)
-  assert.equal(occurrences(source, "</CadenceField>"), caller.frames, `${caller.file} close count`)
+  assert.equal(occurrences(source, "<CadenceField\n"), currentFrames, `${caller.file} open count`)
+  assert.equal(occurrences(source, "</CadenceField>"), currentFrames, `${caller.file} close count`)
   assert.equal(
     occurrences(source, 'wrapper-class="fieldset mb-3"'),
-    caller.frames,
+    currentFrames,
     `${caller.file} wrapper-class count`,
   )
   assert.equal(
     occurrences(source, '<template #errors>'),
-    caller.errors,
+    currentErrors,
     `${caller.file} errors slot count`,
   )
   assert.doesNotMatch(
@@ -218,7 +225,13 @@ const templateSource = sources.get("OpsContactRequirementTemplate.vue")
 const templatePredecessorSource = peelCadenceValidationMessages(
   peelCadenceDetailsFrames(
     peelCadenceInlineWarnings(
-      peelCadenceOpsViewport(templateSource, "OpsContactRequirementTemplate.vue"),
+      peelCadenceOpsViewport(
+        peelConditionalKeyedCadenceFields(
+          templateSource,
+          "OpsContactRequirementTemplate.vue",
+        ),
+        "OpsContactRequirementTemplate.vue",
+      ),
       "OpsContactRequirementTemplate.vue",
     ),
     cadenceDetailsFrameCounts["OpsContactRequirementTemplate.vue"],

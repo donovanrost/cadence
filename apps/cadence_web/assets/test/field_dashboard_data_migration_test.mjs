@@ -16,6 +16,10 @@ import {
   opsAuthorHeaderCallerNames,
   peelCadenceOpsAuthorHeader,
 } from "./page_header_ops_author_test_support.mjs"
+import {
+  conditionalKeyedCadenceFieldCounts,
+  peelConditionalKeyedCadenceFields,
+} from "./conditional_keyed_field_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -265,6 +269,7 @@ const loadedComponents = await Promise.all(
 let totalFields = 0
 for (const component of loadedComponents) {
   const {file, fields, loaded, source} = component
+  const currentFrames = fields.length + (conditionalKeyedCadenceFieldCounts[file] ?? 0)
   assert.ok(loaded.component, `${file} compiles through the real local SFC resolver`)
   assert.ok(loaded.descriptor.scriptSetup, `${file} keeps its setup script`)
   assert.ok(loaded.descriptor.template, `${file} keeps its real template`)
@@ -272,12 +277,12 @@ for (const component of loadedComponents) {
   assert.equal(occurrences(source, componentImport), 1, `${file} has one CadenceField import`)
   assert.equal(
     occurrences(source, "<CadenceField\n"),
-    fields.length,
+    currentFrames,
     `${file} has its exact frozen CadenceField frame count`,
   )
   assert.equal(
     occurrences(source, 'wrapper-class="fieldset mb-3"'),
-    fields.length,
+    currentFrames,
     `${file} sends the exact frozen wrapper class to every frame`,
   )
   assert.doesNotMatch(
@@ -286,9 +291,10 @@ for (const component of loadedComponents) {
     `${file} has no residual eligible literal field shell`,
   )
 
-  let reconstructed = opsAuthorHeaderCallerNames.includes(file)
-    ? peelCadenceOpsAuthorHeader(source, file)
-    : source
+  let reconstructed = peelConditionalKeyedCadenceFields(source, file)
+  reconstructed = opsAuthorHeaderCallerNames.includes(file)
+    ? peelCadenceOpsAuthorHeader(reconstructed, file)
+    : reconstructed
   reconstructed = opsViewportCallerNames.includes(file)
     ? peelCadenceOpsViewport(reconstructed, file)
     : reconstructed
@@ -322,30 +328,38 @@ assert.equal(totalFields, 21, "the frozen DASHBOARD/DATA cohort contains exactly
 const dashboardNewSource = loadedComponents.find(
   ({file}) => file === "OpsDashboardNew.vue",
 ).source
+const dashboardNewPredecessorSource = peelConditionalKeyedCadenceFields(
+  dashboardNewSource,
+  "OpsDashboardNew.vue",
+)
 assert.equal(
   occurrences(
-    dashboardNewSource,
+    dashboardNewPredecessorSource,
     '<div v-if="form.document_json !== null" class="fieldset mb-3">',
   ),
   1,
-  "the conditional dashboard document field remains a caller-owned manual shell",
+  "the frozen conditional dashboard document exclusion reconstructs exactly",
 )
 assert.match(
-  dashboardNewSource,
+  dashboardNewPredecessorSource,
   /<div v-if="form\.document_json !== null" class="fieldset mb-3">\n\s*<label :for="form\.document_json\.id">[\s\S]*?<textarea[\s\S]*?v-model="dashboard\.document_json"/,
-  "the excluded conditional textarea and its reconciliation stay untouched",
+  "the excluded conditional textarea and its reconciliation remain exact after the newest peel",
 )
 
 const dataOperationsSource = loadedComponents.find(
   ({file}) => file === "OpsDataOperations.vue",
 ).source
+const dataOperationsPredecessorSource = peelConditionalKeyedCadenceFields(
+  dataOperationsSource,
+  "OpsDataOperations.vue",
+)
 for (const fieldKeys of ["primaryRequestFieldKeys", "sourceRangeFieldKeys"]) {
   assert.match(
-    dataOperationsSource,
+    dataOperationsPredecessorSource,
     new RegExp(
       `<div\\n\\s+v-for="fieldKey in ${fieldKeys}"\\n\\s+:key="request_form\\.fields\\[fieldKey\\]\\.id"\\n\\s+class="fieldset mb-3"`,
     ),
-    `${fieldKeys} dynamic field shell remains manual and caller-owned`,
+    `${fieldKeys} frozen dynamic exclusion reconstructs exactly`,
   )
 }
 assert.match(

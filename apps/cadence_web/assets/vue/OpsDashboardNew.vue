@@ -206,19 +206,22 @@ const save = () => emit("save", payload())
           >
         </CadenceField>
 
-        <div v-if="form.document_json !== null" class="fieldset mb-3">
-          <label :for="form.document_json.id">
-            <span class="hud-label block mb-1.5">{{ form.document_json.label }}</span>
-            <textarea
-              :id="form.document_json.id"
-              v-model="dashboard.document_json"
-              :name="form.document_json.name"
-              :required="form.document_json.required"
-              class="textarea textarea-bordered min-h-80 w-full font-mono text-xs"
-              @input="validate"
-            ></textarea>
-          </label>
-        </div>
+        <CadenceField
+          v-if="form.document_json !== null"
+          :control-id="form.document_json.id"
+          wrapper-class="fieldset mb-3"
+          :label="form.document_json.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <textarea
+            :id="form.document_json.id"
+            v-model="dashboard.document_json"
+            :name="form.document_json.name"
+            :required="form.document_json.required"
+            class="textarea textarea-bordered min-h-80 w-full font-mono text-xs"
+            @input="validate"
+          ></textarea>
+        </CadenceField>
 
         <p v-if="page.import_guidance !== null" class="text-xs text-base-content/55">
           {{ page.import_guidance }}

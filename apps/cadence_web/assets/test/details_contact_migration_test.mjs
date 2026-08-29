@@ -10,6 +10,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
@@ -101,7 +102,13 @@ for (const caller of callers) {
   const componentPath = resolve(vueDirectory, caller.file)
   const source = peelCadenceInlineWarnings(
     peelCadenceOpsViewport(
-      peelContactSummaryBand(await readFile(componentPath, "utf8"), caller.file),
+      peelContactSummaryBand(
+        peelConditionalKeyedCadenceFields(
+          await readFile(componentPath, "utf8"),
+          caller.file,
+        ),
+        caller.file,
+      ),
       caller.file,
     ),
     caller.file,

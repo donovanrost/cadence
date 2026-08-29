@@ -4,6 +4,7 @@ import {createHash} from "node:crypto"
 import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsAuthorHeaderCallerNames,
@@ -309,6 +310,7 @@ const peelCadenceCollapsibles = (source, caller) => {
 }
 
 const reconstructParent = (source, caller) => {
+  source = peelConditionalKeyedCadenceFields(source, caller.path.split("/").at(-1))
   if (opsAuthorHeaderCallerNames.includes(caller.path.split("/").at(-1))) {
     source = peelCadenceOpsAuthorHeader(source, caller.path)
   }

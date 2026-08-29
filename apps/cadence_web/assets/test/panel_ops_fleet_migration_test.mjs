@@ -7,6 +7,7 @@ import {
   hoverTableRowCallerNames,
   peelCadenceHoverTableRows,
 } from "./hover_table_row_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -600,10 +601,14 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
+  const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+    source,
+    file.name,
+  )
   const opsDataSourcesFieldCompatibleSource =
     file.name === "OpsDataSources.vue"
-      ? peelOpsDataSourcesCadenceFields(source, file.name)
-      : source
+      ? peelOpsDataSourcesCadenceFields(conditionalKeyedCompatibleSource, file.name)
+      : conditionalKeyedCompatibleSource
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(file.name)
     ? peelCadenceOpsViewport(opsDataSourcesFieldCompatibleSource, file.name)
     : opsDataSourcesFieldCompatibleSource

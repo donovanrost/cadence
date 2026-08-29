@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -153,7 +154,10 @@ const peelCadenceFields = (source, filename, expectedFrames) => {
 
 for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const source = await readFile(resolve(vueDirectory, filename), "utf8")
-  const contactSummaryCompatibleSource = peelContactSummaryBand(source, filename)
+  const contactSummaryCompatibleSource = peelContactSummaryBand(
+    peelConditionalKeyedCadenceFields(source, filename),
+    filename,
+  )
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
     ? peelCadenceOpsViewport(contactSummaryCompatibleSource, filename)
     : contactSummaryCompatibleSource

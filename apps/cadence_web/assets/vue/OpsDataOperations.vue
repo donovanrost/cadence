@@ -458,43 +458,43 @@ const requestCorrection = (action: Action) => {
                 </select>
               </CadenceField>
 
-              <div
+              <CadenceField
                 v-for="fieldKey in primaryRequestFieldKeys"
                 :key="request_form.fields[fieldKey].id"
-                class="fieldset mb-3"
+                :control-id="request_form.fields[fieldKey].id"
+                wrapper-class="fieldset mb-3"
+                :label="request_form.fields[fieldKey].label"
+                label-class="hud-label block mb-1.5"
               >
-                <label :for="request_form.fields[fieldKey].id">
-                  <span class="hud-label block mb-1.5">{{ request_form.fields[fieldKey].label }}</span>
+                <input
+                  :id="request_form.fields[fieldKey].id"
+                  v-model="requestValues[fieldKey]"
+                  :name="request_form.fields[fieldKey].name"
+                  type="text"
+                  :placeholder="request_form.fields[fieldKey].placeholder ?? undefined"
+                  class="w-full input"
+                  @input="validateRequest"
+                >
+              </CadenceField>
+
+              <div class="grid grid-cols-2 gap-2">
+                <CadenceField
+                  v-for="fieldKey in sourceRangeFieldKeys"
+                  :key="request_form.fields[fieldKey].id"
+                  :control-id="request_form.fields[fieldKey].id"
+                  wrapper-class="fieldset mb-3"
+                  :label="request_form.fields[fieldKey].label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <input
                     :id="request_form.fields[fieldKey].id"
                     v-model="requestValues[fieldKey]"
                     :name="request_form.fields[fieldKey].name"
                     type="text"
-                    :placeholder="request_form.fields[fieldKey].placeholder ?? undefined"
                     class="w-full input"
                     @input="validateRequest"
                   >
-                </label>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <div
-                  v-for="fieldKey in sourceRangeFieldKeys"
-                  :key="request_form.fields[fieldKey].id"
-                  class="fieldset mb-3"
-                >
-                  <label :for="request_form.fields[fieldKey].id">
-                    <span class="hud-label block mb-1.5">{{ request_form.fields[fieldKey].label }}</span>
-                    <input
-                      :id="request_form.fields[fieldKey].id"
-                      v-model="requestValues[fieldKey]"
-                      :name="request_form.fields[fieldKey].name"
-                      type="text"
-                      class="w-full input"
-                      @input="validateRequest"
-                    >
-                  </label>
-                </div>
+                </CadenceField>
               </div>
 
               <CadenceField

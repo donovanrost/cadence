@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
@@ -276,7 +277,13 @@ for (const file of files) {
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        peelCadenceInlineWarnings(peelCadenceOpsViewport(source, file.name), file.name),
+        peelCadenceInlineWarnings(
+          peelCadenceOpsViewport(
+            peelConditionalKeyedCadenceFields(source, file.name),
+            file.name,
+          ),
+          file.name,
+        ),
         cadenceDetailsFrameCounts[file.name] ?? 0,
         file.name,
       ),

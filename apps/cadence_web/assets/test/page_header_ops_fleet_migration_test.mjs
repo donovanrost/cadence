@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import test from "node:test"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -358,9 +359,13 @@ ${spaces}</div>`
 for (const caller of callers) {
   test(`${caller.file} has one ops page-header frame and reconstructs ${parent}`, async () => {
     const source = await readFile(new URL(`../vue/${caller.file}`, import.meta.url), "utf8")
+    const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+      source,
+      caller.file,
+    )
     const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.file)
-      ? peelCadenceOpsViewport(source, caller.file)
-      : source
+      ? peelCadenceOpsViewport(conditionalKeyedCompatibleSource, caller.file)
+      : conditionalKeyedCompatibleSource
     const migratedOpening =
       caller.migratedOpening ?? `${caller.indent}<CadencePageHeaderFrame variant="ops">`
     const parentOpening = caller.parentOpening ?? `${caller.indent}${rawOpening}`

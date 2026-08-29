@@ -12,6 +12,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 const scenarios = Object.freeze([
@@ -91,6 +92,7 @@ assert.equal(
 )
 
 const reconstructPredecessor = (source) => {
+  source = peelConditionalKeyedCadenceFields(source, "OpsFleetPlanningPolicy.vue")
   source = peelCadenceInlineWarnings(source, "OpsFleetPlanningPolicy.vue")
 
   for (const importLine of cadenceCollapsibleImports) {
