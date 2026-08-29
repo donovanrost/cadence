@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {onMounted, reactive, ref, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
@@ -96,10 +97,7 @@ const issueServiceIdentity = () => {
 <template>
   <main id="admin-organization-detail" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <nav
-        aria-label="Breadcrumb"
-        class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-      >
+      <CadenceBreadcrumbs>
         <a
           :href="navigation.platform_admin_href"
           data-phx-link="redirect"
@@ -115,7 +113,7 @@ const issueServiceIdentity = () => {
         >Organizations</a>
         <span class="text-base-content/20" aria-hidden="true">/</span>
         <span class="text-primary/90">{{ organization.display_name }}</span>
-      </nav>
+      </CadenceBreadcrumbs>
 
       <div class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

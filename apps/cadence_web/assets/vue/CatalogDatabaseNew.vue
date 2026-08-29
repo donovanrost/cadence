@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CatalogUploadForm from "./CatalogUploadForm.vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
@@ -39,10 +40,7 @@ const emit = defineEmits<{
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.breadcrumbs"
               :key="`${index}-${breadcrumb.label}`"
@@ -59,7 +57,7 @@ const emit = defineEmits<{
                 class="hover:text-primary transition-colors"
               >{{ breadcrumb.label }}</a>
             </template>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {{ page.heading }}
           </h1>
