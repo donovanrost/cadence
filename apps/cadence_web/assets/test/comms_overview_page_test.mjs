@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceEmptyStateFrames} from "./empty_state_frame_test_support.mjs"
 
 const scenarioLedger = [
   "the complete Comms Overview page is one non-SSR LiveVue parent with one presentation prop",
@@ -138,7 +139,11 @@ const reconstructCards = (source, expectedCount, label) => {
   return reconstructed
 }
 
-const preCardChildSource = reconstructCards(childSource, 2, "CommsOverview.vue")
+const preCardChildSource = reconstructCards(
+  peelCadenceEmptyStateFrames(childSource, "CommsOverview.vue"),
+  2,
+  "CommsOverview.vue",
+)
 
 assert.equal(
   createHash("sha256").update(preCardChildSource).digest("hex"),

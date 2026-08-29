@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue"
 import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue"
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
@@ -131,15 +132,12 @@ defineProps<{
       </template>
 
       <div class="card-body" :class="roster.fleet_empty ? 'p-6' : 'p-0'">
-        <div
-          v-if="roster.fleet_empty"
-          class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
-        >
-          <p class="hud-label">No spacecraft yet</p>
-          <p class="mx-auto mt-2 max-w-md text-sm text-base-content/70">
+        <CadenceEmptyStateFrame v-if="roster.fleet_empty">
+          <template #title>No spacecraft yet</template>
+          <template #description>
             Register the first spacecraft for this mission.
-          </p>
-          <div class="mt-5">
+          </template>
+          <template #action>
             <a
               :href="roster.new_spacecraft_href"
               data-phx-link="redirect"
@@ -149,8 +147,8 @@ defineProps<{
               <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
               Register the first spacecraft
             </a>
-          </div>
-        </div>
+          </template>
+        </CadenceEmptyStateFrame>
 
         <template v-else>
           <CadenceListToolbarFrame id="spacecraft-roster-toolbar">
@@ -344,15 +342,12 @@ defineProps<{
       </template>
 
       <div class="card-body" :class="profiles.empty ? 'p-6' : 'p-0'">
-        <div
-          v-if="profiles.empty"
-          class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"
-        >
-          <p class="hud-label">No profiles yet</p>
-          <p class="mx-auto mt-2 max-w-md text-sm text-base-content/70">
+        <CadenceEmptyStateFrame v-if="profiles.empty">
+          <template #title>No profiles yet</template>
+          <template #description>
             Create a profile to reuse frame and packet interpretation settings across spacecraft.
-          </p>
-          <div class="mt-5">
+          </template>
+          <template #action>
             <a
               :href="profiles.new_profile_href"
               data-phx-link="redirect"
@@ -362,8 +357,8 @@ defineProps<{
               <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
               Create the first profile
             </a>
-          </div>
-        </div>
+          </template>
+        </CadenceEmptyStateFrame>
 
         <template v-else>
           <CadenceTableFrame id="spacecraft-profiles-preview-table">

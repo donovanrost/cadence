@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceEmptyStateComponent} from "./empty_state_frame_test_support.mjs"
 import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 
 const scenarioLedger = [
@@ -44,7 +45,7 @@ const [
   childSource,
   breadcrumbsSource,
   pageHeaderSource,
-  emptyStateSource,
+  currentEmptyStateSource,
   pageShellTypesSource,
   liveViewSource,
   liveViewTestSource,
@@ -60,6 +61,7 @@ const [
   readFile(liveViewTestPath, "utf8"),
   readFile(routerPath, "utf8"),
 ])
+const emptyStateSource = peelCadenceEmptyStateComponent(currentEmptyStateSource)
 const preHoverTableRowChildSource = peelCadenceHoverTableRows(
   childSource,
   "SpacecraftTypeList.vue",

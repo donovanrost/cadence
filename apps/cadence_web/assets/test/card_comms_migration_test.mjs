@@ -3,6 +3,10 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  emptyStateFrameMigrations,
+  peelCadenceEmptyStateFrames,
+} from "./empty_state_frame_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
 import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
@@ -38,6 +42,7 @@ const detailsFrameCounts = Object.freeze({
   "CommsTransportNew.vue": 1,
   "CommsTransportShow.vue": 1,
 })
+const emptyStateFrameCallers = new Set(emptyStateFrameMigrations.map(({file}) => file))
 const peelCadenceDetailsFrames = (source, expectedCount, label) => {
   const expectedImportCount = expectedCount > 0 ? 1 : 0
 
@@ -330,9 +335,12 @@ const sources = new Map()
 for (const contract of contracts) {
   const componentPath = resolve(testDirectory, `../vue/${contract.filename}`)
   const source = await readFile(componentPath, "utf8")
-  const pageTitleCompatibleSource = pageTitleCallerNames.includes(contract.filename)
-    ? peelCadencePageTitle(source, contract.filename)
+  const preEmptyStateFrameSource = emptyStateFrameCallers.has(contract.filename)
+    ? peelCadenceEmptyStateFrames(source, contract.filename)
     : source
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(contract.filename)
+    ? peelCadencePageTitle(preEmptyStateFrameSource, contract.filename)
+    : preEmptyStateFrameSource
   sources.set(contract.filename, {componentPath, source})
 
   assert.equal(

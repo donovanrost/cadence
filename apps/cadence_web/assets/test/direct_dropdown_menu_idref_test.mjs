@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceEmptyStateFrames} from "./empty_state_frame_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {
   assertPinnedAdapterRuntime,
@@ -522,7 +523,11 @@ const compileSfc = async (definition) => {
       ? reconstructCatalogArtifactShowPreDataRowSource(prePanelSource)
       : prePanelSource
   }
-  const source = reconstructNewerPresentationFrames(currentSource)
+  const preEmptyStateSource =
+    definition.name === "SpacecraftList"
+      ? peelCadenceEmptyStateFrames(currentSource, "SpacecraftList.vue")
+      : currentSource
+  const source = reconstructNewerPresentationFrames(preEmptyStateSource)
   const predecessorCompatibleSource =
     definition.name === "SpacecraftList"
       ? reconstructNewerPresentationFrames(

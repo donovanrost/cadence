@@ -1,22 +1,28 @@
 <script setup lang="ts">
+import CadenceEmptyStateFrame from "./CadenceEmptyStateFrame.vue"
 import type {EmptyStatePresentation} from "./page_shell"
 
 const props = defineProps<{emptyState: EmptyStatePresentation}>()
 </script>
 
 <template>
-  <div v-bind="props.emptyState.attrs">
-    <p v-bind="props.emptyState.title.attrs">
+  <CadenceEmptyStateFrame
+    :root-attrs="props.emptyState.attrs"
+    :title-attrs="props.emptyState.title.attrs"
+    :description-attrs="props.emptyState.description.attrs"
+    :action-container-attrs="props.emptyState.action_container.attrs"
+  >
+    <template #title>
       {{ props.emptyState.title.text }}
-    </p>
-    <p v-bind="props.emptyState.description.attrs">
+    </template>
+    <template #description>
       {{ props.emptyState.description.text }}
-    </p>
-    <div v-bind="props.emptyState.action_container.attrs">
+    </template>
+    <template #action>
       <a v-bind="props.emptyState.action.attrs">
         <span v-bind="props.emptyState.action.icon.attrs"></span>
         {{ props.emptyState.action.text }}
       </a>
-    </div>
-  </div>
+    </template>
+  </CadenceEmptyStateFrame>
 </template>

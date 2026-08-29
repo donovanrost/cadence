@@ -18,6 +18,7 @@ import {
   reorderedHoverTableRowClass,
   sha256,
 } from "./hover_table_row_test_support.mjs"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -199,13 +200,24 @@ let excludedReorderedRows = 0
 let excludedDynamicRows = 0
 for (const exclusion of excludedHoverTableRowFiles) {
   const source = await readFile(resolve(vueDirectory, exclusion.file), "utf8")
+  const predecessorCompatibleSource = pageTitleCallerNames.includes(exclusion.file)
+    ? peelCadencePageTitle(source, exclusion.file)
+    : source
   const uniqueFragments = new Set(exclusion.fragments)
 
-  assert.equal(sha256(source), exclusion.sha256, `${exclusion.file} remains byte-frozen`)
-  assert.doesNotMatch(source, /CadenceHoverTableRow/)
+  assert.equal(
+    sha256(predecessorCompatibleSource),
+    exclusion.sha256,
+    `${exclusion.file} remains byte-frozen`,
+  )
+  assert.doesNotMatch(predecessorCompatibleSource, /CadenceHoverTableRow/)
   for (const fragment of uniqueFragments) {
     const expectedCount = exclusion.fragments.filter((value) => value === fragment).length
-    assert.equal(occurrences(source, fragment), expectedCount, `${exclusion.file}: ${fragment}`)
+    assert.equal(
+      occurrences(predecessorCompatibleSource, fragment),
+      expectedCount,
+      `${exclusion.file}: ${fragment}`,
+    )
     if (fragment === reorderedHoverTableRowClass) excludedReorderedRows += expectedCount
     else excludedDynamicRows += expectedCount
   }
