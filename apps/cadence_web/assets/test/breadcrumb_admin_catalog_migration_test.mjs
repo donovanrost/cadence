@@ -4,6 +4,9 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs";
 import { pageTitleCallerNames, peelCadencePageTitle } from "./page_title_test_support.mjs";
 import {
   hoverTableRowCallerNames,
@@ -128,9 +131,11 @@ for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path);
   const source = readFileSync(componentPath, "utf8");
   const file = caller.path.split("/").at(-1);
+  const compactHeaderBodyCompatibleSource =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(source, file);
   const pageTitleCompatibleSource = pageTitleCallerNames.includes(file)
-    ? peelCadencePageTitle(source, file)
-    : source;
+    ? peelCadencePageTitle(compactHeaderBodyCompatibleSource, file)
+    : compactHeaderBodyCompatibleSource;
   const preHoverTableRowSource = hoverTableRowCallers.has(file)
     ? peelCadenceHoverTableRows(pageTitleCompatibleSource, file)
     : pageTitleCompatibleSource;

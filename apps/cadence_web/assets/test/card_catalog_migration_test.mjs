@@ -3,6 +3,9 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
@@ -212,7 +215,12 @@ const sources = new Map()
 for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
   const currentSource = await readFile(componentPath, "utf8")
-  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, migration.file)
+  const compactHeaderBodyCompatibleSource =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(currentSource, migration.file)
+  const source = peelResidualCadenceCardBeforeOlderLayers(
+    compactHeaderBodyCompatibleSource,
+    migration.file,
+  )
   const pageTitleCompatibleSource = pageTitleCallerNames.includes(migration.file)
     ? peelCadencePageTitle(source, migration.file)
     : source

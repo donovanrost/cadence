@@ -1,4 +1,7 @@
 import assert from "node:assert/strict"
+import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
 import {peelCadenceStatTileBeforeOlderLayers} from "./stat_tile_test_support.mjs"
 
 export const compactTableFramePredecessor =
@@ -131,7 +134,12 @@ export const compactTableFrameMigrationFor = (caller) => {
 export const peelCompactTableFrames = (source, caller) => {
   const migration = compactTableFrameMigrationFor(caller)
   if (!migration) return source
-  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(source, caller)
+  const compactHeaderBodyCompatibleSource =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(source, caller)
+  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(
+    compactHeaderBodyCompatibleSource,
+    caller,
+  )
 
   assert.equal(
     occurrences(statTileCompatibleSource, compactTableFrameImport),

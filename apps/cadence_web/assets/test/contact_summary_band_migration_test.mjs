@@ -8,6 +8,9 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {
+  compactHeaderBodyFramePath,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   contactSummaryBandCallerNames,
   contactSummaryBandHeaderClass,
   contactSummaryBandMigrationFor,
@@ -124,10 +127,11 @@ assert.deepEqual(
   currentVuePaths,
   [
     ...predecessorVuePaths,
+    compactHeaderBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
   ].sort(),
-  "the current SFC path cohort adds only CadenceDefinitionListPanel and CadenceStatTile",
+  "the current SFC path cohort adds only the compact header body, definition-list, and stat-tile primitives",
 )
 assert.deepEqual(contactSummaryBandCallerNames, [
   "OpsContactRequirementShow.vue",

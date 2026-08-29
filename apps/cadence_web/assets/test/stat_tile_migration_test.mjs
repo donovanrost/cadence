@@ -8,6 +8,10 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {
+  compactHeaderBodyFramePath,
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   elementAttributes,
   expectedNodeVersion,
   flushVue,
@@ -28,7 +32,7 @@ import {
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 223-SFC predecessor and full 225-SFC current tree add only the two named primitives",
+  "the fixed 223-SFC predecessor and full 226-SFC current tree add only the three named primitives",
   "all predecessor SFCs classify into six exact shells and one frozen semantic exclusion",
   "all current SFCs parse and exactly six singular imports/openings replace the native cohort",
   "the fixed predecessor commit, Git blob, byte length, and SHA-256 are exact for every caller",
@@ -92,12 +96,21 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 225, "the current-tree gate includes exactly 225 Vue SFCs")
-assert.deepEqual(addedVuePaths, [definitionListPanelRepositoryPath, primitiveRepositoryPath])
+assert.equal(currentVuePaths.length, 226, "the current-tree gate includes exactly 226 Vue SFCs")
+assert.deepEqual(addedVuePaths, [
+  compactHeaderBodyFramePath,
+  definitionListPanelRepositoryPath,
+  primitiveRepositoryPath,
+])
 assert.deepEqual(
   currentVuePaths,
-  [...predecessorVuePaths, definitionListPanelRepositoryPath, primitiveRepositoryPath].sort(),
-  "the current inventory is every fixed predecessor SFC plus only the two named primitives",
+  [
+    ...predecessorVuePaths,
+    compactHeaderBodyFramePath,
+    definitionListPanelRepositoryPath,
+    primitiveRepositoryPath,
+  ].sort(),
+  "the current inventory is every fixed predecessor SFC plus only the three named primitives",
 )
 
 // Install JSDOM before the first Vue runtime import or compiled-SFC evaluation.
@@ -250,7 +263,9 @@ const compileOnly = (source, filename, id) => {
 for (const entry of statTileMigrations) {
   const predecessor = predecessorSources.get(entry.repositoryPath)
   const current = currentSources.get(entry.repositoryPath)
-  const reconstructed = peelCadenceStatTile(current, entry.file)
+  const compactHeaderBodyCompatibleCurrent =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, entry.file)
+  const reconstructed = peelCadenceStatTile(compactHeaderBodyCompatibleCurrent, entry.file)
 
   assert.equal(entry.predecessorCommit, statTilePredecessorCommit)
   assert.equal(

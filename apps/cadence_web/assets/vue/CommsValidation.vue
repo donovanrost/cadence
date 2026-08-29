@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
@@ -57,8 +58,8 @@ defineProps<{validation: Validation}>()
 <template>
   <div :id="validation.id" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in validation.breadcrumbs"
@@ -87,11 +88,11 @@ defineProps<{validation: Validation}>()
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ validation.subtitle }}
           </p>
-        </div>
-        <div class="flex items-center gap-2">
+        </template>
+        <template #actions>
           <StatusBadge :status="validation.status.tone" :label="validation.status.label" />
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <CadenceCard

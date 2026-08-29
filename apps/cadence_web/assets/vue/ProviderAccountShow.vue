@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -233,8 +234,8 @@ const revokeGrant = (grant: Grant) => {
 <template>
   <div :id="page.id" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.header.breadcrumbs"
@@ -264,8 +265,8 @@ const revokeGrant = (grant: Grant) => {
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             {{ page.header.subtitle }}
           </p>
-        </div>
-        <div class="flex items-center gap-2">
+        </template>
+        <template #actions>
           <button
             :id="actions.validate.id"
             type="button"
@@ -297,8 +298,8 @@ const revokeGrant = (grant: Grant) => {
           >
             {{ actions.revoke.label }}
           </button>
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">

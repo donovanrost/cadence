@@ -9,6 +9,9 @@ import {dirname, extname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {
+  compactHeaderBodyFramePath,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   definitionListPanelBoundaries,
   definitionListPanelCaller,
   definitionListPanelClass,
@@ -34,7 +37,7 @@ import {
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 224-SFC predecessor and recursive 225-SFC current tree differ only by the primitive",
+  "the fixed 224-SFC predecessor and recursive 226-SFC current tree add only the two named primitives",
   "all current SFCs parse and compile with the actual pinned Vue compiler",
   "the predecessor tree classifies exactly two native shells and the current tree has no third",
   "the fixed predecessor commit, blob, byte length, and SHA-256 remain exact",
@@ -103,12 +106,16 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 224, "the immediate predecessor freezes 224 SFCs")
-assert.equal(currentVuePaths.length, 225, "the recursive current inventory includes 225 SFCs")
-assert.deepEqual(addedVuePaths, [definitionListPanelPrimitiveRepositoryPath])
+assert.equal(currentVuePaths.length, 226, "the recursive current inventory includes 226 SFCs")
+assert.deepEqual(addedVuePaths, [compactHeaderBodyFramePath, definitionListPanelPrimitiveRepositoryPath])
 assert.deepEqual(
   currentVuePaths,
-  [...predecessorVuePaths, definitionListPanelPrimitiveRepositoryPath].sort(),
-  "the new primitive is the only current-tree addition",
+  [
+    ...predecessorVuePaths,
+    compactHeaderBodyFramePath,
+    definitionListPanelPrimitiveRepositoryPath,
+  ].sort(),
+  "the two named primitives are the only current-tree additions",
 )
 
 const currentSources = new Map(

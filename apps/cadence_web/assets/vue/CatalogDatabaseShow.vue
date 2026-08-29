@@ -3,6 +3,7 @@ import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
@@ -77,8 +78,8 @@ const emit = defineEmits<{
   >
     <div id="catalog-database-show-surface" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <a
               :href="navigation.mission.href"
@@ -103,9 +104,9 @@ const emit = defineEmits<{
             {{ database.name }}
             <span class="ml-3 font-mono text-base text-base-content/60">{{ database.slug }}</span>
           </h1>
-        </div>
+        </template>
 
-        <div class="flex items-center gap-2">
+        <template #actions>
           <CadenceCollapsibleTrigger>
             <button
               id="add-revision-toggle"
@@ -116,8 +117,8 @@ const emit = defineEmits<{
               {{ revision_form_open ? "Cancel" : "+ Add revision" }}
             </button>
           </CadenceCollapsibleTrigger>
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">

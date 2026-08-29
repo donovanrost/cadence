@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
@@ -200,8 +201,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
     :data-runtime-selected-decision-state="summary.selected_decision_state"
   >
     <CadencePageHeaderFrame variant="compact">
-      <div class="flex items-end justify-between gap-4">
-        <div>
+      <CadenceCompactPageHeaderBodyFrame>
+        <template #content>
           <CadenceBreadcrumbs>
             <a
               :href="navigation.admin_href"
@@ -221,8 +222,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
             Process-local runtime health for support workflows, including dashboard invalidation decisions emitted by open dashboards.
           </p>
-        </div>
-        <div class="flex items-center gap-2">
+        </template>
+        <template #actions>
           <button
             id="admin-runtime-refresh"
             type="button"
@@ -231,8 +232,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
           >
             <span class="hero-arrow-path h-4 w-4" aria-hidden="true"></span> Refresh
           </button>
-        </div>
-      </div>
+        </template>
+      </CadenceCompactPageHeaderBodyFrame>
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">

@@ -4,6 +4,9 @@ import {readdir, readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
+} from "./compact_page_header_body_frame_test_support.mjs"
+import {
   cadenceEmptyStateConsumers,
   cadenceEmptyStateMigration,
   emptyStateActionClass,
@@ -185,8 +188,10 @@ for (const consumer of cadenceEmptyStateConsumers) {
 
 for (const exclusion of emptyStateVariantLedger.filter(({sha256}) => sha256)) {
   const current = await readFile(resolve(repositoryRoot, exclusion.repositoryPath), "utf8")
+  const compactHeaderBodyCompatibleCurrent =
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, exclusion.file)
   const fieldCompatibleCurrent = peelCadenceFieldsBeforeEmptyStateLayers(
-    current,
+    compactHeaderBodyCompatibleCurrent,
     exclusion.file,
   )
   const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(exclusion.file)
