@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -74,10 +75,7 @@ defineProps<{
   <div id="spacecraft-profile-show-surface" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
       <div>
-        <nav
-          aria-label="Breadcrumb"
-          class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-        >
+        <CadenceBreadcrumbs>
           <a
             :href="navigation.mission.href"
             data-phx-link="redirect"
@@ -100,7 +98,7 @@ defineProps<{
           >{{ navigation.profiles.label }}</a>
           <span class="text-base-content/20" aria-hidden="true">/</span>
           <span class="text-primary/90">{{ navigation.current.label }}</span>
-        </nav>
+        </CadenceBreadcrumbs>
 
         <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
           {{ profile.display_name }}

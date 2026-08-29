@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -107,10 +108,7 @@ defineProps<{
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.header.breadcrumbs"
               :key="breadcrumb.label + '-' + index"
@@ -129,7 +127,7 @@ defineProps<{
               >{{ breadcrumb.label }}</a>
               <span v-else class="text-primary/90">{{ breadcrumb.label }}</span>
             </template>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {{ page.header.title }}
             <span class="ml-3 font-mono text-base text-base-content/60">

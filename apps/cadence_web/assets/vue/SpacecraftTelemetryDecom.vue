@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
@@ -296,10 +297,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <template v-for="(breadcrumb, index) in page.breadcrumbs" :key="breadcrumb.id">
               <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
               <span
@@ -316,7 +314,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
                 class="hover:text-primary transition-colors"
               >{{ breadcrumb.label }}</a>
             </template>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {{ page.title }}
           </h1>
