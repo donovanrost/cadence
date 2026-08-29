@@ -16,6 +16,9 @@ import {
   predecessorCadenceTableFrameCallers,
 } from "./compact_table_frame_test_support.mjs"
 import {
+  peelCadenceDefinitionListPanelBeforeOlderLayers,
+} from "./definition_list_panel_test_support.mjs"
+import {
   elementAttributes,
   expectedNodeVersion,
   installDom,
@@ -75,6 +78,7 @@ const predecessorVuePaths = git(
   .filter((path) => path.endsWith(".vue"))
   .sort()
 const allowedPostPredecessorVuePaths = Object.freeze([
+  "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceDiagnosticsSectionFrame.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
 ])
@@ -85,12 +89,12 @@ const postPredecessorVuePaths = currentVuePaths.filter(
 assert.deepEqual(
   postPredecessorVuePaths,
   allowedPostPredecessorVuePaths,
-  "exactly two explicitly allowed SFCs were added after the frozen predecessor",
+  "exactly three explicitly allowed SFCs were added after the frozen predecessor",
 )
 assert.deepEqual(
   currentVuePaths,
   [...predecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
-  "the audit covers the full current tree: every frozen predecessor SFC plus two allowed additions",
+  "the audit covers the full current tree: every frozen predecessor SFC plus three allowed additions",
 )
 assert.equal(predecessorVuePaths.length, 222, "the frozen audit covers exactly 222 Vue SFCs")
 
@@ -178,7 +182,10 @@ for (const migration of compactTableFrameMigrations) {
   assert.equal(current.match(/<CadenceTableFrame\b/g)?.length, migration.boundaries.length)
   assert.equal(current.match(/<\/CadenceTableFrame>/g)?.length, migration.boundaries.length)
   assert.equal(
-    peelCompactTableFrames(current, migration.file),
+    peelCompactTableFrames(
+      peelCadenceDefinitionListPanelBeforeOlderLayers(current, migration.file),
+      migration.file,
+    ),
     predecessor,
     `${migration.file} inversely reconstructs ${compactTableFramePredecessor} byte-for-byte`,
   )

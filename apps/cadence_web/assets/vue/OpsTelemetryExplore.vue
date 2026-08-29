@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDefinitionListPanel from "./ui/components/CadenceDefinitionListPanel.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import {onBeforeUnmount, reactive, ref, watch} from "vue"
@@ -960,25 +961,25 @@ onBeforeUnmount(() => {
               </div>
             </section>
 
-            <section id="telemetry-explore-context-card" class="border border-base-300/70 bg-base-100/40 p-4">
-              <h2 class="hud-label">Context</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
+            <CadenceDefinitionListPanel id="telemetry-explore-context-card">
+              <template #heading>Context</template>
+              <template #default>
                 <template v-for="row in context_rows" :key="row.label">
                   <dt class="text-base-content/60">{{ row.label }}</dt>
                   <dd class="font-mono text-base-content break-all" :data-explore-context="row.label">{{ row.value }}</dd>
                 </template>
-              </dl>
-            </section>
+              </template>
+            </CadenceDefinitionListPanel>
 
-            <section :id="diagnostics.id" class="border border-base-300/70 bg-base-100/40 p-4">
-              <h2 class="hud-label">Read Diagnostics</h2>
-              <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
+            <CadenceDefinitionListPanel :id="diagnostics.id">
+              <template #heading>Read Diagnostics</template>
+              <template #default>
                 <template v-for="row in diagnostics.rows" :key="row.label">
                   <dt class="text-base-content/60">{{ row.label }}</dt>
                   <dd class="font-mono text-base-content break-all" :data-explore-diagnostics="row.label">{{ row.value }}</dd>
                 </template>
-              </dl>
-            </section>
+              </template>
+            </CadenceDefinitionListPanel>
           </aside>
 
           <section class="min-w-0 border border-base-300/70 bg-base-100/40">

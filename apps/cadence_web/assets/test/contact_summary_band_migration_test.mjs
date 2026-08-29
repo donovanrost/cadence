@@ -124,9 +124,10 @@ assert.deepEqual(
   currentVuePaths,
   [
     ...predecessorVuePaths,
+    "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
   ].sort(),
-  "the current SFC path cohort adds only CadenceStatTile to the fixed predecessor",
+  "the current SFC path cohort adds only CadenceDefinitionListPanel and CadenceStatTile",
 )
 assert.deepEqual(contactSummaryBandCallerNames, [
   "OpsContactRequirementShow.vue",

@@ -11,6 +11,9 @@ import {
 } from "./reka_adapter_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {
+  peelCadenceDefinitionListPanelBeforeOlderLayers,
+} from "./definition_list_panel_test_support.mjs"
+import {
   excludedHoverTableRowFiles,
   hoverTableRowCallerNames,
   hoverTableRowClass,
@@ -201,9 +204,13 @@ let excludedReorderedRows = 0
 let excludedDynamicRows = 0
 for (const exclusion of excludedHoverTableRowFiles) {
   const source = await readFile(resolve(vueDirectory, exclusion.file), "utf8")
+  const definitionListCompatibleSource = peelCadenceDefinitionListPanelBeforeOlderLayers(
+    source,
+    exclusion.file,
+  )
   const predecessorCompatibleSource = pageTitleCallerNames.includes(exclusion.file)
-    ? peelCadencePageTitle(source, exclusion.file)
-    : peelCompactTableFrames(source, exclusion.file)
+    ? peelCadencePageTitle(definitionListCompatibleSource, exclusion.file)
+    : peelCompactTableFrames(definitionListCompatibleSource, exclusion.file)
   const uniqueFragments = new Set(exclusion.fragments)
 
   assert.equal(
