@@ -12,6 +12,9 @@ import {
   conditionalKeyedCadenceFieldCounts,
   peelConditionalKeyedCadenceFields,
 } from "./conditional_keyed_field_test_support.mjs"
+import {
+  peelCadenceDefinitionListPanelBeforeOlderLayers,
+} from "./definition_list_panel_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -293,6 +296,7 @@ const peelCadenceValidationMessages = (source, name) => {
 }
 
 const reconstructSource = (file, source) => {
+  source = peelCadenceDefinitionListPanelBeforeOlderLayers(source, file.name)
   source = peelConditionalKeyedCadenceFields(source, file.name)
   const compactTableCompatibleSource = peelCompactTableFrames(source, file.name)
   source = opsViewportCallerNames.includes(file.name)

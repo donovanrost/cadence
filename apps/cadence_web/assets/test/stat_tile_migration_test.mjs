@@ -28,7 +28,7 @@ import {
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 223-SFC predecessor and full 224-SFC current tree differ only by the primitive",
+  "the fixed 223-SFC predecessor and full 225-SFC current tree add only the two named primitives",
   "all predecessor SFCs classify into six exact shells and one frozen semantic exclusion",
   "all current SFCs parse and exactly six singular imports/openings replace the native cohort",
   "the fixed predecessor commit, Git blob, byte length, and SHA-256 are exact for every caller",
@@ -47,6 +47,8 @@ const repositoryRoot = resolve(testDirectory, "../../../..")
 const vueDirectory = resolve(testDirectory, "../vue")
 const primitiveRepositoryPath =
   "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue"
+const definitionListPanelRepositoryPath =
+  "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue"
 const primitivePath = resolve(repositoryRoot, primitiveRepositoryPath)
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
@@ -90,12 +92,12 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 224, "the current-tree gate includes exactly 224 Vue SFCs")
-assert.deepEqual(addedVuePaths, [primitiveRepositoryPath])
+assert.equal(currentVuePaths.length, 225, "the current-tree gate includes exactly 225 Vue SFCs")
+assert.deepEqual(addedVuePaths, [definitionListPanelRepositoryPath, primitiveRepositoryPath])
 assert.deepEqual(
   currentVuePaths,
-  [...predecessorVuePaths, primitiveRepositoryPath].sort(),
-  "the current inventory is every fixed predecessor SFC plus only CadenceStatTile",
+  [...predecessorVuePaths, definitionListPanelRepositoryPath, primitiveRepositoryPath].sort(),
+  "the current inventory is every fixed predecessor SFC plus only the two named primitives",
 )
 
 // Install JSDOM before the first Vue runtime import or compiled-SFC evaluation.

@@ -16,6 +16,9 @@ import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {
+  peelCadenceDefinitionListPanelBeforeOlderLayers,
+} from "./definition_list_panel_test_support.mjs"
+import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
@@ -100,8 +103,12 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
+  const definitionListCompatibleCurrent = peelCadenceDefinitionListPanelBeforeOlderLayers(
     current,
+    entry.file,
+  )
+  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
+    definitionListCompatibleCurrent,
     entry.file,
   )
   const fieldCompatibleCurrent = peelCadenceFieldsBeforePageTitleLayers(
