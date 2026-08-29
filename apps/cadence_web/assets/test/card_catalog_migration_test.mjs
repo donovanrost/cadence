@@ -6,6 +6,10 @@ import {fileURLToPath} from "node:url"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const foundationBase = "00c264585863a89a76d55484b777a7e73eda7fa5"
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const importLine = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
@@ -40,6 +44,44 @@ const migrations = Object.freeze([
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, value) => source.split(value).length - 1
+
+const peelCadenceBreadcrumbs = (source, label) => {
+  const importCount = occurrences(source, breadcrumbsImport)
+  const openingCount = occurrences(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(source, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(source, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
+
 const tableFrameBoundaries = Object.freeze({
   "CatalogArtifactShow.vue": Object.freeze({
     openings: Object.freeze([
@@ -169,7 +211,9 @@ for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
   const source = await readFile(componentPath, "utf8")
   const reconstructed = reconstructBaseSource(
-    peelPageHeaderFrame(peelTableFrames(source, migration.file)),
+    peelPageHeaderFrame(
+      peelTableFrames(peelCadenceBreadcrumbs(source, migration.file), migration.file),
+    ),
     migration.boundaryCount,
     migration.file,
   )

@@ -13,6 +13,10 @@ assert.equal(
 
 const base = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderFrameImport =
@@ -24,6 +28,54 @@ const panelHeaderClass =
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 const occurrenceCount = (value, token) => value.split(token).length - 1
+const peelCadenceBreadcrumbs = (source, label) => {
+  const importCount = occurrenceCount(source, breadcrumbsImport)
+  const openingCount = occurrenceCount(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrenceCount(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(
+    occurrenceCount(source, wrapperOpening),
+    1,
+    `${label} opening indentation is exact`,
+  )
+  assert.equal(
+    occurrenceCount(source, wrapperClosing),
+    1,
+    `${label} closing indentation is exact`,
+  )
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(
+    occurrenceCount(peeled, "CadenceBreadcrumbs"),
+    0,
+    `${label} breadcrumb peel is exact`,
+  )
+  return peeled
+}
 const replaceExactlyOnce = (value, current, replacement, label) => {
   assert.equal(occurrenceCount(value, current), 1, `${label} occurs exactly once`)
   return value.replace(current, replacement)
@@ -280,7 +332,9 @@ for (const contract of contracts) {
   )
 
   const predecessorSource = peelCadencePanels(
-    peelPageHeaderFrame(peelTableFrames(source, contract.filename)),
+    peelPageHeaderFrame(
+      peelTableFrames(peelCadenceBreadcrumbs(source, contract.filename), contract.filename),
+    ),
     contract.filename,
   )
   let openingCount = 0

@@ -7,6 +7,10 @@ import {fileURLToPath} from "node:url"
 assert.equal(process.versions.node, "24.16.0", "detail migration uses pinned Node 24.16.0")
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
 const pageHeaderImport =
@@ -15,6 +19,45 @@ const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"
 const tableFrameImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+
+const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const peelCadenceBreadcrumbs = (source, label) => {
+  const importCount = occurrences(source, breadcrumbsImport)
+  const openingCount = occurrences(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(source, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(source, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
 
 const peelCadencePageHeaderFrame = source =>
   source
@@ -423,7 +466,9 @@ for (const file of files) {
 
   let reconstructed = reconstructCards(
     peelCadencePanels(
-      peelCadencePageHeaderFrame(peelCadenceTableFrames(source, file.name)),
+      peelCadencePageHeaderFrame(
+        peelCadenceTableFrames(peelCadenceBreadcrumbs(source, file.name), file.name),
+      ),
       file.name,
     ),
     file.cardCount,
@@ -447,7 +492,12 @@ const spacecraftType = await readFile(files[2].path, "utf8")
 const reconstructedSpacecraftType = files[2].boundaries.reduce(
   (source, rowBoundary) => reconstructBoundary(source, rowBoundary, files[2].name),
   reconstructCards(
-    peelCadencePageHeaderFrame(peelCadenceTableFrames(spacecraftType, files[2].name)),
+    peelCadencePageHeaderFrame(
+      peelCadenceTableFrames(
+        peelCadenceBreadcrumbs(spacecraftType, files[2].name),
+        files[2].name,
+      ),
+    ),
     files[2].cardCount,
     files[2].name,
   ).replace(dataRowImport, ""),

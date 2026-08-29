@@ -17,6 +17,10 @@ assert.equal(
 )
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const providerPath = resolve(testDirectory, "../vue/ProviderAccountNew.vue")
 const spacecraftPath = resolve(testDirectory, "../vue/SpacecraftTypeNew.vue")
 const [providerSource, spacecraftSource] = await Promise.all([
@@ -55,6 +59,43 @@ const actionOpen =
 const originalActionOpen =
   '      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">'
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+
+const peelCadenceBreadcrumbs = (source, label) => {
+  const importCount = occurrences(source, breadcrumbsImport)
+  const openingCount = occurrences(source, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(source, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return source
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = source.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(source, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(source, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = source
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
 
 const reconstructFormChromeSource = (
   source,
@@ -102,14 +143,17 @@ ${indent}</div>`
 }
 
 const reconstructProviderSource = (source) => {
-  let reconstructed = reconstructFormChromeSource(reconstructPageHeaderSource(source), {
+  let reconstructed = reconstructFormChromeSource(
+    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, "ProviderAccountNew.vue")),
+    {
     featureName: "provider",
     dividerClass: "h-px flex-1 bg-base-300/60",
     multilineNumberExpressions: new Set([
       "form.sections.credential_registry",
       "form.sections.organization_guardrails",
     ]),
-  }).replace(
+    },
+  ).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
   )
@@ -164,11 +208,14 @@ const multilineSpacecraftLabels = new Set([
 ])
 
 const reconstructSpacecraftSource = (source) => {
-  let reconstructed = reconstructFormChromeSource(reconstructPageHeaderSource(source), {
+  let reconstructed = reconstructFormChromeSource(
+    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, "SpacecraftTypeNew.vue")),
+    {
     featureName: "spacecraft type",
     dividerClass: "flex-1 h-px bg-base-300/60",
     multilineNumberExpressions: new Set(["form.sections.frame_parameters"]),
-  }).replace(
+    },
+  ).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
   )

@@ -20,6 +20,10 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsGroundStationForm.vue")
 const source = await readFile(componentPath, "utf8")
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const reconstructPageHeaderSource = (value) =>
@@ -34,6 +38,44 @@ const reconstructPageHeaderSource = (value) =>
       '<header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">',
     )
     .replace("</CadencePageHeaderFrame>", "</header>")
+const occurrences = (value, fragment) => value.split(fragment).length - 1
+
+const peelCadenceBreadcrumbs = (value, label) => {
+  const importCount = occurrences(value, breadcrumbsImport)
+  const openingCount = occurrences(value, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(value, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return value
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = value.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(value, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(value, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = value
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
 const extractionLedger = Object.freeze([
   "all five CadenceField boundaries remain one-for-one",
   "all three section headers reconstruct their exact native DOM",
@@ -68,7 +110,9 @@ assert.match(
   /:id="form\.actions\.cancel\.id"\n          :href="form\.actions\.cancel\.href"\n          data-phx-link="redirect"\n          data-phx-link-state="push"\n          class="btn btn-ghost"/,
 )
 
-let reconstructedSource = reconstructPageHeaderSource(source).replace(
+let reconstructedSource = reconstructPageHeaderSource(
+  peelCadenceBreadcrumbs(source, "CommsGroundStationForm.vue"),
+).replace(
   /import CadenceField from "\.\/ui\/components\/CadenceField\.vue"\nimport CadenceFormActions from "\.\/ui\/components\/CadenceFormActions\.vue"\nimport CadenceFormSectionHeader from "\.\/ui\/components\/CadenceFormSectionHeader\.vue"\n/,
   "",
 )

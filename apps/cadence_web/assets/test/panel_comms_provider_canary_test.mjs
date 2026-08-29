@@ -10,6 +10,10 @@ assert.equal(process.versions.node, "24.16.0", "panel canary uses pinned Node 24
 const base = "88137bfa2ea69aaedfa0c5d3882e763dae0d09db"
 const baseByteLength = 13677
 const baseSha256 = "84771fcb6fde91f9a0ee782b206d473c638aeb19ea14bab55b40e93ddd61fc34"
+const breadcrumbsImport =
+  'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const breadcrumbNavClass =
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const compactPageHeaderOpen = '    <CadencePageHeaderFrame variant="compact">'
@@ -21,6 +25,48 @@ const tableFrameImport = 'import CadenceTableFrame from "./ui/components/Cadence
 const headerClass = "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/CommsProviderShow.vue")
+
+function occurrences(value, fragment) {
+  return value.split(fragment).length - 1
+}
+
+function peelCadenceBreadcrumbs(value, label) {
+  const importCount = occurrences(value, breadcrumbsImport)
+  const openingCount = occurrences(value, "<CadenceBreadcrumbs>")
+  const closingCount = occurrences(value, "</CadenceBreadcrumbs>")
+
+  if (importCount === 0) {
+    assert.equal(openingCount, 0, `${label} has no unimported breadcrumb opening`)
+    assert.equal(closingCount, 0, `${label} has no unimported breadcrumb closing`)
+    return value
+  }
+
+  assert.equal(importCount, 1, `${label} has one exact breadcrumb import`)
+  assert.equal(openingCount, 1, `${label} has one exact breadcrumb opening`)
+  assert.equal(closingCount, 1, `${label} has one exact breadcrumb closing`)
+
+  const openingMatch = value.match(/^( *)<CadenceBreadcrumbs>$/m)
+  assert.ok(openingMatch, `${label} has an explicitly bounded breadcrumb opening`)
+  const indent = openingMatch[1]
+  const wrapperOpening = `${indent}<CadenceBreadcrumbs>`
+  const wrapperClosing = `${indent}</CadenceBreadcrumbs>`
+  const nativeOpening = `${indent}<nav
+${indent}  aria-label="Breadcrumb"
+${indent}  class="${breadcrumbNavClass}"
+${indent}>`
+
+  assert.equal(occurrences(value, wrapperOpening), 1, `${label} opening indentation is exact`)
+  assert.equal(occurrences(value, wrapperClosing), 1, `${label} closing indentation is exact`)
+
+  const peeled = value
+    .replace(breadcrumbsImport, "")
+    .replace(wrapperOpening, nativeOpening)
+    .replace(wrapperClosing, `${indent}</nav>`)
+
+  assert.equal(occurrences(peeled, "CadenceBreadcrumbs"), 0, `${label} breadcrumb peel is exact`)
+  return peeled
+}
+
 const currentSource = await readFile(componentPath, "utf8")
 const {parse} = integrationRequire("@vue/compiler-sfc")
 const parsed = parse(currentSource, {filename: componentPath})
@@ -34,7 +80,7 @@ assert.equal(currentSource.split(compactPageHeaderClose).length - 1, 1, "page he
 assert.equal(currentSource.split(tableFrameImport).length - 1, 1, "table frame import reconstructs")
 assert.equal(currentSource.match(/<CadenceTableFrame\b/g)?.length, 2, "exactly two table frames open")
 assert.equal(currentSource.split("</CadenceTableFrame>").length - 1, 2, "exactly two table frames close")
-const source = currentSource
+const source = peelCadenceBreadcrumbs(currentSource, "CommsProviderShow.vue")
   .replace(pageHeaderImport, "")
   .replace(compactPageHeaderOpen, compactPageHeaderBaseOpen)
   .replace(compactPageHeaderClose, compactPageHeaderBaseClose)
