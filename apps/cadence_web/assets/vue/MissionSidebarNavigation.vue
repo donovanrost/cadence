@@ -1,4 +1,7 @@
 <script setup>
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 import {ref} from "vue"
 
 const props = defineProps({
@@ -15,6 +18,11 @@ const sidebarClass = () =>
 const toggleCollapsed = () => {
   collapsed.value = !collapsed.value
 }
+
+const sectionContentId = (item) => `mission-sidebar-${item.key}-content`
+
+const sectionSeedEpoch = (item) =>
+  `${item.key}:${item.active ? "active" : "inactive"}:${item.expanded ? "expanded" : "collapsed"}`
 </script>
 
 <template>
@@ -66,33 +74,45 @@ const toggleCollapsed = () => {
             <span :class="item.label_class">{{ item.label }}</span>
           </a>
 
-          <details
+          <CadenceCollapsible
             v-else
-            :class="item.details_class"
+            :content-id="sectionContentId(item)"
             :open="item.expanded"
+            client-seeded
+            :seed-epoch="sectionSeedEpoch(item)"
+            :unmount-on-hide="false"
           >
-            <summary :class="item.summary_class">
-              <span :class="item.icon_class"></span>
-              <span :class="item.label_class">{{ item.label }}</span>
-              <span :class="item.chevron_class"></span>
-            </summary>
-            <ul :class="item.list_class">
-              <li
-                v-for="child in item.children"
-                :key="child.key"
-              >
-                <a
-                  :class="child.class"
-                  v-bind="child.attrs"
+            <div :class="item.details_class">
+              <CadenceCollapsibleTrigger>
+                <button
+                  type="button"
+                  :class="item.summary_class"
                 >
-                  <span :class="child.icon_container_class">
-                    <span :class="child.icon_class"></span>
-                  </span>
-                  <span :class="child.label_class">{{ child.label }}</span>
-                </a>
-              </li>
-            </ul>
-          </details>
+                  <span :class="item.icon_class"></span>
+                  <span :class="item.label_class">{{ item.label }}</span>
+                  <span :class="item.chevron_class"></span>
+                </button>
+              </CadenceCollapsibleTrigger>
+              <CadenceCollapsibleContent>
+                <ul :class="item.list_class">
+                  <li
+                    v-for="child in item.children"
+                    :key="child.key"
+                  >
+                    <a
+                      :class="child.class"
+                      v-bind="child.attrs"
+                    >
+                      <span :class="child.icon_container_class">
+                        <span :class="child.icon_class"></span>
+                      </span>
+                      <span :class="child.label_class">{{ child.label }}</span>
+                    </a>
+                  </li>
+                </ul>
+              </CadenceCollapsibleContent>
+            </div>
+          </CadenceCollapsible>
         </li>
       </ul>
     </nav>
