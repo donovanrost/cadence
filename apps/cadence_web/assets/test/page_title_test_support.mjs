@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 
 export const pageTitlePredecessorCommit = "78cf304ae600958a7058c81c369161cb9cb76f52"
 export const pageTitleClass = "mt-2 text-2xl font-bold text-base-content tracking-tight"
@@ -124,15 +125,28 @@ export const pageTitleMigrationFor = (caller) => {
 
 export const peelCadencePageTitle = (source, caller) => {
   const entry = pageTitleMigrationFor(caller)
+  const predecessorCompatibleSource = peelCompactTableFrames(source, caller)
 
-  assert.equal(occurrences(source, entry.importLine), 1, `${entry.file} title import count`)
-  assert.equal(source.match(/^import CadencePageTitle\b/gm)?.length, 1)
-  assert.equal(occurrences(source, entry.opening), 1, `${entry.file} exact title opening`)
-  assert.equal(occurrences(source, entry.closing), 1, `${entry.file} exact title closing`)
-  assert.equal(source.match(/<CadencePageTitle\b/g)?.length, 1)
-  assert.equal(source.match(/<\/CadencePageTitle>/g)?.length, 1)
+  assert.equal(
+    occurrences(predecessorCompatibleSource, entry.importLine),
+    1,
+    `${entry.file} title import count`,
+  )
+  assert.equal(predecessorCompatibleSource.match(/^import CadencePageTitle\b/gm)?.length, 1)
+  assert.equal(
+    occurrences(predecessorCompatibleSource, entry.opening),
+    1,
+    `${entry.file} exact title opening`,
+  )
+  assert.equal(
+    occurrences(predecessorCompatibleSource, entry.closing),
+    1,
+    `${entry.file} exact title closing`,
+  )
+  assert.equal(predecessorCompatibleSource.match(/<CadencePageTitle\b/g)?.length, 1)
+  assert.equal(predecessorCompatibleSource.match(/<\/CadencePageTitle>/g)?.length, 1)
 
-  const predecessor = source
+  const predecessor = predecessorCompatibleSource
     .replace(entry.importLine, "")
     .replace(entry.opening, entry.predecessorOpening)
     .replace(entry.closing, entry.predecessorClosing)

@@ -7,6 +7,7 @@ import ApplicationStats from "./application_host/ApplicationStats.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import type {
   Diagnostics,
@@ -784,7 +785,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
             <div class="border-t border-base-300/50 bg-base-200/20 px-4 pb-4 pl-8 pt-3">
               <p v-if="group.reason" class="mb-3 text-xs text-warning">{{ group.reason }}</p>
               <div class="overflow-x-auto">
-                <table class="table table-xs">
+                <CadenceTableFrame class="table-xs">
                   <thead>
                     <tr>
                       <th>Resource</th>
@@ -825,7 +826,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
                       </td>
                     </tr>
                   </tbody>
-                </table>
+                </CadenceTableFrame>
               </div>
             </div>
           </details>
@@ -870,7 +871,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
       </div>
 
       <div class="mt-5 overflow-x-auto">
-        <table class="table table-sm">
+        <CadenceTableFrame class="table-sm">
           <thead>
             <tr>
               <th v-for="column in declarative_surface.table.columns" :key="column.key">
@@ -902,7 +903,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
               >{{ row.values[column.key] }}</td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
       </div>
 
       <CadencePaginationFrame

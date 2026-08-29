@@ -12,6 +12,7 @@ import {
   installDom,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
+import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
@@ -76,9 +77,10 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const compactTableCompatibleSource = peelCompactTableFrames(current, entry.file)
   const source = opsViewportCallerNames.includes(entry.file)
-    ? peelCadenceOpsViewport(current, entry.file)
-    : current
+    ? peelCadenceOpsViewport(compactTableCompatibleSource, entry.file)
+    : compactTableCompatibleSource
 
   assert.equal(sha256(source), entry.sha256, `${entry.file} remains byte-frozen`)
   assert.equal(occurrences(source, entry.opening), entry.count, `${entry.file} exact excluded title`)

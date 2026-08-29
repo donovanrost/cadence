@@ -5,6 +5,7 @@ import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type FilterKey =
   | "dashboard_id"
@@ -311,7 +312,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
         </div>
       </template>
       <div class="card-body p-0">
-        <table id="admin-runtime-decisions-table" class="table table-sm">
+        <CadenceTableFrame id="admin-runtime-decisions-table" class="table-sm">
           <thead>
             <tr>
               <th class="hud-label" scope="col">Dashboard</th>
@@ -411,7 +412,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
               </td>
             </tr>
           </tbody>
-        </table>
+        </CadenceTableFrame>
       </div>
     </CadencePanel>
 

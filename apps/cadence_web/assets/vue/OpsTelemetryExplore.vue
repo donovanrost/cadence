@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import {onBeforeUnmount, reactive, ref, watch} from "vue"
 
 type Row = {
@@ -995,7 +996,7 @@ onBeforeUnmount(() => {
             </header>
 
             <div class="overflow-x-auto">
-              <table id="telemetry-explore-samples" class="table table-xs">
+              <CadenceTableFrame id="telemetry-explore-samples" class="table-xs">
                 <thead>
                   <tr>
                     <th>Receipt</th>
@@ -1054,7 +1055,7 @@ onBeforeUnmount(() => {
                     </td>
                   </tr>
                 </tbody>
-              </table>
+              </CadenceTableFrame>
             </div>
           </section>
         </div>
