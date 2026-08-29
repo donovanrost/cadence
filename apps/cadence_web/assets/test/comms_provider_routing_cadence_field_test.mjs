@@ -10,6 +10,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -228,7 +229,10 @@ ${indentControl(control)}
 const reconstructProviderSource = (source) => {
   let reconstructedFields = 0
   let reconstructed = reconstructPageHeaderSource(
-    peelCadenceBreadcrumbs(source, "CommsProviderNew.vue"),
+    peelCadenceBreadcrumbs(
+      peelCadenceNoticeFrames(source, "CommsProviderNew.vue"),
+      "CommsProviderNew.vue",
+    ),
   ).replace(
     'import CadenceField from "./ui/components/CadenceField.vue"\n',
     "",
@@ -587,7 +591,17 @@ const providerApp = createApp(ProviderContract)
 providerApp.mount(providerHost)
 
 assertFieldWrappers(providerHost, 5)
-assert.ok(providerHost.querySelector("#provider-approval-guidance"))
+const providerApprovalGuidance = providerHost.querySelector("#provider-approval-guidance")
+assert.equal(providerApprovalGuidance.tagName, "DIV")
+assert.deepEqual(elementAttributes(providerApprovalGuidance), {
+  class: "border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70",
+  id: "provider-approval-guidance",
+})
+assert.deepEqual(
+  [...providerApprovalGuidance.childNodes].map((node) => node.nodeName),
+  ["#text"],
+)
+assert.equal(providerApprovalGuidance.textContent.trim(), "Every provider change requires approval.")
 assert.equal(providerHost.querySelector("#provider-bounded-policy"), null)
 assert.deepEqual(
   [...providerHost.querySelectorAll("#provider_provider_account_grant_id option")].map((option) => [

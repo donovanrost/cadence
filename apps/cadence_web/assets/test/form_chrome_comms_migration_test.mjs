@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -393,7 +394,7 @@ for (const manifest of manifests) {
     reconstructPageHeaderSource(
       peelCadenceBreadcrumbs(
         peelCadenceDetailsFrames(
-          source,
+          peelCadenceNoticeFrames(source, manifest.filename),
           manifest.filename === "CommsTransportNew.vue" ? 1 : 0,
           manifest.filename,
         ),

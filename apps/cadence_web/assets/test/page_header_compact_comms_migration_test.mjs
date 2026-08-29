@@ -5,6 +5,7 @@ import {readFileSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import test from "node:test"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -171,7 +172,7 @@ for (const caller of callers) {
     const reconstructed = peelTableFrames(
       peelCadenceBreadcrumbs(
         peelCadenceDetailsFrames(
-          source,
+          peelCadenceNoticeFrames(source, filename),
           cadenceDetailsFrameCounts[filename] ?? 0,
           caller,
         ),

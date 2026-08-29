@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {installDom, loadSfc} from "./reka_adapter_test_support.mjs"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -361,7 +362,7 @@ for (const contract of contracts) {
       peelTableFrames(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            source,
+            peelCadenceNoticeFrames(source, contract.filename),
             detailsFrameCounts[contract.filename] ?? 0,
             contract.filename,
           ),

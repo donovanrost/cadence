@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceNoticeFrames} from "./notice_frame_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "comms data-row contracts use pinned Node 24.16.0")
 
@@ -535,7 +536,7 @@ for (const contract of contracts) {
       peelCadenceTableFrames(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            source,
+            peelCadenceNoticeFrames(source, contract.filename),
             detailsFrameCounts[contract.filename] ?? 0,
             contract.filename,
           ),
