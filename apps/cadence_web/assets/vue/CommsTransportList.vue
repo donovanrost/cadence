@@ -5,6 +5,7 @@ import StatusBadge from "./StatusBadge.vue";
 import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue";
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
 
 type TransportRow = {
   id: string;
@@ -103,11 +104,10 @@ const lastVisible = computed(() =>
         </tr>
       </thead>
       <tbody id="transports">
-        <tr
+        <CadenceHoverTableRow
           v-for="row in rows"
           :id="row.id"
           :key="row.id"
-          class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
         >
           <td class="font-medium">
             <a
@@ -142,7 +142,7 @@ const lastVisible = computed(() =>
           <td class="font-mono text-sm text-base-content/70">
             {{ row.version }}
           </td>
-        </tr>
+        </CadenceHoverTableRow>
       </tbody>
     </CadenceTableFrame>
 

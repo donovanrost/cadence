@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 
 type ProviderRow = {
   id: string
@@ -34,11 +35,10 @@ defineProps<{rows: ProviderRow[]}>()
       </tr>
     </thead>
     <tbody id="mission-providers-table-body">
-      <tr
+      <CadenceHoverTableRow
         v-for="row in rows"
         :id="row.id"
         :key="row.id"
-        class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
       >
         <td class="font-medium">
           <a
@@ -61,7 +61,7 @@ defineProps<{rows: ProviderRow[]}>()
         <td class="font-mono text-sm">{{ row.grant_binding }}</td>
         <td class="font-mono text-sm">{{ row.last_synced_at }}</td>
         <td class="font-mono text-sm">{{ row.version }}</td>
-      </tr>
+      </CadenceHoverTableRow>
     </tbody>
   </CadenceTableFrame>
 </template>

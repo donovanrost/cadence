@@ -4,6 +4,10 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
+import {
   expectedNodeVersion,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
@@ -17,6 +21,7 @@ const importWithBlankLine = `${importWithoutSemicolon}\n`
 const importWithSemicolon =
   'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 
 const fixtures = Object.freeze([
@@ -100,11 +105,14 @@ let closingTagCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.file}`)
   const source = await readFile(componentPath, "utf8")
+  const preHoverTableRowSource = hoverTableRowCallers.has(fixture.file)
+    ? peelCadenceHoverTableRows(source, fixture.file)
+    : source
   const preToolbarSource =
     fixture.file === "CommsGroundStationList.vue" ||
     fixture.file === "CommsTransportList.vue"
-      ? peelCadenceListToolbarFrame(source, fixture.file)
-      : source
+      ? peelCadenceListToolbarFrame(preHoverTableRowSource, fixture.file)
+      : preHoverTableRowSource
   const prePaginationSource =
     fixture.file === "CommsGroundStationList.vue" ||
     fixture.file === "CommsTransportList.vue"

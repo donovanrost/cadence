@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 
 type OrganizationRow = {
   id: string
@@ -20,11 +21,10 @@ defineProps<{rows: OrganizationRow[]}>()
       </tr>
     </thead>
     <tbody id="admin-orgs-table-body">
-      <tr
+      <CadenceHoverTableRow
         v-for="row in rows"
         :id="row.id"
         :key="row.id"
-        class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
       >
         <td class="font-medium">
           <a
@@ -35,7 +35,7 @@ defineProps<{rows: OrganizationRow[]}>()
           >{{ row.display_name }}</a>
         </td>
         <td class="font-mono text-sm">{{ row.slug }}</td>
-      </tr>
+      </CadenceHoverTableRow>
     </tbody>
   </CadenceTableFrame>
 </template>

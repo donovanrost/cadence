@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 
 const scenarioLedger = [
   "one always-present non-SSR SpacecraftTypeListPage host owns the complete list page",
@@ -59,6 +60,10 @@ const [
   readFile(liveViewTestPath, "utf8"),
   readFile(routerPath, "utf8"),
 ])
+const preHoverTableRowChildSource = peelCadenceHoverTableRows(
+  childSource,
+  "SpacecraftTypeList.vue",
+)
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)
@@ -98,19 +103,19 @@ const assertBalancedTemplate = (source, label) => {
 }
 
 assert.equal(
-  childSource.match(
+  preHoverTableRowChildSource.match(
     /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
   )?.length,
   1,
   "SpacecraftTypeList.vue has one CadenceTableFrame import before compatibility peeling",
 )
 assert.equal(
-  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  preHoverTableRowChildSource.match(/<\/?CadenceTableFrame\b/g)?.length,
   2,
   "SpacecraftTypeList.vue has one CadenceTableFrame boundary before compatibility peeling",
 )
 
-const predecessorChildSource = childSource
+const predecessorChildSource = preHoverTableRowChildSource
   .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n\n', "")
   .replace(
     '  <CadenceTableFrame id="spacecraft-profiles-table">',

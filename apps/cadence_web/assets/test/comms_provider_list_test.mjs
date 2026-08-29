@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 
 const scenarioLedger = [
   "the complete provider-list page is one non-SSR LiveVue parent with one presentation prop",
@@ -39,6 +40,10 @@ const [componentSource, childSource, liveViewSource, liveViewTestSource, routerS
     readFile(liveViewTestPath, "utf8"),
     readFile(routerPath, "utf8"),
   ])
+const preHoverTableRowChildSource = peelCadenceHoverTableRows(
+  childSource,
+  "CommsProviderTable.vue",
+)
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)
@@ -79,19 +84,19 @@ const assertBalancedTemplate = (source) => {
 }
 
 assert.equal(
-  childSource.match(
+  preHoverTableRowChildSource.match(
     /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
   )?.length,
   1,
   "CommsProviderTable.vue has one CadenceTableFrame import before compatibility peeling",
 )
 assert.equal(
-  childSource.match(/<\/?CadenceTableFrame\b/g)?.length,
+  preHoverTableRowChildSource.match(/<\/?CadenceTableFrame\b/g)?.length,
   2,
   "CommsProviderTable.vue has one CadenceTableFrame boundary before compatibility peeling",
 )
 
-const predecessorChildSource = childSource
+const predecessorChildSource = preHoverTableRowChildSource
   .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
   .replace(
     '  <CadenceTableFrame id="mission-providers-table">',

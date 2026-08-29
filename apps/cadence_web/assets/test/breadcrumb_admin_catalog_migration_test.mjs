@@ -4,6 +4,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs";
 import { integrationRequire } from "./reka_adapter_test_support.mjs";
 
 const baseCommit = "4f98922febb2d9de5f63d025326c8026decb4f26";
@@ -18,6 +22,7 @@ const importLine =
 const componentOpening = "<CadenceBreadcrumbs>";
 const componentClosing = "</CadenceBreadcrumbs>";
 const nativeClosing = "</nav>";
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames);
 const { compileScript, parse } = integrationRequire("@vue/compiler-sfc");
 
 const callers = Object.freeze([
@@ -121,6 +126,10 @@ assert.equal(
 for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path);
   const source = readFileSync(componentPath, "utf8");
+  const file = caller.path.split("/").at(-1);
+  const preHoverTableRowSource = hoverTableRowCallers.has(file)
+    ? peelCadenceHoverTableRows(source, file)
+    : source;
   const parentSource = execFileSync(
     "git",
     ["show", `${baseCommit}:${caller.path}`],
@@ -132,37 +141,37 @@ for (const caller of callers) {
   const callerNativeOpening = nativeOpening(caller.openingIndent);
 
   assert.equal(
-    occurrences(source, importLine),
+    occurrences(preHoverTableRowSource, importLine),
     1,
     `${caller.path} imports breadcrumbs once`
   );
   assert.equal(
-    source.match(/^import CadenceBreadcrumbs\b/gm)?.length,
+    preHoverTableRowSource.match(/^import CadenceBreadcrumbs\b/gm)?.length,
     1,
     `${caller.path} has one breadcrumbs import declaration`
   );
   assert.equal(
-    source.match(/<CadenceBreadcrumbs\b/g)?.length,
+    preHoverTableRowSource.match(/<CadenceBreadcrumbs\b/g)?.length,
     1,
     `${caller.path} opens one breadcrumbs wrapper`
   );
   assert.equal(
-    occurrences(source, componentOpening),
+    occurrences(preHoverTableRowSource, componentOpening),
     1,
     `${caller.path} uses the transparent slot opening without props`
   );
   assert.equal(
-    occurrences(source, componentClosing),
+    occurrences(preHoverTableRowSource, componentClosing),
     1,
     `${caller.path} closes one breadcrumbs wrapper`
   );
   assert.doesNotMatch(
-    source,
+    preHoverTableRowSource,
     /<nav(?:\s|>)/,
     `${caller.path} has no residual native nav`
   );
   assert.doesNotMatch(
-    source,
+    preHoverTableRowSource,
     /<CadenceBreadcrumbs\b[^>]*\b(?:v-bind:|:)?breadcrumbs\s*=/,
     `${caller.path} does not move caller-owned breadcrumb data into a DTO prop`
   );
@@ -174,7 +183,7 @@ for (const caller of callers) {
   );
   assert.equal(
     bodyBetween(
-      source,
+      preHoverTableRowSource,
       componentOpening,
       componentClosing,
       `${caller.path} wrapper`
@@ -188,7 +197,7 @@ for (const caller of callers) {
     `${caller.path} keeps every caller-owned breadcrumb body byte-for-byte in place`
   );
 
-  const reconstructed = source
+  const reconstructed = preHoverTableRowSource
     .replace(importLine, "")
     .replace(componentOpening, callerNativeOpening)
     .replace(componentClosing, nativeClosing);

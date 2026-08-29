@@ -4,6 +4,10 @@ import {execFileSync} from "node:child_process"
 import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
@@ -23,6 +27,7 @@ const frameOpening = '<CadencePageHeaderFrame variant="compact">'
 const frameClosing = "</CadencePageHeaderFrame>"
 const nativeOpening = '<header class="border-b border-primary/20 pb-4">'
 const nativeClosing = "</header>"
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const callers = [
   "apps/cadence_web/assets/vue/CatalogDatabaseNew.vue",
   "apps/cadence_web/assets/vue/CatalogImportRunShow.vue",
@@ -189,10 +194,14 @@ assert.equal(
 
 for (const caller of callers) {
   const source = readFileSync(resolve(repositoryRoot, caller), "utf8")
+  const file = caller.split("/").at(-1)
+  const preHoverTableRowSource = hoverTableRowCallers.has(file)
+    ? peelCadenceHoverTableRows(source, file)
+    : source
   const prePaginationSource =
     caller === "apps/cadence_web/assets/vue/ApplicationHost.vue"
-      ? peelCadencePaginationFrame(source, caller)
-      : source
+      ? peelCadencePaginationFrame(preHoverTableRowSource, caller)
+      : preHoverTableRowSource
 
   assert.equal(occurrences(source, importLine), 1, `${caller} must have one frame import`)
   assert.equal(occurrences(source, frameOpening), 1, `${caller} must have one compact frame`)

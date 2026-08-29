@@ -3,6 +3,7 @@ import {onMounted, reactive, ref, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 
 type Organization = {
   organization_id: string
@@ -269,11 +270,10 @@ const issueServiceIdentity = () => {
             </tr>
           </thead>
           <tbody id="service-identities-table-body">
-            <tr
+            <CadenceHoverTableRow
               v-for="identity in service_identities"
               :id="identity.id"
               :key="identity.service_identity_id"
-              class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
             >
               <td>{{ identity.display_name }}</td>
               <td class="font-mono text-sm">{{ identity.service_identity_id }}</td>
@@ -284,7 +284,7 @@ const issueServiceIdentity = () => {
                   class="font-mono text-[0.65rem] uppercase tracking-wide text-success"
                 >{{ identity.lifecycle_state_label }}</span>
               </td>
-            </tr>
+            </CadenceHoverTableRow>
           </tbody>
         </CadenceTableFrame>
       </div>

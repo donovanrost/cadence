@@ -4,6 +4,10 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  hoverTableRowClass,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
+import {
   assertPinnedAdapterRuntime,
   flushVue,
   installDom,
@@ -31,24 +35,25 @@ await assertPinnedAdapterRuntime(packageLockPath)
 assert.equal(scenarioLedger.length, 10)
 
 const source = await readFile(componentPath, "utf8")
+const preHoverTableRowSource = peelCadenceHoverTableRows(source, "CatalogDatabaseTable.vue")
 const menuTag = source.match(/<CadenceModalMenu\b[^>]*>/)?.[0]
 const contentSlot = source.match(/<template #content="\{open\}">([\s\S]*?)<\/template>/)?.[1]
 const contentRootTag = contentSlot?.match(/<div\b[\s\S]*?>/)?.[0]
 
 assert.equal(
-  source.match(
+  preHoverTableRowSource.match(
     /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
   )?.length,
   1,
   "CatalogDatabaseTable has one CadenceTableFrame import before compatibility peeling",
 )
 assert.equal(
-  source.match(/<\/?CadenceTableFrame\b/g)?.length,
+  preHoverTableRowSource.match(/<\/?CadenceTableFrame\b/g)?.length,
   2,
   "CatalogDatabaseTable has one CadenceTableFrame boundary before compatibility peeling",
 )
 
-const predecessorSource = source
+const predecessorSource = preHoverTableRowSource
   .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n', "")
   .replace(
     '  <CadenceTableFrame id="catalog-databases-table">',
@@ -93,6 +98,32 @@ const [{component: CadenceModalMenu}, {component: CadenceMenuItem}] = await Prom
   loadSfc(resolve(testDirectory, "../vue/ui/reka/CadenceModalMenu.vue")),
   loadSfc(resolve(testDirectory, "../vue/ui/reka/CadenceMenuItem.vue")),
 ])
+const hoverTableRowPath = resolve(
+  testDirectory,
+  "../vue/ui/components/CadenceHoverTableRow.vue",
+)
+const hoverTableRowSource = await readFile(hoverTableRowPath, "utf8")
+const parsedHoverTableRow = parse(hoverTableRowSource, {filename: hoverTableRowPath})
+assert.deepEqual(parsedHoverTableRow.errors, [], "CadenceHoverTableRow parses for catalog mounting")
+assert.ok(parsedHoverTableRow.descriptor.script, "CadenceHoverTableRow keeps its normal script")
+assert.equal(parsedHoverTableRow.descriptor.scriptSetup, null)
+assert.equal(parsedHoverTableRow.descriptor.template, null)
+const compiledHoverTableRow = compileScript(parsedHoverTableRow.descriptor, {
+  id: "catalog-database-hover-table-row",
+})
+const transformedHoverTableRow = transformSync(compiledHoverTableRow.content, {
+  format: "cjs",
+  loader: "ts",
+  platform: "node",
+  target: "node24",
+})
+const hoverTableRowModule = {exports: {}}
+new Function("require", "module", "exports", transformedHoverTableRow.code)(
+  integrationRequire,
+  hoverTableRowModule,
+  hoverTableRowModule.exports,
+)
+const CadenceHoverTableRow = hoverTableRowModule.exports.default
 
 const parsed = parse(source, {filename: componentPath})
 assert.deepEqual(parsed.errors, [], "CatalogDatabaseTable parses with the pinned Vue compiler")
@@ -122,6 +153,7 @@ const CadenceTableFrame = defineComponent({
 const localRequire = (specifier) => {
   if (specifier === "./StatusBadge.vue") return StatusBadge
   if (specifier === "./ui/components/CadenceTableFrame.vue") return CadenceTableFrame
+  if (specifier === "./ui/components/CadenceHoverTableRow.vue") return CadenceHoverTableRow
   if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
   if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
   return integrationRequire(specifier)
@@ -161,6 +193,23 @@ await flushVue(nextTick)
 
 assert.equal(document.querySelectorAll("#catalog-databases-table tbody tr").length, 2)
 assert.equal(new Set(rows.map((row) => row.actions_id)).size, 2)
+const catalogNativeNodes = new Map(
+  rows.map((row) => {
+    const nativeRow = document.getElementById(row.id)
+    const primaryLink = nativeRow.querySelector('a[data-phx-link="redirect"]')
+    const trigger = document.getElementById(row.actions_id)
+
+    assert.equal(nativeRow.tagName, "TR")
+    assert.equal(nativeRow.className, hoverTableRowClass)
+    assert.equal(nativeRow.hasAttribute("key"), false)
+    assert.deepEqual([...nativeRow.children].map(({tagName}) => tagName), ["TD", "TD", "TD", "TD", "TD"])
+    assert.equal(primaryLink.getAttribute("href"), row.href)
+    assert.equal(primaryLink.getAttribute("data-phx-link-state"), "push")
+    assert.equal(trigger.closest("tr"), nativeRow)
+
+    return [row.id, {nativeRow, primaryLink, trigger}]
+  }),
+)
 
 const assertClosed = (row, contentId) => {
   const trigger = document.getElementById(row.actions_id)
@@ -285,6 +334,15 @@ for (const [rowIndex, row] of rows.entries()) {
 
 assert.equal(new Set(generatedContentIds).size, 2, "both generated content IDs stay unique")
 assert.equal(document.querySelectorAll('[role="menu"]').length, 0)
+for (const row of rows) {
+  const retained = catalogNativeNodes.get(row.id)
+  assert.strictEqual(document.getElementById(row.id), retained.nativeRow)
+  assert.strictEqual(
+    retained.nativeRow.querySelector('a[data-phx-link="redirect"]'),
+    retained.primaryLink,
+  )
+  assert.strictEqual(document.getElementById(row.actions_id), retained.trigger)
+}
 
 app.unmount()
 dom.window.close()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -43,11 +44,10 @@ defineProps<{rows: DatabaseRow[]}>()
       </tr>
     </thead>
     <tbody>
-      <tr
+      <CadenceHoverTableRow
         v-for="row in rows"
         :id="row.id"
         :key="row.id"
-        class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
       >
         <td>
           <a
@@ -117,7 +117,7 @@ defineProps<{rows: DatabaseRow[]}>()
             </template>
           </CadenceModalMenu>
         </td>
-      </tr>
+      </CadenceHoverTableRow>
     </tbody>
   </CadenceTableFrame>
 </template>
