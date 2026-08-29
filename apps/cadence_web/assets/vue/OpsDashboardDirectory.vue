@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue"
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
@@ -221,7 +222,7 @@ const restoreDashboard = (row: DirectoryRow) => {
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto max-w-[100rem] space-y-5 p-5 lg:p-7">
+    <CadenceOpsPageBodyFrame>
       <form
         :id="filters.id"
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
@@ -420,6 +421,6 @@ const restoreDashboard = (row: DirectoryRow) => {
           </div>
         </article>
       </div>
-    </div>
+    </CadenceOpsPageBodyFrame>
   </CadenceOpsViewport>
 </template>

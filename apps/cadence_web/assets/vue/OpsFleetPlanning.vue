@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type ControlTone = "warning" | "muted" | "quiet"
@@ -178,7 +179,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto max-w-[100rem] space-y-5 p-5 lg:p-7">
+    <CadenceOpsPageBodyFrame>
       <CadencePanel
         id="fleet-planning-control-strip"
         class="grid border border-base-300 bg-base-200/20 md:grid-cols-4"
@@ -355,6 +356,6 @@ const coverageToneClasses: Record<CoverageTone, string> = {
           </section>
         </aside>
       </div>
-    </div>
+    </CadenceOpsPageBodyFrame>
   </CadenceOpsViewport>
 </template>

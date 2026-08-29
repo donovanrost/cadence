@@ -86,7 +86,7 @@ assert.equal(
   225,
   "the exact predecessor owns 225 Vue SFCs"
 );
-assert.equal(successorVuePaths.length, 230, "the successor owns 230 Vue SFCs");
+assert.equal(successorVuePaths.length, 231, "the successor owns 231 Vue SFCs");
 assert.deepEqual(
   successorVuePaths.filter((path) => !predecessorVuePaths.includes(path)),
   [
@@ -95,6 +95,7 @@ assert.deepEqual(
     narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
+    "apps/cadence_web/assets/vue/ui/components/CadenceOpsPageBodyFrame.vue",
   ],
   "the current tree adds only the audited frame paths"
 );
@@ -1238,5 +1239,5 @@ contractApp.unmount();
 dom.window.close();
 
 console.log(
-  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-230 SFC inventory)"
+  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-231 SFC inventory)"
 );
