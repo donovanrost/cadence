@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CatalogUploadForm from "./CatalogUploadForm.vue"
 import StatusBadge from "./StatusBadge.vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
@@ -78,10 +79,7 @@ const emit = defineEmits<{
     <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <a
               :href="navigation.mission.href"
               data-phx-link="redirect"
@@ -99,7 +97,7 @@ const emit = defineEmits<{
             >
             <span class="text-base-content/20" aria-hidden="true">/</span>
             <span class="text-primary/90">{{ navigation.current.label }}</span>
-          </nav>
+          </CadenceBreadcrumbs>
 
           <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
             {{ database.name }}

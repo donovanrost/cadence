@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -66,10 +67,7 @@ const valueClasses: Record<DetailRow["style"], string> = {
   <div id="catalog-revision-show-surface" class="space-y-6">
     <CadencePageHeaderFrame variant="compact">
       <div>
-        <nav
-          aria-label="Breadcrumb"
-          class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-        >
+        <CadenceBreadcrumbs>
           <template
             v-for="(breadcrumb, index) in navigation.breadcrumbs"
             :key="`${index}-${breadcrumb.label}`"
@@ -86,7 +84,7 @@ const valueClasses: Record<DetailRow["style"], string> = {
               class="transition-colors hover:text-primary"
             >{{ breadcrumb.label }}</a>
           </template>
-        </nav>
+        </CadenceBreadcrumbs>
 
         <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
           {{ revision.title }}

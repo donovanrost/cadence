@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
@@ -198,10 +199,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
     <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <a
               :href="navigation.admin_href"
               data-phx-link="redirect"
@@ -210,7 +208,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
             >Platform Admin</a>
             <span class="text-base-content/20" aria-hidden="true">/</span>
             <span class="text-primary/90">Runtime Diagnostics</span>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             Runtime Diagnostics
             <span class="ml-3 font-mono text-base text-base-content/60">
