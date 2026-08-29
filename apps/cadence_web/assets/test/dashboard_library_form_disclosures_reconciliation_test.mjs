@@ -12,6 +12,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
+import {peelCadenceOpsAuthorHeader} from "./page_header_ops_author_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the actual dashboard library SFC loads the real CadenceCollapsible adapter graph",
@@ -71,6 +72,7 @@ const disclosures = Object.freeze([
 ])
 
 const reconstructImmediateParent = (source) => {
+  source = peelCadenceOpsAuthorHeader(source, "OpsDashboardLibrary.vue")
   source = peelCadenceOpsViewport(source, "OpsDashboardLibrary.vue")
   assert.equal(occurrences(source, cadenceCollapsibleImports), 1)
   assert.equal(occurrences(source, disclosureSeedHelper), 1)

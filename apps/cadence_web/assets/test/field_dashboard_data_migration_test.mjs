@@ -12,6 +12,10 @@ import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
+import {
+  opsAuthorHeaderCallerNames,
+  peelCadenceOpsAuthorHeader,
+} from "./page_header_ops_author_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -282,9 +286,12 @@ for (const component of loadedComponents) {
     `${file} has no residual eligible literal field shell`,
   )
 
-  let reconstructed = opsViewportCallerNames.includes(file)
-    ? peelCadenceOpsViewport(source, file)
+  let reconstructed = opsAuthorHeaderCallerNames.includes(file)
+    ? peelCadenceOpsAuthorHeader(source, file)
     : source
+  reconstructed = opsViewportCallerNames.includes(file)
+    ? peelCadenceOpsViewport(reconstructed, file)
+    : reconstructed
   if (file === "OpsDashboardLibrary.vue") {
     reconstructed = peelCadenceCollapsibles(reconstructed, file)
   }
