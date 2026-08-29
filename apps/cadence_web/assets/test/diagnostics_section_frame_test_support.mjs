@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import {peelCadenceStatTileBeforeOlderLayers} from "./stat_tile_test_support.mjs"
 
 export const diagnosticsSectionPredecessorCommit =
   "230d045e5182192ee707e62a5a1a84633a82c7ec"
@@ -93,29 +94,45 @@ const migrationFor = (caller) => {
 export const peelCadenceDiagnosticsSectionFrame = (source, caller) => {
   const migration = migrationFor(caller)
   if (!migration) return source
+  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(source, caller)
 
-  assert.equal(occurrences(source, migration.importLine), 1, `${migration.file} frame import`)
-  assert.equal(occurrences(source, migration.frameOpening), 1, `${migration.file} frame opening`)
   assert.equal(
-    occurrences(source, migration.frameHeaderOpening),
+    occurrences(statTileCompatibleSource, migration.importLine),
+    1,
+    `${migration.file} frame import`,
+  )
+  assert.equal(
+    occurrences(statTileCompatibleSource, migration.frameOpening),
+    1,
+    `${migration.file} frame opening`,
+  )
+  assert.equal(
+    occurrences(statTileCompatibleSource, migration.frameHeaderOpening),
     1,
     `${migration.file} header slot opening`,
   )
-  assert.equal(occurrences(source, migration.frameClosing), 1, `${migration.file} frame closing`)
+  assert.equal(
+    occurrences(statTileCompatibleSource, migration.frameClosing),
+    1,
+    `${migration.file} frame closing`,
+  )
 
-  const headerStart = source.indexOf(migration.frameHeaderOpening)
-  const headerEnd = source.indexOf(
+  const headerStart = statTileCompatibleSource.indexOf(migration.frameHeaderOpening)
+  const headerEnd = statTileCompatibleSource.indexOf(
     migration.frameHeaderClosing,
     headerStart + migration.frameHeaderOpening.length,
   )
   assert.notEqual(headerEnd, -1, `${migration.file} header slot closes after its opening`)
 
   const headerCompatibleSource =
-    source.slice(0, headerStart) +
+    statTileCompatibleSource.slice(0, headerStart) +
     migration.nativeHeaderOpening +
-    source.slice(headerStart + migration.frameHeaderOpening.length, headerEnd) +
+    statTileCompatibleSource.slice(
+      headerStart + migration.frameHeaderOpening.length,
+      headerEnd,
+    ) +
     migration.nativeHeaderClosing +
-    source.slice(headerEnd + migration.frameHeaderClosing.length)
+    statTileCompatibleSource.slice(headerEnd + migration.frameHeaderClosing.length)
 
   const predecessor = headerCompatibleSource
     .replace(migration.importLine, "")

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import {peelCadenceStatTileBeforeOlderLayers} from "./stat_tile_test_support.mjs"
 
 export const compactTableFramePredecessor =
   "0117bf2999f160de2d0ef05ed1d5d8fdb3b2a648"
@@ -130,17 +131,24 @@ export const compactTableFrameMigrationFor = (caller) => {
 export const peelCompactTableFrames = (source, caller) => {
   const migration = compactTableFrameMigrationFor(caller)
   if (!migration) return source
+  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(source, caller)
 
   assert.equal(
-    occurrences(source, compactTableFrameImport),
+    occurrences(statTileCompatibleSource, compactTableFrameImport),
     1,
     `${migration.file} compact-table import count`,
   )
-  assert.equal(source.match(/^import CadenceTableFrame\b/gm)?.length, 1)
-  assert.equal(source.match(/<CadenceTableFrame\b/g)?.length, migration.boundaries.length)
-  assert.equal(source.match(/<\/CadenceTableFrame>/g)?.length, migration.boundaries.length)
+  assert.equal(statTileCompatibleSource.match(/^import CadenceTableFrame\b/gm)?.length, 1)
+  assert.equal(
+    statTileCompatibleSource.match(/<CadenceTableFrame\b/g)?.length,
+    migration.boundaries.length,
+  )
+  assert.equal(
+    statTileCompatibleSource.match(/<\/CadenceTableFrame>/g)?.length,
+    migration.boundaries.length,
+  )
 
-  let predecessor = source.replace(compactTableFrameImport, "")
+  let predecessor = statTileCompatibleSource.replace(compactTableFrameImport, "")
 
   for (const [index, entry] of migration.boundaries.entries()) {
     assert.equal(

@@ -6,6 +6,7 @@ import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -239,15 +240,14 @@ const archiveProvider = () => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <div
+      <CadenceStatTile
         v-for="summary in provider.summary_tiles"
         :id="summary.id"
         :key="summary.id"
-        class="border border-base-300 bg-base-200 px-3 py-2"
       >
-        <p class="hud-label">{{ summary.label }}</p>
+        <template #label>{{ summary.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ summary.value }}</p>
-      </div>
+      </CadenceStatTile>
     </div>
 
     <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">

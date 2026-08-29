@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceStatTileBeforeOlderLayers} from "./stat_tile_test_support.mjs"
 
 export const opsDataSourcesFieldPredecessorCommit =
   "c19bb1e9ac6f67968eb9a72e04736983fcb6ab2f"
@@ -211,23 +212,24 @@ const assertNativeControl = (control, boundary, caller) => {
 export const peelOpsDataSourcesCadenceFields = (source, caller = "OpsDataSources.vue") => {
   const file = caller.split("/").at(-1)
   assert.equal(file, "OpsDataSources.vue", `${caller} is the exact field-migration caller`)
+  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(source, caller)
   assert.equal(
-    occurrences(source, opsDataSourcesFieldImport),
+    occurrences(statTileCompatibleSource, opsDataSourcesFieldImport),
     1,
     `${file} has one exact CadenceField import before peeling`,
   )
   assert.equal(
-    occurrences(source, "<CadenceField\n"),
+    occurrences(statTileCompatibleSource, "<CadenceField\n"),
     opsDataSourcesFields.length,
     `${file} has exactly eleven migrated field openings`,
   )
   assert.equal(
-    occurrences(source, "</CadenceField>"),
+    occurrences(statTileCompatibleSource, "</CadenceField>"),
     opsDataSourcesFields.length,
     `${file} has exactly eleven migrated field closings`,
   )
 
-  let predecessor = source.replace(opsDataSourcesFieldImport, "")
+  let predecessor = statTileCompatibleSource.replace(opsDataSourcesFieldImport, "")
 
   for (const boundary of opsDataSourcesFields) {
     const spaces = " ".repeat(boundary.indent)

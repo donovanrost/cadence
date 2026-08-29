@@ -8,6 +8,7 @@ import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type EmptyPayload = Record<string, never>
@@ -301,15 +302,14 @@ const revokeGrant = (grant: Grant) => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <div
+      <CadenceStatTile
         v-for="stat in stats"
         :id="stat.id"
         :key="stat.id"
-        class="border border-base-300 bg-base-200 px-3 py-2"
       >
-        <p class="hud-label">{{ stat.label }}</p>
+        <template #label>{{ stat.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
-      </div>
+      </CadenceStatTile>
     </div>
 
     <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">

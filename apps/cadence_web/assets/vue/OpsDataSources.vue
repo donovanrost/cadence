@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 
 type EmptyPayload = Record<string, never>
 type StringMap = Record<string, string>
@@ -658,14 +659,13 @@ const deploymentFields = [
               {{ page.header.register_link.label }}
             </a>
             <div class="grid grid-cols-3 gap-2 text-right">
-              <div
+              <CadenceStatTile
                 v-for="stat in page.header.stats"
                 :key="stat.label"
-                class="border border-base-300 bg-base-200 px-3 py-2"
               >
-                <p class="hud-label">{{ stat.label }}</p>
+                <template #label>{{ stat.label }}</template>
                 <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
-              </div>
+              </CadenceStatTile>
             </div>
             <div
               :id="page.header.readiness_policy.id"

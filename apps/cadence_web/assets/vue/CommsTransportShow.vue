@@ -5,6 +5,7 @@ import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 
 type Breadcrumb = {
   label: string
@@ -113,15 +114,14 @@ defineProps<{
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <div
+      <CadenceStatTile
         v-for="summary in transport.summary_tiles"
         :id="summary.id"
         :key="summary.id"
-        class="border border-base-300 bg-base-200 px-3 py-2"
       >
-        <p class="hud-label">{{ summary.label }}</p>
+        <template #label>{{ summary.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ summary.value }}</p>
-      </div>
+      </CadenceStatTile>
     </div>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
