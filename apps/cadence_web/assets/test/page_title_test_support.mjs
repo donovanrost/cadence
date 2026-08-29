@@ -2,6 +2,12 @@ import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelCadenceDiagnosticsSectionFrame} from "./diagnostics_section_frame_test_support.mjs"
+import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
+
+export const peelCadenceFieldsBeforePageTitleLayers = (source, caller) =>
+  caller.split("/").at(-1) === "OpsDataSources.vue"
+    ? peelOpsDataSourcesCadenceFields(source, caller)
+    : source
 
 export const pageTitlePredecessorCommit = "78cf304ae600958a7058c81c369161cb9cb76f52"
 export const pageTitleClass = "mt-2 text-2xl font-bold text-base-content tracking-tight"

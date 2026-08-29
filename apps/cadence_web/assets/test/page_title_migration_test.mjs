@@ -33,6 +33,7 @@ import {
   pageTitleMigrationFor,
   pageTitleMigrations,
   pageTitlePredecessorCommit,
+  peelCadenceFieldsBeforePageTitleLayers,
   peelCadencePageTitle,
   sha256,
 } from "./page_title_test_support.mjs"
@@ -90,7 +91,8 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
+  const fieldCompatibleCurrent = peelCadenceFieldsBeforePageTitleLayers(current, entry.file)
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(fieldCompatibleCurrent, entry.file)
   const opsAuthorHeaderCompatibleSource = opsAuthorHeaderCallerNames.includes(entry.file)
     ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
     : contactSummaryCompatibleCurrent

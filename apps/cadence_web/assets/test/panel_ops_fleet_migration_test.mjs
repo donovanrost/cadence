@@ -15,6 +15,7 @@ import {
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
+import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "migration contracts use pinned Node 24.16.0")
 
@@ -599,9 +600,13 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
+  const opsDataSourcesFieldCompatibleSource =
+    file.name === "OpsDataSources.vue"
+      ? peelOpsDataSourcesCadenceFields(source, file.name)
+      : source
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(file.name)
-    ? peelCadenceOpsViewport(source, file.name)
-    : source
+    ? peelCadenceOpsViewport(opsDataSourcesFieldCompatibleSource, file.name)
+    : opsDataSourcesFieldCompatibleSource
   const preHoverTableRowSource = hoverTableRowCallers.has(file.name)
     ? peelCadenceHoverTableRows(opsViewportCompatibleSource, file.name)
     : opsViewportCompatibleSource
