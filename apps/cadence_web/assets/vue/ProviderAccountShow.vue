@@ -5,6 +5,7 @@ import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -531,7 +532,7 @@ const revokeGrant = (grant: Grant) => {
       </aside>
     </div>
 
-    <details
+    <CadenceDetailsFrame
       :id="diagnostics.id"
       class="rounded border border-base-300 bg-base-200/60 p-4 text-sm"
     >
@@ -555,6 +556,6 @@ const revokeGrant = (grant: Grant) => {
           </CadenceDataRow>
         </div>
       </div>
-    </details>
+    </CadenceDetailsFrame>
   </div>
 </template>

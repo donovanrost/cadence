@@ -4,6 +4,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
 import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
@@ -804,7 +805,7 @@ const statusClass = (status: "ready" | "attention") =>
           {{ form.review.error }}
         </p>
 
-        <details
+        <CadenceDetailsFrame
           :id="form.review.diagnostics.id"
           class="rounded border border-base-300 bg-base-100/40 p-4 text-sm"
         >
@@ -815,7 +816,7 @@ const statusClass = (status: "ready" | "attention") =>
             :id="form.review.diagnostics.json_id"
             class="mt-3 max-h-96 overflow-auto font-mono text-xs text-base-content/70"
           >{{ form.review.diagnostics.json }}</pre>
-        </details>
+        </CadenceDetailsFrame>
       </section>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">

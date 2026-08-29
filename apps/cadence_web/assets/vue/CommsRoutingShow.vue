@@ -3,6 +3,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type Breadcrumb = {
@@ -102,7 +103,7 @@ defineProps<{
             </CadenceDataRow>
           </div>
 
-          <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
+          <CadenceDetailsFrame class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
             <summary class="cursor-pointer hud-label hover:text-primary">
               {{ rule.runtime_artifacts_title }}
             </summary>
@@ -117,7 +118,7 @@ defineProps<{
                 <span class="hud-data-value">{{ artifact.value }}</span>
               </CadenceDataRow>
             </div>
-          </details>
+          </CadenceDetailsFrame>
       </CadenceCard>
 
       <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">

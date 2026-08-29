@@ -3,6 +3,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -162,7 +163,7 @@ defineProps<{
             </CadenceDataRow>
           </div>
 
-          <details
+          <CadenceDetailsFrame
             :id="transport.capability.diagnostics.id"
             class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm"
           >
@@ -173,7 +174,7 @@ defineProps<{
               :id="transport.capability.diagnostics.json_id"
               class="mt-3 max-h-96 overflow-auto font-mono text-xs text-base-content/70"
             >{{ transport.capability.diagnostics.json }}</pre>
-          </details>
+          </CadenceDetailsFrame>
       </CadenceCard>
 
       <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">

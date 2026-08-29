@@ -3,6 +3,7 @@ import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
@@ -418,7 +419,7 @@ const archiveProvider = () => {
       </aside>
     </div>
 
-    <details
+    <CadenceDetailsFrame
       :id="diagnostics.id"
       class="rounded border border-base-300 bg-base-200/60 p-4 text-sm"
     >
@@ -444,6 +445,6 @@ const archiveProvider = () => {
           class="max-h-80 overflow-auto border border-base-300 bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
         >{{ diagnostics.json }}</pre>
       </div>
-    </details>
+    </CadenceDetailsFrame>
   </div>
 </template>

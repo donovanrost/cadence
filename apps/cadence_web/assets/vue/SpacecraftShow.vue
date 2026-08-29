@@ -2,6 +2,7 @@
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
@@ -328,12 +329,12 @@ defineProps<{
         </div>
 
         <div v-if="overview.metadata_json !== null" class="pt-2">
-          <details class="text-sm">
+          <CadenceDetailsFrame class="text-sm">
             <summary class="cursor-pointer hud-label hover:text-primary">
               Metadata
             </summary>
             <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{{ overview.metadata_json }}</pre>
-          </details>
+          </CadenceDetailsFrame>
         </div>
     </CadenceCard>
   </div>
