@@ -45,7 +45,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentationTest do
              "data-dashboard-widget-group" => "power"
            }
 
-    assert group["section"]["root"]["attrs"]["open"] == ""
+    assert group["section"]["root"]["attrs"] == %{
+             "id" => "dashboard-section-group-power",
+             "open" => "",
+             "class" => "group/dashboard-section",
+             "data-dashboard-section" => "power"
+           }
+
+    assert group["section"]["summary"]["attrs"] == %{
+             "class" =>
+               "flex cursor-pointer list-none items-center gap-2 marker:hidden sticky top-0 z-10 border-b border-base-300/50 bg-base-200/90 px-3 py-2 backdrop-blur"
+           }
+
+    assert group["section"]["summary"]["icon"]["attrs"] == %{
+             "class" =>
+               "hero-chevron-right h-3.5 w-3.5 text-base-content/45 transition-transform group-data-[state=open]/dashboard-section:rotate-90"
+           }
+
     assert group["section"]["summary"]["copy"]["title"]["text"] == "Power"
     assert group["section"]["summary"]["copy"]["description"]["text"] == "Bus health"
     assert group["section"]["summary"]["count"]["text"] == "1 widget"
@@ -152,6 +168,30 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentationTest do
              },
              "text" => "Open Dashboard Editor"
            }
+  end
+
+  test "section root preserves exact raw server-open seed semantics" do
+    Enum.each([{true, ""}, {false, nil}], fn {open?, expected_open} ->
+      presentation =
+        DashboardCanvasPresentation.build(
+          render_model(Map.put(section_group(), :open?, open?), false),
+          %{editor_route?: true},
+          widget_presentation: & &1,
+          comparison_presentation: fn false, _rollup, _preset, _review, _saved -> nil end
+        )
+
+      assert [group] = presentation.groups
+      attrs = group.section.root.attrs
+
+      assert Map.has_key?(attrs, "open") == open?
+      assert Map.get(attrs, "open") == expected_open
+
+      assert Map.drop(attrs, ["open"]) == %{
+               "id" => "dashboard-section-group-power",
+               "class" => "group/dashboard-section",
+               "data-dashboard-section" => "power"
+             }
+    end)
   end
 
   defp render_model(group, comparison_open?) do

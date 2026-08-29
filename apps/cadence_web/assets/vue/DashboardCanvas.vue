@@ -1,4 +1,9 @@
 <script setup>
+import {reactive} from "vue"
+
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 import DashboardComparisonInspector from "./DashboardComparisonInspector.vue"
 import DashboardGrid from "./DashboardGrid.vue"
 
@@ -12,13 +17,21 @@ const forwardLayoutChanged = (payload) => emit("layout_changed", payload)
 // A section's disclosure state belongs to this client-rendered canvas. Keep
 // the browser's latest state across LiveVue prop updates while retaining the
 // server-presented open value for a section's first render.
-const sectionOpenByKey = new Map()
-const sectionOpen = (group) =>
-  sectionOpenByKey.has(group.key)
-    ? sectionOpenByKey.get(group.key)
-    : Object.hasOwn(group.section.root.attrs, "open")
-const rememberSectionOpen = (group, event) => {
-  sectionOpenByKey.set(group.key, event.currentTarget.open)
+const sectionOpenByKey = reactive(new Map())
+const sectionOpen = (group) => {
+  if (!sectionOpenByKey.has(group.key)) {
+    sectionOpenByKey.set(group.key, Object.hasOwn(group.section.root.attrs, "open"))
+  }
+
+  return sectionOpenByKey.get(group.key)
+}
+const rememberSectionOpen = (group, open) => {
+  sectionOpenByKey.set(group.key, open)
+}
+const sectionContentId = (group) => `${group.section.root.attrs.id}-content`
+const sectionRootAttrs = (group) => {
+  const {open: _serverOpen, ...attrs} = group.section.root.attrs
+  return attrs
 }
 </script>
 
@@ -30,34 +43,44 @@ const rememberSectionOpen = (group, event) => {
         :key="group.key"
         v-bind="group.root.attrs"
       >
-        <details
+        <CadenceCollapsible
           v-if="group.section"
-          v-bind="group.section.root.attrs"
+          :content-id="sectionContentId(group)"
           :open="sectionOpen(group)"
-          @toggle="rememberSectionOpen(group, $event)"
+          :unmount-on-hide="false"
+          @request-change="rememberSectionOpen(group, $event)"
         >
-          <summary v-bind="group.section.summary.attrs">
-            <span v-bind="group.section.summary.icon.attrs"></span>
-            <div v-bind="group.section.summary.copy.attrs">
-              <h2 v-bind="group.section.summary.copy.title.attrs">{{
-                group.section.summary.copy.title.text
-              }}</h2>
-              <p
-                v-if="group.section.summary.copy.description"
-                v-bind="group.section.summary.copy.description.attrs"
-              >{{ group.section.summary.copy.description.text }}</p>
-            </div>
-            <span
-              v-if="group.section.summary.count"
-              v-bind="group.section.summary.count.attrs"
-            >{{ group.section.summary.count.text }}</span>
-          </summary>
+          <div v-bind="sectionRootAttrs(group)">
+            <CadenceCollapsibleTrigger>
+              <button type="button" v-bind="group.section.summary.attrs">
+                <span v-bind="group.section.summary.icon.attrs"></span>
+                <div v-bind="group.section.summary.copy.attrs">
+                  <h2 v-bind="group.section.summary.copy.title.attrs">{{
+                    group.section.summary.copy.title.text
+                  }}</h2>
+                  <p
+                    v-if="group.section.summary.copy.description"
+                    v-bind="group.section.summary.copy.description.attrs"
+                  >{{ group.section.summary.copy.description.text }}</p>
+                </div>
+                <span
+                  v-if="group.section.summary.count"
+                  v-bind="group.section.summary.count.attrs"
+                >{{ group.section.summary.count.text }}</span>
+              </button>
+            </CadenceCollapsibleTrigger>
 
-          <DashboardGrid
-            :presentation="group.grid"
-            @layout_changed="forwardLayoutChanged"
-          />
-        </details>
+            <CadenceCollapsibleContent>
+              <div class="contents">
+                <DashboardGrid
+                  :presentation="group.grid"
+                  :section-open="sectionOpen(group)"
+                  @layout_changed="forwardLayoutChanged"
+                />
+              </div>
+            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>
 
         <template v-else>
           <header v-if="group.header" v-bind="group.header.attrs">

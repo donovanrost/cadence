@@ -96,7 +96,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardCanvasPresentation do
           attrs:
             raw_attributes(%{
               "class" =>
-                "hero-chevron-right h-3.5 w-3.5 text-base-content/45 transition-transform group-open/dashboard-section:rotate-90"
+                "hero-chevron-right h-3.5 w-3.5 text-base-content/45 transition-transform group-data-[state=open]/dashboard-section:rotate-90"
             })
         },
         copy: %{

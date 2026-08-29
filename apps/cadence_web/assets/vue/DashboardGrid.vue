@@ -1,5 +1,5 @@
 <script setup>
-import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"
+import {onBeforeUnmount, onMounted, onUpdated, ref, watch} from "vue"
 // gridstack-all.js is a UMD bundle whose export value is the GridStack class
 // itself (module.exports = GridStack), so it imports as a default, not a named
 // export — `import { GridStack }` resolves to undefined.
@@ -59,22 +59,6 @@ const DashboardGridController = {
     this.grid.on("change", () => this.scheduleLayoutPush())
     this.grid.on("dragstop resizestop", () => this.updated())
     this.syncEditMode()
-    this.sectionDetails = this.el.closest && this.el.closest("details[data-dashboard-section]")
-    if (this.sectionDetails) {
-      this.handleSectionToggle = () => {
-        if (this.sectionResizeFrame !== null) {
-          cancelAnimationFrame(this.sectionResizeFrame)
-          this.sectionResizeFrame = null
-        }
-        if (!this.sectionDetails.open) return
-        this.sectionResizeFrame = requestAnimationFrame(() => {
-          this.sectionResizeFrame = null
-          this.grid.prevWidth = undefined
-          this.grid.onResize()
-        })
-      }
-      this.sectionDetails.addEventListener("toggle", this.handleSectionToggle)
-    }
   },
 
   updated() {
@@ -86,13 +70,7 @@ const DashboardGridController = {
 
   destroyed() {
     clearTimeout(this.pushTimer)
-    if (this.sectionResizeFrame !== null) {
-      cancelAnimationFrame(this.sectionResizeFrame)
-      this.sectionResizeFrame = null
-    }
-    if (this.sectionDetails && this.handleSectionToggle) {
-      this.sectionDetails.removeEventListener("toggle", this.handleSectionToggle)
-    }
+    this.cancelSectionResize()
     if (this.grid) {
       this.grid.destroy(false)
       this.grid = null
@@ -157,6 +135,23 @@ const DashboardGridController = {
     this.pushTimer = setTimeout(() => this.flushLayout(), LAYOUT_PUSH_DEBOUNCE_MS)
   },
 
+  cancelSectionResize() {
+    if (this.sectionResizeFrame !== null) {
+      cancelAnimationFrame(this.sectionResizeFrame)
+      this.sectionResizeFrame = null
+    }
+  },
+
+  scheduleSectionResize() {
+    this.cancelSectionResize()
+
+    this.sectionResizeFrame = requestAnimationFrame(() => {
+      this.sectionResizeFrame = null
+      this.grid.prevWidth = undefined
+      this.grid.onResize()
+    })
+  },
+
   flushLayout() {
     if (this.pushTimer) {
       clearTimeout(this.pushTimer)
@@ -182,6 +177,7 @@ const DashboardGridController = {
 
 const props = defineProps({
   presentation: {type: Object, required: true},
+  sectionOpen: {type: Boolean, default: true},
 })
 
 const emit = defineEmits(["layout_changed"])
@@ -199,6 +195,19 @@ onMounted(() => {
 })
 
 onUpdated(() => controller?.updated())
+
+watch(
+  () => props.sectionOpen,
+  (open, previousOpen) => {
+    if (!controller || open === previousOpen) return
+    if (open && previousOpen === false) {
+      controller.scheduleSectionResize()
+    } else if (!open) {
+      controller.cancelSectionResize()
+    }
+  },
+  {flush: "post"},
+)
 
 onBeforeUnmount(() => {
   controller?.destroyed()
