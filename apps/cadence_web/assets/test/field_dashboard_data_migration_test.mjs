@@ -19,10 +19,111 @@ const migrationBase = "7643e25b78faf8bf09d7bc3497de88db3b46715a"
 const componentImport = 'import CadenceField from "./ui/components/CadenceField.vue"'
 const cadenceDetailsFrameImport =
   'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
+const cadenceCollapsibleImports = [
+  'import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"',
+  'import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"',
+  'import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"',
+].join("\n") + "\n"
+const disclosureSeedHelper = [
+  "const disclosureSeedEpoch = (details: ProgressiveDetails) =>",
+  '  `${details.id}:${details.open ? "open" : "closed"}`',
+  "",
+  "",
+].join("\n")
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const disclosure = (form, openingSha256) => ({
+  form,
+  openingSha256,
+  nativeOpening: [
+    "<details",
+    `          :id="${form}.details.id"`,
+    `          :open="${form}.details.open"`,
+    '          class="border border-base-300 bg-base-200/20 p-4"',
+    "        >",
+  ].join("\n"),
+})
+const dashboardLibraryDisclosures = Object.freeze([
+  disclosure("create_form", "3c98a4d0cee5edea1d8f05eed91388a37c7228e28ba4302b8fe55ee3f1eb3104"),
+  disclosure("version_form", "a17681f34775420252d7c0ec017c416311f646011bd37abafed1837ab7840bb7"),
+])
+const peelCadenceCollapsibles = (source, label) => {
+  assert.equal(occurrences(source, cadenceCollapsibleImports), 1, `${label} collapsible imports`)
+  assert.equal(occurrences(source, disclosureSeedHelper), 1, `${label} seed helper`)
+  assert.equal(
+    occurrences(source, "<CadenceCollapsible\n"),
+    dashboardLibraryDisclosures.length,
+    `${label} collapsible opening count`,
+  )
+  assert.equal(
+    occurrences(source, "        </CadenceCollapsible>"),
+    dashboardLibraryDisclosures.length,
+    `${label} collapsible closing count`,
+  )
+
+  let peeled = source
+  for (const boundary of dashboardLibraryDisclosures) {
+    const migratedOpening = `        <CadenceCollapsible
+          :content-id="${boundary.form}.id"
+          :open="${boundary.form}.details.open"
+          client-seeded
+          :seed-epoch="disclosureSeedEpoch(${boundary.form}.details)"
+          :unmount-on-hide="false"
+        >
+          <div
+            :id="${boundary.form}.details.id"
+            class="border border-base-300 bg-base-200/20 p-4"
+          >
+            <CadenceCollapsibleTrigger>
+              <button
+                :id="${boundary.form}.details.summary_id"
+                type="button"
+                class="cursor-pointer font-semibold"
+              >{{ ${boundary.form}.details.summary }}</button>
+            </CadenceCollapsibleTrigger>
+
+            <CadenceCollapsibleContent>`
+    const migratedClosing = `            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>`
+    const nativeSummary = `          <summary
+            :id="${boundary.form}.details.summary_id"
+            class="cursor-pointer font-semibold"
+          >{{ ${boundary.form}.details.summary }}</summary>`
+
+    assert.equal(
+      sha256(boundary.nativeOpening),
+      boundary.openingSha256,
+      `${label} preserves the retired ${boundary.form} opening-tag SHA-256`,
+    )
+    assert.equal(occurrences(peeled, migratedOpening), 1, `${label} ${boundary.form} opening`)
+
+    const openingIndex = peeled.indexOf(migratedOpening)
+    const contentStart = openingIndex + migratedOpening.length + 1
+    const closingIndex = peeled.indexOf(migratedClosing, contentStart)
+    assert.notEqual(closingIndex, -1, `${label} ${boundary.form} closing`)
+    const callerForm = peeled.slice(contentStart, closingIndex)
+    const nativeDisclosure =
+      `        ${boundary.nativeOpening}\n` +
+      `${nativeSummary}\n\n` +
+      callerForm +
+      "        </details>"
+
+    peeled =
+      peeled.slice(0, openingIndex) +
+      nativeDisclosure +
+      peeled.slice(closingIndex + migratedClosing.length)
+  }
+
+  peeled = peeled
+    .replace(cadenceCollapsibleImports, "")
+    .replace(disclosureSeedHelper, "")
+
+  assert.doesNotMatch(peeled, /CadenceCollapsible|disclosureSeedEpoch/)
+  return peeled
+}
 const peelCadenceDetailsFrames = (source, expectedCount, label) => {
   const expectedImportCount = expectedCount > 0 ? 1 : 0
 
@@ -177,8 +278,12 @@ for (const component of loadedComponents) {
     `${file} has no residual eligible literal field shell`,
   )
 
-  let reconstructed = peelCadenceDetailsFrames(
-    source,
+  let reconstructed = source
+  if (file === "OpsDashboardLibrary.vue") {
+    reconstructed = peelCadenceCollapsibles(reconstructed, file)
+  }
+  reconstructed = peelCadenceDetailsFrames(
+    reconstructed,
     file === "OpsDashboardLibrary.vue" ? 1 : 0,
     file,
   ).replace(`${componentImport}\n`, "")
