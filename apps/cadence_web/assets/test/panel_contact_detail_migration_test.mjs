@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {fileURLToPath} from "node:url"
 import {resolve} from "node:path"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -286,12 +287,13 @@ const peelPanel = (source, panel, path) => {
 let totalPanels = 0
 
 for (const file of files) {
-  const source = await readFile(resolve(assetsRoot, file.path), "utf8")
+  const currentSource = await readFile(resolve(assetsRoot, file.path), "utf8")
   const filename = file.path.split("/").at(-1)
+  const source = peelContactSummaryBand(currentSource, file.path)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
     ? peelCadenceOpsViewport(source, file.path)
     : source
-  const parsed = parse(source, {filename: file.path})
+  const parsed = parse(currentSource, {filename: file.path})
 
   assert.deepEqual(parsed.errors, [], `${file.path}: Vue compiler parses the SFC`)
   assert.equal(countLiteral(source, cadencePanelImport), 1, `${file.path}: exact import count`)

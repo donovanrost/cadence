@@ -8,6 +8,7 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
 
@@ -359,9 +360,10 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
+  const contactSummaryCompatibleSource = peelContactSummaryBand(source, foundation.file)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(foundation.file)
-    ? peelCadenceOpsViewport(source, foundation.file)
-    : source
+    ? peelCadenceOpsViewport(contactSummaryCompatibleSource, foundation.file)
+    : contactSummaryCompatibleSource
   const pageTitleCompatibleSource = pageTitleCallerNames.includes(foundation.file)
     ? peelCadencePageTitle(opsViewportCompatibleSource, foundation.file)
     : opsViewportCompatibleSource

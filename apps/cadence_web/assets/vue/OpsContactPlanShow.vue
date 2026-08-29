@@ -268,8 +268,8 @@ const executePlan = () => emit("execute-plan", {})
       class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.7fr)] lg:p-7"
     >
       <div class="min-w-0 space-y-5">
-        <section :id="page.summary.id" class="border border-base-300 bg-base-200/20">
-          <div class="grid gap-4 p-4 sm:grid-cols-3">
+        <CadencePanel :id="page.summary.id" class="border border-base-300 bg-base-200/20" header-class="grid gap-4 p-4 sm:grid-cols-3">
+          <template #header>
             <div>
               <p class="hud-label">Requirement coverage</p>
               <p :class="page.summary.coverage.class">{{ page.summary.coverage.label }}</p>
@@ -282,7 +282,7 @@ const executePlan = () => emit("execute-plan", {})
               <p class="hud-label">Approval identity</p>
               <p class="mt-1 font-mono text-sm">{{ page.summary.approval_identity }}</p>
             </div>
-          </div>
+          </template>
           <div class="border-t border-base-300 px-4 py-3">
             <p class="hud-label">Exact content hash</p>
             <p
@@ -290,7 +290,7 @@ const executePlan = () => emit("execute-plan", {})
               class="mt-1 break-all font-mono text-[0.68rem] text-base-content/55"
             >{{ page.summary.content_hash.value }}</p>
           </div>
-        </section>
+        </CadencePanel>
 
         <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
           <template #header>

@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
@@ -253,8 +254,9 @@ assert.equal(process.version, pinnedNodeVersion, `run with pinned Node ${pinnedN
 assert.equal(files.reduce((total, file) => total + file.panels, 0), 11)
 
 for (const file of files) {
-  const source = await readFile(resolve(vueDirectory, file.name), "utf8")
-  const parsed = parse(source, {filename: file.name})
+  const currentSource = await readFile(resolve(vueDirectory, file.name), "utf8")
+  const source = peelContactSummaryBand(currentSource, file.name)
+  const parsed = parse(currentSource, {filename: file.name})
 
   assert.equal(parsed.errors.length, 0, `${file.name} must parse with the Vue compiler`)
   assert.equal(occurrences(source, cadencePanelImport), 1, `${file.name} import count`)

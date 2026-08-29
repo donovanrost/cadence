@@ -12,6 +12,7 @@ import {
   installDom,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
+import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -60,6 +61,7 @@ assert.throws(
 
 for (const entry of pageTitleMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
   const predecessor = execFileSync(
     "git",
     ["-C", repositoryRoot, "show", `${pageTitlePredecessorCommit}:apps/cadence_web/assets/vue/${entry.file}`],
@@ -69,7 +71,10 @@ for (const entry of pageTitleMigrations) {
   assert.equal(entry.predecessorCommit, pageTitlePredecessorCommit)
   assert.equal(Buffer.byteLength(predecessor), entry.predecessorByteLength)
   assert.equal(sha256(predecessor), entry.predecessorSha256)
-  assert.equal(sha256(peelCadencePageTitle(current, entry.file)), entry.predecessorSha256)
+  assert.equal(
+    sha256(peelCadencePageTitle(contactSummaryCompatibleCurrent, entry.file)),
+    entry.predecessorSha256,
+  )
   assert.equal(occurrences(current, `<h1 class="${pageTitleClass}">`), 0)
 
   const openingStart = current.indexOf(entry.opening)
@@ -85,9 +90,10 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
   const opsAuthorHeaderCompatibleSource = opsAuthorHeaderCallerNames.includes(entry.file)
-    ? peelCadenceOpsAuthorHeader(current, entry.file)
-    : current
+    ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
+    : contactSummaryCompatibleCurrent
   const paddedOpsViewportCompatibleSource = paddedOpsViewportCallerNames.includes(entry.file)
     ? peelPaddedOpsViewport(opsAuthorHeaderCompatibleSource, entry.file)
     : opsAuthorHeaderCompatibleSource
