@@ -4,6 +4,7 @@ import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
 import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
 
@@ -220,11 +221,10 @@ defineProps<{
               </tr>
             </thead>
             <tbody id="spacecraft-vehicles">
-              <tr
+              <CadenceHoverTableRow
                 v-for="row in roster.rows"
                 :id="row.id"
                 :key="row.id"
-                class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
               >
                 <td class="font-medium">
                   <a
@@ -284,7 +284,7 @@ defineProps<{
                     </CadenceModalMenu>
                   </div>
                 </td>
-              </tr>
+              </CadenceHoverTableRow>
             </tbody>
           </CadenceTableFrame>
 
@@ -377,11 +377,10 @@ defineProps<{
               </tr>
             </thead>
             <tbody id="spacecraft-profile-previews">
-              <tr
+              <CadenceHoverTableRow
                 v-for="row in profiles.rows"
                 :id="row.id"
                 :key="row.id"
-                class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
               >
                 <td class="font-medium">
                   <a
@@ -414,7 +413,7 @@ defineProps<{
                 <td>
                   <StatusBadge :status="row.status" :label="row.status_label" />
                 </td>
-              </tr>
+              </CadenceHoverTableRow>
             </tbody>
           </CadenceTableFrame>
 

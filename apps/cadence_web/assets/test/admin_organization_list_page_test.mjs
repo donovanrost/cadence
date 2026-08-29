@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 
 const scenarioLedger = [
   "one non-SSR AdminOrganizationListPage host owns the complete page boundary",
@@ -55,21 +56,25 @@ const [
 ] = await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const preHoverTableRowImmutableChild = peelCadenceHoverTableRows(
+  immutableChild,
+  "AdminOrganizationList.vue",
+)
 
 assert.equal(
-  immutableChild.match(
+  preHoverTableRowImmutableChild.match(
     /^import CadenceTableFrame from "\.\/ui\/components\/CadenceTableFrame\.vue"$/gm,
   )?.length,
   1,
   "AdminOrganizationList.vue has one CadenceTableFrame import before compatibility peeling",
 )
 assert.equal(
-  immutableChild.match(/<\/?CadenceTableFrame\b/g)?.length,
+  preHoverTableRowImmutableChild.match(/<\/?CadenceTableFrame\b/g)?.length,
   2,
   "AdminOrganizationList.vue has one CadenceTableFrame boundary before compatibility peeling",
 )
 
-const predecessorImmutableChild = immutableChild
+const predecessorImmutableChild = preHoverTableRowImmutableChild
   .replace('import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n\n', "")
   .replace(
     '  <CadenceTableFrame id="admin-orgs-table">',

@@ -7,6 +7,10 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
+import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
@@ -20,6 +24,7 @@ const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const tableImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const {compileScript, compileTemplate, parse} = integrationRequire("@vue/compiler-sfc")
 
 assert.equal(process.execPath, pinnedNode)
@@ -181,13 +186,16 @@ let instanceCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const preHoverTableRowSource = hoverTableRowCallers.has(fixture.filename)
+    ? peelCadenceHoverTableRows(source, fixture.filename)
+    : source
   const prePaginationSource =
     fixture.filename === "SpacecraftList.vue"
       ? peelCadencePaginationFrame(
-          peelCadenceListToolbarFrame(source, fixture.filename),
+          peelCadenceListToolbarFrame(preHoverTableRowSource, fixture.filename),
           fixture.filename,
         )
-      : source
+      : preHoverTableRowSource
 
   assert.equal(
     occurrenceCount(prePaginationSource, tableImport),

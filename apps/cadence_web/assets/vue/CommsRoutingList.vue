@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 
 type RoutingRuleRow = {
   id: string
@@ -28,11 +29,10 @@ defineProps<{rows: RoutingRuleRow[]}>()
       </tr>
     </thead>
     <tbody id="routing-rules">
-      <tr
+      <CadenceHoverTableRow
         v-for="row in rows"
         :id="row.id"
         :key="row.id"
-        class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
       >
         <td class="font-medium">
           <a
@@ -47,7 +47,7 @@ defineProps<{rows: RoutingRuleRow[]}>()
         <td class="font-mono text-sm uppercase text-primary/80">{{ row.direction }}</td>
         <td>{{ row.transport_name }}</td>
         <td class="font-mono text-sm uppercase text-base-content/70">{{ row.role }}</td>
-      </tr>
+      </CadenceHoverTableRow>
     </tbody>
   </CadenceTableFrame>
 </template>

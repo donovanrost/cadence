@@ -4,6 +4,10 @@ import {createHash} from "node:crypto"
 import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const baseCommit = "c720c80701148764113420bf8f62ddbd07f439e8"
@@ -16,6 +20,7 @@ const breadcrumbNavClass =
 const importLine = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
 const componentClosing = "</CadenceTableFrame>"
 const nativeClosing = "</table>"
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 
 const callers = Object.freeze([
@@ -115,31 +120,35 @@ assert.equal(
 for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path)
   const source = readFileSync(componentPath, "utf8")
+  const file = caller.path.split("/").at(-1)
+  const preHoverTableRowSource = hoverTableRowCallers.has(file)
+    ? peelCadenceHoverTableRows(source, file)
+    : source
 
-  assert.equal(occurrences(source, importLine), 1, `${caller.path} imports the frame once`)
+  assert.equal(occurrences(preHoverTableRowSource, importLine), 1, `${caller.path} imports the frame once`)
   assert.equal(
-    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    preHoverTableRowSource.match(/^import CadenceTableFrame\b/gm)?.length,
     1,
     `${caller.path} has one frame import declaration`,
   )
   assert.equal(
-    source.match(/<CadenceTableFrame\b/g)?.length,
+    preHoverTableRowSource.match(/<CadenceTableFrame\b/g)?.length,
     caller.boundaries.length,
     `${caller.path} has its frozen frame count`,
   )
   assert.equal(
-    occurrences(source, componentClosing),
+    occurrences(preHoverTableRowSource, componentClosing),
     caller.boundaries.length,
     `${caller.path} closes every frame`,
   )
-  assert.doesNotMatch(source, /<table\b|<\/table>/, `${caller.path} has no residual native table`)
+  assert.doesNotMatch(preHoverTableRowSource, /<table\b|<\/table>/, `${caller.path} has no residual native table`)
   assert.doesNotMatch(
-    source,
+    preHoverTableRowSource,
     /<CadenceTableFrame\b[^>]*\bclass="table"/,
     `${caller.path} omits the redundant table class`,
   )
 
-  let reconstructed = peelCadenceBreadcrumbs(source, caller.path).replace(importLine, "")
+  let reconstructed = peelCadenceBreadcrumbs(preHoverTableRowSource, caller.path).replace(importLine, "")
 
   for (const boundary of caller.boundaries) {
     assert.equal(

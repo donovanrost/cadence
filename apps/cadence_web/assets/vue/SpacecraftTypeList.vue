@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
 
 type SpacecraftProfileRow = {
   id: string
@@ -26,11 +27,10 @@ defineProps<{rows: SpacecraftProfileRow[]}>()
       </tr>
     </thead>
     <tbody id="spacecraft-profiles">
-      <tr
+      <CadenceHoverTableRow
         v-for="row in rows"
         :id="row.id"
         :key="row.id"
-        class="border-l-2 border-l-transparent transition-colors hover:border-l-primary/60"
       >
         <td class="font-medium">
           <a
@@ -48,7 +48,7 @@ defineProps<{rows: SpacecraftProfileRow[]}>()
           {{ row.uplink_protocol }}
         </td>
         <td class="text-sm text-base-content/70">{{ row.applications }}</td>
-      </tr>
+      </CadenceHoverTableRow>
     </tbody>
   </CadenceTableFrame>
 </template>

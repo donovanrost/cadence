@@ -3,6 +3,10 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
@@ -13,6 +17,7 @@ assert.equal(process.versions.node, "24.16.0", "migration contracts use pinned N
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const cadenceCollapsibleImports = Object.freeze([
   'import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"\n',
   'import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"\n',
@@ -590,7 +595,13 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
-  const inlineWarningCompatibleSource = peelCadenceInlineWarnings(source, file.name)
+  const preHoverTableRowSource = hoverTableRowCallers.has(file.name)
+    ? peelCadenceHoverTableRows(source, file.name)
+    : source
+  const inlineWarningCompatibleSource = peelCadenceInlineWarnings(
+    preHoverTableRowSource,
+    file.name,
+  )
   const prePaginationSource =
     file.name === "SpacecraftList.vue"
       ? peelCadencePaginationFrame(

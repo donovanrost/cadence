@@ -4,6 +4,10 @@ import {readdir, readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
+import {
   expectedNodeVersion,
   installDom,
   loadSfc,
@@ -29,6 +33,7 @@ const vueDirectory = resolve(testDirectory, "../vue")
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const expectedCallers = paginationFrameMigrations.map(({file}) => file).sort()
 const toolbarCallers = new Set(listToolbarFrameMigrations.map(({file}) => file))
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const vueFiles = (await readdir(vueDirectory, {recursive: true}))
   .filter((path) => path.endsWith(".vue"))
   .sort()
@@ -110,9 +115,12 @@ for (const migration of paginationFrameMigrations) {
   )
   assert.doesNotMatch(callerSlot, /<Cadence(?:Button|PaginationValue)/)
 
-  const preToolbarSource = toolbarCallers.has(migration.file)
-    ? peelCadenceListToolbarFrame(callerSource, migration.file)
+  const preHoverTableRowSource = hoverTableRowCallers.has(migration.file)
+    ? peelCadenceHoverTableRows(callerSource, migration.file)
     : callerSource
+  const preToolbarSource = toolbarCallers.has(migration.file)
+    ? peelCadenceListToolbarFrame(preHoverTableRowSource, migration.file)
+    : preHoverTableRowSource
   const predecessor = peelCadencePaginationFrame(preToolbarSource, migration.file)
   const reconstructedHash = sha256(predecessor)
 

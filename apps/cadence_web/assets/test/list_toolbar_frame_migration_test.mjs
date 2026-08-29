@@ -4,6 +4,10 @@ import {readdir, readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
+  hoverTableRowCallerNames,
+  peelCadenceHoverTableRows,
+} from "./hover_table_row_test_support.mjs"
+import {
   elementAttributes,
   expectedNodeVersion,
   installDom,
@@ -26,6 +30,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const expectedCallers = listToolbarFrameMigrations.map(({file}) => file).sort()
+const hoverTableRowCallers = new Set(hoverTableRowCallerNames)
 const dom = installDom('<main id="list-toolbar-migration"></main>')
 
 for (const globalName of ["HTMLFormElement", "HTMLInputElement"]) {
@@ -182,7 +187,10 @@ for (const definition of definitions) {
   const callerPath = resolve(vueDirectory, definition.file)
   const callerSource = await readFile(callerPath, "utf8")
   const formSource = exactFormSource(callerSource, definition.formId)
-  const predecessor = peelCadenceListToolbarFrame(callerSource, definition.file)
+  const preHoverTableRowSource = hoverTableRowCallers.has(definition.file)
+    ? peelCadenceHoverTableRows(callerSource, definition.file)
+    : callerSource
+  const predecessor = peelCadenceListToolbarFrame(preHoverTableRowSource, definition.file)
 
   assert.ok(migration, `${definition.file} has a frozen toolbar migration entry`)
   assert.equal(sha256(formSource), definition.formSha256, `${definition.file} keeps its native form bytes`)

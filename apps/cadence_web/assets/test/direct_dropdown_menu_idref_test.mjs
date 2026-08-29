@@ -10,6 +10,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {hoverTableRowClass, peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
@@ -49,6 +50,10 @@ const pageHeaderFramePath = resolve(
 const tableFramePath = resolve(
   testDirectory,
   "../vue/ui/components/CadenceTableFrame.vue",
+)
+const hoverTableRowPath = resolve(
+  testDirectory,
+  "../vue/ui/components/CadenceHoverTableRow.vue",
 )
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const pageHeaderImport =
@@ -107,6 +112,34 @@ const loadTableFrame = async () => {
   return loadedModule.exports.default
 }
 
+const loadHoverTableRow = async () => {
+  const source = await readFile(hoverTableRowPath, "utf8")
+  const parsed = parse(source, {filename: hoverTableRowPath})
+  assert.deepEqual(parsed.errors, [], "CadenceHoverTableRow parses for direct-dropdown mounting")
+  assert.ok(parsed.descriptor.script, "CadenceHoverTableRow keeps its normal render script")
+  assert.equal(parsed.descriptor.scriptSetup, null)
+  assert.equal(parsed.descriptor.template, null)
+
+  const compiled = compileScript(parsed.descriptor, {
+    id: "direct-dropdown-hover-table-row",
+  })
+  const transformed = transformSync(compiled.content, {
+    format: "cjs",
+    loader: "ts",
+    platform: "node",
+    target: "node24",
+  })
+  const loadedModule = {exports: {}}
+
+  new Function("require", "module", "exports", transformed.code)(
+    integrationRequire,
+    loadedModule,
+    loadedModule.exports,
+  )
+
+  return loadedModule.exports.default
+}
+
 const spacecraftPanelMigrations = [
   {
     componentOpen: `    <CadencePanel
@@ -147,11 +180,13 @@ const [
   {component: CadenceMenuItem},
   CadencePageHeaderFrame,
   CadenceTableFrame,
+  CadenceHoverTableRow,
 ] = await Promise.all([
   loadSfc(modalMenuPath),
   loadSfc(menuItemPath),
   loadPageHeaderFrame(),
   loadTableFrame(),
+  loadHoverTableRow(),
 ])
 
 const StatusBadge = defineComponent({
@@ -464,28 +499,37 @@ const reconstructMissionOverviewPrePageHeaderSource = source =>
 
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
-  const prePaginationSource =
-    definition.name === "SpacecraftList"
-      ? peelCadencePaginationFrame(
-          peelCadenceListToolbarFrame(currentSource, "SpacecraftList.vue"),
-          "SpacecraftList.vue",
-        )
-      : currentSource
-  const preCardSource = reconstructPreCardSource(prePaginationSource, definition)
-  const prePanelSource =
-    definition.name === "SpacecraftList"
-      ? reconstructSpacecraftListPrePanelSource(preCardSource)
-      : preCardSource
-  const source =
-    definition.name === "CatalogArtifactShow"
+  const reconstructNewerPresentationFrames = (inputSource) => {
+    const prePaginationSource =
+      definition.name === "SpacecraftList"
+        ? peelCadencePaginationFrame(
+            peelCadenceListToolbarFrame(inputSource, "SpacecraftList.vue"),
+            "SpacecraftList.vue",
+          )
+        : inputSource
+    const preCardSource = reconstructPreCardSource(prePaginationSource, definition)
+    const prePanelSource =
+      definition.name === "SpacecraftList"
+        ? reconstructSpacecraftListPrePanelSource(preCardSource)
+        : preCardSource
+
+    return definition.name === "CatalogArtifactShow"
       ? reconstructCatalogArtifactShowPreDataRowSource(prePanelSource)
       : prePanelSource
+  }
+  const source = reconstructNewerPresentationFrames(currentSource)
+  const predecessorCompatibleSource =
+    definition.name === "SpacecraftList"
+      ? reconstructNewerPresentationFrames(
+          peelCadenceHoverTableRows(currentSource, "SpacecraftList.vue"),
+        )
+      : source
   const parsed = parse(source, {filename: definition.path})
 
   assert.deepEqual(parsed.errors, [], `${definition.name} parses with the pinned Vue compiler`)
   assert.ok(parsed.descriptor.scriptSetup, `${definition.name} keeps its setup script`)
   assert.ok(parsed.descriptor.template, `${definition.name} keeps its template`)
-  const preTableSource = reconstructPreTableSource(source, definition)
+  const preTableSource = reconstructPreTableSource(predecessorCompatibleSource, definition)
   const predecessorSource =
     definition.name === "MissionOverview"
       ? reconstructMissionOverviewPrePageHeaderSource(preTableSource)
@@ -530,6 +574,7 @@ const compileSfc = async (definition) => {
       return CadencePageHeaderFrame
     }
     if (specifier === "./ui/components/CadenceTableFrame.vue") return CadenceTableFrame
+    if (specifier === "./ui/components/CadenceHoverTableRow.vue") return CadenceHoverTableRow
     if (specifier === "./ui/reka/CadenceModalMenu.vue") return CadenceModalMenu
     if (specifier === "./ui/reka/CadenceMenuItem.vue") return CadenceMenuItem
     return integrationRequire(specifier)
@@ -583,12 +628,28 @@ const spacecraftProps = {
     rows: spacecraftRows,
   },
   profiles: {
-    empty: true,
+    empty: false,
     truncated: false,
-    subtitle: "",
+    subtitle: "Profiles",
     new_profile_href: "/missions/mission-1/spacecraft-profiles/new",
     all_profiles_href: "/missions/mission-1/spacecraft-profiles",
-    rows: [],
+    rows: [
+      {
+        id: "spacecraft-profile-alpha",
+        display_name: "Alpha profile",
+        href: "/missions/mission-1/spacecraft/profiles/alpha",
+        fleet_entries: [
+          {
+            label: "Alpha",
+            href: "/missions/mission-1/spacecraft?profile=alpha",
+          },
+        ],
+        protocols: "ccsds",
+        applications: "Telemetry",
+        status: "ready",
+        status_label: "Ready",
+      },
+    ],
   },
 }
 
@@ -716,6 +777,36 @@ const allContentIds = cases.flatMap(({rows}) =>
 assert.equal(new Set(allTriggerIds).size, 6, "all six public trigger IDs are unique")
 assert.equal(new Set(allContentIds).size, 6, "all six public content IDs are unique")
 
+const spacecraftNativeNodes = new Map(
+  spacecraftRows.map((row) => {
+    const nativeRow = document.getElementById(row.id)
+    const primaryLink = nativeRow.querySelector('a[data-phx-link="redirect"]')
+    const trigger = document.getElementById(`${row.actions_id}-trigger`)
+
+    assert.equal(nativeRow.tagName, "TR")
+    assert.equal(nativeRow.className, hoverTableRowClass)
+    assert.equal(nativeRow.hasAttribute("key"), false)
+    assert.deepEqual([...nativeRow.children].map(({tagName}) => tagName), ["TD", "TD", "TD", "TD", "TD"])
+    assert.equal(primaryLink.getAttribute("href"), row.href)
+    assert.equal(primaryLink.getAttribute("data-phx-link"), "redirect")
+    assert.equal(primaryLink.getAttribute("data-phx-link-state"), "push")
+    assert.equal(trigger.closest("tr"), nativeRow)
+
+    return [row.id, {nativeRow, primaryLink, trigger}]
+  }),
+)
+const profileRow = document.getElementById("spacecraft-profile-alpha")
+const profileRedirect = profileRow.querySelector('a[data-phx-link="redirect"]')
+const profilePatch = profileRow.querySelector('a[data-phx-link="patch"]')
+assert.equal(profileRow.tagName, "TR")
+assert.equal(profileRow.className, hoverTableRowClass)
+assert.equal(profileRow.hasAttribute("key"), false)
+assert.deepEqual([...profileRow.children].map(({tagName}) => tagName), ["TD", "TD", "TD", "TD", "TD"])
+assert.equal(profileRedirect.getAttribute("href"), spacecraftProps.profiles.rows[0].href)
+assert.equal(profileRedirect.getAttribute("data-phx-link-state"), "push")
+assert.equal(profilePatch.getAttribute("href"), spacecraftProps.profiles.rows[0].fleet_entries[0].href)
+assert.equal(profilePatch.getAttribute("data-phx-link-state"), "push")
+
 const assertClosed = (actionsId, label) => {
   const wrapper = document.getElementById(actionsId)
   const trigger = document.getElementById(`${actionsId}-trigger`)
@@ -823,6 +914,19 @@ for (const testCase of cases) {
     assert.equal(appElement.hasAttribute("aria-hidden"), false, `${label} releases modal hiding`)
   }
 }
+
+for (const row of spacecraftRows) {
+  const retained = spacecraftNativeNodes.get(row.id)
+  assert.strictEqual(document.getElementById(row.id), retained.nativeRow)
+  assert.strictEqual(
+    retained.nativeRow.querySelector('a[data-phx-link="redirect"]'),
+    retained.primaryLink,
+  )
+  assert.strictEqual(document.getElementById(`${row.actions_id}-trigger`), retained.trigger)
+}
+assert.strictEqual(document.getElementById("spacecraft-profile-alpha"), profileRow)
+assert.strictEqual(profileRow.querySelector('a[data-phx-link="redirect"]'), profileRedirect)
+assert.strictEqual(profileRow.querySelector('a[data-phx-link="patch"]'), profilePatch)
 
 app.unmount()
 dom.window.close()

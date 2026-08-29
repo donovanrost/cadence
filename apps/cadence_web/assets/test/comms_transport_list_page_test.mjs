@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
@@ -125,8 +126,12 @@ const assertInOrder = (source, contracts, label) => {
   }
 }
 
-const preToolbarChildSource = peelCadenceListToolbarFrame(
+const preHoverTableRowChildSource = peelCadenceHoverTableRows(
   childSource,
+  "CommsTransportList.vue",
+)
+const preToolbarChildSource = peelCadenceListToolbarFrame(
+  preHoverTableRowChildSource,
   "CommsTransportList.vue",
 )
 const prePaginationChildSource = peelCadencePaginationFrame(
