@@ -26,6 +26,10 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {
+  opsListFrameCallerNames,
+  peelCadenceOpsListFrame,
+} from "./ops_list_frame_test_support.mjs"
+import {
   paddedOpsViewportCallerNames,
   peelPaddedOpsViewport,
 } from "./padded_ops_viewport_test_support.mjs"
@@ -191,8 +195,11 @@ assert.deepEqual(
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 for (const entry of opsViewportMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const opsListCompatibleCurrent = opsListFrameCallerNames.includes(entry.file)
+    ? peelCadenceOpsListFrame(current, entry.file)
+    : current
   const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
-    current,
+    opsListCompatibleCurrent,
     entry.file,
   )
   const contactSummaryCompatibleCurrent = peelContactSummaryBand(

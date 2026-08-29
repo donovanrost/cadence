@@ -84,6 +84,7 @@ const allowedPostPredecessorVuePaths = Object.freeze([
   compactHeaderBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceDiagnosticsSectionFrame.vue",
+  "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
 ])
 const postPredecessorVuePaths = currentVuePaths.filter(
@@ -93,12 +94,12 @@ const postPredecessorVuePaths = currentVuePaths.filter(
 assert.deepEqual(
   postPredecessorVuePaths,
   allowedPostPredecessorVuePaths,
-  "exactly four explicitly allowed SFCs were added after the frozen predecessor",
+  "exactly five explicitly allowed SFCs were added after the frozen predecessor",
 )
 assert.deepEqual(
   currentVuePaths,
   [...predecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
-  "the audit covers the full current tree: every frozen predecessor SFC plus four allowed additions",
+  "the audit covers the full current tree: every frozen predecessor SFC plus five allowed additions",
 )
 assert.equal(predecessorVuePaths.length, 222, "the frozen audit covers exactly 222 Vue SFCs")
 

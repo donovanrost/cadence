@@ -32,7 +32,7 @@ import {
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 223-SFC predecessor and full 226-SFC current tree add only the three named primitives",
+  "the fixed 223-SFC predecessor and full 227-SFC current tree add only the audited primitives",
   "all predecessor SFCs classify into six exact shells and one frozen semantic exclusion",
   "all current SFCs parse and exactly six singular imports/openings replace the native cohort",
   "the fixed predecessor commit, Git blob, byte length, and SHA-256 are exact for every caller",
@@ -96,10 +96,11 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 226, "the current-tree gate includes exactly 226 Vue SFCs")
+assert.equal(currentVuePaths.length, 227, "the current-tree gate includes exactly 227 Vue SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
   definitionListPanelRepositoryPath,
+  "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   primitiveRepositoryPath,
 ])
 assert.deepEqual(
@@ -108,9 +109,10 @@ assert.deepEqual(
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
     definitionListPanelRepositoryPath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
     primitiveRepositoryPath,
   ].sort(),
-  "the current inventory is every fixed predecessor SFC plus only the three named primitives",
+  "the current inventory is every fixed predecessor SFC plus only the audited primitives",
 )
 
 // Install JSDOM before the first Vue runtime import or compiled-SFC evaluation.

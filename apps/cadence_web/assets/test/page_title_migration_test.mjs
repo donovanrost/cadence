@@ -26,6 +26,10 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {
+  opsListFrameCallerNames,
+  peelCadenceOpsListFrame,
+} from "./ops_list_frame_test_support.mjs"
+import {
   paddedOpsViewportCallerNames,
   peelPaddedOpsViewport,
 } from "./padded_ops_viewport_test_support.mjs"
@@ -108,8 +112,13 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const compactHeaderBodyCompatibleCurrent =
-    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, entry.file)
+  const opsListCompatibleCurrent = opsListFrameCallerNames.includes(entry.file)
+    ? peelCadenceOpsListFrame(current, entry.file)
+    : current
+  const compactHeaderBodyCompatibleCurrent = peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(
+    opsListCompatibleCurrent,
+    entry.file,
+  )
   const definitionListCompatibleCurrent = peelCadenceDefinitionListPanelBeforeOlderLayers(
     compactHeaderBodyCompatibleCurrent,
     entry.file,
