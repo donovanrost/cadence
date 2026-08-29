@@ -3,6 +3,10 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 
 assert.equal(
@@ -45,9 +49,12 @@ const migrations = Object.freeze([
 for (const migration of migrations) {
   const source = await readFile(migration.path, "utf8")
   const filename = migration.path.split("/").at(-1)
-  const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
-    ? peelCadencePageTitle(source, filename)
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
+    ? peelCadenceOpsViewport(source, filename)
     : source
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(filename)
+    ? peelCadencePageTitle(opsViewportCompatibleSource, filename)
+    : opsViewportCompatibleSource
 
   assert.equal(source.split(migration.importLine).length - 1, 1, `${migration.name} import count`)
   assert.equal(source.split(migration.opening).length - 1, 1, `${migration.name} opening count`)

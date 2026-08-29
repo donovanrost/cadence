@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import vm from "node:vm"
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const scenarioLedger = [
   "the star control uses one wrapper-free CadenceToggle around the existing button",
@@ -170,7 +171,9 @@ const originalButtonMarkup = `            <button
             >
               <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>
             </button>`
-const normalizedComponent = reconstructPageHeaderBase(source)
+const normalizedComponent = reconstructPageHeaderBase(
+  peelCadenceOpsViewport(source, "OpsDashboardDirectory.vue"),
+)
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n', "")
   .replace("const toggleDashboardStar = (row: DirectoryRow) => {", "const toggleStar = (row: DirectoryRow) => {")
   .replace(toggleMarkup, originalButtonMarkup)

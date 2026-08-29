@@ -4,6 +4,10 @@ import {readFile} from "node:fs/promises"
 import {fileURLToPath} from "node:url"
 import {resolve} from "node:path"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const {parse} = integrationRequire("@vue/compiler-sfc")
@@ -283,6 +287,10 @@ let totalPanels = 0
 
 for (const file of files) {
   const source = await readFile(resolve(assetsRoot, file.path), "utf8")
+  const filename = file.path.split("/").at(-1)
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
+    ? peelCadenceOpsViewport(source, file.path)
+    : source
   const parsed = parse(source, {filename: file.path})
 
   assert.deepEqual(parsed.errors, [], `${file.path}: Vue compiler parses the SFC`)
@@ -314,7 +322,7 @@ for (const file of files) {
 
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceDetailsFrames(
-      peelCadenceInlineWarnings(source, file.path),
+      peelCadenceInlineWarnings(opsViewportCompatibleSource, file.path),
       cadenceDetailsFrameCounts[file.path] ?? 0,
       file.path,
     ),

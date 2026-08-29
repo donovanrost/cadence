@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {reactive, watch} from "vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
@@ -284,7 +285,7 @@ const updateStageVersion = (event: Event) => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <header
       :id="page.header.id"
       class="border-b border-primary/20 bg-base-200/70 px-6 py-5 hud-grid"
@@ -659,5 +660,5 @@ const updateStageVersion = (event: Event) => {
         </CadenceCollapsible>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

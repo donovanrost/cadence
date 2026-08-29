@@ -8,6 +8,10 @@ import {
   peelCadenceHoverTableRows,
 } from "./hover_table_row_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
@@ -595,9 +599,12 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
-  const preHoverTableRowSource = hoverTableRowCallers.has(file.name)
-    ? peelCadenceHoverTableRows(source, file.name)
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(file.name)
+    ? peelCadenceOpsViewport(source, file.name)
     : source
+  const preHoverTableRowSource = hoverTableRowCallers.has(file.name)
+    ? peelCadenceHoverTableRows(opsViewportCompatibleSource, file.name)
+    : opsViewportCompatibleSource
   const inlineWarningCompatibleSource = peelCadenceInlineWarnings(
     preHoverTableRowSource,
     file.name,

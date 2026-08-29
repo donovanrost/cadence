@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
@@ -207,7 +208,7 @@ const clearCommandFocus = () => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -428,5 +429,5 @@ const clearCommandFocus = () => {
         </div>
       </section>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import vm from "node:vm"
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
 const scenarioLedger = [
   "the opportunity control uses one wrapper-free CadenceToggle",
@@ -195,7 +196,12 @@ assert.doesNotMatch(toggleMarkup, /@click|@update:model-value|v-model|\bas-child
 
 // Normalize only the reviewed import and toggle subtree back to the pre-migration marker.
 // Its hash proves the rest of this large component is byte-for-byte unchanged.
-const normalizedComponentScaffold = reconstructPanelBase(reconstructPageHeaderBase(source), 4)
+const normalizedComponentScaffold = reconstructPanelBase(
+  reconstructPageHeaderBase(
+    peelCadenceOpsViewport(source, "OpsContactRequirementShow.vue"),
+  ),
+  4,
+)
   .replace('import CadenceToggle from "./ui/reka/CadenceToggle.vue"\n\n', "")
   .replace(toggleMarkup, "              <!-- opportunity-toggle -->")
 

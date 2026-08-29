@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -258,10 +259,9 @@ const repairFleetRun = () => {
 </script>
 
 <template>
-  <section
+  <CadenceOpsViewport
     :id="page.id"
     :aria-busy="planning"
-    class="h-full overflow-y-auto bg-base-100"
   >
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[110rem]">
@@ -661,5 +661,5 @@ const repairFleetRun = () => {
         </aside>
       </div>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

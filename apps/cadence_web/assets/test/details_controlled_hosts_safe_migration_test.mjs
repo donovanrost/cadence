@@ -5,6 +5,10 @@ import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const parent = "f9f36bb729e9f9abb1a2d01c3924bddf3d7eb99a"
@@ -301,6 +305,9 @@ const peelCadenceCollapsibles = (source, caller) => {
 }
 
 const reconstructParent = (source, caller) => {
+  if (opsViewportCallerNames.includes(caller.path.split("/").at(-1))) {
+    source = peelCadenceOpsViewport(source, caller.path)
+  }
   source = peelCadenceInlineWarnings(source, caller.path)
 
   assert.equal(

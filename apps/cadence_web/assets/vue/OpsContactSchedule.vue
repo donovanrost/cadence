@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
@@ -253,7 +254,7 @@ const cancel = (reservation: Reservation) => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
@@ -698,5 +699,5 @@ const cancel = (reservation: Reservation) => {
         </aside>
       </div>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

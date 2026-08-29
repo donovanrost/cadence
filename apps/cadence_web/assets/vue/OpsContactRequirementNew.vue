@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
@@ -227,7 +228,7 @@ const activeError = computed(() =>
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-5xl">
         <a
@@ -613,5 +614,5 @@ const activeError = computed(() =>
         </section>
       </form>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

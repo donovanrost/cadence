@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -131,7 +132,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-[100rem] flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -355,5 +356,5 @@ const coverageToneClasses: Record<CoverageTone, string> = {
         </aside>
       </div>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

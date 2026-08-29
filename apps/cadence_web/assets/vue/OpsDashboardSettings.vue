@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import {reactive, watch} from "vue"
@@ -298,7 +299,7 @@ const archiveDashboard = () => {
 </script>
 
 <template>
-  <section :id="page.id" class="h-full overflow-y-auto bg-base-100">
+  <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto flex max-w-5xl items-end justify-between gap-4">
         <div>
@@ -613,5 +614,5 @@ const archiveDashboard = () => {
         </section>
       </aside>
     </div>
-  </section>
+  </CadenceOpsViewport>
 </template>

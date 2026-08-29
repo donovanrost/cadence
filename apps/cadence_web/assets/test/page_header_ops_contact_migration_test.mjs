@@ -4,6 +4,10 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 const expectedNodeVersion = "24.16.0"
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
@@ -148,6 +152,9 @@ const peelCadenceFields = (source, filename, expectedFrames) => {
 
 for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const source = await readFile(resolve(vueDirectory, filename), "utf8")
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
+    ? peelCadenceOpsViewport(source, filename)
+    : source
 
   assert.equal(count(source, importLine), 1, `${filename} has exactly one frame import`)
   assert.equal(count(source, frameOpening), 1, `${filename} has exactly one ops frame`)
@@ -157,7 +164,7 @@ for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const reconstructed = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        peelCadenceInlineWarnings(source, filename),
+        peelCadenceInlineWarnings(opsViewportCompatibleSource, filename),
         cadenceDetailsFrameCounts[filename] ?? 0,
         filename,
       ),

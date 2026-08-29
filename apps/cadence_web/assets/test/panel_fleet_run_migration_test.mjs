@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
+import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 assert.equal(process.version, "v24.16.0", "run with pinned Node 24.16.0")
@@ -253,7 +254,9 @@ const rawSectionHeader = `  <section
     <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">`
 
 const predecessorCompatibleSource = peelPageHeaderFrame(
-  peelCadenceFields(peelCadenceDetailsFrames(source)),
+  peelCadenceFields(
+    peelCadenceDetailsFrames(peelCadenceOpsViewport(source, "OpsFleetPlanningRun.vue")),
+  ),
 )
 
 assert.equal(

@@ -10,6 +10,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -171,9 +175,15 @@ ${spaces}>{{ error }}</${tag}>`
 }
 
 const reconstructPredecessor = (file) => {
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(file.name)
+    ? peelCadenceOpsViewport(file.source, file.name)
+    : file.source
   assert.equal(countExact(file.source, validationImport), 1, `${file.name}: exact import count`)
   let reconstructed = peelCadenceDetailsFrames(
-    peelCadenceCollapsible(peelCadenceInlineWarnings(file.source, file.name), file.name),
+    peelCadenceCollapsible(
+      peelCadenceInlineWarnings(opsViewportCompatibleSource, file.name),
+      file.name,
+    ),
     cadenceDetailsFrameCounts[file.name],
     file.name,
   ).replace(validationImport, "")

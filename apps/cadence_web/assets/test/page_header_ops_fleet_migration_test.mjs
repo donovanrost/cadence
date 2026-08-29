@@ -3,6 +3,10 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import test from "node:test"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -354,6 +358,9 @@ ${spaces}</div>`
 for (const caller of callers) {
   test(`${caller.file} has one ops page-header frame and reconstructs ${parent}`, async () => {
     const source = await readFile(new URL(`../vue/${caller.file}`, import.meta.url), "utf8")
+    const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.file)
+      ? peelCadenceOpsViewport(source, caller.file)
+      : source
     const migratedOpening =
       caller.migratedOpening ?? `${caller.indent}<CadencePageHeaderFrame variant="ops">`
     const parentOpening = caller.parentOpening ?? `${caller.indent}${rawOpening}`
@@ -370,7 +377,10 @@ for (const caller of callers) {
     const predecessorCompatibleSource = peelCadenceFields(
       peelCadenceValidationMessages(
         peelCadenceDetailsFrames(
-          peelCadenceCollapsible(peelCadenceInlineWarnings(source, caller.file), caller.file),
+          peelCadenceCollapsible(
+            peelCadenceInlineWarnings(opsViewportCompatibleSource, caller.file),
+            caller.file,
+          ),
           cadenceDetailsFrameCounts[caller.file] ?? 0,
           caller.file
         ),

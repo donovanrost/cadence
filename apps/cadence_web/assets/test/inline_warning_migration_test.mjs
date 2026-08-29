@@ -16,6 +16,10 @@ import {
   inlineWarningCallerLedger,
   peelCadenceInlineWarnings,
 } from "./inline_warning_test_support.mjs"
+import {
+  opsViewportCallerNames,
+  peelCadenceOpsViewport,
+} from "./ops_viewport_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -54,7 +58,10 @@ assert.doesNotMatch(componentSource, /\b(?:tone|role|aria-live|aria-atomic)\b/)
 
 for (const caller of callerPaths) {
   const source = await readFile(caller.path, "utf8")
-  peelCadenceInlineWarnings(source, caller.filename)
+  const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.filename)
+    ? peelCadenceOpsViewport(source, caller.filename)
+    : source
+  peelCadenceInlineWarnings(opsViewportCompatibleSource, caller.filename)
   assert.equal(source.split("<CadenceInlineWarning\n").length - 1, 1)
   assert.equal(source.split("</CadenceInlineWarning>").length - 1, 1)
   assert.equal(source.includes(`class="${baseClass}"`), false)
