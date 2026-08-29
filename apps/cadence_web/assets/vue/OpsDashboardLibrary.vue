@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
@@ -286,9 +287,9 @@ const updateStageVersion = (event: Event) => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <header
+    <CadencePageHeaderFrame
       :id="page.header.id"
-      class="border-b border-primary/20 bg-base-200/70 px-6 py-5 hud-grid"
+      variant="ops-author"
     >
       <div class="mx-auto max-w-6xl">
         <p class="hud-label">{{ page.header.eyebrow }}</p>
@@ -297,7 +298,7 @@ const updateStageVersion = (event: Event) => {
           {{ page.header.copy }}
         </p>
       </div>
-    </header>
+    </CadencePageHeaderFrame>
 
     <div class="mx-auto grid max-w-6xl gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div :id="page.list.id" class="space-y-3">

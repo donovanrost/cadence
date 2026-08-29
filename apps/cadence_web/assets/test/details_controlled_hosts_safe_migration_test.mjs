@@ -6,6 +6,10 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
+  opsAuthorHeaderCallerNames,
+  peelCadenceOpsAuthorHeader,
+} from "./page_header_ops_author_test_support.mjs"
+import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
@@ -305,6 +309,9 @@ const peelCadenceCollapsibles = (source, caller) => {
 }
 
 const reconstructParent = (source, caller) => {
+  if (opsAuthorHeaderCallerNames.includes(caller.path.split("/").at(-1))) {
+    source = peelCadenceOpsAuthorHeader(source, caller.path)
+  }
   if (opsViewportCallerNames.includes(caller.path.split("/").at(-1))) {
     source = peelCadenceOpsViewport(source, caller.path)
   }

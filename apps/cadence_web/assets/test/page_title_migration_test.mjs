@@ -22,6 +22,10 @@ import {
   peelPaddedOpsViewport,
 } from "./padded_ops_viewport_test_support.mjs"
 import {
+  opsAuthorHeaderCallerNames,
+  peelCadenceOpsAuthorHeader,
+} from "./page_header_ops_author_test_support.mjs"
+import {
   excludedPageTitles,
   pageTitleCallerNames,
   pageTitleClass,
@@ -81,9 +85,12 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const paddedOpsViewportCompatibleSource = paddedOpsViewportCallerNames.includes(entry.file)
-    ? peelPaddedOpsViewport(current, entry.file)
+  const opsAuthorHeaderCompatibleSource = opsAuthorHeaderCallerNames.includes(entry.file)
+    ? peelCadenceOpsAuthorHeader(current, entry.file)
     : current
+  const paddedOpsViewportCompatibleSource = paddedOpsViewportCallerNames.includes(entry.file)
+    ? peelPaddedOpsViewport(opsAuthorHeaderCompatibleSource, entry.file)
+    : opsAuthorHeaderCompatibleSource
   const compactTableCompatibleSource = peelCompactTableFrames(
     paddedOpsViewportCompatibleSource,
     entry.file,

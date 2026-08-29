@@ -27,6 +27,10 @@ import {
   paddedOpsViewportCallerNames,
   peelPaddedOpsViewport,
 } from "./padded_ops_viewport_test_support.mjs"
+import {
+  opsAuthorHeaderCallerNames,
+  peelCadenceOpsAuthorHeader,
+} from "./page_header_ops_author_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the complete Vue tree contains only the frozen exact cohort and two excluded padded variants",
@@ -185,6 +189,9 @@ assert.deepEqual(
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 for (const entry of opsViewportMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
+  const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(entry.file)
+    ? peelCadenceOpsAuthorHeader(current, entry.file)
+    : current
   const predecessor = execFileSync(
     "git",
     [
@@ -199,7 +206,7 @@ for (const entry of opsViewportMigrations) {
   assert.equal(entry.predecessorCommit, opsViewportPredecessorCommit)
   assert.equal(Buffer.byteLength(predecessor), entry.predecessorByteLength)
   assert.equal(opsViewportSha256(predecessor), entry.predecessorSha256)
-  assert.equal(peelCadenceOpsViewport(current, entry.file), predecessor)
+  assert.equal(peelCadenceOpsViewport(predecessorCompatibleCurrent, entry.file), predecessor)
   assert.equal(occurrences(current, `class="${opsViewportClass}"`), 0)
   assert.match(entry.opening, /:id="(?:page|header)\.id"/, `${entry.file} keeps caller id`)
 

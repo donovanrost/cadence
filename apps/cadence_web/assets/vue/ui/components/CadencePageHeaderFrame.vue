@@ -1,11 +1,12 @@
 <script lang="ts">
 import {Fragment, defineComponent, h, isVNode, type PropType, type VNodeChild} from "vue"
 
-type Variant = "compact" | "ops"
+type Variant = "compact" | "ops" | "ops-author"
 
 const variantClasses: Record<Variant, string> = {
   compact: "border-b border-primary/20 pb-4",
   ops: "border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7",
+  "ops-author": "border-b border-primary/20 bg-base-200/70 px-6 py-5 hud-grid",
 }
 
 const flattenSlotChildren = (children: VNodeChild[]): VNodeChild[] =>
@@ -26,7 +27,8 @@ export default defineComponent({
     variant: {
       type: String as PropType<Variant>,
       required: true,
-      validator: (value: string) => value === "compact" || value === "ops",
+      validator: (value: string) =>
+        value === "compact" || value === "ops" || value === "ops-author",
     },
   },
   setup(props, {attrs, slots}) {

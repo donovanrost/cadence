@@ -25,6 +25,10 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {
+  opsAuthorHeaderCallerNames,
+  peelCadenceOpsAuthorHeader,
+} from "./page_header_ops_author_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the complete predecessor Vue tree has exactly fourteen frozen border-dashed occurrences",
@@ -180,12 +184,19 @@ for (const consumer of cadenceEmptyStateConsumers) {
 
 for (const exclusion of emptyStateVariantLedger.filter(({sha256}) => sha256)) {
   const current = await readFile(resolve(repositoryRoot, exclusion.repositoryPath), "utf8")
+  const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(exclusion.file)
+    ? peelCadenceOpsAuthorHeader(current, exclusion.file)
+    : current
   const predecessor = predecessorSource(exclusion.repositoryPath)
 
-  assert.equal(current, predecessor, `${exclusion.file}: ${exclusion.classification}`)
-  assert.equal(Buffer.byteLength(current), exclusion.byteLength)
-  assert.equal(emptyStateSha256(current), exclusion.sha256)
-  assert.doesNotMatch(current, /CadenceEmptyStateFrame/)
+  assert.equal(
+    predecessorCompatibleCurrent,
+    predecessor,
+    `${exclusion.file}: ${exclusion.classification}`,
+  )
+  assert.equal(Buffer.byteLength(predecessorCompatibleCurrent), exclusion.byteLength)
+  assert.equal(emptyStateSha256(predecessorCompatibleCurrent), exclusion.sha256)
+  assert.doesNotMatch(predecessorCompatibleCurrent, /CadenceEmptyStateFrame/)
 }
 
 const validationExclusion = lines(
