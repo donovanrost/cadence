@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
@@ -589,10 +590,14 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
+  const inlineWarningCompatibleSource = peelCadenceInlineWarnings(source, file.name)
   const prePaginationSource =
     file.name === "SpacecraftList.vue"
-      ? peelCadencePaginationFrame(peelCadenceListToolbarFrame(source, file.name), file.name)
-      : source
+      ? peelCadencePaginationFrame(
+          peelCadenceListToolbarFrame(inlineWarningCompatibleSource, file.name),
+          file.name,
+        )
+      : inlineWarningCompatibleSource
 
   assert.deepEqual(parsed.errors, [], `${file.name} parses with the pinned Vue compiler`)
   assert.equal(countExact(source, cadencePanelImport), 1, `${file.name} has one exact import`)

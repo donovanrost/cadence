@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 const expectedNodeVersion = "24.16.0"
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
@@ -156,7 +157,7 @@ for (const [filename, expectedParentHash] of Object.entries(callers)) {
   const reconstructed = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        source,
+        peelCadenceInlineWarnings(source, filename),
         cadenceDetailsFrameCounts[filename] ?? 0,
         filename,
       ),

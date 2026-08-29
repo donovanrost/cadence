@@ -4,6 +4,7 @@ import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
 import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
 import {reactive, ref, watch} from "vue"
@@ -1059,12 +1060,11 @@ const revokeGrant = () => {
         </CadenceDetailsFrame>
       </section>
 
-      <p
+      <CadenceInlineWarning
         v-if="authorization.admin_required"
-        class="border-l-2 border-warning px-3 text-xs text-warning"
       >
         {{ authorization.admin_required.copy }}
-      </p>
+      </CadenceInlineWarning>
     </aside>
   </div>
 </template>

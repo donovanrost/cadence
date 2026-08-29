@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
@@ -715,13 +716,12 @@ const fieldClass = (field: FormField) => [
           </form>
         </CadencePanel>
 
-        <p
+        <CadenceInlineWarning
           v-if="authorization.admin_required"
           :id="authorization.admin_required.id"
-          class="border-l-2 border-warning px-3 text-xs text-warning"
         >
           {{ authorization.admin_required.copy }}
-        </p>
+        </CadenceInlineWarning>
       </aside>
     </div>
   </section>

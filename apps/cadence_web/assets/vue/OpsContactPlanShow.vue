@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import {ref, watch} from "vue"
@@ -509,11 +510,11 @@ const executePlan = () => emit("execute-plan", {})
               </form>
             </CadenceDetailsFrame>
           </template>
-          <p
+          <CadenceInlineWarning
             v-else-if="page.decision.admin_required !== null"
             :id="page.decision.admin_required.id"
-            class="mt-4 border-l-2 border-warning px-3 text-xs text-warning"
-          >{{ page.decision.admin_required.message }}</p>
+            class="mt-4"
+          >{{ page.decision.admin_required.message }}</CadenceInlineWarning>
         </section>
 
         <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">

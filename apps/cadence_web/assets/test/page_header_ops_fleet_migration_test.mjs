@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import test from "node:test"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -369,7 +370,7 @@ for (const caller of callers) {
     const predecessorCompatibleSource = peelCadenceFields(
       peelCadenceValidationMessages(
         peelCadenceDetailsFrames(
-          peelCadenceCollapsible(source, caller.file),
+          peelCadenceCollapsible(peelCadenceInlineWarnings(source, caller.file), caller.file),
           cadenceDetailsFrameCounts[caller.file] ?? 0,
           caller.file
         ),

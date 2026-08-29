@@ -9,6 +9,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -17,6 +18,7 @@ assert.equal(
 )
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
+const inlineWarningClass = "border-l-2 border-warning px-3 text-xs text-warning"
 const cadenceCollapsibleImports = Object.freeze([
   'import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"\n',
   'import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"\n',
@@ -171,7 +173,7 @@ ${spaces}>{{ error }}</${tag}>`
 const reconstructPredecessor = (file) => {
   assert.equal(countExact(file.source, validationImport), 1, `${file.name}: exact import count`)
   let reconstructed = peelCadenceDetailsFrames(
-    peelCadenceCollapsible(file.source, file.name),
+    peelCadenceCollapsible(peelCadenceInlineWarnings(file.source, file.name), file.name),
     cadenceDetailsFrameCounts[file.name],
     file.name,
   ).replace(validationImport, "")
@@ -217,7 +219,13 @@ for (const file of loadedSources) {
   )
 }
 
-const dom = installDom('<div id="fleet-new-contract"></div><div id="fleet-policy-contract"></div>')
+const dom = installDom(
+  [
+    '<div id="fleet-new-contract"></div>',
+    '<div id="fleet-policy-contract"></div>',
+    '<div id="fleet-policy-warning-contract"></div>',
+  ].join(""),
+)
 for (const globalName of [
   "Document",
   "ShadowRoot",
@@ -500,9 +508,44 @@ for (const [index, expected] of expectedMessages.entries()) {
   assert.ok(label?.contains(control), `${expected.text}: native control identity remains caller-owned`)
 }
 
+const policyHost = dom.window.document.querySelector("#fleet-policy-contract")
+assert.equal(
+  policyHost.querySelector(`p[class="${inlineWarningClass}"]`),
+  null,
+  "the actual admin policy caller omits the inline authorization warning",
+)
+
+const policyWarningApp = createApp(components["OpsFleetPlanningPolicy.vue"], {
+  ...policyProps,
+  policy_form: null,
+  approval_form: null,
+  authorization: {
+    organization_admin: false,
+    admin_required: {
+      copy: "Organization administrator authority is required to change policy or grants.",
+    },
+  },
+  grant_form: null,
+  revocation_form: null,
+})
+const policyWarningHost = dom.window.document.querySelector("#fleet-policy-warning-contract")
+policyWarningApp.mount(policyWarningHost)
+
+const policyWarning = policyWarningHost.querySelector(`p[class="${inlineWarningClass}"]`)
+assert.ok(policyWarning instanceof dom.window.HTMLParagraphElement)
+assert.equal(policyWarning.hasAttribute("id"), false, "the fleet warning deliberately remains ID-less")
+assert.equal(policyWarning.attributes.length, 1)
+assert.equal(
+  policyWarning.textContent,
+  "Organization administrator authority is required to change policy or grants.",
+)
+
 newApp.unmount()
 policyApp.unmount()
+policyWarningApp.unmount()
 assert.equal(dom.window.document.querySelectorAll("p.mt-1\\.5.text-sm.text-error").length, 0)
 dom.window.close()
 
-console.log("validation_message_fleet_migration_test passed (18 exact sites across 2 SFCs)")
+console.log(
+  "validation_message_fleet_migration_test passed (18 exact sites across 2 SFCs, authorization warning)",
+)

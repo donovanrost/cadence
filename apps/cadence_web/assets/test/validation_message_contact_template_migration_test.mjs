@@ -9,8 +9,10 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
+const inlineWarningClass = "border-l-2 border-warning px-3 text-xs text-warning"
 
 assert.equal(process.execPath, pinnedNode)
 assert.equal(
@@ -86,7 +88,9 @@ assert.equal(
 
 validationMessageSite.lastIndex = 0
 let reconstructedSites = 0
-const predecessorSource = peelCadenceDetailsFrames(source)
+const predecessorSource = peelCadenceDetailsFrames(
+  peelCadenceInlineWarnings(source, "OpsContactRequirementTemplate.vue"),
+)
   .replace(validationMessageImport, "")
   .replace(validationMessageSite, (_match, indent, field) => {
     reconstructedSites += 1
@@ -102,7 +106,11 @@ assert.equal(
 )
 
 const dom = installDom(
-  '<div id="fixed-duration-contract"></div><div id="daily-volume-contract"></div>',
+  [
+    '<div id="fixed-duration-contract"></div>',
+    '<div id="daily-volume-contract"></div>',
+    '<div id="contact-template-warning-contract"></div>',
+  ].join(""),
 )
 const loaded = await loadSfc(componentPath)
 const {createApp, nextTick} = integrationRequire("vue")
@@ -263,10 +271,17 @@ const mountScenario = async (hostId, scheduleType, successMeasure) => {
     assert.equal(control.getAttribute("name"), `template[${field}]`, `${field} keeps its name`)
   }
 
+  assert.equal(
+    host.querySelector("#requirement-template-admin-required"),
+    null,
+    "the actual admin caller omits the inline authorization warning",
+  )
+
   return {app, creations, host, validations, values}
 }
 
 const mounted = []
+let warningApp
 try {
   const fixedDuration = await mountScenario(
     "fixed-duration-contract",
@@ -309,11 +324,37 @@ try {
 
   assert.equal(submitEvent.defaultPrevented, true)
   assert.deepEqual(fixedDuration.creations, [{template: expectedValues}])
+
+  const {props: warningProps} = scenarioProps("fixed_interval", "minimum_duration")
+  warningApp = createApp(loaded.component, {
+    ...warningProps,
+    authorization: {
+      organization_admin: false,
+      admin_required: {
+        id: "requirement-template-admin-required",
+        copy: "Organization administrator authority is required to manage recurring demand.",
+      },
+    },
+    template_form: null,
+  })
+  const warningHost = dom.window.document.querySelector("#contact-template-warning-contract")
+  warningApp.mount(warningHost)
+  await nextTick()
+
+  const warning = warningHost.querySelector("#requirement-template-admin-required")
+  assert.ok(warning instanceof dom.window.HTMLParagraphElement)
+  assert.equal(warning.className, inlineWarningClass)
+  assert.equal(
+    warning.textContent,
+    "Organization administrator authority is required to manage recurring demand.",
+  )
+  assert.equal(warning.children.length, 0, "the warning copy remains a caller-owned text node")
 } finally {
+  warningApp?.unmount()
   for (const {app} of mounted) app.unmount()
   dom.window.close()
 }
 
 console.log(
-  "validation_message_contact_template_migration_test passed (19 sites, exact predecessor, 2 mounted states)",
+  "validation_message_contact_template_migration_test passed (19 sites, exact predecessor, 2 mounted states, authorization warning)",
 )

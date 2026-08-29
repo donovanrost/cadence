@@ -9,6 +9,7 @@ import {
   installDom,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const parent = "f9f36bb729e9f9abb1a2d01c3924bddf3d7eb99a"
@@ -96,7 +97,10 @@ assert.equal(
 for (const caller of callers) {
   const repositoryPath = `apps/cadence_web/assets/vue/${caller.file}`
   const componentPath = resolve(vueDirectory, caller.file)
-  const source = await readFile(componentPath, "utf8")
+  const source = peelCadenceInlineWarnings(
+    await readFile(componentPath, "utf8"),
+    caller.file,
+  )
   const parentSource = execFileSync(
     "git",
     ["-C", repositoryRoot, "show", `${parent}:${repositoryPath}`],
