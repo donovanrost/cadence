@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
@@ -208,10 +209,7 @@ const save = () => emit("save", {provider_account: values()})
   <div :id="page.id" class="max-w-3xl space-y-6">
     <CadencePageHeaderFrame variant="compact">
       <div>
-        <nav
-          aria-label="Breadcrumb"
-          class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-        >
+        <CadenceBreadcrumbs>
           <template
             v-for="(breadcrumb, index) in page.breadcrumbs"
             :key="`${index}-${breadcrumb.label}`"
@@ -228,7 +226,7 @@ const save = () => emit("save", {provider_account: values()})
               class="transition-colors hover:text-primary"
             >{{ breadcrumb.label }}</a>
           </template>
-        </nav>
+        </CadenceBreadcrumbs>
         <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
           {{ page.heading }}
         </h1>
