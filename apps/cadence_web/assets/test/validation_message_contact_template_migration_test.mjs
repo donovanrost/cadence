@@ -9,6 +9,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 
@@ -91,7 +92,10 @@ validationMessageSite.lastIndex = 0
 let reconstructedSites = 0
 const predecessorSource = peelCadenceDetailsFrames(
   peelCadenceInlineWarnings(
-    peelCadenceOpsViewport(source, "OpsContactRequirementTemplate.vue"),
+    peelCadenceOpsViewport(
+      peelConditionalKeyedCadenceFields(source, "OpsContactRequirementTemplate.vue"),
+      "OpsContactRequirementTemplate.vue",
+    ),
     "OpsContactRequirementTemplate.vue",
   ),
 )

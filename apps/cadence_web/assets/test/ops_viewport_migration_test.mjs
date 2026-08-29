@@ -14,6 +14,7 @@ import {
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {
   excludedOpsViewportVariants,
   opsViewportCallerNames,
@@ -190,7 +191,14 @@ assert.deepEqual(
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 for (const entry of opsViewportMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(current, entry.file)
+  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
+    current,
+    entry.file,
+  )
+  const contactSummaryCompatibleCurrent = peelContactSummaryBand(
+    conditionalKeyedCompatibleCurrent,
+    entry.file,
+  )
   const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(entry.file)
     ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
     : contactSummaryCompatibleCurrent

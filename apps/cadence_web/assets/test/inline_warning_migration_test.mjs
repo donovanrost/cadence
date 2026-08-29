@@ -13,6 +13,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {
   inlineWarningCallerLedger,
   peelCadenceInlineWarnings,
@@ -59,7 +60,14 @@ assert.doesNotMatch(componentSource, /\b(?:tone|role|aria-live|aria-atomic)\b/)
 
 for (const caller of callerPaths) {
   const source = await readFile(caller.path, "utf8")
-  const contactSummaryCompatibleSource = peelContactSummaryBand(source, caller.filename)
+  const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+    source,
+    caller.filename,
+  )
+  const contactSummaryCompatibleSource = peelContactSummaryBand(
+    conditionalKeyedCompatibleSource,
+    caller.filename,
+  )
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(caller.filename)
     ? peelCadenceOpsViewport(contactSummaryCompatibleSource, caller.filename)
     : contactSummaryCompatibleSource

@@ -554,29 +554,31 @@ const revokeGrant = () => {
             <div>
               <p class="hud-label">Search boundary</p>
               <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div
+                <CadenceField
                   v-for="fieldKey in searchPolicyFieldKeys"
                   :key="policy_form.fields[fieldKey].id"
-                  class="fieldset mb-3"
+                  :control-id="policy_form.fields[fieldKey].id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields[fieldKey].label"
+                  label-class="hud-label block mb-1.5"
                 >
-                  <label :for="policy_form.fields[fieldKey].id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields[fieldKey].label }}</span>
-                    <input
-                      :id="policy_form.fields[fieldKey].id"
-                      v-model.number="policy[fieldKey]"
-                      :name="policy_form.fields[fieldKey].name"
-                      :type="policy_form.fields[fieldKey].type"
-                      :min="policy_form.fields[fieldKey].min ?? undefined"
-                      :required="policy_form.fields[fieldKey].required"
-                      :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <CadenceValidationMessage
-                    v-for="error in policy_form.fields[fieldKey].errors"
-                    :key="error"
-                  >{{ error }}</CadenceValidationMessage>
-                </div>
+                  <input
+                    :id="policy_form.fields[fieldKey].id"
+                    v-model.number="policy[fieldKey]"
+                    :name="policy_form.fields[fieldKey].name"
+                    :type="policy_form.fields[fieldKey].type"
+                    :min="policy_form.fields[fieldKey].min ?? undefined"
+                    :required="policy_form.fields[fieldKey].required"
+                    :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage
+                      v-for="error in policy_form.fields[fieldKey].errors"
+                      :key="error"
+                    >{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
               </div>
             </div>
 
@@ -693,26 +695,28 @@ const revokeGrant = () => {
                   </template>
                 </CadenceField>
 
-                <div
+                <CadenceField
                   v-for="fieldKey in automationPolicyFieldKeys"
                   :key="policy_form.fields[fieldKey].id"
-                  class="fieldset mb-3"
+                  :control-id="policy_form.fields[fieldKey].id"
+                  wrapper-class="fieldset mb-3"
+                  :label="policy_form.fields[fieldKey].label"
+                  label-class="hud-label block mb-1.5"
                 >
-                  <label :for="policy_form.fields[fieldKey].id">
-                    <span class="hud-label block mb-1.5">{{ policy_form.fields[fieldKey].label }}</span>
-                    <input
-                      :id="policy_form.fields[fieldKey].id"
-                      v-model.number="policy[fieldKey]"
-                      :name="policy_form.fields[fieldKey].name"
-                      type="number"
-                      :min="policy_form.fields[fieldKey].min ?? undefined"
-                      :required="policy_form.fields[fieldKey].required"
-                      :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
-                      @input="validatePolicy"
-                    >
-                  </label>
-                  <CadenceValidationMessage v-for="error in policy_form.fields[fieldKey].errors" :key="error">{{ error }}</CadenceValidationMessage>
-                </div>
+                  <input
+                    :id="policy_form.fields[fieldKey].id"
+                    v-model.number="policy[fieldKey]"
+                    :name="policy_form.fields[fieldKey].name"
+                    type="number"
+                    :min="policy_form.fields[fieldKey].min ?? undefined"
+                    :required="policy_form.fields[fieldKey].required"
+                    :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
+                    @input="validatePolicy"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage v-for="error in policy_form.fields[fieldKey].errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
               </div>
 
               <div v-if="policy.automation_mode !== 'advisory'" class="fieldset mb-3">

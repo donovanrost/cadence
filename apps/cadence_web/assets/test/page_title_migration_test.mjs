@@ -14,6 +14,7 @@ import {
 } from "./reka_adapter_test_support.mjs"
 import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
@@ -91,7 +92,14 @@ for (const entry of pageTitleMigrations) {
 const exclusionCounts = Object.create(null)
 for (const entry of excludedPageTitles) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const fieldCompatibleCurrent = peelCadenceFieldsBeforePageTitleLayers(current, entry.file)
+  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
+    current,
+    entry.file,
+  )
+  const fieldCompatibleCurrent = peelCadenceFieldsBeforePageTitleLayers(
+    conditionalKeyedCompatibleCurrent,
+    entry.file,
+  )
   const contactSummaryCompatibleCurrent = peelContactSummaryBand(fieldCompatibleCurrent, entry.file)
   const opsAuthorHeaderCompatibleSource = opsAuthorHeaderCallerNames.includes(entry.file)
     ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)

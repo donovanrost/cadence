@@ -367,39 +367,49 @@ const fieldClass = (field: FormField) => [
                   </template>
                 </CadenceField>
 
-                <div v-if="template.schedule_type === 'fixed_interval'" class="fieldset mb-3">
-                  <label :for="template_form.fields.interval_minutes.id">
-                    <span class="hud-label block mb-1.5">{{ template_form.fields.interval_minutes.label }}</span>
-                    <input
-                      :id="template_form.fields.interval_minutes.id"
-                      v-model="template.interval_minutes"
-                      :name="template_form.fields.interval_minutes.name"
-                      type="number"
-                      :min="template_form.fields.interval_minutes.min ?? undefined"
-                      :required="template_form.fields.interval_minutes.required"
-                      :class="fieldClass(template_form.fields.interval_minutes)"
-                      @input="validateTemplate"
-                    >
-                  </label>
-                  <CadenceValidationMessage v-for="error in template_form.fields.interval_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                </div>
+                <CadenceField
+                  v-if="template.schedule_type === 'fixed_interval'"
+                  :control-id="template_form.fields.interval_minutes.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="template_form.fields.interval_minutes.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="template_form.fields.interval_minutes.id"
+                    v-model="template.interval_minutes"
+                    :name="template_form.fields.interval_minutes.name"
+                    type="number"
+                    :min="template_form.fields.interval_minutes.min ?? undefined"
+                    :required="template_form.fields.interval_minutes.required"
+                    :class="fieldClass(template_form.fields.interval_minutes)"
+                    @input="validateTemplate"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage v-for="error in template_form.fields.interval_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
 
-                <div v-if="template.schedule_type === 'daily'" class="fieldset mb-3">
-                  <label :for="template_form.fields.time_utc.id">
-                    <span class="hud-label block mb-1.5">{{ template_form.fields.time_utc.label }}</span>
-                    <input
-                      :id="template_form.fields.time_utc.id"
-                      v-model="template.time_utc"
-                      :name="template_form.fields.time_utc.name"
-                      type="time"
-                      :step="template_form.fields.time_utc.step ?? undefined"
-                      :required="template_form.fields.time_utc.required"
-                      :class="fieldClass(template_form.fields.time_utc)"
-                      @input="validateTemplate"
-                    >
-                  </label>
-                  <CadenceValidationMessage v-for="error in template_form.fields.time_utc.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                </div>
+                <CadenceField
+                  v-if="template.schedule_type === 'daily'"
+                  :control-id="template_form.fields.time_utc.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="template_form.fields.time_utc.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="template_form.fields.time_utc.id"
+                    v-model="template.time_utc"
+                    :name="template_form.fields.time_utc.name"
+                    type="time"
+                    :step="template_form.fields.time_utc.step ?? undefined"
+                    :required="template_form.fields.time_utc.required"
+                    :class="fieldClass(template_form.fields.time_utc)"
+                    @input="validateTemplate"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage v-for="error in template_form.fields.time_utc.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
 
                 <CadenceField
                   :control-id="template_form.fields.window_offset_minutes.id"
@@ -491,40 +501,47 @@ const fieldClass = (field: FormField) => [
                   </template>
                 </CadenceField>
 
-                <div
+                <CadenceField
                   v-if="['minimum_duration', 'minimum_data_volume'].includes(template.success_measure)"
-                  class="fieldset mb-3"
+                  :control-id="template_form.fields.minimum_duration_seconds.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="template_form.fields.minimum_duration_seconds.label"
+                  label-class="hud-label block mb-1.5"
                 >
-                  <label :for="template_form.fields.minimum_duration_seconds.id">
-                    <span class="hud-label block mb-1.5">{{ template_form.fields.minimum_duration_seconds.label }}</span>
-                    <input
-                      :id="template_form.fields.minimum_duration_seconds.id"
-                      v-model="template.minimum_duration_seconds"
-                      :name="template_form.fields.minimum_duration_seconds.name"
-                      type="number"
-                      :min="template_form.fields.minimum_duration_seconds.min ?? undefined"
-                      :class="fieldClass(template_form.fields.minimum_duration_seconds)"
-                      @input="validateTemplate"
-                    >
-                  </label>
-                  <CadenceValidationMessage v-for="error in template_form.fields.minimum_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                </div>
+                  <input
+                    :id="template_form.fields.minimum_duration_seconds.id"
+                    v-model="template.minimum_duration_seconds"
+                    :name="template_form.fields.minimum_duration_seconds.name"
+                    type="number"
+                    :min="template_form.fields.minimum_duration_seconds.min ?? undefined"
+                    :class="fieldClass(template_form.fields.minimum_duration_seconds)"
+                    @input="validateTemplate"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
 
-                <div v-if="template.success_measure === 'minimum_data_volume'" class="fieldset mb-3">
-                  <label :for="template_form.fields.minimum_data_volume_bytes.id">
-                    <span class="hud-label block mb-1.5">{{ template_form.fields.minimum_data_volume_bytes.label }}</span>
-                    <input
-                      :id="template_form.fields.minimum_data_volume_bytes.id"
-                      v-model="template.minimum_data_volume_bytes"
-                      :name="template_form.fields.minimum_data_volume_bytes.name"
-                      type="number"
-                      :min="template_form.fields.minimum_data_volume_bytes.min ?? undefined"
-                      :class="fieldClass(template_form.fields.minimum_data_volume_bytes)"
-                      @input="validateTemplate"
-                    >
-                  </label>
-                  <CadenceValidationMessage v-for="error in template_form.fields.minimum_data_volume_bytes.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                </div>
+                <CadenceField
+                  v-if="template.success_measure === 'minimum_data_volume'"
+                  :control-id="template_form.fields.minimum_data_volume_bytes.id"
+                  wrapper-class="fieldset mb-3"
+                  :label="template_form.fields.minimum_data_volume_bytes.label"
+                  label-class="hud-label block mb-1.5"
+                >
+                  <input
+                    :id="template_form.fields.minimum_data_volume_bytes.id"
+                    v-model="template.minimum_data_volume_bytes"
+                    :name="template_form.fields.minimum_data_volume_bytes.name"
+                    type="number"
+                    :min="template_form.fields.minimum_data_volume_bytes.min ?? undefined"
+                    :class="fieldClass(template_form.fields.minimum_data_volume_bytes)"
+                    @input="validateTemplate"
+                  >
+                  <template #errors>
+                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_data_volume_bytes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
 
                 <CadenceField
                   :control-id="template_form.fields.contact_count.id"

@@ -9,6 +9,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -175,9 +176,13 @@ ${spaces}>{{ error }}</${tag}>`
 }
 
 const reconstructPredecessor = (file) => {
+  const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+    file.source,
+    file.name,
+  )
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(file.name)
-    ? peelCadenceOpsViewport(file.source, file.name)
-    : file.source
+    ? peelCadenceOpsViewport(conditionalKeyedCompatibleSource, file.name)
+    : conditionalKeyedCompatibleSource
   assert.equal(countExact(file.source, validationImport), 1, `${file.name}: exact import count`)
   let reconstructed = peelCadenceDetailsFrames(
     peelCadenceCollapsible(

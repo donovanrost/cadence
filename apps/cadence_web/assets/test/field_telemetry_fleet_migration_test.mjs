@@ -8,6 +8,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
+import {
+  conditionalKeyedCadenceFieldCounts,
+  peelConditionalKeyedCadenceFields,
+} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsViewportCallerNames,
@@ -289,6 +293,7 @@ const peelCadenceValidationMessages = (source, name) => {
 }
 
 const reconstructSource = (file, source) => {
+  source = peelConditionalKeyedCadenceFields(source, file.name)
   const compactTableCompatibleSource = peelCompactTableFrames(source, file.name)
   source = opsViewportCallerNames.includes(file.name)
     ? peelCadenceOpsViewport(compactTableCompatibleSource, file.name)
@@ -354,6 +359,7 @@ ${indent}</div>`
 
 for (const file of loadedFiles) {
   const {component, descriptor, source} = file.loaded
+  const currentFrames = file.expectedFrames + (conditionalKeyedCadenceFieldCounts[file.name] ?? 0)
 
   assert.equal(typeof component.setup, "function", `${file.name}: real SFC compiles with local resolvers`)
   assert.ok(descriptor.scriptSetup, `${file.name}: setup script remains present`)
@@ -361,12 +367,12 @@ for (const file of loadedFiles) {
   assert.equal(occurrences(source, cadenceFieldImport), 1, `${file.name}: one real CadenceField import`)
   assert.equal(
     occurrences(source, "<CadenceField\n"),
-    file.expectedFrames,
+    currentFrames,
     `${file.name}: exact CadenceField opening-frame count`,
   )
   assert.equal(
     occurrences(source, "</CadenceField>"),
-    file.expectedFrames,
+    currentFrames,
     `${file.name}: exact CadenceField closing-frame count`,
   )
   assert.equal(file.fields.length, file.expectedFrames, `${file.name}: every frame is ledgered`)
@@ -386,6 +392,10 @@ for (const file of loadedFiles) {
 const sourceFor = (name) => loadedFiles.find((file) => file.name === name).loaded.source
 const telemetrySource = sourceFor("OpsTelemetryExplore.vue")
 const policySource = sourceFor("OpsFleetPlanningPolicy.vue")
+const policyPredecessorSource = peelConditionalKeyedCadenceFields(
+  policySource,
+  "OpsFleetPlanningPolicy.vue",
+)
 const newSource = sourceFor("OpsFleetPlanningNew.vue")
 const runSource = sourceFor("OpsFleetPlanningRun.vue")
 
@@ -395,14 +405,14 @@ assert.equal(
   "telemetry hidden reconciliation inputs remain caller-owned",
 )
 assert.match(
-  policySource,
+  policyPredecessorSource,
   /<div\n\s+v-for="fieldKey in searchPolicyFieldKeys"\n\s+:key="policy_form\.fields\[fieldKey\]\.id"\n\s+class="fieldset mb-3"\n\s+>\n\s+<label :for="policy_form\.fields\[fieldKey\]\.id">/,
-  "the nonliteral search-policy loop remains manual",
+  "the frozen nonliteral search-policy exclusion reconstructs exactly",
 )
 assert.match(
-  policySource,
+  policyPredecessorSource,
   /<div\n\s+v-for="fieldKey in automationPolicyFieldKeys"\n\s+:key="policy_form\.fields\[fieldKey\]\.id"\n\s+class="fieldset mb-3"\n\s+>\n\s+<label :for="policy_form\.fields\[fieldKey\]\.id">/,
-  "the nonliteral automation-policy loop remains manual",
+  "the frozen nonliteral automation-policy exclusion reconstructs exactly",
 )
 assert.match(
   policySource,
