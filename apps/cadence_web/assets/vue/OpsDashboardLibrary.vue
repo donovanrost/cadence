@@ -2,6 +2,9 @@
 import {reactive, watch} from "vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 
 type Header = {
   id: string
@@ -212,6 +215,9 @@ const versionValuesFromForm = (form: VersionForm): VersionValues => ({
   change_summary: form.fields.change_summary.value,
   widget_json: form.fields.widget_json.value
 })
+
+const disclosureSeedEpoch = (details: ProgressiveDetails) =>
+  `${details.id}:${details.open ? "open" : "closed"}`
 
 const stageForm = reactive<StageValues>(stageValuesFromForm(props.stage_form))
 const createForm = reactive<CreateValues>(createValuesFromForm(props.create_form))
@@ -471,16 +477,26 @@ const updateStageVersion = (event: Event) => {
           </button>
         </form>
 
-        <details
-          :id="create_form.details.id"
+        <CadenceCollapsible
+          :content-id="create_form.id"
           :open="create_form.details.open"
-          class="border border-base-300 bg-base-200/20 p-4"
+          client-seeded
+          :seed-epoch="disclosureSeedEpoch(create_form.details)"
+          :unmount-on-hide="false"
         >
-          <summary
-            :id="create_form.details.summary_id"
-            class="cursor-pointer font-semibold"
-          >{{ create_form.details.summary }}</summary>
+          <div
+            :id="create_form.details.id"
+            class="border border-base-300 bg-base-200/20 p-4"
+          >
+            <CadenceCollapsibleTrigger>
+              <button
+                :id="create_form.details.summary_id"
+                type="button"
+                class="cursor-pointer font-semibold"
+              >{{ create_form.details.summary }}</button>
+            </CadenceCollapsibleTrigger>
 
+            <CadenceCollapsibleContent>
           <form
             :id="create_form.id"
             class="mt-4 space-y-3"
@@ -552,18 +568,30 @@ const updateStageVersion = (event: Event) => {
               {{ create_form.action.label }}
             </button>
           </form>
-        </details>
+            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>
 
-        <details
-          :id="version_form.details.id"
+        <CadenceCollapsible
+          :content-id="version_form.id"
           :open="version_form.details.open"
-          class="border border-base-300 bg-base-200/20 p-4"
+          client-seeded
+          :seed-epoch="disclosureSeedEpoch(version_form.details)"
+          :unmount-on-hide="false"
         >
-          <summary
-            :id="version_form.details.summary_id"
-            class="cursor-pointer font-semibold"
-          >{{ version_form.details.summary }}</summary>
+          <div
+            :id="version_form.details.id"
+            class="border border-base-300 bg-base-200/20 p-4"
+          >
+            <CadenceCollapsibleTrigger>
+              <button
+                :id="version_form.details.summary_id"
+                type="button"
+                class="cursor-pointer font-semibold"
+              >{{ version_form.details.summary }}</button>
+            </CadenceCollapsibleTrigger>
 
+            <CadenceCollapsibleContent>
           <form
             :id="version_form.id"
             class="mt-4 space-y-3"
@@ -626,7 +654,9 @@ const updateStageVersion = (event: Event) => {
               {{ version_form.action.label }}
             </button>
           </form>
-        </details>
+            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>
       </aside>
     </div>
   </section>
