@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 type Breadcrumb = {
@@ -73,7 +74,7 @@ const save = () => emit("save", {organization: values()})
 </script>
 
 <template>
-  <div id="admin-organization-new-page" class="space-y-6 max-w-xl">
+  <CadenceNarrowFormPageFrame id="admin-organization-new-page">
     <CadencePageHeaderFrame variant="compact">
       <div>
         <CadenceBreadcrumbs>
@@ -139,5 +140,5 @@ const save = () => emit("save", {organization: values()})
         >{{ page.cancel_label }}</a>
       </CadenceFormActions>
     </form>
-  </div>
+  </CadenceNarrowFormPageFrame>
 </template>

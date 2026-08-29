@@ -19,6 +19,10 @@ import {
 } from "./compact_page_header_body_frame_test_support.mjs";
 import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs";
 import {
+  narrowFormPageFramePath,
+  peelCadenceNarrowFormPageFrameBeforeOlderLayers,
+} from "./narrow_form_page_frame_test_support.mjs";
+import {
   elementAttributes,
   expectedNodeVersion,
   flushVue,
@@ -79,11 +83,12 @@ assert.equal(
   225,
   "the exact predecessor owns 225 Vue SFCs"
 );
-assert.equal(successorVuePaths.length, 228, "the successor owns 228 Vue SFCs");
+assert.equal(successorVuePaths.length, 229, "the successor owns 229 Vue SFCs");
 assert.deepEqual(
   successorVuePaths.filter((path) => !predecessorVuePaths.includes(path)),
   [
     compactHeaderBodyFramePath,
+    narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
   ],
@@ -233,12 +238,18 @@ for (const exclusion of compactHeaderBodyExclusions) {
   const current = await readFile(
     resolve(repositoryRoot, exclusion.repositoryPath)
   );
+  const compatibleCurrent = Buffer.from(
+    peelCadenceNarrowFormPageFrameBeforeOlderLayers(
+      current.toString("utf8"),
+      exclusion.file,
+    ),
+  );
   const currentBlob = git(["hash-object", "--stdin"], {
-    input: current,
+    input: compatibleCurrent,
   }).trim();
 
   assert.equal(
-    current.byteLength,
+    compatibleCurrent.byteLength,
     exclusion.byteLength,
     `${exclusion.file} excluded bytes`
   );
@@ -248,17 +259,17 @@ for (const exclusion of compactHeaderBodyExclusions) {
     `${exclusion.file} excluded blob`
   );
   assert.equal(
-    sha256(current),
+    sha256(compatibleCurrent),
     exclusion.sha256,
     `${exclusion.file} excluded SHA-256`
   );
   assert.equal(
-    current.toString("utf8"),
+    compatibleCurrent.toString("utf8"),
     predecessor,
     `${exclusion.file} stays byte-identical`
   );
   assert.doesNotMatch(
-    current.toString("utf8"),
+    compatibleCurrent.toString("utf8"),
     /CadenceCompactPageHeaderBodyFrame/
   );
 }
@@ -1220,5 +1231,5 @@ contractApp.unmount();
 dom.window.close();
 
 console.log(
-  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-228 SFC inventory)"
+  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-229 SFC inventory)"
 );

@@ -10,6 +10,7 @@ import {fileURLToPath} from "node:url"
 import {
   compactHeaderBodyFramePath,
 } from "./compact_page_header_body_frame_test_support.mjs"
+import {narrowFormPageFramePath} from "./narrow_form_page_frame_test_support.mjs"
 import {
   contactSummaryBandCallerNames,
   contactSummaryBandHeaderClass,
@@ -129,6 +130,7 @@ assert.deepEqual(
   [
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
+    narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",

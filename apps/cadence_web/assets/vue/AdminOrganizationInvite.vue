@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -108,7 +109,7 @@ const save = () => {
 </script>
 
 <template>
-  <div id="admin-organization-invite-page" class="space-y-6 max-w-xl">
+  <CadenceNarrowFormPageFrame id="admin-organization-invite-page">
     <CadencePageHeaderFrame variant="compact">
       <div>
         <CadenceBreadcrumbs>
@@ -215,5 +216,5 @@ const save = () => {
         >{{ page.cancel_label }}</a>
       </CadenceFormActions>
     </form>
-  </div>
+  </CadenceNarrowFormPageFrame>
 </template>
