@@ -2,6 +2,7 @@
 import { computed } from "vue";
 
 import StatusBadge from "./StatusBadge.vue";
+import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue";
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
 
@@ -46,10 +47,7 @@ const lastVisible = computed(() =>
 
 <template>
   <div>
-    <div
-      id="transports-toolbar"
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-2"
-    >
+    <CadenceListToolbarFrame id="transports-toolbar">
       <form
         id="transports-toolbar-search-form"
         phx-change="search"
@@ -70,7 +68,7 @@ const lastVisible = computed(() =>
           </label>
         </div>
       </form>
-    </div>
+    </CadenceListToolbarFrame>
 
     <CadenceTableFrame id="transports-table">
       <thead>

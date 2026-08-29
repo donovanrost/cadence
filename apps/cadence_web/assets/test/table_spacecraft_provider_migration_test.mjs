@@ -7,6 +7,7 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
@@ -182,7 +183,10 @@ for (const fixture of fixtures) {
   const source = await readFile(componentPath, "utf8")
   const prePaginationSource =
     fixture.filename === "SpacecraftList.vue"
-      ? peelCadencePaginationFrame(source, fixture.filename)
+      ? peelCadencePaginationFrame(
+          peelCadenceListToolbarFrame(source, fixture.filename),
+          fixture.filename,
+        )
       : source
 
   assert.equal(

@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = [
@@ -129,8 +130,12 @@ const assertInOrder = (source, contracts, label) => {
   }
 }
 
-const prePaginationChildSource = peelCadencePaginationFrame(
+const preToolbarChildSource = peelCadenceListToolbarFrame(
   childSource,
+  "CommsGroundStationList.vue",
+)
+const prePaginationChildSource = peelCadencePaginationFrame(
+  preToolbarChildSource,
   "CommsGroundStationList.vue",
 )
 

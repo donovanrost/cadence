@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed} from "vue"
+import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue"
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
@@ -31,10 +32,7 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
 
 <template>
   <div>
-    <div
-      id="ground-stations-toolbar"
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-2"
-    >
+    <CadenceListToolbarFrame id="ground-stations-toolbar">
       <form
         id="ground-stations-toolbar-search-form"
         phx-change="search"
@@ -55,7 +53,7 @@ const lastVisible = computed(() => Math.min(props.page * props.page_size, props.
           </label>
         </div>
       </form>
-    </div>
+    </CadenceListToolbarFrame>
 
     <CadenceTableFrame id="ground-stations-table">
       <thead>

@@ -9,6 +9,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {
+  listToolbarFrameMigrations,
+  peelCadenceListToolbarFrame,
+} from "./list_toolbar_frame_test_support.mjs"
+import {
   paginationFrameClass,
   paginationFrameMigrations,
   peelCadencePaginationFrame,
@@ -24,6 +28,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const expectedCallers = paginationFrameMigrations.map(({file}) => file).sort()
+const toolbarCallers = new Set(listToolbarFrameMigrations.map(({file}) => file))
 const vueFiles = (await readdir(vueDirectory, {recursive: true}))
   .filter((path) => path.endsWith(".vue"))
   .sort()
@@ -105,7 +110,10 @@ for (const migration of paginationFrameMigrations) {
   )
   assert.doesNotMatch(callerSlot, /<Cadence(?:Button|PaginationValue)/)
 
-  const predecessor = peelCadencePaginationFrame(callerSource, migration.file)
+  const preToolbarSource = toolbarCallers.has(migration.file)
+    ? peelCadenceListToolbarFrame(callerSource, migration.file)
+    : callerSource
+  const predecessor = peelCadencePaginationFrame(preToolbarSource, migration.file)
   const reconstructedHash = sha256(predecessor)
 
   assert.equal(

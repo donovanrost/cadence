@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "migration contracts use pinned Node 24.16.0")
@@ -590,7 +591,7 @@ for (const file of files) {
   const parsed = parse(source, {filename})
   const prePaginationSource =
     file.name === "SpacecraftList.vue"
-      ? peelCadencePaginationFrame(source, file.name)
+      ? peelCadencePaginationFrame(peelCadenceListToolbarFrame(source, file.name), file.name)
       : source
 
   assert.deepEqual(parsed.errors, [], `${file.name} parses with the pinned Vue compiler`)
