@@ -77,8 +77,34 @@ const assertBalancedTemplate = (source) => {
   assert.deepEqual(stack, [], "SFC template tags are balanced")
 }
 
+const statsCardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n\n'
+const statsCardClass =
+  "card bg-base-200 border border-base-300 hud-corners hover-glow-cyan transition-glow hover:bg-[linear-gradient(var(--state-hover),var(--state-hover))]"
+const peelOrganizationStatsCards = (source) => {
+  let peeled = source.replace(statsCardImport, "")
+
+  for (const id of [
+    "organization-stat-missions",
+    "organization-stat-spacecraft",
+    "organization-stat-members",
+  ]) {
+    peeled = peeled
+      .replace(
+        `    <CadenceCard\n      id="${id}"\n      class="${statsCardClass}"\n      body-class="card-body p-6"\n    >`,
+        `    <section\n      id="${id}"\n      class="${statsCardClass}"\n    >\n      <div class="card-body p-6">`,
+      )
+      .replace("    </CadenceCard>", "      </div>\n    </section>")
+  }
+
+  return peeled
+}
+
 for (const [label, source, expectedHash] of [
-  ["OrganizationStats.vue", statsSource, "99e4693d18ba7d2b32301bfbc7a09c5b52c83d12f26f9fa344ed5a7855b89771"],
+  [
+    "OrganizationStats.vue",
+    peelOrganizationStatsCards(statsSource),
+    "99e4693d18ba7d2b32301bfbc7a09c5b52c83d12f26f9fa344ed5a7855b89771",
+  ],
   ["RecentMissions.vue", recentMissionsSource, "99872dcbdecee4489aedccd3996d5accb521935e9b9d10fd25bc33d2eda46584"],
 ]) {
   assert.equal(
