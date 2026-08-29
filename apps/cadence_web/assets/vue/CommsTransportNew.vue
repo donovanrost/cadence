@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, reactive, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
@@ -340,10 +341,7 @@ const statusClass = (status: "ready" | "attention") =>
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.breadcrumbs"
               :key="`${index}-${breadcrumb.label}`"
@@ -360,7 +358,7 @@ const statusClass = (status: "ready" | "attention") =>
                 class="hover:text-primary transition-colors"
               >{{ breadcrumb.label }}</a>
             </template>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {{ page.title }}
           </h1>

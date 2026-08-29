@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 
 import CadenceCard from "./ui/components/CadenceCard.vue"
@@ -231,10 +232,7 @@ const revokeGrant = (grant: Grant) => {
     <CadencePageHeaderFrame variant="compact">
       <div class="flex items-end justify-between gap-4">
         <div>
-          <nav
-            aria-label="Breadcrumb"
-            class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-          >
+          <CadenceBreadcrumbs>
             <template
               v-for="(breadcrumb, index) in page.header.breadcrumbs"
               :key="`${index}-${breadcrumb.label}`"
@@ -251,7 +249,7 @@ const revokeGrant = (grant: Grant) => {
                 class="hover:text-primary transition-colors"
               >{{ breadcrumb.label }}</a>
             </template>
-          </nav>
+          </CadenceBreadcrumbs>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {{ page.header.title }}
             <span class="ml-3 font-mono text-base text-base-content/60">
