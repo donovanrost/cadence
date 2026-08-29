@@ -12,6 +12,7 @@ import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
+import {peelCadenceNarrowFormPageFrameBeforeOlderLayers} from "./narrow_form_page_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -361,8 +362,12 @@ const migratedCallSites = []
 
 for (const foundation of foundations) {
   const source = await readFile(resolve(vueDirectory, foundation.file), "utf8")
-  const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+  const narrowFormCompatibleSource = peelCadenceNarrowFormPageFrameBeforeOlderLayers(
     source,
+    foundation.file,
+  )
+  const conditionalKeyedCompatibleSource = peelConditionalKeyedCadenceFields(
+    narrowFormCompatibleSource,
     foundation.file,
   )
   const contactSummaryCompatibleSource = peelContactSummaryBand(
