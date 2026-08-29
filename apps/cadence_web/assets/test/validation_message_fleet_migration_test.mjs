@@ -19,9 +19,32 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const validationImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const validationClass = "mt-1.5 text-sm text-error"
 const countExact = (source, value) => source.split(value).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsFleetPlanningNew.vue": 1,
+  "OpsFleetPlanningPolicy.vue": 3,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(countExact(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(countExact(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const migration = (expression, indent, multiline = false) => ({
   expression,
@@ -93,7 +116,11 @@ ${spaces}>{{ error }}</${tag}>`
 
 const reconstructPredecessor = (file) => {
   assert.equal(countExact(file.source, validationImport), 1, `${file.name}: exact import count`)
-  let reconstructed = file.source.replace(validationImport, "")
+  let reconstructed = peelCadenceDetailsFrames(
+    file.source,
+    cadenceDetailsFrameCounts[file.name],
+    file.name,
+  ).replace(validationImport, "")
 
   for (const [index, entry] of file.migrations.entries()) {
     const migrated = migrationSource(entry, "CadenceValidationMessage", false)

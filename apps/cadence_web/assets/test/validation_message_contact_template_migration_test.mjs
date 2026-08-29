@@ -24,10 +24,27 @@ const componentPath = resolve(testDirectory, "../vue/OpsContactRequirementTempla
 const source = await readFile(componentPath, "utf8")
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 const occurrences = (value, fragment) => value.split(fragment).length - 1
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const validationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const validationMessageSite =
   /^( *)<CadenceValidationMessage v-for="error in template_form\.fields\.([a-z_]+)\.errors" :key="error">\{\{ error \}\}<\/CadenceValidationMessage>$/gm
+const peelCadenceDetailsFrames = (value) => {
+  assert.equal(occurrences(value, cadenceDetailsFrameImport), 1, "details import count")
+  assert.equal(value.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, 2, "details opening count")
+  assert.equal(occurrences(value, "</CadenceDetailsFrame>"), 2, "details closing count")
+
+  const peeled = value
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const templateFields = Object.freeze([
   "spacecraft_id",
   "schedule_type",
@@ -69,7 +86,7 @@ assert.equal(
 
 validationMessageSite.lastIndex = 0
 let reconstructedSites = 0
-const predecessorSource = source
+const predecessorSource = peelCadenceDetailsFrames(source)
   .replace(validationMessageImport, "")
   .replace(validationMessageSite, (_match, indent, field) => {
     reconstructedSites += 1

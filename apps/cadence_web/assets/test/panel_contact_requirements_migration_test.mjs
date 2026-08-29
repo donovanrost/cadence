@@ -7,6 +7,8 @@ import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNodeVersion = "v24.16.0"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
@@ -71,6 +73,28 @@ const rawScheduleAsideSha256 = "7ee7b82e26ada81562fda604c5d51fe9e501f55933b621de
 
 const occurrences = (source, needle) => source.split(needle).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsContactRequirementNew.vue": 1,
+  "OpsContactRequirementTemplate.vue": 2,
+  "OpsContactSchedule.vue": 1,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const peelCadenceValidationMessages = (source) =>
   source
     .replace(cadenceValidationMessageImport, "")
@@ -246,7 +270,13 @@ for (const file of files) {
   }
 
   const fieldCompatibleSource = peelCadenceFields(
-    peelCadenceValidationMessages(source),
+    peelCadenceValidationMessages(
+      peelCadenceDetailsFrames(
+        source,
+        cadenceDetailsFrameCounts[file.name] ?? 0,
+        file.name,
+      ),
+    ),
     file.name,
     file.fieldFrames,
   )

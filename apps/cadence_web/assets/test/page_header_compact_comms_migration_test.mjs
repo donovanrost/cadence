@@ -16,6 +16,8 @@ const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const migrationImport =
@@ -46,6 +48,32 @@ function occurrences(source, value) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+const cadenceDetailsFrameCounts = Object.freeze({
+  "CommsProviderShow.vue": 1,
+  "CommsRoutingShow.vue": 1,
+  "CommsTransportNew.vue": 1,
+  "CommsTransportShow.vue": 1,
+  "ProviderAccountShow.vue": 1,
+})
+
+function peelCadenceDetailsFrames(source, expectedCount, label) {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
 }
 
 function peelCadenceBreadcrumbs(source, label) {
@@ -139,7 +167,18 @@ for (const caller of callers) {
     assert.equal(occurrences(source, frameClosing), 1, "expected exactly one frame closing")
     assert.doesNotMatch(source, /<header\b/, "expected no residual native header")
 
-    const reconstructed = peelTableFrames(peelCadenceBreadcrumbs(source, caller), caller)
+    const filename = caller.slice(caller.lastIndexOf("/") + 1)
+    const reconstructed = peelTableFrames(
+      peelCadenceBreadcrumbs(
+        peelCadenceDetailsFrames(
+          source,
+          cadenceDetailsFrameCounts[filename] ?? 0,
+          caller,
+        ),
+        caller,
+      ),
+      caller,
+    )
       .replace(migrationImport, "")
       .replace(frameOpening, nativeOpening)
       .replace(frameClosing, nativeClosing)

@@ -18,6 +18,8 @@ const breadcrumbsImport =
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
@@ -29,6 +31,28 @@ const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 const occurrences = (value, fragment) => value.split(fragment).length - 1
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
+
+const detailsFrameCounts = Object.freeze({
+  "ProviderAccountShow.vue": 1,
+  "SpacecraftShow.vue": 1,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, detailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(count(source, /<CadenceDetailsFrame\b/g), expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(detailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -333,7 +357,17 @@ for (const file of files) {
   const reconstructed = reconstructBase(
     peelCadencePanels(
       peelPageHeaderFrame(
-        peelTableFrame(peelCadenceBreadcrumbs(source, file.name), file.name),
+        peelTableFrame(
+          peelCadenceBreadcrumbs(
+            peelCadenceDetailsFrames(
+              source,
+              detailsFrameCounts[file.filename] ?? 0,
+              file.name,
+            ),
+            file.name,
+          ),
+          file.name,
+        ),
       ),
       file.name,
     ),

@@ -8,6 +8,8 @@ const expectedNodeVersion = "24.16.0"
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const importLine =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
 const cadenceValidationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
@@ -67,6 +69,30 @@ assert.equal(
 
 const count = (source, token) => source.split(token).length - 1
 const sha256 = source => createHash("sha256").update(source).digest("hex")
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsContactDetail.vue": 1,
+  "OpsContactPlanShow.vue": 2,
+  "OpsContactRequirementNew.vue": 1,
+  "OpsContactRequirementTemplate.vue": 2,
+  "OpsContactSchedule.vue": 1,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(count(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(count(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const peelCadenceValidationMessages = (source) =>
   source
     .replace(cadenceValidationMessageImport, "")
@@ -128,7 +154,13 @@ for (const [filename, expectedParentHash] of Object.entries(callers)) {
   assert.doesNotMatch(source, /<header(?:\s|>)/, `${filename} has no residual native header`)
 
   const reconstructed = peelCadenceFields(
-    peelCadenceValidationMessages(source),
+    peelCadenceValidationMessages(
+      peelCadenceDetailsFrames(
+        source,
+        cadenceDetailsFrameCounts[filename] ?? 0,
+        filename,
+      ),
+    ),
     filename,
     cadenceFieldFrames[filename],
   )

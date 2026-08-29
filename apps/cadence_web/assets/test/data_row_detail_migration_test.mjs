@@ -13,6 +13,8 @@ const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
@@ -21,6 +23,28 @@ const panelHeaderClass =
   "flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const detailsFrameCounts = Object.freeze({
+  "ProviderAccountShow.vue": 1,
+  "SpacecraftShow.vue": 1,
+})
+
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, detailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(detailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -467,7 +491,17 @@ for (const file of files) {
   let reconstructed = reconstructCards(
     peelCadencePanels(
       peelCadencePageHeaderFrame(
-        peelCadenceTableFrames(peelCadenceBreadcrumbs(source, file.name), file.name),
+        peelCadenceTableFrames(
+          peelCadenceBreadcrumbs(
+            peelCadenceDetailsFrames(
+              source,
+              detailsFrameCounts[file.name] ?? 0,
+              file.name,
+            ),
+            file.name,
+          ),
+          file.name,
+        ),
       ),
       file.name,
     ),
@@ -494,7 +528,14 @@ const reconstructedSpacecraftType = files[2].boundaries.reduce(
   reconstructCards(
     peelCadencePageHeaderFrame(
       peelCadenceTableFrames(
-        peelCadenceBreadcrumbs(spacecraftType, files[2].name),
+        peelCadenceBreadcrumbs(
+          peelCadenceDetailsFrames(
+            spacecraftType,
+            detailsFrameCounts[files[2].name] ?? 0,
+            files[2].name,
+          ),
+          files[2].name,
+        ),
         files[2].name,
       ),
     ),

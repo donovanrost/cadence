@@ -18,6 +18,8 @@ const breadcrumbsImport =
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const pageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
@@ -28,6 +30,29 @@ const panelHeaderClass =
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const count = (value, pattern) => value.match(pattern)?.length ?? 0
 const occurrenceCount = (value, token) => value.split(token).length - 1
+const detailsFrameCounts = Object.freeze({
+  "CommsProviderShow.vue": 1,
+  "CommsRoutingShow.vue": 1,
+  "CommsTransportNew.vue": 1,
+  "CommsTransportShow.vue": 1,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrenceCount(source, detailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(count(source, /<CadenceDetailsFrame\b/g), expectedCount, `${label} details opening count`)
+  assert.equal(occurrenceCount(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(detailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrenceCount(source, breadcrumbsImport)
   const openingCount = occurrenceCount(source, "<CadenceBreadcrumbs>")
@@ -333,7 +358,17 @@ for (const contract of contracts) {
 
   const predecessorSource = peelCadencePanels(
     peelPageHeaderFrame(
-      peelTableFrames(peelCadenceBreadcrumbs(source, contract.filename), contract.filename),
+      peelTableFrames(
+        peelCadenceBreadcrumbs(
+          peelCadenceDetailsFrames(
+            source,
+            detailsFrameCounts[contract.filename] ?? 0,
+            contract.filename,
+          ),
+          contract.filename,
+        ),
+        contract.filename,
+      ),
     ),
     contract.filename,
   )

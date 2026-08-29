@@ -16,6 +16,8 @@ assert.equal(
 
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadenceValidationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const cadenceValidationMessageCounts = new Map([
@@ -25,6 +27,28 @@ const cadenceValidationMessageCounts = new Map([
 const occurrences = (source, fragment) => source.split(fragment).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const spaces = (count) => " ".repeat(count)
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsFleetPlanningNew.vue": 1,
+  "OpsFleetPlanningPolicy.vue": 3,
+  "OpsFleetPlanningRun.vue": 1,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const field = (controlId, label, indent, {errors = false, labelSource = null} = {}) => ({
   controlId,
@@ -205,7 +229,14 @@ const peelCadenceValidationMessages = (source, name) => {
 }
 
 const reconstructSource = (file, source) => {
-  let reconstructed = peelCadenceValidationMessages(source, file.name)
+  let reconstructed = peelCadenceValidationMessages(
+    peelCadenceDetailsFrames(
+      source,
+      cadenceDetailsFrameCounts[file.name] ?? 0,
+      file.name,
+    ),
+    file.name,
+  )
   assert.equal(occurrences(reconstructed, cadenceFieldImport), 1, `${file.name}: exact import count`)
   reconstructed = reconstructed.replace(cadenceFieldImport, "")
 

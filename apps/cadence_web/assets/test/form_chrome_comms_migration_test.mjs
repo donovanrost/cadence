@@ -14,6 +14,8 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const actionWrapperClass = "flex items-center gap-3 border-t border-base-300/60 pt-5"
@@ -118,6 +120,23 @@ const manifests = Object.freeze([
 ])
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -371,7 +390,16 @@ for (const manifest of manifests) {
   assert.match(actionsSource, /data-phx-link-state="push"/)
 
   const preCardSource = reconstructCards(
-    reconstructPageHeaderSource(peelCadenceBreadcrumbs(source, manifest.filename)),
+    reconstructPageHeaderSource(
+      peelCadenceBreadcrumbs(
+        peelCadenceDetailsFrames(
+          source,
+          manifest.filename === "CommsTransportNew.vue" ? 1 : 0,
+          manifest.filename,
+        ),
+        manifest.filename,
+      ),
+    ),
     manifest,
   )
   let reconstructed =

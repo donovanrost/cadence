@@ -16,6 +16,8 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const actionImport = 'import CadenceFormActions from "./ui/components/CadenceFormActions.vue"'
@@ -79,6 +81,23 @@ const contactPlanPanels = [
 ]
 
 const occurrences = (source, needle) => source.split(needle).length - 1
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -337,7 +356,14 @@ for (const foundation of foundations) {
   let reconstructedSource = reconstructPanels(
     reconstructPageHeaderSource(
       peelCadenceFields(
-        peelCadenceBreadcrumbs(source, foundation.file),
+        peelCadenceBreadcrumbs(
+          peelCadenceDetailsFrames(
+            source,
+            foundation.file === "OpsContactPlanShow.vue" ? 2 : 0,
+            foundation.file,
+          ),
+          foundation.file,
+        ),
         foundation.file,
         foundation.fieldFrames,
       ),
