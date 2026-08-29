@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
 import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue"
@@ -272,9 +273,11 @@ const clearCommandFocus = () => {
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-3"
         @submit.prevent
       >
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.status.label }}</span>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.status.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.status.id"
               :name="filters.fields.status.name"
@@ -290,11 +293,12 @@ const clearCommandFocus = () => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.target.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.target.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.target.id"
               :name="filters.fields.target.name"
@@ -310,11 +314,12 @@ const clearCommandFocus = () => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.query.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.query.label"
+            label-class="hud-label block mb-1.5"
+          >
             <input
               :id="filters.fields.query.id"
               :name="filters.fields.query.name"
@@ -324,8 +329,7 @@ const clearCommandFocus = () => {
               class="w-full input"
               @input="updateQuery"
             >
-          </label>
-        </div>
+          </CadenceField>
       </form>
 
       <div class="flex items-center justify-between gap-3">

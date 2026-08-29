@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref, watch} from "vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -188,9 +189,11 @@ const decide = (event: SubmitEvent) => {
               >
             </label>
           </div>
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label block mb-1.5">{{ form.reason.label }}</span>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="form.reason.label"
+              label-class="hud-label block mb-1.5"
+            >
               <textarea
                 :id="form.reason.id"
                 v-model="rationale"
@@ -198,8 +201,7 @@ const decide = (event: SubmitEvent) => {
                 :required="form.reason.required"
                 class="w-full textarea"
               ></textarea>
-            </label>
-          </div>
+            </CadenceField>
           <div class="mt-3 flex justify-end gap-2">
             <button
               :id="form.actions.reject.id"

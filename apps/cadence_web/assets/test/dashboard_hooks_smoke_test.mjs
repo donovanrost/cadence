@@ -497,10 +497,14 @@ function classList(...initialClasses) {
 
   assert.ok(script, "DashboardAbsoluteRangePane.vue must have a script setup block")
   assert.ok(template, "DashboardAbsoluteRangePane.vue must have a template block")
+  assert.match(script, /import CadenceField from "\.\/ui\/components\/CadenceField\.vue"/)
   assert.match(script, /import TimeRangeRecents from "\.\/TimeRangeRecents\.vue"/)
   assert.match(template, /^  <div v-bind="props\.root\.attrs">/)
   assert.match(template, /<form v-bind="props\.form\.attrs">/)
-  assert.match(template, /<div :class="props\.form\.from\.wrapper_class">/)
+  assert.equal(template.match(/<CadenceField\n/g)?.length, 2)
+  assert.match(template, /:wrapper-class="props\.form\.from\.wrapper_class"/)
+  assert.match(template, /:wrapper-class="props\.form\.to\.field\.wrapper_class"/)
+  assert.doesNotMatch(template, /control-id=/)
   assert.match(template, /<input v-bind="props\.form\.from\.attrs" \/>/)
   assert.match(template, /<div :class="props\.form\.to\.margin_class">/)
   assert.match(template, /<input v-bind="props\.form\.to\.field\.attrs" \/>/)
@@ -526,6 +530,7 @@ function classList(...initialClasses) {
   }
 
   const testableScript = script
+    .replace('import CadenceField from "./ui/components/CadenceField.vue"', "")
     .replace('import TimeRangeRecents from "./TimeRangeRecents.vue"', "") +
     "\nglobalThis.DashboardAbsoluteRangePane = {forwardRecentsLoaded, forwardSelectRange}"
 

@@ -10,6 +10,7 @@ import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 const expectedNodeVersion = "24.16.0"
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
@@ -112,6 +113,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 
 const peelCadenceFields = (source, filename, expectedFrames) => {
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, filename)
   const expectedImports = expectedFrames === 0 ? 0 : 1
   assert.equal(count(source, cadenceFieldImport), expectedImports, `${filename} field import count`)
   assert.equal(count(source, "<CadenceField\n"), expectedFrames, `${filename} field open count`)

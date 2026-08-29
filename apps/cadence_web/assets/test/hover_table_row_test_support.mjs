@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import {peelCadenceEmptyStateFrames} from "./empty_state_frame_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 export const hoverTableRowPredecessor = "437a22f8dde29828bf52e9a709ced2d9d90a04e1"
 export const hoverTableRowClass =
@@ -274,10 +275,14 @@ export const hoverTableRowMigrationFor = (caller) => {
 export const peelCadenceHoverTableRows = (source, caller) => {
   const migration = hoverTableRowMigrationFor(caller)
   const expectedBoundaries = migration.openings.length
+  const labeledCompatibleSource = peelLabeledControlFieldsBeforeOlderLayers(
+    source,
+    migration.file,
+  )
   const predecessorCompatibleSource =
     migration.file === "SpacecraftList.vue"
-      ? peelCadenceEmptyStateFrames(source, migration.file)
-      : source
+      ? peelCadenceEmptyStateFrames(labeledCompatibleSource, migration.file)
+      : labeledCompatibleSource
 
   assert.equal(
     occurrences(predecessorCompatibleSource, migration.importLine),

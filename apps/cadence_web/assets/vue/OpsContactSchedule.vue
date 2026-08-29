@@ -2,6 +2,7 @@
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import {reactive, watch} from "vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
@@ -394,9 +395,11 @@ const cancel = (reservation: Reservation) => {
               class="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4"
               @submit.prevent="submitSearch"
             >
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label block mb-1.5">{{ search.fields.spacecraft.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="search.fields.spacecraft.label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <select
                     :id="search.fields.spacecraft.id"
                     :name="search.fields.spacecraft.name"
@@ -412,12 +415,13 @@ const cancel = (reservation: Reservation) => {
                       {{ option.label }}
                     </option>
                   </select>
-                </label>
-              </div>
+                </CadenceField>
 
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label block mb-1.5">{{ search.fields.route.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="search.fields.route.label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <select
                     :id="search.fields.route.id"
                     :name="search.fields.route.name"
@@ -433,12 +437,13 @@ const cancel = (reservation: Reservation) => {
                       {{ option.label }}
                     </option>
                   </select>
-                </label>
-              </div>
+                </CadenceField>
 
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label block mb-1.5">{{ search.fields.starts_at.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="search.fields.starts_at.label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <input
                     :id="search.fields.starts_at.id"
                     :name="search.fields.starts_at.name"
@@ -447,12 +452,13 @@ const cancel = (reservation: Reservation) => {
                     class="w-full input"
                     @change="updateField('starts_at', $event)"
                   >
-                </label>
-              </div>
+                </CadenceField>
 
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label block mb-1.5">{{ search.fields.ends_at.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="search.fields.ends_at.label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <input
                     :id="search.fields.ends_at.id"
                     :name="search.fields.ends_at.name"
@@ -461,8 +467,7 @@ const cancel = (reservation: Reservation) => {
                     class="w-full input"
                     @change="updateField('ends_at', $event)"
                   >
-                </label>
-              </div>
+                </CadenceField>
 
               <div class="flex items-center gap-3 md:col-span-2 xl:col-span-4">
                 <button

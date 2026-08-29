@@ -10,6 +10,7 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -20,7 +21,10 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const callerPath = resolve(testDirectory, "../vue/ApplicationHost.vue")
 const callerSource = await readFile(callerPath, "utf8")
-const prePaginationSource = peelCadencePaginationFrame(callerSource, "ApplicationHost.vue")
+const prePaginationSource = peelCadencePaginationFrame(
+  peelLabeledControlFieldsBeforeOlderLayers(callerSource, "ApplicationHost.vue"),
+  "ApplicationHost.vue",
+)
 const occurrences = (value, fragment) => value.split(fragment).length - 1
 const importSource =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'

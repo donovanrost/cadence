@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
+
 type Attributes = Record<string, string>
 
 type TextPresentation = {
@@ -208,15 +210,18 @@ defineProps<{presentation: Presentation}>()
       </p>
     </section>
 
-    <div :class="presentation.reason.wrapper_class">
-      <label>
-        <span :class="presentation.reason.label.class">{{ presentation.reason.label.text }}</span>
+      <CadenceField
+        :wrapper-class="presentation.reason.wrapper_class"
+        :label="presentation.reason.label.text"
+        :label-class="presentation.reason.label.class"
+      >
         <input :class="presentation.reason.control.class" v-bind="presentation.reason.control.attrs">
-      </label>
-      <p v-for="error in presentation.reason.errors" :key="error.text" :class="error.class">
-        {{ error.text }}
-      </p>
-    </div>
+        <template #errors>
+          <p v-for="error in presentation.reason.errors" :key="error.text" :class="error.class">
+            {{ error.text }}
+          </p>
+        </template>
+      </CadenceField>
 
     <label :id="presentation.confirmation.id" :class="presentation.confirmation.class">
       <input

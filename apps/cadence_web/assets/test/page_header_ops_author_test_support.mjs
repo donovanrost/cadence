@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 export const opsAuthorHeaderPredecessorCommit =
   "6f707c14d35944c203c25fcdb26593c0a5419ca8"
@@ -87,6 +88,7 @@ export const opsAuthorHeaderMigrationFor = (caller) => {
 
 export const peelCadenceOpsAuthorHeader = (source, caller) => {
   const entry = opsAuthorHeaderMigrationFor(caller)
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
 
   assert.equal(occurrences(source, entry.importLine), 1, `${entry.file} exact import count`)
   assert.equal(source.match(/^import CadencePageHeaderFrame\b/gm)?.length, 1)

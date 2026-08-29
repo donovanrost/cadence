@@ -4,6 +4,7 @@ import {
   peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers,
 } from "./dashboard_settings_section_frame_test_support.mjs"
 import {peelCadenceOpsPageBodyFrameBeforeOlderLayers} from "./ops_page_body_frame_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 export const opsViewportPredecessorCommit = "fef20d7c72b5842b3dcae3e99630a1795b5791b3"
 export const opsViewportClass = "h-full overflow-y-auto bg-base-100"
@@ -165,6 +166,7 @@ export const opsViewportMigrationFor = (caller) => {
 
 export const peelCadenceOpsViewport = (source, caller) => {
   const entry = opsViewportMigrationFor(caller)
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
   const dashboardSettingsCompatibleSource =
     peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers(source, caller)
   const pageBodyCompatibleSource = peelCadenceOpsPageBodyFrameBeforeOlderLayers(

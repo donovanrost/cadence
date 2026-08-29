@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
 
@@ -222,9 +223,11 @@ const updateDwellSeconds = (event: Event) => {
           @submit.prevent="createPlaylist"
         >
           <p class="hud-label">{{ page.form_eyebrow }}</p>
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label block mb-1.5">{{ form.name.label }}</span>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="form.name.label"
+              label-class="hud-label block mb-1.5"
+            >
               <input
                 :id="form.name.id"
                 v-model="playlistForm.name"
@@ -233,11 +236,12 @@ const updateDwellSeconds = (event: Event) => {
                 :required="form.name.required"
                 class="w-full input"
               >
-            </label>
-          </div>
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label block mb-1.5">{{ form.description.label }}</span>
+            </CadenceField>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="form.description.label"
+              label-class="hud-label block mb-1.5"
+            >
               <textarea
                 :id="form.description.id"
                 v-model="playlistForm.description"
@@ -245,11 +249,12 @@ const updateDwellSeconds = (event: Event) => {
                 :required="form.description.required"
                 class="w-full textarea"
               ></textarea>
-            </label>
-          </div>
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label block mb-1.5">{{ form.dashboard_ids.label }}</span>
+            </CadenceField>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="form.dashboard_ids.label"
+              label-class="hud-label block mb-1.5"
+            >
               <select
                 :id="form.dashboard_ids.id"
                 v-model="playlistForm.dashboard_ids"
@@ -262,11 +267,12 @@ const updateDwellSeconds = (event: Event) => {
                   {{ option.label }}
                 </option>
               </select>
-            </label>
-          </div>
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label block mb-1.5">{{ form.dwell_seconds.label }}</span>
+            </CadenceField>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="form.dwell_seconds.label"
+              label-class="hud-label block mb-1.5"
+            >
               <input
                 :id="form.dwell_seconds.id"
                 :value="playlistForm.dwell_seconds"
@@ -278,8 +284,7 @@ const updateDwellSeconds = (event: Event) => {
                 class="w-full input"
                 @input="updateDwellSeconds"
               >
-            </label>
-          </div>
+            </CadenceField>
           <div class="fieldset mb-3">
             <label class="flex cursor-pointer items-start gap-3">
               <input type="hidden" :name="form.wallboard_mode.name" value="false">

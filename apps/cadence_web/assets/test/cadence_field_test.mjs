@@ -17,7 +17,7 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const componentPath = resolve(testDirectory, "../vue/ui/components/CadenceField.vue")
 const source = await readFile(componentPath, "utf8")
-const dom = installDom('<div id="field-contract"></div>')
+const dom = installDom('<div id="field-contract"></div><div id="field-optional-contract"></div>')
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 const parsed = parse(source, {filename: componentPath})
 
@@ -101,6 +101,38 @@ assert.deepEqual(inputEvents, [input], "native input events reach the owning con
 
 app.unmount()
 assert.equal(host.children.length, 0)
+
+const optionalHost = dom.window.document.querySelector("#field-optional-contract")
+const OptionalContract = defineComponent({
+  setup() {
+    return () =>
+      h(
+        CadenceField,
+        {
+          wrapperClass: "fieldset mb-3",
+          label: "Unassociated field",
+          labelClass: "hud-label block mb-1.5",
+        },
+        {
+          default: () => h("input", {id: "unassociated-field", type: "text", value: "unchanged"}),
+        },
+      )
+  },
+})
+const optionalApp = createApp(OptionalContract)
+optionalApp.mount(optionalHost)
+
+const optionalRoot = optionalHost.firstElementChild
+const optionalLabel = optionalRoot.querySelector("label")
+assert.equal(optionalLabel.hasAttribute("for"), false, "omitted controlId emits no label for attribute")
+assert.equal(
+  optionalRoot.outerHTML,
+  '<div class="fieldset mb-3"><label><span class="hud-label block mb-1.5">Unassociated field</span><input id="unassociated-field" type="text" value="unchanged"></label></div>',
+  "optional controlId preserves the native field shell without a new label attribute",
+)
+
+optionalApp.unmount()
+assert.equal(optionalHost.children.length, 0)
 dom.window.close()
 
 console.log("cadence_field_test passed")

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { peelCadenceNarrowFormPageFrameBeforeOlderLayers } from "./narrow_form_page_frame_test_support.mjs";
 import { peelCadenceFormPageFrameBeforeOlderLayers } from "./form_page_frame_test_support.mjs";
+import { peelLabeledControlFieldsBeforeOlderLayers } from "./labeled_control_field_test_support.mjs";
 
 export const compactHeaderBodyBase = "41063fbbb2bcdcb5c509929b6550b0689a210838";
 export const compactHeaderBodyFrameClass =
@@ -245,6 +246,7 @@ export const compactHeaderBodyMigrationFor = (caller) => {
 
 export const peelCadenceCompactPageHeaderBodyFrame = (source, caller) => {
   const migrationEntry = compactHeaderBodyMigrationFor(caller);
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, caller);
   const frameOpening = "      <CadenceCompactPageHeaderBodyFrame>";
   const frameClosing = "      </CadenceCompactPageHeaderBodyFrame>";
   const contentOpening = "        <template #content>";
@@ -312,8 +314,12 @@ export const peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers = (
   caller
 ) => {
   const file = caller.split("/").at(-1);
-  const formPageCompatibleSource = peelCadenceFormPageFrameBeforeOlderLayers(
+  const labeledCompatibleSource = peelLabeledControlFieldsBeforeOlderLayers(
     source,
+    caller,
+  );
+  const formPageCompatibleSource = peelCadenceFormPageFrameBeforeOlderLayers(
+    labeledCompatibleSource,
     caller,
   );
   const narrowFormCompatibleSource = peelCadenceNarrowFormPageFrameBeforeOlderLayers(

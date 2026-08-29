@@ -8,6 +8,7 @@ import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_
 import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {peelCadenceOpsViewport} from "./ops_viewport_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 const pinnedNodeVersion = "v24.16.0"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
@@ -122,6 +123,7 @@ const cadenceFieldFrame =
   /^( *)<CadenceField\n\1  :control-id="([^"]+)"\n\1  wrapper-class="fieldset mb-3"\n\1  :label="([^"]+)"\n\1  label-class="hud-label block mb-1\.5"\n\1>\n([\s\S]*?)\n\1<\/CadenceField>/gm
 
 const peelCadenceFields = (source, name, expectedFrames) => {
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, name)
   const expectedImports = expectedFrames === 0 ? 0 : 1
   assert.equal(occurrences(source, cadenceFieldImport), expectedImports, `${name} field import count`)
   assert.equal(occurrences(source, "<CadenceField\n"), expectedFrames, `${name} field open count`)

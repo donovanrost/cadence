@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
+
 type Attributes = Record<string, string>
 
 type TextPresentation = {
@@ -118,13 +120,13 @@ defineProps<{presentation: Presentation}>()
       <h3 :class="presentation.request_context.title.class">
         {{ presentation.request_context.title.text }}
       </h3>
-      <div
-        v-for="field in presentation.request_context.fields"
-        :key="field.key"
-        :class="field.wrapper_class"
-      >
-        <label>
-          <span :class="field.label.class">{{ field.label.text }}</span>
+        <CadenceField
+          v-for="field in presentation.request_context.fields"
+          :key="field.key"
+          :wrapper-class="field.wrapper_class"
+          :label="field.label.text"
+          :label-class="field.label.class"
+        >
           <select
             v-if="field.type === 'select'"
             :class="field.control.class"
@@ -137,25 +139,27 @@ defineProps<{presentation: Presentation}>()
             >{{ option.text }}</option>
           </select>
           <input v-else :class="field.control.class" v-bind="field.control.attrs">
-        </label>
-        <p v-for="error in field.errors" :key="error.text" :class="error.class">
-          {{ error.text }}
-        </p>
-      </div>
+          <template #errors>
+            <p v-for="error in field.errors" :key="error.text" :class="error.class">
+              {{ error.text }}
+            </p>
+          </template>
+        </CadenceField>
       <div :class="presentation.request_context.group.class">
-        <div
-          v-for="field in presentation.request_context.group.fields"
-          :key="field.key"
-          :class="field.wrapper_class"
-        >
-          <label>
-            <span :class="field.label.class">{{ field.label.text }}</span>
+          <CadenceField
+            v-for="field in presentation.request_context.group.fields"
+            :key="field.key"
+            :wrapper-class="field.wrapper_class"
+            :label="field.label.text"
+            :label-class="field.label.class"
+          >
             <input :class="field.control.class" v-bind="field.control.attrs">
-          </label>
-          <p v-for="error in field.errors" :key="error.text" :class="error.class">
-            {{ error.text }}
-          </p>
-        </div>
+            <template #errors>
+              <p v-for="error in field.errors" :key="error.text" :class="error.class">
+                {{ error.text }}
+              </p>
+            </template>
+          </CadenceField>
       </div>
     </section>
 
@@ -163,19 +167,20 @@ defineProps<{presentation: Presentation}>()
       <h3 :class="presentation.source_window.title.class">
         {{ presentation.source_window.title.text }}
       </h3>
-      <div
-        v-for="field in presentation.source_window.fields"
-        :key="field.key"
-        :class="field.wrapper_class"
-      >
-        <label>
-          <span :class="field.label.class">{{ field.label.text }}</span>
+        <CadenceField
+          v-for="field in presentation.source_window.fields"
+          :key="field.key"
+          :wrapper-class="field.wrapper_class"
+          :label="field.label.text"
+          :label-class="field.label.class"
+        >
           <input :class="field.control.class" v-bind="field.control.attrs">
-        </label>
-        <p v-for="error in field.errors" :key="error.text" :class="error.class">
-          {{ error.text }}
-        </p>
-      </div>
+          <template #errors>
+            <p v-for="error in field.errors" :key="error.text" :class="error.class">
+              {{ error.text }}
+            </p>
+          </template>
+        </CadenceField>
     </section>
 
     <label :id="presentation.confirmation.id" :class="presentation.confirmation.class">

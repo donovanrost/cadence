@@ -3,6 +3,7 @@ import {ref, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDiagnosticsSectionFrame from "./ui/components/CadenceDiagnosticsSectionFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
@@ -357,9 +358,11 @@ const buttonClasses: Record<ButtonVariant, string> = {
               :id="revision.form_id"
               class="flex max-w-xl items-end gap-3"
             >
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label block mb-1.5">{{ revision.field.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="revision.field.label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <select
                     :id="revision.field.id"
                     v-model="selectedRevisionId"
@@ -373,8 +376,7 @@ const buttonClasses: Record<ButtonVariant, string> = {
                       :value="option.value"
                     >{{ option.label }}</option>
                   </select>
-                </label>
-              </div>
+                </CadenceField>
               <button
                 :id="revision.action.id"
                 type="button"

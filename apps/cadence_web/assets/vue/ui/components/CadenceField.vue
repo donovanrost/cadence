@@ -4,7 +4,7 @@ import {defineComponent, h} from "vue"
 const CadenceField = defineComponent({
   name: "CadenceField",
   props: {
-    controlId: {type: String, required: true},
+    controlId: {type: String, required: false},
     wrapperClass: {type: String, required: true},
     label: {type: String, required: true},
     labelClass: {type: String, required: true}
@@ -12,7 +12,7 @@ const CadenceField = defineComponent({
   setup(props, {slots}) {
     return () =>
       h("div", {class: props.wrapperClass}, [
-        h("label", {for: props.controlId}, [
+        h("label", props.controlId ? {for: props.controlId} : {}, [
           h("span", {class: props.labelClass}, props.label),
           ...(slots.default?.() ?? [])
         ]),

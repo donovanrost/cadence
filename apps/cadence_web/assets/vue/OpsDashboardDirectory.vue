@@ -2,6 +2,7 @@
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceToggle from "./ui/reka/CadenceToggle.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
@@ -228,9 +229,11 @@ const restoreDashboard = (row: DirectoryRow) => {
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
         @submit.prevent
       >
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.query.label }}</span>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.query.label"
+            label-class="hud-label block mb-1.5"
+          >
             <input
               :id="filters.fields.query.id"
               :name="filters.fields.query.name"
@@ -241,11 +244,12 @@ const restoreDashboard = (row: DirectoryRow) => {
               phx-debounce="250"
               @input="updateQuery"
             >
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.lifecycle.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.lifecycle.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.lifecycle.id"
               :name="filters.fields.lifecycle.name"
@@ -261,11 +265,12 @@ const restoreDashboard = (row: DirectoryRow) => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.tag.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.tag.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.tag.id"
               :name="filters.fields.tag.name"
@@ -281,11 +286,12 @@ const restoreDashboard = (row: DirectoryRow) => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.sort.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.sort.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.sort.id"
               :name="filters.fields.sort.name"
@@ -301,8 +307,7 @@ const restoreDashboard = (row: DirectoryRow) => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
+          </CadenceField>
       </form>
 
       <div :id="page.list.id" class="grid gap-3 xl:grid-cols-2">
