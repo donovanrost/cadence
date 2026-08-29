@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
@@ -528,10 +531,20 @@ const revokeGrant = () => {
         :id="policy_form.panel_id"
         class="border border-base-300 bg-base-200/15"
       >
-        <details :open="policy_form.open">
-          <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
-            {{ policy_form.summary }}
-          </summary>
+        <CadenceCollapsible
+          :content-id="policy_form.id"
+          :open="policy_form.open"
+          client-seeded
+          :seed-epoch="`${policy_form.id}:${policy_form.open}`"
+          :unmount-on-hide="false"
+        >
+          <div>
+            <CadenceCollapsibleTrigger>
+              <button type="button" class="cursor-pointer px-4 py-3 text-sm font-semibold">
+                {{ policy_form.summary }}
+              </button>
+            </CadenceCollapsibleTrigger>
+            <CadenceCollapsibleContent>
           <form
             :id="policy_form.id"
             class="space-y-5 border-t border-base-300 p-4"
@@ -753,7 +766,9 @@ const revokeGrant = () => {
               {{ policy_form.submit.label }}
             </button>
           </form>
-        </details>
+            </CadenceCollapsibleContent>
+          </div>
+        </CadenceCollapsible>
       </section>
 
       <section
