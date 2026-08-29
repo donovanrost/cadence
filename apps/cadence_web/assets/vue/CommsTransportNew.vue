@@ -768,36 +768,35 @@ const statusClass = (status: "ready" | "attention") =>
           divider-class="h-px flex-1 bg-base-300/60"
         />
 
-        <section
+        <CadenceCard
           :id="form.review.configuration_summary_id"
           class="card bg-base-200 border border-base-300"
+          body-class="card-body p-0"
         >
-          <div class="card-body p-0">
-            <div class="grid divide-y divide-base-300 md:grid-cols-2 md:divide-x md:divide-y-0">
-              <div class="p-5">
-                <p class="hud-label">{{ form.review.ownership.label }}</p>
-                <p class="mt-2 text-base font-semibold">{{ form.review.ownership.value }}</p>
-                <p class="mt-1 text-sm text-base-content/60">
-                  {{ form.review.ownership.source }}
-                </p>
+          <div class="grid divide-y divide-base-300 md:grid-cols-2 md:divide-x md:divide-y-0">
+            <div class="p-5">
+              <p class="hud-label">{{ form.review.ownership.label }}</p>
+              <p class="mt-2 text-base font-semibold">{{ form.review.ownership.value }}</p>
+              <p class="mt-1 text-sm text-base-content/60">
+                {{ form.review.ownership.source }}
+              </p>
+            </div>
+            <div class="p-5">
+              <p class="hud-label">{{ form.review.readiness.label }}</p>
+              <div class="mt-2">
+                <span
+                  :class="[
+                    'inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide',
+                    statusClass(form.review.readiness.status)
+                  ]"
+                >{{ form.review.readiness.value }}</span>
               </div>
-              <div class="p-5">
-                <p class="hud-label">{{ form.review.readiness.label }}</p>
-                <div class="mt-2">
-                  <span
-                    :class="[
-                      'inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide',
-                      statusClass(form.review.readiness.status)
-                    ]"
-                  >{{ form.review.readiness.value }}</span>
-                </div>
-                <p class="mt-2 font-mono text-xs text-base-content/60">
-                  {{ form.review.readiness.endpoint }}
-                </p>
-              </div>
+              <p class="mt-2 font-mono text-xs text-base-content/60">
+                {{ form.review.readiness.endpoint }}
+              </p>
             </div>
           </div>
-        </section>
+        </CadenceCard>
 
         <p
           v-if="form.review.error"

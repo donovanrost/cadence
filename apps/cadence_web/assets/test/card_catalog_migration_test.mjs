@@ -5,6 +5,7 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 const foundationBase = "00c264585863a89a76d55484b777a7e73eda7fa5"
 const breadcrumbsImport =
@@ -210,7 +211,8 @@ const sources = new Map()
 
 for (const migration of migrations) {
   const componentPath = resolve(testDirectory, `../vue/${migration.file}`)
-  const source = await readFile(componentPath, "utf8")
+  const currentSource = await readFile(componentPath, "utf8")
+  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, migration.file)
   const pageTitleCompatibleSource = pageTitleCallerNames.includes(migration.file)
     ? peelCadencePageTitle(source, migration.file)
     : source
@@ -236,7 +238,7 @@ for (const migration of migrations) {
     `${migration.file} leaves no conventional raw p-6 card shell`,
   )
 
-  const parsed = parse(source, {filename: componentPath})
+  const parsed = parse(currentSource, {filename: componentPath})
   assert.deepEqual(parsed.errors, [], `${migration.file} parses with the pinned Vue compiler`)
   assert.ok(parsed.descriptor.template, `${migration.file} retains an SFC template`)
 

@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelResidualCadenceCard} from "./residual_cadence_cards_test_support.mjs"
 
 const scenarioLedger = [
   "one always-present non-SSR CatalogArtifactShowPage host owns the complete page",
@@ -38,9 +39,10 @@ const paths = {
   router: resolve(__dirname, "../../lib/cadence_web/router.ex"),
 }
 
-const [page, child, liveView, liveViewTest, router] = await Promise.all(
+const [page, currentChild, liveView, liveViewTest, router] = await Promise.all(
   Object.values(paths).map((path) => readFile(path, "utf8")),
 )
+const child = peelResidualCadenceCard(currentChild, "CatalogArtifactShow.vue")
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)

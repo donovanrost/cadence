@@ -121,22 +121,21 @@ defineProps<{
         data-phx-link-state="push"
         class="block"
       >
-        <section
+        <CadenceCard
           class="card bg-base-200 border border-base-300 hud-corners hover-glow-cyan transition-glow hover:bg-[linear-gradient(var(--state-hover),var(--state-hover))]"
+          body-class="card-body p-6"
         >
-          <div class="card-body p-6">
-            <div class="flex items-center gap-4">
-              <div>
-                <h3 class="font-semibold">
-                  {{ presentation.quick_actions.create_organization_title }}
-                </h3>
-                <p class="text-sm text-base-content/60">
-                  {{ presentation.quick_actions.create_organization_description }}
-                </p>
-              </div>
+          <div class="flex items-center gap-4">
+            <div>
+              <h3 class="font-semibold">
+                {{ presentation.quick_actions.create_organization_title }}
+              </h3>
+              <p class="text-sm text-base-content/60">
+                {{ presentation.quick_actions.create_organization_description }}
+              </p>
             </div>
           </div>
-        </section>
+        </CadenceCard>
       </a>
     </section>
   </div>

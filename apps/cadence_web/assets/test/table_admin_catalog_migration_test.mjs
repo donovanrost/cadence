@@ -9,6 +9,7 @@ import {
   peelCadenceHoverTableRows,
 } from "./hover_table_row_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 const baseCommit = "c720c80701148764113420bf8f62ddbd07f439e8"
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
@@ -119,8 +120,9 @@ assert.equal(
 
 for (const caller of callers) {
   const componentPath = resolve(repositoryRoot, caller.path)
-  const source = readFileSync(componentPath, "utf8")
+  const currentSource = readFileSync(componentPath, "utf8")
   const file = caller.path.split("/").at(-1)
+  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, file)
   const preHoverTableRowSource = hoverTableRowCallers.has(file)
     ? peelCadenceHoverTableRows(source, file)
     : source
@@ -178,7 +180,7 @@ for (const caller of callers) {
     `${caller.path} reconstructs ${baseCommit} byte-for-byte`,
   )
 
-  const parsed = parse(source, {filename: componentPath})
+  const parsed = parse(currentSource, {filename: componentPath})
   assert.deepEqual(parsed.errors, [], `${caller.path} parses with the pinned Vue compiler`)
   assert.ok(parsed.descriptor.scriptSetup, `${caller.path} retains its script setup block`)
   assert.ok(parsed.descriptor.template, `${caller.path} retains its template block`)

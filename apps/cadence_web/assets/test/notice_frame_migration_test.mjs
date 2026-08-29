@@ -15,6 +15,8 @@ import {
   noticeFrameCallerLedger,
   peelCadenceNoticeFrames,
 } from "./notice_frame_test_support.mjs"
+import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -43,7 +45,14 @@ assert.doesNotMatch(componentSource, /\b(?:error|success):/)
 
 for (const caller of callerPaths) {
   const source = await readFile(caller.path, "utf8")
-  peelCadenceNoticeFrames(source, caller.filename)
+  const residualCardCompatibleSource = peelResidualCadenceCardBeforeOlderLayers(
+    source,
+    caller.filename,
+  )
+  const pageTitleCompatibleSource = pageTitleCallerNames.includes(caller.filename)
+    ? peelCadencePageTitle(residualCardCompatibleSource, caller.filename)
+    : residualCardCompatibleSource
+  peelCadenceNoticeFrames(pageTitleCompatibleSource, caller.filename)
 }
 
 const dom = installDom('<div id="notice-contract"></div>')

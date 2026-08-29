@@ -8,6 +8,7 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {pageTitleCallerNames, peelCadencePageTitle} from "./page_title_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -47,8 +48,9 @@ const migrations = Object.freeze([
 ])
 
 for (const migration of migrations) {
-  const source = await readFile(migration.path, "utf8")
+  const currentSource = await readFile(migration.path, "utf8")
   const filename = migration.path.split("/").at(-1)
+  const source = peelResidualCadenceCardBeforeOlderLayers(currentSource, filename)
   const opsViewportCompatibleSource = opsViewportCallerNames.includes(filename)
     ? peelCadenceOpsViewport(source, filename)
     : source

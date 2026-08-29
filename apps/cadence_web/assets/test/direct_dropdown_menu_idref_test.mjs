@@ -15,6 +15,7 @@ import {
 import {hoverTableRowClass, peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
+import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
   "the actual three direct-dropdown SFCs compile and mount with two rows each",
@@ -501,6 +502,10 @@ const reconstructMissionOverviewPrePageHeaderSource = source =>
 
 const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
+  const residualCardCompatibleSource = peelResidualCadenceCardBeforeOlderLayers(
+    currentSource,
+    `${definition.name}.vue`,
+  )
   const reconstructNewerPresentationFrames = (inputSource) => {
     const filename = `${definition.name}.vue`
     const prePageTitleSource = pageTitleCallerNames.includes(filename)
@@ -525,8 +530,8 @@ const compileSfc = async (definition) => {
   }
   const preEmptyStateSource =
     definition.name === "SpacecraftList"
-      ? peelCadenceEmptyStateFrames(currentSource, "SpacecraftList.vue")
-      : currentSource
+      ? peelCadenceEmptyStateFrames(residualCardCompatibleSource, "SpacecraftList.vue")
+      : residualCardCompatibleSource
   const source = reconstructNewerPresentationFrames(preEmptyStateSource)
   const predecessorCompatibleSource =
     definition.name === "SpacecraftList"
