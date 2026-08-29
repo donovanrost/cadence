@@ -7,6 +7,7 @@ import {
   expectedNodeVersion,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const predecessor = "c720c80701148764113420bf8f62ddbd07f439e8"
 const importWithoutSemicolon =
@@ -98,6 +99,11 @@ let closingTagCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.file}`)
   const source = await readFile(componentPath, "utf8")
+  const prePaginationSource =
+    fixture.file === "CommsGroundStationList.vue" ||
+    fixture.file === "CommsTransportList.vue"
+      ? peelCadencePaginationFrame(source, fixture.file)
+      : source
   const componentOpening =
     `${fixture.indentation}<CadenceTableFrame id="${fixture.id}">`
   const componentClosing = `${fixture.indentation}</CadenceTableFrame>`
@@ -106,31 +112,35 @@ for (const fixture of fixtures) {
   const predecessorClosing = `${fixture.indentation}</table>`
 
   assert.equal(
-    occurrences(source, fixture.importLine),
+    occurrences(prePaginationSource, fixture.importLine),
     1,
     `${fixture.file} imports CadenceTableFrame exactly once`,
   )
   assert.equal(
-    source.match(/^import CadenceTableFrame\b/gm)?.length,
+    prePaginationSource.match(/^import CadenceTableFrame\b/gm)?.length,
     1,
     `${fixture.file} has exactly one CadenceTableFrame importer`,
   )
   assert.equal(
-    occurrences(source, componentOpening),
+    occurrences(prePaginationSource, componentOpening),
     1,
     `${fixture.file} has its one exact CadenceTableFrame opening tag`,
   )
   assert.equal(
-    occurrences(source, componentClosing),
+    occurrences(prePaginationSource, componentClosing),
     1,
     `${fixture.file} has its one exact CadenceTableFrame closing tag`,
   )
-  assert.doesNotMatch(source, /<table\b/i, `${fixture.file} has no residual native table`)
+  assert.doesNotMatch(
+    prePaginationSource,
+    /<table\b/i,
+    `${fixture.file} has no residual native table`,
+  )
 
   const reconstructed = replaceExactlyOnce(
     replaceExactlyOnce(
       replaceExactlyOnce(
-        source,
+        prePaginationSource,
         fixture.importLine,
         "",
         `${fixture.file} import reconstruction`,

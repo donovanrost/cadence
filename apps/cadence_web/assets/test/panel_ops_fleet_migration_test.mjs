@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 assert.equal(process.versions.node, "24.16.0", "migration contracts use pinned Node 24.16.0")
 
@@ -587,6 +588,10 @@ for (const file of files) {
   const filename = resolve(vueDirectory, file.name)
   const source = await readFile(filename, "utf8")
   const parsed = parse(source, {filename})
+  const prePaginationSource =
+    file.name === "SpacecraftList.vue"
+      ? peelCadencePaginationFrame(source, file.name)
+      : source
 
   assert.deepEqual(parsed.errors, [], `${file.name} parses with the pinned Vue compiler`)
   assert.equal(countExact(source, cadencePanelImport), 1, `${file.name} has one exact import`)
@@ -599,7 +604,7 @@ for (const file of files) {
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        peelCadenceCollapsible(source, file.name),
+        peelCadenceCollapsible(prePaginationSource, file.name),
         file.name === "OpsFleetPlanningPolicy.vue" ? 3 : 0,
         file.name,
       ),

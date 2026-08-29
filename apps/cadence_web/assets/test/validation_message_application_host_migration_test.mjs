@@ -9,6 +9,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 assert.equal(
   process.versions.node,
@@ -19,6 +20,7 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const callerPath = resolve(testDirectory, "../vue/ApplicationHost.vue")
 const callerSource = await readFile(callerPath, "utf8")
+const prePaginationSource = peelCadencePaginationFrame(callerSource, "ApplicationHost.vue")
 const occurrences = (value, fragment) => value.split(fragment).length - 1
 const importSource =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
@@ -34,14 +36,14 @@ const predecessorOpening = `                <p
 const messageClosing = "                >{{ error }}</CadenceValidationMessage>"
 const predecessorClosing = "                >{{ error }}</p>"
 
-assert.equal(occurrences(callerSource, importSource), 1)
-assert.equal(occurrences(callerSource, messageOpening), 1)
-assert.equal(occurrences(callerSource, messageClosing), 1)
-assert.equal(occurrences(callerSource, "<CadenceValidationMessage"), 1)
-assert.equal(occurrences(callerSource, "</CadenceValidationMessage>"), 1)
-assert.equal(occurrences(callerSource, 'class="mt-1.5 text-sm text-error"'), 0)
+assert.equal(occurrences(prePaginationSource, importSource), 1)
+assert.equal(occurrences(prePaginationSource, messageOpening), 1)
+assert.equal(occurrences(prePaginationSource, messageClosing), 1)
+assert.equal(occurrences(prePaginationSource, "<CadenceValidationMessage"), 1)
+assert.equal(occurrences(prePaginationSource, "</CadenceValidationMessage>"), 1)
+assert.equal(occurrences(prePaginationSource, 'class="mt-1.5 text-sm text-error"'), 0)
 
-const predecessorSource = callerSource
+const predecessorSource = prePaginationSource
   .replace(importSource, "")
   .replace(messageOpening, predecessorOpening)
   .replace(messageClosing, predecessorClosing)

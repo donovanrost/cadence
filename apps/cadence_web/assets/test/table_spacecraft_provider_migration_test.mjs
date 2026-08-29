@@ -7,6 +7,7 @@ import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 
 import {expectedNodeVersion, integrationRequire} from "./reka_adapter_test_support.mjs"
+import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const predecessor = "c720c80701148764113420bf8f62ddbd07f439e8"
@@ -179,27 +180,39 @@ let instanceCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.filename}`)
   const source = await readFile(componentPath, "utf8")
+  const prePaginationSource =
+    fixture.filename === "SpacecraftList.vue"
+      ? peelCadencePaginationFrame(source, fixture.filename)
+      : source
 
-  assert.equal(occurrenceCount(source, tableImport), 1, `${fixture.filename} import count`)
+  assert.equal(
+    occurrenceCount(prePaginationSource, tableImport),
+    1,
+    `${fixture.filename} import count`,
+  )
   importerCount += 1
 
   assert.equal(
-    occurrenceCount(source, "<CadenceTableFrame"),
+    occurrenceCount(prePaginationSource, "<CadenceTableFrame"),
     fixture.instances,
     `${fixture.filename} opening count`,
   )
   assert.equal(
-    occurrenceCount(source, "</CadenceTableFrame>"),
+    occurrenceCount(prePaginationSource, "</CadenceTableFrame>"),
     fixture.instances,
     `${fixture.filename} closing count`,
   )
-  assert.doesNotMatch(source, /<\/?table\b/, `${fixture.filename} has no residual native table`)
+  assert.doesNotMatch(
+    prePaginationSource,
+    /<\/?table\b/,
+    `${fixture.filename} has no residual native table`,
+  )
   instanceCount += fixture.instances
 
   let reconstructed = replaceExact(
     peelCadenceBreadcrumbs(
       peelCadenceDetailsFrames(
-        source,
+        prePaginationSource,
         fixture.filename === "CommsProviderShow.vue" ? 1 : 0,
         fixture.filename,
       ),
