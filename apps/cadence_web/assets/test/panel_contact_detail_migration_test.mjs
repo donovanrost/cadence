@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {fileURLToPath} from "node:url"
 import {resolve} from "node:path"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const {parse} = integrationRequire("@vue/compiler-sfc")
@@ -313,7 +314,7 @@ for (const file of files) {
 
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceDetailsFrames(
-      source,
+      peelCadenceInlineWarnings(source, file.path),
       cadenceDetailsFrameCounts[file.path] ?? 0,
       file.path,
     ),

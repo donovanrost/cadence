@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {integrationRequire} from "./reka_adapter_test_support.mjs"
 
 const pinnedNodeVersion = "v24.16.0"
@@ -272,7 +273,7 @@ for (const file of files) {
   const fieldCompatibleSource = peelCadenceFields(
     peelCadenceValidationMessages(
       peelCadenceDetailsFrames(
-        source,
+        peelCadenceInlineWarnings(source, file.name),
         cadenceDetailsFrameCounts[file.name] ?? 0,
         file.name,
       ),

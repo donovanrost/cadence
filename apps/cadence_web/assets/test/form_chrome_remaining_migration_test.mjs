@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {expectedNodeVersion} from "./reka_adapter_test_support.mjs"
 
 assert.equal(
@@ -358,7 +359,7 @@ for (const foundation of foundations) {
       peelCadenceFields(
         peelCadenceBreadcrumbs(
           peelCadenceDetailsFrames(
-            source,
+            peelCadenceInlineWarnings(source, foundation.file),
             foundation.file === "OpsContactPlanShow.vue" ? 2 : 0,
             foundation.file,
           ),

@@ -12,6 +12,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the actual fleet policy SFC mounts through the real Cadence collapsible adapter graph",
@@ -90,6 +91,8 @@ assert.equal(
 )
 
 const reconstructPredecessor = (source) => {
+  source = peelCadenceInlineWarnings(source, "OpsFleetPlanningPolicy.vue")
+
   for (const importLine of cadenceCollapsibleImports) {
     assert.equal(occurrences(source, importLine), 1, "each Cadence collapsible import is exact")
   }
