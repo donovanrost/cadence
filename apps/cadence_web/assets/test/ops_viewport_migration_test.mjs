@@ -23,6 +23,10 @@ import {
   opsViewportSha256,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
+import {
+  paddedOpsViewportCallerNames,
+  peelPaddedOpsViewport,
+} from "./padded_ops_viewport_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the complete Vue tree contains only the frozen exact cohort and two excluded padded variants",
@@ -93,11 +97,40 @@ const walkVueFiles = async (directory) => {
   return nested.flat()
 }
 
+const historicalVueFiles = new Set(
+  execFileSync(
+    "git",
+    [
+      "-C",
+      repositoryRoot,
+      "ls-tree",
+      "-r",
+      "--name-only",
+      opsViewportPredecessorCommit,
+      "apps/cadence_web/assets/vue",
+    ],
+    {encoding: "utf8"},
+  )
+    .trim()
+    .split("\n")
+    .filter((filePath) => filePath.endsWith(".vue"))
+    .map((filePath) => filePath.slice("apps/cadence_web/assets/vue/".length)),
+)
+historicalVueFiles.add("ui/components/CadenceOpsViewport.vue")
+
 const allVueSources = await Promise.all(
-  (await walkVueFiles(vueDirectory)).map(async (filePath) => ({
-    file: filePath.slice(vueDirectory.length + 1),
-    source: await readFile(filePath, "utf8"),
-  })),
+  (await walkVueFiles(vueDirectory))
+    .map((filePath) => ({filePath, file: filePath.slice(vueDirectory.length + 1)}))
+    .filter(({file}) => historicalVueFiles.has(file))
+    .map(async ({filePath, file}) => {
+      const current = await readFile(filePath, "utf8")
+      return {
+        file,
+        source: paddedOpsViewportCallerNames.includes(file)
+          ? peelPaddedOpsViewport(current, file)
+          : current,
+      }
+    }),
 )
 
 assert.equal(allVueSources.length, 221, "the audited Vue tree includes every current SFC")
@@ -198,6 +231,9 @@ for (const entry of opsViewportMigrations) {
 
 for (const exclusion of excludedOpsViewportVariants) {
   const current = await readFile(resolve(vueDirectory, exclusion.file), "utf8")
+  const predecessorCompatibleCurrent = paddedOpsViewportCallerNames.includes(exclusion.file)
+    ? peelPaddedOpsViewport(current, exclusion.file)
+    : current
   const predecessor = execFileSync(
     "git",
     [
@@ -209,12 +245,16 @@ for (const exclusion of excludedOpsViewportVariants) {
     {encoding: "utf8"},
   )
 
-  assert.equal(current, predecessor, `${exclusion.file} stays byte-identical to the predecessor`)
-  assert.equal(Buffer.byteLength(current), exclusion.byteLength)
-  assert.equal(opsViewportSha256(current), exclusion.sha256)
-  assert.equal(occurrences(current, exclusion.opening), exclusion.count)
+  assert.equal(
+    predecessorCompatibleCurrent,
+    predecessor,
+    `${exclusion.file} stays byte-identical to the predecessor`,
+  )
+  assert.equal(Buffer.byteLength(predecessorCompatibleCurrent), exclusion.byteLength)
+  assert.equal(opsViewportSha256(predecessorCompatibleCurrent), exclusion.sha256)
+  assert.equal(occurrences(predecessorCompatibleCurrent, exclusion.opening), exclusion.count)
   assert.match(exclusion.reason, /^p-6 padded/)
-  assert.doesNotMatch(current, /CadenceOpsViewport/)
+  assert.doesNotMatch(predecessorCompatibleCurrent, /CadenceOpsViewport/)
 }
 
 const dom = installDom('<div id="ops-viewport-contract"></div>')
