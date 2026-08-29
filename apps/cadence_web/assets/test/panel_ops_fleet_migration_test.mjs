@@ -11,6 +11,8 @@ const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const {parse} = integrationRequire("@vue/compiler-sfc")
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadenceValidationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const cadenceValidationMessageCounts = new Map([["OpsFleetPlanningPolicy.vue", 16]])
@@ -268,6 +270,23 @@ const files = [
 ]
 
 const countExact = (source, value) => source.split(value).length - 1
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(countExact(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(countExact(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const replaceOnce = (source, before, after, label) => {
   assert.ok(source.includes(before), `${label} exists exactly where reconstruction expects it`)
@@ -524,7 +543,14 @@ for (const file of files) {
   assert.equal(file.migrations.length, file.panels, `${file.name} frozen migration ledger count`)
 
   const fieldCompatibleSource = peelCadenceFields(
-    peelCadenceValidationMessages(source, file.name),
+    peelCadenceValidationMessages(
+      peelCadenceDetailsFrames(
+        source,
+        file.name === "OpsFleetPlanningPolicy.vue" ? 3 : 0,
+        file.name,
+      ),
+      file.name,
+    ),
     file.name,
   )
   const predecessorCompatibleSource = peelTableFrames(

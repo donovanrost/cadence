@@ -17,10 +17,29 @@ assert.equal(
 
 const migrationBase = "7643e25b78faf8bf09d7bc3497de88db3b46715a"
 const componentImport = 'import CadenceField from "./ui/components/CadenceField.vue"'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const shiftIndent = (source, spaces) =>
   source
     .split("\n")
@@ -158,7 +177,11 @@ for (const component of loadedComponents) {
     `${file} has no residual eligible literal field shell`,
   )
 
-  let reconstructed = source.replace(`${componentImport}\n`, "")
+  let reconstructed = peelCadenceDetailsFrames(
+    source,
+    file === "OpsDashboardLibrary.vue" ? 1 : 0,
+    file,
+  ).replace(`${componentImport}\n`, "")
   for (const migratedField of fields) {
     reconstructed = reconstructField(reconstructed, migratedField, file)
   }

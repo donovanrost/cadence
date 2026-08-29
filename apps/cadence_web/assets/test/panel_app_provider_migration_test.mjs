@@ -10,6 +10,8 @@ import {integrationRequire} from "./reka_adapter_test_support.mjs"
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const pageHeaderImport =
@@ -27,6 +29,23 @@ assert.equal(process.execPath, pinnedNode)
 assert.equal(process.versions.node, "24.16.0")
 
 const occurrenceCount = (source, fragment) => source.split(fragment).length - 1
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrenceCount(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrenceCount(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrenceCount(source, breadcrumbsImport)
@@ -241,7 +260,14 @@ for (const fixture of fixtures) {
 
   assert.deepEqual(parsed.errors, [], `${fixture.name} must parse with the Vue compiler`)
   let source = replaceExact(
-    peelCadenceBreadcrumbs(currentSource, fixture.name),
+    peelCadenceBreadcrumbs(
+      peelCadenceDetailsFrames(
+        currentSource,
+        fixture.name === "ProviderAccountShow.vue" ? 1 : 0,
+        fixture.name,
+      ),
+      fixture.name,
+    ),
     pageHeaderImport,
     "",
     1,

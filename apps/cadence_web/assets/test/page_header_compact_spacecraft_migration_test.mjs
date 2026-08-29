@@ -12,6 +12,8 @@ const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const componentImport =
@@ -86,6 +88,24 @@ function occurrences(source, needle) {
 
 function sha256(source) {
   return createHash("sha256").update(source).digest("hex")
+}
+
+function peelCadenceDetailsFrames(source, expectedCount, label) {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
 }
 
 function peelCadenceBreadcrumbs(source, label) {
@@ -232,7 +252,17 @@ test("compact spacecraft and mission page-header migration is exact", async (t) 
         ? `${componentImport}\n\n`
         : `${componentImport}\n`
       const reconstructed = peelTableFrame(
-        peelCadenceField(peelCadenceBreadcrumbs(source, caller), caller),
+        peelCadenceField(
+          peelCadenceBreadcrumbs(
+            peelCadenceDetailsFrames(
+              source,
+              caller.endsWith("/SpacecraftShow.vue") ? 1 : 0,
+              caller,
+            ),
+            caller,
+          ),
+          caller,
+        ),
         caller,
       )
         .replace(importInsertion, "")

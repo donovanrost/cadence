@@ -14,6 +14,8 @@ const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cardImport = 'import CadenceCard from "./ui/components/CadenceCard.vue"\n'
 const dataRowImport = 'import CadenceDataRow from "./ui/components/CadenceDataRow.vue"\n'
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const pageHeaderImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const panelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
@@ -28,6 +30,30 @@ const rawReviewShell = `        <section
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const detailsFrameCounts = Object.freeze({
+  "CommsProviderShow.vue": 1,
+  "CommsRoutingShow.vue": 1,
+  "CommsTransportNew.vue": 1,
+  "CommsTransportShow.vue": 1,
+})
+
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, detailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(detailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -507,7 +533,14 @@ for (const contract of contracts) {
   const predecessorSource = peelCadencePanels(
     peelCadencePageHeaderFrame(
       peelCadenceTableFrames(
-        peelCadenceBreadcrumbs(source, contract.filename),
+        peelCadenceBreadcrumbs(
+          peelCadenceDetailsFrames(
+            source,
+            detailsFrameCounts[contract.filename] ?? 0,
+            contract.filename,
+          ),
+          contract.filename,
+        ),
         contract.filename,
       ),
     ),

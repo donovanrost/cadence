@@ -21,12 +21,38 @@ assert.equal(
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const vueDirectory = resolve(testDirectory, "../vue")
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadenceValidationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const cadenceValidationMessageSite =
   /^( *)<CadenceValidationMessage v-for="error in template_form\.fields\.([a-z_]+)\.errors" :key="error">\{\{ error \}\}<\/CadenceValidationMessage>$/gm
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsContactDetail.vue": 1,
+  "OpsContactPlanShow.vue": 2,
+  "OpsContactRequirementNew.vue": 1,
+  "OpsContactRequirementTemplate.vue": 2,
+})
+
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceValidationMessages = (source) =>
   source
@@ -83,7 +109,13 @@ const reconstructHeadSource = (migratedSource, caller) => {
   assert.equal(occurrences(migratedSource, cadenceFieldImport), 1, `${caller.file} import count`)
 
   let reconstructedFrames = 0
-  const reconstructed = peelCadenceValidationMessages(migratedSource)
+  const reconstructed = peelCadenceValidationMessages(
+    peelCadenceDetailsFrames(
+      migratedSource,
+      cadenceDetailsFrameCounts[caller.file] ?? 0,
+      caller.file,
+    ),
+  )
     .replace(cadenceFieldImport, "")
     .replace(cadenceFieldFrame, (_match, indent, controlId, label, body) => {
       let control = body
@@ -177,7 +209,13 @@ const excludedTemplateShells = Object.freeze([
 ])
 
 const templateSource = sources.get("OpsContactRequirementTemplate.vue")
-const templatePredecessorSource = peelCadenceValidationMessages(templateSource)
+const templatePredecessorSource = peelCadenceValidationMessages(
+  peelCadenceDetailsFrames(
+    templateSource,
+    cadenceDetailsFrameCounts["OpsContactRequirementTemplate.vue"],
+    "OpsContactRequirementTemplate.vue",
+  ),
+)
 for (const excluded of excludedTemplateShells) {
   assert.equal(
     occurrences(templatePredecessorSource, excluded.opening),

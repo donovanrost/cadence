@@ -12,6 +12,8 @@ const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/b
 const predecessor = "c720c80701148764113420bf8f62ddbd07f439e8"
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const tableImport = 'import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"\n'
@@ -27,6 +29,23 @@ assert.equal(
 
 const occurrenceCount = (source, fragment) => source.split(fragment).length - 1
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrenceCount(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrenceCount(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrenceCount(source, breadcrumbsImport)
@@ -178,7 +197,14 @@ for (const fixture of fixtures) {
   instanceCount += fixture.instances
 
   let reconstructed = replaceExact(
-    peelCadenceBreadcrumbs(source, fixture.filename),
+    peelCadenceBreadcrumbs(
+      peelCadenceDetailsFrames(
+        source,
+        fixture.filename === "CommsProviderShow.vue" ? 1 : 0,
+        fixture.filename,
+      ),
+      fixture.filename,
+    ),
     tableImport,
     "",
     1,

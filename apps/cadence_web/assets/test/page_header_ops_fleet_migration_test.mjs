@@ -11,6 +11,8 @@ assert.equal(
 
 const parent = "4a087fc3426b3b21d7c447152e444752947da692"
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadenceValidationMessageImport =
   'import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"\n'
 const cadenceValidationMessageCounts = new Map([
@@ -112,6 +114,29 @@ const callers = [
 
 const occurrences = (source, token) => source.split(token).length - 1
 const sha256 = source => createHash("sha256").update(source).digest("hex")
+const cadenceDetailsFrameCounts = Object.freeze({
+  "OpsCommands.vue": 1,
+  "OpsFleetPlanningNew.vue": 1,
+  "OpsFleetPlanningPolicy.vue": 3,
+  "OpsFleetPlanningRun.vue": 1
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceValidationMessages = (source, name) => {
   const expectedMessages = cadenceValidationMessageCounts.get(name) ?? 0
@@ -288,7 +313,14 @@ for (const caller of callers) {
     assert.doesNotMatch(source, /<header\b/, "expected no residual native header")
 
     const predecessorCompatibleSource = peelCadenceFields(
-      peelCadenceValidationMessages(source, caller.file),
+      peelCadenceValidationMessages(
+        peelCadenceDetailsFrames(
+          source,
+          cadenceDetailsFrameCounts[caller.file] ?? 0,
+          caller.file
+        ),
+        caller.file
+      ),
       caller
     )
     const reconstructed = predecessorCompatibleSource

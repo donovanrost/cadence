@@ -21,9 +21,28 @@ const breadcrumbsImport =
 const breadcrumbNavClass =
   "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1
 const digest = (source) => createHash("sha256").update(source).digest("hex")
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(occurrences(source, cadenceDetailsFrameImport), expectedImportCount, `${label} details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`)
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceBreadcrumbs = (source, label) => {
   const importCount = occurrences(source, breadcrumbsImport)
@@ -277,7 +296,14 @@ for (const fixture of fixtures) {
   )
   compiledSfcCount += 1
 
-  let reconstructedSource = peelCadenceBreadcrumbs(source, fixture.filename)
+  let reconstructedSource = peelCadenceBreadcrumbs(
+    peelCadenceDetailsFrames(
+      source,
+      fixture.filename === "CommsTransportNew.vue" ? 1 : 0,
+      fixture.filename,
+    ),
+    fixture.filename,
+  )
   if (fixture.fields.length > 0) {
     reconstructedSource = reconstructedSource.replace(cadenceFieldImport, "")
     for (const entry of fixture.fields) {

@@ -29,6 +29,8 @@ const replaceAt = (value, start, before, after, label) => {
 
 const importLine = 'import CadencePanel from "./ui/components/CadencePanel.vue"\n'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadencePageHeaderFrameOpen = '<CadencePageHeaderFrame variant="ops">'
@@ -40,6 +42,20 @@ const cadenceFields = [
   {expression: "repair_form.fields.horizon_start", indent: 14},
   {expression: "repair_form.fields.horizon_end", indent: 14}
 ]
+
+const peelCadenceDetailsFrames = (value) => {
+  assert.equal(count(value, cadenceDetailsFrameImport), 1, `${relativePath}: details import count`)
+  assert.equal(count(value, "<CadenceDetailsFrame"), 1, `${relativePath}: details opening count`)
+  assert.equal(count(value, "</CadenceDetailsFrame>"), 1, `${relativePath}: details closing count`)
+
+  const peeled = value
+    .replace(cadenceDetailsFrameImport, "")
+    .replace("<CadenceDetailsFrame", "<details")
+    .replace("</CadenceDetailsFrame>", "</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 
 const peelCadenceFields = value => {
   assert.equal(count(value, cadenceFieldImport), 1, `${relativePath}: CadenceField import count`)
@@ -236,7 +252,9 @@ const rawSectionHeader = `  <section
   >
     <header class="border-b border-primary/20 bg-base-200/70 px-5 py-5 hud-grid lg:px-7">`
 
-const predecessorCompatibleSource = peelPageHeaderFrame(peelCadenceFields(source))
+const predecessorCompatibleSource = peelPageHeaderFrame(
+  peelCadenceFields(peelCadenceDetailsFrames(source)),
+)
 
 assert.equal(
   count(predecessorCompatibleSource, rawSectionHeader),

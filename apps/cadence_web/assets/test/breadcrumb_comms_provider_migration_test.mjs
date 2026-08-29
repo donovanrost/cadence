@@ -21,6 +21,8 @@ const repositoryRoot = resolve(
 );
 const breadcrumbsImport =
   'import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"\n';
+const detailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n';
 const wrapperOpening = "<CadenceBreadcrumbs>";
 const wrapperClosing = "</CadenceBreadcrumbs>";
 const nativeClosing = "</nav>";
@@ -113,6 +115,31 @@ const fixtures = Object.freeze([
 
 const occurrences = (source, fragment) => source.split(fragment).length - 1;
 const sha256 = (source) => createHash("sha256").update(source).digest("hex");
+const detailsFrameCounts = Object.freeze({
+  "CommsProviderShow.vue": 1,
+  "CommsRoutingShow.vue": 1,
+  "CommsTransportNew.vue": 1,
+  "CommsTransportShow.vue": 1,
+  "ProviderAccountShow.vue": 1,
+});
+
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0;
+
+  assert.equal(occurrences(source, detailsFrameImport), expectedImportCount, `${label} details import count`);
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label} details opening count`);
+  assert.equal(occurrences(source, "</CadenceDetailsFrame>"), expectedCount, `${label} details closing count`);
+
+  const peeled = source
+    .replace(detailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>");
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/);
+  return peeled;
+};
 
 const nativeOpening = (indentation) => {
   const attributeIndentation = " ".repeat(indentation + 2);
@@ -233,7 +260,11 @@ for (const fixture of fixtures) {
   const reconstructed = replaceExact(
     replaceExact(
       replaceExact(
-        source,
+        peelCadenceDetailsFrames(
+          source,
+          detailsFrameCounts[fixture.filename] ?? 0,
+          fixture.filename
+        ),
         breadcrumbsImport,
         "",
         1,

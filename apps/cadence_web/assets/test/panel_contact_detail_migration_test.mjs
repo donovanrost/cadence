@@ -9,6 +9,8 @@ const {parse} = integrationRequire("@vue/compiler-sfc")
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const cadencePanelImport = 'import CadencePanel from "./ui/components/CadencePanel.vue"'
+const cadenceDetailsFrameImport =
+  'import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"\n'
 const cadencePageHeaderFrameImport =
   'import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"\n'
 const cadenceFieldImport = 'import CadenceField from "./ui/components/CadenceField.vue"\n'
@@ -163,6 +165,27 @@ const files = [
 
 const countLiteral = (source, literal) => source.split(literal).length - 1
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const cadenceDetailsFrameCounts = Object.freeze({
+  "vue/OpsContactDetail.vue": 1,
+  "vue/OpsContactPlanShow.vue": 2,
+})
+const peelCadenceDetailsFrames = (source, expectedCount, label) => {
+  const expectedImportCount = expectedCount > 0 ? 1 : 0
+
+  assert.equal(countLiteral(source, cadenceDetailsFrameImport), expectedImportCount, `${label}: details import count`)
+  assert.equal(source.match(/<CadenceDetailsFrame\b/g)?.length ?? 0, expectedCount, `${label}: details opening count`)
+  assert.equal(countLiteral(source, "</CadenceDetailsFrame>"), expectedCount, `${label}: details closing count`)
+
+  const peeled = source
+    .replace(cadenceDetailsFrameImport, "")
+    .split("<CadenceDetailsFrame")
+    .join("<details")
+    .split("</CadenceDetailsFrame>")
+    .join("</details>")
+
+  assert.doesNotMatch(peeled, /CadenceDetailsFrame/)
+  return peeled
+}
 const multilineLabels = new Set([
   "change.decision_forms.approval.reason.label",
   "change.decision_forms.rejection.reason.label",
@@ -288,7 +311,15 @@ for (const file of files) {
     )
   }
 
-  const fieldCompatibleSource = peelCadenceFields(source, file.path, file.fieldFrames)
+  const fieldCompatibleSource = peelCadenceFields(
+    peelCadenceDetailsFrames(
+      source,
+      cadenceDetailsFrameCounts[file.path] ?? 0,
+      file.path,
+    ),
+    file.path,
+    file.fieldFrames,
+  )
   const predecessorCompatibleSource = peelPageHeaderFrame(fieldCompatibleSource, file.path)
 
   for (const rawVariant of file.rawVariants) {
