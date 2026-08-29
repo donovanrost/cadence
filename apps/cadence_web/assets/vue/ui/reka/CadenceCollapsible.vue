@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {CollapsibleRoot} from "reka-ui"
-import {provide, toRef} from "vue"
+import {computed, provide, ref, toRef, watch} from "vue"
 import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
 
 defineOptions({inheritAttrs: false})
@@ -10,30 +10,61 @@ const props = withDefaults(
     open: boolean
     contentId: string
     disabled?: boolean
+    clientSeeded?: boolean
+    seedEpoch?: string | number
+    unmountOnHide?: boolean
   }>(),
-  {disabled: false},
+  {
+    disabled: false,
+    clientSeeded: false,
+    unmountOnHide: true,
+  },
 )
+
+if (props.clientSeeded && props.seedEpoch === undefined) {
+  throw new Error("CadenceCollapsible client-seeded mode requires seedEpoch")
+}
 
 const emit = defineEmits<{
   "request-change": [open: boolean]
 }>()
+
+const clientOpen = ref(props.open)
+const effectiveOpen = computed(() => (props.clientSeeded ? clientOpen.value : props.open))
+
+watch(
+  () => props.seedEpoch,
+  () => {
+    if (!props.clientSeeded) return
+    if (props.seedEpoch === undefined) {
+      throw new Error("CadenceCollapsible client-seeded mode requires seedEpoch")
+    }
+
+    clientOpen.value = props.open
+  },
+)
+
+const requestChange = (open: boolean) => {
+  if (props.clientSeeded) clientOpen.value = open
+  emit("request-change", open)
+}
 
 provide("cadence-collapsible", {contentId: toRef(props, "contentId")})
 </script>
 
 <template>
   <CollapsibleRoot
-    :open="props.open"
+    :open="effectiveOpen"
     :disabled="props.disabled"
-    :unmount-on-hide="true"
+    :unmountOnHide="props.unmountOnHide"
     as-child
-    @update:open="emit('request-change', $event)"
+    @update:open="requestChange"
   >
     <CadencePrimitiveChild
       contract-name="CadenceCollapsible"
       :enforce-attrs="['data-state', 'data-disabled']"
     >
-      <slot :open="props.open" :disabled="props.disabled"></slot>
+      <slot :open="effectiveOpen" :disabled="props.disabled"></slot>
     </CadencePrimitiveChild>
   </CollapsibleRoot>
 </template>

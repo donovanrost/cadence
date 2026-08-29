@@ -39,23 +39,26 @@ assert.match(rootSfc.descriptor.scriptSetup.content, /^import \{CollapsibleRoot\
 assert.match(rootSfc.descriptor.scriptSetup.content, /open: boolean/)
 assert.match(rootSfc.descriptor.scriptSetup.content, /contentId: string/)
 assert.match(rootSfc.descriptor.scriptSetup.content, /disabled\?: boolean/)
+assert.match(rootSfc.descriptor.scriptSetup.content, /clientSeeded\?: boolean/)
+assert.match(rootSfc.descriptor.scriptSetup.content, /seedEpoch\?: string \| number/)
+assert.match(rootSfc.descriptor.scriptSetup.content, /unmountOnHide\?: boolean/)
 assert.match(rootSfc.descriptor.scriptSetup.content, /"request-change": \[open: boolean\]/)
 assert.match(
   rootSfc.descriptor.scriptSetup.content,
   /provide\("cadence-collapsible", \{contentId: toRef\(props, "contentId"\)\}\)/,
 )
 assert.match(rootSfc.descriptor.template.content, /<CollapsibleRoot/)
-assert.match(rootSfc.descriptor.template.content, /:open="props\.open"/)
+assert.match(rootSfc.descriptor.template.content, /:open="effectiveOpen"/)
 assert.match(rootSfc.descriptor.template.content, /:disabled="props\.disabled"/)
-assert.match(rootSfc.descriptor.template.content, /:unmount-on-hide="true"/)
+assert.match(rootSfc.descriptor.template.content, /:unmountOnHide="props\.unmountOnHide"/)
 assert.match(rootSfc.descriptor.template.content, /\bas-child\b/)
 assert.match(rootSfc.descriptor.template.content, /contract-name="CadenceCollapsible"/)
 assert.match(rootSfc.descriptor.template.content, /:enforce-attrs="\['data-state', 'data-disabled'\]"/)
 assert.match(
   rootSfc.descriptor.template.content,
-  /@update:open="emit\('request-change', \$event\)"/,
+  /@update:open="requestChange"/,
 )
-assert.doesNotMatch(rootSfc.source, /\bv-model\b|defaultOpen|default-open|\bref\(|\breactive\(/)
+assert.doesNotMatch(rootSfc.source, /\bv-model\b|defaultOpen|default-open|\breactive\(/)
 
 assert.match(
   triggerSfc.descriptor.scriptSetup.content,
