@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 
 type EmptyPayload = Record<string, never>
@@ -940,161 +941,181 @@ const deploymentFields = [
             class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
             @submit.prevent="submitRegistration"
           >
-            <div class="fieldset mb-3">
-              <label for="source_data_source_id">
-                <span class="hud-label block mb-1.5">Source ID</span>
-                <input
-                  id="source_data_source_id"
-                  v-model="registerSource.data_source_id"
-                  name="source[data_source_id]"
-                  type="text"
-                  placeholder="rehearsal-questdb"
-                  required
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_logical_source">
-                <span class="hud-label block mb-1.5">Logical source</span>
-                <select
-                  id="source_logical_source"
-                  v-model="registerSource.logical_source"
-                  name="source[logical_source]"
-                  required
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in page.admin.registration.form.options.logical_source"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_kind">
-                <span class="hud-label block mb-1.5">Ownership</span>
-                <select
-                  id="source_kind"
-                  v-model="registerSource.kind"
-                  name="source[kind]"
-                  required
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in page.admin.registration.form.options.kind"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_isolation_level">
-                <span class="hud-label block mb-1.5">Isolation</span>
-                <select
-                  id="source_isolation_level"
-                  v-model="registerSource.isolation_level"
-                  name="source[isolation_level]"
-                  required
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in page.admin.registration.form.options.isolation_level"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_credentials_ref">
-                <span class="hud-label block mb-1.5">Credential ref</span>
-                <input
-                  id="source_credentials_ref"
-                  v-model="registerSource.credentials_ref"
-                  name="source[credentials_ref]"
-                  type="text"
-                  placeholder="cred-rehearsal-questdb"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_credential_provider">
-                <span class="hud-label block mb-1.5">Credential provider</span>
-                <select
-                  id="source_credential_provider"
-                  v-model="registerSource.credential_provider"
-                  name="source[credential_provider]"
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in page.admin.registration.form.options.credential_provider"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_endpoint_ref">
-                <span class="hud-label block mb-1.5">Endpoint ref</span>
-                <input
-                  id="source_endpoint_ref"
-                  v-model="registerSource.endpoint_ref"
-                  name="source[endpoint_ref]"
-                  type="text"
-                  placeholder="endpoint://customer/rehearsal"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_material_env_profile">
-                <span class="hud-label block mb-1.5">Env material profile</span>
-                <input
-                  id="source_material_env_profile"
-                  v-model="registerSource.material_env_profile"
-                  name="source[material_env_profile]"
-                  type="text"
-                  placeholder="customer-rehearsal-questdb"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_http_endpoint_env">
-                <span class="hud-label block mb-1.5">HTTP endpoint env</span>
-                <input
-                  id="source_http_endpoint_env"
-                  v-model="registerSource.http_endpoint_env"
-                  name="source[http_endpoint_env]"
-                  type="text"
-                  placeholder="CADENCE_CUSTOMER_QUESTDB_HTTP_ENDPOINT"
-                  class="w-full input"
-                >
-              </label>
-            </div>
-            <div class="fieldset mb-3">
-              <label for="source_storage">
-                <span class="hud-label block mb-1.5">Storage</span>
-                <select
-                  id="source_storage"
-                  v-model="registerSource.storage"
-                  name="source[storage]"
-                  required
-                  class="w-full select"
-                >
-                  <option
-                    v-for="option in page.admin.registration.form.options.storage"
-                    :key="option.value"
-                    :value="option.value"
-                  >{{ option.label }}</option>
-                </select>
-              </label>
-            </div>
+            <CadenceField
+              control-id="source_data_source_id"
+              wrapper-class="fieldset mb-3"
+              label="Source ID"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                id="source_data_source_id"
+                v-model="registerSource.data_source_id"
+                name="source[data_source_id]"
+                type="text"
+                placeholder="rehearsal-questdb"
+                required
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              control-id="source_logical_source"
+              wrapper-class="fieldset mb-3"
+              label="Logical source"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                id="source_logical_source"
+                v-model="registerSource.logical_source"
+                name="source[logical_source]"
+                required
+                class="w-full select"
+              >
+                <option
+                  v-for="option in page.admin.registration.form.options.logical_source"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              control-id="source_kind"
+              wrapper-class="fieldset mb-3"
+              label="Ownership"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                id="source_kind"
+                v-model="registerSource.kind"
+                name="source[kind]"
+                required
+                class="w-full select"
+              >
+                <option
+                  v-for="option in page.admin.registration.form.options.kind"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              control-id="source_isolation_level"
+              wrapper-class="fieldset mb-3"
+              label="Isolation"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                id="source_isolation_level"
+                v-model="registerSource.isolation_level"
+                name="source[isolation_level]"
+                required
+                class="w-full select"
+              >
+                <option
+                  v-for="option in page.admin.registration.form.options.isolation_level"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              control-id="source_credentials_ref"
+              wrapper-class="fieldset mb-3"
+              label="Credential ref"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                id="source_credentials_ref"
+                v-model="registerSource.credentials_ref"
+                name="source[credentials_ref]"
+                type="text"
+                placeholder="cred-rehearsal-questdb"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              control-id="source_credential_provider"
+              wrapper-class="fieldset mb-3"
+              label="Credential provider"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                id="source_credential_provider"
+                v-model="registerSource.credential_provider"
+                name="source[credential_provider]"
+                class="w-full select"
+              >
+                <option
+                  v-for="option in page.admin.registration.form.options.credential_provider"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
+            <CadenceField
+              control-id="source_endpoint_ref"
+              wrapper-class="fieldset mb-3"
+              label="Endpoint ref"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                id="source_endpoint_ref"
+                v-model="registerSource.endpoint_ref"
+                name="source[endpoint_ref]"
+                type="text"
+                placeholder="endpoint://customer/rehearsal"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              control-id="source_material_env_profile"
+              wrapper-class="fieldset mb-3"
+              label="Env material profile"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                id="source_material_env_profile"
+                v-model="registerSource.material_env_profile"
+                name="source[material_env_profile]"
+                type="text"
+                placeholder="customer-rehearsal-questdb"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              control-id="source_http_endpoint_env"
+              wrapper-class="fieldset mb-3"
+              label="HTTP endpoint env"
+              label-class="hud-label block mb-1.5"
+            >
+              <input
+                id="source_http_endpoint_env"
+                v-model="registerSource.http_endpoint_env"
+                name="source[http_endpoint_env]"
+                type="text"
+                placeholder="CADENCE_CUSTOMER_QUESTDB_HTTP_ENDPOINT"
+                class="w-full input"
+              >
+            </CadenceField>
+            <CadenceField
+              control-id="source_storage"
+              wrapper-class="fieldset mb-3"
+              label="Storage"
+              label-class="hud-label block mb-1.5"
+            >
+              <select
+                id="source_storage"
+                v-model="registerSource.storage"
+                name="source[storage]"
+                required
+                class="w-full select"
+              >
+                <option
+                  v-for="option in page.admin.registration.form.options.storage"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </CadenceField>
             <div class="flex items-end gap-2">
               <button id="submit-register-source" type="submit" class="btn btn-primary btn-sm">
                 Register
@@ -1265,24 +1286,26 @@ const deploymentFields = [
                       @submit.prevent="submitBinding"
                     >
                       <div>
-                        <div class="fieldset mb-3">
-                          <label for="binding_data_source_id">
-                            <span class="hud-label block mb-1.5">Data source</span>
-                            <select
-                              id="binding_data_source_id"
-                              v-model="binding.data_source_id"
-                              name="binding[data_source_id]"
-                              required
-                              class="w-full select"
-                            >
-                              <option
-                                v-for="option in page.admin.binding_form.source_options"
-                                :key="option.value"
-                                :value="option.value"
-                              >{{ option.label }}</option>
-                            </select>
-                          </label>
-                        </div>
+                        <CadenceField
+                          control-id="binding_data_source_id"
+                          wrapper-class="fieldset mb-3"
+                          label="Data source"
+                          label-class="hud-label block mb-1.5"
+                        >
+                          <select
+                            id="binding_data_source_id"
+                            v-model="binding.data_source_id"
+                            name="binding[data_source_id]"
+                            required
+                            class="w-full select"
+                          >
+                            <option
+                              v-for="option in page.admin.binding_form.source_options"
+                              :key="option.value"
+                              :value="option.value"
+                            >{{ option.label }}</option>
+                          </select>
+                        </CadenceField>
                         <p
                           v-if="page.admin.binding_form.error"
                           :id="`change-binding-error-${row.binding_id}`"

@@ -15,6 +15,7 @@ import {
   emptyStateRootClass,
   emptyStateSha256,
   emptyStateVariantLedger,
+  peelCadenceFieldsBeforeEmptyStateLayers,
   peelCadenceEmptyStateComponent,
   peelCadenceEmptyStateFrames,
 } from "./empty_state_frame_test_support.mjs"
@@ -184,9 +185,13 @@ for (const consumer of cadenceEmptyStateConsumers) {
 
 for (const exclusion of emptyStateVariantLedger.filter(({sha256}) => sha256)) {
   const current = await readFile(resolve(repositoryRoot, exclusion.repositoryPath), "utf8")
+  const fieldCompatibleCurrent = peelCadenceFieldsBeforeEmptyStateLayers(
+    current,
+    exclusion.file,
+  )
   const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(exclusion.file)
-    ? peelCadenceOpsAuthorHeader(current, exclusion.file)
-    : current
+    ? peelCadenceOpsAuthorHeader(fieldCompatibleCurrent, exclusion.file)
+    : fieldCompatibleCurrent
   const predecessor = predecessorSource(exclusion.repositoryPath)
 
   assert.equal(

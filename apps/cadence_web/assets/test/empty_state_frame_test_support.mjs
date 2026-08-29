@@ -1,5 +1,11 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
+
+export const peelCadenceFieldsBeforeEmptyStateLayers = (source, caller) =>
+  caller.split("/").at(-1) === "OpsDataSources.vue"
+    ? peelOpsDataSourcesCadenceFields(source, caller)
+    : source
 
 export const emptyStateFramePredecessor = "96e8a4bb542d9abf784de4eb5c9c61492860e937"
 export const emptyStateRootClass =
