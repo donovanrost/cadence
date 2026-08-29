@@ -34,7 +34,7 @@ import {narrowFormPageFramePath} from "./narrow_form_page_frame_test_support.mjs
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 223-SFC predecessor and full 229-SFC current tree add only the audited primitives",
+  "the fixed 223-SFC predecessor and full 232-SFC current tree add only the audited primitives",
   "all predecessor SFCs classify into six exact shells and one frozen semantic exclusion",
   "all current SFCs parse and exactly six singular imports/openings replace the native cohort",
   "the fixed predecessor commit, Git blob, byte length, and SHA-256 are exact for every caller",
@@ -98,9 +98,10 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 231, "the current-tree gate includes exactly 231 Vue SFCs")
+assert.equal(currentVuePaths.length, 232, "the current-tree gate includes exactly 232 Vue SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
+  "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
   definitionListPanelRepositoryPath,
   "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
   narrowFormPageFramePath,
@@ -121,6 +122,7 @@ assert.deepEqual(
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsPageBodyFrame.vue",
     primitiveRepositoryPath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
   ].sort(),
   "the current inventory is every fixed predecessor SFC plus only the audited primitives",
 )

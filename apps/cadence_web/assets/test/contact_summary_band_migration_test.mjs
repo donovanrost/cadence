@@ -137,8 +137,9 @@ assert.deepEqual(
     "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
+    "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
   ].sort(),
-  "the current SFC path cohort adds only the compact header body, definition-list, and stat-tile primitives",
+  "the current SFC path cohort adds only the audited presentation primitives",
 )
 assert.deepEqual(contactSummaryBandCallerNames, [
   "OpsContactRequirementShow.vue",

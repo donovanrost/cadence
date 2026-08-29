@@ -2,6 +2,7 @@
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceDashboardSettingsSectionFrame from "./ui/components/CadenceDashboardSettingsSectionFrame.vue"
 import {reactive, watch} from "vue"
 
 type EmptyState = {
@@ -406,7 +407,7 @@ const archiveDashboard = () => {
           </div>
         </form>
 
-        <section :id="page.sharing.id" class="border border-base-300 bg-base-200/20 p-5">
+        <CadenceDashboardSettingsSectionFrame :id="page.sharing.id">
           <p class="hud-label">{{ page.sharing.eyebrow }}</p>
           <h2 class="mt-1 text-lg font-semibold">{{ page.sharing.heading }}</h2>
           <p class="mt-1 text-xs text-base-content/55">
@@ -493,11 +494,10 @@ const archiveDashboard = () => {
               >Revoke</button>
             </article>
           </div>
-        </section>
+        </CadenceDashboardSettingsSectionFrame>
 
-        <section
+        <CadenceDashboardSettingsSectionFrame
           :id="page.snapshots.id"
-          class="border border-base-300 bg-base-200/20 p-5"
         >
           <p class="hud-label">{{ page.snapshots.eyebrow }}</p>
           <h2 class="mt-1 text-lg font-semibold">{{ page.snapshots.heading }}</h2>
@@ -556,7 +556,7 @@ const archiveDashboard = () => {
               </p>
             </article>
           </div>
-        </section>
+        </CadenceDashboardSettingsSectionFrame>
       </div>
 
       <aside class="space-y-4">

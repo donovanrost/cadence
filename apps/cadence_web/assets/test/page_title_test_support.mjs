@@ -3,6 +3,9 @@ import {createHash} from "node:crypto"
 import {
   peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
 } from "./compact_page_header_body_frame_test_support.mjs"
+import {
+  peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers,
+} from "./dashboard_settings_section_frame_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelCadenceDiagnosticsSectionFrame} from "./diagnostics_section_frame_test_support.mjs"
 import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
@@ -137,8 +140,13 @@ export const pageTitleMigrationFor = (caller) => {
 
 export const peelCadencePageTitle = (source, caller) => {
   const entry = pageTitleMigrationFor(caller)
+  const dashboardSettingsCompatibleSource =
+    peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers(source, caller)
   const compactHeaderBodyCompatibleSource =
-    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(source, caller)
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(
+      dashboardSettingsCompatibleSource,
+      caller,
+    )
   const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(
     compactHeaderBodyCompatibleSource,
     caller,
