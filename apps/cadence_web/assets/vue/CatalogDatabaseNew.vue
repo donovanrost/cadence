@@ -3,6 +3,7 @@ import CatalogUploadForm from "./CatalogUploadForm.vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
 
 type Breadcrumb = {
   label: string
@@ -37,7 +38,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div :id="page.id" class="space-y-6 max-w-2xl">
+  <CadenceFormPageFrame :id="page.id">
     <CadencePageHeaderFrame variant="compact">
       <div>
         <div>
@@ -84,5 +85,5 @@ const emit = defineEmits<{
         class="btn btn-ghost"
       >{{ page.cancel.label }}</a>
     </div>
-  </div>
+  </CadenceFormPageFrame>
 </template>

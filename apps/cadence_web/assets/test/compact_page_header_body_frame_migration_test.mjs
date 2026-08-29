@@ -23,6 +23,9 @@ import {
   peelCadenceNarrowFormPageFrameBeforeOlderLayers,
 } from "./narrow_form_page_frame_test_support.mjs";
 import {
+  peelCadenceFormPageFrameBeforeOlderLayers,
+} from "./form_page_frame_test_support.mjs";
+import {
   elementAttributes,
   expectedNodeVersion,
   flushVue,
@@ -83,11 +86,12 @@ assert.equal(
   225,
   "the exact predecessor owns 225 Vue SFCs"
 );
-assert.equal(successorVuePaths.length, 229, "the successor owns 229 Vue SFCs");
+assert.equal(successorVuePaths.length, 230, "the successor owns 230 Vue SFCs");
 assert.deepEqual(
   successorVuePaths.filter((path) => !predecessorVuePaths.includes(path)),
   [
     compactHeaderBodyFramePath,
+    "apps/cadence_web/assets/vue/ui/components/CadenceFormPageFrame.vue",
     narrowFormPageFramePath,
     opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
@@ -240,7 +244,10 @@ for (const exclusion of compactHeaderBodyExclusions) {
   );
   const compatibleCurrent = Buffer.from(
     peelCadenceNarrowFormPageFrameBeforeOlderLayers(
-      current.toString("utf8"),
+      peelCadenceFormPageFrameBeforeOlderLayers(
+        current.toString("utf8"),
+        exclusion.file,
+      ),
       exclusion.file,
     ),
   );
@@ -1231,5 +1238,5 @@ contractApp.unmount();
 dom.window.close();
 
 console.log(
-  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-229 SFC inventory)"
+  "compact_page_header_body_frame_migration_test passed (10 callers + 23 exclusions + 225-to-230 SFC inventory)"
 );
