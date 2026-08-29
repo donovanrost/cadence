@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {onMounted, reactive, ref, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
@@ -294,9 +295,11 @@ const issueServiceIdentity = () => {
         class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end"
         @submit.prevent="issueServiceIdentity"
       >
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label mb-1.5 block">Display name</span>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            label="Display name"
+            label-class="hud-label mb-1.5 block"
+          >
             <input
               id="service_identity_display_name"
               v-model="serviceIdentityForm.display_name"
@@ -305,11 +308,12 @@ const issueServiceIdentity = () => {
               class="input w-full"
               required
             >
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label mb-1.5 block">ID (optional)</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            label="ID (optional)"
+            label-class="hud-label mb-1.5 block"
+          >
             <input
               id="service_identity_service_identity_id"
               v-model="serviceIdentityForm.service_identity_id"
@@ -318,8 +322,7 @@ const issueServiceIdentity = () => {
               class="input w-full"
               placeholder="Generated when blank"
             >
-          </label>
-        </div>
+          </CadenceField>
         <button type="submit" class="btn btn-primary btn-sm mb-3">Issue credential</button>
       </form>
     </section>

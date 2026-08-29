@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
 import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue"
@@ -207,9 +208,11 @@ const resetFilters = () => {
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
         @submit.prevent
       >
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.severity.label }}</span>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.severity.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.severity.id"
               :name="filters.fields.severity.name"
@@ -225,11 +228,12 @@ const resetFilters = () => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.state.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.state.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.state.id"
               :name="filters.fields.state.name"
@@ -245,11 +249,12 @@ const resetFilters = () => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.spacecraft_id.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.spacecraft_id.label"
+            label-class="hud-label block mb-1.5"
+          >
             <select
               :id="filters.fields.spacecraft_id.id"
               :name="filters.fields.spacecraft_id.name"
@@ -265,11 +270,12 @@ const resetFilters = () => {
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
-        <div class="fieldset mb-3">
-          <label>
-            <span class="hud-label block mb-1.5">{{ filters.fields.query.label }}</span>
+          </CadenceField>
+          <CadenceField
+            wrapper-class="fieldset mb-3"
+            :label="filters.fields.query.label"
+            label-class="hud-label block mb-1.5"
+          >
             <input
               :id="filters.fields.query.id"
               :name="filters.fields.query.name"
@@ -279,8 +285,7 @@ const resetFilters = () => {
               class="w-full input"
               @input="updateQuery"
             >
-          </label>
-        </div>
+          </CadenceField>
       </form>
 
       <div class="flex items-center justify-between gap-3">

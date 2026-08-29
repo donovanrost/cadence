@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
+
 type AttrValue = string | boolean | null
 type Attrs = Record<string, AttrValue>
 
@@ -127,13 +129,13 @@ defineProps<{runtime_controls: RuntimeControls}>()
             {{ runtime_controls.form.source.heading.text }}
           </p>
           <div :class="runtime_controls.form.source.fields_class">
-            <div
-              v-for="field in runtime_controls.form.source.fields"
-              :key="String(field.attrs.id)"
-              :class="field.wrapper_class"
-            >
-              <label>
-                <span :class="field.label.class">{{ field.label.text }}</span>
+              <CadenceField
+                v-for="field in runtime_controls.form.source.fields"
+                :key="String(field.attrs.id)"
+                :wrapper-class="field.wrapper_class"
+                :label="field.label.text"
+                :label-class="field.label.class"
+              >
                 <select v-bind="field.attrs">
                   <option
                     v-for="option in field.options"
@@ -146,8 +148,7 @@ defineProps<{runtime_controls: RuntimeControls}>()
                     {{ option.label }}
                   </option>
                 </select>
-              </label>
-            </div>
+              </CadenceField>
           </div>
         </section>
 
@@ -156,13 +157,13 @@ defineProps<{runtime_controls: RuntimeControls}>()
             {{ runtime_controls.form.representation.heading.text }}
           </p>
           <div :class="runtime_controls.form.representation.fields_class">
-            <div
-              v-for="field in runtime_controls.form.representation.fields"
-              :key="String(field.attrs.id)"
-              :class="field.wrapper_class"
-            >
-              <label>
-                <span :class="field.label.class">{{ field.label.text }}</span>
+              <CadenceField
+                v-for="field in runtime_controls.form.representation.fields"
+                :key="String(field.attrs.id)"
+                :wrapper-class="field.wrapper_class"
+                :label="field.label.text"
+                :label-class="field.label.class"
+              >
                 <select v-bind="field.attrs">
                   <option
                     v-for="option in field.options"
@@ -175,8 +176,7 @@ defineProps<{runtime_controls: RuntimeControls}>()
                     {{ option.label }}
                   </option>
                 </select>
-              </label>
-            </div>
+              </CadenceField>
           </div>
         </section>
 
@@ -185,13 +185,13 @@ defineProps<{runtime_controls: RuntimeControls}>()
             {{ runtime_controls.form.semantics.heading.text }}
           </p>
           <div :class="runtime_controls.form.semantics.fields_class">
-            <div
-              v-for="field in runtime_controls.form.semantics.fields"
-              :key="String(field.attrs.id)"
-              :class="field.wrapper_class"
-            >
-              <label>
-                <span :class="field.label.class">{{ field.label.text }}</span>
+              <CadenceField
+                v-for="field in runtime_controls.form.semantics.fields"
+                :key="String(field.attrs.id)"
+                :wrapper-class="field.wrapper_class"
+                :label="field.label.text"
+                :label-class="field.label.class"
+              >
                 <select v-bind="field.attrs">
                   <option
                     v-for="option in field.options"
@@ -204,8 +204,7 @@ defineProps<{runtime_controls: RuntimeControls}>()
                     {{ option.label }}
                   </option>
                 </select>
-              </label>
-            </div>
+              </CadenceField>
           </div>
           <span
             v-if="runtime_controls.form.semantics.badge"

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 export const opsPageBodyFramePredecessorCommit =
   "3f461caaca8391f5a7a4388b0098cd46a76c716c"
@@ -47,6 +48,7 @@ const migrationFor = caller => {
 
 export const peelCadenceOpsPageBodyFrame = (source, caller) => {
   const migration = migrationFor(caller)
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
   const opening = "    <CadenceOpsPageBodyFrame>"
   const closing = "    </CadenceOpsPageBodyFrame>"
   const predecessorOpening = `    <div class="${opsPageBodyFrameClass}">`

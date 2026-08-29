@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 
 export const statTilePredecessorCommit = "b9e8c677bf4cb37020107a8d37483117ddf03b94"
 export const statTileClass = "border border-base-300 bg-base-200 px-3 py-2"
@@ -156,6 +157,7 @@ export const statTileMigrationFor = (caller) => {
 export const peelCadenceStatTile = (source, caller) => {
   const entry = statTileMigrationFor(caller)
   assert.ok(entry, `${caller} is an audited CadenceStatTile caller`)
+  source = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
 
   assert.equal(occurrences(source, statTileImport), 1, `${entry.file} stat-tile import count`)
   assert.equal(source.match(/^import CadenceStatTile\b/gm)?.length, 1)
@@ -181,7 +183,10 @@ export const peelCadenceStatTile = (source, caller) => {
 }
 
 export const peelCadenceStatTileBeforeOlderLayers = (source, caller) => {
+  const labeledCompatibleSource = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
   const entry = statTileMigrationFor(caller)
-  if (!entry || occurrences(source, statTileImport) === 0) return source
-  return peelCadenceStatTile(source, caller)
+  if (!entry || occurrences(labeledCompatibleSource, statTileImport) === 0) {
+    return labeledCompatibleSource
+  }
+  return peelCadenceStatTile(labeledCompatibleSource, caller)
 }

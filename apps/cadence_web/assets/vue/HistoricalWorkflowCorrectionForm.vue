@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
+
 type Attributes = Record<string, string>
 
 type TextPresentation = {
@@ -116,11 +118,11 @@ defineProps<{presentation: Presentation}>()
       </template>
     </dl>
 
-    <div :class="presentation.new_run.wrapper_class">
-      <label>
-        <span :class="presentation.new_run.label.class">
-          {{ presentation.new_run.label.text }}
-        </span>
+      <CadenceField
+        :wrapper-class="presentation.new_run.wrapper_class"
+        :label="presentation.new_run.label.text"
+        :label-class="presentation.new_run.label.class"
+      >
         <input
           :id="presentation.new_run.id"
           :name="presentation.new_run.name"
@@ -129,24 +131,25 @@ defineProps<{presentation: Presentation}>()
           :required="presentation.new_run.required"
           :class="presentation.new_run.input_class"
         >
-      </label>
-      <p
-        v-for="(error, index) in presentation.new_run.errors"
-        :key="`${presentation.new_run.id}-error-${index}`"
-        :class="presentation.new_run.error_class"
-      >
-        {{ error }}
-      </p>
-    </div>
+        <template #errors>
+          <p
+            v-for="(error, index) in presentation.new_run.errors"
+            :key="`${presentation.new_run.id}-error-${index}`"
+            :class="presentation.new_run.error_class"
+          >
+            {{ error }}
+          </p>
+        </template>
+      </CadenceField>
 
     <div :class="presentation.source_fields_class">
-      <div
-        v-for="field in presentation.source_fields"
-        :key="field.id"
-        :class="field.wrapper_class"
-      >
-        <label>
-          <span :class="field.label.class">{{ field.label.text }}</span>
+        <CadenceField
+          v-for="field in presentation.source_fields"
+          :key="field.id"
+          :wrapper-class="field.wrapper_class"
+          :label="field.label.text"
+          :label-class="field.label.class"
+        >
           <input
             :id="field.id"
             :name="field.name"
@@ -155,15 +158,16 @@ defineProps<{presentation: Presentation}>()
             :required="field.required"
             :class="field.input_class"
           >
-        </label>
-        <p
-          v-for="(error, index) in field.errors"
-          :key="`${field.id}-error-${index}`"
-          :class="field.error_class"
-        >
-          {{ error }}
-        </p>
-      </div>
+          <template #errors>
+            <p
+              v-for="(error, index) in field.errors"
+              :key="`${field.id}-error-${index}`"
+              :class="field.error_class"
+            >
+              {{ error }}
+            </p>
+          </template>
+        </CadenceField>
     </div>
 
     <label

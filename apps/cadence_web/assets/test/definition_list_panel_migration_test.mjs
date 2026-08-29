@@ -27,6 +27,7 @@ import {
   definitionListPanelSha256,
   peelCadenceDefinitionListPanel,
 } from "./definition_list_panel_test_support.mjs"
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -384,7 +385,10 @@ const divergentDiagnosticArticles = Object.freeze([
   }),
 ])
 for (const exclusion of divergentDiagnosticArticles) {
-  const source = currentSources.get(exclusion.repositoryPath)
+  const source = peelLabeledControlFieldsBeforeOlderLayers(
+    currentSources.get(exclusion.repositoryPath),
+    exclusion.repositoryPath,
+  )
   const filename = exclusion.repositoryPath.split("/").at(-1)
   const predecessorCompatibleSource = opsListFrameCallerNames.includes(filename)
     ? peelCadenceOpsListFrame(source, filename)

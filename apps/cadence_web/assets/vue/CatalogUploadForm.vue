@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed, reactive, ref} from "vue"
 import {useLiveUpload} from "live_vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 
 type UploadError = {
   ref: string
@@ -202,13 +203,14 @@ const submitUpload = () => {
 
         <form :id="form.id" :class="form.class" @submit.prevent="submitUpload">
           <div :class="form.primary_fields_class">
-            <div
-              v-for="field in form.primary_fields"
-              :key="field.key"
-              :class="field.wrapper_class"
-            >
-              <label :for="field.id">
-                <span :class="field.label_class">{{ field.label }}</span>
+              <CadenceField
+                v-for="field in form.primary_fields"
+                :key="field.key"
+                :control-id="field.id"
+                :wrapper-class="field.wrapper_class"
+                :label="field.label"
+                :label-class="field.label_class"
+              >
                 <textarea
                   v-if="field.type === 'textarea'"
                   :id="field.id"
@@ -226,20 +228,22 @@ const submitUpload = () => {
                   :class="field.input_class"
                   @input="validate"
                 >
-              </label>
-              <p v-for="error in field.errors" :key="error" :class="field.error_class">
-                {{ error }}
-              </p>
-            </div>
+                <template #errors>
+                  <p v-for="error in field.errors" :key="error" :class="field.error_class">
+                    {{ error }}
+                  </p>
+                </template>
+              </CadenceField>
           </div>
 
-          <div
-            v-for="field in form.secondary_fields"
-            :key="field.key"
-            :class="field.wrapper_class"
-          >
-            <label :for="field.id">
-              <span :class="field.label_class">{{ field.label }}</span>
+            <CadenceField
+              v-for="field in form.secondary_fields"
+              :key="field.key"
+              :control-id="field.id"
+              :wrapper-class="field.wrapper_class"
+              :label="field.label"
+              :label-class="field.label_class"
+            >
               <textarea
                 v-if="field.type === 'textarea'"
                 :id="field.id"
@@ -257,11 +261,12 @@ const submitUpload = () => {
                 :class="field.input_class"
                 @input="validate"
               >
-            </label>
-            <p v-for="error in field.errors" :key="error" :class="field.error_class">
-              {{ error }}
-            </p>
-          </div>
+              <template #errors>
+                <p v-for="error in field.errors" :key="error" :class="field.error_class">
+                  {{ error }}
+                </p>
+              </template>
+            </CadenceField>
 
           <label v-if="form.file_input.wrapper_class" :class="form.file_input.wrapper_class">
             <input

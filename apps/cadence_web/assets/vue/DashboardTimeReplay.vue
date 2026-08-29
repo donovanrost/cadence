@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import CadenceField from "./ui/components/CadenceField.vue"
+
 type AttrValue = string | boolean | null
 type Attrs = Record<string, AttrValue>
 
@@ -69,11 +71,11 @@ defineProps<{presentation: ReplayPresentation}>()
             <input v-bind="field.attrs" />
           </label>
         </div>
-        <div :class="presentation.body.form.replay_run.wrapper_class">
-          <label>
-            <span :class="presentation.body.form.replay_run.label.class">
-              {{ presentation.body.form.replay_run.label.text }}
-            </span>
+          <CadenceField
+            :wrapper-class="presentation.body.form.replay_run.wrapper_class"
+            :label="presentation.body.form.replay_run.label.text"
+            :label-class="presentation.body.form.replay_run.label.class"
+          >
             <select v-bind="presentation.body.form.replay_run.attrs">
               <option
                 v-for="(option, index) in presentation.body.form.replay_run.options"
@@ -86,8 +88,7 @@ defineProps<{presentation: ReplayPresentation}>()
                 {{ option.label }}
               </option>
             </select>
-          </label>
-        </div>
+          </CadenceField>
       </form>
       <span v-if="presentation.body.clock" v-bind="presentation.body.clock.attrs">
         {{ presentation.body.clock.text }}

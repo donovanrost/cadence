@@ -5,6 +5,7 @@ import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vu
 import ApplicationNavigation from "./application_host/ApplicationNavigation.vue"
 import ApplicationStats from "./application_host/ApplicationStats.vue"
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
@@ -524,9 +525,11 @@ const packetRailClasses: Record<PacketGroupState, string> = {
               :data-reference-mode="field.reference?.mode"
               :data-reference-query="field.reference?.query"
             >
-              <div class="fieldset mb-3">
-                <label>
-                  <span class="hud-label mb-1.5 block">{{ field.label }}</span>
+                <CadenceField
+                  wrapper-class="fieldset mb-3"
+                  :label="field.label"
+                  label-class="hud-label mb-1.5 block"
+                >
                   <select
                     v-if="field.type === 'select'"
                     :id="field.input_id"
@@ -581,34 +584,36 @@ const packetRailClasses: Record<PacketGroupState, string> = {
                     ]"
                     @input="changeFormField(field, $event)"
                   />
-                </label>
+                  <template #help>
+                    <datalist v-if="field.reference?.mode === 'search'" :id="field.reference.options_id">
+                      <option
+                        v-for="option in field.reference.options"
+                        :key="option.value"
+                        :value="option.value"
+                        :label="option.label"
+                      >{{ option.description }}</option>
+                    </datalist>
 
-                <datalist v-if="field.reference?.mode === 'search'" :id="field.reference.options_id">
-                  <option
-                    v-for="option in field.reference.options"
-                    :key="option.value"
-                    :value="option.value"
-                    :label="option.label"
-                  >{{ option.description }}</option>
-                </datalist>
+                    <p
+                      v-if="field.reference?.mode === 'search'"
+                      :id="field.reference.status_id"
+                      :data-match-count="field.reference.match_count"
+                      :data-more-matches="String(field.reference.more_matches)"
+                      aria-live="polite"
+                      class="-mt-1 mb-2 flex items-center gap-1.5 border-l-2 border-primary/45 pl-2 font-mono text-[0.68rem] uppercase tracking-[0.09em] text-base-content/55"
+                    >
+                      <span class="hero-magnifying-glass size-3.5 text-primary/70" aria-hidden="true"></span>
+                      {{ field.reference.result_summary }}
+                    </p>
+                  </template>
 
-                <p
-                  v-if="field.reference?.mode === 'search'"
-                  :id="field.reference.status_id"
-                  :data-match-count="field.reference.match_count"
-                  :data-more-matches="String(field.reference.more_matches)"
-                  aria-live="polite"
-                  class="-mt-1 mb-2 flex items-center gap-1.5 border-l-2 border-primary/45 pl-2 font-mono text-[0.68rem] uppercase tracking-[0.09em] text-base-content/55"
-                >
-                  <span class="hero-magnifying-glass size-3.5 text-primary/70" aria-hidden="true"></span>
-                  {{ field.reference.result_summary }}
-                </p>
-
-                <CadenceValidationMessage
-                  v-for="error in field.errors"
-                  :key="error"
-                >{{ error }}</CadenceValidationMessage>
-              </div>
+                  <template #errors>
+                    <CadenceValidationMessage
+                      v-for="error in field.errors"
+                      :key="error"
+                    >{{ error }}</CadenceValidationMessage>
+                  </template>
+                </CadenceField>
               <p
                 v-if="field.help"
                 class="mb-3 text-xs text-base-content/55"
@@ -684,11 +689,11 @@ const packetRailClasses: Record<PacketGroupState, string> = {
         />
 
         <div class="grid gap-4 border-b border-base-300/60 px-4 py-3 md:grid-cols-[minmax(16rem,28rem)_1fr] md:items-end">
-          <div class="fieldset mb-3">
-            <label>
-              <span class="hud-label mb-1.5 block">
-                {{ declarative_surface.packet_bindings.form.source_endpoint.label }}
-              </span>
+            <CadenceField
+              wrapper-class="fieldset mb-3"
+              :label="declarative_surface.packet_bindings.form.source_endpoint.label"
+              label-class="hud-label mb-1.5 block"
+            >
               <select
                 :id="declarative_surface.packet_bindings.form.source_endpoint.id"
                 :name="declarative_surface.packet_bindings.form.source_endpoint.name"
@@ -707,8 +712,7 @@ const packetRailClasses: Record<PacketGroupState, string> = {
                   :disabled="option.disabled"
                 >{{ option.label }}</option>
               </select>
-            </label>
-          </div>
+            </CadenceField>
           <p class="pb-3 text-xs text-base-content/50">
             {{ declarative_surface.packet_bindings.instructions.shared_input }}
           </p>

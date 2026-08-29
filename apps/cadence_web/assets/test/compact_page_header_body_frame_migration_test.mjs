@@ -28,6 +28,7 @@ import {
 import {
   peelCadenceFormSectionFrameBeforeOlderLayers,
 } from "./form_section_frame_test_support.mjs";
+import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs";
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -252,7 +253,10 @@ for (const exclusion of compactHeaderBodyExclusions) {
     peelCadenceNarrowFormPageFrameBeforeOlderLayers(
       peelCadenceFormPageFrameBeforeOlderLayers(
         peelCadenceFormSectionFrameBeforeOlderLayers(
-          current.toString("utf8"),
+          peelLabeledControlFieldsBeforeOlderLayers(
+            current.toString("utf8"),
+            exclusion.file,
+          ),
           exclusion.file,
         ),
         exclusion.file,

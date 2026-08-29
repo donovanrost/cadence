@@ -2,6 +2,7 @@
 import {reactive, watch} from "vue"
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
 import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
+import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 
@@ -390,13 +391,13 @@ const revokeGrant = (grant: Grant) => {
           </template>
           <div class="card-body p-6">
             <form :id="grant_form.id" class="space-y-4" @submit.prevent="grantMission">
-              <div
-                v-for="fieldKey in grantFieldOrder"
-                :key="fieldKey"
-                class="fieldset mb-3"
-              >
-                <label>
-                  <span class="hud-label block mb-1.5">{{ grant_form.fields[fieldKey].label }}</span>
+                <CadenceField
+                  v-for="fieldKey in grantFieldOrder"
+                  :key="fieldKey"
+                  wrapper-class="fieldset mb-3"
+                  :label="grant_form.fields[fieldKey].label"
+                  label-class="hud-label block mb-1.5"
+                >
                   <select
                     v-if="grant_form.fields[fieldKey].type === 'select'"
                     :id="grant_form.fields[fieldKey].id"
@@ -425,8 +426,7 @@ const revokeGrant = (grant: Grant) => {
                     :min="grant_form.fields[fieldKey].min ?? undefined"
                     class="w-full input"
                   >
-                </label>
-              </div>
+                </CadenceField>
               <div class="flex justify-end">
                 <button
                   :id="grant_form.action.id"
