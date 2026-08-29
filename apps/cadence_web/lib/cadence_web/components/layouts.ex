@@ -363,7 +363,7 @@ defmodule CadenceWeb.Layouts do
       "label_class" => "sidebar-label flex-1",
       "label" => label,
       "chevron_class" =>
-        "hero-chevron-right h-3 w-3 opacity-60 transition-transform group-open:rotate-90 sidebar-label",
+        "hero-chevron-right h-3 w-3 opacity-60 transition-transform group-data-[state=open]:rotate-90 sidebar-label",
       "list_class" => "mt-0.5 space-y-0.5",
       "children" => children,
       "active" => active?
