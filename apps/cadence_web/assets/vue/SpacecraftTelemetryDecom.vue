@@ -5,6 +5,7 @@ import CadenceCard from "./ui/components/CadenceCard.vue"
 import CadenceDiagnosticsSectionFrame from "./ui/components/CadenceDiagnosticsSectionFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
 type PreflightState = "ready" | "attention" | "blocked"
@@ -414,15 +415,14 @@ const buttonClasses: Record<ButtonVariant, string> = {
               </p>
               <template v-else>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div
+                  <CadenceStatTile
                     v-for="stat in preview.stats"
                     :id="stat.id"
                     :key="stat.id"
-                    class="border border-base-300 bg-base-200 px-3 py-2"
                   >
-                    <p class="hud-label">{{ stat.label }}</p>
+                    <template #label>{{ stat.label }}</template>
                     <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
-                  </div>
+                  </CadenceStatTile>
                 </div>
 
                 <div v-if="preview.diagnostics" class="mt-3">

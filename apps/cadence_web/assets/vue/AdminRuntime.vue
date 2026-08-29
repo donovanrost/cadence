@@ -5,6 +5,7 @@ import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
 
 type FilterKey =
@@ -235,15 +236,14 @@ const updateFilter = (key: FilterKey, event: Event) => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <div
+      <CadenceStatTile
         v-for="stat in summary.stats"
         :id="stat.id"
         :key="stat.id"
-        class="border border-base-300 bg-base-200 px-3 py-2"
       >
-        <p class="hud-label">{{ stat.label }}</p>
+        <template #label>{{ stat.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
-      </div>
+      </CadenceStatTile>
     </div>
 
     <CadencePanel

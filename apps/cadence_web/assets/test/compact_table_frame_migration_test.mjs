@@ -76,6 +76,7 @@ const predecessorVuePaths = git(
   .sort()
 const allowedPostPredecessorVuePaths = Object.freeze([
   "apps/cadence_web/assets/vue/ui/components/CadenceDiagnosticsSectionFrame.vue",
+  "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
 ])
 const postPredecessorVuePaths = currentVuePaths.filter(
   (path) => !predecessorVuePaths.includes(path),
@@ -84,12 +85,12 @@ const postPredecessorVuePaths = currentVuePaths.filter(
 assert.deepEqual(
   postPredecessorVuePaths,
   allowedPostPredecessorVuePaths,
-  "exactly one explicitly allowed SFC was added after the frozen predecessor",
+  "exactly two explicitly allowed SFCs were added after the frozen predecessor",
 )
 assert.deepEqual(
   currentVuePaths,
   [...predecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
-  "the audit covers the full current tree: every frozen predecessor SFC plus one allowed addition",
+  "the audit covers the full current tree: every frozen predecessor SFC plus two allowed additions",
 )
 assert.equal(predecessorVuePaths.length, 222, "the frozen audit covers exactly 222 Vue SFCs")
 

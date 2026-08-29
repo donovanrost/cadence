@@ -120,7 +120,14 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
   .sort()
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor audits all 223 Vue SFCs")
-assert.deepEqual(currentVuePaths, predecessorVuePaths, "the current SFC path cohort is unchanged")
+assert.deepEqual(
+  currentVuePaths,
+  [
+    ...predecessorVuePaths,
+    "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",
+  ].sort(),
+  "the current SFC path cohort adds only CadenceStatTile to the fixed predecessor",
+)
 assert.deepEqual(contactSummaryBandCallerNames, [
   "OpsContactRequirementShow.vue",
   "OpsContactPlanShow.vue",

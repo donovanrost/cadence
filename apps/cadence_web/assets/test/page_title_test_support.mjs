@@ -4,6 +4,7 @@ import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelCadenceDiagnosticsSectionFrame} from "./diagnostics_section_frame_test_support.mjs"
 import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
 import {peelResidualCadenceCardBeforeOlderLayers} from "./residual_cadence_cards_test_support.mjs"
+import {peelCadenceStatTileBeforeOlderLayers} from "./stat_tile_test_support.mjs"
 
 export const peelCadenceFieldsBeforePageTitleLayers = (source, caller) =>
   caller.split("/").at(-1) === "OpsDataSources.vue"
@@ -133,7 +134,11 @@ export const pageTitleMigrationFor = (caller) => {
 
 export const peelCadencePageTitle = (source, caller) => {
   const entry = pageTitleMigrationFor(caller)
-  const residualCardCompatibleSource = peelResidualCadenceCardBeforeOlderLayers(source, caller)
+  const statTileCompatibleSource = peelCadenceStatTileBeforeOlderLayers(source, caller)
+  const residualCardCompatibleSource = peelResidualCadenceCardBeforeOlderLayers(
+    statTileCompatibleSource,
+    caller,
+  )
   const diagnosticsCompatibleSource = peelCadenceDiagnosticsSectionFrame(
     residualCardCompatibleSource,
     caller,
