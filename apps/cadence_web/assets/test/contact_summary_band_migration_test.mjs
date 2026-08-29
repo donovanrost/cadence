@@ -20,6 +20,7 @@ import {
   contactSummaryBandRootClass,
   peelContactSummaryBand,
 } from "./contact_summary_band_test_support.mjs"
+import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs"
 import {
   elementAttributes,
   expectedNodeVersion,
@@ -128,6 +129,7 @@ assert.deepEqual(
   [
     ...predecessorVuePaths,
     compactHeaderBodyFramePath,
+    opsListBodyFramePath,
     "apps/cadence_web/assets/vue/ui/components/CadenceDefinitionListPanel.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceOpsListFrame.vue",
     "apps/cadence_web/assets/vue/ui/components/CadenceStatTile.vue",

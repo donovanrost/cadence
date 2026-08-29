@@ -3,6 +3,7 @@ import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
+import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
 type Option = {
@@ -243,7 +244,7 @@ const clearCommandFocus = () => {
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto max-w-[100rem] space-y-4 p-5 lg:p-7">
+    <CadenceOpsListBodyFrame>
       <div
         v-if="focus_banner"
         :id="focus_banner.id"
@@ -429,6 +430,6 @@ const clearCommandFocus = () => {
           </article>
         </div>
       </CadenceOpsListFrame>
-    </div>
+    </CadenceOpsListBodyFrame>
   </CadenceOpsViewport>
 </template>

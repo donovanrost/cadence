@@ -3,6 +3,7 @@ import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
+import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue"
 
 type Severity = "critical" | "warning" | "info" | "nominal"
 
@@ -200,7 +201,7 @@ const resetFilters = () => {
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto max-w-[100rem] space-y-4 p-5 lg:p-7">
+    <CadenceOpsListBodyFrame>
       <form
         :id="filters.id"
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
@@ -365,6 +366,6 @@ const resetFilters = () => {
           </article>
         </div>
       </CadenceOpsListFrame>
-    </div>
+    </CadenceOpsListBodyFrame>
   </CadenceOpsViewport>
 </template>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceOpsListBodyFrameBeforeOlderLayers} from "./ops_list_body_frame_test_support.mjs"
 
 export const opsListFramePredecessorCommit = "37435982d75e0d23b4b102d6e8d371686b27d5f3"
 export const opsListFrameClass = "overflow-hidden border border-base-300 bg-base-100"
@@ -47,6 +48,7 @@ export const opsListFrameMigrationFor = caller => {
 
 export const peelCadenceOpsListFrame = (source, caller) => {
   const migration = opsListFrameMigrationFor(caller)
+  source = peelCadenceOpsListBodyFrameBeforeOlderLayers(source, caller)
 
   assert.equal(
     occurrences(source, opsListFrameImport),
