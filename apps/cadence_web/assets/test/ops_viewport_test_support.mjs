@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {
+  peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers,
+} from "./dashboard_settings_section_frame_test_support.mjs"
 import {peelCadenceOpsPageBodyFrameBeforeOlderLayers} from "./ops_page_body_frame_test_support.mjs"
 
 export const opsViewportPredecessorCommit = "fef20d7c72b5842b3dcae3e99630a1795b5791b3"
@@ -162,7 +165,12 @@ export const opsViewportMigrationFor = (caller) => {
 
 export const peelCadenceOpsViewport = (source, caller) => {
   const entry = opsViewportMigrationFor(caller)
-  const pageBodyCompatibleSource = peelCadenceOpsPageBodyFrameBeforeOlderLayers(source, caller)
+  const dashboardSettingsCompatibleSource =
+    peelCadenceDashboardSettingsSectionFrameBeforeOlderLayers(source, caller)
+  const pageBodyCompatibleSource = peelCadenceOpsPageBodyFrameBeforeOlderLayers(
+    dashboardSettingsCompatibleSource,
+    caller,
+  )
 
   assert.equal(occurrences(pageBodyCompatibleSource, entry.importLine), 1, `${entry.file} viewport import count`)
   assert.equal(pageBodyCompatibleSource.match(/^import CadenceOpsViewport\b/gm)?.length, 1)
