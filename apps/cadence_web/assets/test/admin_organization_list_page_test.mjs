@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceEmptyStateComponent} from "./empty_state_frame_test_support.mjs"
 import {peelCadenceHoverTableRows} from "./hover_table_row_test_support.mjs"
 
 const scenarioLedger = [
@@ -46,7 +47,7 @@ const [
   immutableChild,
   breadcrumbs,
   pageHeader,
-  emptyState,
+  currentEmptyState,
   pageShellTypes,
   liveView,
   presentation,
@@ -56,6 +57,7 @@ const [
 ] = await Promise.all(Object.values(paths).map((path) => readFile(path, "utf8")))
 
 const sha256 = (source) => createHash("sha256").update(source).digest("hex")
+const emptyState = peelCadenceEmptyStateComponent(currentEmptyState)
 const preHoverTableRowImmutableChild = peelCadenceHoverTableRows(
   immutableChild,
   "AdminOrganizationList.vue",

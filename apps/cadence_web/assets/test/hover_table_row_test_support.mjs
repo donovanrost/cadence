@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceEmptyStateFrames} from "./empty_state_frame_test_support.mjs"
 
 export const hoverTableRowPredecessor = "437a22f8dde29828bf52e9a709ced2d9d90a04e1"
 export const hoverTableRowClass =
@@ -273,30 +274,38 @@ export const hoverTableRowMigrationFor = (caller) => {
 export const peelCadenceHoverTableRows = (source, caller) => {
   const migration = hoverTableRowMigrationFor(caller)
   const expectedBoundaries = migration.openings.length
+  const predecessorCompatibleSource =
+    migration.file === "SpacecraftList.vue"
+      ? peelCadenceEmptyStateFrames(source, migration.file)
+      : source
 
-  assert.equal(occurrences(source, migration.importLine), 1, `${migration.file} exact import count`)
   assert.equal(
-    source.match(/^import CadenceHoverTableRow\b/gm)?.length,
+    occurrences(predecessorCompatibleSource, migration.importLine),
+    1,
+    `${migration.file} exact import count`,
+  )
+  assert.equal(
+    predecessorCompatibleSource.match(/^import CadenceHoverTableRow\b/gm)?.length,
     1,
     `${migration.file} import declaration count`,
   )
   assert.equal(
-    source.match(/<CadenceHoverTableRow\b/g)?.length,
+    predecessorCompatibleSource.match(/<CadenceHoverTableRow\b/g)?.length,
     expectedBoundaries,
     `${migration.file} opening boundary count`,
   )
   assert.equal(
-    occurrences(source, migration.componentClosing),
+    occurrences(predecessorCompatibleSource, migration.componentClosing),
     expectedBoundaries,
     `${migration.file} closing boundary count`,
   )
   assert.equal(
-    occurrences(source, hoverTableRowClass),
+    occurrences(predecessorCompatibleSource, hoverTableRowClass),
     0,
     `${migration.file} transfers the fixed class out of the caller`,
   )
 
-  let predecessor = source.replace(migration.importLine, "")
+  let predecessor = predecessorCompatibleSource.replace(migration.importLine, "")
 
   for (const [index, opening] of migration.openings.entries()) {
     assert.equal(

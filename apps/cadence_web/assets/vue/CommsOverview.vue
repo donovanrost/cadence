@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadenceCard from "./ui/components/CadenceCard.vue"
+import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue"
 import StatusBadge from "./StatusBadge.vue"
 
 type StatusTone = "ready" | "attention" | "blocked" | "info"
@@ -105,12 +106,12 @@ defineProps<{overview: Overview}>()
         </div>
 
         <div v-if="overview.transport.empty" class="mt-6">
-          <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
-            <p class="hud-label">{{ overview.transport.empty_state.title }}</p>
-            <p class="mx-auto mt-2 max-w-md text-sm text-base-content/70">
+          <CadenceEmptyStateFrame>
+            <template #title>{{ overview.transport.empty_state.title }}</template>
+            <template #description>
               {{ overview.transport.empty_state.description }}
-            </p>
-            <div class="mt-5">
+            </template>
+            <template #action>
               <a
                 :href="overview.transport.empty_state.action_href"
                 data-phx-link="redirect"
@@ -120,8 +121,8 @@ defineProps<{overview: Overview}>()
                 <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
                 {{ overview.transport.empty_state.action_label }}
               </a>
-            </div>
-          </div>
+            </template>
+          </CadenceEmptyStateFrame>
         </div>
 
         <template v-else>

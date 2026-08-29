@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceEmptyStateComponent} from "./empty_state_frame_test_support.mjs"
 import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
@@ -54,7 +55,7 @@ const [
   childSource,
   breadcrumbsSource,
   pageHeaderSource,
-  emptyStateSource,
+  currentEmptyStateSource,
   pageShellTypesSource,
   liveViewSource,
   liveViewTestSource,
@@ -70,6 +71,7 @@ const [
   readFile(liveViewTestPath, "utf8"),
   readFile(routerPath, "utf8"),
 ])
+const emptyStateSource = peelCadenceEmptyStateComponent(currentEmptyStateSource)
 
 const sourceSlice = (source, start, end, label) => {
   const startIndex = source.indexOf(start)
