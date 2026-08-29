@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {reactive, watch} from "vue"
@@ -452,7 +453,7 @@ const repairFleetRun = () => {
               >
                 {{ page.decision_inspector.empty.copy }}
               </div>
-              <details
+              <CadenceDetailsFrame
                 v-for="decision in decisions"
                 :id="decision.__dom_id"
                 :key="decision.fleet_planning_decision_id"
@@ -488,7 +489,7 @@ const repairFleetRun = () => {
                     </p>
                   </div>
                 </div>
-              </details>
+              </CadenceDetailsFrame>
             </div>
           </CadencePanel>
         </div>

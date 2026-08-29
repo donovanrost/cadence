@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadenceField from "./ui/components/CadenceField.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
@@ -320,14 +321,14 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
             <dd class="font-mono text-base-content/75">{{ fact.value }}</dd>
           </div>
         </dl>
-        <details :id="preview.details.id" class="border-t border-base-300">
+        <CadenceDetailsFrame :id="preview.details.id" class="border-t border-base-300">
           <summary class="cursor-pointer px-4 py-3 text-xs font-semibold">
             {{ preview.details.summary }}
           </summary>
           <p class="border-t border-base-300 px-4 py-3 text-xs leading-relaxed text-base-content/55">
             {{ preview.details.copy }}
           </p>
-        </details>
+        </CadenceDetailsFrame>
       </aside>
     </div>
   </section>

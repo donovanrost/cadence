@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
 import {onBeforeUnmount, reactive, watch} from "vue"
 
@@ -392,7 +393,7 @@ const clearCommandFocus = () => {
                 {{ command.focus.label }}
               </span>
             </div>
-            <details class="xl:col-span-6 border-t border-base-300/50 pt-2">
+            <CadenceDetailsFrame class="xl:col-span-6 border-t border-base-300/50 pt-2">
               <summary class="cursor-pointer font-mono text-[0.65rem] uppercase tracking-wider text-base-content/50">
                 {{ command.evidence.summary }}
               </summary>
@@ -422,7 +423,7 @@ const clearCommandFocus = () => {
                   </dd>
                 </div>
               </dl>
-            </details>
+            </CadenceDetailsFrame>
           </article>
         </div>
       </section>
