@@ -7,9 +7,9 @@ import vm from "node:vm"
 
 const scenarioLedger = [
   "Controller exposes one non-SSR DashboardCanvas host with one presentation prop",
-  "DashboardCanvas composes DashboardGrid and DashboardComparisonInspector while the grid owns widgets",
+  "DashboardCanvas composes the real collapsible adapters DashboardGrid and DashboardComparisonInspector",
   "outer flex content and optional inspector remain siblings",
-  "dashboard section disclosure state survives LiveVue prop updates by stable group key",
+  "reactive dashboard section disclosure state survives complete prop replacement by stable group key",
   "section and unsectioned groups use the same Vue-owned grid subtree",
   "GridStack items remain direct grid children with exact controller props",
   "every DashboardGrid layout event is re-emitted by DashboardCanvas",
@@ -68,6 +68,17 @@ for (const component of ["DashboardGrid", "DashboardComparisonInspector"]) {
   assert.match(source.canvas, new RegExp(`import ${component} from "\\./${component}\\.vue"`))
   assert.match(template, new RegExp(`<${component}\\b`))
 }
+for (const component of [
+  "CadenceCollapsible",
+  "CadenceCollapsibleContent",
+  "CadenceCollapsibleTrigger",
+]) {
+  assert.match(
+    source.canvas,
+    new RegExp(`import ${component} from "\\./ui/reka/${component}\\.vue"`),
+  )
+  assert.match(template, new RegExp(`<${component}\\b`))
+}
 assert.doesNotMatch(source.canvas, /import DashboardWidget/)
 assert.match(source.grid, /import DashboardWidget from "\.\/DashboardWidget\.vue"/)
 assert.match(gridTemplate, /<DashboardWidget :presentation="widget\.presentation" \/>/)
@@ -80,17 +91,29 @@ assert.match(
 )
 assert.match(
   template,
-  /<details\n          v-if="group\.section"\n          v-bind="group\.section\.root\.attrs"\n          :open="sectionOpen\(group\)"\n          @toggle="rememberSectionOpen\(group, \$event\)"/,
+  /<CadenceCollapsible\n          v-if="group\.section"\n          :content-id="sectionContentId\(group\)"\n          :open="sectionOpen\(group\)"\n          :unmount-on-hide="false"\n          @request-change="rememberSectionOpen\(group, \$event\)"/,
 )
-assert.match(template, /<summary v-bind="group\.section\.summary\.attrs">/)
+assert.match(template, /<div v-bind="sectionRootAttrs\(group\)">/)
+assert.match(
+  template,
+  /<CadenceCollapsibleTrigger>\n              <button type="button" v-bind="group\.section\.summary\.attrs">/,
+)
+assert.match(
+  template,
+  /<CadenceCollapsibleContent>\n              <div class="contents">[\s\S]*?:section-open="sectionOpen\(group\)"/,
+)
+assert.doesNotMatch(template, /<details(?:\s|>)|<summary(?:\s|>)/)
 assert.match(template, /<header v-if="group\.header" v-bind="group\.header\.attrs">/)
 
 const gridControllers = [...template.matchAll(/<DashboardGrid\b/g)]
 assert.equal(gridControllers.length, 2, "section and unsectioned branches each compose one controller")
 assert.equal(template.match(/:presentation="group\.grid"/g)?.length, 2)
 assert.equal(template.match(/@layout_changed="forwardLayoutChanged"/g)?.length, 2)
+assert.equal(template.match(/:section-open="sectionOpen\(group\)"/g)?.length, 1)
 assert.match(source.canvas, /const emit = defineEmits\(\["layout_changed"\]\)/)
 assert.match(source.canvas, /emit\("layout_changed", payload\)/)
+assert.match(source.canvas, /const sectionOpenByKey = reactive\(new Map\(\)\)/)
+assert.doesNotMatch(source.canvas, /@toggle|currentTarget\.open/)
 
 assert.match(gridTemplate, /^  <div ref="gridElement" v-bind="props\.presentation\.root\.attrs">/)
 assert.match(gridTemplate, /v-for="widget in props\.presentation\.widgets"/)
@@ -118,6 +141,7 @@ assert.ok(
 )
 
 const canvasContext = {
+  reactive: (value) => value,
   defineProps() {},
   defineEmits() {
     return () => {}
@@ -126,17 +150,48 @@ const canvasContext = {
 vm.createContext(canvasContext)
 vm.runInContext(
   canvasScript.replace(/^import .*$/gm, "") +
-    "\nglobalThis.DashboardCanvasTest = {sectionOpen, rememberSectionOpen}",
+    "\nglobalThis.DashboardCanvasTest = {sectionOpen, rememberSectionOpen, sectionContentId, sectionRootAttrs}",
   canvasContext,
 )
 const defaultOpenGroup = {key: "power", section: {root: {attrs: {open: ""}}}}
 const defaultClosedGroup = {key: "comms", section: {root: {attrs: {}}}}
 assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultOpenGroup), true)
 assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultClosedGroup), false)
-canvasContext.DashboardCanvasTest.rememberSectionOpen(defaultOpenGroup, {
-  currentTarget: {open: false},
-})
+canvasContext.DashboardCanvasTest.rememberSectionOpen(defaultOpenGroup, false)
 assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(defaultOpenGroup), false)
+assert.equal(
+  canvasContext.DashboardCanvasTest.sectionOpen({
+    key: "power",
+    section: {root: {attrs: {open: ""}}},
+  }),
+  false,
+)
+const replacementPower = {
+  key: "power-replacement",
+  section: {
+    root: {
+      attrs: {
+        id: "dashboard-section-group-power-replacement",
+        class: "group/dashboard-section",
+        "data-dashboard-section": "power-replacement",
+        open: "",
+      },
+    },
+  },
+}
+assert.equal(canvasContext.DashboardCanvasTest.sectionOpen(replacementPower), true)
+assert.equal(
+  canvasContext.DashboardCanvasTest.sectionContentId(replacementPower),
+  "dashboard-section-group-power-replacement-content",
+)
+assert.deepEqual(
+  JSON.parse(JSON.stringify(canvasContext.DashboardCanvasTest.sectionRootAttrs(replacementPower))),
+  {
+    id: "dashboard-section-group-power-replacement",
+    class: "group/dashboard-section",
+    "data-dashboard-section": "power-replacement",
+  },
+)
 
 assert.match(source.app, /hooks: \{\.\.\.Hooks, \.\.\.getHooks\(liveVueApp\)\}/)
 assert.doesNotMatch(source.app, /\bdom:\s*\{|onBeforeElUpdated|grid-stack|ui-resizable-handle/)
@@ -146,6 +201,11 @@ assert.match(source.presentation, /"id" => "dashboard-widget-group-#\{group_id\}
 assert.match(source.presentation, /"id" => "dashboard-section-group-#\{group_id\}"/)
 assert.match(source.presentation, /"data-dashboard-widget-group" => group_id/)
 assert.match(source.presentation, /"data-dashboard-section" => group_id/)
+assert.match(
+  source.presentation,
+  /group-data-\[state=open\]\/dashboard-section:rotate-90/,
+)
+assert.doesNotMatch(source.presentation, /group-open\/dashboard-section:rotate-90/)
 assert.match(source.presentation, /defp widget_count_text\(1\), do: "1 widget"/)
 assert.match(source.presentation, /defp widget_count_text\(count\), do: "#\{count\} widgets"/)
 assert.match(source.presentation, /"dashboard-editor-empty-add-widget"/)

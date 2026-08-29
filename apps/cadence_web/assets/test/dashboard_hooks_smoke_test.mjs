@@ -61,6 +61,8 @@ function classList(...initialClasses) {
   let mountedCallback
   let updatedCallback
   let unmountedCallback
+  let sectionOpenSource
+  let sectionOpenCallback
   const connectedNode = {
     x: 2,
     y: 3,
@@ -111,19 +113,7 @@ function classList(...initialClasses) {
       gridCalls.push(["destroy", removeDom])
     },
     onResize() {
-      gridCalls.push(["onResize"])
-    },
-  }
-
-  const sectionListeners = new Map()
-  const sectionDetails = {
-    open: false,
-    addEventListener(type, listener) {
-      sectionListeners.set(type, listener)
-    },
-    removeEventListener(type, listener) {
-      assert.equal(sectionListeners.get(type), listener)
-      sectionListeners.delete(type)
+      gridCalls.push(["onResize", this.prevWidth])
     },
   }
 
@@ -143,10 +133,6 @@ function classList(...initialClasses) {
     dataset: { editMode: "false" },
     classList: classList("grid-stack-static"),
     gestureActive: false,
-    closest(selector) {
-      assert.equal(selector, "details[data-dashboard-section]")
-      return sectionDetails
-    },
     querySelector(selector) {
       assert.equal(selector, ".ui-draggable-dragging, .ui-resizable-resizing")
       return this.gestureActive ? {} : null
@@ -169,6 +155,7 @@ function classList(...initialClasses) {
   }
 
   const props = {
+    sectionOpen: false,
     presentation: {
       root: {attrs: {id: "dashboard-grid-alpha", class: "grid-stack gs-12"}},
       widgets: [],
@@ -187,8 +174,8 @@ function classList(...initialClasses) {
     gridPath,
     [
       [
-        'import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"\n',
-        "const {onBeforeUnmount, onMounted, onUpdated, ref} = globalThis.Vue\n",
+        'import {onBeforeUnmount, onMounted, onUpdated, ref, watch} from "vue"\n',
+        "const {onBeforeUnmount, onMounted, onUpdated, ref, watch} = globalThis.Vue\n",
       ],
       [
         'import GridStack from "../vendor/gridstack/gridstack-all"\n',
@@ -199,6 +186,8 @@ function classList(...initialClasses) {
     {
       defineProps(definition) {
         assert.equal(definition.presentation.required, true)
+        assert.equal(definition.sectionOpen.type.name, "Boolean")
+        assert.equal(definition.sectionOpen.default, true)
         return props
       },
       defineEmits(names) {
@@ -235,6 +224,11 @@ function classList(...initialClasses) {
         onUpdated: (callback) => { updatedCallback = callback },
         onBeforeUnmount: (callback) => { unmountedCallback = callback },
         ref: (value) => ({value: value === null ? gridElement : value}),
+        watch: (source, callback, options) => {
+          sectionOpenSource = source
+          sectionOpenCallback = callback
+          assert.equal(options.flush, "post")
+        },
       },
     },
     "\nglobalThis.DashboardGridTest = {DashboardGridController, getController: () => controller}"
@@ -244,10 +238,17 @@ function classList(...initialClasses) {
   assert.match(context.template, /<div ref="gridElement" v-bind="props\.presentation\.root\.attrs">/)
   assert.match(context.template, /v-for="widget in props\.presentation\.widgets"/)
   assert.doesNotMatch(context.source, /MutationObserver|onBeforeElUpdated|gridObserver/)
+  assert.doesNotMatch(
+    context.source,
+    /closest\("details\[data-dashboard-section\]"\)|addEventListener\("toggle"|sectionDetails|handleSectionToggle/,
+  )
   assert.match(context.source, /this\.grid\.destroy\(false\)/)
   assert.equal(typeof mountedCallback, "function")
   assert.equal(typeof updatedCallback, "function")
   assert.equal(typeof unmountedCallback, "function")
+  assert.equal(typeof sectionOpenSource, "function")
+  assert.equal(typeof sectionOpenCallback, "function")
+  assert.equal(sectionOpenSource(), false)
 
   mountedCallback()
   const controller = context.DashboardGridTest.getController()
@@ -257,7 +258,6 @@ function classList(...initialClasses) {
     ["on", "change"],
     ["on", "dragstop resizestop"],
   ])
-  assert.equal(typeof sectionListeners.get("toggle"), "function")
   assert.equal(typeof fakeGrid.gestureStopHandler, "function")
 
   gridElement.gestureActive = true
@@ -330,22 +330,26 @@ function classList(...initialClasses) {
   timerCallbacks.get(scheduledTimerId)()
   assert.equal(emittedEvents.length, 2)
 
-  sectionListeners.get("toggle")()
-  assert.equal(gridCalls.some(([name]) => name === "onResize"), false)
-  sectionDetails.open = true
+  sectionOpenCallback(false, true)
+  assert.equal(animationFrameCallbacks.size, 0)
   fakeGrid.prevWidth = 720
-  sectionListeners.get("toggle")()
+  props.sectionOpen = true
+  sectionOpenCallback(true, false)
+  assert.equal(sectionOpenSource(), true)
+  assert.equal(animationFrameCallbacks.size, 1)
   const canceledSectionResizeFrame = nextAnimationFrameId
-  sectionDetails.open = false
-  sectionListeners.get("toggle")()
+  props.sectionOpen = false
+  sectionOpenCallback(false, true)
   assert.equal(canceledAnimationFrames.includes(canceledSectionResizeFrame), true)
   assert.equal(animationFrameCallbacks.size, 0)
 
-  sectionDetails.open = true
-  sectionListeners.get("toggle")()
+  fakeGrid.prevWidth = 720
+  props.sectionOpen = true
+  sectionOpenCallback(true, false)
+  assert.equal(animationFrameCallbacks.size, 1)
   runAnimationFrame(nextAnimationFrameId)
   assert.equal(fakeGrid.prevWidth, undefined)
-  assert.deepEqual(gridCalls.at(-1), ["onResize"])
+  assert.deepEqual(gridCalls.at(-1), ["onResize", undefined])
 
   props.presentation.controller.props.edit_mode = false
   gridElement.dataset.editMode = "false"
@@ -358,15 +362,16 @@ function classList(...initialClasses) {
     ["setStatic", true],
   ])
 
-  sectionDetails.open = true
-  sectionListeners.get("toggle")()
+  props.sectionOpen = false
+  sectionOpenCallback(false, true)
+  props.sectionOpen = true
+  sectionOpenCallback(true, false)
   const pendingSectionResizeFrame = nextAnimationFrameId
   assert.equal(animationFrameCallbacks.has(pendingSectionResizeFrame), true)
   unmountedCallback()
   assert.deepEqual(gridCalls.at(-1), ["destroy", false])
   assert.equal(canceledAnimationFrames.includes(pendingSectionResizeFrame), true)
   assert.equal(animationFrameCallbacks.size, 0)
-  assert.equal(sectionListeners.size, 0)
   assert.equal(context.DashboardGridTest.getController(), null)
 }
 
