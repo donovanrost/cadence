@@ -7,6 +7,7 @@ import {
   expectedNodeVersion,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const predecessor = "c720c80701148764113420bf8f62ddbd07f439e8"
@@ -99,11 +100,16 @@ let closingTagCount = 0
 for (const fixture of fixtures) {
   const componentPath = resolve(testDirectory, `../vue/${fixture.file}`)
   const source = await readFile(componentPath, "utf8")
+  const preToolbarSource =
+    fixture.file === "CommsGroundStationList.vue" ||
+    fixture.file === "CommsTransportList.vue"
+      ? peelCadenceListToolbarFrame(source, fixture.file)
+      : source
   const prePaginationSource =
     fixture.file === "CommsGroundStationList.vue" ||
     fixture.file === "CommsTransportList.vue"
-      ? peelCadencePaginationFrame(source, fixture.file)
-      : source
+      ? peelCadencePaginationFrame(preToolbarSource, fixture.file)
+      : preToolbarSource
   const componentOpening =
     `${fixture.indentation}<CadenceTableFrame id="${fixture.id}">`
   const componentClosing = `${fixture.indentation}</CadenceTableFrame>`

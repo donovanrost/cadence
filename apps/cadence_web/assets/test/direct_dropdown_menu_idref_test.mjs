@@ -10,6 +10,7 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = Object.freeze([
@@ -465,7 +466,10 @@ const compileSfc = async (definition) => {
   const currentSource = await readFile(definition.path, "utf8")
   const prePaginationSource =
     definition.name === "SpacecraftList"
-      ? peelCadencePaginationFrame(currentSource, "SpacecraftList.vue")
+      ? peelCadencePaginationFrame(
+          peelCadenceListToolbarFrame(currentSource, "SpacecraftList.vue"),
+          "SpacecraftList.vue",
+        )
       : currentSource
   const preCardSource = reconstructPreCardSource(prePaginationSource, definition)
   const prePanelSource =

@@ -3,6 +3,7 @@ import {createHash} from "node:crypto"
 import {readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
+import {peelCadenceListToolbarFrame} from "./list_toolbar_frame_test_support.mjs"
 import {peelCadencePaginationFrame} from "./pagination_frame_test_support.mjs"
 
 const scenarioLedger = [
@@ -246,9 +247,13 @@ const reconstructSpacecraftListPrePanelSource = (source) => {
   return reconstructedSource
 }
 
+const preToolbarChildSource = peelCadenceListToolbarFrame(
+  currentChildSource,
+  "SpacecraftList.vue",
+)
 const childSource = reconstructSpacecraftListPrePanelSource(
   reconstructSpacecraftListPreTableSource(
-    peelCadencePaginationFrame(currentChildSource, "SpacecraftList.vue"),
+    peelCadencePaginationFrame(preToolbarChildSource, "SpacecraftList.vue"),
   ),
 )
 

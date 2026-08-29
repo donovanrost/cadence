@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue"
+import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue"
 import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
 import CadencePanel from "./ui/components/CadencePanel.vue"
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
@@ -151,10 +152,7 @@ defineProps<{
         </div>
 
         <template v-else>
-          <div
-            id="spacecraft-roster-toolbar"
-            class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-2"
-          >
+          <CadenceListToolbarFrame id="spacecraft-roster-toolbar">
             <form
               id="spacecraft-roster-toolbar-search-form"
               phx-change="search"
@@ -175,7 +173,7 @@ defineProps<{
                 </label>
               </div>
             </form>
-          </div>
+          </CadenceListToolbarFrame>
 
           <CadenceTableFrame id="spacecraft-vehicles-table">
             <thead>
