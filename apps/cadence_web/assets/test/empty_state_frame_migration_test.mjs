@@ -30,6 +30,10 @@ import {
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
 import {
+  opsPageBodyFrameCallerNames,
+  peelCadenceOpsPageBodyFrameBeforeOlderLayers,
+} from "./ops_page_body_frame_test_support.mjs"
+import {
   opsAuthorHeaderCallerNames,
   peelCadenceOpsAuthorHeader,
 } from "./page_header_ops_author_test_support.mjs"
@@ -188,8 +192,11 @@ for (const consumer of cadenceEmptyStateConsumers) {
 
 for (const exclusion of emptyStateVariantLedger.filter(({sha256}) => sha256)) {
   const current = await readFile(resolve(repositoryRoot, exclusion.repositoryPath), "utf8")
+  const pageBodyCompatibleCurrent = opsPageBodyFrameCallerNames.includes(exclusion.file)
+    ? peelCadenceOpsPageBodyFrameBeforeOlderLayers(current, exclusion.file)
+    : current
   const compactHeaderBodyCompatibleCurrent =
-    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(current, exclusion.file)
+    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(pageBodyCompatibleCurrent, exclusion.file)
   const fieldCompatibleCurrent = peelCadenceFieldsBeforeEmptyStateLayers(
     compactHeaderBodyCompatibleCurrent,
     exclusion.file,

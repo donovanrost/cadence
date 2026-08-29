@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
+import {peelCadenceOpsPageBodyFrameBeforeOlderLayers} from "./ops_page_body_frame_test_support.mjs"
 
 export const opsViewportPredecessorCommit = "fef20d7c72b5842b3dcae3e99630a1795b5791b3"
 export const opsViewportClass = "h-full overflow-y-auto bg-base-100"
@@ -161,15 +162,16 @@ export const opsViewportMigrationFor = (caller) => {
 
 export const peelCadenceOpsViewport = (source, caller) => {
   const entry = opsViewportMigrationFor(caller)
+  const pageBodyCompatibleSource = peelCadenceOpsPageBodyFrameBeforeOlderLayers(source, caller)
 
-  assert.equal(occurrences(source, entry.importLine), 1, `${entry.file} viewport import count`)
-  assert.equal(source.match(/^import CadenceOpsViewport\b/gm)?.length, 1)
-  assert.equal(occurrences(source, entry.opening), 1, `${entry.file} exact viewport opening`)
-  assert.equal(occurrences(source, entry.closing), 1, `${entry.file} exact viewport closing`)
-  assert.equal(source.match(/<CadenceOpsViewport\b/g)?.length, 1)
-  assert.equal(source.match(/<\/CadenceOpsViewport>/g)?.length, 1)
+  assert.equal(occurrences(pageBodyCompatibleSource, entry.importLine), 1, `${entry.file} viewport import count`)
+  assert.equal(pageBodyCompatibleSource.match(/^import CadenceOpsViewport\b/gm)?.length, 1)
+  assert.equal(occurrences(pageBodyCompatibleSource, entry.opening), 1, `${entry.file} exact viewport opening`)
+  assert.equal(occurrences(pageBodyCompatibleSource, entry.closing), 1, `${entry.file} exact viewport closing`)
+  assert.equal(pageBodyCompatibleSource.match(/<CadenceOpsViewport\b/g)?.length, 1)
+  assert.equal(pageBodyCompatibleSource.match(/<\/CadenceOpsViewport>/g)?.length, 1)
 
-  const predecessor = source
+  const predecessor = pageBodyCompatibleSource
     .replace(entry.importLine, "")
     .replace(entry.opening, entry.predecessorOpening)
     .replace(entry.closing, entry.predecessorClosing)
