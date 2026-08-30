@@ -372,7 +372,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     assert is_nil(application["install_action"])
 
     assert application["manage_path"] ==
-             "/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
+             "/missions/#{context.mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated"
 
     assert application["disable_action"] == %{
              "id" => "disable-spacecraft-application-telemetry_decom",

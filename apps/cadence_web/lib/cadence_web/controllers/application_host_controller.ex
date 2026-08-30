@@ -46,22 +46,6 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
-  def federated(conn, %{"mission_id" => _mission_id} = params) do
-    with %Scope{} = current_scope <- conn.assigns.current_scope,
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params) do
-      render_shell(
-        conn,
-        current_scope,
-        route_context,
-        "comms_overview",
-        "overview",
-        "/missions/" <> URI.encode(route_context.mission.mission_id) <> "/comms"
-      )
-    else
-      _reason -> not_found_html(conn)
-    end
-  end
-
   @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def catalog(conn, %{"mission_id" => _mission_id} = params) do
     with %Scope{} = current_scope <- conn.assigns.current_scope,
@@ -175,19 +159,30 @@ defmodule CadenceWeb.ApplicationHostController do
          surface_id,
          fallback_override \\ nil
        ) do
-    render(conn, :federated,
-      flash: conn.assigns.flash,
-      current_scope: current_scope,
-      mission_id: route_context.mission.mission_id,
-      spacecraft_id: route_context.host_context.spacecraft_id,
-      host_scope: Atom.to_string(route_context.host_context.placement),
-      application_key: application_key,
-      surface_id: surface_id,
-      catalog_url: catalog_url(route_context),
-      fallback_href:
-        fallback_override ||
-          ApplicationHostCatalog.fallback_href(route_context, application_key, surface_id)
-    )
+    fallback_result =
+      case fallback_override do
+        nil -> ApplicationHostCatalog.fallback_href(route_context, application_key, surface_id)
+        path when is_binary(path) -> {:ok, path}
+        _invalid -> {:error, :invalid_application_request}
+      end
+
+    case fallback_result do
+      {:ok, fallback_href} ->
+        render(conn, :federated,
+          flash: conn.assigns.flash,
+          current_scope: current_scope,
+          mission_id: route_context.mission.mission_id,
+          spacecraft_id: route_context.host_context.spacecraft_id,
+          host_scope: Atom.to_string(route_context.host_context.placement),
+          application_key: application_key,
+          surface_id: surface_id,
+          catalog_url: catalog_url(route_context),
+          fallback_href: fallback_href
+        )
+
+      {:error, :invalid_application_request} ->
+        not_found_html(conn)
+    end
   end
 
   defp build_catalog(conn, current_scope, route_context, params) do

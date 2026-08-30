@@ -12,6 +12,8 @@ defmodule Cadence.Extensions.Registry do
     WidgetTypeContribution
   }
 
+  alias Cadence.Applications.Comms, as: CommsApplication
+
   @type fetch_error ::
           :unknown_extension_package
           | :unsupported_extension_package_version
@@ -127,15 +129,17 @@ defmodule Cadence.Extensions.Registry do
   end
 
   defp comms_package do
+    identity = CommsApplication.identity()
+
     %ExtensionPackage{
-      package_id: "cadence.comms",
-      version: 1,
+      package_id: identity.package_id,
+      version: identity.package_version,
       trust: :first_party,
       compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
       contributions: [
         %ApplicationContribution{
-          application_key: "comms",
-          application_version: 1
+          application_key: identity.application_key,
+          application_version: identity.application_version
         }
       ]
     }

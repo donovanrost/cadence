@@ -10,18 +10,19 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
-  test "the opt-in shell is protected and the existing Comms route remains the fallback", %{
-    conn: conn
-  } do
+  test "the generic compatibility shell is protected and the Comms LiveView remains the fallback",
+       %{
+         conn: conn
+       } do
     assert conn
-           |> get("/missions/mission-missing/comms/federated")
+           |> get("/missions/mission-missing/applications/comms_overview/federated")
            |> redirected_to() == "/sign-in"
 
     {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 
     federated_html =
       member_conn
-      |> get("/missions/#{mission.mission_id}/comms/federated")
+      |> get("/missions/#{mission.mission_id}/applications/comms_overview/federated")
       |> html_response(200)
 
     assert federated_html =~ ~s(<div id="cadence-federation-root")
@@ -51,15 +52,16 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     mission_context = %{host_context: HostContext.mission("mission-1")}
     spacecraft_context = %{host_context: HostContext.spacecraft("mission-1", "spacecraft-1")}
 
-    assert ApplicationHostCatalog.fallback_href(mission_context, "derived_telemetry", nil) ==
-             "/missions/mission-1/applications/derived_telemetry"
+    assert {:ok, "/missions/mission-1/applications/derived_telemetry"} ==
+             ApplicationHostCatalog.fallback_href(mission_context, "derived_telemetry", nil)
 
-    assert ApplicationHostCatalog.fallback_href(
-             spacecraft_context,
-             "telemetry_decom",
-             "packet_bindings"
-           ) ==
-             "/missions/mission-1/spacecraft/spacecraft-1/applications/telemetry_decom/packet_bindings"
+    assert {:ok,
+            "/missions/mission-1/spacecraft/spacecraft-1/applications/telemetry_decom/packet_bindings"} ==
+             ApplicationHostCatalog.fallback_href(
+               spacecraft_context,
+               "telemetry_decom",
+               "packet_bindings"
+             )
   end
 
   test "the browser-session catalog is server-owned and advertises only Comms overview", %{
@@ -228,43 +230,16 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert %{"code" => "unsupported_query"} = json_response(rejected, 404)
   end
 
-  test "first-class Comms v1 queries use the generic host dispatch" do
-    {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
+  test "an installed first-class application without a release is absent from the federated catalog" do
+    {member_conn, _organization, mission, scope} = signed_in_scope_and_mission()
     host_context = HostContext.mission(mission.mission_id)
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
-    {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
-    valid_scope = scope_document(organization, mission)
+    {_catalog_conn, catalog} = fetch_catalog(member_conn, mission)
 
-    comms_application =
-      Enum.find(catalog["applications"], &(&1["applicationKey"] == "comms"))
-
-    assert comms_application["applicationVersion"] == 1
-    assert comms_application["release"]["remoteName"] == "cadence_comms"
-    assert comms_application["release"]["exposedModule"] == "./Application"
-
-    response =
-      post_bridge(catalog, catalog_conn, mission.mission_id, %{
-        "applicationKey" => "comms",
-        "applicationVersion" => 1,
-        "surfaceId" => "overview",
-        "surfaceVersion" => 1,
-        "queryId" => "cadence.comms.overview",
-        "queryVersion" => 1,
-        "params" => %{},
-        "scope" => valid_scope
-      })
-
-    body = json_response(response, 200)
-    assert body["host"]["application_key"] == "comms"
-    assert body["host"]["renderer"] == "trusted"
-    assert body["navigation"]["fallback_href"] == "/missions/#{mission.mission_id}/comms"
-    assert is_map(body["trusted_surface"])
-    assert body["trusted_surface"]["root"]["attrs"]["id"] == "comms-overview-page"
-
-    refute Jason.encode!(body) =~ "provider_configuration_snapshot"
+    refute Enum.any?(catalog["applications"], &(&1["applicationKey"] == "comms"))
   end
 
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{

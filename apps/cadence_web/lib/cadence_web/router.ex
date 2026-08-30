@@ -70,8 +70,6 @@ defmodule CadenceWeb.Router do
         CatalogArtifactDownloadController,
         :show
 
-    get "/missions/:mission_id/comms/federated", ApplicationHostController, :federated
-
     get "/missions/:mission_id/applications/:application_key/federated",
         ApplicationHostController,
         :federated

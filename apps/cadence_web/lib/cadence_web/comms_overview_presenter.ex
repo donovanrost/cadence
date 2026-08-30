@@ -10,13 +10,15 @@ defmodule CadenceWeb.CommsOverviewPresenter do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Auth.Scope
-  alias Cadence.Comms.{RoutingRuleStore, TransportStore}
   alias Cadence.Missions.Mission
-  alias CadenceWeb.CommsValidation
+  alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsRead
 
   @spec build(Scope.t(), Mission.t()) :: map()
   def build(%Scope{} = current_scope, %Mission{} = mission) do
-    presentation(mission, load_summary(current_scope, mission))
+    case CommsRead.overview(current_scope, mission.mission_id) do
+      {:ok, summary} -> presentation(mission, summary)
+      {:error, _reason} -> presentation(mission, empty_summary())
+    end
   end
 
   @spec presentation(Mission.t(), map()) :: map()
@@ -70,45 +72,8 @@ defmodule CadenceWeb.CommsOverviewPresenter do
     end)
   end
 
-  defp load_summary(%Scope{organization_id: organization_id} = scope, %Mission{} = mission) do
-    spacecraft = Cadence.SpacecraftStore.list_spacecraft(organization_id, mission.mission_id)
-
-    source_endpoints =
-      Cadence.SourceEndpoints.list_source_endpoints(organization_id, mission.mission_id)
-
-    transports = TransportStore.list_transports(organization_id, mission.mission_id)
-
-    provider_profiles =
-      Cadence.Contacts.list_provider_profiles(organization_id, mission.mission_id)
-
-    transport_profiles =
-      Cadence.Contacts.list_transport_profiles(organization_id, mission.mission_id)
-
-    path_templates = Cadence.Contacts.list_path_templates(organization_id, mission.mission_id)
-
-    routing_rules = RoutingRuleStore.list_routing_rules(organization_id, mission.mission_id)
-
-    findings =
-      CommsValidation.findings_for_resources(
-        scope,
-        mission.mission_id,
-        %{
-          spacecraft: spacecraft,
-          source_endpoints: source_endpoints,
-          path_templates: path_templates,
-          provider_profiles: provider_profiles,
-          transport_profiles: transport_profiles,
-          transports: transports,
-          routing_rules: routing_rules
-        }
-      )
-
-    %{
-      transports: Enum.take(transports, 6),
-      transport_count: length(transports),
-      findings: findings,
-      finding_groups: CommsValidation.finding_groups(findings)
-    }
+  defp empty_summary do
+    %{transports: [], transport_count: 0, findings: [], finding_groups: []}
   end
 
   defp overview_dto(mission_id, summary) do
@@ -199,7 +164,7 @@ defmodule CadenceWeb.CommsOverviewPresenter do
       body: finding.body,
       action_label: action_href && Map.get(finding, :action_label, "Review"),
       action_href: action_href,
-      status: status_dto(finding.severity, CommsValidation.finding_label(finding.severity))
+      status: status_dto(finding.severity, CommsRead.finding_label(finding.severity))
     }
   end
 

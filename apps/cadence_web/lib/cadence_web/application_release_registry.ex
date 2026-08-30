@@ -1,11 +1,7 @@
 defmodule CadenceWeb.ApplicationReleaseRegistry do
-  @moduledoc """
-  Authoritative first-party frontend release coordinates.
+  @moduledoc "Generic lookup of release metadata contributed by application owners."
 
-  A release is deployment data, so it deliberately lives outside of
-  `Cadence.Applications.SurfaceDefinition`. The lookup key binds an
-  application version and surface version to one immutable frontend release.
-  """
+  alias Cadence.Applications.{ReleaseContribution, ReleaseRegistry}
 
   @type federation :: :module_federation | :native_federation
 
@@ -19,50 +15,24 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   @type key :: {binary(), pos_integer(), binary(), pos_integer()}
 
-  @comms_release %{
-    federation: :module_federation,
-    release_id: "comms-v1",
-    remote_name: "cadence_comms",
-    manifest_path: "/assets/application-host/comms/mf-manifest.json",
-    exposed_module: "./Application"
-  }
-
-  @releases %{
-    {"comms", 1, "overview", 1} => @comms_release,
-    {"comms", 1, "validation", 1} => @comms_release,
-    {"comms", 1, "transports", 1} => @comms_release,
-    {"comms", 1, "transport", 1} => @comms_release,
-    {"comms", 1, "routing", 1} => @comms_release,
-    {"comms", 1, "routing_detail", 1} => @comms_release,
-    {"comms", 1, "ground_stations", 1} => @comms_release,
-    {"comms", 1, "ground_station", 1} => @comms_release,
-    {"comms_overview", 1, "overview", 1} => %{
-      federation: :module_federation,
-      release_id: "comms-overview-v1",
-      remote_name: "cadence_comms_overview",
-      manifest_path: "/assets/application-host/comms-overview/mf-manifest.json",
-      exposed_module: "./Application"
-    },
-    {"telemetry_decom", 1, "packet_bindings", 1} => %{
-      federation: :module_federation,
-      release_id: "telemetry-decom-v1",
-      remote_name: "cadence_telemetry_decom",
-      manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
-      exposed_module: "./Application"
-    }
-  }
-
   @spec all() :: [{key(), release()}]
-  def all, do: Map.to_list(@releases)
+  def all do
+    ReleaseRegistry.all()
+    |> Enum.map(fn contribution ->
+      {ReleaseContribution.key(contribution), ReleaseContribution.release(contribution)}
+    end)
+  end
 
   @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
           {:ok, release()} | {:error, :unknown_application_release}
   def fetch(application_key, application_version, surface_id, surface_version)
       when is_binary(application_key) and is_integer(application_version) and
              is_binary(surface_id) and is_integer(surface_version) do
-    case Map.fetch(@releases, {application_key, application_version, surface_id, surface_version}) do
-      {:ok, release} -> {:ok, release}
-      :error -> {:error, :unknown_application_release}
+    case Enum.find(all(), fn {key, _release} ->
+           key == {application_key, application_version, surface_id, surface_version}
+         end) do
+      {_key, release} -> {:ok, release}
+      nil -> {:error, :unknown_application_release}
     end
   end
 

@@ -24,9 +24,6 @@ defmodule CadenceWeb.ApplicationHostBridge do
       Map.get(params, "applicationKey") == "comms_overview" ->
         legacy_query(current_scope, route_context, params)
 
-      Map.get(params, "applicationKey") == "comms" ->
-        generic_query(current_scope, route_context, params)
-
       Map.get(params, "queryId") == "cadence.comms.overview" and
           not Map.has_key?(params, "applicationKey") ->
         legacy_query(current_scope, route_context, params)

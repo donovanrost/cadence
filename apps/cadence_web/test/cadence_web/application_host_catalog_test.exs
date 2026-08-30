@@ -40,54 +40,91 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              "/assets/application-host/telemetry-decom/mf-manifest.json"
   end
 
-  test "admits all mission Comms v1 surfaces and keeps fallback paths server-owned" do
+  test "generic catalog and fallback routing support a second registry application", %{
+    conn: _conn
+  } do
+    {scope, route_context} = installed_telemetry_context()
+
+    assert {:ok, catalog} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "catalog-session",
+               csrf_token: "catalog-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end
+             )
+
+    assert [application] = catalog["applications"]
+    assert application["applicationKey"] == "telemetry_decom"
+    assert application["surface"]["surfaceId"] == "packet_bindings"
+    assert application["release"]["releaseId"] == "telemetry-decom-v1"
+
+    assert {:ok, fallback} =
+             ApplicationHostCatalog.fallback_href(
+               route_context,
+               "telemetry_decom",
+               "packet_bindings"
+             )
+
+    assert fallback ==
+             "/missions/#{route_context.mission.mission_id}/spacecraft/#{route_context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
+  end
+
+  test "uses native semantic fallbacks when the installed Comms surfaces have no release" do
     {scope, %{mission: mission} = route_context} = installed_comms_context()
 
     for surface_id <- @comms_surfaces do
-      assert {:ok, admission} =
+      assert {:error, :unknown_application_release} =
                ApplicationHostCatalog.admit_application(
                  scope,
                  route_context,
                  "comms",
                  surface_id
                )
-
-      assert admission.definition.application_key == "comms"
-      assert admission.definition.version == 1
-      assert admission.surface.data_contract.version == 1
-      assert admission.release.release_id == "comms-v1"
-      assert admission.release.remote_name == "cadence_comms"
-      assert admission.release.manifest_path == "/assets/application-host/comms/mf-manifest.json"
-      assert admission.release.exposed_module == "./Application"
     end
 
-    assert ApplicationHostCatalog.fallback_href(route_context, "comms", "overview") ==
-             "/missions/#{mission.mission_id}/comms"
+    assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
+             ApplicationHostCatalog.workspace_href(scope, route_context, "comms")
 
-    assert ApplicationHostCatalog.fallback_href(route_context, "comms", "validation") ==
-             "/missions/#{mission.mission_id}/comms/validation"
+    assert {:ok, workspace_href} =
+             ApplicationHostCatalog.workspace_href(scope, route_context, "comms")
 
-    assert ApplicationHostCatalog.fallback_href(
-             route_context,
-             "comms",
-             "transport",
-             "transport-1"
-           ) ==
-             "/missions/#{mission.mission_id}/comms/transports/transport-1"
+    refute workspace_href =~ "/federated"
 
-    assert ApplicationHostCatalog.fallback_href(
-             route_context,
-             "comms",
-             "routing_detail",
-             "routing-rule-1"
-           ) == "/missions/#{mission.mission_id}/comms/routing/routing-rule-1"
+    assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
+             ApplicationHostCatalog.fallback_href(route_context, "comms", "overview")
 
-    assert ApplicationHostCatalog.fallback_href(
-             route_context,
-             "comms",
-             "ground_station",
-             "ground-station-1"
-           ) == "/missions/#{mission.mission_id}/comms/ground-stations/ground-station-1"
+    assert {:ok, "/missions/#{mission.mission_id}/comms/validation"} ==
+             ApplicationHostCatalog.fallback_href(route_context, "comms", "validation")
+
+    assert {:ok, "/missions/#{mission.mission_id}/comms/transports/transport-1"} ==
+             ApplicationHostCatalog.fallback_href(
+               route_context,
+               "comms",
+               "transport",
+               "transport-1"
+             )
+
+    assert {:ok, "/missions/#{mission.mission_id}/comms/routing/routing-rule-1"} ==
+             ApplicationHostCatalog.fallback_href(
+               route_context,
+               "comms",
+               "routing_detail",
+               "routing-rule-1"
+             )
+
+    assert {:ok, "/missions/#{mission.mission_id}/comms/ground-stations/ground-station-1"} ==
+             ApplicationHostCatalog.fallback_href(
+               route_context,
+               "comms",
+               "ground_station",
+               "ground-station-1"
+             )
+
+    result = ApplicationHostCatalog.fallback_href(route_context, "bad/key", "overview")
+    assert result == {:error, :invalid_application_request}
+    refute inspect(result) =~ "/invalid"
   end
 
   defp installed_telemetry_context do

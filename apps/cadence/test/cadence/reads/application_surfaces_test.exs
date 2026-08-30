@@ -13,21 +13,39 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
   alias Cadence.Applications.SurfaceElements.{Diagnostic, Diagnostics}
   alias Cadence.Auth.Scope
-  alias Cadence.Comms.{Transport, TransportStore}
+
+  alias Cadence.Comms.{
+    GroundStation,
+    GroundStationStore,
+    RoutingRule,
+    RoutingRuleStore,
+    Transport,
+    TransportRow,
+    TransportStore
+  }
+
+  alias Cadence.Contacts.PathTemplate
+  alias Cadence.Contacts.PathTemplateStore.PathTemplateRow
+  alias Cadence.Contacts.ProfileStore
   alias Cadence.DerivedTelemetry.Definition, as: DerivedDefinition
   alias Cadence.Extensions.Presentation.{ReferenceOption, ReferencePage}
   alias Cadence.Limits.Definition
   alias Cadence.Limits.Event
   alias Cadence.Limits.Store
   alias Cadence.Listing.Page
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
+  alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Telemetry.PacketDefinition
 
+  import Ecto.Query
+
   @organization_id "org-application-surfaces"
   @mission_id "mission-application-surfaces"
+  @secret_sentinel "R2_COMMS_PROVIDER_CONFIGURATION_SECRET_SENTINEL"
 
   setup do
     persist_mission_scope(@organization_id, @mission_id)
@@ -105,7 +123,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
         configuration: %{
           "mode" => "listen",
           "direction_capability" => "inbound",
-          "host" => "127.0.0.1",
+          "host" => @secret_sentinel,
           "port" => "5000",
           "framing_mode" => "raw",
           "frame_size" => "64",
@@ -117,17 +135,56 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     assert {:ok, persisted_transport} =
              TransportStore.persist_transport(@organization_id, transport)
 
+    assert {:ok, provider_profile} =
+             ProfileStore.fetch_provider_profile(
+               @organization_id,
+               @mission_id,
+               persisted_transport.materialized_provider_profile_id
+             )
+
+    assert provider_profile.configuration["host"] == @secret_sentinel
+    assert persisted_transport.configuration["host"] == @secret_sentinel
+
+    Repo.update_all(
+      from(row in TransportRow,
+        where:
+          row.organization_id == ^@organization_id and
+            row.mission_id == ^@mission_id and
+            row.transport_id == ^persisted_transport.transport_id and
+            row.version == ^persisted_transport.version
+      ),
+      set: [
+        provider_configuration_snapshot:
+          JsonDocument.wrap_value(%{"secret_sentinel" => @secret_sentinel})
+      ]
+    )
+
+    assert {:ok, stored_transport} =
+             TransportStore.fetch_transport_version(
+               @organization_id,
+               @mission_id,
+               persisted_transport.transport_id,
+               persisted_transport.version
+             )
+
+    assert stored_transport.provider_configuration_snapshot["secret_sentinel"] ==
+             @secret_sentinel
+
     for surface_id <- ~w(overview validation transports routing ground_stations) do
       assert {:ok, surface} = Registry.fetch_surface(comms_definition, :mission, surface_id)
 
-      assert {:ok, %{"navigation" => navigation, "data" => data}} =
-               ApplicationSurfaces.load(
-                 scope,
-                 host_context,
-                 "comms",
-                 1,
-                 surface
-               )
+      result =
+        ApplicationSurfaces.load(
+          scope,
+          host_context,
+          "comms",
+          1,
+          surface
+        )
+
+      assert match?({:ok, _}, result), "surface #{surface_id} returned #{inspect(result)}"
+      assert {:ok, %{"navigation" => navigation, "data" => data}} = result
+      assert_redacted_surface(result)
 
       assert navigation["fallback_href"] == comms_fallback_href(surface_id)
       assert is_map(data)
@@ -165,7 +222,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                }
              )
 
-    assert {:error, :unsupported_application_surface_query} =
+    assert {:error, :invalid_application_request} =
              ApplicationSurfaces.load(
                scope,
                host_context,
@@ -174,6 +231,373 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                transports_surface,
                %{"unexpected" => "rejected"}
              )
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface,
+               %{"pageSize" => "1000000"}
+             )
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface,
+               %{"page" => "10001"}
+             )
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface,
+               %{"q" => String.duplicate("q", 241)}
+             )
+
+    oversized_params = Map.new(1..65, &{"param-#{&1}", "value"})
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface,
+               oversized_params
+             )
+  end
+
+  test "fails closed for unsafe bounded payload terms" do
+    assert :ok = CommsSurface.validate_bounded_payload(%{"count" => 1, "ratio" => 1.0})
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             CommsSurface.validate_bounded_payload(9_007_199_254_740_992)
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             CommsSurface.validate_bounded_payload(%{String.duplicate("a", 241) => "value"})
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             CommsSurface.validate_bounded_payload(%{"unsupported" => self()})
+  end
+
+  test "rejects invalid detail IDs without fabricating a fallback segment" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    host_context = HostContext.mission(@mission_id)
+    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+    assert {:ok, definition} = Registry.fetch_available("comms")
+    assert {:ok, surface} = Registry.fetch_surface(definition, :mission, "transport")
+
+    for invalid_id <- [
+          "slash/id",
+          "?query",
+          "#fragment",
+          "percent%20",
+          "space id",
+          "é",
+          ".",
+          "..",
+          String.duplicate("a", 121)
+        ] do
+      result =
+        ApplicationSurfaces.load(
+          scope,
+          host_context,
+          "comms",
+          1,
+          surface,
+          %{"transport_id" => invalid_id}
+        )
+
+      assert result == {:error, :invalid_application_request}
+      refute inspect(result) =~ "/invalid"
+    end
+  end
+
+  test "truncates multibyte display text at a valid byte boundary" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    host_context = HostContext.mission(@mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    transport =
+      Transport.new(%{
+        mission_id: @mission_id,
+        transport_id: "unicode-display",
+        display_name: String.duplicate("界", 81),
+        direction_capability: :inbound,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "127.0.0.1",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "frame_size" => "64",
+          "reconnect_policy" => "always",
+          "tls_enabled" => "false"
+        }
+      })
+
+    assert {:ok, _persisted_transport} =
+             TransportStore.persist_transport(@organization_id, transport)
+
+    assert {:ok, comms_definition} = Registry.fetch_available("comms")
+    assert {:ok, surface} = Registry.fetch_surface(comms_definition, :mission, "transports")
+
+    assert {:ok, %{"data" => %{"items" => [row]}}} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               surface
+             )
+
+    assert byte_size(row["display_name"]) <= 240
+    assert String.valid?(row["display_name"])
+  end
+
+  test "keeps missing reference findings reportable without emitting unsafe paths" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    host_context = HostContext.mission(@mission_id)
+    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+
+    path_template =
+      PathTemplate.new(%{
+        mission_id: @mission_id,
+        path_template_id: "missing-reference-template",
+        path_id: "missing-reference-path",
+        direction: :downlink,
+        selection_role: :selected
+      })
+
+    assert {:ok, _persisted_path_template} =
+             Cadence.Contacts.persist_path_template(@organization_id, path_template)
+
+    Repo.update_all(
+      from(row in PathTemplateRow,
+        where:
+          row.organization_id == ^@organization_id and
+            row.mission_id == ^@mission_id and
+            row.path_template_id == "missing-reference-template"
+      ),
+      set: [
+        source_endpoint_ref: "missing-source-endpoint",
+        provider_profile_ids: ["missing-provider-profile"],
+        provider_profile_ref_documents: %{
+          "items" => [%{"provider_profile_id" => "missing-provider-profile", "version" => 1}]
+        },
+        transport_profile_ids: ["missing-transport-profile"],
+        transport_profile_ref_documents: %{
+          "items" => [%{"transport_profile_id" => "missing-transport-profile", "version" => 1}]
+        }
+      ]
+    )
+
+    assert {:ok, findings} = CommsSurface.validation(scope, @mission_id)
+
+    missing_reference =
+      Enum.find(findings, fn finding ->
+        finding.title == "missing-reference-path references a missing internal telemetry identity"
+      end)
+
+    refute Map.has_key?(missing_reference, :action_navigate)
+
+    assert Enum.any?(
+             findings,
+             &(&1.title == "missing-reference-path references a missing provider")
+           )
+
+    assert Enum.any?(
+             findings,
+             &(&1.title == "missing-reference-path references a missing protocol behavior")
+           )
+
+    assert {:ok, definition} = Registry.fetch_available("comms")
+    assert {:ok, surface} = Registry.fetch_surface(definition, :mission, "validation")
+
+    assert {:ok, payload} =
+             ApplicationSurfaces.load(scope, host_context, "comms", 1, surface)
+
+    encoded = Jason.encode!(payload)
+    assert encoded =~ "missing-reference-path references a missing internal telemetry identity"
+    refute encoded =~ "/invalid"
+  end
+
+  test "loads valid detail surfaces and honors a routing rule's pinned transport version" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    host_context = HostContext.mission(@mission_id)
+    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+    assert {:ok, comms_definition} = Registry.fetch_available("comms")
+
+    spacecraft =
+      Cadence.Spacecraft.new(%{
+        mission_id: @mission_id,
+        spacecraft_id: "surface-spacecraft",
+        display_name: "Surface spacecraft",
+        scid: 42
+      })
+
+    assert {:ok, persisted_spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
+
+    transport =
+      Transport.new(%{
+        mission_id: @mission_id,
+        transport_id: "versioned-transport",
+        display_name: "Pinned transport v1",
+        direction_capability: :inbound,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => @secret_sentinel,
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "frame_size" => "64",
+          "reconnect_policy" => "always",
+          "tls_enabled" => "false"
+        }
+      })
+
+    assert {:ok, persisted_transport} =
+             TransportStore.persist_transport(@organization_id, transport)
+
+    assert {:ok, _version_two} =
+             TransportStore.version_transport(
+               @organization_id,
+               @mission_id,
+               persisted_transport.transport_id,
+               %{display_name: "Latest transport v2"}
+             )
+
+    assert {:ok, provider_profile} =
+             ProfileStore.fetch_provider_profile(
+               @organization_id,
+               @mission_id,
+               persisted_transport.materialized_provider_profile_id
+             )
+
+    assert provider_profile.configuration["host"] == @secret_sentinel
+    assert persisted_transport.configuration["host"] == @secret_sentinel
+
+    Repo.update_all(
+      from(row in TransportRow,
+        where:
+          row.organization_id == ^@organization_id and
+            row.mission_id == ^@mission_id and
+            row.transport_id == ^persisted_transport.transport_id and
+            row.version == ^persisted_transport.version
+      ),
+      set: [
+        provider_configuration_snapshot:
+          JsonDocument.wrap_value(%{"secret_sentinel" => @secret_sentinel})
+      ]
+    )
+
+    routing_rule =
+      RoutingRule.new(%{
+        mission_id: @mission_id,
+        spacecraft_id: persisted_spacecraft.spacecraft_id,
+        routing_rule_id: "pinned-routing-rule",
+        display_name: "Pinned routing rule",
+        purpose_label: "Pinned detail regression",
+        direction: :inbound,
+        transport_id: persisted_transport.transport_id,
+        transport_version: persisted_transport.version,
+        role: :primary
+      })
+
+    assert {:ok, persisted_rule} =
+             RoutingRuleStore.create_routing_rule(@organization_id, routing_rule)
+
+    ground_station =
+      GroundStation.new(%{
+        mission_id: @mission_id,
+        ground_station_id: "surface-ground-station",
+        display_name: "Surface station",
+        provider: "Surface provider",
+        region: "Surface region"
+      })
+
+    assert {:ok, persisted_station} =
+             GroundStationStore.persist_ground_station(@organization_id, ground_station)
+
+    for {surface_id, params} <- [
+          {"transport", %{"transport_id" => persisted_transport.transport_id}},
+          {"routing_detail", %{"routing_rule_id" => persisted_rule.routing_rule_id}},
+          {"ground_station", %{"ground_station_id" => persisted_station.ground_station_id}}
+        ] do
+      assert {:ok, surface} = Registry.fetch_surface(comms_definition, :mission, surface_id)
+
+      assert {:ok, %{"navigation" => navigation, "data" => data}} =
+               ApplicationSurfaces.load(
+                 scope,
+                 host_context,
+                 "comms",
+                 1,
+                 surface,
+                 params
+               )
+
+      assert is_map(data)
+      assert navigation["fallback_href"] =~ "/missions/#{@mission_id}/comms/"
+      assert_redacted_surface({:ok, %{"navigation" => navigation, "data" => data}})
+    end
+
+    assert {:ok, routing_surface} =
+             Registry.fetch_surface(comms_definition, :mission, "routing_detail")
+
+    assert {:ok, %{"data" => data}} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               routing_surface,
+               %{"routing_rule_id" => persisted_rule.routing_rule_id}
+             )
+
+    assert data["transport_version"] == 1
+    assert data["transport_name"] == "Pinned transport v1"
+    assert_redacted_surface({:ok, %{"data" => data}})
   end
 
   test "rejects undeclared surface contracts even when their query id is known", context do
@@ -584,4 +1008,13 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
   defp comms_fallback_href("ground_stations"),
     do: "/missions/#{@mission_id}/comms/ground-stations"
+
+  defp assert_redacted_surface({:ok, payload}) do
+    encoded = Jason.encode!(payload)
+
+    refute encoded =~ @secret_sentinel
+    refute encoded =~ "\"configuration\":"
+    refute encoded =~ "\"provider_configuration_snapshot\":"
+    refute encoded =~ "\"secret\":"
+  end
 end

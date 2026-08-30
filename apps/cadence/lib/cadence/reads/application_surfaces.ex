@@ -5,6 +5,7 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     ApplicationDefinition,
     ApplicationInstallation,
     ApplicationInstallations,
+    Comms,
     HostContext,
     Registry,
     SurfaceDefinition,
@@ -22,31 +23,18 @@ defmodule Cadence.Reads.ApplicationSurfaces do
   alias Cadence.Reads.ApplicationSurfaces.PacketBindings, as: PacketBindingsSurface
   alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
 
-  @providers %{
-    "cadence.comms.overview" => CommsSurface,
-    "cadence.comms.validation" => CommsSurface,
-    "cadence.comms.transports" => CommsSurface,
-    "cadence.comms.transport" => CommsSurface,
-    "cadence.comms.routing" => CommsSurface,
-    "cadence.comms.routing_detail" => CommsSurface,
-    "cadence.comms.ground_stations" => CommsSurface,
-    "cadence.comms.ground_station" => CommsSurface,
-    "cadence.derived_telemetry.manage" => DerivedTelemetrySurface,
-    "cadence.limits.manage" => LimitsSurface,
-    "cadence.limits.activity" => LimitsSurface,
-    "cadence.packet_bindings.manage" => PacketBindingsSurface
-  }
+  @comms_providers Map.new(Comms.surface_ids(), fn surface_id ->
+                     {elem(Comms.query_id(surface_id), 1), CommsSurface}
+                   end)
 
-  @trusted_provider_query_ids [
-    "cadence.comms.overview",
-    "cadence.comms.validation",
-    "cadence.comms.transports",
-    "cadence.comms.transport",
-    "cadence.comms.routing",
-    "cadence.comms.routing_detail",
-    "cadence.comms.ground_stations",
-    "cadence.comms.ground_station"
-  ]
+  @providers Map.merge(@comms_providers, %{
+               "cadence.derived_telemetry.manage" => DerivedTelemetrySurface,
+               "cadence.limits.manage" => LimitsSurface,
+               "cadence.limits.activity" => LimitsSurface,
+               "cadence.packet_bindings.manage" => PacketBindingsSurface
+             })
+
+  @trusted_provider_query_ids Map.keys(@comms_providers)
 
   @spec validate_providers() ::
           :ok | {:error, :invalid_application_surface_provider_registry}
