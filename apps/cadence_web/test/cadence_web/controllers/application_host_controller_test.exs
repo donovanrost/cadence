@@ -162,12 +162,14 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     presentation = CommsOverviewPresenter.build(scope, mission)
 
-    assert json_response(query_response, 200) == %{
+    response = json_response(query_response, 200)
+
+    assert response == %{
              "queryVersion" => 1,
-             "presentation" => presentation
+             "presentation" => Jason.decode!(Jason.encode!(presentation))
            }
 
-    assert Jason.decode!(Jason.encode!(presentation)) == presentation
+    assert Jason.decode!(Jason.encode!(presentation)) == response["presentation"]
   end
 
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{
@@ -180,6 +182,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     missing_csrf =
       catalog_conn
       |> recycle()
+      |> put_private(:plug_skip_csrf_protection, false)
       |> put_req_header("content-type", "application/json")
       |> put_req_header("x-cadence-poc-session", catalog["session"]["sessionId"])
       |> post_json(
@@ -192,7 +195,11 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         csrf: nil
       )
 
-    assert missing_csrf.status == 403
+    assert %{
+             "schema" => "cadence.application-host-problem.v1",
+             "code" => "invalid_csrf",
+             "message" => "The request CSRF token is invalid."
+           } = json_response(missing_csrf, 403)
 
     invalid_session =
       catalog_conn

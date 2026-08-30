@@ -4,6 +4,11 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   federated application-host query.
   """
 
+  use Phoenix.VerifiedRoutes,
+    endpoint: CadenceWeb.Endpoint,
+    router: CadenceWeb.Router,
+    statics: CadenceWeb.static_paths()
+
   alias Cadence.Auth.Scope
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
   alias Cadence.Missions.Mission
@@ -17,39 +22,38 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   @spec presentation(Mission.t(), map()) :: map()
   def presentation(%Mission{} = mission, summary) when is_map(summary) do
     %{
-      root: %{
-        attrs:
+      "root" => %{
+        "attrs" =>
           presentation_attrs(%{
             "class" => "space-y-6",
             "id" => "comms-overview-page"
           })
       },
-      header: %{
-        attrs: presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
-        body: %{attrs: presentation_attrs(%{"class" => false})},
-        content: %{attrs: presentation_attrs(%{})},
-        eyebrow: %{
-          attrs: presentation_attrs(%{"class" => "hud-label"}),
-          text: "Communications"
+      "header" => %{
+        "attrs" => presentation_attrs(%{"class" => "border-b border-primary/20 pb-4"}),
+        "body" => %{"attrs" => presentation_attrs(%{"class" => false})},
+        "content" => %{"attrs" => presentation_attrs(%{})},
+        "eyebrow" => %{
+          "attrs" => presentation_attrs(%{"class" => "hud-label"}),
+          "text" => "Communications"
         },
-        title: %{
-          attrs:
+        "title" => %{
+          "attrs" =>
             presentation_attrs(%{
               "class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"
             }),
-          text: mission.display_name
+          "text" => mission.display_name
         },
-        title_suffix: %{
-          attrs:
+        "title_suffix" => %{
+          "attrs" =>
             presentation_attrs(%{
               "class" => "ml-3 font-mono text-base text-base-content/60"
             }),
-          text: "· Mission Comms"
+          "text" => "· Mission Comms"
         }
       },
-      overview: overview_dto(mission.mission_id, summary)
+      "overview" => overview_dto(mission.mission_id, summary)
     }
-    |> json_safe()
   end
 
   @doc false
@@ -202,16 +206,4 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   defp status_dto(tone, label) do
     %{tone: Atom.to_string(tone), label: label}
   end
-
-  defp json_safe(%{} = map) do
-    Map.new(map, fn {key, value} -> {json_key(key), json_safe(value)} end)
-  end
-
-  defp json_safe(list) when is_list(list), do: Enum.map(list, &json_safe/1)
-  defp json_safe(value) when is_boolean(value), do: value
-  defp json_safe(value) when is_atom(value), do: Atom.to_string(value)
-  defp json_safe(value), do: value
-
-  defp json_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp json_key(key), do: key
 end

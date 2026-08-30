@@ -3,5 +3,5 @@ defmodule CadenceWeb.ApplicationHostHTML do
 
   use CadenceWeb, :html
 
-  embed_templates("application_host_html")
+  embed_templates("application_host_html/*")
 end

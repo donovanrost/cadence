@@ -23,7 +23,7 @@ defmodule CadenceWeb.Router do
   pipeline :application_host_json do
     plug :accepts, ["json"]
     plug :fetch_session
-    plug :protect_from_forgery
+    plug CadenceWeb.Plugs.ApplicationHostCSRF
     plug :put_secure_browser_headers
     plug CadenceWeb.Plugs.FetchBrowserCurrentScope
     plug CadenceWeb.Plugs.RequireApplicationHostScope

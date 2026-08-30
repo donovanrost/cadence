@@ -25,7 +25,7 @@ defmodule CadenceWeb.ApplicationHostController do
     case fetch_mission(conn.assigns.current_scope, mission_id) do
       {:ok, %Mission{} = mission} ->
         render(conn, :federated,
-          flash: Phoenix.Controller.get_flash(conn),
+          flash: conn.assigns.flash,
           current_scope: conn.assigns.current_scope,
           mission_id: mission.mission_id,
           catalog_url: catalog_url(mission.mission_id)
@@ -185,7 +185,7 @@ defmodule CadenceWeb.ApplicationHostController do
         "federation" => "module_federation",
         "releaseId" => "comms-overview-v1",
         "remoteName" => "cadence_comms_overview",
-        "manifestUrl" => url(conn, @manifest_path),
+        "manifestUrl" => unverified_url(conn, @manifest_path),
         "exposedModule" => "./Application"
       }
     }

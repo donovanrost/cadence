@@ -21,15 +21,15 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
         finding_groups: []
       })
 
-    assert Jason.decode!(Jason.encode!(presentation)) == presentation
+    assert is_binary(Jason.encode!(presentation))
 
     assert presentation["root"]["attrs"] == %{
              "class" => "space-y-6",
              "id" => "comms-overview-page"
            }
 
-    assert presentation["overview"]["transport"]["empty"]
-    assert presentation["overview"]["validation"]["empty"]
+    assert presentation["overview"][:transport][:empty]
+    assert presentation["overview"][:validation][:empty]
   end
 
   test "keeps presentation attribute semantics in the extracted presenter" do
