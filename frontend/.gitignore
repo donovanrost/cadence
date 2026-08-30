@@ -8,6 +8,7 @@ pnpm-debug.log*
 
 # Generated output and dependencies
 node_modules
+.pnpm-store/
 dist
 dist-ssr
 .mf
