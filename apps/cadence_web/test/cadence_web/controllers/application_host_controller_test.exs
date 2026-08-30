@@ -32,6 +32,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert federated_html =~
              ~s(<script type="module" src="/assets/application-host/host/host.js">)
 
+    assert federated_html =~
+             ~s(<link rel="stylesheet" href="/assets/application-host/host/plugin-host.css">)
+
     assert federated_html =~ ~s(href="/assets/app.css")
 
     {:ok, view, _html} =
