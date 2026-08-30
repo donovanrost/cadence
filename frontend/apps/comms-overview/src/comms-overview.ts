@@ -188,7 +188,8 @@ function validValidationSummary(value: unknown): value is ValidationSummary {
     validEmptyState(value.empty_state) &&
     nonEmptyString(value.findings_id) &&
     Array.isArray(value.finding_groups) &&
-    value.finding_groups.every(validFindingGroup)
+    value.finding_groups.every(validFindingGroup) &&
+    value.empty === (value.finding_groups.length === 0)
   );
 }
 

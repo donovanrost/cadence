@@ -22,3 +22,11 @@ const liveSocket = new LiveSocket("/live", Socket, {
 liveSocket.connect()
 
 window.liveSocket = liveSocket
+
+const federationRoot = document.querySelector("#cadence-federation-root")
+if (federationRoot) {
+  const federationHostAsset = "/assets/application-host/host/host.js"
+  void import(/* @vite-ignore */ federationHostAsset).catch((reason) => {
+    console.error("Cadence federated host failed to load.", reason)
+  })
+}

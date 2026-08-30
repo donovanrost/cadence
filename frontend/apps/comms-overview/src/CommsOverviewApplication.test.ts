@@ -7,7 +7,7 @@ import type {
 } from "@cadence/plugin-sdk";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
 import { manifest } from "./federated-application";
-import type { CommsOverviewResponse } from "./comms-overview";
+import { unwrapCommsOverviewResponse, type CommsOverviewResponse } from "./comms-overview";
 
 const context: MissionHostContext = {
   scope: "mission",
@@ -126,6 +126,29 @@ describe("Comms Overview federated adapter", () => {
     expect(wrapper.find("#comms-overview-error").text()).toContain("query unavailable");
     expect(wrapper.find("#comms-overview-page").exists()).toBe(false);
     wrapper.unmount();
+  });
+
+  it("rejects a validation payload that hides nonempty finding groups", () => {
+    const malformed = {
+      ...presentationResponse,
+      presentation: {
+        ...presentationResponse.presentation,
+        overview: {
+          ...presentationResponse.presentation.overview,
+          validation: {
+            ...presentationResponse.presentation.overview.validation,
+            empty: true,
+            finding_groups: [
+              { id: "setup", title: "Setup", description: "Review setup.", findings: [] },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(() => unwrapCommsOverviewResponse(malformed)).toThrow(
+      "communications overview response is invalid",
+    );
   });
 
   it("publishes the exact mission-scoped first-party identity", () => {
