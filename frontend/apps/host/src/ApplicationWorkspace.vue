@@ -69,13 +69,17 @@ async function loadCatalog(): Promise<void> {
       scenario: requestedScenario,
     });
     catalog.value = nextCatalog;
-    const nextBridge = createHttpHostBridge(nextCatalog.session);
-    bridge.value = nextBridge;
-    stopListening = nextBridge.subscribe(recordActivity);
 
     if (!nextCatalog.applications.some(matchesActiveApplication)) {
       activeApplicationKey.value = nextCatalog.applications[0]?.applicationKey ?? "";
     }
+
+    const nextApplication = nextCatalog.applications.find(matchesActiveApplication);
+    if (!nextApplication) throw new Error("The host catalog did not provide an active application.");
+
+    const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication);
+    bridge.value = nextBridge;
+    stopListening = nextBridge.subscribe(recordActivity);
 
     mountGeneration.value += 1;
   } catch (reason) {
@@ -93,6 +97,12 @@ function selectApplication(application: CatalogApplication): void {
   if (activeApplicationKey.value === application.applicationKey) return;
   activeApplicationKey.value = application.applicationKey;
   manifest.value = undefined;
+  const currentCatalog = catalog.value;
+  if (!currentCatalog) return;
+  stopListening?.();
+  const nextBridge = createHttpHostBridge(currentCatalog.session, application);
+  bridge.value = nextBridge;
+  stopListening = nextBridge.subscribe(recordActivity);
   mountGeneration.value += 1;
   pageUrl.searchParams.set("application", application.applicationKey);
   window.history.replaceState({}, "", pageUrl);

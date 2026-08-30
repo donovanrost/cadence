@@ -84,7 +84,9 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
     assert body == Jason.decode!(Jason.encode!(body))
   end
 
-  test "successful save returns a receipt and persists packet-id selection", %{conn: _conn} do
+  test "successful save resolves the declared action version and persists packet-id selection", %{
+    conn: _conn
+  } do
     context = telemetry_context()
     {revision, endpoint} = imported_packet_context(context)
 
@@ -143,6 +145,25 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
 
     assert configuration.configuration_version == 1
     assert [%{packet_id: ^packet_id}] = configuration.bindings
+  end
+
+  test "mismatched explicit action versions fail closed", %{conn: _conn} do
+    context = telemetry_context()
+    {revision, endpoint} = imported_packet_context(context)
+    {catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
+
+    for version_key <- ["actionVersion", "version"] do
+      response =
+        catalog_conn
+        |> bridge_conn(catalog)
+        |> put_req_header("idempotency-key", "telemetry-version-#{version_key}")
+        |> post_json(
+          action_path(context),
+          Map.put(action_body(context, revision, endpoint, "packet"), version_key, 2)
+        )
+
+      assert %{"code" => "unsupported_action"} = json_response(response, 404)
+    end
   end
 
   test "stale packet-binding versions map to a stable conflict", %{conn: _conn} do
@@ -391,7 +412,6 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
       "surfaceId" => "packet_bindings",
       "surfaceVersion" => 1,
       "actionId" => "save_packet_bindings",
-      "actionVersion" => 1,
       "scope" => scope_document(context),
       "input" => params
     }

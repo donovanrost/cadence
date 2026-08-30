@@ -1,5 +1,6 @@
 import {
   assertFrontendApplicationCatalog,
+  type CatalogApplication,
   type FrontendApplicationCatalog,
   type HostActivityEvent,
   type HostContext,
@@ -29,12 +30,40 @@ const session: HostSessionDescriptor = {
   context,
 };
 
+const telemetryApplication: CatalogApplication = {
+  applicationKey: "telemetry_decom",
+  applicationVersion: 1,
+  displayName: "Telemetry Decom",
+  description: "Telemetry packet bindings.",
+  package: { packageId: "cadence.telemetry-applications", version: 1 },
+  surface: {
+    surfaceId: "packet_bindings",
+    version: 1,
+    purpose: "configuration",
+    scope: "spacecraft",
+    placement: "application_workspace",
+    navigation: { label: "Packet bindings", order: 20 },
+    dataContract: { id: "cadence.packet_bindings.manage", version: 1 },
+    actions: ["save_packet_bindings"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+  release: {
+    federation: "module_federation",
+    releaseId: "telemetry-decom-v1",
+    remoteName: "cadence_telemetry_decom",
+    manifestUrl: "/assets/application-host/telemetry-decom/mf-manifest.json",
+    exposedModule: "./Application",
+  },
+};
+
 describe("the HTTP host bridge", () => {
-  it("sends only scope identity while retaining host-owned actor authority", async () => {
+  it("sends the selected Telemetry application identity and scope", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _request?: RequestInit) =>
       Response.json({ queryVersion: 1, configurationVersion: 7, packets: [] }),
     );
-    const bridge = createHttpHostBridge(session, { fetch: fetcher as typeof fetch });
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
     const activity: HostActivityEvent[] = [];
     bridge.subscribe((event) => activity.push(event));
 
@@ -52,16 +81,82 @@ describe("the HTTP host bridge", () => {
     if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
     const body = JSON.parse(serializedBody) as Record<string, unknown>;
     expect(body).toEqual({
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      surfaceId: "packet_bindings",
+      surfaceVersion: 1,
       queryId: "cadence.packet_bindings.manage",
-      version: 1,
+      queryVersion: 1,
       scope: {
         organizationId: "org-1",
         missionId: "mission-1",
         spacecraftId: "spacecraft-1",
       },
     });
+    const headers = new Headers(request?.headers);
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("x-cadence-poc-session")).toBe("session-1");
+    expect(headers.get("x-csrf-token")).toBe("csrf-1");
+    expect(headers.get("idempotency-key")).toBeNull();
     expect(JSON.stringify(body)).not.toContain("Forged operator");
     expect(activity.map(({ status }) => status)).toEqual(["started", "completed"]);
+  });
+
+  it("rejects a request outside the active scope before sending it", async () => {
+    const fetcher = vi.fn(async () => Response.json({ queryVersion: 1 }));
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    await expect(
+      bridge.query({
+        queryId: "cadence.packet_bindings.manage",
+        version: 1,
+        context: { ...context, spacecraftId: "other-spacecraft", spacecraftName: "Other" },
+      }),
+    ).rejects.toMatchObject({ status: 400, code: "invalid_scope" } satisfies Partial<HostBridgeError>);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects a query outside the selected surface contract before sending it", async () => {
+    const fetcher = vi.fn(async () => Response.json({ queryVersion: 1 }));
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    await expect(
+      bridge.query({ queryId: "cadence.packet_bindings.other", version: 1, context }),
+    ).rejects.toMatchObject({ status: 400, code: "unsupported_query" } satisfies Partial<HostBridgeError>);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects an action identity or declaration mismatch before sending it", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({ receiptId: "receipt-1", completedAt: "2026-08-22T20:00:00.000Z", result: {} }),
+    );
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+    const baseAction = {
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      actionId: "save_packet_bindings",
+      input: {},
+      context,
+    };
+
+    for (const action of [
+      { ...baseAction, applicationKey: "other_application" },
+      { ...baseAction, applicationVersion: 2 },
+      { ...baseAction, actionId: "undeclared_action" },
+    ]) {
+      await expect(bridge.execute(action)).rejects.toMatchObject({
+        status: 400,
+        code: "unsupported_action",
+      } satisfies Partial<HostBridgeError>);
+    }
+
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("uses an idempotency key for every host action", async () => {
@@ -72,7 +167,9 @@ describe("the HTTP host bridge", () => {
         result: { configurationVersion: 8 },
       }),
     );
-    const bridge = createHttpHostBridge(session, { fetch: fetcher as typeof fetch });
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
 
     await bridge.execute({
       applicationKey: "telemetry_decom",
@@ -83,7 +180,25 @@ describe("the HTTP host bridge", () => {
     });
 
     const request = fetcher.mock.calls[0]?.[1];
-    expect(new Headers(request?.headers).get("idempotency-key")).toBeTruthy();
+    const serializedBody = request?.body;
+    if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
+    expect(JSON.parse(serializedBody)).toEqual({
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      surfaceId: "packet_bindings",
+      surfaceVersion: 1,
+      actionId: "save_packet_bindings",
+      input: { expectedConfigurationVersion: 7, selectedApids: [100] },
+      scope: {
+        organizationId: "org-1",
+        missionId: "mission-1",
+        spacecraftId: "spacecraft-1",
+      },
+    });
+    const headers = new Headers(request?.headers);
+    expect(headers.get("x-cadence-poc-session")).toBe("session-1");
+    expect(headers.get("x-csrf-token")).toBe("csrf-1");
+    expect(headers.get("idempotency-key")).toBeTruthy();
     expect(request?.credentials).toBe("same-origin");
   });
 
@@ -98,7 +213,9 @@ describe("the HTTP host bridge", () => {
         { status: 403 },
       ),
     );
-    const bridge = createHttpHostBridge(session, { fetch: fetcher as typeof fetch });
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
 
     await expect(
       bridge.execute({
