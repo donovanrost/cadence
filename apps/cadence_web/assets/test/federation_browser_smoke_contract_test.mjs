@@ -3,10 +3,12 @@ import { createServer } from "node:net";
 import { test } from "node:test";
 import {
   assertHttpRequestContract,
+  assertLiveViewWebSocket,
   assertManifestAssetsRequested,
   assertNoPasswordArgument,
   browserUrls,
   createPage,
+  installDiagnostics,
   isDataUrl,
   isIgnoredFavicon,
   parseResponseBody,
@@ -80,6 +82,10 @@ test("the browser URL contract uses an actual isolated HTTP endpoint", async () 
     const firstUrls = browserUrls({ port: first.port, missionId: "mission/one", spacecraftId: "sc-1" });
     const secondUrls = browserUrls({ port: second.port, missionId: "mission/one", spacecraftId: "sc-1" });
     assert.notEqual(new URL(firstUrls.commsUrl).origin, new URL(secondUrls.commsUrl).origin);
+    assert.equal(
+      new URL(firstUrls.commsUrl).pathname,
+      "/missions/mission%2Fone/comms/federated",
+    );
     assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));
   } finally {
     await Promise.all([
@@ -159,13 +165,28 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
 
 test("manifest validation follows every declared transitive JavaScript and CSS asset", () => {
   const manifestUrl = `${origin}/assets/application-host/telemetry-decom/mf-manifest.json`;
-  const manifest = { entry: "remoteEntry.js", files: ["chunks/Application-1.js", "styles/Application.css"] };
+  const manifest = {
+    metaData: { remoteEntry: { name: "remoteEntry.js" }, ssrRemoteEntry: { name: "remoteEntry.ssr.js" } },
+    entry: "remoteEntry.js",
+    files: ["chunks/Application-1.js", "styles/Application.css"],
+    exposes: [
+      { path: "./Application", assets: { js: { sync: ["chunks/Application-1.js"] } } },
+      { path: "./Failure", assets: { js: { sync: ["chunks/Failure.js"] } } },
+    ],
+  };
   const assets = [
     record({ url: `${origin}/assets/application-host/telemetry-decom/remoteEntry.js`, method: "GET", body: undefined, resourceType: "Script" }),
     record({ url: `${origin}/assets/application-host/telemetry-decom/chunks/Application-1.js`, method: "GET", body: undefined, resourceType: "Script" }),
     record({ url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`, method: "GET", body: undefined, resourceType: "Stylesheet" }),
   ];
-  assert.equal(assertManifestAssetsRequested(manifest, manifestUrl, assets, { origin, label: "telemetry manifest" }).length, 3);
+  assert.equal(
+    assertManifestAssetsRequested(manifest, manifestUrl, assets, {
+      origin,
+      label: "telemetry manifest",
+      requiredExposedModule: "./Application",
+    }).length,
+    3,
+  );
   assert.throws(
     () => assertManifestAssetsRequested(manifest, manifestUrl, assets.slice(0, 2), { origin, label: "missing asset manifest" }),
     /was not successfully requested.*Application\.css/,
@@ -218,7 +239,107 @@ test("data URLs and favicon exclusion are explicit and narrowly scoped", () => {
   assert.equal(isIgnoredFavicon(record({ url: `${origin}/favicon.ico?foreign=1`, method: "GET", body: undefined, resourceType: "Image" }), origin), false);
   assert.equal(isIgnoredFavicon(record({ url: "https://evil.example/favicon.ico", method: "GET", body: undefined, resourceType: "Image" }), origin), false);
   assert.equal(isIgnoredFavicon(record({ url: `${origin}/favicon.ico`, method: "POST", body: undefined, resourceType: "Image" }), origin), false);
-  assert.equal(isIgnoredFavicon(record({ url: `${origin}/favicon.ico`, method: "GET", body: undefined, resourceType: "Other" }), origin), false);
+  assert.equal(isIgnoredFavicon(record({ url: `${origin}/favicon.ico`, method: "GET", body: undefined, resourceType: "Other" }), origin), true);
+});
+
+test("favicon log errors are ignored only with the matching browser request contract", () => {
+  const diagnosticClient = () => {
+    const listeners = new Map();
+    return {
+      on(method, listener) {
+        const methodListeners = listeners.get(method) || new Set();
+        methodListeners.add(listener);
+        listeners.set(method, methodListeners);
+        return () => methodListeners.delete(listener);
+      },
+      emit(method, event) {
+        for (const listener of listeners.get(method) || []) listener(event);
+      },
+      listenerCount() {
+        return [...listeners.values()].reduce((count, methodListeners) => count + methodListeners.size, 0);
+      },
+    };
+  };
+  const client = diagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const favicon = `${origin}/favicon.ico`;
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "favicon-1",
+    request: { url: favicon, method: "GET" },
+    type: "Other",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "favicon-1",
+    response: { url: favicon, status: 404 },
+    type: "Other",
+  });
+  client.emit("Network.loadingFinished", { requestId: "favicon-1" });
+  client.emit("Log.entryAdded", { entry: { level: "error", text: "favicon missing", url: favicon } });
+  assert.doesNotThrow(() => diagnostics.assertClean("favicon"));
+  assert.ok(client.listenerCount() > 0);
+  diagnostics.dispose();
+  assert.equal(client.listenerCount(), 0, "diagnostics did not unsubscribe all CDP listeners");
+
+  const foreignClient = diagnosticClient();
+  const foreignLog = installDiagnostics(foreignClient, { expectedOrigin: origin });
+  foreignClient.emit("Log.entryAdded", {
+    entry: { level: "error", text: "favicon missing", url: `${origin}/favicon.ico?query=1` },
+  });
+  assert.throws(() => foreignLog.assertClean("foreign favicon"), /browser diagnostics failed/);
+  foreignLog.dispose();
+  assert.equal(foreignClient.listenerCount(), 0);
+});
+
+test("LiveView requires a same-origin websocket handshake and rejects longpoll fallback", () => {
+  const connected = {
+    requestId: "live-ws-1",
+    url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
+    handshakeRequest: { headers: { Origin: origin } },
+    handshake: { status: 101 },
+    error: undefined,
+  };
+  const diagnostics = {
+    webSockets: new Map([
+      ["live-ws-old", { ...connected, requestId: "live-ws-old" }],
+      [connected.requestId, connected],
+    ]),
+    webSocketFailures: [],
+    requests: new Map(),
+    consoleErrors: [],
+    logErrors: [],
+  };
+  assert.equal(
+    assertLiveViewWebSocket(diagnostics, origin, { beforeRequestIds: new Set(["live-ws-old"]) }),
+    connected,
+  );
+
+  for (const invalid of [
+    { ...connected, url: "wss://evil.example/live/websocket?vsn=2.0.0" },
+    { ...connected, handshake: { status: 403 } },
+    { ...connected, handshakeRequest: { headers: { Origin: "http://127.0.0.1:4101" } } },
+    { ...connected, error: "WebSocket handshake failed" },
+  ]) {
+    assert.throws(
+      () => assertLiveViewWebSocket({ ...diagnostics, webSockets: new Map([[invalid.requestId, invalid]]) }, origin),
+      /same-origin HTTP 101 handshake/,
+    );
+  }
+
+  assert.throws(
+    () => assertLiveViewWebSocket({
+      ...diagnostics,
+      requests: new Map([[
+        "longpoll-1",
+        { url: `${origin}/live/longpoll?vsn=2.0.0` },
+      ]]),
+    }, origin),
+    /longpoll transport/,
+  );
+  assert.throws(
+    () => assertLiveViewWebSocket({ ...diagnostics, webSocketFailures: ["origin rejected"] }, origin),
+    /websocket transport failed/,
+  );
 });
 
 test("binary admission and diagnostics redact secrets without argv or environment transport", () => {

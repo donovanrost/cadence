@@ -1,3 +1,5 @@
+Code.require_file(Path.join(__DIR__, "browser_endpoint_plug.exs"))
+
 defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   @moduledoc false
 
@@ -127,15 +129,13 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   end
 
   def start_browser_endpoint!(port, sandbox_owner) do
-    endpoint_id = {:dashboard_browser_endpoint, port}
-
     :ok = Sandbox.mode(Cadence.Repo, {:shared, sandbox_owner})
 
     endpoint_pid =
       start_supervised!(
         Supervisor.child_spec(
-          {Bandit, plug: CadenceWeb.Endpoint, scheme: :http, ip: {127, 0, 0, 1}, port: port},
-          id: endpoint_id,
+          {Bandit, browser_endpoint_options(port)},
+          id: {:dashboard_browser_endpoint, make_ref()},
           restart: :temporary
         )
       )
@@ -146,6 +146,29 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     end)
 
     endpoint_pid
+  end
+
+  def start_browser_endpoint_on_ephemeral_port!(sandbox_owner) do
+    endpoint_pid = start_browser_endpoint!(0, sandbox_owner)
+    {:ok, {_address, port}} = ThousandIsland.listener_info(endpoint_pid)
+    port
+  end
+
+  def start_browser_endpoint_link!(port) do
+    {:ok, endpoint_pid} = Bandit.start_link(browser_endpoint_options(port))
+
+    case ThousandIsland.listener_info(endpoint_pid) do
+      {:ok, {_address, actual_port}} ->
+        {endpoint_pid, actual_port}
+
+      :error ->
+        stop_browser_endpoint(endpoint_pid)
+        raise "browser endpoint listener was not available"
+    end
+  end
+
+  def browser_endpoint_options(port) do
+    [plug: CadenceWeb.Assets.BrowserEndpointPlug, scheme: :http, ip: {127, 0, 0, 1}, port: port]
   end
 
   def stop_browser_endpoint(pid) when is_pid(pid) do

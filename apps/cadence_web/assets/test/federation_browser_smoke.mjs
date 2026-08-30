@@ -31,6 +31,12 @@ export function reportProgress(stage) {
   }
 }
 
+export function activeResourceNames() {
+  return typeof process.getActiveResourcesInfo === "function"
+    ? process.getActiveResourcesInfo()
+    : [];
+}
+
 export function argValue(args, name) {
   const index = args.indexOf(name);
   return index === -1 ? undefined : args[index + 1];
@@ -42,8 +48,25 @@ export function requiredArg(args, name) {
   return value;
 }
 
-export function sleep(milliseconds) {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
+export function sleep(milliseconds, signal) {
+  if (signal?.aborted) return Promise.reject(abortError(signal));
+
+  return new Promise((resolveSleep, rejectSleep) => {
+    let settled = false;
+    let timer;
+    const onAbort = () => finish(rejectSleep, abortError(signal));
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      callback(value);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    else timer = setTimeout(() => finish(resolveSleep), milliseconds);
+  });
 }
 
 export function withTimeout(promise, milliseconds, label, onTimeout) {
@@ -64,12 +87,16 @@ export function abortError(signal, fallback = "operation cancelled") {
 
 export function raceWithSignalAndTimeout(
   operation,
-  { signal, milliseconds, label, onTimeout } = {},
+  { signal, milliseconds, label, onTimeout, onCancel } = {},
 ) {
   const operationPromise = Promise.resolve(operation);
   operationPromise.catch(() => {});
 
-  if (signal?.aborted) return Promise.reject(abortError(signal));
+  if (signal?.aborted) {
+    const error = abortError(signal);
+    onCancel?.(error);
+    return Promise.reject(error);
+  }
 
   return new Promise((resolveRace, rejectRace) => {
     let settled = false;
@@ -83,13 +110,18 @@ export function raceWithSignalAndTimeout(
       callback(value);
     };
 
-    const onAbort = () => finish(rejectRace, abortError(signal));
+    const onAbort = () => {
+      const error = abortError(signal);
+      onCancel?.(error);
+      finish(rejectRace, error);
+    };
 
     signal?.addEventListener("abort", onAbort, { once: true });
     if (milliseconds) {
       timer = setTimeout(() => {
         const error = new Error(`${label || "operation"} timed out after ${milliseconds}ms`);
         onTimeout?.(error);
+        onCancel?.(error);
         finish(rejectRace, error);
       }, milliseconds);
     }
@@ -491,11 +523,12 @@ export async function closePage(endpoint, targetId, { fetcher = fetch, timeout =
 }
 
 export class CdpClient {
-  constructor(endpoint) {
-    this.socket = new WebSocket(endpoint);
+  constructor(endpoint, { webSocketImpl = WebSocket } = {}) {
+    this.socket = new webSocketImpl(endpoint);
     this.nextCommandId = 0;
     this.pending = new Map();
     this.listeners = new Map();
+    this.eventWaiters = new Set();
     this.closed = false;
     this.ready = new Promise((resolveReady, rejectReady) => {
       this.socket.addEventListener("open", resolveReady, { once: true });
@@ -530,7 +563,11 @@ export class CdpClient {
       const listeners = this.listeners.get(message.method) || new Set();
       for (const listener of listeners) listener(message.params || {});
     });
-    this.socket.addEventListener("close", () => this.rejectPending(new Error("CDP WebSocket closed")));
+    this.socket.addEventListener("close", () => {
+      const error = new Error("CDP WebSocket closed");
+      this.rejectPending(error);
+      this.rejectEventWaiters(error);
+    });
   }
 
   rejectPending(error) {
@@ -538,9 +575,17 @@ export class CdpClient {
     this.pending.clear();
   }
 
-  async send(method, params = {}, timeout = CDP_COMMAND_TIMEOUT_MS) {
+  rejectEventWaiters(error) {
+    for (const waiter of [...this.eventWaiters]) waiter.reject(error);
+  }
+
+  async send(method, params = {}, timeout = CDP_COMMAND_TIMEOUT_MS, signal) {
     assert.equal(this.closed, false, "CDP client is closed");
-    await withTimeout(this.ready, timeout, `CDP connection during ${method}`);
+    await raceWithSignalAndTimeout(this.ready, {
+      signal,
+      milliseconds: timeout,
+      label: `CDP connection during ${method}`,
+    });
     const id = ++this.nextCommandId;
     const result = new Promise((resolveResult, rejectResult) => {
       this.pending.set(id, { resolve: resolveResult, reject: rejectResult });
@@ -553,9 +598,11 @@ export class CdpClient {
       throw error;
     }
 
-    return withTimeout(result, timeout, `CDP ${method} during ${currentProgressStage}`).finally(() => {
-      this.pending.delete(id);
-    });
+    return raceWithSignalAndTimeout(result, {
+      signal,
+      milliseconds: timeout,
+      label: `CDP ${method} during ${currentProgressStage}`,
+    }).finally(() => this.pending.delete(id));
   }
 
   on(method, listener) {
@@ -565,36 +612,57 @@ export class CdpClient {
     return () => listeners.delete(listener);
   }
 
-  once(method, timeout = CDP_EVENT_TIMEOUT_MS) {
-    return this.waitForEvent(method, () => true, timeout);
+  once(method, timeout = CDP_EVENT_TIMEOUT_MS, signal) {
+    return this.waitForEvent(method, () => true, timeout, signal);
   }
 
-  waitForEvent(method, predicate = () => true, timeout = CDP_EVENT_TIMEOUT_MS) {
-    return new Promise((resolveEvent, rejectEvent) => {
+  waitForEvent(method, predicate = () => true, timeout = CDP_EVENT_TIMEOUT_MS, signal) {
+    if (signal?.aborted) return Promise.reject(abortError(signal));
+
+    const eventPromise = new Promise((resolveEvent, rejectEvent) => {
       let timer;
-      const off = this.on(method, (params) => {
+      let settled = false;
+      let off;
+      let onAbort;
+      const waiter = {
+        reject: (error) => finish(rejectEvent, error),
+      };
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        this.eventWaiters.delete(waiter);
+        off?.();
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        callback(value);
+      };
+      off = this.on(method, (params) => {
         try {
           if (!predicate(params)) return;
-          off();
-          clearTimeout(timer);
-          resolveEvent(params);
+          finish(resolveEvent, params);
         } catch (error) {
-          off();
-          clearTimeout(timer);
-          rejectEvent(error);
+          finish(rejectEvent, error);
         }
       });
+      this.eventWaiters.add(waiter);
+      onAbort = () => finish(rejectEvent, abortError(signal));
+      signal?.addEventListener("abort", onAbort, { once: true });
       timer = setTimeout(() => {
-        off();
-        rejectEvent(new Error(`CDP ${method} during ${currentProgressStage} timed out after ${timeout}ms`));
+        finish(
+          rejectEvent,
+          new Error(`CDP ${method} during ${currentProgressStage} timed out after ${timeout}ms`),
+        );
       }, timeout);
     });
+    eventPromise.catch(() => {});
+    return eventPromise;
   }
 
   close() {
     if (this.closed) return;
     this.closed = true;
     this.rejectPending(new Error("CDP client closed"));
+    this.rejectEventWaiters(new Error("CDP client closed"));
     try {
       this.socket.close();
     } catch {
@@ -633,7 +701,7 @@ export function isIgnoredFavicon(record, expectedOrigin) {
     url.pathname === "/favicon.ico" &&
     url.search === "" &&
     url.hash === "" &&
-    record.resourceType === "Image"
+    ["Image", "Other"].includes(record.resourceType)
   );
 }
 
@@ -643,9 +711,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const logErrors = [];
   const runtimeExceptions = [];
   const requestFailures = [];
+  const webSockets = new Map();
+  const webSocketFailures = [];
+  const subscriptions = [];
   let sequence = 0;
+  const on = (method, listener) => subscriptions.push(client.on(method, listener));
 
-  client.on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse }) => {
+  on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse }) => {
     const prior = requests.get(requestId);
     const redirects = prior?.redirects || [];
     if (redirectResponse) redirects.push({ status: redirectResponse.status, url: redirectResponse.url });
@@ -660,13 +732,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       response: undefined,
       resourceType: type,
       redirects,
+      webSocket: type === "WebSocket",
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(request.url),
     });
   });
 
-  client.on("Network.responseReceived", ({ requestId, response, type }) => {
+  on("Network.responseReceived", ({ requestId, response, type }) => {
     const record = requests.get(requestId) || {
       requestId,
       sequence: ++sequence,
@@ -687,12 +760,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
   });
 
-  client.on("Network.loadingFinished", ({ requestId }) => {
+  on("Network.loadingFinished", ({ requestId }) => {
     const record = requests.get(requestId);
     if (record) record.finished = true;
   });
 
-  client.on("Network.loadingFailed", ({ requestId, errorText, canceled, blockedReason }) => {
+  on("Network.loadingFailed", ({ requestId, errorText, canceled, blockedReason }) => {
     const record = requests.get(requestId);
     const detail = `${errorText || "request failed"}${canceled ? " (canceled)" : ""}${blockedReason ? ` (${blockedReason})` : ""}`;
     if (!record?.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
@@ -701,19 +774,52 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (record) record.failed = detail;
   });
 
-  client.on("Runtime.consoleAPICalled", ({ type, args, stackTrace }) => {
+  on("Network.webSocketCreated", ({ requestId, url }) => {
+    webSockets.set(requestId, { requestId, url, handshake: undefined, error: undefined });
+  });
+
+  on("Network.webSocketWillSendHandshakeRequest", ({ requestId, request }) => {
+    const socket = webSockets.get(requestId) || { requestId, url: request.url };
+    socket.handshakeRequest = request;
+    webSockets.set(requestId, socket);
+  });
+
+  on("Network.webSocketHandshakeResponseReceived", ({ requestId, response }) => {
+    const socket = webSockets.get(requestId) || { requestId, url: response.url };
+    socket.handshake = response;
+    webSockets.set(requestId, socket);
+  });
+
+  on("Network.webSocketFrameError", ({ requestId, errorMessage }) => {
+    const socket = webSockets.get(requestId);
+    const detail = errorMessage || "websocket frame error";
+    if (socket) socket.error = detail;
+    webSocketFailures.push(`${socket?.url || requestId}: ${detail}`);
+  });
+
+  on("Network.webSocketClosed", ({ requestId }) => {
+    const socket = webSockets.get(requestId);
+    if (socket) socket.closed = true;
+  });
+
+  on("Runtime.consoleAPICalled", ({ type, args, stackTrace }) => {
     if (!["error", "assert"].includes(type)) return;
     const values = (args || []).map((arg) => arg.value ?? arg.description ?? arg.type).join(" ");
     consoleErrors.push(`${values}${stackTrace?.description ? `\n${stackTrace.description}` : ""}`);
   });
 
-  client.on("Log.entryAdded", ({ entry }) => {
+  on("Log.entryAdded", ({ entry }) => {
     if (["error", "assert"].includes(entry?.level)) {
-      logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+      const matchingFavicon = entry.url && [...requests.values()].some(
+        (record) => record.url === entry.url && isIgnoredFavicon(record, expectedOrigin),
+      );
+      if (!matchingFavicon) {
+        logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+      }
     }
   });
 
-  client.on("Runtime.exceptionThrown", (exception) => {
+  on("Runtime.exceptionThrown", (exception) => {
     runtimeExceptions.push(exceptionMessage(exception));
   });
 
@@ -724,7 +830,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       ...consoleErrors.map((value) => `console.error/assert: ${value}`),
       ...runtimeExceptions.map((value) => `runtime exception: ${value}`),
       ...[...requests.values()]
-        .filter((record) => !record.finished && !record.failed && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin))
+        .filter((record) => !record.webSocket && !record.finished && !record.failed && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin))
         .map((record) => `outstanding request: ${record.method} ${record.url}`),
     ];
     return failures.length ? `${stage} browser diagnostics failed:\n${failures.join("\n")}` : null;
@@ -736,13 +842,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     logErrors,
     runtimeExceptions,
     requestFailures,
+    webSockets,
+    webSocketFailures,
     completed(predicate) {
       return [...requests.values()].filter((record) =>
         record.response && record.finished && !record.failed && predicate(record),
       );
     },
-    async drainLateEvents(milliseconds = 250) {
-      await sleep(milliseconds);
+    async drainLateEvents(milliseconds = 250, signal) {
+      await sleep(milliseconds, signal);
+    },
+    dispose() {
+      while (subscriptions.length) subscriptions.pop()?.();
     },
     assertClean(stage) {
       const failure = describeFailures(stage);
@@ -756,6 +867,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
             logErrors,
             consoleErrors,
             runtimeExceptions,
+            webSocketFailures,
+            webSockets: [...webSockets.values()].map((socket) => ({
+              requestId: socket.requestId,
+              url: socket.url,
+              status: socket.handshake?.status,
+              closed: socket.closed,
+              error: socket.error,
+            })),
             requests: [...requests.values()].map((record) => ({
               requestId: record.requestId,
               method: record.method,
@@ -764,6 +883,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
               status: record.response?.status,
               resourceType: record.resourceType,
               redirects: record.redirects,
+              webSocket: record.webSocket,
               finished: record.finished,
               failed: record.failed,
             })),
@@ -777,37 +897,108 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
 }
 
-export async function evaluate(client, expression, label) {
+export function assertLiveViewWebSocket(
+  { webSockets, webSocketFailures, requests, consoleErrors = [], logErrors = [] },
+  expectedOrigin,
+  { beforeRequestIds = new Set() } = {},
+) {
+  const liveViewSockets = [...webSockets.values()].filter((socket) => {
+    try {
+      const url = new URL(socket.url);
+      return url.pathname === "/live/websocket" && !beforeRequestIds.has(socket.requestId);
+    } catch {
+      return false;
+    }
+  });
+  assert.ok(liveViewSockets.length > 0, "LiveView did not create its websocket transport");
+
+  const connected = liveViewSockets.find((socket) => {
+    const url = new URL(socket.url);
+    const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
+    const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
+    return (
+      socketOrigin === expectedOrigin &&
+      originHeader === expectedOrigin &&
+      socket.handshake?.status === 101 &&
+      !socket.error
+    );
+  });
+  assert.ok(
+    connected,
+    `LiveView websocket did not complete a same-origin HTTP 101 handshake: ${JSON.stringify(
+      liveViewSockets.map((socket) => ({
+        url: socket.url,
+        origin: requestHeader({ request: socket.handshakeRequest }, "origin"),
+        status: socket.handshake?.status,
+        error: socket.error,
+      })),
+    )}`,
+  );
+
+  const fallback = [...requests.values()].find((record) => {
+    try {
+      return new URL(record.url).pathname === "/live/longpoll";
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(
+    fallback,
+    undefined,
+    `LiveView fell back to longpoll transport: ${fallback?.url || "unknown request"}`,
+  );
+  assert.deepEqual(webSocketFailures, [], `LiveView websocket transport failed: ${webSocketFailures.join("; ")}`);
+
+  const originDiagnostic = [...consoleErrors, ...logErrors].find((message) => /origin|longpoll/i.test(message));
+  assert.equal(originDiagnostic, undefined, `LiveView emitted an origin or transport diagnostic: ${originDiagnostic}`);
+  return connected;
+}
+
+export async function evaluate(client, expression, label, { signal } = {}) {
   const result = await client.send("Runtime.evaluate", {
     expression,
     awaitPromise: true,
     returnByValue: true,
-  });
+  }, CDP_COMMAND_TIMEOUT_MS, signal);
   if (result.exceptionDetails) throw new Error(`${label}: ${exceptionMessage(result)}`);
   return result.result?.value;
 }
 
-export async function waitForExpression(client, expression, label, timeout = CDP_EVENT_TIMEOUT_MS) {
+export async function waitForExpression(
+  client,
+  expression,
+  label,
+  { timeout = CDP_EVENT_TIMEOUT_MS, signal, sleepFn = sleep } = {},
+) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    if (await evaluate(client, expression, label)) return;
-    await sleep(POLL_INTERVAL_MS);
+    if (await evaluate(client, expression, label, { signal })) return;
+    await sleepFn(POLL_INTERVAL_MS, signal);
   }
 
   const state = await evaluate(
     client,
     "({url: location.href, readyState: document.readyState, body: document.body?.innerText?.slice(0, 2000)})",
     `${label} diagnostics`,
-  ).catch(() => ({}));
+    { signal },
+  ).catch((error) => {
+    if (signal?.aborted) throw error;
+    return {};
+  });
   throw new Error(`${label} timed out: ${JSON.stringify(state)}`);
 }
 
-export async function waitForResponse(diagnostics, predicate, label, timeout = CDP_EVENT_TIMEOUT_MS) {
+export async function waitForResponse(
+  diagnostics,
+  predicate,
+  label,
+  { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {},
+) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const match = diagnostics.completed(predicate)[0];
     if (match) return match;
-    await sleep(POLL_INTERVAL_MS);
+    await sleep(POLL_INTERVAL_MS, signal);
   }
 
   throw new Error(`${label} response was not observed`);
@@ -821,8 +1012,13 @@ export function parseResponseBody(result, label) {
   return body;
 }
 
-export async function responseJson(client, record, label) {
-  const result = await client.send("Network.getResponseBody", { requestId: record.requestId });
+export async function responseJson(client, record, label, { signal } = {}) {
+  const result = await client.send(
+    "Network.getResponseBody",
+    { requestId: record.requestId },
+    CDP_COMMAND_TIMEOUT_MS,
+    signal,
+  );
   const body = parseResponseBody(result, label);
   try {
     return JSON.parse(body);
@@ -887,21 +1083,31 @@ export function assertManifestAssetsRequested(
   manifest,
   manifestUrl,
   records,
-  { origin, label = "remote manifest" } = {},
+  { origin, label = "remote manifest", requiredExposedModule } = {},
 ) {
   const manifestLocation = assertHttpUrl(manifestUrl, origin, `${label} URL`);
   const assetStrings = new Set();
 
-  const visit = (value) => {
+  let manifestForBrowser = manifest;
+  if (requiredExposedModule !== undefined) {
+    const expose = (manifest.exposes || []).find(
+      (candidate) => candidate.path === requiredExposedModule,
+    );
+    assert.ok(expose, `${label} does not declare exposed module ${requiredExposedModule}`);
+    manifestForBrowser = { ...manifest, exposes: [expose] };
+  }
+
+  const visit = (value, key) => {
+    if (key === "ssrRemoteEntry") return;
     if (typeof value === "string" && /\.(?:m?js|css)(?:[?#]|$)/i.test(value)) {
       assetStrings.add(value);
     } else if (Array.isArray(value)) {
       for (const child of value) visit(child);
     } else if (value && typeof value === "object") {
-      for (const child of Object.values(value)) visit(child);
+      for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
     }
   };
-  visit(manifest);
+  visit(manifestForBrowser);
 
   assert.ok(assetStrings.size > 0, `${label} declared no JavaScript or CSS assets`);
   const assets = [...assetStrings].map((asset) =>
@@ -936,64 +1142,98 @@ export function requirePostActionRefresh(
   return fresh[fresh.length - 1];
 }
 
-export async function navigate(client, url, { expectedOrigin, expectedPath } = {}) {
+export async function navigate(client, url, { expectedOrigin, expectedPath, signal } = {}) {
   const target = assertHttpUrl(url, expectedOrigin, "navigation URL");
   reportProgress(`navigating ${target.href}`);
+  const navigationController = new AbortController();
+  const onAbort = () => navigationController.abort(abortError(signal));
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  const navigationSignal = navigationController.signal;
+
   // Both listeners are installed before Page.navigate so a fast redirect cannot
   // satisfy the document assertion with an event from the previous page.
-  const frameNavigation = client.waitForEvent("Page.frameNavigated", ({ frame }) => !frame.parentId);
-  const loadEvent = client.once("Page.loadEventFired");
-  const result = await client.send("Page.navigate", { url: target.href });
-  assert.ok(!result?.errorText, `Page.navigate failed: ${result?.errorText || "unknown error"}`);
-  const frame = await frameNavigation;
-  await loadEvent;
-  const documentState = await evaluate(
-    client,
-    "({href: location.href, origin: location.origin, readyState: document.readyState, hasBody: document.body !== null})",
-    `${target.href} document validation`,
-  );
-  assertHttpUrl(documentState.href, expectedOrigin, "resulting document URL");
-  assert.equal(documentState.origin, target.origin, "resulting document origin changed");
-  if (expectedPath) assert.equal(new URL(documentState.href).pathname, expectedPath, "resulting document path changed");
-  assert.equal(documentState.readyState, "complete", "resulting document did not load");
-  assert.equal(documentState.hasBody, true, "resulting document has no body");
-  assertHttpUrl(frame.frame.url, expectedOrigin, "frame navigation URL");
+  try {
+    const frameNavigation = client.waitForEvent(
+      "Page.frameNavigated",
+      ({ frame }) => !frame.parentId,
+      CDP_EVENT_TIMEOUT_MS,
+      navigationSignal,
+    );
+    const loadEvent = client.once("Page.loadEventFired", CDP_EVENT_TIMEOUT_MS, navigationSignal);
+    const result = await client.send("Page.navigate", { url: target.href }, CDP_COMMAND_TIMEOUT_MS, navigationSignal);
+    assert.ok(!result?.errorText, `Page.navigate failed: ${result?.errorText || "unknown error"}`);
+    const frame = await frameNavigation;
+    await loadEvent;
+    const documentState = await evaluate(
+      client,
+      "({href: location.href, origin: location.origin, readyState: document.readyState, hasBody: document.body !== null})",
+      `${target.href} document validation`,
+      { signal: navigationSignal },
+    );
+    assertHttpUrl(documentState.href, expectedOrigin, "resulting document URL");
+    assert.equal(documentState.origin, target.origin, "resulting document origin changed");
+    if (expectedPath) assert.equal(new URL(documentState.href).pathname, expectedPath, "resulting document path changed");
+    assert.equal(documentState.readyState, "complete", "resulting document did not load");
+    assert.equal(documentState.hasBody, true, "resulting document has no body");
+    assertHttpUrl(frame.frame.url, expectedOrigin, "frame navigation URL");
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    navigationController.abort(new Error("navigation wait settled"));
+  }
 }
 
-async function submitSignIn(client, loginUrl, email, password, expectedOrigin) {
+async function submitSignIn(client, loginUrl, email, password, expectedOrigin, signal) {
   const login = assertHttpUrl(loginUrl, expectedOrigin, "sign-in URL");
-  await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname });
+  await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname, signal });
   await waitForExpression(
     client,
     "Boolean(document.querySelector('#sign-in-form input[name=\"user[email]\"]') && document.querySelector('#sign-in-form input[name=\"user[password]\"]'))",
     "sign-in form",
+    { signal },
   );
 
-  const frameNavigation = client.waitForEvent("Page.frameNavigated", ({ frame }) => !frame.parentId);
-  const loadEvent = client.once("Page.loadEventFired");
-  const result = await evaluate(
-    client,
-    `(() => {
-      const form = document.querySelector('#sign-in-form');
-      const emailInput = form?.querySelector('input[name="user[email]"]');
-      const passwordInput = form?.querySelector('input[name="user[password]"]');
-      if (!form || !emailInput || !passwordInput) return false;
-      emailInput.value = ${JSON.stringify(email)};
-      passwordInput.value = ${JSON.stringify(password)};
-      emailInput.dispatchEvent(new Event('input', {bubbles: true}));
-      passwordInput.dispatchEvent(new Event('input', {bubbles: true}));
-      form.submit();
-      return true;
-    })()`,
-    "sign-in submission",
-  );
-  assert.equal(result, true, "sign-in form was not submitted");
-  await frameNavigation;
-  await loadEvent;
-  const state = await evaluate(client, "({href: location.href, origin: location.origin})", "authenticated redirect");
-  assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
-  assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
-  await waitForExpression(client, "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')", "authenticated redirect");
+  const submissionController = new AbortController();
+  const onAbort = () => submissionController.abort(abortError(signal));
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  const submissionSignal = submissionController.signal;
+  try {
+    const frameNavigation = client.waitForEvent(
+      "Page.frameNavigated",
+      ({ frame }) => !frame.parentId,
+      CDP_EVENT_TIMEOUT_MS,
+      submissionSignal,
+    );
+    const loadEvent = client.once("Page.loadEventFired", CDP_EVENT_TIMEOUT_MS, submissionSignal);
+    const result = await evaluate(
+      client,
+      `(() => {
+        const form = document.querySelector('#sign-in-form');
+        const emailInput = form?.querySelector('input[name="user[email]"]');
+        const passwordInput = form?.querySelector('input[name="user[password]"]');
+        if (!form || !emailInput || !passwordInput) return false;
+        emailInput.value = ${JSON.stringify(email)};
+        passwordInput.value = ${JSON.stringify(password)};
+        emailInput.dispatchEvent(new Event('input', {bubbles: true}));
+        passwordInput.dispatchEvent(new Event('input', {bubbles: true}));
+        form.submit();
+        return true;
+      })()`,
+      "sign-in submission",
+      { signal: submissionSignal },
+    );
+    assert.equal(result, true, "sign-in form was not submitted");
+    await frameNavigation;
+    await loadEvent;
+    const state = await evaluate(client, "({href: location.href, origin: location.origin})", "authenticated redirect", { signal: submissionSignal });
+    assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
+    assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
+    await waitForExpression(client, "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')", "authenticated redirect", { signal: submissionSignal });
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    submissionController.abort(new Error("sign-in wait settled"));
+  }
 }
 
 function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin) {
@@ -1032,6 +1272,7 @@ function queryBody(application, queryId, queryVersion, scope) {
 async function assertRemoteSurface({
   client,
   diagnostics,
+  signal,
   url,
   expectedOrigin,
   catalogPath,
@@ -1045,65 +1286,92 @@ async function assertRemoteSurface({
   queryVersion,
 }) {
   const surfaceUrl = assertHttpUrl(url, expectedOrigin, `${applicationKey} surface URL`);
-  await navigate(client, surfaceUrl.href, { expectedOrigin, expectedPath: surfaceUrl.pathname });
+  await navigate(client, surfaceUrl.href, {
+    expectedOrigin,
+    expectedPath: surfaceUrl.pathname,
+    signal,
+  });
+  reportProgress(`${applicationKey} waiting for REMOTE READY`);
   try {
-    await waitForExpression(client, readyExpression, `${applicationKey} REMOTE READY`);
+    await waitForExpression(client, readyExpression, `${applicationKey} REMOTE READY`, { signal });
   } catch (error) {
     throw new Error(`${error.message}\n${diagnostics.describe()}`, { cause: error });
   }
+  reportProgress(`${applicationKey} REMOTE READY observed`);
   diagnostics.assertClean(`${applicationKey} surface`);
+  reportProgress(`${applicationKey} asserting LiveView websocket`);
+  assertLiveViewWebSocket(diagnostics, expectedOrigin);
+  reportProgress(`${applicationKey} LiveView websocket asserted`);
 
+  reportProgress(`${applicationKey} waiting for catalog response`);
   const catalogRecord = await waitForResponse(
     diagnostics,
     (record) => pathMatches(record, "GET", catalogPath, expectedOrigin),
     `${applicationKey} catalog`,
+    { signal },
   );
+  reportProgress(`${applicationKey} catalog response observed`);
   assertHttpRequestContract(catalogRecord, {
     origin: expectedOrigin,
     method: "GET",
     pathname: catalogPath,
     label: `${applicationKey} catalog`,
   });
-  const catalog = await responseJson(client, catalogRecord, `${applicationKey} catalog`);
+  const catalog = await responseJson(client, catalogRecord, `${applicationKey} catalog`, { signal });
   const application = assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin);
 
   const manifestUrl = assertHttpUrl(application.release.manifestUrl, expectedOrigin, `${applicationKey} manifest URL`);
+  reportProgress(`${applicationKey} waiting for manifest response`);
   const manifestRecord = await waitForResponse(
     diagnostics,
     (record) => pathMatches(record, "GET", manifestUrl.pathname, expectedOrigin),
     `${applicationKey} manifest`,
+    { signal },
   );
+  reportProgress(`${applicationKey} manifest response observed`);
   assertHttpRequestContract(manifestRecord, {
     origin: expectedOrigin,
     method: "GET",
     pathname: manifestUrl.pathname,
     label: `${applicationKey} manifest`,
   });
-  const manifest = await responseJson(client, manifestRecord, `${applicationKey} manifest`);
+  const manifest = await responseJson(client, manifestRecord, `${applicationKey} manifest`, { signal });
   assert.equal(typeof manifest, "object");
   assertManifestAssetsRequested(manifest, manifestUrl.href, diagnostics.completed(() => true), {
     origin: expectedOrigin,
     label: `${applicationKey} manifest`,
+    requiredExposedModule: application.release.exposedModule,
   });
+  reportProgress(`${applicationKey} manifest assets asserted`);
 
   const hostRecord = diagnostics.completed(
     (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
-  )[0];
+  ).at(-1);
   assertHttpRequestContract(hostRecord, {
     origin: expectedOrigin,
     method: "GET",
     pathname: "/assets/application-host/host/host.js",
     label: "published Phoenix host bundle",
   });
-  const hostBody = await client.send("Network.getResponseBody", { requestId: hostRecord.requestId });
+  reportProgress(`${applicationKey} reading published host bundle body`);
+  const hostBody = await client.send(
+    "Network.getResponseBody",
+    { requestId: hostRecord.requestId },
+    CDP_COMMAND_TIMEOUT_MS,
+    signal,
+  );
   parseResponseBody(hostBody, "published Phoenix host bundle");
+  reportProgress(`${applicationKey} published host bundle body asserted`);
 
   assert.ok(manifestUrl.pathname.startsWith(remotePath), `${applicationKey} manifest escaped its published remote path`);
+  reportProgress(`${applicationKey} waiting for query response`);
   const queryRecord = await waitForResponse(
     diagnostics,
     (record) => pathMatches(record, "POST", queryPath, expectedOrigin),
     `${applicationKey} query`,
+    { signal },
   );
+  reportProgress(`${applicationKey} query response observed`);
   const scope = catalog.session.context;
   assertHttpRequestContract(queryRecord, {
     origin: expectedOrigin,
@@ -1121,7 +1389,7 @@ async function assertRemoteSurface({
       spacecraftId: scope.spacecraftId,
     }),
   });
-  const query = await responseJson(client, queryRecord, `${applicationKey} query`);
+  const query = await responseJson(client, queryRecord, `${applicationKey} query`, { signal });
   return { catalog, application, manifest, query, queryRecord, queryPath };
 }
 
@@ -1133,22 +1401,33 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const email = requiredArg(args, "--login-email");
   const missionId = requiredArg(args, "--mission-id");
   const spacecraftId = requiredArg(args, "--spacecraft-id");
+  const catalogRevisionId = requiredArg(args, "--catalog-revision-id");
+  const sourceEndpointId = requiredArg(args, "--source-endpoint-id");
   const expectedApid = Number(requiredArg(args, "--expected-apid"));
   assert.equal(Number.isInteger(expectedApid), true, "--expected-apid must be an integer");
   assert.ok(secret?.password, "structured login secret is required");
 
   const origin = assertHttpUrl(commsUrl, undefined, "Comms surface URL").origin;
+  assert.equal(
+    new URL(commsUrl).pathname,
+    `/missions/${encodeURIComponent(missionId)}/comms/federated`,
+    "Comms surface must use the authenticated federated route",
+  );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
   assertHttpUrl(loginUrl, origin, "sign-in URL");
 
   reportProgress("authenticating browser session");
-  await submitSignIn(client, loginUrl, email, secret.password, origin);
+  await submitSignIn(client, loginUrl, email, secret.password, origin, signal);
+  reportProgress("authenticated browser session ready");
   diagnostics.assertClean("authenticated sign-in");
+  reportProgress("authenticated LiveView websocket asserted");
+  assertLiveViewWebSocket(diagnostics, origin);
 
   const commsQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
   const comms = await assertRemoteSurface({
     client,
     diagnostics,
+    signal,
     url: commsUrl,
     expectedOrigin: origin,
     catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
@@ -1168,7 +1447,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
 
   reportProgress("verifying Comms Overview DOM and network contract");
   assert.equal(
-    await evaluate(client, "document.querySelector('#comms-transports')?.textContent?.includes('Federation Browser Transport')", "Comms Overview transport"),
+    await evaluate(client, "document.querySelector('#comms-transports')?.textContent?.includes('Federation Browser Transport')", "Comms Overview transport", { signal }),
     true,
   );
 
@@ -1176,6 +1455,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const telemetry = await assertRemoteSurface({
     client,
     diagnostics,
+    signal,
     url: telemetryUrl,
     expectedOrigin: origin,
     catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
@@ -1206,6 +1486,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       return {group: Boolean(group), checked: checkbox?.checked === true};
     })()`,
     "Telemetry packet group",
+    { signal },
   );
   assert.deepEqual(telemetryState, { group: true, checked: true });
 
@@ -1221,15 +1502,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     client,
     "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
     "Telemetry packet-bindings submit",
+    { signal },
   );
   assert.equal(clicked, true);
 
   const actionPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/actions`;
+  reportProgress("waiting for Telemetry packet-bindings action response");
   const actionRecord = await waitForResponse(
     diagnostics,
     (record) => pathMatches(record, "POST", actionPath, origin) && record.startedAtMs >= actionStartedAtMs,
     "Telemetry packet-bindings action",
+    { signal },
   );
+  reportProgress("Telemetry packet-bindings action response observed");
   const telemetryScope = telemetry.catalog.session.context;
   assertHttpRequestContract(actionRecord, {
     origin,
@@ -1248,7 +1533,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       surfaceId: "packet_bindings",
       surfaceVersion: 1,
       actionId: "save_packet_bindings",
-      input: { source_endpoint: "primary", selected_packet_ids: [packetId] },
+      input: {
+        catalog_revision_id: catalogRevisionId,
+        expected_configuration_version: "",
+        input_id: "telemetry-fields",
+        input_version: "1",
+        selected_packet_ids: [packetId],
+        source_endpoint_ref: sourceEndpointId,
+      },
       scope: {
         organizationId: telemetryScope.organizationId,
         missionId: telemetryScope.missionId,
@@ -1256,11 +1548,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       },
     },
   });
-  const receipt = await responseJson(client, actionRecord, "Telemetry packet-bindings action");
+  const receipt = await responseJson(client, actionRecord, "Telemetry packet-bindings action", { signal });
   assert.match(receipt.receiptId, /^application-host-receipt-/);
   assert.equal(receipt.result.applicationKey, "telemetry_decom");
   assert.deepEqual(receipt.result.selectedPacketIds, [packetId]);
 
+  reportProgress("waiting for Telemetry canonical query refresh");
   const refreshedQueryRecord = await waitForResponse(
     diagnostics,
     (record) =>
@@ -1268,7 +1561,9 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       !beforeRequestIds.has(record.requestId) &&
       record.startedAtMs >= actionStartedAtMs,
     "Telemetry canonical query refresh",
+    { signal },
   );
+  reportProgress("Telemetry canonical query refresh observed");
   assert.equal(
     requirePostActionRefresh(diagnostics.completed(() => true), {
       beforeRequestIds,
@@ -1296,7 +1591,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       spacecraftId: telemetryScope.spacecraftId,
     }),
   });
-  const refreshedQuery = await responseJson(client, refreshedQueryRecord, "Telemetry refreshed query");
+  const refreshedQuery = await responseJson(client, refreshedQueryRecord, "Telemetry refreshed query", { signal });
   const refreshedGroup = refreshedQuery.application_surface_packet_groups.find(
     (group) => group.packet_id === packetId,
   );
@@ -1307,13 +1602,17 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     client,
     "Boolean(document.querySelector('#telemetry-decom-action-notice') && document.querySelector('#telemetry-decom-action-notice').textContent.includes('refreshed from the host'))",
     "Telemetry canonical refresh notice",
+    { signal },
   );
+  reportProgress("Telemetry canonical refresh notice observed");
   assert.equal(
-    await evaluate(client, `document.querySelector('[data-apid="${expectedApid}"] input[type="checkbox"]')?.checked === true`, "Telemetry retained selection"),
+    await evaluate(client, `document.querySelector('[data-apid="${expectedApid}"] input[type="checkbox"]')?.checked === true`, "Telemetry retained selection", { signal }),
     true,
   );
 
-  await diagnostics.drainLateEvents();
+  reportProgress("draining late browser events");
+  await diagnostics.drainLateEvents(250, signal);
+  reportProgress("late browser events drained");
   diagnostics.assertClean("federation browser gate");
   return {
     origin,
@@ -1324,9 +1623,9 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   };
 }
 
-export async function readStructuredLoginSecret({ stream = process.stdin, signal } = {}) {
-  return raceWithSignalAndTimeout(
-    new Promise((resolveSecret, rejectSecret) => {
+export async function readStructuredLoginSecret({ stream = process.stdin, signal, timeout = 5_000 } = {}) {
+  let cancelReader = () => {};
+  const reader = new Promise((resolveSecret, rejectSecret) => {
       let buffer = "";
       let finished = false;
       const finish = (callback, value) => {
@@ -1335,8 +1634,19 @@ export async function readStructuredLoginSecret({ stream = process.stdin, signal
         stream.removeListener("data", onData);
         stream.removeListener("end", onEnd);
         stream.removeListener("error", onError);
+        try {
+          stream.pause?.();
+        } catch {
+          // The input may already be closed while cancellation is cleaning it up.
+        }
+        try {
+          stream.unref?.();
+        } catch {
+          // Some imported test streams do not expose an unref operation.
+        }
         callback(value);
       };
+      cancelReader = (error) => finish(rejectSecret, error);
       const parse = () => {
         const line = buffer.split("\n", 1)[0].trim();
         if (!line) return;
@@ -1364,9 +1674,14 @@ export async function readStructuredLoginSecret({ stream = process.stdin, signal
       stream.on("data", onData);
       stream.once("end", onEnd);
       stream.once("error", onError);
-    }),
-    { signal, milliseconds: 5_000, label: "structured login secret" },
-  );
+    });
+
+  return raceWithSignalAndTimeout(reader, {
+    signal,
+    milliseconds: timeout,
+    label: "structured login secret",
+    onCancel: cancelReader,
+  });
 }
 
 export function installShutdownGuards({ onAbort }) {
@@ -1417,11 +1732,21 @@ export function installShutdownGuards({ onAbort }) {
   };
 }
 
-export async function runBrowserGate(args = process.argv.slice(2), { env = process.env } = {}) {
+export async function runBrowserGate(
+  args = process.argv.slice(2),
+  {
+    env = process.env,
+    launchChromeImpl = launchChrome,
+    createPageImpl = createPage,
+    createClientImpl = (endpoint) => new CdpClient(endpoint),
+    runScenarioImpl = runScenario,
+  } = {},
+) {
   assertNoPasswordArgument(args);
   const controller = new AbortController();
   const state = { runtime: null, client: null, page: null };
   const secrets = [];
+  let diagnostics;
   const guards = installShutdownGuards({
     onAbort: (reason) => {
       controller.abort(reason);
@@ -1438,7 +1763,7 @@ export async function runBrowserGate(args = process.argv.slice(2), { env = proce
     if (secret) secrets.push(secret.password);
 
     reportProgress("launching bounded Chrome process");
-    state.runtime = await launchChrome({
+    state.runtime = await launchChromeImpl({
       env,
       signal: controller.signal,
       onRuntime: (runtime) => {
@@ -1446,56 +1771,68 @@ export async function runBrowserGate(args = process.argv.slice(2), { env = proce
       },
     });
     reportProgress("creating browser target");
-    state.page = await createPage(state.runtime.endpoint, "about:blank", { signal: controller.signal });
-    state.client = new CdpClient(state.page.webSocketDebuggerUrl);
-    await state.client.send("Page.enable");
-    await state.client.send("Runtime.enable");
-    await state.client.send("Network.enable");
-    await state.client.send("Network.setCacheDisabled", { cacheDisabled: true });
-    await state.client.send("Log.enable");
+    state.page = await createPageImpl(state.runtime.endpoint, "about:blank", { signal: controller.signal });
+    state.client = createClientImpl(state.page.webSocketDebuggerUrl);
+    await state.client.send("Page.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
+    await state.client.send("Runtime.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
+    await state.client.send("Network.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
+    await state.client.send(
+      "Network.setCacheDisabled",
+      { cacheDisabled: true },
+      CDP_COMMAND_TIMEOUT_MS,
+      controller.signal,
+    );
+    await state.client.send("Log.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
     await state.client.send("Emulation.setDeviceMetricsOverride", {
       width: 1440,
       height: 1000,
       deviceScaleFactor: 1,
       mobile: false,
-    });
+    }, CDP_COMMAND_TIMEOUT_MS, controller.signal);
 
     const commsUrl = requiredArg(args, "--comms-url");
-    const diagnostics = installDiagnostics(state.client, { expectedOrigin: new URL(commsUrl).origin, secrets });
+    diagnostics = installDiagnostics(state.client, { expectedOrigin: new URL(commsUrl).origin, secrets });
     const timeout = Number(argValue(args, "--scenario-timeout-ms") || SCENARIO_TIMEOUT_MS);
     assert.ok(Number.isFinite(timeout) && timeout > 0, "--scenario-timeout-ms must be positive");
-    const scenario = runScenario(state.client, diagnostics, args, { secret, signal: controller.signal });
+    const scenario = runScenarioImpl(state.client, diagnostics, args, { secret, signal: controller.signal });
     const result = await raceWithSignalAndTimeout(scenario, {
       signal: controller.signal,
       milliseconds: timeout,
       label: "federation browser scenario",
       onTimeout: (error) => {
+        reportProgress(`federation browser scenario timeout after ${timeout}ms`);
         controller.abort(error);
         state.client?.close();
         void state.runtime?.close();
       },
     });
+    reportProgress("federation browser scenario settled successfully");
     diagnostics.assertClean("federation browser gate final");
+    reportProgress("browser gate returning successfully");
     return result;
   } catch (error) {
     const safe = new Error(redactError(error, secrets));
     safe.exitCode = guards.exitCode;
     runError = safe;
+    reportProgress("browser gate throwing after run failure");
     throw safe;
   } finally {
     guards.dispose();
+    diagnostics?.dispose();
     reportProgress("cleaning up browser process and profile");
     const cleanupErrors = [];
     try {
       await closePage(state.runtime?.endpoint, state.page?.id, {
         timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
       });
+      reportProgress("browser target close complete");
     } catch (error) {
       cleanupErrors.push(error);
     }
     state.client?.close();
     try {
       await state.runtime?.close();
+      reportProgress("Chrome process and profile cleanup complete");
     } catch (error) {
       cleanupErrors.push(error);
     }
@@ -1503,8 +1840,10 @@ export async function runBrowserGate(args = process.argv.slice(2), { env = proce
       const message = redactText(cleanupErrors.map(redactError).join("\n"), secrets);
       const combined = new Error(runError ? `${redactError(runError, secrets)}\n${message}` : message);
       combined.exitCode = runError?.exitCode;
+      reportProgress(`browser gate cleanup finished with errors; active resources: ${JSON.stringify(activeResourceNames())}`);
       throw combined;
     }
+    reportProgress(`browser gate cleanup finished; active resources: ${JSON.stringify(activeResourceNames())}`);
   }
 }
 

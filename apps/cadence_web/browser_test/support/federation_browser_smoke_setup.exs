@@ -24,10 +24,10 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     assert_production_publication!(app_root)
 
     context = persist_context!()
-    # Each invocation owns an ephemeral loopback endpoint. The published
-    # catalog and manifest URLs are derived from the request's actual origin.
-    port = DashboardRenderedViewportRunner.free_tcp_port()
-    DashboardRenderedViewportRunner.start_browser_endpoint!(port, sandbox_owner)
+    # Bandit owns the ephemeral listener before its actual port is returned.
+    # The published catalog and manifest URLs are derived from that origin.
+    port =
+      DashboardRenderedViewportRunner.start_browser_endpoint_on_ephemeral_port!(sandbox_owner)
 
     base_url = "http://127.0.0.1:#{port}"
 
@@ -45,9 +45,19 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       context.mission.mission_id,
       "--spacecraft-id",
       context.spacecraft.spacecraft_id,
+      "--catalog-revision-id",
+      context.catalog_revision_id,
+      "--source-endpoint-id",
+      context.source_endpoint_id,
       "--expected-apid",
       "42"
     ]
+
+    args =
+      case System.get_env("FEDERATION_BROWSER_SCENARIO_TIMEOUT_MS") do
+        nil -> args
+        timeout_ms -> args ++ ["--scenario-timeout-ms", timeout_ms]
+      end
 
     assert {output, 0} =
              DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(args,
@@ -110,7 +120,13 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
                source_endpoint_id: endpoint.source_endpoint_id
              )
 
-    %{user: user, mission: mission, spacecraft: spacecraft}
+    %{
+      user: user,
+      mission: mission,
+      spacecraft: spacecraft,
+      catalog_revision_id: revision.catalog_revision_id,
+      source_endpoint_id: endpoint.source_endpoint_id
+    }
   end
 
   defp persist_transport!(organization_id, mission_id) do

@@ -3,15 +3,29 @@ import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import {
+  activeResourceNames,
+  CdpClient,
   launchChrome,
+  readStructuredLoginSecret,
   reserveLoopbackPort,
+  runBrowserGate,
+  sleep,
   terminateProcess,
+  waitForExpression,
 } from "./federation_browser_smoke.mjs";
 
 const node = process.execPath;
 const smokeScript = new URL("./federation_browser_smoke.mjs", import.meta.url);
+
+function assertSecretStreamStopped(stream) {
+  assert.equal(stream.listenerCount("data"), 0, "secret reader left a data listener active");
+  assert.equal(stream.listenerCount("end"), 0, "secret reader left an end listener active");
+  assert.equal(stream.listenerCount("error"), 0, "secret reader left an error listener active");
+  assert.equal(stream.isPaused(), true, "secret reader did not pause the owned input stream");
+}
 
 async function profileNames() {
   return (await readdir(tmpdir())).filter((name) => name.startsWith("cadence-federation-chrome-"));
@@ -39,6 +53,162 @@ function runNode(args, { input = "", env = {} } = {}) {
     child.stdin.end(input);
   });
 }
+
+class FakeWebSocket {
+  constructor() {
+    this.listeners = new Map();
+    queueMicrotask(() => this.dispatch("open"));
+  }
+
+  addEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || new Set();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatch(type, event = {}) {
+    for (const listener of this.listeners.get(type) || []) listener(event);
+  }
+
+  send(payload) {
+    const { id, method } = JSON.parse(payload);
+    queueMicrotask(() => {
+      const result = method === "Runtime.evaluate" ? { result: { value: false } } : {};
+      this.dispatch("message", { data: JSON.stringify({ id, result }) });
+    });
+  }
+
+  close() {
+    this.dispatch("close");
+  }
+}
+
+test("scenario timeout aborts polling and CDP event waiters before gate cleanup returns", async () => {
+  const client = new CdpClient("ws://fake", { webSocketImpl: FakeWebSocket });
+  const args = [
+    "--comms-url",
+    "http://127.0.0.1:43721/missions/mission-1/comms/federated",
+  ];
+  let activePollTimers = 0;
+  let runtimeClosed = 0;
+  const timerCountBefore = activeResourceNames().filter((name) => name === "Timeout").length;
+  const trackedSleep = (milliseconds, signal) => {
+    activePollTimers += 1;
+    return sleep(milliseconds, signal).finally(() => { activePollTimers -= 1; });
+  };
+
+  const startedAt = Date.now();
+  await assert.rejects(
+    runBrowserGate(args.concat(["--scenario-timeout-ms", "25"]), {
+      launchChromeImpl: async ({ onRuntime }) => {
+        let closed = false;
+        const runtime = {
+          endpoint: "ws://fake",
+          child: null,
+          close: async () => {
+            if (closed) return;
+            closed = true;
+            runtimeClosed += 1;
+          },
+        };
+        onRuntime?.(runtime);
+        return runtime;
+      },
+      createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://fake-page" }),
+      createClientImpl: () => client,
+      runScenarioImpl: async (scenarioClient, _diagnostics, _args, { signal }) => {
+        const eventWait = scenarioClient.waitForEvent("Page.neverFired", () => true, 60_000, signal);
+        eventWait.catch(() => {});
+        await Promise.all([
+          eventWait,
+          waitForExpression(scenarioClient, "false", "deliberately non-resolving wait", {
+            timeout: 60_000,
+            signal,
+            sleepFn: trackedSleep,
+          }),
+        ]);
+      },
+    }),
+    /federation browser scenario timed out after 25ms/,
+  );
+
+  assert.ok(Date.now() - startedAt < 1_000, "gate cleanup exceeded its bounded lifecycle budget");
+  assert.equal(client.eventWaiters.size, 0, "abort left a CDP event waiter active");
+  assert.equal(client.pending.size, 0, "abort left a CDP command active");
+  assert.equal(activePollTimers, 0, "abort left a polling timer active");
+  assert.equal(runtimeClosed, 1, "runtime cleanup was not idempotently completed");
+  await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+  assert.equal(
+    activeResourceNames().filter((name) => name === "Timeout").length,
+    timerCountBefore,
+    "scenario abort left a real Timer resource active",
+  );
+});
+
+test("structured secret cleanup pauses real streams on success, parse error, end, abort, and timeout", async () => {
+  const successStream = new PassThrough();
+  const success = readStructuredLoginSecret({ stream: successStream });
+  successStream.end(JSON.stringify({ password: "test-secret" }));
+  assert.deepEqual(await success, { password: "test-secret" });
+  assertSecretStreamStopped(successStream);
+
+  const parseStream = new PassThrough();
+  const parseError = readStructuredLoginSecret({ stream: parseStream });
+  parseStream.end(JSON.stringify({ password: "" }));
+  await assert.rejects(parseError, /non-empty password/);
+  assertSecretStreamStopped(parseStream);
+
+  const endStream = new PassThrough();
+  const endError = readStructuredLoginSecret({ stream: endStream });
+  endStream.end();
+  await assert.rejects(endError, /secret was not provided/);
+  assertSecretStreamStopped(endStream);
+
+  const abortStream = new PassThrough();
+  const controller = new AbortController();
+  const aborted = readStructuredLoginSecret({ stream: abortStream, signal: controller.signal });
+  controller.abort(new Error("secret read cancelled"));
+  await assert.rejects(aborted, /secret read cancelled/);
+  assertSecretStreamStopped(abortStream);
+
+  const timeoutStream = new PassThrough();
+  const timedOut = readStructuredLoginSecret({ stream: timeoutStream, timeout: 20 });
+  await assert.rejects(timedOut, /structured login secret timed out after 20ms/);
+  assertSecretStreamStopped(timeoutStream);
+});
+
+test("an open child stdin pipe is unrefed after the one-shot secret read", async () => {
+  const source = [
+    `import { readStructuredLoginSecret } from ${JSON.stringify(smokeScript.href)};`,
+    `const secret = await readStructuredLoginSecret();`,
+    `if (secret.password !== "test-secret") throw new Error("unexpected secret");`,
+  ].join("\n");
+  const child = spawn(node, ["--input-type=module", "-e", source], {
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  let timer;
+  try {
+    child.stdin.write(`${JSON.stringify({ password: "test-secret" })}\n`);
+    const result = await new Promise((resolveChild, rejectChild) => {
+      timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        rejectChild(new Error("spawned secret-reader process did not exit within 1s"));
+      }, 1_000);
+      child.once("error", rejectChild);
+      child.once("exit", (code, signal) => resolveChild({ code, signal }));
+    });
+    assert.equal(result.code, 0);
+    assert.equal(result.signal, null);
+  } finally {
+    clearTimeout(timer);
+    child.stdin.destroy();
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }
+});
 
 test("missing Chrome is rejected before profile allocation", async () => {
   const before = await profileNames();
