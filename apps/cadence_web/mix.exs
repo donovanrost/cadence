@@ -83,6 +83,7 @@ defmodule CadenceWeb.MixProject do
       "assets.deploy": [
         "tailwind cadence_web --minify",
         "phoenix_vite.npm vite build",
+        "cmd --cd ../../frontend corepack pnpm@11.22.0 run build:publication",
         "phx.digest"
       ],
       "test.browser": [
