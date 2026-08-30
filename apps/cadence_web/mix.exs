@@ -27,7 +27,8 @@ defmodule CadenceWeb.MixProject do
     [
       preferred_envs: [
         "test.browser": :test,
-        "test.browser.full": :test
+        "test.browser.full": :test,
+        "test.browser.federation": :test
       ]
     ]
   end
@@ -91,6 +92,11 @@ defmodule CadenceWeb.MixProject do
       ],
       "test.browser.full": [
         "test --include browser --include browser_smoke browser_test/cadence_web/assets"
+      ],
+      "test.browser.federation": [
+        "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
+        "assets.deploy",
+        "test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs"
       ]
     ]
   end

@@ -30,7 +30,8 @@ defmodule CadenceWorkspace.MixProject do
         "test.planes": :test,
         "test.integration": :test,
         "test.browser": :test,
-        "test.browser.full": :test
+        "test.browser.full": :test,
+        "test.browser.federation": :test
       ]
     ]
   end
@@ -76,6 +77,12 @@ defmodule CadenceWorkspace.MixProject do
       ],
       "test.browser.full": [
         workspace_command("test.browser.full",
+          projects: [:cadence_web],
+          env: [{"MIX_ENV", "test"}]
+        )
+      ],
+      "test.browser.federation": [
+        workspace_command("test.browser.federation",
           projects: [:cadence_web],
           env: [{"MIX_ENV", "test"}]
         )
