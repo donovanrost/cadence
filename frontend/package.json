@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vp run -r --parallel dev",
     "build": "vp run -r build",
+    "build:publication": "corepack pnpm --filter @cadence/plugin-host build:phoenix && corepack pnpm --filter @cadence/comms-overview-plugin build",
     "preview": "node tools/production-server.ts",
     "check": "vp check",
     "test": "vp run -r test",

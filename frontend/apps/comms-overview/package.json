@@ -1,0 +1,30 @@
+{
+  "name": "@cadence/comms-overview-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev --host 127.0.0.1 --port 4176 --strictPort",
+    "build": "vue-tsc -b && vp build",
+    "preview": "vp preview --host 127.0.0.1 --port 4176 --strictPort",
+    "test": "vp test --run"
+  },
+  "dependencies": {
+    "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

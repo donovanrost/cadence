@@ -10,6 +10,7 @@ import { DemoHostService } from "../../../tools/demo-host-service";
 import { createHttpHostBridge, HostBridgeError } from "./http-host-bridge";
 
 const context: HostContext = {
+  scope: "spacecraft",
   organizationId: "org-1",
   missionId: "mission-1",
   missionName: "Firebird",

@@ -90,9 +90,13 @@ The equivalent commands can be run from the worktree root with `vp -C frontend`,
 frontend/node_modules/.bin/vp -C frontend run dev
 ```
 
-`dev` runs the host on `127.0.0.1:5173`, Telemetry Decom on `127.0.0.1:4174`, and Contract Probe
-on `127.0.0.1:4175`. `build` emits independently deployable artifacts, including current and
-previous Telemetry Decom releases. `preview` serves those artifacts through a production-shaped
+`dev` runs the demo host on `127.0.0.1:5173`, Telemetry Decom on `127.0.0.1:4174`, Contract Probe
+on `127.0.0.1:4175`, and Communications Overview on `127.0.0.1:4176`. `build` emits independently
+deployable demo artifacts plus the Communications Overview publication artifact. The Phoenix host
+entry and mission remote can be built with `corepack pnpm build:publication`; they publish to
+`apps/cadence_web/priv/static/assets/application-host/host/host.js` and
+`apps/cadence_web/priv/static/assets/application-host/comms-overview/`, respectively.
+`preview` serves those demo artifacts through a production-shaped
 server with no-store catalogs and manifests, immutable hashed assets, explicit remote CORS, and a
 restrictive host CSP. Run `build` before `preview`.
 

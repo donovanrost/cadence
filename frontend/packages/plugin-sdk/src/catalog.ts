@@ -1,4 +1,4 @@
-import type { HostContext } from "./bridge";
+import { isHostContext, type HostContext } from "./bridge";
 import {
   APPLICATION_HOST_CONTRACT,
   assertCompatibleManifest,
@@ -134,22 +134,7 @@ function validSession(value: unknown): value is HostSessionDescriptor {
     nonEmptyString(value.sessionId) &&
     nonEmptyString(value.csrfToken) &&
     validBridgeBaseUrl(value.bridgeBaseUrl) &&
-    validHostContext(value.context)
-  );
-}
-
-function validHostContext(value: unknown): value is HostContext {
-  return (
-    isRecord(value) &&
-    nonEmptyString(value.organizationId) &&
-    nonEmptyString(value.missionId) &&
-    nonEmptyString(value.missionName) &&
-    nonEmptyString(value.spacecraftId) &&
-    nonEmptyString(value.spacecraftName) &&
-    isRecord(value.actor) &&
-    nonEmptyString(value.actor.displayName) &&
-    Array.isArray(value.actor.permissions) &&
-    value.actor.permissions.every(nonEmptyString)
+    isHostContext(value.context)
   );
 }
 
@@ -204,6 +189,7 @@ function validRemoteName(value: unknown): value is string {
 
 function validManifestUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
+  if (value.startsWith("/") && !value.startsWith("//")) return true;
 
   try {
     const url = new URL(value);
