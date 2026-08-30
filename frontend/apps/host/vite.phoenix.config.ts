@@ -8,6 +8,9 @@ const publicationRoot = resolve(
 );
 
 export default defineConfig({
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   build: {
     target: "chrome89",
     outDir: publicationRoot,

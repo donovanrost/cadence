@@ -11,6 +11,9 @@ const publicationRoot = resolve(
 );
 
 export default defineConfig({
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   base: "/assets/application-host/comms-overview/",
   resolve: {
     alias: {
