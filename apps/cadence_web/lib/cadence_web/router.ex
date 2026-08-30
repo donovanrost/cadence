@@ -72,6 +72,22 @@ defmodule CadenceWeb.Router do
 
     get "/missions/:mission_id/comms/federated", ApplicationHostController, :federated
 
+    get "/missions/:mission_id/applications/:application_key/federated",
+        ApplicationHostController,
+        :federated
+
+    get "/missions/:mission_id/applications/:application_key/:surface_id/federated",
+        ApplicationHostController,
+        :federated
+
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/federated",
+        ApplicationHostController,
+        :federated
+
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id/federated",
+        ApplicationHostController,
+        :federated
+
     get "/missions/:mission_id/ops/telemetry/explore",
         LegacyOpsRedirectController,
         :telemetry_explore
@@ -565,8 +581,11 @@ defmodule CadenceWeb.Router do
     pipe_through :application_host_json
 
     get "/missions/:mission_id/catalog", ApplicationHostController, :catalog
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/catalog", ApplicationHostController, :catalog
     post "/missions/:mission_id/query", ApplicationHostController, :query
+    post "/missions/:mission_id/spacecraft/:spacecraft_id/query", ApplicationHostController, :query
     post "/missions/:mission_id/actions", ApplicationHostController, :actions
+    post "/missions/:mission_id/spacecraft/:spacecraft_id/actions", ApplicationHostController, :actions
   end
 
   scope "/api", CadenceWeb do
