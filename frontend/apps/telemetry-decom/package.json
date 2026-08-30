@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vp dev --host 127.0.0.1 --port 4174 --strictPort",
     "build": "vue-tsc -b && vp build && vp build --mode previous",
+    "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
     "preview": "vp preview --host 127.0.0.1 --port 4174 --strictPort",
     "test": "vp test --run"
   },
@@ -19,7 +20,9 @@
     "@module-federation/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
     "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",

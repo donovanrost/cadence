@@ -536,9 +536,15 @@ importers:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.8(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(typescript@6.0.3))(vue@3.5.41(typescript@6.0.3))
+      '@vue/test-utils':
+        specifier: 'catalog:'
+        version: 2.4.11(@vue/compiler-dom@3.5.41)(@vue/server-renderer@3.5.41)(vue@3.5.41(typescript@6.0.3))
       '@vue/tsconfig':
         specifier: 'catalog:'
         version: 0.9.1(typescript@6.0.3)(vue@3.5.41(typescript@6.0.3))
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.11.6
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
