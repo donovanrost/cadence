@@ -20,6 +20,7 @@ defmodule CadenceWorkspace.MixProject do
       preferred_envs: [
         precommit: :test,
         "precommit.checks": :test,
+        "static.checks": :test,
         "precommit.affected": :test,
         "test.fast": :test,
         "test.runtime": :test,
@@ -82,6 +83,9 @@ defmodule CadenceWorkspace.MixProject do
       ],
       "precommit.checks": [
         "format.all",
+        "static.checks"
+      ],
+      "static.checks": [
         workspace_command("compile",
           env: [{"MIX_ENV", "test"}],
           task_args: ["--warnings-as-errors"]

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Checks & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install system packages
+        # xmllint: required by the XTCE schema validator
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-utils
+
+      - name: Set up mise toolchain
+        uses: jdx/mise-action@v2
+        with:
+          # Only the BEAM toolchain is needed in CI; hk/pkl are commit-hook tools.
+          install_args: erlang elixir
+
+      - name: Read resolved tool versions
+        id: beam
+        run: |
+          echo "otp-version=$(mise current erlang)" >> "$GITHUB_OUTPUT"
+          echo "elixir-version=$(mise current elixir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache deps and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+            apps/*/deps
+            apps/*/_build
+            packages/*/deps
+            packages/*/_build
+          key: mix-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-
+
+      - name: Fetch dependencies
+        # Both envs: the root path deps use `env: Mix.env()`, so each env has
+        # its own dependency graph (test-only deps like lazy_html vs dev-only
+        # deps like tidewave, which cadence.architecture.check needs for its
+        # dev-env xref graph).
+        run: |
+          mix setup
+          MIX_ENV=test mix setup
+
+      - name: Check formatting
+        run: mix format.all --check-formatted
+
+      - name: Static checks (compile --warnings-as-errors, credo --strict, workspace & architecture checks)
+        run: mix static.checks
+
+      - name: Plane tests
+        run: mix test.planes
+
+      - name: Full test suite
+        run: mix test
