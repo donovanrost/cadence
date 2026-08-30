@@ -20,6 +20,16 @@ defmodule CadenceWeb.Router do
     plug CadenceWeb.Plugs.RequireAuthenticatedScope
   end
 
+  pipeline :application_host_json do
+    plug :accepts, ["json"]
+    plug :fetch_session
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug CadenceWeb.Plugs.FetchBrowserCurrentScope
+    plug CadenceWeb.Plugs.ApplicationHostSession
+    plug CadenceWeb.Plugs.RequireApplicationHostScope
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -59,6 +69,8 @@ defmodule CadenceWeb.Router do
     get "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
         CatalogArtifactDownloadController,
         :show
+
+    get "/missions/:mission_id/comms/federated", ApplicationHostController, :federated
 
     get "/missions/:mission_id/ops/telemetry/explore",
         LegacyOpsRedirectController,
@@ -547,6 +559,14 @@ defmodule CadenceWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :show
+  end
+
+  scope "/api/cadence/application-host/v1", CadenceWeb do
+    pipe_through :application_host_json
+
+    get "/missions/:mission_id/catalog", ApplicationHostController, :catalog
+    post "/missions/:mission_id/query", ApplicationHostController, :query
+    post "/missions/:mission_id/actions", ApplicationHostController, :actions
   end
 
   scope "/api", CadenceWeb do
