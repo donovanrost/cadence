@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "vp run -r --parallel dev",
     "build": "vp run -r build",
@@ -31,5 +30,6 @@
       "version": "24.16.0",
       "onFail": "download"
     }
-  }
+  },
+  "packageManager": "pnpm@11.22.0"
 }
