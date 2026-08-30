@@ -11,6 +11,12 @@ const routerPath = resolve(webRoot, "lib/cadence_web/router.ex")
 const liveRoot = resolve(webRoot, "lib/cadence_web/live")
 const controllerRoot = resolve(webRoot, "lib/cadence_web/controllers")
 const runtimeTemplateRoot = resolve(webRoot, "lib/cadence_web")
+const federatedTemplatePath = resolve(
+  runtimeTemplateRoot,
+  "controllers/application_host_html/federated.html.heex",
+)
+const federatedHtmlModulePath = resolve(controllerRoot, "application_host_html.ex")
+const federatedControllerPath = resolve(controllerRoot, "application_host_controller.ex")
 const vueRoot = resolve(webRoot, "assets/vue")
 const vueIndexPath = resolve(vueRoot, "index.ts")
 const appPath = resolve(webRoot, "assets/js/app.js")
@@ -112,6 +118,7 @@ public_page|/invitations/:invitation_token|OrganizationInvitationController|show
 authenticated_page|/admin-mode|AdminModeController|new
 authenticated_page|/no-organization|NoOrganizationController|show
 download|/missions/:mission_id/catalog/artifacts/:artifact_id/download|CatalogArtifactDownloadController|show
+authenticated_page|/missions/:mission_id/comms/federated|ApplicationHostController|federated
 redirect|/missions/:mission_id/ops/telemetry/explore|LegacyOpsRedirectController|telemetry_explore
 download|/missions/:mission_id/ops/dashboards/:dashboard_id/export|DashboardExportController|show
 redirect|/missions/:mission_id/spacecraft/:spacecraft_id/telemetry|LegacyApplicationRedirectController|telemetry_decom
@@ -137,7 +144,7 @@ redirect|/missions/:mission_id/comms/advanced/runtime-identities/new|LegacyComms
 `.trim().split("\n")
 
 assert.equal(expectedLiveRoutes.length, 89)
-assert.equal(expectedBrowserGets.length, 26)
+assert.equal(expectedBrowserGets.length, 27)
 
 const walkFiles = async (directory) => {
   const entries = await readdir(directory, {withFileTypes: true})
@@ -231,7 +238,7 @@ for (const entry of expectedBrowserGets) {
 
 const apiSource = routerSource.slice(apiStart)
 const apiGets = [...apiSource.matchAll(/\bget\s+"[^"]+"\s*,/g)]
-assert.equal(apiGets.length, 61, "JSON API GET declarations remain outside presentation closure")
+assert.equal(apiGets.length, 62, "JSON API GET declarations remain outside presentation closure")
 assert.match(
   apiSource,
   /scope "\/api", CadenceWeb do\s+pipe_through :api\s+get "\/health", HealthController, :show/s,
@@ -384,12 +391,17 @@ for (const [rendererModule, routeLabel] of rendererTargets) {
 const controllerFiles = await walkFiles(controllerRoot)
 assert.deepEqual(
   controllerFiles.filter((path) => [".eex", ".heex", ".leex"].includes(extname(path))),
-  [],
-  "controllers retain no HEEx template files",
+  [federatedTemplatePath],
+  "only the federated host retains a controller-owned HEEx template",
 )
 
 for (const path of controllerFiles.filter((path) => extname(path) === ".ex")) {
   const source = await readFile(path, "utf8")
+  if (path === federatedHtmlModulePath) continue
+  if (path === federatedControllerPath) {
+    assert.match(source, /\brender\(conn, :federated,/, "federated host renders its dedicated template")
+    continue
+  }
   assert.doesNotMatch(source, /\bembed_templates\b/, `${relative(webRoot, path)} embeds no templates`)
   assert.doesNotMatch(source, /\brender\s*\(/, `${relative(webRoot, path)} renders no controller HEEx`)
 }
@@ -435,8 +447,24 @@ for (const script of scriptTags) {
 
 const appSource = await readFile(appPath, "utf8")
 const vueIndexSource = await readFile(vueIndexPath, "utf8")
+const federatedTemplateSource = await readFile(federatedTemplatePath, "utf8")
 assert.match(appSource, /const Hooks = \{\s*LiveToast: createLiveToastHook\(\)\s*\}/)
 assert.match(appSource, /hooks: \{\.\.\.Hooks, \.\.\.getHooks\(liveVueApp\)\}/)
+assert.doesNotMatch(
+  federatedTemplateSource,
+  /<script\b/,
+  "federated HEEx delegates its host loader to app.js",
+)
+assert.match(
+  appSource,
+  /const federationRoot = document\.querySelector\("#cadence-federation-root"\)/,
+  "app.js identifies the opt-in federation root",
+)
+assert.match(
+  appSource,
+  /if \(federationRoot\)\s*\{\s*const federationHostAsset = "\/assets\/application-host\/host\/host\.js"\s*void import\(\/\* @vite-ignore \*\/ federationHostAsset\)/,
+  "app.js runtime-loads the separately published host bundle",
+)
 assert.doesNotMatch(appSource, /\bdom\s*:/, "LiveSocket has no global DOM callback object")
 assert.doesNotMatch(
   appSource,

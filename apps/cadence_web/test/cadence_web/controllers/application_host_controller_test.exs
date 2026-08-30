@@ -29,8 +29,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert federated_html =~
              ~s(data-catalog-url="#{catalog_path(mission.mission_id)}")
 
-    assert federated_html =~
-             ~s(<script type="module" src="/assets/application-host/host/host.js">)
+    refute federated_html =~ ~s(src="/assets/application-host/host/host.js")
 
     assert federated_html =~
              ~s(<link rel="stylesheet" href="/assets/application-host/host/plugin-host.css">)
