@@ -5,5 +5,5 @@ defmodule Cadence.Reads.ApplicationSurfaces.SurfaceQueryProvider do
   alias Cadence.Auth.Scope
 
   @callback load(Scope.t(), HostContext.t(), SurfaceQueryRequest.t()) ::
-              {:ok, SurfaceDocument.t()} | {:error, term()}
+              {:ok, SurfaceDocument.t() | map()} | {:error, term()}
 end

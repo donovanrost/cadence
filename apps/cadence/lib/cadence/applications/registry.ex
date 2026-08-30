@@ -25,7 +25,7 @@ defmodule Cadence.Applications.Registry do
   @type surface_error :: :unknown_surface | :invalid_application_definition
 
   @spec all() :: [ApplicationDefinition.t()]
-  def all, do: [telemetry_decom(), derived_telemetry(), limits(), cfdp()]
+  def all, do: [telemetry_decom(), derived_telemetry(), limits(), comms(), cfdp()]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do
@@ -386,6 +386,121 @@ defmodule Cadence.Applications.Registry do
       ],
       capability_contributions: [
         %{kind: :projection, family_key: :limits}
+      ]
+    }
+  end
+
+  defp comms do
+    %ApplicationDefinition{
+      application_key: "comms",
+      version: 1,
+      display_name: "Communications",
+      description: "Inspect mission-scoped communications setup and validation.",
+      trust: :first_party,
+      availability: :available,
+      installable_scopes: [:mission],
+      resource_contract: %ResourceContract{},
+      lifecycle_contract: %LifecycleContract{},
+      surfaces: [
+        %SurfaceDefinition{
+          surface_id: "overview",
+          version: 1,
+          purpose: :overview,
+          scope: :mission,
+          placement: :application_workspace,
+          navigation: %{label: "Overview", order: 10},
+          data_contract: %{query_id: "cadence.comms.overview", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.overview"}
+        },
+        %SurfaceDefinition{
+          surface_id: "validation",
+          version: 1,
+          purpose: :activity,
+          scope: :mission,
+          placement: :application_workspace,
+          navigation: %{label: "Validation", order: 20},
+          data_contract: %{query_id: "cadence.comms.validation", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.validation"}
+        },
+        %SurfaceDefinition{
+          surface_id: "transports",
+          version: 1,
+          purpose: :collection,
+          scope: :mission,
+          placement: :application_workspace,
+          navigation: %{label: "Transports", order: 30},
+          data_contract: %{query_id: "cadence.comms.transports", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.transports"}
+        },
+        %SurfaceDefinition{
+          surface_id: "transport",
+          version: 1,
+          purpose: :subject_detail,
+          scope: :mission,
+          placement: :application_workspace,
+          subject_contract: %{schema_id: "cadence.comms.transport.subject", version: 1},
+          navigation: %{label: "Transport", order: 40},
+          data_contract: %{query_id: "cadence.comms.transport", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.transport"}
+        },
+        %SurfaceDefinition{
+          surface_id: "routing",
+          version: 1,
+          purpose: :collection,
+          scope: :mission,
+          placement: :application_workspace,
+          navigation: %{label: "Routing", order: 50},
+          data_contract: %{query_id: "cadence.comms.routing", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.routing"}
+        },
+        %SurfaceDefinition{
+          surface_id: "routing_detail",
+          version: 1,
+          purpose: :subject_detail,
+          scope: :mission,
+          placement: :application_workspace,
+          subject_contract: %{schema_id: "cadence.comms.routing_rule.subject", version: 1},
+          navigation: %{label: "Routing Rule", order: 60},
+          data_contract: %{query_id: "cadence.comms.routing_detail", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.routing_detail"}
+        },
+        %SurfaceDefinition{
+          surface_id: "ground_stations",
+          version: 1,
+          purpose: :collection,
+          scope: :mission,
+          placement: :application_workspace,
+          navigation: %{label: "Ground Stations", order: 70},
+          data_contract: %{query_id: "cadence.comms.ground_stations", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.ground_stations"}
+        },
+        %SurfaceDefinition{
+          surface_id: "ground_station",
+          version: 1,
+          purpose: :subject_detail,
+          scope: :mission,
+          placement: :application_workspace,
+          subject_contract: %{schema_id: "cadence.comms.ground_station.subject", version: 1},
+          navigation: %{label: "Ground Station", order: 80},
+          data_contract: %{query_id: "cadence.comms.ground_station", version: 1},
+          actions: [],
+          refresh: :static,
+          renderer: {:trusted, "cadence.comms.ground_station"}
+        }
       ]
     }
   end

@@ -7,7 +7,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
     ActionRequest,
     ApplicationDefinition,
     HostContext,
-    SurfaceDefinition
+    SurfaceDefinition,
+    SurfaceDocument
   }
 
   alias Cadence.Auth.Scope
@@ -20,8 +21,14 @@ defmodule CadenceWeb.ApplicationHostBridge do
   @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
   def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
     cond do
-      Map.get(params, "queryId") == "cadence.comms.overview" or
-          Map.get(params, "applicationKey") == "comms_overview" ->
+      Map.get(params, "applicationKey") == "comms_overview" ->
+        legacy_query(current_scope, route_context, params)
+
+      Map.get(params, "applicationKey") == "comms" ->
+        generic_query(current_scope, route_context, params)
+
+      Map.get(params, "queryId") == "cadence.comms.overview" and
+          not Map.has_key?(params, "applicationKey") ->
         legacy_query(current_scope, route_context, params)
 
       Map.has_key?(params, "applicationKey") or Map.has_key?(params, "surfaceId") ->
@@ -87,7 +94,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
              admission.surface,
              request.params
            ) do
-      {:ok, query_response(admission, document)}
+      query_response(admission, document)
     end
   end
 
@@ -289,7 +296,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp ensure_declared_action_version(%ActionDefinition{}, _version),
     do: {:error, :unsupported_application_action}
 
-  defp query_response(admission, document) do
+  defp query_response(admission, %SurfaceDocument{} = document) do
     presentation =
       Declarative.presentation(
         document,
@@ -299,17 +306,31 @@ defmodule CadenceWeb.ApplicationHostBridge do
         nil
       )
 
-    %{
-      "host" => json_safe(host_dto(admission)),
-      "navigation" => nil,
-      "declarative_surface" => json_safe(presentation),
-      "application_surface_rows" => document |> Declarative.table_row_dtos() |> json_safe(),
-      "application_surface_activity" =>
-        document |> Declarative.activity_item_dtos() |> json_safe(),
-      "application_surface_packet_groups" =>
-        document |> Declarative.packet_group_dtos() |> json_safe()
-    }
+    {:ok,
+     %{
+       "host" => json_safe(host_dto(admission)),
+       "navigation" => nil,
+       "declarative_surface" => json_safe(presentation),
+       "application_surface_rows" => document |> Declarative.table_row_dtos() |> json_safe(),
+       "application_surface_activity" =>
+         document |> Declarative.activity_item_dtos() |> json_safe(),
+       "application_surface_packet_groups" =>
+         document |> Declarative.packet_group_dtos() |> json_safe()
+     }}
   end
+
+  defp query_response(admission, %{"navigation" => navigation, "data" => data})
+       when is_map(navigation) and is_map(data) do
+    {:ok,
+     %{
+       "host" => json_safe(host_dto(admission)),
+       "navigation" => json_safe(navigation),
+       "trusted_surface" => json_safe(data)
+     }}
+  end
+
+  defp query_response(_admission, _invalid),
+    do: {:error, :invalid_application_surface_document}
 
   defp host_dto(%{
          definition: %ApplicationDefinition{} = definition,
@@ -322,9 +343,12 @@ defmodule CadenceWeb.ApplicationHostBridge do
       application_version: definition.version,
       application_installation_id: installation.application_installation_id,
       surface_id: surface.surface_id,
-      renderer: "declarative"
+      renderer: renderer_name(surface)
     }
   end
+
+  defp renderer_name(%SurfaceDefinition{renderer: {:trusted, _renderer_id}}), do: "trusted"
+  defp renderer_name(%SurfaceDefinition{}), do: "declarative"
 
   defp host_dom_id(:spacecraft), do: "spacecraft-application-host"
   defp host_dom_id(:mission), do: "mission-application-host"

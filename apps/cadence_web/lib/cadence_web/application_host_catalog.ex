@@ -19,6 +19,9 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @application_catalog_schema "cadence.first-party-frontend-catalog.v1"
   @application_host_contract "cadence.application-host.v1"
+  @comms_surface_ids ~w(
+    overview validation transports transport routing routing_detail ground_stations ground_station
+  )
 
   @type route_context :: %{
           host_context: HostContext.t(),
@@ -146,13 +149,24 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @doc "Returns the Phoenix LiveView fallback for an admitted application surface."
   @spec fallback_href(route_context(), binary(), binary() | nil) :: binary()
+  def fallback_href(route_context, application_key, surface_id),
+    do: fallback_href(route_context, application_key, surface_id, nil)
+
+  @spec fallback_href(route_context(), binary(), binary() | nil, binary() | nil) :: binary()
   def fallback_href(
         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
         application_key,
-        surface_id
+        surface_id,
+        subject_id
       )
       when is_binary(application_key) do
-    application_href("/missions/" <> URI.encode(mission_id), application_key, surface_id)
+    case {application_key, surface_id} do
+      {"comms", surface_id} when surface_id in @comms_surface_ids ->
+        comms_fallback_href(mission_id, surface_id, subject_id)
+
+      _other ->
+        application_href("/missions/" <> URI.encode(mission_id), application_key, surface_id)
+    end
   end
 
   def fallback_href(
@@ -164,7 +178,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           }
         },
         application_key,
-        surface_id
+        surface_id,
+        _subject_id
       )
       when is_binary(application_key) do
     application_href(
@@ -173,6 +188,45 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       surface_id
     )
   end
+
+  defp comms_fallback_href(mission_id, "overview", _subject_id),
+    do: "/missions/" <> URI.encode(mission_id) <> "/comms"
+
+  defp comms_fallback_href(mission_id, "validation", _subject_id),
+    do: "/missions/" <> URI.encode(mission_id) <> "/comms/validation"
+
+  defp comms_fallback_href(mission_id, "transports", _subject_id),
+    do: "/missions/" <> URI.encode(mission_id) <> "/comms/transports"
+
+  defp comms_fallback_href(mission_id, "transport", subject_id) when is_binary(subject_id),
+    do:
+      "/missions/" <>
+        URI.encode(mission_id) <> "/comms/transports/" <> URI.encode(subject_id)
+
+  defp comms_fallback_href(mission_id, "transport", _subject_id),
+    do: comms_fallback_href(mission_id, "transports", nil)
+
+  defp comms_fallback_href(mission_id, "routing", _subject_id),
+    do: "/missions/" <> URI.encode(mission_id) <> "/comms/routing"
+
+  defp comms_fallback_href(mission_id, "routing_detail", subject_id) when is_binary(subject_id),
+    do:
+      "/missions/" <>
+        URI.encode(mission_id) <> "/comms/routing/" <> URI.encode(subject_id)
+
+  defp comms_fallback_href(mission_id, "routing_detail", _subject_id),
+    do: comms_fallback_href(mission_id, "routing", nil)
+
+  defp comms_fallback_href(mission_id, "ground_stations", _subject_id),
+    do: "/missions/" <> URI.encode(mission_id) <> "/comms/ground-stations"
+
+  defp comms_fallback_href(mission_id, "ground_station", subject_id) when is_binary(subject_id),
+    do:
+      "/missions/" <>
+        URI.encode(mission_id) <> "/comms/ground-stations/" <> URI.encode(subject_id)
+
+  defp comms_fallback_href(mission_id, "ground_station", _subject_id),
+    do: comms_fallback_href(mission_id, "ground_stations", nil)
 
   defp applications(current_scope, route_context, opts) do
     manifest_url = Keyword.fetch!(opts, :manifest_url)

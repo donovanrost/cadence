@@ -22,6 +22,7 @@ defmodule Cadence.Extensions.Registry do
     do: [
       telemetry_package(),
       mission_assurance_package(),
+      comms_package(),
       runtime_foundations_package(),
       cfdp_package(),
       tcp_transport_package(),
@@ -119,6 +120,21 @@ defmodule Cadence.Extensions.Registry do
       contributions: [
         %ApplicationContribution{
           application_key: "limits",
+          application_version: 1
+        }
+      ]
+    }
+  end
+
+  defp comms_package do
+    %ExtensionPackage{
+      package_id: "cadence.comms",
+      version: 1,
+      trust: :first_party,
+      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
+      contributions: [
+        %ApplicationContribution{
+          application_key: "comms",
           application_version: 1
         }
       ]

@@ -15,6 +15,27 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
            }
   end
 
+  test "shares one Comms v1 module federation release across all eight surfaces" do
+    surfaces =
+      ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
+
+    releases =
+      Enum.map(surfaces, fn surface_id ->
+        assert {:ok, release} = ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1)
+        release
+      end)
+
+    assert Enum.uniq(releases) == [
+             %{
+               federation: :module_federation,
+               release_id: "comms-v1",
+               remote_name: "cadence_comms",
+               manifest_path: "/assets/application-host/comms/mf-manifest.json",
+               exposed_module: "./Application"
+             }
+           ]
+  end
+
   test "advertises the checked-in telemetry packet bindings release coordinate" do
     assert {:ok, release} =
              ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)

@@ -2,9 +2,18 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
-  alias Cadence.Applications.{ApplicationInstallations, HostContext, Registry, SurfaceDefinition}
+
+  alias Cadence.Applications.{
+    ApplicationInstallations,
+    HostContext,
+    Registry,
+    SurfaceDefinition,
+    SurfaceQueryRequest
+  }
+
   alias Cadence.Applications.SurfaceElements.{Diagnostic, Diagnostics}
   alias Cadence.Auth.Scope
+  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.DerivedTelemetry.Definition, as: DerivedDefinition
   alias Cadence.Extensions.Presentation.{ReferenceOption, ReferencePage}
   alias Cadence.Limits.Definition
@@ -13,6 +22,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Listing.Page
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
   alias Cadence.Reads.Applications, as: ApplicationReads
+  alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Telemetry.PacketDefinition
 
@@ -67,6 +77,103 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     assert document.form.success_message == "Derived telemetry definition saved."
     assert document.table.id == "derived-telemetry-definitions"
     assert document.table.page == %Page{items: [], total_count: 0, page: 1, page_size: 20}
+  end
+
+  test "loads all Comms v1 read surfaces as bounded trusted DTOs" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    host_context = HostContext.mission(@mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    assert {:ok, comms_definition} = Registry.fetch_available("comms")
+
+    transport =
+      Transport.new(%{
+        mission_id: @mission_id,
+        transport_id: "transport-surface",
+        display_name: "Secret-bearing transport",
+        direction_capability: :inbound,
+        adapter_key: :tcp_socket,
+        configuration: %{
+          "mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "127.0.0.1",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "frame_size" => "64",
+          "reconnect_policy" => "always",
+          "tls_enabled" => "false"
+        }
+      })
+
+    assert {:ok, persisted_transport} =
+             TransportStore.persist_transport(@organization_id, transport)
+
+    for surface_id <- ~w(overview validation transports routing ground_stations) do
+      assert {:ok, surface} = Registry.fetch_surface(comms_definition, :mission, surface_id)
+
+      assert {:ok, %{"navigation" => navigation, "data" => data}} =
+               ApplicationSurfaces.load(
+                 scope,
+                 host_context,
+                 "comms",
+                 1,
+                 surface
+               )
+
+      assert navigation["fallback_href"] == comms_fallback_href(surface_id)
+      assert is_map(data)
+      assert Jason.decode!(Jason.encode!(data)) == data
+    end
+
+    assert {:ok, transports_surface} =
+             Registry.fetch_surface(comms_definition, :mission, "transports")
+
+    assert {:ok, %{"data" => %{"items" => [transport_row]}}} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface
+             )
+
+    assert transport_row["id"] == persisted_transport.transport_id
+    refute Map.has_key?(transport_row, "configuration")
+    refute Map.has_key?(transport_row, "provider_configuration_snapshot")
+
+    assert {:error, :unsupported_application_surface_query} =
+             CommsSurface.load(
+               scope,
+               host_context,
+               %SurfaceQueryRequest{
+                 application_key: "comms",
+                 application_version: 1,
+                 surface_id: "overview",
+                 surface_version: 1,
+                 query_id: "cadence.comms.not-overview",
+                 query_version: 1,
+                 params: %{}
+               }
+             )
+
+    assert {:error, :unsupported_application_surface_query} =
+             ApplicationSurfaces.load(
+               scope,
+               host_context,
+               "comms",
+               1,
+               transports_surface,
+               %{"unexpected" => "rejected"}
+             )
   end
 
   test "rejects undeclared surface contracts even when their query id is known", context do
@@ -462,4 +569,19 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                binding_set_content_sha256: content_sha256
              )
   end
+
+  defp comms_fallback_href("overview"),
+    do: "/missions/#{@mission_id}/comms"
+
+  defp comms_fallback_href("validation"),
+    do: "/missions/#{@mission_id}/comms/validation"
+
+  defp comms_fallback_href("transports"),
+    do: "/missions/#{@mission_id}/comms/transports"
+
+  defp comms_fallback_href("routing"),
+    do: "/missions/#{@mission_id}/comms/routing"
+
+  defp comms_fallback_href("ground_stations"),
+    do: "/missions/#{@mission_id}/comms/ground-stations"
 end

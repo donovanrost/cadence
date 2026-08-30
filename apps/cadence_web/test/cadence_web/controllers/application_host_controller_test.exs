@@ -3,7 +3,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   import Phoenix.LiveViewTest
 
-  alias Cadence.Applications.HostContext
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
   alias CadenceWeb.{ApplicationHostCatalog, CommsOverviewPresenter, TestFixtures}
@@ -226,6 +226,45 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
       })
 
     assert %{"code" => "unsupported_query"} = json_response(rejected, 404)
+  end
+
+  test "first-class Comms v1 queries use the generic host dispatch" do
+    {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
+    host_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
+    valid_scope = scope_document(organization, mission)
+
+    comms_application =
+      Enum.find(catalog["applications"], &(&1["applicationKey"] == "comms"))
+
+    assert comms_application["applicationVersion"] == 1
+    assert comms_application["release"]["remoteName"] == "cadence_comms"
+    assert comms_application["release"]["exposedModule"] == "./Application"
+
+    response =
+      post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "queryVersion" => 1,
+        "params" => %{},
+        "scope" => valid_scope
+      })
+
+    body = json_response(response, 200)
+    assert body["host"]["application_key"] == "comms"
+    assert body["host"]["renderer"] == "trusted"
+    assert body["navigation"]["fallback_href"] == "/missions/#{mission.mission_id}/comms"
+    assert is_map(body["trusted_surface"])
+    assert body["trusted_surface"]["root"]["attrs"]["id"] == "comms-overview-page"
+
+    refute Jason.encode!(body) =~ "provider_configuration_snapshot"
   end
 
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{

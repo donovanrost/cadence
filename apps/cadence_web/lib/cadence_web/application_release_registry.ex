@@ -19,7 +19,23 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   @type key :: {binary(), pos_integer(), binary(), pos_integer()}
 
+  @comms_release %{
+    federation: :module_federation,
+    release_id: "comms-v1",
+    remote_name: "cadence_comms",
+    manifest_path: "/assets/application-host/comms/mf-manifest.json",
+    exposed_module: "./Application"
+  }
+
   @releases %{
+    {"comms", 1, "overview", 1} => @comms_release,
+    {"comms", 1, "validation", 1} => @comms_release,
+    {"comms", 1, "transports", 1} => @comms_release,
+    {"comms", 1, "transport", 1} => @comms_release,
+    {"comms", 1, "routing", 1} => @comms_release,
+    {"comms", 1, "routing_detail", 1} => @comms_release,
+    {"comms", 1, "ground_stations", 1} => @comms_release,
+    {"comms", 1, "ground_station", 1} => @comms_release,
     {"comms_overview", 1, "overview", 1} => %{
       federation: :module_federation,
       release_id: "comms-overview-v1",
