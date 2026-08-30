@@ -24,12 +24,12 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     assert_production_publication!(app_root)
 
     context = persist_context!()
-    # The Phoenix endpoint's production manifest URLs use the configured test
-    # endpoint port (4101), so the browser server must serve that same origin.
-    port = 4101
+    # Each invocation owns an ephemeral loopback endpoint. The published
+    # catalog and manifest URLs are derived from the request's actual origin.
+    port = DashboardRenderedViewportRunner.free_tcp_port()
     DashboardRenderedViewportRunner.start_browser_endpoint!(port, sandbox_owner)
 
-    base_url = "http://localhost:#{port}"
+    base_url = "http://127.0.0.1:#{port}"
 
     args = [
       Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),
@@ -41,8 +41,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "#{base_url}/sign-in",
       "--login-email",
       context.user.email,
-      "--login-password",
-      TestFixtures.default_password(),
       "--mission-id",
       context.mission.mission_id,
       "--spacecraft-id",
@@ -54,7 +52,9 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     assert {output, 0} =
              DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(args,
                cd: app_root,
-               timeout: 540_000
+               timeout: 540_000,
+               shutdown_timeout: 15_000,
+               stdin: Jason.encode!(%{"password" => TestFixtures.default_password()}) <> "\n"
              )
 
     assert output =~ "federation_browser_smoke passed"

@@ -33,6 +33,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     node = System.find_executable("node") || raise "node executable is required"
     timeout = Keyword.get(opts, :timeout, @dashboard_viewport_smoke_timeout_ms)
 
+    shutdown_timeout =
+      Keyword.get(opts, :shutdown_timeout, @dashboard_viewport_smoke_shutdown_timeout_ms)
+
     port_opts =
       [
         :binary,
@@ -45,9 +48,17 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
       |> maybe_put_port_env(Keyword.get(opts, :env))
 
     port = Port.open({:spawn_executable, node}, port_opts)
+    send_port_stdin(port, Keyword.get(opts, :stdin))
     deadline = System.monotonic_time(:millisecond) + timeout
 
-    collect_dashboard_viewport_smoke(port, "", deadline, timeout)
+    collect_dashboard_viewport_smoke(port, "", deadline, timeout, shutdown_timeout)
+  end
+
+  def send_port_stdin(_port, nil), do: :ok
+
+  def send_port_stdin(port, stdin) when is_binary(stdin) do
+    true = Port.command(port, stdin)
+    :ok
   end
 
   def maybe_put_port_cd(port_opts, cd) when is_binary(cd), do: [{:cd, cd} | port_opts]
@@ -56,10 +67,16 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   def maybe_put_port_env(port_opts, env) when is_list(env), do: [{:env, env} | port_opts]
   def maybe_put_port_env(port_opts, _env), do: port_opts
 
-  def collect_dashboard_viewport_smoke(port, output, deadline, timeout) do
+  def collect_dashboard_viewport_smoke(port, output, deadline, timeout, shutdown_timeout) do
     receive do
       {^port, {:data, data}} ->
-        collect_dashboard_viewport_smoke(port, output <> data, deadline, timeout)
+        collect_dashboard_viewport_smoke(
+          port,
+          output <> data,
+          deadline,
+          timeout,
+          shutdown_timeout
+        )
 
       {^port, {:exit_status, status}} ->
         {output, status}
@@ -69,21 +86,25 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
           output <>
             "\nDashboard viewport smoke timed out after #{timeout}ms; terminating node process.\n"
 
-        terminate_dashboard_viewport_smoke(port, timeout_output)
+        terminate_dashboard_viewport_smoke(port, timeout_output, shutdown_timeout)
     end
   end
 
-  def terminate_dashboard_viewport_smoke(port, output) do
+  def terminate_dashboard_viewport_smoke(
+        port,
+        output,
+        shutdown_timeout \\ @dashboard_viewport_smoke_shutdown_timeout_ms
+      ) do
     kill_dashboard_viewport_smoke(port, "TERM")
 
     receive do
       {^port, {:data, data}} ->
-        terminate_dashboard_viewport_smoke(port, output <> data)
+        terminate_dashboard_viewport_smoke(port, output <> data, shutdown_timeout)
 
       {^port, {:exit_status, status}} ->
         {output, status}
     after
-      @dashboard_viewport_smoke_shutdown_timeout_ms ->
+      shutdown_timeout ->
         kill_dashboard_viewport_smoke(port, "KILL")
 
         receive do

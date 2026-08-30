@@ -95,7 +95,7 @@ defmodule CadenceWeb.MixProject do
       ],
       "test.browser.federation": [
         "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
-        "assets.deploy",
+        "cmd node assets/test/run_federation_publication_build.mjs assets.deploy",
         "test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs"
       ]
     ]
