@@ -154,7 +154,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
       )
 
     try do
-      {_output, status} =
+      {output, status} =
         System.cmd(
           "mix",
           ["xref", "graph", "--format", "json", "--output", output_path],
@@ -164,6 +164,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
         )
 
       if status != 0 do
+        Mix.shell().error(output)
         Mix.raise("Could not generate the core xref dependency graph.")
       end
 
