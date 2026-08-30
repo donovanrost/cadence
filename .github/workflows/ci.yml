@@ -63,7 +63,11 @@ jobs:
             mix-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-elixir${{ steps.beam.outputs.elixir-version }}-
 
       - name: Fetch dependencies
+        # Test env: the root path deps use `env: Mix.env()`, so test-only
+        # transitive deps only appear in the graph under MIX_ENV=test.
         run: mix setup
+        env:
+          MIX_ENV: test
 
       - name: Check formatting
         run: mix format.all --check-formatted
