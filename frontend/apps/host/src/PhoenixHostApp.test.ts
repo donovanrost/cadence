@@ -1,10 +1,10 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent } from "vue";
 import { describe, expect, it, vi } from "vite-plus/test";
-import PhoenixHostApp from "./PhoenixHostApp.vue";
 import type { FrontendApplicationCatalog } from "@cadence/plugin-sdk";
+import PhoenixHostApp from "./PhoenixHostApp.vue";
 
-const catalog = {
+const missionCatalog = {
   schema: "cadence.first-party-frontend-catalog.v1",
   hostContract: "cadence.application-host.v1",
   generatedAt: "2026-08-29T20:00:00.000Z",
@@ -42,9 +42,52 @@ const catalog = {
       },
       release: {
         federation: "module_federation",
-        releaseId: "2026.08.29.1",
+        releaseId: "comms-overview-v1",
         remoteName: "cadence_comms_overview",
         manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
+        exposedModule: "./Application",
+      },
+    },
+  ],
+} satisfies FrontendApplicationCatalog;
+
+const spacecraftCatalog = {
+  ...missionCatalog,
+  session: {
+    ...missionCatalog.session,
+    context: {
+      scope: "spacecraft",
+      organizationId: "org-1",
+      missionId: "mission-1",
+      missionName: "Firebird",
+      spacecraftId: "spacecraft-1",
+      spacecraftName: "FB-1",
+      actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
+    },
+  },
+  applications: [
+    {
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      displayName: "Telemetry Decom",
+      description: "Choose the packet inputs decoded for an installed spacecraft.",
+      package: { packageId: "cadence.telemetry-applications", version: 1 },
+      surface: {
+        surfaceId: "packet_bindings",
+        version: 1,
+        purpose: "configuration",
+        scope: "spacecraft",
+        placement: "application_workspace",
+        navigation: { label: "Packet bindings", order: 20 },
+        dataContract: { id: "cadence.packet_bindings.manage", version: 1 },
+        actions: ["save_packet_bindings"],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      release: {
+        federation: "module_federation",
+        releaseId: "telemetry-decom-v1",
+        remoteName: "cadence_telemetry_decom",
+        manifestUrl: "/assets/application-host/telemetry-decom/mf-manifest.json",
         exposedModule: "./Application",
       },
     },
@@ -54,12 +97,15 @@ const catalog = {
 const BoundaryStub = defineComponent({ template: "<div id='remote-boundary-stub'></div>" });
 
 describe("Phoenix host application", () => {
-  it("loads and mounts only the mission comms application without demo auth", async () => {
-    const fetcher = vi.fn(async () => Response.json(catalog));
+  it("mounts the route-selected mission Comms surface and uses Phoenix fallback navigation", async () => {
+    const fetcher = vi.fn(async () => Response.json(missionCatalog));
     const wrapper = mount(PhoenixHostApp, {
       props: {
+        applicationKey: "comms_overview",
+        surfaceId: "overview",
         missionId: "mission-1",
         catalogUrl: "/api/cadence/application-host/v1/catalog",
+        fallbackHref: "/missions/mission-1/comms",
         fetcher: fetcher as typeof fetch,
       },
       global: { stubs: { RemoteApplicationBoundary: BoundaryStub } },
@@ -70,28 +116,66 @@ describe("Phoenix host application", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(wrapper.find("#remote-boundary-stub").exists()).toBe(true);
     expect(wrapper.find("#phoenix-host-home").attributes("href")).toBe("/missions/mission-1/comms");
-    expect(wrapper.text()).toContain("Firebird");
+    expect(wrapper.text()).toContain("Overview");
+    expect(wrapper.text()).toContain("MISSION CONTEXT");
     wrapper.unmount();
   });
 
-  it("contains a catalog without comms_overview at the Phoenix boundary", async () => {
+  it("mounts the route-selected spacecraft telemetry surface", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(input).toBe(
+        "/api/cadence/application-host/v1/catalog?mission_id=mission-1&spacecraft_id=spacecraft-1",
+      );
+      return Response.json(spacecraftCatalog);
+    });
+    const wrapper = mount(PhoenixHostApp, {
+      props: {
+        applicationKey: "telemetry_decom",
+        surfaceId: "packet_bindings",
+        spacecraftId: "spacecraft-1",
+        missionId: "mission-1",
+        catalogUrl: "/api/cadence/application-host/v1/catalog",
+        fallbackHref: "/missions/mission-1/spacecraft/spacecraft-1/applications",
+        fetcher: fetcher as typeof fetch,
+      },
+      global: { stubs: { RemoteApplicationBoundary: BoundaryStub } },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.find("#remote-boundary-stub").exists()).toBe(true);
+    expect(wrapper.find("#phoenix-host-home").attributes("href")).toBe(
+      "/missions/mission-1/spacecraft/spacecraft-1/applications",
+    );
+    expect(wrapper.text()).toContain("Packet bindings");
+    expect(wrapper.text()).toContain("SPACECRAFT CONTEXT");
+    expect(wrapper.text()).toContain("FB-1");
+    wrapper.unmount();
+  });
+
+  it("contains a catalog without the requested application at the Phoenix boundary", async () => {
     const fetcher = vi.fn(async () =>
       Response.json({
-        ...catalog,
-        applications: [{ ...catalog.applications[0], applicationKey: "other_application" }],
+        ...missionCatalog,
+        applications: [{ ...missionCatalog.applications[0], applicationKey: "other_application" }],
       }),
     );
     const wrapper = mount(PhoenixHostApp, {
       props: {
+        applicationKey: "missing_application",
+        surfaceId: "overview",
         missionId: "mission-1",
         catalogUrl: "/catalog",
+        fallbackHref: "/missions/mission-1",
         fetcher: fetcher as typeof fetch,
       },
     });
 
     await flushPromises();
 
-    expect(wrapper.find("#phoenix-host-error").text()).toContain("does not provide comms_overview");
+    expect(wrapper.find("#phoenix-host-error").text()).toContain(
+      'does not provide requested application "missing_application"',
+    );
     wrapper.unmount();
   });
 });
