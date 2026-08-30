@@ -75,7 +75,8 @@ async function loadCatalog(): Promise<void> {
     }
 
     const nextApplication = nextCatalog.applications.find(matchesActiveApplication);
-    if (!nextApplication) throw new Error("The host catalog did not provide an active application.");
+    if (!nextApplication)
+      throw new Error("The host catalog did not provide an active application.");
 
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication);
     bridge.value = nextBridge;

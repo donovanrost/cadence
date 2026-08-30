@@ -581,11 +581,22 @@ defmodule CadenceWeb.Router do
     pipe_through :application_host_json
 
     get "/missions/:mission_id/catalog", ApplicationHostController, :catalog
-    get "/missions/:mission_id/spacecraft/:spacecraft_id/catalog", ApplicationHostController, :catalog
+
+    get "/missions/:mission_id/spacecraft/:spacecraft_id/catalog",
+        ApplicationHostController,
+        :catalog
+
     post "/missions/:mission_id/query", ApplicationHostController, :query
-    post "/missions/:mission_id/spacecraft/:spacecraft_id/query", ApplicationHostController, :query
+
+    post "/missions/:mission_id/spacecraft/:spacecraft_id/query",
+         ApplicationHostController,
+         :query
+
     post "/missions/:mission_id/actions", ApplicationHostController, :actions
-    post "/missions/:mission_id/spacecraft/:spacecraft_id/actions", ApplicationHostController, :actions
+
+    post "/missions/:mission_id/spacecraft/:spacecraft_id/actions",
+         ApplicationHostController,
+         :actions
   end
 
   scope "/api", CadenceWeb do

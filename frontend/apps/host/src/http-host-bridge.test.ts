@@ -114,7 +114,10 @@ describe("the HTTP host bridge", () => {
         version: 1,
         context: { ...context, spacecraftId: "other-spacecraft", spacecraftName: "Other" },
       }),
-    ).rejects.toMatchObject({ status: 400, code: "invalid_scope" } satisfies Partial<HostBridgeError>);
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_scope",
+    } satisfies Partial<HostBridgeError>);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -126,13 +129,20 @@ describe("the HTTP host bridge", () => {
 
     await expect(
       bridge.query({ queryId: "cadence.packet_bindings.other", version: 1, context }),
-    ).rejects.toMatchObject({ status: 400, code: "unsupported_query" } satisfies Partial<HostBridgeError>);
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "unsupported_query",
+    } satisfies Partial<HostBridgeError>);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("rejects an action identity or declaration mismatch before sending it", async () => {
     const fetcher = vi.fn(async () =>
-      Response.json({ receiptId: "receipt-1", completedAt: "2026-08-22T20:00:00.000Z", result: {} }),
+      Response.json({
+        receiptId: "receipt-1",
+        completedAt: "2026-08-22T20:00:00.000Z",
+        result: {},
+      }),
     );
     const bridge = createHttpHostBridge(session, telemetryApplication, {
       fetch: fetcher as typeof fetch,
