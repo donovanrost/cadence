@@ -1,0 +1,43 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  vue-demi: true
+
+catalog:
+  "@fontsource-variable/archivo": 5.3.0
+  "@fontsource-variable/jetbrains-mono": 5.3.0
+  "@module-federation/runtime": 2.8.2
+  "@module-federation/vite": 1.20.7
+  "@storybook/addon-a11y": 10.5.10
+  "@storybook/addon-docs": 10.5.10
+  "@storybook/addon-vitest": 10.5.10
+  "@storybook/vue3-vite": 10.5.10
+  "@types/node": ^24.13.3
+  "@vue/test-utils": 2.4.11
+  "@vitejs/plugin-vue": ^6.0.8
+  "@vue/tsconfig": ^0.9.1
+  "@vitest/browser": 4.1.10
+  "@vitest/browser-playwright": 4.1.10
+  "@vitest/runner": 4.1.10
+  happy-dom: 20.11.6
+  playwright: 1.62.1
+  react: 19.2.8
+  react-dom: 19.2.8
+  reka-ui: 2.10.3
+  storybook: 10.5.10
+  typescript: ~6.0.2
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.9
+  vite-plus: 0.2.9
+  vitest: 4.1.10
+  vue: ^3.5.40
+  vue-tsc: ^3.3.8
+overrides:
+  vite: "catalog:"
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"

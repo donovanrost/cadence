@@ -71,7 +71,8 @@ additive, opt-in, or invisible (the one visible change is a small green hue shif
   `badge-success`.
 - **Phase 2 — warn-mode enforcement.** `scripts/check-design-system.sh` (raw
   color literals, `z-[n]`, raw inputs) and `scripts/contrast-check.mjs`
-  (oklch→WCAG audit). The blunt `check-css-frozen.sh` hook stays for now.
+  (oklch→WCAG audit). The blunt frozen-CSS hook has been retired; these precise
+  checks remain warn-only until Phase 6.
 - **Phase 3 — mechanical migrations.**
   - All 20 `z-[n]` literals → `z-[var(--z-*)]` tiers. **Fixed the
     popover-below-chrome bug** (dashboard popovers now sit above the sidebar).
@@ -160,7 +161,6 @@ free. Order is by blast radius and how much taste-iteration each needs:
 ### Phase 6 — lock it
 
 - Flip `check-design-system.sh` from warn → **error**.
-- **Retire `check-css-frozen.sh`** (the precise lint now covers its job).
 - Tag a **version** and start a **changelog**.
 
 ### Open findings from the pilot

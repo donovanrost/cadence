@@ -1,0 +1,190 @@
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/jetbrains-mono";
+
+:root {
+  color-scheme: dark;
+
+  /* Two voices: interface language and machine-readable evidence. */
+  --cadence-font-display: "Archivo Variable", sans-serif;
+  --cadence-font-sans: "Archivo Variable", sans-serif;
+  --cadence-font-mono: "JetBrains Mono Variable", monospace;
+
+  --cadence-type-display-xl: clamp(2.75rem, 6vw, 5.5rem);
+  --cadence-type-display-lg: clamp(2.125rem, 4.5vw, 4rem);
+  --cadence-type-title-lg: clamp(1.5rem, 2.5vw, 2.25rem);
+  --cadence-type-title-md: 1.25rem;
+  --cadence-type-body-lg: 1rem;
+  --cadence-type-body-md: 0.875rem;
+  --cadence-type-body-sm: 0.75rem;
+  --cadence-type-label: 0.6875rem;
+  --cadence-leading-tight: 0.94;
+  --cadence-leading-copy: 1.5;
+  --cadence-tracking-display: -0.035em;
+  --cadence-tracking-label: 0.1em;
+
+  /* Dark mode: structure is white. Surfaces remain monochrome. */
+  --cadence-color-canvas: #050505;
+  --cadence-color-shell: #050505;
+  --cadence-color-surface-inset: #101010;
+  --cadence-color-surface: #080808;
+  --cadence-color-surface-raised: #0d0d0d;
+  --cadence-color-surface-inverse: #ffffff;
+  --cadence-color-line: #ffffff;
+  --cadence-color-border-subtle: rgb(255 255 255 / 28%);
+  --cadence-color-border: #ffffff;
+  --cadence-color-border-strong: #ffffff;
+  --cadence-color-text: #e8e8e8;
+  --cadence-color-text-strong: #ffffff;
+  --cadence-color-text-secondary: #b8b8b8;
+  --cadence-color-text-muted: #8a8a8a;
+  --cadence-color-text-inverse: #050505;
+
+  /* Chroma communicates action, selection, live signal, or operational state. */
+  --cadence-color-accent: #6fa8ff;
+  --cadence-color-accent-hover: #9bc2ff;
+  --cadence-color-accent-muted: #6fa8ff;
+  --cadence-color-on-accent: #050505;
+  --cadence-color-signal: #55d9ff;
+  --cadence-color-signal-hover: #8ae6ff;
+  --cadence-color-success: #55e6a5;
+  --cadence-color-warning: #ffc35c;
+  --cadence-color-danger: #ff6262;
+
+  /* Status roles pair invariant geometry with informative color. */
+  --cadence-color-status-critical: #ff6262;
+  --cadence-color-status-serious: #ff965f;
+  --cadence-color-status-caution: #ffc35c;
+  --cadence-color-status-normal: #55e6a5;
+  --cadence-color-status-standby: #55d9ff;
+  --cadence-color-status-off: #8a8a8a;
+  --cadence-color-status-unknown: #b8b8b8;
+
+  /* Four-pixel operational rhythm. */
+  --cadence-space-0-5: 2px;
+  --cadence-space-1: 4px;
+  --cadence-space-2: 8px;
+  --cadence-space-3: 12px;
+  --cadence-space-4: 16px;
+  --cadence-space-5: 20px;
+  --cadence-space-6: 24px;
+  --cadence-space-8: 32px;
+  --cadence-space-10: 40px;
+  --cadence-space-12: 48px;
+  --cadence-space-16: 64px;
+  --cadence-space-20: 80px;
+
+  --cadence-control-sm: 32px;
+  --cadence-control-md: 40px;
+
+  /* Shape is structural: no softened corners or simulated elevation. */
+  --cadence-radius-xs: 0;
+  --cadence-radius-sm: 0;
+  --cadence-radius-md: 0;
+  --cadence-radius-lg: 0;
+  --cadence-radius-round: 0;
+  --cadence-shadow-raised: none;
+  --cadence-shadow-floating: none;
+  --cadence-shadow-action: none;
+  --cadence-focus-ring: none;
+
+  --cadence-ease-standard: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --cadence-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --cadence-duration-instant: 90ms;
+  --cadence-duration-fast: 150ms;
+  --cadence-duration-moderate: 240ms;
+  --cadence-transition-fast: var(--cadence-duration-fast) var(--cadence-ease-standard);
+
+  --cadence-layer-dropdown: 40;
+  --cadence-layer-popover: 60;
+  --cadence-layer-tooltip: 80;
+
+  /* Temporary compatibility aliases for the proof-of-concept shell. */
+  --ink-950: var(--cadence-color-canvas);
+  --ink-900: var(--cadence-color-shell);
+  --ink-850: var(--cadence-color-surface);
+  --ink-800: var(--cadence-color-surface-raised);
+  --ink-700: var(--cadence-color-border);
+  --steel-500: var(--cadence-color-text-muted);
+  --steel-300: var(--cadence-color-text-secondary);
+  --paper: var(--cadence-color-text);
+  --amber: var(--cadence-color-accent);
+  --amber-soft: var(--cadence-color-accent-muted);
+  --cyan: var(--cadence-color-signal);
+  --danger: var(--cadence-color-danger);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Light mode: structure is black. Surfaces remain monochrome. */
+  --cadence-color-canvas: #ffffff;
+  --cadence-color-shell: #ffffff;
+  --cadence-color-surface-inset: #eeeeee;
+  --cadence-color-surface: #ffffff;
+  --cadence-color-surface-raised: #ffffff;
+  --cadence-color-surface-inverse: #000000;
+  --cadence-color-line: #000000;
+  --cadence-color-border-subtle: rgb(0 0 0 / 28%);
+  --cadence-color-border: #000000;
+  --cadence-color-border-strong: #000000;
+  --cadence-color-text: #171717;
+  --cadence-color-text-strong: #000000;
+  --cadence-color-text-secondary: #414141;
+  --cadence-color-text-muted: #666666;
+  --cadence-color-text-inverse: #ffffff;
+
+  --cadence-color-accent: #004ed6;
+  --cadence-color-accent-hover: #00399e;
+  --cadence-color-accent-muted: #004ed6;
+  --cadence-color-on-accent: #ffffff;
+  --cadence-color-signal: #006f8f;
+  --cadence-color-signal-hover: #004f67;
+  --cadence-color-success: #006b42;
+  --cadence-color-warning: #8a4c00;
+  --cadence-color-danger: #b31818;
+  --cadence-color-status-critical: #b31818;
+  --cadence-color-status-serious: #9a3f00;
+  --cadence-color-status-caution: #8a4c00;
+  --cadence-color-status-normal: #006b42;
+  --cadence-color-status-standby: #006f8f;
+  --cadence-color-status-off: #666666;
+  --cadence-color-status-unknown: #414141;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+
+    --cadence-color-canvas: #ffffff;
+    --cadence-color-shell: #ffffff;
+    --cadence-color-surface-inset: #eeeeee;
+    --cadence-color-surface: #ffffff;
+    --cadence-color-surface-raised: #ffffff;
+    --cadence-color-surface-inverse: #000000;
+    --cadence-color-line: #000000;
+    --cadence-color-border-subtle: rgb(0 0 0 / 28%);
+    --cadence-color-border: #000000;
+    --cadence-color-border-strong: #000000;
+    --cadence-color-text: #171717;
+    --cadence-color-text-strong: #000000;
+    --cadence-color-text-secondary: #414141;
+    --cadence-color-text-muted: #666666;
+    --cadence-color-text-inverse: #ffffff;
+    --cadence-color-accent: #004ed6;
+    --cadence-color-accent-hover: #00399e;
+    --cadence-color-accent-muted: #004ed6;
+    --cadence-color-on-accent: #ffffff;
+    --cadence-color-signal: #006f8f;
+    --cadence-color-signal-hover: #004f67;
+    --cadence-color-success: #006b42;
+    --cadence-color-warning: #8a4c00;
+    --cadence-color-danger: #b31818;
+    --cadence-color-status-critical: #b31818;
+    --cadence-color-status-serious: #9a3f00;
+    --cadence-color-status-caution: #8a4c00;
+    --cadence-color-status-normal: #006b42;
+    --cadence-color-status-standby: #006f8f;
+    --cadence-color-status-off: #666666;
+    --cadence-color-status-unknown: #414141;
+  }
+}

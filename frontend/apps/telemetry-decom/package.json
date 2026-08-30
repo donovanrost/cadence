@@ -1,0 +1,28 @@
+{
+  "name": "@cadence/telemetry-decom-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev --host 127.0.0.1 --port 4174 --strictPort",
+    "build": "vue-tsc -b && vp build && vp build --mode previous",
+    "preview": "vp preview --host 127.0.0.1 --port 4174 --strictPort",
+    "test": "vp test --run"
+  },
+  "dependencies": {
+    "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}
