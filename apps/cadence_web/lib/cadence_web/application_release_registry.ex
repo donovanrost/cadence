@@ -26,6 +26,13 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
       remote_name: "cadence_comms_overview",
       manifest_path: "/assets/application-host/comms-overview/mf-manifest.json",
       exposed_module: "./Application"
+    },
+    {"telemetry_decom", 1, "packet_bindings", 1} => %{
+      federation: :module_federation,
+      release_id: "telemetry-decom-v1",
+      remote_name: "cadence_telemetry_decom",
+      manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
+      exposed_module: "./Application"
     }
   }
 

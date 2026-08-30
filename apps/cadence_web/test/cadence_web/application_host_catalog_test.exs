@@ -6,7 +6,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias Cadence.Auth.Scope
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
-  test "admits the registered telemetry packet_bindings surface only after release lookup", %{
+  test "admits the registered telemetry packet_bindings surface after release lookup", %{
     conn: _conn
   } do
     {scope, route_context} = installed_telemetry_context()
@@ -23,13 +23,19 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
 
     assert surface.surface_id == "packet_bindings"
 
-    assert {:error, :unknown_application_release} =
+    assert {:ok, admission} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
                "telemetry_decom",
                "packet_bindings"
              )
+
+    assert admission.release.release_id == "telemetry-decom-v1"
+    assert admission.release.remote_name == "cadence_telemetry_decom"
+
+    assert admission.release.manifest_path ==
+             "/assets/application-host/telemetry-decom/mf-manifest.json"
   end
 
   defp installed_telemetry_context do

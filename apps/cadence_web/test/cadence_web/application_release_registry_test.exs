@@ -15,9 +15,17 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
            }
   end
 
-  test "does not advertise the standalone telemetry release coordinate" do
-    assert {:error, :unknown_application_release} =
+  test "advertises the checked-in telemetry packet bindings release coordinate" do
+    assert {:ok, release} =
              ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+
+    assert release == %{
+             federation: :module_federation,
+             release_id: "telemetry-decom-v1",
+             remote_name: "cadence_telemetry_decom",
+             manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
+             exposed_module: "./Application"
+           }
 
     assert Enum.all?(ApplicationReleaseRegistry.all(), fn {_key, release} ->
              String.starts_with?(release.manifest_path, "/assets/") and

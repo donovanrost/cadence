@@ -219,7 +219,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp registered_application(
          application_key,
-         %ApplicationInstallation{application_version: application_version},
+         %ApplicationInstallation{application_version: application_version} = installation,
          %HostContext{placement: placement},
          surface_id
        ) do
@@ -232,6 +232,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       {:ok,
        %{
          definition: definition,
+         installation: installation,
          package: package,
          release: release,
          surface: surface
