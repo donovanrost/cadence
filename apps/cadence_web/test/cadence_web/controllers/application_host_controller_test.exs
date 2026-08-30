@@ -191,6 +191,43 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert Jason.decode!(Jason.encode!(presentation)) == response["presentation"]
   end
 
+  test "scoped Comms queries preserve the legacy presenter and identity", %{conn: _conn} do
+    {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
+    {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
+    valid_scope = scope_document(organization, mission)
+
+    response =
+      post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "queryVersion" => 1,
+        "scope" => valid_scope
+      })
+
+    presentation = CommsOverviewPresenter.build(scope, mission)
+
+    assert json_response(response, 200) == %{
+             "queryVersion" => 1,
+             "presentation" => Jason.decode!(Jason.encode!(presentation))
+           }
+
+    rejected =
+      post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "wrong_surface",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "queryVersion" => 1,
+        "scope" => valid_scope
+      })
+
+    assert %{"code" => "unsupported_query"} = json_response(rejected, 404)
+  end
+
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{
     conn: _conn
   } do

@@ -51,7 +51,7 @@ async function loadCatalog(): Promise<void> {
     catalog.value = nextCatalog;
     application.value = nextApplication;
     context.value = nextCatalog.session.context;
-    bridge.value = createHttpHostBridge(nextCatalog.session);
+    bridge.value = createHttpHostBridge(nextCatalog.session, nextApplication);
     mountGeneration.value += 1;
   } catch (reason) {
     if (generation !== loadGeneration) return;

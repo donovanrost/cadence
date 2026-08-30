@@ -1,4 +1,5 @@
 import type {
+  CatalogApplication,
   HostActionReceipt,
   HostActionRequest,
   HostActivityEvent,
@@ -33,6 +34,7 @@ export class HostBridgeError extends Error {
 
 export function createHttpHostBridge(
   session: HostSessionDescriptor,
+  application: CatalogApplication,
   options: BridgeOptions = {},
 ): HostBridge {
   const fetcher = options.fetch ?? globalThis.fetch;
@@ -80,11 +82,16 @@ export function createHttpHostBridge(
   return {
     async query<TResult>(query: HostQueryRequest): Promise<TResult> {
       assertActiveContext(query.context, session.context);
+      assertSelectedQuery(query, application);
 
       return withActivity("query", query.queryId, () =>
         request<TResult>("query", {
+          applicationKey: application.applicationKey,
+          applicationVersion: application.applicationVersion,
+          surfaceId: application.surface.surfaceId,
+          surfaceVersion: application.surface.version,
           queryId: query.queryId,
-          version: query.version,
+          queryVersion: query.version,
           scope: scopeFrom(session.context),
         }),
       );
@@ -94,14 +101,17 @@ export function createHttpHostBridge(
       action: HostActionRequest<TInput>,
     ): Promise<HostActionReceipt<TResult>> {
       assertActiveContext(action.context, session.context);
+      assertSelectedAction(action, application);
       const idempotencyKey = crypto.randomUUID();
 
       return withActivity("action", action.actionId, () =>
         request<HostActionReceipt<TResult>>(
           "actions",
           {
-            applicationKey: action.applicationKey,
-            applicationVersion: action.applicationVersion,
+            applicationKey: application.applicationKey,
+            applicationVersion: application.applicationVersion,
+            surfaceId: application.surface.surfaceId,
+            surfaceVersion: application.surface.version,
             actionId: action.actionId,
             input: action.input as TInput,
             scope: scopeFrom(session.context),
@@ -137,6 +147,36 @@ function assertActiveContext(actual: HostContext, expected: HostContext): void {
       400,
       "invalid_scope",
       "The requested application context is not active in this host.",
+    );
+  }
+}
+
+function assertSelectedQuery(query: HostQueryRequest, application: CatalogApplication): void {
+  if (
+    query.queryId !== application.surface.dataContract.id ||
+    query.version !== application.surface.dataContract.version
+  ) {
+    throw new HostBridgeError(
+      400,
+      "unsupported_query",
+      "The requested query contract is not declared for the selected application surface.",
+    );
+  }
+}
+
+function assertSelectedAction<TInput>(
+  action: HostActionRequest<TInput>,
+  application: CatalogApplication,
+): void {
+  if (
+    action.applicationKey !== application.applicationKey ||
+    action.applicationVersion !== application.applicationVersion ||
+    !application.surface.actions.includes(action.actionId)
+  ) {
+    throw new HostBridgeError(
+      400,
+      "unsupported_action",
+      "The requested action is not declared for the selected application surface.",
     );
   }
 }

@@ -19,10 +19,16 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
   def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
-    if Map.has_key?(params, "applicationKey") or Map.has_key?(params, "surfaceId") do
-      generic_query(current_scope, route_context, params)
-    else
-      legacy_query(current_scope, route_context, params)
+    cond do
+      Map.get(params, "queryId") == "cadence.comms.overview" or
+          Map.get(params, "applicationKey") == "comms_overview" ->
+        legacy_query(current_scope, route_context, params)
+
+      Map.has_key?(params, "applicationKey") or Map.has_key?(params, "surfaceId") ->
+        generic_query(current_scope, route_context, params)
+
+      true ->
+        legacy_query(current_scope, route_context, params)
     end
   end
 
@@ -50,16 +56,19 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp legacy_query(
          %Scope{} = current_scope,
          %{host_context: %HostContext{placement: :mission}, mission: mission},
-         %{"queryId" => "cadence.comms.overview", "version" => 1}
+         %{"queryId" => "cadence.comms.overview"} = params
        ) do
-    {:ok,
-     %{
-       "queryVersion" => 1,
-       "presentation" =>
-         current_scope
-         |> CadenceWeb.CommsOverviewPresenter.build(mission)
-         |> json_safe()
-     }}
+    with :ok <- ensure_comms_identity(params),
+         {:ok, query_version} <- comms_query_version(params) do
+      {:ok,
+       %{
+         "queryVersion" => query_version,
+         "presentation" =>
+           current_scope
+           |> CadenceWeb.CommsOverviewPresenter.build(mission)
+           |> json_safe()
+       }}
+    end
   end
 
   defp legacy_query(_current_scope, _route_context, _params),
@@ -152,10 +161,47 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   defp action_version(params) do
     case {Map.get(params, "actionVersion"), Map.get(params, "version")} do
-      {nil, version} -> positive_integer_value(version)
-      {version, nil} -> positive_integer_value(version)
-      {action_version, version} when action_version == version -> positive_integer_value(version)
-      _mismatch -> {:error, :invalid_application_request}
+      {nil, nil} ->
+        {:ok, nil}
+
+      {nil, version} ->
+        positive_integer_value(version)
+
+      {version, nil} ->
+        positive_integer_value(version)
+
+      {action_version, version} when action_version == version ->
+        positive_integer_value(version)
+
+      _mismatch ->
+        {:error, :invalid_application_request}
+    end
+  end
+
+  defp ensure_comms_identity(params) do
+    case Map.take(params, ~w(applicationKey applicationVersion surfaceId surfaceVersion)) do
+      identity when map_size(identity) == 0 ->
+        :ok
+
+      %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1
+      } ->
+        :ok
+
+      _invalid ->
+        {:error, :unsupported_application_query}
+    end
+  end
+
+  defp comms_query_version(params) do
+    case {Map.get(params, "queryVersion"), Map.get(params, "version")} do
+      {nil, 1} -> {:ok, 1}
+      {1, nil} -> {:ok, 1}
+      {1, 1} -> {:ok, 1}
+      _invalid -> {:error, :unsupported_application_query}
     end
   end
 
@@ -225,7 +271,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
          {:ok, %ActionDefinition{} = action} <-
            ApplicationDefinition.fetch_action(definition, action_id),
          true <- action.scope == surface.scope,
-         true <- action.version == action_version,
+         :ok <- ensure_declared_action_version(action, action_version),
          :ok <- ActionDefinition.validate(action) do
       {:ok, action}
     else
@@ -234,6 +280,14 @@ defmodule CadenceWeb.ApplicationHostBridge do
       _invalid -> {:error, :unsupported_application_action}
     end
   end
+
+  defp ensure_declared_action_version(%ActionDefinition{}, nil), do: :ok
+
+  defp ensure_declared_action_version(%ActionDefinition{version: version}, version),
+    do: :ok
+
+  defp ensure_declared_action_version(%ActionDefinition{}, _version),
+    do: {:error, :unsupported_application_action}
 
   defp query_response(admission, document) do
     presentation =
