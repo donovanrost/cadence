@@ -345,9 +345,16 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         :actions -> @catalog_suffix <> "/#{mission_id}/actions"
       end
 
-    conn
-    |> bridge_conn(catalog)
-    |> post_json(path, body)
+    conn = bridge_conn(conn, catalog)
+
+    conn =
+      if endpoint == :actions do
+        put_req_header(conn, "idempotency-key", "legacy-action-test")
+      else
+        conn
+      end
+
+    post_json(conn, path, body)
   end
 
   defp bridge_conn(conn, catalog) do

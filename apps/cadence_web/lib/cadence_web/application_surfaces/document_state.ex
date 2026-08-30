@@ -6,6 +6,10 @@ defmodule CadenceWeb.ApplicationSurfaces.DocumentState do
 
   alias Cadence.Reads.ApplicationSurfaces
 
+  @doc "Builds the canonical web form used by both LiveView and the JSON bridge."
+  @spec form(map()) :: Phoenix.HTML.Form.t() | nil
+  def form(document), do: surface_form(document)
+
   @spec load(Phoenix.LiveView.Socket.t(), map() | nil) ::
           {:ok, Phoenix.LiveView.Socket.t()} | {:error, term()}
   def load(socket, params \\ nil) do
