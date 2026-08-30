@@ -34,6 +34,7 @@ interface DemoSession {
 }
 
 interface HostContext {
+  scope: "spacecraft";
   organizationId: string;
   missionId: string;
   missionName: string;
@@ -105,6 +106,7 @@ interface PacketBindingsData {
 const bridgeBaseUrl = "/api/cadence/application-host/v1";
 
 const fullAccessContext: HostContext = {
+  scope: "spacecraft",
   organizationId: "org-orbital-research",
   missionId: "mission-firebird",
   missionName: "Firebird",

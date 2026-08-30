@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   APPLICATION_HOST_CONTRACT,
+  assertHostContext,
   assertFrontendApplicationCatalog,
   assertCompatibleManifest,
   defineApplicationManifest,
   FEDERATED_APPLICATION_MANIFEST_SCHEMA,
   FRONTEND_APPLICATION_CATALOG_SCHEMA,
+  isHostContext,
 } from "./index";
 
 const manifest = defineApplicationManifest({
@@ -73,6 +75,51 @@ describe("first-party federated application manifests", () => {
   });
 });
 
+describe("mission and spacecraft host contexts", () => {
+  it("accepts mission context without inventing spacecraft identity", () => {
+    const context = {
+      scope: "mission",
+      organizationId: "org-1",
+      missionId: "mission-1",
+      missionName: "Firebird",
+      spacecraftId: null,
+      spacecraftName: null,
+      actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
+    };
+
+    expect(isHostContext(context)).toBe(true);
+    expect(() => assertHostContext(context)).not.toThrow();
+  });
+
+  it("rejects a mission context that fabricates spacecraft values", () => {
+    expect(() =>
+      assertHostContext({
+        scope: "mission",
+        organizationId: "org-1",
+        missionId: "mission-1",
+        missionName: "Firebird",
+        spacecraftId: "spacecraft-1",
+        spacecraftName: "FB-1",
+        actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
+      }),
+    ).toThrow("Host context is invalid");
+  });
+
+  it("requires complete spacecraft identity for spacecraft context", () => {
+    expect(
+      isHostContext({
+        scope: "spacecraft",
+        organizationId: "org-1",
+        missionId: "mission-1",
+        missionName: "Firebird",
+        spacecraftId: null,
+        spacecraftName: null,
+        actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("host-approved frontend catalogs", () => {
   const catalog = {
     schema: FRONTEND_APPLICATION_CATALOG_SCHEMA,
@@ -83,6 +130,7 @@ describe("host-approved frontend catalogs", () => {
       csrfToken: "csrf-1",
       bridgeBaseUrl: "/api/cadence/application-host/v1",
       context: {
+        scope: "spacecraft",
         organizationId: "org-1",
         missionId: "mission-1",
         missionName: "Firebird",

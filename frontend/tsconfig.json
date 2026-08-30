@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./apps/host" },
+    { "path": "./apps/comms-overview" },
     { "path": "./apps/telemetry-decom" },
     { "path": "./packages/ui" },
     { "path": "./packages/plugin-sdk" }

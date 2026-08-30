@@ -128,6 +128,7 @@ function scopeFrom(context: HostContext) {
 
 function assertActiveContext(actual: HostContext, expected: HostContext): void {
   if (
+    actual.scope !== expected.scope ||
     actual.organizationId !== expected.organizationId ||
     actual.missionId !== expected.missionId ||
     actual.spacecraftId !== expected.spacecraftId
