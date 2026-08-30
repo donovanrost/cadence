@@ -4,11 +4,13 @@ import {
   type FrontendApplicationCatalog,
 } from "@cadence/plugin-sdk";
 
-export const COMMS_OVERVIEW_APPLICATION_KEY = "comms_overview" as const;
-
 export interface PhoenixHostConfig {
+  applicationKey: string;
+  surfaceId: string;
+  spacecraftId?: string;
   missionId: string;
   catalogUrl: string;
+  fallbackHref: string;
 }
 
 export interface PhoenixCatalogRequestOptions {
@@ -16,57 +18,75 @@ export interface PhoenixCatalogRequestOptions {
   baseUrl?: string;
 }
 
-export async function loadPhoenixMissionCatalog(
+export interface PhoenixContextRequest {
+  missionId: string;
+  spacecraftId?: string;
+}
+
+export async function loadPhoenixApplicationCatalog(
   config: PhoenixHostConfig,
   options: PhoenixCatalogRequestOptions = {},
 ): Promise<FrontendApplicationCatalog> {
+  assertPhoenixHostConfig(config);
+
   const fetcher = options.fetch ?? globalThis.fetch;
-  const url = phoenixCatalogUrl(config.catalogUrl, config.missionId, options.baseUrl);
+  if (typeof fetcher !== "function") {
+    throw new Error("The Phoenix application host cannot fetch its catalog.");
+  }
+
+  const url = phoenixCatalogUrl(config.catalogUrl, config, options.baseUrl);
   const response = await fetcher(url, { credentials: "same-origin", cache: "no-store" });
 
   if (!response.ok) {
-    throw new Error(`The mission application catalog returned HTTP ${response.status}.`);
+    throw new Error(`The application catalog returned HTTP ${response.status}.`);
   }
 
   const catalog: unknown = await response.json();
   assertFrontendApplicationCatalog(catalog);
 
   const context = catalog.session.context;
-  if (context.scope !== "mission" || context.missionId !== config.missionId) {
-    throw new Error("The mission application catalog is not scoped to the active mission.");
+  const expectedScope = config.spacecraftId === undefined ? "mission" : "spacecraft";
+  if (
+    context.scope !== expectedScope ||
+    context.missionId !== config.missionId ||
+    context.spacecraftId !== (config.spacecraftId ?? null)
+  ) {
+    throw new Error("The application catalog is not scoped to the requested context.");
   }
 
   return catalog;
 }
 
-export function selectCommsOverviewApplication(
+export function selectPhoenixApplication(
   catalog: FrontendApplicationCatalog,
+  config: Pick<PhoenixHostConfig, "applicationKey" | "surfaceId" | "spacecraftId">,
 ): CatalogApplication {
+  assertSelectionContext(config);
+  const expectedScope = config.spacecraftId === undefined ? "mission" : "spacecraft";
   const application = catalog.applications.find(
-    ({ applicationKey }) => applicationKey === COMMS_OVERVIEW_APPLICATION_KEY,
+    ({ applicationKey }) => applicationKey === config.applicationKey,
   );
 
   if (!application) {
-    throw new Error("The mission application catalog does not provide comms_overview.");
+    throw new Error(
+      `The application catalog does not provide requested application "${config.applicationKey}".`,
+    );
   }
 
-  if (
-    application.applicationVersion !== 1 ||
-    application.package.packageId !== "cadence.comms_overview" ||
-    application.package.version !== 1 ||
-    application.surface.surfaceId !== "overview" ||
-    application.surface.version !== 1 ||
-    application.surface.purpose !== "overview" ||
-    application.surface.scope !== "mission" ||
-    application.surface.dataContract.id !== "cadence.comms.overview" ||
-    application.surface.dataContract.version !== 1 ||
-    application.surface.actions.length !== 0 ||
-    application.surface.renderer.exposedModule !== "./Application" ||
-    application.release.federation !== "module_federation" ||
-    application.release.remoteName !== "cadence_comms_overview" ||
-    application.release.exposedModule !== "./Application"
-  ) {
-    throw new Error("The mission catalog comms_overview application contract is invalid.");
+  if (application.surface.surfaceId !== config.surfaceId) {
+    throw new Error(
+      `The application catalog does not provide requested surface "${config.surfaceId}" for application "${config.applicationKey}".`,
+    );
+  }
+
+  if (application.surface.scope !== expectedScope) {
+    throw new Error(
+      `The requested application surface is not approved for ${expectedScope} context.`,
+    );
+  }
+
+  if (application.surface.renderer.exposedModule !== application.release.exposedModule) {
+    throw new Error("The selected application release does not match its surface renderer module.");
   }
 
   return application;
@@ -74,22 +94,81 @@ export function selectCommsOverviewApplication(
 
 export function phoenixCatalogUrl(
   catalogUrl: string,
-  missionId: string,
+  context: PhoenixContextRequest | string,
   baseUrl = currentOrigin(),
 ): string {
-  if (!nonEmptyString(missionId)) throw new Error("The Phoenix host requires a mission id.");
+  const request = typeof context === "string" ? { missionId: context } : context;
+  assertContextRequest(request);
 
-  const base = new URL(baseUrl);
-  const target = new URL(catalogUrl, base);
+  if (!nonEmptyString(catalogUrl)) {
+    throw new Error("The Phoenix host requires a catalog URL.");
+  }
+
+  let base: URL;
+  let target: URL;
+
+  try {
+    base = new URL(baseUrl);
+    target = new URL(catalogUrl, base);
+  } catch {
+    throw new Error("The Phoenix application catalog URL is invalid.");
+  }
+
   if (target.origin !== base.origin) {
     throw new Error("The Phoenix application catalog must use the same origin as the host.");
   }
 
-  target.searchParams.set("mission_id", missionId);
+  target.searchParams.set("mission_id", request.missionId);
+  if (request.spacecraftId !== undefined) {
+    target.searchParams.set("spacecraft_id", request.spacecraftId);
+  } else target.searchParams.delete("spacecraft_id");
   target.hash = "";
+
   return catalogUrl.startsWith("/") && !catalogUrl.startsWith("//")
     ? `${target.pathname}${target.search}`
     : target.toString();
+}
+
+function assertPhoenixHostConfig(config: PhoenixHostConfig): void {
+  if (!nonEmptyString(config.applicationKey)) {
+    throw new Error("The Phoenix host requires an application key.");
+  }
+
+  if (!nonEmptyString(config.surfaceId)) {
+    throw new Error("The Phoenix host requires a surface id.");
+  }
+
+  if (!nonEmptyString(config.missionId)) {
+    throw new Error("The Phoenix host requires a mission id.");
+  }
+
+  if (!nonEmptyString(config.catalogUrl)) {
+    throw new Error("The Phoenix host requires a catalog URL.");
+  }
+
+  if (!nonEmptyString(config.fallbackHref)) {
+    throw new Error("The Phoenix host requires a Phoenix fallback href.");
+  }
+
+  assertContextRequest(config);
+}
+
+function assertSelectionContext(
+  config: Pick<PhoenixHostConfig, "applicationKey" | "surfaceId" | "spacecraftId">,
+): void {
+  if (config.spacecraftId !== undefined && !nonEmptyString(config.spacecraftId)) {
+    throw new Error("The Phoenix host requires a non-empty spacecraft id when provided.");
+  }
+}
+
+function assertContextRequest(context: PhoenixContextRequest): void {
+  if (!nonEmptyString(context.missionId)) {
+    throw new Error("The Phoenix host requires a mission id.");
+  }
+
+  if (context.spacecraftId !== undefined && !nonEmptyString(context.spacecraftId)) {
+    throw new Error("The Phoenix host requires a non-empty spacecraft id when provided.");
+  }
 }
 
 function currentOrigin(): string {

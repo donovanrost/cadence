@@ -10,8 +10,8 @@ import { CButton, CStatus } from "@cadence/ui";
 import { onMounted, ref, shallowRef } from "vue";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 import {
-  loadPhoenixMissionCatalog,
-  selectCommsOverviewApplication,
+  loadPhoenixApplicationCatalog,
+  selectPhoenixApplication,
   type PhoenixHostConfig,
 } from "./phoenix-catalog-client";
 import { createHttpHostBridge } from "./http-host-bridge";
@@ -44,11 +44,8 @@ async function loadCatalog(): Promise<void> {
   context.value = undefined;
 
   try {
-    const nextCatalog = await loadPhoenixMissionCatalog(
-      { missionId: props.missionId, catalogUrl: props.catalogUrl },
-      { fetch: props.fetcher },
-    );
-    const nextApplication = selectCommsOverviewApplication(nextCatalog);
+    const nextCatalog = await loadPhoenixApplicationCatalog(props, { fetch: props.fetcher });
+    const nextApplication = selectPhoenixApplication(nextCatalog, props);
     if (generation !== loadGeneration) return;
 
     catalog.value = nextCatalog;
@@ -58,7 +55,8 @@ async function loadCatalog(): Promise<void> {
     mountGeneration.value += 1;
   } catch (reason) {
     if (generation !== loadGeneration) return;
-    bootError.value = reason instanceof Error ? reason.message : "The mission host failed to load.";
+    bootError.value =
+      reason instanceof Error ? reason.message : "The application host failed to load.";
   } finally {
     if (generation === loadGeneration) loading.value = false;
   }
@@ -73,30 +71,45 @@ function recordManifest(value: FirstPartyApplicationManifest): void {
   manifest.value = value;
 }
 
-function missionHref(): string {
-  return `/missions/${encodeURIComponent(props.missionId)}/comms`;
+function contextLabel(): string {
+  return context.value ? `${context.value.scope.toUpperCase()} CONTEXT` : "CONTEXT";
+}
+
+function contextName(): string {
+  if (!context.value) return "RESOLVING";
+  return context.value.scope === "spacecraft"
+    ? context.value.spacecraftName
+    : context.value.missionName;
+}
+
+function contextDetails(): string {
+  if (!context.value) return "RESOLVING";
+  if (context.value.scope === "spacecraft") {
+    return `${context.value.missionId} · ${context.value.spacecraftId}`;
+  }
+  return context.value.missionId;
 }
 </script>
 
 <template>
   <div id="cadence-phoenix-host" class="phoenix-host-shell">
     <header class="phoenix-host-header">
-      <a id="phoenix-host-home" class="phoenix-host-wordmark" :href="missionHref()">
+      <a id="phoenix-host-home" class="phoenix-host-wordmark" :href="props.fallbackHref">
         <span class="phoenix-host-signal" aria-hidden="true"><i></i><i></i><i></i></span>
         <span>CADENCE</span>
       </a>
       <div class="phoenix-host-context">
-        <span>MISSION CONTEXT</span>
-        <strong>{{ context?.missionName ?? "RESOLVING" }}</strong>
+        <span>{{ contextLabel() }}</span>
+        <strong>{{ contextName() }}</strong>
       </div>
       <CStatus tone="nominal" pulse>PHOENIX HOST</CStatus>
     </header>
 
     <main class="phoenix-host-main">
       <section v-if="loading" id="phoenix-host-loading" class="phoenix-host-state" role="status">
-        <p class="phoenix-host-eyebrow">MISSION APPLICATION HOST</p>
-        <h1>Resolving communications surface</h1>
-        <p>Loading the approved mission catalog with same-origin credentials.</p>
+        <p class="phoenix-host-eyebrow">APPLICATION SURFACE HOST</p>
+        <h1>Resolving application surface</h1>
+        <p>Loading the approved catalog with same-origin credentials.</p>
       </section>
 
       <section
@@ -105,7 +118,7 @@ function missionHref(): string {
         class="phoenix-host-state phoenix-host-state--error"
       >
         <p class="phoenix-host-eyebrow">HOST CATALOG UNAVAILABLE</p>
-        <h1>Cadence rejected the mission application catalog.</h1>
+        <h1>Cadence rejected the application catalog.</h1>
         <p>{{ bootError }}</p>
         <CButton id="retry-phoenix-host" variant="primary" @click="loadCatalog">
           Retry catalog
@@ -115,7 +128,10 @@ function missionHref(): string {
       <template v-else-if="application && bridge && context">
         <div class="phoenix-host-titlebar">
           <div>
-            <p class="phoenix-host-eyebrow">APPLICATIONS / COMMS OVERVIEW</p>
+            <p class="phoenix-host-eyebrow">
+              APPLICATIONS / {{ application.displayName.toUpperCase() }} /
+              {{ application.surface.navigation.label.toUpperCase() }}
+            </p>
             <h1>{{ application.surface.navigation.label }}</h1>
           </div>
           <span class="phoenix-host-release" :class="{ 'phoenix-host-release--ready': manifest }">
@@ -125,8 +141,10 @@ function missionHref(): string {
 
         <div class="phoenix-host-surface">
           <div class="phoenix-host-surface__chrome">
-            <span>TRUSTED FIRST-PARTY SURFACE</span>
-            <span>{{ application.release.releaseId }} · MISSION {{ context.missionId }}</span>
+            <span>
+              {{ application.displayName }} · {{ application.surface.purpose.toUpperCase() }}
+            </span>
+            <span>{{ application.release.releaseId }} · {{ contextDetails() }}</span>
           </div>
           <RemoteApplicationBoundary
             :key="`${application.release.releaseId}:${mountGeneration}`"

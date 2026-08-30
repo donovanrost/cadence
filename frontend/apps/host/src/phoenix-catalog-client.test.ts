@@ -1,12 +1,65 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FrontendApplicationCatalog } from "@cadence/plugin-sdk";
+import type { CatalogApplication, FrontendApplicationCatalog } from "@cadence/plugin-sdk";
 import {
-  loadPhoenixMissionCatalog,
+  loadPhoenixApplicationCatalog,
   phoenixCatalogUrl,
-  selectCommsOverviewApplication,
+  selectPhoenixApplication,
+  type PhoenixHostConfig,
 } from "./phoenix-catalog-client";
 
-const catalog = {
+const missionCommsApplication = {
+  applicationKey: "comms_overview",
+  applicationVersion: 1,
+  displayName: "Communications Overview",
+  description: "Mission communications overview.",
+  package: { packageId: "cadence.comms_overview", version: 1 },
+  surface: {
+    surfaceId: "overview",
+    version: 1,
+    purpose: "overview",
+    scope: "mission",
+    placement: "application_workspace",
+    navigation: { label: "Overview", order: 10 },
+    dataContract: { id: "cadence.comms.overview", version: 1 },
+    actions: [],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+  release: {
+    federation: "module_federation",
+    releaseId: "comms-overview-v1",
+    remoteName: "cadence_comms_overview",
+    manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
+    exposedModule: "./Application",
+  },
+} satisfies CatalogApplication;
+
+const spacecraftTelemetryApplication = {
+  applicationKey: "telemetry_decom",
+  applicationVersion: 1,
+  displayName: "Telemetry Decom",
+  description: "Choose the packet inputs decoded for an installed spacecraft.",
+  package: { packageId: "cadence.telemetry-applications", version: 1 },
+  surface: {
+    surfaceId: "packet_bindings",
+    version: 1,
+    purpose: "configuration",
+    scope: "spacecraft",
+    placement: "application_workspace",
+    navigation: { label: "Packet bindings", order: 20 },
+    dataContract: { id: "cadence.packet_bindings.manage", version: 1 },
+    actions: ["save_packet_bindings"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+  release: {
+    federation: "module_federation",
+    releaseId: "telemetry-decom-v1",
+    remoteName: "cadence_telemetry_decom",
+    manifestUrl: "/assets/application-host/telemetry-decom/mf-manifest.json",
+    exposedModule: "./Application",
+  },
+} satisfies CatalogApplication;
+
+const missionCatalog = {
   schema: "cadence.first-party-frontend-catalog.v1",
   hostContract: "cadence.application-host.v1",
   generatedAt: "2026-08-29T20:00:00.000Z",
@@ -24,96 +77,174 @@ const catalog = {
       actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
     },
   },
-  applications: [
-    {
-      applicationKey: "comms_overview",
-      applicationVersion: 1,
-      displayName: "Communications Overview",
-      description: "Mission communications overview.",
-      package: { packageId: "cadence.comms_overview", version: 1 },
-      surface: {
-        surfaceId: "overview",
-        version: 1,
-        purpose: "overview",
-        scope: "mission",
-        placement: "application_workspace",
-        navigation: { label: "Overview", order: 10 },
-        dataContract: { id: "cadence.comms.overview", version: 1 },
-        actions: [],
-        renderer: { kind: "federated-vue", exposedModule: "./Application" },
-      },
-      release: {
-        federation: "module_federation",
-        releaseId: "2026.08.29.1",
-        remoteName: "cadence_comms_overview",
-        manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
-        exposedModule: "./Application",
-      },
-    },
-  ],
+  applications: [missionCommsApplication],
 } satisfies FrontendApplicationCatalog;
 
-describe("Phoenix mission catalog bootstrap", () => {
-  it("adds the active mission to a same-origin catalog URL and preserves credentials", async () => {
+const spacecraftCatalog = {
+  ...missionCatalog,
+  session: {
+    ...missionCatalog.session,
+    context: {
+      scope: "spacecraft",
+      organizationId: "org-1",
+      missionId: "mission-1",
+      missionName: "Firebird",
+      spacecraftId: "spacecraft-1",
+      spacecraftName: "FB-1",
+      actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
+    },
+  },
+  applications: [spacecraftTelemetryApplication],
+} satisfies FrontendApplicationCatalog;
+
+const missionConfig: PhoenixHostConfig = {
+  applicationKey: "comms_overview",
+  surfaceId: "overview",
+  missionId: "mission-1",
+  catalogUrl: "/api/cadence/application-host/v1/catalog",
+  fallbackHref: "/missions/mission-1/comms",
+};
+
+const spacecraftConfig: PhoenixHostConfig = {
+  applicationKey: "telemetry_decom",
+  surfaceId: "packet_bindings",
+  spacecraftId: "spacecraft-1",
+  missionId: "mission-1",
+  catalogUrl: "/api/cadence/application-host/v1/catalog",
+  fallbackHref: "/missions/mission-1/spacecraft/spacecraft-1/applications",
+};
+
+describe("Phoenix application catalog bootstrap", () => {
+  it("selects the requested mission Comms application and preserves same-origin credentials", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(input).toBe("/api/cadence/application-host/v1/catalog?mission_id=mission-1");
       expect(init).toEqual({ credentials: "same-origin", cache: "no-store" });
-      return Response.json(catalog);
+      return Response.json(missionCatalog);
     });
 
-    await expect(
-      loadPhoenixMissionCatalog(
-        { missionId: "mission-1", catalogUrl: "/api/cadence/application-host/v1/catalog" },
-        { fetch: fetcher as typeof fetch },
-      ),
-    ).resolves.toEqual(catalog);
+    const catalog = await loadPhoenixApplicationCatalog(missionConfig, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    expect(selectPhoenixApplication(catalog, missionConfig)).toEqual(
+      missionCatalog.applications[0],
+    );
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts an absolute same-origin catalog URL and rejects a different mission", async () => {
+  it("selects the requested spacecraft telemetry surface and requests exact context", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(input).toBe(
+        "/api/cadence/application-host/v1/catalog?mission_id=mission-1&spacecraft_id=spacecraft-1",
+      );
+      return Response.json(spacecraftCatalog);
+    });
+
+    const catalog = await loadPhoenixApplicationCatalog(spacecraftConfig, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    expect(selectPhoenixApplication(catalog, spacecraftConfig)).toEqual(
+      spacecraftCatalog.applications[0],
+    );
+  });
+
+  it("rejects a catalog returned for a different scope or identity", async () => {
+    const wrongContext = {
+      ...spacecraftCatalog,
+      session: {
+        ...spacecraftCatalog.session,
+        context: { ...spacecraftCatalog.session.context, spacecraftId: "spacecraft-2" },
+      },
+    };
+    const fetcher = vi.fn(async () => Response.json(wrongContext));
+
+    await expect(
+      loadPhoenixApplicationCatalog(spacecraftConfig, {
+        fetch: fetcher as typeof fetch,
+      }),
+    ).rejects.toThrow("not scoped to the requested context");
+
+    expect(() =>
+      selectPhoenixApplication(missionCatalog, {
+        applicationKey: "comms_overview",
+        surfaceId: "overview",
+        spacecraftId: "spacecraft-1",
+      }),
+    ).toThrow("not approved for spacecraft context");
+  });
+
+  it("fails closed for a missing application or surface", () => {
+    expect(() =>
+      selectPhoenixApplication(missionCatalog, {
+        applicationKey: "missing_application",
+        surfaceId: "overview",
+      }),
+    ).toThrow('does not provide requested application "missing_application"');
+
+    expect(() =>
+      selectPhoenixApplication(missionCatalog, {
+        applicationKey: "comms_overview",
+        surfaceId: "missing_surface",
+      }),
+    ).toThrow('does not provide requested surface "missing_surface"');
+  });
+
+  it("rejects a selected release whose module differs from the catalog surface", () => {
+    const mismatchedCatalog = {
+      ...missionCatalog,
+      applications: [
+        {
+          ...missionCommsApplication,
+          release: { ...missionCommsApplication.release, exposedModule: "./Other" },
+        },
+      ],
+    } as FrontendApplicationCatalog;
+
+    expect(() => selectPhoenixApplication(mismatchedCatalog, missionConfig)).toThrow(
+      "does not match its surface renderer module",
+    );
+  });
+
+  it("uses the current plugin-sdk catalog schema and rejects stale documents", async () => {
+    const staleCatalog = { ...missionCatalog, schema: "cadence.frontend-catalog.v0" };
+    const fetcher = vi.fn(async () => Response.json(staleCatalog));
+
+    await expect(
+      loadPhoenixApplicationCatalog(missionConfig, { fetch: fetcher as typeof fetch }),
+    ).rejects.toThrow("frontend application catalog is invalid");
+  });
+
+  it("rejects a cross-origin catalog before sending credentials", async () => {
+    const fetcher = vi.fn();
+
+    await expect(
+      loadPhoenixApplicationCatalog(
+        { ...missionConfig, catalogUrl: "https://other.test/catalog" },
+        {
+          fetch: fetcher as typeof fetch,
+          baseUrl: "https://cadence.test/missions/mission-1/comms",
+        },
+      ),
+    ).rejects.toThrow("same origin");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("adds exact context query parameters and removes stale spacecraft context", () => {
     expect(
       phoenixCatalogUrl(
-        "https://cadence.test/catalog?mode=mission",
-        "mission-1",
+        "https://cadence.test/catalog?mode=mission&spacecraft_id=old#ignored",
+        { missionId: "mission-1" },
         "https://cadence.test/missions/mission-1/comms",
       ),
     ).toBe("https://cadence.test/catalog?mode=mission&mission_id=mission-1");
 
-    const wrongMission = {
-      ...catalog,
-      session: {
-        ...catalog.session,
-        context: { ...catalog.session.context, missionId: "mission-2" },
-      },
-    };
-    const fetcher = vi.fn(async () => Response.json(wrongMission));
-
-    await expect(
-      loadPhoenixMissionCatalog(
-        { missionId: "mission-1", catalogUrl: "/catalog" },
-        { fetch: fetcher as typeof fetch },
+    expect(
+      phoenixCatalogUrl(
+        "/catalog",
+        { missionId: "mission-1", spacecraftId: "spacecraft-1" },
+        "https://cadence.test/missions/mission-1/spacecraft/spacecraft-1/applications",
       ),
-    ).rejects.toThrow("not scoped to the active mission");
-  });
-
-  it("fails closed when the selected comms identity is not exact", () => {
-    expect(selectCommsOverviewApplication(catalog)).toBe(catalog.applications[0]);
-    expect(() =>
-      selectCommsOverviewApplication({
-        ...catalog,
-        applications: [
-          {
-            ...catalog.applications[0],
-            surface: { ...catalog.applications[0].surface, actions: ["unexpected_action"] },
-          },
-        ],
-      }),
-    ).toThrow("contract is invalid");
-  });
-
-  it("rejects cross-origin catalogs before sending credentials", () => {
-    expect(() => phoenixCatalogUrl("https://other.test/catalog", "mission-1")).toThrow(
-      "same origin",
-    );
+    ).toBe("/catalog?mission_id=mission-1&spacecraft_id=spacecraft-1");
   });
 });

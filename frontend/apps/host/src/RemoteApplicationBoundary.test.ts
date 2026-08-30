@@ -61,6 +61,8 @@ describe("RemoteApplicationBoundary", () => {
     expect(wrapper.find("#remote-error").exists()).toBe(true);
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
     expect(wrapper.find("#remote-loading").exists()).toBe(false);
+    await wrapper.find("#retry-remote").trigger("click");
+    expect(wrapper.emitted("retry")).toHaveLength(1);
     wrapper.unmount();
   });
 });
