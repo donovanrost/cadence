@@ -3,9 +3,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Applications.HostContext
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
-  alias CadenceWeb.{CommsOverviewPresenter, TestFixtures}
+  alias CadenceWeb.{ApplicationHostCatalog, CommsOverviewPresenter, TestFixtures}
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
@@ -25,6 +26,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     assert federated_html =~ ~s(<div id="cadence-federation-root")
     assert federated_html =~ ~s(data-mission-id="#{mission.mission_id}")
+    assert federated_html =~ ~s(data-application-key="comms_overview")
+    assert federated_html =~ ~s(data-surface-id="overview")
+    assert federated_html =~ ~s(data-fallback-href="/missions/#{mission.mission_id}/comms")
+    refute federated_html =~ ~s(data-spacecraft-id=)
 
     assert federated_html =~
              ~s(data-catalog-url="#{catalog_path(mission.mission_id)}")
@@ -40,6 +45,21 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
       live(member_conn, "/missions/#{mission.mission_id}/comms")
 
     assert has_element?(view, "#comms-overview-component")
+  end
+
+  test "generic shell fallbacks target the existing mission and spacecraft LiveViews" do
+    mission_context = %{host_context: HostContext.mission("mission-1")}
+    spacecraft_context = %{host_context: HostContext.spacecraft("mission-1", "spacecraft-1")}
+
+    assert ApplicationHostCatalog.fallback_href(mission_context, "derived_telemetry", nil) ==
+             "/missions/mission-1/applications/derived_telemetry"
+
+    assert ApplicationHostCatalog.fallback_href(
+             spacecraft_context,
+             "telemetry_decom",
+             "packet_bindings"
+           ) ==
+             "/missions/mission-1/spacecraft/spacecraft-1/applications/telemetry_decom/packet_bindings"
   end
 
   test "the browser-session catalog is server-owned and advertises only Comms overview", %{
