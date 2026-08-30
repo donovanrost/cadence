@@ -65,6 +65,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              "organizationId" => organization.organization_id,
              "missionId" => mission.mission_id,
              "missionName" => mission.display_name,
+             "scope" => "mission",
              "spacecraftId" => nil,
              "spacecraftName" => nil,
              "actor" => %{
@@ -76,6 +77,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert [application] = catalog["applications"]
     assert application["applicationKey"] == "comms_overview"
     assert application["applicationVersion"] == 1
+    assert application["package"] == %{"packageId" => "cadence.comms_overview", "version" => 1}
 
     assert application["surface"] == %{
              "surfaceId" => "overview",
@@ -91,6 +93,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     release = application["release"]
     assert release["federation"] == "module_federation"
+    assert release["remoteName"] == "cadence_comms_overview"
     assert release["exposedModule"] == "./Application"
     assert release["manifestUrl"] =~ ~r{\Ahttps?://}
 
@@ -157,8 +160,13 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         "actor" => %{"displayName" => "Ignored actor", "permissions" => ["admin"]}
       })
 
-    presentation = json_response(query_response, 200)
-    assert presentation == CommsOverviewPresenter.build(scope, mission)
+    presentation = CommsOverviewPresenter.build(scope, mission)
+
+    assert json_response(query_response, 200) == %{
+             "queryVersion" => 1,
+             "presentation" => presentation
+           }
+
     assert Jason.decode!(Jason.encode!(presentation)) == presentation
   end
 

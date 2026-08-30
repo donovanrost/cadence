@@ -62,7 +62,10 @@ defmodule CadenceWeb.ApplicationHostController do
          :ok <- validate_host_mission(conn, mission.mission_id),
          :ok <- validate_request_scope(params, current_scope, mission),
          :ok <- validate_query(params) do
-      json(conn, CommsOverviewPresenter.build(current_scope, mission))
+      json(conn, %{
+        "queryVersion" => 1,
+        "presentation" => CommsOverviewPresenter.build(current_scope, mission)
+      })
     else
       {:error, _reason} ->
         problem(conn, :not_found, "mission_not_found", mission_not_found_message())
@@ -150,6 +153,7 @@ defmodule CadenceWeb.ApplicationHostController do
       "organizationId" => organization_id,
       "missionId" => mission.mission_id,
       "missionName" => mission.display_name,
+      "scope" => "mission",
       "spacecraftId" => nil,
       "spacecraftName" => nil,
       "actor" => %{
@@ -165,7 +169,7 @@ defmodule CadenceWeb.ApplicationHostController do
       "applicationVersion" => 1,
       "displayName" => "Communications Overview",
       "description" => "Review the saved communications setup for a mission.",
-      "package" => %{"packageId" => "cadence.comms-overview", "version" => 1},
+      "package" => %{"packageId" => "cadence.comms_overview", "version" => 1},
       "surface" => %{
         "surfaceId" => "overview",
         "version" => 1,
@@ -180,7 +184,7 @@ defmodule CadenceWeb.ApplicationHostController do
       "release" => %{
         "federation" => "module_federation",
         "releaseId" => "comms-overview-v1",
-        "remoteName" => "comms_overview_v1",
+        "remoteName" => "cadence_comms_overview",
         "manifestUrl" => url(conn, @manifest_path),
         "exposedModule" => "./Application"
       }

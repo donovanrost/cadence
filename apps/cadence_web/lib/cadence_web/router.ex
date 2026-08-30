@@ -26,8 +26,8 @@ defmodule CadenceWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug CadenceWeb.Plugs.FetchBrowserCurrentScope
-    plug CadenceWeb.Plugs.ApplicationHostSession
     plug CadenceWeb.Plugs.RequireApplicationHostScope
+    plug CadenceWeb.Plugs.ApplicationHostSession
   end
 
   pipeline :api do
