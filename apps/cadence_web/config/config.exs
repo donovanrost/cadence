@@ -24,6 +24,12 @@ config :cadence_web, :admin_mode_ttl_seconds, 3_600
 
 config :live_vue, ssr: false, shared_props: []
 
+config :cadence_web, :frontend_release_publication,
+  artifact_store: CadenceWeb.FrontendReleasePublication.LocalArtifactStore,
+  artifact_root: nil,
+  trust_records: [],
+  allowed_origins: []
+
 config :phoenix_vite, PhoenixVite.Npm,
   assets: [args: [], cd: Path.expand("..", __DIR__)],
   vite: [

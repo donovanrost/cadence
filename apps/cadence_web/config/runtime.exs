@@ -206,6 +206,68 @@ case System.get_env("CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES") ||
     end
 end
 
+decode_frontend_release_json = fn env_name, default ->
+  case System.get_env(env_name) do
+    nil ->
+      default
+
+    encoded ->
+      case Jason.decode(encoded) do
+        {:ok, value} when is_list(value) or is_map(value) -> value
+        {:ok, _other} -> raise "#{env_name} must decode to a JSON array or object"
+        {:error, reason} -> raise "#{env_name} is invalid JSON: #{inspect(reason)}"
+      end
+  end
+end
+
+frontend_release_artifact_root = System.get_env("CADENCE_FRONTEND_ARTIFACT_ROOT")
+
+validate_frontend_release_artifact_root = fn
+  root when is_binary(root) and root != "" ->
+    cond do
+      not String.valid?(root) ->
+        {:error, :invalid_utf8}
+
+      String.contains?(root, <<0>>) ->
+        {:error, :nul_byte}
+
+      Path.type(root) != :absolute ->
+        {:error, :not_absolute}
+
+      true ->
+        case File.lstat(root) do
+          {:ok, %File.Stat{type: :directory}} -> :ok
+          {:ok, %File.Stat{type: :symlink}} -> {:error, :symlink}
+          {:ok, _stat} -> {:error, :not_directory}
+          {:error, :enoent} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+    end
+
+  _ ->
+    {:error, :not_configured}
+end
+
+if config_env() == :prod do
+  case validate_frontend_release_artifact_root.(frontend_release_artifact_root) do
+    :ok ->
+      :ok
+
+    {:error, reason} ->
+      raise """
+      CADENCE_FRONTEND_ARTIFACT_ROOT must be an explicit valid absolute local storage root: \
+      #{inspect(reason)}
+      """
+  end
+end
+
+config :cadence_web, :frontend_release_publication,
+  artifact_store: CadenceWeb.FrontendReleasePublication.LocalArtifactStore,
+  artifact_root: frontend_release_artifact_root,
+  trust_records: decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_TRUST_RECORDS_JSON", []),
+  allowed_origins:
+    decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_ALLOWED_ORIGINS_JSON", [])
+
 config :cadence_web,
        :admin_mode_ttl_seconds,
        System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()
