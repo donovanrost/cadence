@@ -282,6 +282,7 @@ export async function terminateProcess(
     gracefulTimeout = CHROME_GRACEFUL_SHUTDOWN_TIMEOUT_MS,
     forceTimeout = CHROME_FORCE_SHUTDOWN_TIMEOUT_MS,
     spawnErrorRef = { value: null },
+    diagnostics,
   } = {},
 ) {
   if (!child || childHasExited(child, spawnErrorRef.value)) return { forced: false };
@@ -296,8 +297,9 @@ export async function terminateProcess(
       await waitForChildExit(child, forceTimeout, "forced Chrome shutdown", spawnErrorRef);
       return { forced: true };
     } catch (forceError) {
+      const detail = typeof diagnostics === "function" ? diagnostics() : diagnostics;
       throw new Error(
-        `Chrome did not exit after graceful and forced shutdown: ${forceError.message}`,
+        `Chrome did not exit after graceful and forced shutdown: ${forceError.message}${detail ? `\n${detail}` : ""}`,
         { cause: gracefulError },
       );
     }
@@ -322,6 +324,8 @@ export async function launchChrome({
   signal,
   spawnImpl = spawn,
   onRuntime,
+  gracefulShutdownTimeout = CHROME_GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+  forceShutdownTimeout = CHROME_FORCE_SHUTDOWN_TIMEOUT_MS,
 } = {}) {
   // Resolve and validate the executable before allocating a profile directory.
   const executable = requireChromeBinary(
@@ -337,6 +341,17 @@ export async function launchChrome({
   let child;
   let closePromise;
   let onSpawnError;
+  let onStdoutData;
+  let onStderrData;
+  let childListenersCleaned = false;
+
+  const cleanupChildListeners = () => {
+    if (childListenersCleaned) return;
+    childListenersCleaned = true;
+    child?.stdout?.removeListener("data", onStdoutData);
+    child?.stderr?.removeListener("data", onStderrData);
+    child?.removeListener("error", onSpawnError);
+  };
 
   const runtime = {
     child: null,
@@ -349,15 +364,20 @@ export async function launchChrome({
         try {
           await spawnReady;
           if (runtime.child) {
-            await terminateProcess(runtime.child, { spawnErrorRef });
+            await terminateProcess(runtime.child, {
+              gracefulTimeout: gracefulShutdownTimeout,
+              forceTimeout: forceShutdownTimeout,
+              spawnErrorRef,
+              diagnostics: () => output.value(),
+            });
             terminated = true;
           } else {
             terminated = true;
           }
         } finally {
           // Never remove the profile until the process has been observed exited.
+          cleanupChildListeners();
           if (terminated) {
-            runtime.child?.removeListener("error", onSpawnError);
             await removeUserDataDir(userDataDir);
           }
         }
@@ -393,8 +413,10 @@ export async function launchChrome({
     } finally {
       spawnReadyResolve();
     }
-    child.stdout?.on("data", (chunk) => output.append(chunk));
-    child.stderr?.on("data", (chunk) => output.append(chunk));
+    onStdoutData = (chunk) => output.append(chunk);
+    onStderrData = (chunk) => output.append(chunk);
+    child.stdout?.on("data", onStdoutData);
+    child.stderr?.on("data", onStderrData);
     onSpawnError = (error) => {
       spawnErrorRef.value = error;
     };
@@ -756,6 +778,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   let sequence = 0;
   let nextGeneration = 0;
   let activeGeneration;
+  const generations = new Map();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
 
   const beginRequestGeneration = (label = "request generation") => {
@@ -765,25 +788,47 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       requestSequence: sequence,
       requestIds: new Set(requests.keys()),
       startedAtMs: Date.now(),
+      causalRequestId: undefined,
+      causalRequestSequence: undefined,
     };
+    generations.set(generation.id, generation);
     activeGeneration = generation.id;
     return generation;
   };
 
-  on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse }) => {
+  const bindRequestGeneration = (generation, request) => {
+    const generationId = typeof generation === "object" ? generation.id : generation;
+    const current = generations.get(generationId);
+    assert.ok(current, "request generation is not owned by these diagnostics");
+    assert.equal(request?.generation, generationId, "causal request belongs to another generation");
+    assert.ok(request?.requestId, "causal request has no request id");
+    current.causalRequestId = request.requestId;
+    current.causalRequestSequence = request.sequence;
+    for (const socket of webSockets.values()) {
+      if (socket.generation === generationId && socket.boundToRequest === true) {
+        socket.causalRequestId = request.requestId;
+      }
+    }
+    return current;
+  };
+
+  on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse, frameId, loaderId }) => {
     const prior = requests.get(requestId);
+    const responseOnly = prior?.method === "?";
     const redirects = prior?.redirects || [];
     if (redirectResponse) redirects.push({ status: redirectResponse.status, url: redirectResponse.url });
     const record = {
       requestId,
-      sequence: ++sequence,
-      startedAtMs: Date.now(),
+      sequence: responseOnly ? prior.sequence : ++sequence,
+      startedAtMs: responseOnly ? prior.startedAtMs : Date.now(),
       generation: prior?.generation ?? activeGeneration,
       method: request.method,
       url: request.url,
       request,
       postData: request.postData,
-      response: undefined,
+      frameId: frameId || prior?.frameId,
+      loaderId: loaderId || prior?.loaderId,
+      response: responseOnly ? prior.response : undefined,
       resourceType: type,
       redirects,
       webSocket: type === "WebSocket",
@@ -793,28 +838,42 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     };
     requests.set(requestId, record);
     const socket = webSockets.get(requestId);
-    if (socket) {
+    const sameObservedGeneration =
+      socket?.observedGeneration !== undefined && socket.observedGeneration === record.generation;
+    // Chrome may deliver webSocketCreated before requestWillBeSent. Bind that
+    // ordering only when both observations are in the same generation; a
+    // socket observed before the boundary is never upgraded by delayed events.
+    if (socket?.boundToRequest === true || sameObservedGeneration) {
       socket.generation = record.generation;
       socket.sequence = record.sequence;
+      socket.boundToRequest = true;
+      socket.causalRequestId = generations.get(record.generation)?.causalRequestId;
     }
   });
 
-  on("Network.responseReceived", ({ requestId, response, type }) => {
-    const record = requests.get(requestId) || {
+  on("Network.responseReceived", ({ requestId, response, type, frameId, loaderId }) => {
+    const requestRecord = requests.get(requestId);
+    const record = requestRecord || {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
       method: "?",
       url: response.url,
       request: {},
+      frameId,
+      loaderId,
       redirects: [],
-      generation: activeGeneration,
+      // A response without its request is not causally attributable to the
+      // active generation.  A later requestWillBeSent event may bind it.
+      generation: undefined,
       webSocket: type === "WebSocket",
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(response.url),
     };
     record.response = response;
+    record.frameId ||= frameId;
+    record.loaderId ||= loaderId;
     record.resourceType = type || record.resourceType;
     if (type === "WebSocket") record.webSocket = true;
     requests.set(requestId, record);
@@ -838,33 +897,73 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   });
 
   on("Network.webSocketCreated", ({ requestId, url }) => {
+    const requestRecord = requests.get(requestId);
+    const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
+    const observedGeneration = boundRequest?.generation ?? activeGeneration;
+    const generation = generations.get(observedGeneration);
     webSockets.set(requestId, {
       requestId,
       url,
-      generation: requests.get(requestId)?.generation ?? activeGeneration,
-      sequence: requests.get(requestId)?.sequence,
+      generation: boundRequest?.generation,
+      sequence: boundRequest?.sequence,
+      boundToRequest: Boolean(boundRequest),
+      observedGeneration,
+      observedSequence: boundRequest?.sequence ?? sequence,
+      causalRequestId: generation?.causalRequestId,
       handshake: undefined,
       error: undefined,
     });
   });
 
   on("Network.webSocketWillSendHandshakeRequest", ({ requestId, request }) => {
+    const requestRecord = requests.get(requestId);
+    const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
+    const observedGeneration = boundRequest?.generation ?? activeGeneration;
+    const generation = generations.get(observedGeneration);
     const socket = webSockets.get(requestId) || {
       requestId,
       url: request.url,
-      generation: requests.get(requestId)?.generation ?? activeGeneration,
-      sequence: requests.get(requestId)?.sequence,
+      generation: boundRequest?.generation,
+      sequence: boundRequest?.sequence,
+      boundToRequest: Boolean(boundRequest),
+      observedGeneration,
+      observedSequence: boundRequest?.sequence ?? sequence,
+      causalRequestId: generation?.causalRequestId,
     };
     socket.handshakeRequest = request;
+    if (
+      socket.boundToRequest !== true &&
+      socket.observedGeneration !== undefined &&
+      socket.observedGeneration === activeGeneration &&
+      generation?.causalRequestId !== undefined &&
+      socket.observedSequence >= generation.causalRequestSequence
+    ) {
+      // Chrome may omit Network.requestWillBeSent for a websocket. The
+      // handshake request is the causal network event, but only its original
+      // generation may bind the socket; delayed pre-generation events stay
+      // unbound.
+      socket.generation = activeGeneration;
+      socket.boundToRequest = true;
+      socket.boundByHandshake = true;
+      socket.causalRequestId = generation?.causalRequestId;
+    }
     webSockets.set(requestId, socket);
   });
 
   on("Network.webSocketHandshakeResponseReceived", ({ requestId, response }) => {
+    const requestRecord = requests.get(requestId);
+    const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
+    const observedGeneration = boundRequest?.generation ?? activeGeneration;
+    const generation = generations.get(observedGeneration);
     const socket = webSockets.get(requestId) || {
       requestId,
       url: response.url,
-      generation: requests.get(requestId)?.generation ?? activeGeneration,
-      sequence: requests.get(requestId)?.sequence,
+      generation: boundRequest?.generation,
+      sequence: boundRequest?.sequence,
+      boundToRequest: Boolean(boundRequest),
+      observedGeneration,
+      observedSequence: boundRequest?.sequence ?? sequence,
+      causalRequestId: generation?.causalRequestId,
     };
     socket.handshake = response;
     webSockets.set(requestId, socket);
@@ -916,6 +1015,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return failures.length ? `${stage} browser diagnostics failed:\n${failures.join("\n")}` : null;
   };
 
+  const requestForGeneration = (generation, predicate = () => true) =>
+    [...requests.values()]
+      .filter((record) => matchesRequestGeneration(record, generation) && predicate(record))
+      .sort((left, right) => left.sequence - right.sequence)
+      .at(-1);
+
   return {
     requests,
     consoleErrors,
@@ -925,6 +1030,25 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     webSockets,
     webSocketFailures,
     beginRequestGeneration,
+    bindRequestGeneration,
+    requestForGeneration,
+    async waitForRequest(generation, predicate, label, { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {}) {
+      const existing = requestForGeneration(generation, predicate);
+      if (existing) return existing;
+
+      const event = await client.waitForEvent(
+        "Network.requestWillBeSent",
+        ({ requestId }) => {
+          const record = requests.get(requestId);
+          return Boolean(record && matchesRequestGeneration(record, generation) && predicate(record));
+        },
+        timeout,
+        signal,
+      );
+      const record = requests.get(event.requestId);
+      if (!record) throw new Error(`${label} request was not recorded`);
+      return record;
+    },
     completed(predicate, { generation } = {}) {
       return [...requests.values()]
         .filter((record) =>
@@ -959,6 +1083,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
               requestId: socket.requestId,
               url: socket.url,
               generation: socket.generation,
+              boundToRequest: socket.boundToRequest,
+              boundByHandshake: socket.boundByHandshake,
+              observedSequence: socket.observedSequence,
+              causalRequestId: socket.causalRequestId,
               status: socket.handshake?.status,
               closed: socket.closed,
               error: socket.error,
@@ -969,6 +1097,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
               method: record.method,
               url: record.url,
               postData: record.postData,
+              frameId: record.frameId,
+              loaderId: record.loaderId,
               status: record.response?.status,
               resourceType: record.resourceType,
               redirects: record.redirects,
@@ -996,14 +1126,22 @@ export function assertLiveViewWebSocket(
     ["http:", "https:"].includes(normalizedExpectedOrigin.protocol),
     `LiveView expected origin must use HTTP(S), got ${normalizedExpectedOrigin.protocol}`,
   );
+  const requiresCausalGeneration = generation && typeof generation === "object";
+  const causalRequestId = requiresCausalGeneration ? generation.causalRequestId : undefined;
+  const causalRequestSequence = requiresCausalGeneration ? generation.causalRequestSequence : undefined;
   const liveViewSockets = [...webSockets.values()].filter((socket) => {
     try {
       const url = new URL(socket.url);
       return (
         ["ws:", "wss:"].includes(url.protocol) &&
         url.pathname === "/live/websocket" &&
+        socket.boundToRequest === true &&
         !beforeRequestIds.has(socket.requestId) &&
-        matchesRequestGeneration(socket, generation)
+        matchesRequestGeneration(socket, generation) &&
+        (!requiresCausalGeneration ||
+          (causalRequestId !== undefined &&
+            socket.causalRequestId === causalRequestId &&
+            socket.observedSequence >= causalRequestSequence))
       );
     } catch {
       return false;
@@ -1015,6 +1153,11 @@ export function assertLiveViewWebSocket(
       [...webSockets.values()].map((socket) => ({
         requestId: socket.requestId,
         generation: socket.generation,
+        observedGeneration: socket.observedGeneration,
+        sequence: socket.sequence,
+        boundToRequest: socket.boundToRequest,
+        observedSequence: socket.observedSequence,
+        causalRequestId: socket.causalRequestId,
         url: socket.url,
         closed: socket.closed,
       })),
@@ -1259,6 +1402,140 @@ export function requirePostActionRefresh(
   return fresh[fresh.length - 1];
 }
 
+export async function waitForPageNavigation(
+  client,
+  operation,
+  { signal, label = "page navigation", timeout = CDP_EVENT_TIMEOUT_MS } = {},
+) {
+  const events = [];
+  let eventSequence = 0;
+  let resultReady = false;
+  let result;
+  let exactFrame;
+  let exactLoad;
+  let exactLifecycleLoad;
+  let resolveCompletion;
+  let rejectCompletion;
+  let settled = false;
+  const completion = new Promise((resolve, reject) => {
+    resolveCompletion = resolve;
+    rejectCompletion = reject;
+  });
+  completion.catch(() => {});
+
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    resolveCompletion(value);
+  };
+  const maybeFinish = () => {
+    if (!resultReady || !exactFrame || !exactLoad || !exactLifecycleLoad) return;
+    finish({ result, frame: exactFrame.frame, load: exactLoad.params });
+  };
+  const loadMatchesLifecycle = (event) => {
+    const loadTimestamp = event.params?.timestamp;
+    const lifecycleTimestamp = exactLifecycleLoad?.params?.timestamp;
+    return (
+      typeof loadTimestamp === "number" &&
+      typeof lifecycleTimestamp === "number" &&
+      loadTimestamp === lifecycleTimestamp
+    );
+  };
+  const considerFrame = (event) => {
+    if (!resultReady || exactFrame || !event.params?.frame) return;
+    const frame = event.params.frame;
+    if (
+      frame.parentId ||
+      frame.id !== result.frameId ||
+      frame.loaderId !== result.loaderId
+    ) return;
+    exactFrame = { ...event, frame };
+    maybeFinish();
+  };
+  const considerLoad = (event) => {
+    if (
+      !resultReady ||
+      exactLoad ||
+      !exactFrame ||
+      !exactLifecycleLoad ||
+      event.sequence <= exactFrame.sequence ||
+      !loadMatchesLifecycle(event)
+    ) return;
+    if (event.params?.frameId !== undefined && event.params.frameId !== result.frameId) return;
+    exactLoad = event;
+    maybeFinish();
+  };
+  const considerLifecycle = (event) => {
+    const params = event.params;
+    if (
+      !resultReady ||
+      exactLifecycleLoad ||
+      !exactFrame ||
+      event.sequence <= exactFrame.sequence ||
+      params?.name !== "load" ||
+      params?.frameId !== result.frameId ||
+      params?.loaderId !== result.loaderId
+    ) return;
+    exactLifecycleLoad = event;
+    for (const candidate of events) {
+      if (candidate.kind === "load") considerLoad(candidate);
+    }
+    maybeFinish();
+  };
+  const onFrameNavigated = (params) => {
+    const event = { kind: "frame", params, sequence: ++eventSequence };
+    events.push(event);
+    considerFrame(event);
+  };
+  const onLoadEventFired = (params) => {
+    const event = { kind: "load", params, sequence: ++eventSequence };
+    events.push(event);
+    considerLoad(event);
+  };
+  const onLifecycleEvent = (params) => {
+    const event = { kind: "lifecycle", params, sequence: ++eventSequence };
+    events.push(event);
+    considerLifecycle(event);
+  };
+
+  const frameOff = client.on("Page.frameNavigated", onFrameNavigated);
+  const loadOff = client.on("Page.loadEventFired", onLoadEventFired);
+  const lifecycleOff = client.on("Page.lifecycleEvent", onLifecycleEvent);
+
+  try {
+    const operationPromise = Promise.resolve().then(operation);
+    operationPromise.catch(() => {});
+    result = await raceWithSignalAndTimeout(operationPromise, {
+      signal,
+      milliseconds: CDP_COMMAND_TIMEOUT_MS,
+      label: `${label} command`,
+    });
+    assert.ok(!result?.errorText, `${label} failed: ${result?.errorText || "unknown error"}`);
+    assert.equal(typeof result?.frameId, "string", `${label} did not return a frame id`);
+    assert.equal(typeof result?.loaderId, "string", `${label} did not return a loader id`);
+    resultReady = true;
+    for (const event of [...events]) {
+      if (event.kind === "frame") considerFrame(event);
+      if (event.kind === "load") considerLoad(event);
+      if (event.kind === "lifecycle") considerLifecycle(event);
+    }
+    maybeFinish();
+    const completed = await raceWithSignalAndTimeout(completion, {
+      signal,
+      milliseconds: timeout,
+      label: `${label} completion`,
+    });
+    return completed;
+  } catch (error) {
+    rejectCompletion(error);
+    throw error;
+  } finally {
+    frameOff?.();
+    loadOff?.();
+    lifecycleOff?.();
+  }
+}
+
 export async function navigate(
   client,
   url,
@@ -1273,20 +1550,24 @@ export async function navigate(
   if (signal?.aborted) onAbort();
   const navigationSignal = navigationController.signal;
 
-  // Both listeners are installed before Page.navigate so a fast redirect cannot
-  // satisfy the document assertion with an event from the previous page.
   try {
-    const frameNavigation = client.waitForEvent(
-      "Page.frameNavigated",
-      ({ frame }) => !frame.parentId,
-      CDP_EVENT_TIMEOUT_MS,
-      navigationSignal,
+    const navigation = await waitForPageNavigation(
+      client,
+      () => client.send("Page.navigate", { url: target.href }, CDP_COMMAND_TIMEOUT_MS, navigationSignal),
+      { signal: navigationSignal, label: `navigation to ${target.href}` },
     );
-    const loadEvent = client.once("Page.loadEventFired", CDP_EVENT_TIMEOUT_MS, navigationSignal);
-    const result = await client.send("Page.navigate", { url: target.href }, CDP_COMMAND_TIMEOUT_MS, navigationSignal);
-    assert.ok(!result?.errorText, `Page.navigate failed: ${result?.errorText || "unknown error"}`);
-    const frame = await frameNavigation;
-    await loadEvent;
+    const { result, frame } = navigation;
+    if (diagnostics) {
+      await diagnostics.waitForRequest(
+        generation,
+        (record) =>
+          record.resourceType === "Document" &&
+          record.frameId === result.frameId &&
+          record.loaderId === result.loaderId,
+        `navigation to ${target.href}`,
+        { signal: navigationSignal },
+      );
+    }
     const documentState = await evaluate(
       client,
       "({href: location.href, origin: location.origin, readyState: document.readyState, hasBody: document.body !== null})",
@@ -1298,7 +1579,7 @@ export async function navigate(
     if (expectedPath) assert.equal(new URL(documentState.href).pathname, expectedPath, "resulting document path changed");
     assert.equal(documentState.readyState, "complete", "resulting document did not load");
     assert.equal(documentState.hasBody, true, "resulting document has no body");
-    assertHttpUrl(frame.frame.url, expectedOrigin, "frame navigation URL");
+    assertHttpUrl(frame.url, expectedOrigin, "frame navigation URL");
     return generation;
   } finally {
     signal?.removeEventListener("abort", onAbort);
@@ -1323,13 +1604,25 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
   const submissionSignal = submissionController.signal;
   const generation = diagnostics?.beginRequestGeneration("authenticated sign-in");
   try {
-    const frameNavigation = client.waitForEvent(
-      "Page.frameNavigated",
-      ({ frame }) => !frame.parentId,
-      CDP_EVENT_TIMEOUT_MS,
-      submissionSignal,
+    const navigationRequest = diagnostics?.waitForRequest(
+      generation,
+      (record) =>
+        record.resourceType === "Document" &&
+        record.method === "POST" &&
+        record.frameId &&
+        record.loaderId &&
+        new URL(record.url).origin === expectedOrigin,
+      "authenticated sign-in navigation",
+      { signal: submissionSignal },
     );
-    const loadEvent = client.once("Page.loadEventFired", CDP_EVENT_TIMEOUT_MS, submissionSignal);
+    const navigation = waitForPageNavigation(
+      client,
+      async () => {
+        const request = await navigationRequest;
+        return { frameId: request.frameId, loaderId: request.loaderId };
+      },
+      { signal: submissionSignal, label: "authenticated sign-in navigation" },
+    );
     const result = await evaluate(
       client,
       `(() => {
@@ -1348,8 +1641,9 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
       { signal: submissionSignal },
     );
     assert.equal(result, true, "sign-in form was not submitted");
-    await frameNavigation;
-    await loadEvent;
+    const authenticatedRequest = await navigationRequest;
+    await navigation;
+    diagnostics?.bindRequestGeneration(generation, authenticatedRequest);
     const state = await evaluate(client, "({href: location.href, origin: location.origin})", "authenticated redirect", { signal: submissionSignal });
     assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
     assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
@@ -1910,6 +2204,12 @@ export async function runBrowserGate(
     state.page = await createPageImpl(state.runtime.endpoint, "about:blank", { signal: controller.signal });
     state.client = createClientImpl(state.page.webSocketDebuggerUrl);
     await state.client.send("Page.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
+    await state.client.send(
+      "Page.setLifecycleEventsEnabled",
+      { enabled: true },
+      CDP_COMMAND_TIMEOUT_MS,
+      controller.signal,
+    );
     await state.client.send("Runtime.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
     await state.client.send("Network.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
     await state.client.send(

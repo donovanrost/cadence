@@ -16,6 +16,7 @@ import {
   reserveLoopbackPort,
   redactText,
   resolveChromeBinary,
+  waitForPageNavigation,
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
 
@@ -319,6 +320,9 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
   const connected = {
     requestId: "live-ws-1",
     generation: 2,
+    boundToRequest: true,
+    causalRequestId: "auth-request",
+    observedSequence: 1,
     url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
     handshakeRequest: { headers: { Origin: origin } },
     handshake: { status: 101 },
@@ -337,9 +341,23 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
   assert.equal(
     assertLiveViewWebSocket(diagnostics, origin, {
       beforeRequestIds: new Set(["live-ws-old"]),
-      generation: { id: 2 },
+      generation: { id: 2, causalRequestId: "auth-request", causalRequestSequence: 1 },
     }),
     connected,
+  );
+  const secureConnected = {
+    ...connected,
+    requestId: "live-wss-1",
+    url: `${origin.replace("http:", "wss:")}/live/websocket?vsn=2.0.0`,
+    handshakeRequest: { headers: { Origin: origin.replace("http:", "https:") } },
+  };
+  assert.equal(
+    assertLiveViewWebSocket(
+      { ...diagnostics, webSockets: new Map([[secureConnected.requestId, secureConnected]]) },
+      origin.replace("http:", "https:"),
+      { generation: { id: 2, causalRequestId: "auth-request", causalRequestSequence: 1 } },
+    ),
+    secureConnected,
   );
 
   for (const invalid of [
@@ -370,6 +388,123 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
     () => assertLiveViewWebSocket({ ...diagnostics, webSocketFailures: ["origin rejected"] }, origin),
     /websocket transport failed/,
   );
+});
+
+test("delayed websocket events without a request-boundary record fail closed", () => {
+  const listeners = new Map();
+  const client = {
+    on(method, listener) {
+      const methodListeners = listeners.get(method) || new Set();
+      methodListeners.add(listener);
+      listeners.set(method, methodListeners);
+      return () => methodListeners.delete(listener);
+    },
+    emit(method, event) {
+      for (const listener of listeners.get(method) || []) listener(event);
+    },
+  };
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const requestId = "delayed-live-ws";
+  const url = `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`;
+  const responseOnlySocketId = "delayed-live-ws-response-only";
+
+  // The socket was observed before the authenticated generation boundary, but
+  // its queued events are delivered after that boundary.
+  client.emit("Network.webSocketCreated", { requestId, url });
+  client.emit("Network.responseReceived", {
+    requestId: responseOnlySocketId,
+    response: { url, status: 101 },
+    type: "WebSocket",
+  });
+  client.emit("Network.webSocketCreated", { requestId: responseOnlySocketId, url });
+  const generation = diagnostics.beginRequestGeneration("authenticated sign-in");
+  client.emit("Network.webSocketWillSendHandshakeRequest", {
+    requestId,
+    request: { url, headers: { Origin: origin } },
+  });
+  client.emit("Network.webSocketHandshakeResponseReceived", {
+    requestId,
+    response: { url, status: 101 },
+  });
+
+  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
+  assert.throws(
+    () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
+    /did not create a websocket transport/,
+  );
+
+  client.emit("Network.requestWillBeSent", {
+    requestId,
+    request: { url, method: "GET", headers: {} },
+    type: "WebSocket",
+  });
+  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
+  assert.throws(
+    () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
+    /did not create a websocket transport/,
+  );
+  client.emit("Network.requestWillBeSent", {
+    requestId: responseOnlySocketId,
+    request: { url, method: "GET", headers: {} },
+    type: "WebSocket",
+  });
+  assert.equal(diagnostics.webSockets.get(responseOnlySocketId).boundToRequest, false);
+
+  // A socket first observed after the generation boundary is also not enough:
+  // it must follow the exact authenticated navigation request.
+  const observedOnlyId = "observed-after-boundary-only";
+  client.emit("Network.webSocketCreated", { requestId: observedOnlyId, url });
+  client.emit("Network.webSocketWillSendHandshakeRequest", {
+    requestId: observedOnlyId,
+    request: { url, headers: { Origin: origin } },
+  });
+  client.emit("Network.webSocketHandshakeResponseReceived", {
+    requestId: observedOnlyId,
+    response: { url, status: 101 },
+  });
+  assert.equal(diagnostics.webSockets.get(observedOnlyId).boundToRequest, false);
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "auth-request",
+    request: { url: `${origin}/users/log_in`, method: "POST", headers: {} },
+    type: "Document",
+    frameId: "main-frame",
+    loaderId: "auth-loader",
+  });
+  const authRequest = diagnostics.requests.get("auth-request");
+  diagnostics.bindRequestGeneration(generation, authRequest);
+  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
+  assert.equal(diagnostics.webSockets.get(observedOnlyId).boundToRequest, false);
+
+  const boundRequestId = "causally-bound-live-ws";
+  client.emit("Network.webSocketCreated", { requestId: boundRequestId, url });
+  client.emit("Network.webSocketWillSendHandshakeRequest", {
+    requestId: boundRequestId,
+    request: { url, headers: { Origin: origin } },
+  });
+  client.emit("Network.webSocketHandshakeResponseReceived", {
+    requestId: boundRequestId,
+    response: { url, status: 101 },
+  });
+  assert.equal(diagnostics.webSockets.get(boundRequestId).boundToRequest, true);
+  assert.equal(
+    assertLiveViewWebSocket(diagnostics, origin, { generation }).requestId,
+    boundRequestId,
+  );
+
+  const responseOnlyId = "delayed-response-without-request";
+  client.emit("Network.responseReceived", {
+    requestId: responseOnlyId,
+    response: { url: `${origin}/api/current-generation`, status: 200 },
+    type: "XHR",
+  });
+  client.emit("Network.loadingFinished", { requestId: responseOnlyId });
+  assert.deepEqual(
+    diagnostics.completed(() => true, { generation }),
+    [],
+    "response without a causally bound request was admitted to the generation",
+  );
+  diagnostics.dispose();
 });
 
 test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
@@ -403,6 +538,74 @@ test("waitForResponse selects the newest completed response in the requested gen
   const result = await waitForResponse(diagnostics, () => true, "duplicate query", { generation });
   assert.equal(result.requestId, "query-newest");
   assert.deepEqual(seenOptions, [{ generation }]);
+});
+
+test("navigation completion discards queued prior-page events and requires the exact loader", async () => {
+  const listeners = new Map();
+  const client = {
+    on(method, listener) {
+      const methodListeners = listeners.get(method) || new Set();
+      methodListeners.add(listener);
+      listeners.set(method, methodListeners);
+      return () => methodListeners.delete(listener);
+    },
+    emit(method, event) {
+      for (const listener of listeners.get(method) || []) listener(event);
+    },
+  };
+  const oldFrame = { id: "frame-1", loaderId: "loader-old", url: `${origin}/old` };
+  const currentFrame = { id: "frame-1", loaderId: "loader-new", url: `${origin}/current` };
+
+  const completed = await waitForPageNavigation(
+    client,
+    async () => {
+      client.emit("Page.frameNavigated", { frame: oldFrame });
+      client.emit("Page.loadEventFired", { timestamp: 1 });
+      client.emit("Page.lifecycleEvent", {
+        frameId: oldFrame.id,
+        loaderId: oldFrame.loaderId,
+        name: "load",
+        timestamp: 1,
+      });
+      await Promise.resolve();
+      client.emit("Page.frameNavigated", { frame: currentFrame });
+      // Page.loadEventFired has no loader/frame provenance. A queued old-page
+      // event after the new frame must not satisfy this navigation.
+      client.emit("Page.loadEventFired", { timestamp: 1 });
+      client.emit("Page.lifecycleEvent", {
+        frameId: currentFrame.id,
+        loaderId: currentFrame.loaderId,
+        name: "load",
+        timestamp: 2,
+      });
+      client.emit("Page.loadEventFired", { frameId: currentFrame.id, timestamp: 2 });
+      return { frameId: currentFrame.id, loaderId: currentFrame.loaderId };
+    },
+    { timeout: 100 },
+  );
+
+  assert.equal(completed.result.loaderId, "loader-new");
+  assert.equal(completed.frame.loaderId, "loader-new");
+  assert.equal(completed.load.frameId, "frame-1");
+
+  await assert.rejects(
+    waitForPageNavigation(
+      client,
+      async () => {
+        client.emit("Page.frameNavigated", { frame: oldFrame });
+        client.emit("Page.loadEventFired", {});
+        client.emit("Page.lifecycleEvent", {
+          frameId: oldFrame.id,
+          loaderId: oldFrame.loaderId,
+          name: "load",
+          timestamp: 1,
+        });
+        return { frameId: oldFrame.id, loaderId: "loader-new" };
+      },
+      { timeout: 10 },
+    ),
+    /completion timed out/,
+  );
 });
 
 test("raw CDP target creation is abortable and time-bounded", async () => {

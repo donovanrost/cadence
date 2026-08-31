@@ -35,6 +35,46 @@ test("graceful and forced child-exit timeouts remove every exit and error waiter
   assert.equal(child.listenerCount("error"), 0, "child exit timeout left an error listener");
 });
 
+test("launchChrome removes owned output and child listeners when process death is unproven", async () => {
+  const fake = await fixture("sleep 30");
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.signalCode = null;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => true;
+  let runtime;
+
+  try {
+    runtime = await launchChrome({
+      binary: fake.path,
+      spawnImpl: () => {
+        queueMicrotask(() => child.stdout.write("DevTools listening on ws://127.0.0.1:9/devtools/browser/fake\n"));
+        return child;
+      },
+      gracefulShutdownTimeout: 5,
+      forceShutdownTimeout: 5,
+    });
+    const profile = runtime.userDataDir;
+
+    await assert.rejects(runtime.close(), /graceful and forced shutdown/);
+    assert.equal(child.stdout.listenerCount("data"), 0, "Chrome stdout listener survived timeout");
+    assert.equal(child.stderr.listenerCount("data"), 0, "Chrome stderr listener survived timeout");
+    assert.equal(child.listenerCount("error"), 0, "Chrome error listener survived timeout");
+    await assert.doesNotReject(async () => readdir(profile));
+    await rm(profile, { recursive: true, force: true });
+    child.stdout.destroy();
+    child.stderr.destroy();
+  } finally {
+    child.stdout.destroy();
+    child.stderr.destroy();
+    if (runtime?.userDataDir) {
+      await rm(runtime.userDataDir, { recursive: true, force: true });
+    }
+    await rm(fake.directory, { recursive: true, force: true });
+  }
+});
+
 function assertSecretStreamStopped(stream) {
   assert.equal(stream.listenerCount("data"), 0, "secret reader left a data listener active");
   assert.equal(stream.listenerCount("end"), 0, "secret reader left an end listener active");
