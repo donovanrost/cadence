@@ -32,6 +32,7 @@ defmodule CadenceWeb.Endpoint do
 
   plug Plug.Session, @session_options
   plug Plug.MethodOverride
+  plug CadenceWeb.Plugs.PreserveRequestMethod
   plug Plug.Head
   plug CadenceWeb.Router
 end

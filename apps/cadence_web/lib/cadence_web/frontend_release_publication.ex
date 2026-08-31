@@ -19,6 +19,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
     CatalogPublication,
     DatabaseArtifactStore,
     ReleaseArtifact,
+    ReleaseObject,
     ReleasePublication
   }
 
@@ -60,6 +61,17 @@ defmodule CadenceWeb.FrontendReleasePublication do
       %ReleasePublication{} = row -> {:ok, Repo.preload(row, :artifacts)}
     end
   end
+
+  @spec fetch_artifact(binary(), binary(), binary()) ::
+          {:ok, map()} | {:error, :not_found}
+  def fetch_artifact(application_id, release_id, path)
+      when is_binary(application_id) and is_binary(release_id) and is_binary(path) do
+    if valid_artifact_lookup?(application_id, release_id, path),
+      do: fetch_valid_artifact(application_id, release_id, path),
+      else: {:error, :not_found}
+  end
+
+  def fetch_artifact(_application_id, _release_id, _path), do: {:error, :not_found}
 
   @spec fetch_catalog(pos_integer()) :: {:ok, CatalogPublication.t()} | {:error, :not_found}
   def fetch_catalog(sequence) when is_integer(sequence) and sequence > 0 do
@@ -635,6 +647,61 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   defp normalize_transaction_result({:ok, row}), do: {:ok, row}
   defp normalize_transaction_result({:error, reason}), do: {:error, reason}
+
+  defp valid_artifact_lookup?(application_id, release_id, path) do
+    valid_identifier?(application_id) and valid_release_id?(release_id) and
+      valid_artifact_path?(path)
+  end
+
+  defp fetch_valid_artifact(application_id, release_id, path) do
+    case Repo.one(artifact_lookup_query(application_id, release_id, path)) do
+      nil -> {:error, :not_found}
+      artifact -> validate_artifact_lookup(artifact)
+    end
+  end
+
+  defp artifact_lookup_query(application_id, release_id, path) do
+    from(publication in ReleasePublication,
+      join: artifact in ReleaseArtifact,
+      on:
+        artifact.release_publication_id == publication.publication_id and
+          artifact.release_id == publication.release_id,
+      join: object in ReleaseObject,
+      on: object.sha256 == artifact.sha256,
+      where:
+        publication.application_id == ^application_id and
+          publication.release_id == ^release_id and
+          publication.acceptance_state == "accepted" and
+          artifact.path == ^path and
+          artifact.size == object.size,
+      select: %{
+        digest: artifact.object_key,
+        sha256: object.sha256,
+        size: artifact.size,
+        media_type: artifact.media_type
+      }
+    )
+  end
+
+  defp validate_artifact_lookup(%{digest: digest, sha256: sha256} = artifact) do
+    if digest == "sha256:" <> sha256, do: {:ok, artifact}, else: {:error, :not_found}
+  end
+
+  defp validate_artifact_lookup(_artifact), do: {:error, :not_found}
+
+  defp valid_identifier?(value) do
+    byte_size(value) <= 128 and String.valid?(value) and
+      Regex.match?(~r/^[a-z][a-z0-9._-]{0,127}$/, value)
+  end
+
+  defp valid_release_id?(value),
+    do: String.valid?(value) and Regex.match?(~r/^sha256:[0-9a-f]{64}$/, value)
+
+  defp valid_artifact_path?(value) do
+    byte_size(value) > 0 and byte_size(value) <= 256 and String.valid?(value) and
+      not String.starts_with?(value, "/") and not String.contains?(value, "\\") and
+      Enum.all?(String.split(value, "/"), &(&1 not in ["", ".", ".."]))
+  end
 
   defp insert_or_rollback(changeset) do
     case Repo.insert(changeset) do

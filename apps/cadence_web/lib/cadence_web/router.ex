@@ -43,6 +43,18 @@ defmodule CadenceWeb.Router do
     plug CadenceWeb.Plugs.RequireCurrentScope
   end
 
+  pipeline :frontend_release_artifact do
+    plug :put_secure_browser_headers
+  end
+
+  scope "/", CadenceWeb do
+    pipe_through :frontend_release_artifact
+
+    get "/releases/:application_id/:release_id/artifacts/*artifact_path",
+        FrontendReleaseArtifactController,
+        :show
+  end
+
   scope "/", CadenceWeb do
     pipe_through [:browser, :redirect_if_authenticated_scope]
 
