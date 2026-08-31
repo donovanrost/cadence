@@ -35,7 +35,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
          {:ok, verified} <- verify_release(document_bytes, opts),
          {:ok, artifact_bytes} <- normalize_artifact_inputs(artifact_input),
          {:ok, artifact_specs} <- validate_artifact_bytes(verified.release, artifact_bytes) do
-      persist_release(verified, document_bytes, artifact_specs)
+      persist_release(verified, document_bytes, artifact_specs, opts)
     end
   end
 
@@ -43,6 +43,12 @@ defmodule CadenceWeb.FrontendReleasePublication do
           {:ok, ReleasePublication.t()} | {:error, term()}
   def publish_release(document, artifact_input, opts \\ []),
     do: admit_release(document, artifact_input, opts)
+
+  @spec publish_release_with_outcome(binary() | map(), artifact_input(), keyword()) ::
+          {:ok, ReleasePublication.t(), :created | :replayed} | {:error, term()}
+  def publish_release_with_outcome(document, artifact_input, opts \\ []) when is_list(opts) do
+    admit_release(document, artifact_input, Keyword.put(opts, :return_outcome, true))
+  end
 
   @spec admit_catalog(binary() | map(), keyword()) ::
           {:ok, CatalogPublication.t()} | {:error, term()}
@@ -107,7 +113,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
     )
   end
 
-  defp persist_release(verified, document_bytes, artifact_specs) do
+  defp persist_release(verified, document_bytes, artifact_specs, opts) do
     release = verified.release
     release_id = release["releaseId"]
 
@@ -121,7 +127,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
               locked_release_by_identity(release_id),
               verified,
               document_bytes,
-              stored_artifacts
+              stored_artifacts,
+              opts
             )
 
           {:error, reason} ->
@@ -129,10 +136,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
         end
       end)
 
-    normalize_transaction_result(transaction_result)
+    normalize_transaction_result(transaction_result, Keyword.get(opts, :return_outcome, false))
   end
 
-  defp persist_new_release(verified, document_bytes, stored_artifacts) do
+  defp persist_new_release(verified, document_bytes, stored_artifacts, opts) do
     release = verified.release
     release_id = release["releaseId"]
 
@@ -150,7 +157,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
       Repo.rollback(error(:release_document_conflict, "$.payload.releaseId"))
     end
 
-    attrs = release_publication_attrs(verified, document_bytes)
+    attrs = release_publication_attrs(verified, document_bytes, opts)
 
     case Repo.insert(ReleasePublication.changeset(attrs)) do
       {:ok, row} ->
@@ -168,12 +175,12 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp persist_locked_release(nil, verified, document_bytes, stored_artifacts),
-    do: persist_new_release(verified, document_bytes, stored_artifacts)
+  defp persist_locked_release(nil, verified, document_bytes, stored_artifacts, opts),
+    do: {:created, persist_new_release(verified, document_bytes, stored_artifacts, opts)}
 
-  defp persist_locked_release(existing, verified, document_bytes, _stored_artifacts) do
+  defp persist_locked_release(existing, verified, document_bytes, _stored_artifacts, _opts) do
     if exact_release_retry?(existing, verified, document_bytes) do
-      Repo.preload(existing, :artifacts)
+      {:replayed, Repo.preload(existing, :artifacts)}
     else
       Repo.rollback(error(:release_identity_fork, "$.payload.releaseId"))
     end
@@ -366,7 +373,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
       existing.signed_document_digest == digest(document_bytes)
   end
 
-  defp release_publication_attrs(verified, document_bytes) do
+  defp release_publication_attrs(verified, document_bytes, opts) do
     release = verified.release
     application = release["application"]
     package = release["package"]
@@ -395,7 +402,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
       artifact_count: length(release["artifacts"]),
       acceptance_state: "accepted",
       accepted_at: DateTime.utc_now(),
-      metadata: %{}
+      metadata: publication_metadata(opts)
     }
   end
 
@@ -642,6 +649,19 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
+  defp publication_metadata(opts) do
+    case Keyword.get(opts, :publisher_identity) do
+      identity
+      when is_binary(identity) and byte_size(identity) > 0 and byte_size(identity) <= 128 ->
+        if String.valid?(identity),
+          do: %{"publisher_identity" => identity},
+          else: %{}
+
+      _missing_or_invalid ->
+        %{}
+    end
+  end
+
   defp advisory_lock(lock_key) do
     _ = Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [lock_key])
     :ok
@@ -649,6 +669,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   defp normalize_transaction_result({:ok, row}), do: {:ok, row}
   defp normalize_transaction_result({:error, reason}), do: {:error, reason}
+
+  defp normalize_transaction_result({:ok, {outcome, row}}, true), do: {:ok, row, outcome}
+  defp normalize_transaction_result({:ok, {_outcome, row}}, false), do: {:ok, row}
+  defp normalize_transaction_result({:error, reason}, _return_outcome), do: {:error, reason}
 
   defp valid_artifact_lookup?(application_id, release_id, path) do
     valid_identifier?(application_id) and valid_release_id?(release_id) and

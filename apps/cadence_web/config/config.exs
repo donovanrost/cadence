@@ -28,6 +28,8 @@ config :cadence_web, :frontend_release_publication,
   trust_records: [],
   allowed_origins: []
 
+config :cadence_web, :frontend_release_publisher, token_sha256: nil
+
 config :phoenix_vite, PhoenixVite.Npm,
   assets: [args: [], cd: Path.expand("..", __DIR__)],
   vite: [

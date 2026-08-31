@@ -225,6 +225,14 @@ config :cadence_web, :frontend_release_publication,
   allowed_origins:
     decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_ALLOWED_ORIGINS_JSON", [])
 
+publisher_token_sha256 =
+  case System.get_env("CADENCE_FRONTEND_RELEASE_PUBLISHER_TOKEN") do
+    token when is_binary(token) and byte_size(token) > 0 -> :crypto.hash(:sha256, token)
+    _unset_or_empty -> nil
+  end
+
+config :cadence_web, :frontend_release_publisher, token_sha256: publisher_token_sha256
+
 config :cadence_web,
        :admin_mode_ttl_seconds,
        System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()

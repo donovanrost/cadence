@@ -38,6 +38,10 @@ defmodule CadenceWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :frontend_release_publisher do
+    plug CadenceWeb.Plugs.FrontendReleasePublisher
+  end
+
   pipeline :authenticated_api do
     plug CadenceWeb.Plugs.FetchCurrentScope
     plug CadenceWeb.Plugs.RequireCurrentScope
@@ -589,6 +593,12 @@ defmodule CadenceWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :show
+  end
+
+  scope "/api/cadence/frontend-release/v1", CadenceWeb do
+    pipe_through [:api, :frontend_release_publisher]
+
+    post "/releases", FrontendReleasePublisherController, :create
   end
 
   scope "/api/cadence/application-host/v1", CadenceWeb do
