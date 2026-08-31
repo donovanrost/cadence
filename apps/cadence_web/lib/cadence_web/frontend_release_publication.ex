@@ -25,6 +25,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   @type artifact_input :: map() | list()
   @max_artifact_bytes 100_000_000
+  @max_media_type_bytes 128
+  @safe_media_type ~r/^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}$/
 
   @spec admit_release(binary() | map(), artifact_input(), keyword()) ::
           {:ok, ReleasePublication.t()} | {:error, term()}
@@ -660,6 +662,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
+  # Artifact bytes are digest-verified before publication and both publication
+  # tables and objects are append-only. Request-time serving therefore
+  # reconciles immutable signed metadata with immutable object metadata, while
+  # keeping the bytea bounded to the chunk reads performed by the controller.
   defp artifact_lookup_query(application_id, release_id, path) do
     from(publication in ReleasePublication,
       join: artifact in ReleaseArtifact,
@@ -676,18 +682,70 @@ defmodule CadenceWeb.FrontendReleasePublication do
           artifact.size == object.size,
       select: %{
         digest: artifact.object_key,
-        sha256: object.sha256,
-        size: artifact.size,
+        artifact_sha256: artifact.sha256,
+        object_sha256: object.sha256,
+        artifact_size: artifact.size,
+        object_size: object.size,
         media_type: artifact.media_type
       }
     )
   end
 
-  defp validate_artifact_lookup(%{digest: digest, sha256: sha256} = artifact) do
-    if digest == "sha256:" <> sha256, do: {:ok, artifact}, else: {:error, :not_found}
+  defp validate_artifact_lookup(%{
+         digest: digest,
+         artifact_sha256: artifact_sha256,
+         object_sha256: object_sha256,
+         artifact_size: artifact_size,
+         object_size: object_size,
+         media_type: media_type
+       }) do
+    with :ok <- validate_lookup_digest(digest, artifact_sha256),
+         :ok <- validate_lookup_sha256(artifact_sha256, object_sha256),
+         :ok <- validate_lookup_size(artifact_size, object_size),
+         :ok <- validate_lookup_media_type(media_type) do
+      {:ok,
+       %{
+         digest: digest,
+         sha256: object_sha256,
+         size: artifact_size,
+         media_type: media_type
+       }}
+    else
+      {:error, :invalid_artifact_metadata} -> {:error, :not_found}
+    end
   end
 
   defp validate_artifact_lookup(_artifact), do: {:error, :not_found}
+
+  defp validate_lookup_digest("sha256:" <> sha256, sha256),
+    do: validate_lookup_sha256(sha256, sha256)
+
+  defp validate_lookup_digest(_digest, _sha256), do: {:error, :invalid_artifact_metadata}
+
+  defp validate_lookup_sha256(sha256, sha256) when is_binary(sha256) do
+    if Regex.match?(~r/\A[0-9a-f]{64}\z/, sha256),
+      do: :ok,
+      else: {:error, :invalid_artifact_metadata}
+  end
+
+  defp validate_lookup_sha256(_artifact_sha256, _object_sha256),
+    do: {:error, :invalid_artifact_metadata}
+
+  defp validate_lookup_size(size, size)
+       when is_integer(size) and size >= 0 and size <= @max_artifact_bytes,
+       do: :ok
+
+  defp validate_lookup_size(_artifact_size, _object_size),
+    do: {:error, :invalid_artifact_metadata}
+
+  defp validate_lookup_media_type(media_type)
+       when is_binary(media_type) and byte_size(media_type) <= @max_media_type_bytes do
+    if String.valid?(media_type) and Regex.match?(@safe_media_type, media_type),
+      do: :ok,
+      else: {:error, :invalid_artifact_metadata}
+  end
+
+  defp validate_lookup_media_type(_media_type), do: {:error, :invalid_artifact_metadata}
 
   defp valid_identifier?(value) do
     byte_size(value) <= 128 and String.valid?(value) and

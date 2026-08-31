@@ -1,6 +1,7 @@
 defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Repo
   alias CadenceWeb.FrontendReleaseArtifactController
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
@@ -113,6 +114,52 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     refute full_bytea_select?(queries)
   end
 
+  test "weak If-None-Match uses GET and HEAD comparison with comma lists", %{conn: conn} do
+    published = publish_release!(%{"assets/app.js" => "app-bytes"})
+    path = artifact_path(published.release, "assets/app.js")
+    etag = ~s("#{published.app.object_key}")
+    header = ~s("stale", W/#{etag}, "also-stale")
+
+    {get_conn, get_queries} =
+      capture_queries(fn ->
+        conn
+        |> put_req_header("if-none-match", header)
+        |> get(path)
+      end)
+
+    assert get_conn.status == 304
+    assert response(get_conn, 304) == ""
+    assert get_resp_header(get_conn, "etag") == [etag]
+    refute any_chunk_read?(get_queries)
+
+    {head_conn, head_queries} =
+      capture_queries(fn ->
+        Phoenix.ConnTest.build_conn()
+        |> put_req_header("if-none-match", header)
+        |> head(path)
+      end)
+
+    assert head_conn.status == 304
+    assert response(head_conn, 304) == ""
+    assert get_resp_header(head_conn, "etag") == [etag]
+    refute any_chunk_read?(head_queries)
+  end
+
+  test "malformed and nonmatching If-None-Match tags continue normally", %{conn: conn} do
+    published = publish_release!(%{"assets/app.js" => "app-bytes"})
+    path = artifact_path(published.release, "assets/app.js")
+
+    {conn, queries} =
+      capture_queries(fn ->
+        conn
+        |> put_req_header("if-none-match", ~s(W/not-an-entity-tag))
+        |> get(path)
+      end)
+
+    assert response(conn, 200) == "app-bytes"
+    assert any_chunk_read?(queries)
+  end
+
   test "Range and If-Range return 416 with the signed size without object reads", %{conn: conn} do
     published = publish_release!(%{"assets/app.js" => "app-bytes"})
     path = artifact_path(published.release, "assets/app.js")
@@ -168,6 +215,28 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     assert Enum.uniq(responses) == [{404, "", ["no-store"], []}]
   end
 
+  test "valid raw percent encoding resolves to the exact signed decoded path", %{conn: conn} do
+    published = publish_release!(%{"assets/app.js" => "app-bytes"})
+    path = artifact_path(published.release, "assets/app%2Ejs")
+
+    conn = get(conn, path)
+
+    assert response(conn, 200) == "app-bytes"
+  end
+
+  test "malformed raw percent escapes are an indistinguishable 404 before lookup", %{conn: conn} do
+    published = publish_release!(%{"assets/app.js" => "app-bytes"})
+    valid_path = artifact_path(published.release, "assets/app.js")
+    malformed_path = String.replace(valid_path, "assets/app.js", "assets/app%zz.js")
+
+    {conn, queries} = capture_queries(fn -> get(conn, malformed_path) end)
+
+    assert response(conn, 404) == ""
+    assert get_resp_header(conn, "cache-control") == ["no-store"]
+    assert get_resp_header(conn, "content-type") == []
+    assert queries == []
+  end
+
   test "GET streams multiple bounded chunks sequentially", %{conn: conn} do
     bytes = :binary.copy(<<"a">>, 1_048_581)
     published = publish_release!(%{"assets/app.js" => bytes})
@@ -180,6 +249,61 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     chunk_queries = Enum.filter(queries, &chunk_query?/1)
     assert Enum.map(chunk_queries, fn {_query, params} -> List.last(params) end) == [1_048_576, 5]
     refute full_bytea_select?(queries)
+    refute any_octet_length_query?(queries)
+  end
+
+  test "corrupt stored artifact metadata fails closed without reading bytes" do
+    published = publish_release!(%{"assets/app.js" => "app-bytes"})
+    release_id = published.release["releaseId"]
+    application_id = published.release["application"]["id"]
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_artifacts
+        (artifact_id, release_publication_id, release_id, path, sha256, size, media_type, object_key, metadata, inserted_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, now())
+      """,
+      [
+        "corrupt-media-artifact",
+        published.publication.publication_id,
+        release_id,
+        "assets/corrupt.js",
+        published.app.sha256,
+        published.app.size,
+        "text/html\r\nx-poison: true",
+        published.app.object_key
+      ]
+    )
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_artifacts
+        (artifact_id, release_publication_id, release_id, path, sha256, size, media_type, object_key, metadata, inserted_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, now())
+      """,
+      [
+        "corrupt-size-artifact",
+        published.publication.publication_id,
+        release_id,
+        "assets/corrupt-size.js",
+        published.app.sha256,
+        published.app.size + 1,
+        published.app.media_type,
+        published.app.object_key
+      ]
+    )
+
+    for path <- ["assets/corrupt.js", "assets/corrupt-size.js"] do
+      {result, queries} =
+        capture_queries(fn ->
+          FrontendReleasePublication.fetch_artifact(application_id, release_id, path)
+        end)
+
+      assert result == {:error, :not_found}
+      refute any_chunk_read?(queries)
+    end
   end
 
   test "a client disconnect stops streaming without a JSON error", %{conn: conn} do
@@ -268,6 +392,10 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     Enum.any?(queries, fn {query, _params} ->
       Regex.match?(~r/SELECT\s+bytes\s+FROM/i, query)
     end)
+  end
+
+  defp any_octet_length_query?(queries) do
+    Enum.any?(queries, fn {query, _params} -> String.contains?(query, "octet_length(bytes)") end)
   end
 
   defp restore_config(nil),

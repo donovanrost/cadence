@@ -57,9 +57,7 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
       when is_binary(digest) and is_integer(offset) and is_integer(length) do
     with {:ok, sha256} <- parse_digest(digest),
          :ok <- validate_offset(offset),
-         :ok <- validate_chunk_length(length),
-         {:ok, size} <- object_size(sha256),
-         :ok <- chunk_offset(size, offset) do
+         :ok <- validate_chunk_length(length) do
       select_chunk(sha256, offset, length)
     end
   end
@@ -168,9 +166,6 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
 
   defp validate_chunk_length(length) when length > 0 and length <= @max_chunk_size, do: :ok
   defp validate_chunk_length(_length), do: {:error, :invalid_chunk_bounds}
-
-  defp chunk_offset(size, offset) when offset <= size, do: :ok
-  defp chunk_offset(_size, _offset), do: {:error, :invalid_chunk_bounds}
 
   defp parse_digest("sha256:" <> sha256) when byte_size(sha256) == 64 do
     if Regex.match?(~r/\A[0-9a-f]{64}\z/, sha256),

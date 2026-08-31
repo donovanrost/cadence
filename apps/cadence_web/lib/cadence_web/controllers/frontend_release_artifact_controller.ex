@@ -3,6 +3,8 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
 
   use CadenceWeb, :controller
 
+  require Logger
+
   alias CadenceWeb.FrontendReleasePublication
   alias CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore
 
@@ -17,7 +19,8 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
         "release_id" => release_id,
         "artifact_path" => artifact_path
       }) do
-    with {:ok, path} <- normalize_artifact_path(artifact_path),
+    with :ok <- validate_raw_request_path(conn.request_path),
+         {:ok, path} <- normalize_artifact_path(artifact_path),
          {:ok, artifact} <- fetch_artifact(application_id, release_id, path) do
       serve(conn, artifact)
     else
@@ -31,9 +34,7 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
   defp fetch_artifact(application_id, release_id, path) do
     FrontendReleasePublication.fetch_artifact(application_id, release_id, path)
   rescue
-    _error -> {:error, :database_unavailable}
-  catch
-    _kind, _reason -> {:error, :database_unavailable}
+    _error in DBConnection.ConnectionError -> {:error, :database_unavailable}
   end
 
   defp serve(conn, artifact) do
@@ -69,10 +70,6 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
   defp stream_artifact(conn, digest, size) do
     conn = send_chunked(conn, 200)
     stream_chunks(conn, digest, size, 0)
-  rescue
-    _error -> conn
-  catch
-    _kind, _reason -> conn
   end
 
   defp stream_chunks(conn, _digest, size, size), do: conn
@@ -80,16 +77,37 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
   defp stream_chunks(conn, digest, size, offset) do
     length = min(@max_chunk_size, size - offset)
 
-    case DatabaseArtifactStore.read_chunk(digest, offset, length) do
+    case read_chunk(digest, offset, length) do
       {:ok, chunk} when byte_size(chunk) == length ->
         case chunk(conn, chunk) do
-          {:ok, conn} -> stream_chunks(conn, digest, size, offset + length)
-          {:error, _reason} -> conn
+          {:ok, conn} ->
+            stream_chunks(conn, digest, size, offset + length)
+
+          {:error, reason} ->
+            log_stream_failure(digest, offset, :chunk, reason)
+            conn
         end
 
-      _failure ->
+      {:ok, chunk} ->
+        log_stream_failure(
+          digest,
+          offset,
+          :short_read,
+          {:expected_bytes, length, byte_size(chunk)}
+        )
+
+        conn
+
+      {:error, reason} ->
+        log_stream_failure(digest, offset, :read, reason)
         conn
     end
+  end
+
+  defp read_chunk(digest, offset, length) do
+    DatabaseArtifactStore.read_chunk(digest, offset, length)
+  rescue
+    error in DBConnection.ConnectionError -> {:error, {:database_unavailable, error}}
   end
 
   defp normalize_artifact_path(path) when is_list(path) do
@@ -100,6 +118,18 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
 
   defp normalize_artifact_path(path) when is_binary(path), do: validate_artifact_path(path)
   defp normalize_artifact_path(_path), do: {:error, :not_found}
+
+  defp validate_raw_request_path(path) when is_binary(path) do
+    if valid_percent_encoding?(path), do: :ok, else: {:error, :not_found}
+  end
+
+  defp validate_raw_request_path(_path), do: {:error, :not_found}
+
+  defp valid_percent_encoding?(path) do
+    path
+    |> String.replace(~r/%[0-9A-Fa-f]{2}/, "")
+    |> then(&(not String.contains?(&1, "%")))
+  end
 
   defp validate_artifact_path(path) do
     cond do
@@ -123,13 +153,29 @@ defmodule CadenceWeb.FrontendReleaseArtifactController do
   defp request_header_present?(conn, name), do: get_req_header(conn, name) != []
 
   defp if_none_match?(conn, digest) do
+    original_method(conn) in ["GET", "HEAD"] and
+      Enum.any?(get_req_header(conn, "if-none-match"), &if_none_match_value?(&1, digest))
+  end
+
+  defp if_none_match_value?(value, digest) do
     etag = ~s("#{digest}")
 
-    Enum.any?(get_req_header(conn, "if-none-match"), fn value ->
-      value
-      |> String.split(",")
-      |> Enum.any?(fn candidate -> String.trim(candidate) in [etag, "*"] end)
+    value
+    |> String.split(",")
+    |> Enum.any?(fn candidate ->
+      candidate = String.trim(candidate)
+      candidate == "*" or weak_entity_tag(candidate) == etag
     end)
+  end
+
+  defp weak_entity_tag("W/" <> etag), do: etag
+  defp weak_entity_tag(etag), do: etag
+
+  defp log_stream_failure(digest, offset, operation, reason) do
+    Logger.warning(
+      "Frontend release artifact stream stopped (#{operation}) at offset #{offset} " <>
+        "for #{digest}: #{inspect(reason)}"
+    )
   end
 
   defp original_method(conn), do: Map.get(conn.assigns, :original_method, conn.method)
