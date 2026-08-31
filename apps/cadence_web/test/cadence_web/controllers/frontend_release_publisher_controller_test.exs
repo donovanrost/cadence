@@ -2,8 +2,11 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Repo
+  alias CadenceWeb.Endpoint
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication.ReleasePublication
+  alias CadenceWeb.FrontendReleasePublisherTestAdapter
+  alias CadenceWeb.Plugs.FrontendReleasePublisher
 
   @path "/api/cadence/frontend-release/v1/releases"
   @fixture Path.expand("../../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
@@ -197,6 +200,62 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     assert %{"error" => %{"code" => "unsupported_media_type"}} = json_response(response, 415)
   end
 
+  test "endpoint preflight rejects invalid auth before any body read" do
+    result =
+      endpoint_conn([
+        {"authorization", "Bearer wrong-token"},
+        {"content-type", "application/json"},
+        {"content-length", Integer.to_string(@max_body_bytes)}
+      ])
+      |> Endpoint.call([])
+
+    assert result.status == 401
+    refute_receive {:frontend_release_publisher_read, _, _}
+  end
+
+  test "endpoint preflight rejects unsupported media after auth before any body read" do
+    result =
+      endpoint_conn([
+        {"authorization", "Bearer " <> @token},
+        {"content-type", "text/plain"},
+        {"content-length", Integer.to_string(@max_body_bytes)}
+      ])
+      |> Endpoint.call([])
+
+    assert result.status == 415
+    refute_receive {:frontend_release_publisher_read, _, _}
+  end
+
+  test "publisher auth is exact-path and idempotent when the router repeats it" do
+    conn =
+      Plug.Test.conn(:post, @path, "")
+      |> put_req_header("authorization", "Bearer " <> @token)
+      |> put_req_header("content-type", "application/json")
+
+    assert %{halted: false} = first = FrontendReleasePublisher.call(conn, [])
+    assert %{halted: false} = FrontendReleasePublisher.call(first, [])
+
+    near_path =
+      Plug.Test.conn(:post, @path <> "/extra", "")
+      |> put_req_header("authorization", "Bearer wrong-token")
+
+    get_request = Plug.Test.conn(:get, @path, "")
+
+    assert %{halted: false} = FrontendReleasePublisher.call(near_path, [])
+    assert %{halted: false} = FrontendReleasePublisher.call(get_request, [])
+  end
+
+  test "non-publisher requests retain default parser behavior" do
+    result =
+      Plug.Test.conn(:post, "/api/health", ~s({"outside":true}))
+      |> put_req_header("accept", "application/json")
+      |> put_req_header("content-type", "application/json")
+      |> Endpoint.call([])
+
+    assert result.status == 404
+    assert result.body_params == %{"outside" => true}
+  end
+
   test "rejects unknown and duplicate request keys, duplicate paths, and malformed Base64", %{
     conn: conn
   } do
@@ -299,6 +358,21 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     |> put_req_header("accept", "application/json")
     |> put_req_header("content-type", "application/json")
     |> put_req_header("authorization", "Bearer " <> @token)
+  end
+
+  defp endpoint_conn(headers) do
+    Plug.Test.conn(:post, @path, "")
+    |> then(
+      &%{
+        &1
+        | adapter:
+            {FrontendReleasePublisherTestAdapter,
+             FrontendReleasePublisherTestAdapter.body("", self())}
+      }
+    )
+    |> then(
+      &Enum.reduce(headers, &1, fn {name, value}, conn -> put_req_header(conn, name, value) end)
+    )
   end
 
   defp request_body(document, bytes_by_path) do

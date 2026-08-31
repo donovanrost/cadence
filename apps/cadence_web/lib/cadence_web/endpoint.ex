@@ -21,6 +21,7 @@ defmodule CadenceWeb.Endpoint do
     gzip: false,
     only: CadenceWeb.static_paths()
 
+  plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
 
   if Mix.env() == :dev do

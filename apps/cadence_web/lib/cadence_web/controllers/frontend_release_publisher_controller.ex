@@ -4,8 +4,8 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
   use CadenceWeb, :controller
 
   alias CadenceWeb.FrontendReleasePublication
+  alias CadenceWeb.Plugs.FrontendReleasePublisher
   alias CadenceWeb.Plugs.FrontendReleaseRequestBody
-  alias Plug.Conn.Utils
 
   @publisher_identity_header "x-cadence-publisher-identity"
   @max_publisher_identity_bytes 128
@@ -41,16 +41,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
   end
 
   defp application_json?(conn) do
-    case get_req_header(conn, "content-type") do
-      [value] ->
-        case Utils.content_type(value) do
-          {:ok, "application", "json", _params} -> :ok
-          _invalid -> {:error, :unsupported_media_type}
-        end
-
-      _missing_or_duplicate ->
-        {:error, :unsupported_media_type}
-    end
+    FrontendReleasePublisher.application_json?(conn)
   end
 
   defp decode_request(body) when is_binary(body) do
@@ -65,10 +56,6 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       {:ok, value} -> {:ok, value}
       {:error, _reason} -> {:error, :malformed_json}
     end
-  rescue
-    _error -> {:error, :malformed_json}
-  catch
-    _kind, _reason -> {:error, :malformed_json}
   end
 
   defp strict_request(%Jason.OrderedObject{values: values}) do
@@ -172,8 +159,6 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
     else
       _invalid -> {:error, :malformed_body}
     end
-  rescue
-    _error -> {:error, :malformed_body}
   end
 
   defp publisher_identity(conn) do
@@ -211,13 +196,14 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       {:error, %{code: _code}} ->
         {:error, :admission_rejected}
 
-      {:error, _reason} ->
+      {:error, %DBConnection.ConnectionError{}} ->
         {:error, :transient_persistence_failure}
+
+      other ->
+        other
     end
   rescue
-    _error -> {:error, :transient_persistence_failure}
-  catch
-    _kind, _reason -> {:error, :transient_persistence_failure}
+    _error in DBConnection.ConnectionError -> {:error, :transient_persistence_failure}
   end
 
   defp response(conn, :created, publication) do

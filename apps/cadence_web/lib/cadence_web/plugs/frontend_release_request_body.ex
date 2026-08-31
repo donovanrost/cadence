@@ -9,7 +9,8 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBody do
 
   import Plug.Conn
 
-  @publisher_path "/api/cadence/frontend-release/v1/releases"
+  alias CadenceWeb.Plugs.FrontendReleasePublisher
+
   @max_body_bytes 140_000_000
   @read_length 1_048_576
   @read_timeout 15_000
@@ -20,8 +21,8 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBody do
   def init(opts), do: opts
 
   @spec publisher_request?(Plug.Conn.t()) :: boolean()
-  def publisher_request?(%Plug.Conn{method: "POST", request_path: @publisher_path}), do: true
-  def publisher_request?(%Plug.Conn{}), do: false
+  def publisher_request?(%Plug.Conn{} = conn),
+    do: FrontendReleasePublisher.publisher_request?(conn)
 
   @spec call(Plug.Conn.t(), Plug.opts()) :: Plug.Conn.t()
   def call(%Plug.Conn{} = conn, _opts) do
@@ -107,13 +108,9 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBody do
       {:more, chunk, conn} when is_binary(chunk) ->
         more_chunk(conn, content_length, chunks, size, chunk)
 
-      _read_error ->
+      {:error, _reason} ->
         {:error, :read_failed, conn}
     end
-  rescue
-    _error -> {:error, :read_failed, conn}
-  catch
-    _kind, _reason -> {:error, :read_failed, conn}
   end
 
   defp complete_chunk(conn, content_length, chunks, size, chunk) do
@@ -173,10 +170,6 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBody do
       {:error, _reason} ->
         {:error, :read_failed, conn}
     end
-  rescue
-    _error -> {:error, :read_failed, conn}
-  catch
-    _kind, _reason -> {:error, :read_failed, conn}
   end
 
   defp reject(conn, status, code) do
