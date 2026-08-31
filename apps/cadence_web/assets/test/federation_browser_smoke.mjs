@@ -1555,27 +1555,32 @@ export async function navigate(
 
 export function matchesSignInNavigationRequest(
   record,
-  { expectedOrigin, pathname } = {},
+  { expectedOrigin } = {},
 ) {
   if (
     record?.resourceType !== "Document" ||
     record.method !== "POST" ||
     !record.frameId ||
-    !record.loaderId ||
-    typeof pathname !== "string"
+    !record.loaderId
   ) return false;
 
   try {
     const requestUrl = new URL(record.url);
-    return requestUrl.origin === expectedOrigin && requestUrl.pathname === pathname;
+    return requestUrl.origin === expectedOrigin && requestUrl.pathname === "/sign-in";
   } catch {
     return false;
   }
 }
 
+export function assertSignInUrl(url, expectedOrigin, label = "sign-in URL") {
+  const parsed = assertHttpUrl(url, expectedOrigin, label);
+  assert.equal(parsed.pathname, "/sign-in", `${label} must use the exact /sign-in pathname`);
+  return parsed;
+}
+
 async function submitSignIn(client, loginUrl, email, password, expectedOrigin, diagnostics, signal) {
-  const login = assertHttpUrl(loginUrl, expectedOrigin, "sign-in URL");
-  await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname, diagnostics, signal });
+  const login = assertSignInUrl(loginUrl, expectedOrigin);
+  await navigate(client, login.href, { expectedOrigin, expectedPath: "/sign-in", diagnostics, signal });
   await waitForExpression(
     client,
     "Boolean(document.querySelector('#sign-in-form input[name=\"user[email]\"]') && document.querySelector('#sign-in-form input[name=\"user[password]\"]'))",
@@ -1592,10 +1597,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
   try {
     const navigationRequest = diagnostics?.waitForRequest(
       generation,
-      (record) => matchesSignInNavigationRequest(record, {
-        expectedOrigin: login.origin,
-        pathname: login.pathname,
-      }),
+      (record) => matchesSignInNavigationRequest(record, { expectedOrigin: login.origin }),
       "authenticated sign-in navigation",
       { signal: submissionSignal },
     );
@@ -1816,7 +1818,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     "Comms surface must use the authenticated federated route",
   );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
-  assertHttpUrl(loginUrl, origin, "sign-in URL");
+  assertSignInUrl(loginUrl, origin);
 
   reportProgress("authenticating browser session");
   const authenticatedGeneration = await submitSignIn(

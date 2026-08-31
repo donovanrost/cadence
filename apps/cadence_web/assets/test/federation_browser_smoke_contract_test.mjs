@@ -6,6 +6,7 @@ import {
   assertLiveViewWebSocket,
   assertManifestAssetsRequested,
   assertNoPasswordArgument,
+  assertSignInUrl,
   browserUrls,
   createPage,
   installDiagnostics,
@@ -17,6 +18,7 @@ import {
   reserveLoopbackPort,
   redactText,
   resolveChromeBinary,
+  runScenario,
   waitForPageNavigation,
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
@@ -509,7 +511,6 @@ test("delayed websocket events without a request-boundary record fail closed", (
 });
 
 test("authenticated navigation causality requires the exact sign-in pathname", () => {
-  const expectedPathname = "/sign-in";
   const base = {
     method: "POST",
     resourceType: "Document",
@@ -517,30 +518,93 @@ test("authenticated navigation causality requires the exact sign-in pathname", (
     loaderId: "auth-loader",
   };
 
+  for (const [pathname, expected] of [
+    ["/sign-in", true],
+    ["/sign-in?return_to=%2Fmissions#form", true],
+    ["/sign-in/", false],
+    ["/sign-in-extra", false],
+    ["/sign-in/extra", false],
+    ["/users/log_in", false],
+  ]) {
+    assert.equal(
+      matchesSignInNavigationRequest({ ...base, url: `${origin}${pathname}` }, { expectedOrigin: origin }),
+      expected,
+      `sign-in request pathname ${pathname} admission mismatch`,
+    );
+  }
   assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: `${origin}/users/log_in` },
-      { expectedOrigin: origin, pathname: expectedPathname },
-    ),
+    matchesSignInNavigationRequest({ ...base, url: "https://evil.example/sign-in" }, { expectedOrigin: origin }),
     false,
-    "an alternate same-origin document POST must not bind authenticated navigation",
+    "a cross-origin document POST must not bind authenticated navigation",
   );
   assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: `${origin}${expectedPathname}?return_to=%2Fmissions` },
-      { expectedOrigin: origin, pathname: expectedPathname },
-    ),
-    true,
-    "the sign-in flow may retain its query while requiring the exact pathname",
-  );
-  assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: "not-a-url" },
-      { expectedOrigin: origin, pathname: expectedPathname },
-    ),
+    matchesSignInNavigationRequest({ ...base, url: "not-a-url" }, { expectedOrigin: origin }),
     false,
     "malformed request URLs must fail closed",
   );
+  assert.equal(
+    matchesSignInNavigationRequest(
+      { ...base, url: `${origin}/sign-in` },
+      { expectedOrigin: origin, pathname: "/sign-in-extra" },
+    ),
+    true,
+    "a caller-supplied pathname cannot redefine the literal sign-in path",
+  );
+  assert.equal(
+    matchesSignInNavigationRequest(
+      { ...base, url: `${origin}/sign-in-extra` },
+      { expectedOrigin: origin, pathname: "/sign-in-extra" },
+    ),
+    false,
+    "a caller-supplied alternate pathname cannot admit that request",
+  );
+});
+
+test("sign-in URL validation allows only query/hash variation and runs before navigation", async () => {
+  for (const url of [
+    `${origin}/sign-in`,
+    `${origin}/sign-in?return_to=%2Fmissions#form`,
+  ]) {
+    assert.equal(assertSignInUrl(url, origin).pathname, "/sign-in");
+  }
+
+  for (const url of [
+    `${origin}/sign-in/`,
+    `${origin}/sign-in-extra`,
+    `${origin}/sign-in/extra`,
+    `${origin}/users/log_in`,
+    "https://evil.example/sign-in",
+    "not-a-url",
+  ]) {
+    assert.throws(
+      () => assertSignInUrl(url, origin),
+      /exact \/sign-in pathname|escaped the expected origin|Invalid URL/,
+      `invalid sign-in URL was accepted: ${url}`,
+    );
+  }
+
+  let clientAccessed = false;
+  const client = new Proxy({}, {
+    get() {
+      clientAccessed = true;
+      throw new Error("browser navigation was reached before sign-in URL validation");
+    },
+  });
+  await assert.rejects(
+    runScenario(client, {}, [
+      "--comms-url", `${origin}/missions/mission-1/comms/federated`,
+      "--telemetry-url", `${origin}/missions/mission-1/telemetry/federated`,
+      "--login-url", `${origin}/sign-in-extra`,
+      "--login-email", "operator@example.test",
+      "--mission-id", "mission-1",
+      "--spacecraft-id", "spacecraft-1",
+      "--catalog-revision-id", "catalog-1",
+      "--source-endpoint-id", "source-1",
+      "--expected-apid", "42",
+    ], { secret: { password: "secret" } }),
+    /exact \/sign-in pathname/,
+  );
+  assert.equal(clientAccessed, false, "invalid sign-in URL reached browser navigation");
 });
 
 test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
