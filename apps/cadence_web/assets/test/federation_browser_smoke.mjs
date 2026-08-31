@@ -1412,7 +1412,6 @@ export async function waitForPageNavigation(
   let resultReady = false;
   let result;
   let exactFrame;
-  let exactLoad;
   let exactLifecycleLoad;
   let resolveCompletion;
   let rejectCompletion;
@@ -1429,17 +1428,8 @@ export async function waitForPageNavigation(
     resolveCompletion(value);
   };
   const maybeFinish = () => {
-    if (!resultReady || !exactFrame || !exactLoad || !exactLifecycleLoad) return;
-    finish({ result, frame: exactFrame.frame, load: exactLoad.params });
-  };
-  const loadMatchesLifecycle = (event) => {
-    const loadTimestamp = event.params?.timestamp;
-    const lifecycleTimestamp = exactLifecycleLoad?.params?.timestamp;
-    return (
-      typeof loadTimestamp === "number" &&
-      typeof lifecycleTimestamp === "number" &&
-      loadTimestamp === lifecycleTimestamp
-    );
+    if (!resultReady || !exactFrame || !exactLifecycleLoad) return;
+    finish({ result, frame: exactFrame.frame, load: exactLifecycleLoad.params });
   };
   const considerFrame = (event) => {
     if (!resultReady || exactFrame || !event.params?.frame) return;
@@ -1450,19 +1440,6 @@ export async function waitForPageNavigation(
       frame.loaderId !== result.loaderId
     ) return;
     exactFrame = { ...event, frame };
-    maybeFinish();
-  };
-  const considerLoad = (event) => {
-    if (
-      !resultReady ||
-      exactLoad ||
-      !exactFrame ||
-      !exactLifecycleLoad ||
-      event.sequence <= exactFrame.sequence ||
-      !loadMatchesLifecycle(event)
-    ) return;
-    if (event.params?.frameId !== undefined && event.params.frameId !== result.frameId) return;
-    exactLoad = event;
     maybeFinish();
   };
   const considerLifecycle = (event) => {
@@ -1477,20 +1454,12 @@ export async function waitForPageNavigation(
       params?.loaderId !== result.loaderId
     ) return;
     exactLifecycleLoad = event;
-    for (const candidate of events) {
-      if (candidate.kind === "load") considerLoad(candidate);
-    }
     maybeFinish();
   };
   const onFrameNavigated = (params) => {
     const event = { kind: "frame", params, sequence: ++eventSequence };
     events.push(event);
     considerFrame(event);
-  };
-  const onLoadEventFired = (params) => {
-    const event = { kind: "load", params, sequence: ++eventSequence };
-    events.push(event);
-    considerLoad(event);
   };
   const onLifecycleEvent = (params) => {
     const event = { kind: "lifecycle", params, sequence: ++eventSequence };
@@ -1499,7 +1468,6 @@ export async function waitForPageNavigation(
   };
 
   const frameOff = client.on("Page.frameNavigated", onFrameNavigated);
-  const loadOff = client.on("Page.loadEventFired", onLoadEventFired);
   const lifecycleOff = client.on("Page.lifecycleEvent", onLifecycleEvent);
 
   try {
@@ -1516,7 +1484,6 @@ export async function waitForPageNavigation(
     resultReady = true;
     for (const event of [...events]) {
       if (event.kind === "frame") considerFrame(event);
-      if (event.kind === "load") considerLoad(event);
       if (event.kind === "lifecycle") considerLifecycle(event);
     }
     maybeFinish();
@@ -1531,7 +1498,6 @@ export async function waitForPageNavigation(
     throw error;
   } finally {
     frameOff?.();
-    loadOff?.();
     lifecycleOff?.();
   }
 }
@@ -1587,6 +1553,26 @@ export async function navigate(
   }
 }
 
+export function matchesSignInNavigationRequest(
+  record,
+  { expectedOrigin, pathname } = {},
+) {
+  if (
+    record?.resourceType !== "Document" ||
+    record.method !== "POST" ||
+    !record.frameId ||
+    !record.loaderId ||
+    typeof pathname !== "string"
+  ) return false;
+
+  try {
+    const requestUrl = new URL(record.url);
+    return requestUrl.origin === expectedOrigin && requestUrl.pathname === pathname;
+  } catch {
+    return false;
+  }
+}
+
 async function submitSignIn(client, loginUrl, email, password, expectedOrigin, diagnostics, signal) {
   const login = assertHttpUrl(loginUrl, expectedOrigin, "sign-in URL");
   await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname, diagnostics, signal });
@@ -1606,12 +1592,10 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
   try {
     const navigationRequest = diagnostics?.waitForRequest(
       generation,
-      (record) =>
-        record.resourceType === "Document" &&
-        record.method === "POST" &&
-        record.frameId &&
-        record.loaderId &&
-        new URL(record.url).origin === expectedOrigin,
+      (record) => matchesSignInNavigationRequest(record, {
+        expectedOrigin: login.origin,
+        pathname: login.pathname,
+      }),
       "authenticated sign-in navigation",
       { signal: submissionSignal },
     );

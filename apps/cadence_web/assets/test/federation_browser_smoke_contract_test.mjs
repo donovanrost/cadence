@@ -11,6 +11,7 @@ import {
   installDiagnostics,
   isDataUrl,
   isIgnoredFavicon,
+  matchesSignInNavigationRequest,
   parseResponseBody,
   requirePostActionRefresh,
   reserveLoopbackPort,
@@ -466,7 +467,7 @@ test("delayed websocket events without a request-boundary record fail closed", (
 
   client.emit("Network.requestWillBeSent", {
     requestId: "auth-request",
-    request: { url: `${origin}/users/log_in`, method: "POST", headers: {} },
+    request: { url: `${origin}/sign-in`, method: "POST", headers: {} },
     type: "Document",
     frameId: "main-frame",
     loaderId: "auth-loader",
@@ -505,6 +506,41 @@ test("delayed websocket events without a request-boundary record fail closed", (
     "response without a causally bound request was admitted to the generation",
   );
   diagnostics.dispose();
+});
+
+test("authenticated navigation causality requires the exact sign-in pathname", () => {
+  const expectedPathname = "/sign-in";
+  const base = {
+    method: "POST",
+    resourceType: "Document",
+    frameId: "main-frame",
+    loaderId: "auth-loader",
+  };
+
+  assert.equal(
+    matchesSignInNavigationRequest(
+      { ...base, url: `${origin}/users/log_in` },
+      { expectedOrigin: origin, pathname: expectedPathname },
+    ),
+    false,
+    "an alternate same-origin document POST must not bind authenticated navigation",
+  );
+  assert.equal(
+    matchesSignInNavigationRequest(
+      { ...base, url: `${origin}${expectedPathname}?return_to=%2Fmissions` },
+      { expectedOrigin: origin, pathname: expectedPathname },
+    ),
+    true,
+    "the sign-in flow may retain its query while requiring the exact pathname",
+  );
+  assert.equal(
+    matchesSignInNavigationRequest(
+      { ...base, url: "not-a-url" },
+      { expectedOrigin: origin, pathname: expectedPathname },
+    ),
+    false,
+    "malformed request URLs must fail closed",
+  );
 });
 
 test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
@@ -605,6 +641,64 @@ test("navigation completion discards queued prior-page events and requires the e
       { timeout: 10 },
     ),
     /completion timed out/,
+  );
+});
+
+test("navigation ignores an equal-timestamp Page.loadEventFired until exact lifecycle proof", async () => {
+  const listeners = new Map();
+  const client = {
+    on(method, listener) {
+      const methodListeners = listeners.get(method) || new Set();
+      methodListeners.add(listener);
+      listeners.set(method, methodListeners);
+      return () => methodListeners.delete(listener);
+    },
+    emit(method, event) {
+      for (const listener of listeners.get(method) || []) listener(event);
+    },
+  };
+  const currentFrame = { id: "main-frame", loaderId: "loader-current", url: `${origin}/current` };
+  const lifecycleLoad = {
+    frameId: currentFrame.id,
+    loaderId: currentFrame.loaderId,
+    name: "load",
+    timestamp: 7,
+  };
+  let settledBeforeLifecycle = false;
+
+  const navigation = waitForPageNavigation(
+    client,
+    async () => {
+      client.emit("Page.frameNavigated", { frame: currentFrame });
+      // Page.loadEventFired has no loader provenance. Its equal timestamp is
+      // deliberately queued before the exact lifecycle proof.
+      client.emit("Page.loadEventFired", { timestamp: lifecycleLoad.timestamp });
+      await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+      assert.equal(
+        settledBeforeLifecycle,
+        false,
+        "an unproven Page.loadEventFired must not settle navigation",
+      );
+      client.emit("Page.lifecycleEvent", lifecycleLoad);
+      return { frameId: currentFrame.id, loaderId: currentFrame.loaderId };
+    },
+    { timeout: 100 },
+  );
+  navigation.then(
+    () => { settledBeforeLifecycle = true; },
+    () => { settledBeforeLifecycle = true; },
+  );
+
+  const completed = await navigation;
+  assert.equal(
+    settledBeforeLifecycle,
+    true,
+    "navigation did not settle after the exact lifecycle proof",
+  );
+  assert.deepEqual(
+    completed.load,
+    lifecycleLoad,
+    "navigation evidence must come from the exact frame/loader lifecycle event",
   );
 });
 
