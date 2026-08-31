@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ProfileStore do
 
   alias Cadence.Contacts.ProfileStore.{ProviderProfileRow, TransportProfileRow}
   alias Cadence.Contacts.{ProviderProfile, TransportProfile}
+  alias Cadence.Listing
   alias Cadence.Missions
 
   alias Cadence.Repo
@@ -153,6 +154,20 @@ defmodule Cadence.Contacts.ProfileStore do
     |> latest_versioned_rows(organization_id, mission_id, :provider_profile_id)
     |> Enum.reject(&(&1.lifecycle_state == "deleted"))
     |> Enum.map(&ProviderProfileRow.to_domain/1)
+  end
+
+  @doc "Returns one bounded page of active latest provider-profile versions."
+  @spec list_provider_profiles_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_provider_profiles_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    page_of_latest_profiles(
+      ProviderProfileRow,
+      :provider_profile_id,
+      organization_id,
+      mission_id,
+      opts,
+      &ProviderProfileRow.to_domain/1
+    )
   end
 
   @spec list_provider_profile_versions(binary(), binary()) :: [ProviderProfile.t()]
@@ -365,6 +380,20 @@ defmodule Cadence.Contacts.ProfileStore do
     |> Enum.map(&TransportProfileRow.to_domain/1)
   end
 
+  @doc "Returns one bounded page of active latest transport-profile versions."
+  @spec list_transport_profiles_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_transport_profiles_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    page_of_latest_profiles(
+      TransportProfileRow,
+      :transport_profile_id,
+      organization_id,
+      mission_id,
+      opts,
+      &TransportProfileRow.to_domain/1
+    )
+  end
+
   @spec list_transport_profile_versions(binary(), binary()) :: [TransportProfile.t()]
   def list_transport_profile_versions(mission_id, transport_profile_id)
       when is_binary(mission_id) and is_binary(transport_profile_id) do
@@ -488,6 +517,48 @@ defmodule Cadence.Contacts.ProfileStore do
     )
     |> Repo.all()
     |> latest_rows(definition_id_field)
+  end
+
+  defp page_of_latest_profiles(schema, id_field, organization_id, mission_id, opts, converter) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    latest =
+      schema
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> distinct([row], field(row, ^id_field))
+      |> order_by([row], asc: field(row, ^id_field), desc: row.version)
+
+    filtered =
+      latest
+      |> subquery()
+      |> where([row], row.lifecycle_state != "deleted")
+      |> apply_profile_search(Keyword.get(opts, :search), id_field)
+
+    items =
+      filtered
+      |> order_by([row], asc: field(row, ^id_field))
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(converter)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
+  end
+
+  defp apply_profile_search(query, nil, _id_field), do: query
+  defp apply_profile_search(query, "", _id_field), do: query
+
+  defp apply_profile_search(query, search, id_field) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+    where(query, [row], ilike(field(row, ^id_field), ^pattern))
   end
 
   defp latest_rows(rows, definition_id_field) do

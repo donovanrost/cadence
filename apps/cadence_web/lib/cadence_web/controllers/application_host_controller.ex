@@ -10,7 +10,7 @@ defmodule CadenceWeb.ApplicationHostController do
   use CadenceWeb, :controller
 
   alias Cadence.Applications.HostContext
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions.Mission
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
@@ -26,6 +26,7 @@ defmodule CadenceWeb.ApplicationHostController do
         %{"mission_id" => _mission_id, "application_key" => application_key} = params
       ) do
     with %Scope{} = current_scope <- conn.assigns.current_scope,
+         :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          {:ok, application} <-
            ApplicationHostCatalog.admit_application(
@@ -46,25 +47,10 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
-  def federated(conn, %{"mission_id" => _mission_id} = params) do
-    with %Scope{} = current_scope <- conn.assigns.current_scope,
-         {:ok, route_context} <- fetch_route_context(conn, current_scope, params) do
-      render_shell(
-        conn,
-        current_scope,
-        route_context,
-        "comms_overview",
-        "overview",
-        "/missions/" <> URI.encode(route_context.mission.mission_id) <> "/comms"
-      )
-    else
-      _reason -> not_found_html(conn)
-    end
-  end
-
   @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def catalog(conn, %{"mission_id" => _mission_id} = params) do
     with %Scope{} = current_scope <- conn.assigns.current_scope,
+         :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          {:ok, catalog} <- build_catalog(conn, current_scope, route_context, params) do
       conn
@@ -84,6 +70,7 @@ defmodule CadenceWeb.ApplicationHostController do
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, %{"mission_id" => _mission_id} = params) do
     with %Scope{} = current_scope <- conn.assigns.current_scope,
+         :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
@@ -126,6 +113,7 @@ defmodule CadenceWeb.ApplicationHostController do
   @spec actions(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def actions(conn, %{"mission_id" => _mission_id} = params) do
     with %Scope{} = current_scope <- conn.assigns.current_scope,
+         :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
@@ -175,19 +163,30 @@ defmodule CadenceWeb.ApplicationHostController do
          surface_id,
          fallback_override \\ nil
        ) do
-    render(conn, :federated,
-      flash: conn.assigns.flash,
-      current_scope: current_scope,
-      mission_id: route_context.mission.mission_id,
-      spacecraft_id: route_context.host_context.spacecraft_id,
-      host_scope: Atom.to_string(route_context.host_context.placement),
-      application_key: application_key,
-      surface_id: surface_id,
-      catalog_url: catalog_url(route_context),
-      fallback_href:
-        fallback_override ||
-          ApplicationHostCatalog.fallback_href(route_context, application_key, surface_id)
-    )
+    fallback_result =
+      case fallback_override do
+        nil -> ApplicationHostCatalog.fallback_href(route_context, application_key, surface_id)
+        path when is_binary(path) -> {:ok, path}
+        _invalid -> {:error, :invalid_application_request}
+      end
+
+    case fallback_result do
+      {:ok, fallback_href} ->
+        render(conn, :federated,
+          flash: conn.assigns.flash,
+          current_scope: current_scope,
+          mission_id: route_context.mission.mission_id,
+          spacecraft_id: route_context.host_context.spacecraft_id,
+          host_scope: Atom.to_string(route_context.host_context.placement),
+          application_key: application_key,
+          surface_id: surface_id,
+          catalog_url: catalog_url(route_context),
+          fallback_href: fallback_href
+        )
+
+      {:error, :invalid_application_request} ->
+        not_found_html(conn)
+    end
   end
 
   defp build_catalog(conn, current_scope, route_context, params) do
@@ -234,6 +233,18 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp fetch_route_context(%Scope{}, _params), do: {:error, :mission_not_found}
+
+  defp authorize_route_scope(
+         %Scope{} = current_scope,
+         %{"mission_id" => mission_id}
+       ) do
+    Policy.authorize(current_scope, :read_application_catalog, %{
+      organization_id: current_scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize_route_scope(_current_scope, _params), do: {:error, :scope_mismatch}
 
   defp fetch_host_context(%Scope{}, %Mission{} = mission, nil) do
     {:ok,
@@ -349,7 +360,12 @@ defmodule CadenceWeb.ApplicationHostController do
               :unsupported_application_surface_query,
               :invalid_application_surface_query_contract,
               :unknown_application_surface_query,
-              :unsupported_application_query
+              :unsupported_application_query,
+              :application_query_identity_mismatch,
+              :invalid_application_host_query_provider_registry,
+              :invalid_application_host_query,
+              :invalid_application_host_query_output,
+              :application_host_query_output_bounds_exceeded
             ] do
     problem(
       conn,
@@ -430,14 +446,27 @@ defmodule CadenceWeb.ApplicationHostController do
     )
   end
 
+  defp catalog_problem(conn, :forbidden) do
+    problem(
+      conn,
+      :forbidden,
+      "forbidden",
+      "You do not have authority to access this application catalog."
+    )
+  end
+
   defp catalog_problem(conn, reason)
        when reason in [
+              :application_catalog_bounds_exceeded,
+              :application_installation_bounds_exceeded,
               :application_not_installed,
               :application_installation_disabled,
               :application_installation_uninstalled,
               :application_installation_scope_required,
               :application_unavailable,
-              :invalid_application_request
+              :invalid_application_request,
+              :scope_mismatch,
+              :authenticated_user_required
             ] do
     problem(
       conn,

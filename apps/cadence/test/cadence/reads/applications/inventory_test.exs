@@ -46,7 +46,11 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     assert {:ok, applications} =
              Inventory.catalog(context.scope, context.mission_host, definitions)
 
-    assert Enum.map(applications, & &1.application_key) == ["derived_telemetry", "limits"]
+    assert Enum.map(applications, & &1.application_key) == [
+             "derived_telemetry",
+             "limits",
+             "comms"
+           ]
 
     assert Enum.all?(applications, fn application ->
              not application.declared? and

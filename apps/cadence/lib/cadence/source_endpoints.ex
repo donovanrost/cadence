@@ -9,6 +9,7 @@ defmodule Cadence.SourceEndpoints do
   alias Ecto.Changeset
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
@@ -119,6 +120,51 @@ defmodule Cadence.SourceEndpoints do
     |> order_by([row], asc: row.source_endpoint_id)
     |> Repo.all()
     |> Enum.map(&SourceEndpointRow.to_domain/1)
+  end
+
+  @doc "Returns one bounded page of mission source endpoints."
+  @spec list_source_endpoints_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_source_endpoints_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    filtered =
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> apply_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by([row], asc: row.source_endpoint_id)
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&SourceEndpointRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
+  end
+
+  defp apply_search(query, nil), do: query
+  defp apply_search(query, ""), do: query
+
+  defp apply_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [source_endpoint],
+      ilike(source_endpoint.source_endpoint_id, ^pattern) or
+        ilike(source_endpoint.spacecraft_id, ^pattern) or
+        ilike(source_endpoint.display_name, ^pattern)
+    )
   end
 
   @spec ensure_managed_source_endpoint(binary(), Spacecraft.t()) ::

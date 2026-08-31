@@ -2,10 +2,11 @@ defmodule CadenceWeb.Router do
   use CadenceWeb, :router
 
   pipeline :browser do
-    plug :accepts, ["html"]
+    plug CadenceWeb.Plugs.BrowserAccepts
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {CadenceWeb.Layouts, :root}
+    plug CadenceWeb.Plugs.ApplicationHostCSRF
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug CadenceWeb.Plugs.FetchBrowserCurrentScope
@@ -20,10 +21,13 @@ defmodule CadenceWeb.Router do
     plug CadenceWeb.Plugs.RequireAuthenticatedScope
   end
 
+  pipeline :require_authenticated_user do
+    plug CadenceWeb.Plugs.RequireAuthenticatedScope
+  end
+
   pipeline :application_host_json do
     plug :accepts, ["json"]
     plug :fetch_session
-    plug CadenceWeb.Plugs.ApplicationHostCSRF
     plug :put_secure_browser_headers
     plug CadenceWeb.Plugs.FetchBrowserCurrentScope
     plug CadenceWeb.Plugs.RequireApplicationHostScope
@@ -70,7 +74,12 @@ defmodule CadenceWeb.Router do
         CatalogArtifactDownloadController,
         :show
 
-    get "/missions/:mission_id/comms/federated", ApplicationHostController, :federated
+    # Preserve the retired Comms federation URL as a compatibility alias. The
+    # alias supplies the generic application key in the compatibility
+    # controller; ApplicationHostController remains application-agnostic.
+    get "/missions/:mission_id/comms/federated",
+        LegacyApplicationRedirectController,
+        :comms_overview
 
     get "/missions/:mission_id/applications/:application_key/federated",
         ApplicationHostController,
@@ -578,7 +587,7 @@ defmodule CadenceWeb.Router do
   end
 
   scope "/api/cadence/application-host/v1", CadenceWeb do
-    pipe_through :application_host_json
+    pipe_through [:browser, :require_authenticated_user, :application_host_json]
 
     get "/missions/:mission_id/catalog", ApplicationHostController, :catalog
 

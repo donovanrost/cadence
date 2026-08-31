@@ -53,8 +53,8 @@ export interface Finding {
   id: string | null;
   title: string;
   body: string;
-  action_label: string | null;
-  action_href: string | null;
+  action_label?: string | null;
+  action_href?: string | null;
   status: Status;
 }
 
@@ -214,8 +214,12 @@ function validFinding(value: unknown): value is Finding {
     (value.id === null || nonEmptyString(value.id)) &&
     nonEmptyString(value.title) &&
     typeof value.body === "string" &&
-    (value.action_label === null || typeof value.action_label === "string") &&
-    (value.action_href === null || typeof value.action_href === "string") &&
+    (value.action_label === undefined ||
+      value.action_label === null ||
+      typeof value.action_label === "string") &&
+    (value.action_href === undefined ||
+      value.action_href === null ||
+      typeof value.action_href === "string") &&
     validStatus(value.status)
   );
 }

@@ -9,6 +9,14 @@ defmodule CadenceWeb.LegacyApplicationRedirectController do
 
   use CadenceWeb, :controller
 
+  alias CadenceWeb.ApplicationHostController
+
+  def comms_overview(conn, %{"mission_id" => _mission_id} = params) do
+    conn
+    |> put_view(html: CadenceWeb.ApplicationHostHTML)
+    |> ApplicationHostController.federated(Map.put(params, "application_key", "comms_overview"))
+  end
+
   def telemetry_decom(conn, %{
         "mission_id" => mission_id,
         "spacecraft_id" => spacecraft_id

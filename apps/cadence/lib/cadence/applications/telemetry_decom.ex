@@ -23,7 +23,13 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Applications.{MissionBindingComposer, MissionBindingContribution}
-  alias Cadence.Applications.{PacketBindingConfiguration, PacketBindings}
+
+  alias Cadence.Applications.{
+    PacketBindingConfiguration,
+    PacketBindings,
+    SurfaceQueryContribution
+  }
+
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Auth.Scope
@@ -42,6 +48,25 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled
+
+  @spec action_provider() :: module()
+  def action_provider, do: Cadence.Applications.TelemetryDecom.ActionProvider
+
+  @spec application_key() :: binary()
+  def application_key, do: @application_key
+
+  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
+  def surface_query_contributions do
+    [
+      %SurfaceQueryContribution{
+        application_key: @application_key,
+        application_version: 1,
+        query_id: "cadence.packet_bindings.manage",
+        query_version: 1,
+        provider: Cadence.Reads.ApplicationSurfaces.PacketBindings
+      }
+    ]
+  end
 
   @spec configure(binary(), binary(), binary(), map() | keyword()) ::
           {:ok, Config.t()} | {:error, term()}
@@ -330,6 +355,22 @@ defmodule Cadence.Applications.TelemetryDecom do
     |> ApplicationBindingStore.list(mission_id, application_key: @application_key)
     |> Enum.map(&config_from_binding/1)
     |> overlay_packet_binding_selections(organization_id, mission_id)
+  end
+
+  @doc "Loads status-only configurations for one bounded spacecraft batch."
+  @spec status_configs_for_spacecrafts(binary(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Config.t()}} | {:error, :batch_bounds_exceeded}
+  def status_configs_for_spacecrafts(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    with {:ok, bindings} <-
+           ApplicationBindingStore.list_for_spacecrafts(
+             organization_id,
+             mission_id,
+             spacecraft_ids,
+             application_key: @application_key
+           ) do
+      {:ok, Map.new(bindings, &{&1.spacecraft_id, config_from_binding(&1)})}
+    end
   end
 
   @doc """

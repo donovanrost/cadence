@@ -224,6 +224,29 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     assert contract == Jason.decode!(Jason.encode!(contract))
   end
 
+  test "rejects oversized LiveView action input before provider dispatch", context do
+    {:ok, inventory, _html} =
+      live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")
+
+    render_click(inventory, "install_application", %{"key" => "derived_telemetry"})
+
+    {:ok, view, _html} =
+      live(
+        context.conn,
+        ~p"/missions/#{context.mission.mission_id}/applications/derived_telemetry"
+      )
+
+    render_hook(view, "application_action", %{
+      "action-id" => "save_definition",
+      "application_action" => %{"values" => Enum.to_list(1..101)}
+    })
+
+    vue = LiveVue.Test.get_vue(view, id: "application-host-component")
+
+    assert vue.props["declarative_surface"]["action_feedback"]["code"] ==
+             "application_action_failed"
+  end
+
   test "paginates declarative application tables through shareable host state", context do
     {:ok, inventory, _html} =
       live(context.conn, ~p"/missions/#{context.mission.mission_id}/applications")

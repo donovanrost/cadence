@@ -23,6 +23,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Limits do
   alias Cadence.Reads.Limits, as: LimitReads
 
   @impl true
+  def application_key, do: "limits"
+
+  @impl true
   def load(
         %Scope{organization_id: organization_id},
         %HostContext{placement: :mission, mission_id: mission_id},

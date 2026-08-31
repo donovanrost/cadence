@@ -15,6 +15,21 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
            }
   end
 
+  test "does not advertise the unpublished Comms remote" do
+    surfaces =
+      ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
+
+    Enum.each(surfaces, fn surface_id ->
+      assert {:error, :unknown_application_release} =
+               ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1)
+    end)
+
+    refute Enum.any?(ApplicationReleaseRegistry.all(), fn {{application_key, _version, _surface,
+                                                            _surface_version}, _release} ->
+             application_key == "comms"
+           end)
+  end
+
   test "advertises the checked-in telemetry packet bindings release coordinate" do
     assert {:ok, release} =
              ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)

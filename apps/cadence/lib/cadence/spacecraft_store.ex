@@ -13,6 +13,8 @@ defmodule Cadence.SpacecraftStore do
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore.SpacecraftRow
 
+  @max_batch_size 100
+
   @type list_filter ::
           :missing_profile
           | :missing_scid
@@ -97,6 +99,47 @@ defmodule Cadence.SpacecraftStore do
     case fetch_spacecraft_row(organization_id, mission_id, spacecraft_id) do
       {:ok, %SpacecraftRow{} = row} -> {:ok, SpacecraftRow.to_domain(row)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Fetches at most one bounded batch of mission spacecraft in one query."
+  @spec fetch_spacecrafts(binary(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Spacecraft.t()}} | {:error, :batch_bounds_exceeded}
+  def fetch_spacecrafts(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    case bounded_spacecraft_ids(spacecraft_ids) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, []} ->
+        {:ok, %{}}
+
+      {:ok, ids} ->
+        rows =
+          SpacecraftRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.spacecraft_id in ^ids
+          )
+          |> Repo.all()
+
+        {:ok, Map.new(rows, fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)}
+    end
+  end
+
+  defp bounded_spacecraft_ids(spacecraft_ids) do
+    ids = Enum.take(spacecraft_ids, @max_batch_size + 1)
+
+    cond do
+      length(ids) > @max_batch_size ->
+        {:error, :batch_bounds_exceeded}
+
+      not Enum.all?(ids, &(is_binary(&1) and &1 != "")) ->
+        {:error, :batch_bounds_exceeded}
+
+      true ->
+        {:ok, Enum.uniq(ids)}
     end
   end
 

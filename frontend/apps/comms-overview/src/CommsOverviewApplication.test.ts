@@ -151,6 +151,39 @@ describe("Comms Overview federated adapter", () => {
     );
   });
 
+  it("accepts validation findings without optional navigation actions", () => {
+    const compatible = {
+      ...presentationResponse,
+      presentation: {
+        ...presentationResponse.presentation,
+        overview: {
+          ...presentationResponse.presentation.overview,
+          validation: {
+            ...presentationResponse.presentation.overview.validation,
+            empty: false,
+            finding_groups: [
+              {
+                id: "setup",
+                title: "Setup",
+                description: "Review setup.",
+                findings: [
+                  {
+                    id: null,
+                    title: "Review setup",
+                    body: "No navigation action is available.",
+                    status: { tone: "attention", label: "Warning" },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(() => unwrapCommsOverviewResponse(compatible)).not.toThrow();
+  });
+
   it("publishes the exact mission-scoped first-party identity", () => {
     expect(manifest.package).toMatchObject({ packageId: "cadence.comms_overview", version: 1 });
     expect(manifest.application).toMatchObject({ applicationKey: "comms_overview", version: 1 });

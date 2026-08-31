@@ -8,18 +8,28 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   `ApplicationReleaseRegistry`.
   """
 
-  alias Cadence.Applications.{ApplicationInstallation, ApplicationInstallations, HostContext}
+  alias Cadence.Applications.{
+    ApplicationInstallation,
+    ApplicationInstallations,
+    CatalogContribution,
+    CatalogRegistry,
+    HostContext,
+    JSONBoundary
+  }
+
   alias Cadence.Applications.Registry, as: ApplicationRegistry
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.ExtensionCatalog
   alias Cadence.Extensions.{ApplicationContribution, ExtensionPackage}
+  alias Cadence.Ids
   alias Cadence.Missions.Mission
   alias Cadence.Spacecraft
   alias CadenceWeb.ApplicationReleaseRegistry
 
   @application_catalog_schema "cadence.first-party-frontend-catalog.v1"
   @application_host_contract "cadence.application-host.v1"
-
+  @catalog_page_size 100
+  @max_catalog_applications 100
   @type route_context :: %{
           host_context: HostContext.t(),
           mission: Mission.t(),
@@ -28,6 +38,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @type build_error ::
           :application_catalog_unavailable
+          | :application_catalog_bounds_exceeded
           | :application_not_installed
           | :application_installation_disabled
           | :application_installation_uninstalled
@@ -46,21 +57,28 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         opts
       )
       when is_list(opts) do
-    with :ok <- validate_session_options(opts),
-         {:ok, applications} <- applications(current_scope, route_context, opts) do
-      {:ok,
-       %{
-         "schema" => @application_catalog_schema,
-         "hostContract" => @application_host_contract,
-         "generatedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
-         "session" => %{
-           "sessionId" => Keyword.fetch!(opts, :session_id),
-           "csrfToken" => Keyword.fetch!(opts, :csrf_token),
-           "bridgeBaseUrl" => Keyword.fetch!(opts, :bridge_base_url),
-           "context" => context_document(current_scope, route_context)
-         },
-         "applications" => applications
-       }}
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- validate_session_options(opts),
+         {:ok, applications} <- applications(current_scope, route_context, opts),
+         {:ok, catalog} <-
+           {:ok,
+            %{
+              "schema" => @application_catalog_schema,
+              "hostContract" => @application_host_contract,
+              "generatedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+              "session" => %{
+                "sessionId" => Keyword.fetch!(opts, :session_id),
+                "csrfToken" => Keyword.fetch!(opts, :csrf_token),
+                "bridgeBaseUrl" => Keyword.fetch!(opts, :bridge_base_url),
+                "context" => context_document(current_scope, route_context)
+              },
+              "applications" => applications
+            }},
+         :ok <- validate_catalog_output(catalog) do
+      {:ok, catalog}
+    else
+      {:error, _reason} = error -> error
+      _invalid -> {:error, :application_catalog_bounds_exceeded}
     end
   end
 
@@ -78,18 +96,32 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         surface_id
       )
       when is_binary(application_key) do
-    with {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- CatalogRegistry.validate() do
+      case ApplicationInstallations.fetch_installed(
              current_scope,
              route_context.host_context,
              application_key
            ) do
-      registered_application(
-        application_key,
-        installation,
-        route_context.host_context,
-        surface_id
-      )
+        {:ok, installation} ->
+          registered_application(
+            application_key,
+            installation,
+            route_context.host_context,
+            surface_id
+          )
+
+        {:error, :application_not_installed} ->
+          contributed_application_admission(
+            current_scope,
+            application_key,
+            route_context,
+            surface_id
+          )
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -130,7 +162,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @spec bridge_base_path(route_context()) :: binary()
   def bridge_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}) do
-    "/api/cadence/application-host/v1/missions/" <> URI.encode(mission_id)
+    "/api/cadence/application-host/v1/missions/" <> safe_segment(mission_id)
   end
 
   def bridge_base_path(%{
@@ -141,18 +173,63 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         }
       }) do
     "/api/cadence/application-host/v1/missions/" <>
-      URI.encode(mission_id) <> "/spacecraft/" <> URI.encode(spacecraft_id)
+      safe_segment(mission_id) <> "/spacecraft/" <> safe_segment(spacecraft_id)
+  end
+
+  @doc "Selects the admitted native or federated workspace path for an application."
+  @spec workspace_href(Scope.t(), route_context(), binary()) ::
+          {:ok, binary()} | {:error, :invalid_application_request}
+  def workspace_href(%Scope{} = scope, route_context, application_key)
+      when is_binary(application_key) do
+    with :ok <- validate_route_identifiers(route_context, application_key) do
+      case admit_application(scope, route_context, application_key) do
+        {:ok, %{surface: surface, release: %{federation: federation}}} ->
+          href =
+            application_href(host_base_path(route_context), application_key, surface.surface_id)
+
+          {:ok,
+           if(
+             federation in [:module_federation, :native_federation],
+             do: href <> "/federated",
+             else: href
+           )}
+
+        {:error, _reason} ->
+          fallback_href(route_context, application_key, nil)
+      end
+    end
   end
 
   @doc "Returns the Phoenix LiveView fallback for an admitted application surface."
-  @spec fallback_href(route_context(), binary(), binary() | nil) :: binary()
+  @spec fallback_href(route_context(), binary(), binary() | nil) ::
+          {:ok, binary()} | {:error, :invalid_application_request}
+  def fallback_href(route_context, application_key, surface_id),
+    do: fallback_href(route_context, application_key, surface_id, nil)
+
+  @spec fallback_href(route_context(), binary(), binary() | nil, binary() | nil) ::
+          {:ok, binary()} | {:error, :invalid_application_request}
   def fallback_href(
         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
         application_key,
-        surface_id
+        surface_id,
+        subject_id
       )
       when is_binary(application_key) do
-    application_href("/missions/" <> URI.encode(mission_id), application_key, surface_id)
+    with :ok <-
+           validate_route_identifiers(
+             %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
+             application_key
+           ),
+         :ok <- validate_optional_identifier(surface_id),
+         :ok <- validate_optional_identifier(subject_id) do
+      {:ok,
+       generic_fallback_href(
+         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
+         application_key,
+         surface_id,
+         subject_id
+       )}
+    end
   end
 
   def fallback_href(
@@ -164,14 +241,100 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           }
         },
         application_key,
-        surface_id
+        surface_id,
+        subject_id
       )
       when is_binary(application_key) do
-    application_href(
-      "/missions/" <> URI.encode(mission_id) <> "/spacecraft/" <> URI.encode(spacecraft_id),
-      application_key,
-      surface_id
-    )
+    route_context = %{
+      host_context: %HostContext{
+        placement: :spacecraft,
+        mission_id: mission_id,
+        spacecraft_id: spacecraft_id
+      }
+    }
+
+    with :ok <- validate_route_identifiers(route_context, application_key),
+         :ok <- validate_optional_identifier(surface_id),
+         :ok <- validate_optional_identifier(subject_id) do
+      {:ok, generic_fallback_href(route_context, application_key, surface_id, subject_id)}
+    end
+  end
+
+  defp generic_fallback_href(route_context, application_key, surface_id, subject_id) do
+    base_path = host_base_path(route_context)
+
+    case surface_fallback(route_context, application_key, surface_id, subject_id) do
+      {:ok, path} -> base_path <> path
+      :error -> application_href(base_path, application_key, surface_id)
+    end
+  end
+
+  defp surface_fallback(
+         %{host_context: %HostContext{placement: placement}},
+         application_key,
+         surface_id,
+         subject_id
+       )
+       when is_binary(application_key) and is_binary(surface_id) do
+    with {:ok, definition} <- definition_for(application_key),
+         {:ok, surface} <- ApplicationRegistry.fetch_surface(definition, placement, surface_id),
+         fallback_path when is_binary(fallback_path) <-
+           Map.get(surface.navigation, :fallback_path) do
+      render_surface_fallback(fallback_path, surface.navigation, subject_id)
+    else
+      _invalid -> :error
+    end
+  end
+
+  defp surface_fallback(
+         %{host_context: %HostContext{placement: placement}} = route_context,
+         application_key,
+         nil,
+         subject_id
+       )
+       when is_binary(application_key) do
+    with {:ok, definition} <- definition_for(application_key),
+         {:ok, surface} <- ApplicationRegistry.fetch_default_surface(definition, placement) do
+      surface_fallback(route_context, application_key, surface.surface_id, subject_id)
+    else
+      _invalid -> :error
+    end
+  end
+
+  defp surface_fallback(_route_context, _application_key, _surface_id, _subject_id), do: :error
+
+  defp definition_for(application_key) do
+    case ApplicationRegistry.fetch(application_key) do
+      {:ok, definition} -> {:ok, definition}
+      {:error, _reason} -> catalog_definition(application_key)
+    end
+  end
+
+  defp catalog_definition(application_key) do
+    case CatalogRegistry.fetch(application_key) do
+      {:ok, %CatalogContribution{definition: definition}} -> {:ok, definition}
+      {:error, _reason} -> {:error, :unknown_application}
+    end
+  end
+
+  defp render_surface_fallback(path, navigation, subject_id) do
+    case String.contains?(path, ":subject") do
+      true -> render_subject_fallback(path, navigation, subject_id)
+      false -> {:ok, path}
+    end
+  end
+
+  defp render_subject_fallback(path, navigation, subject_id) do
+    case Ids.path_segment(subject_id) do
+      {:ok, segment} ->
+        {:ok, String.replace(path, ":subject", segment)}
+
+      {:error, :invalid_identifier} ->
+        case Map.get(navigation, :fallback_parent_path) do
+          parent when is_binary(parent) -> {:ok, parent}
+          _missing -> :error
+        end
+    end
   end
 
   defp applications(current_scope, route_context, opts) do
@@ -194,28 +357,130 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp all_applications(
          %Scope{} = current_scope,
-         %{host_context: %HostContext{} = host_context},
+         %{host_context: %HostContext{} = host_context} = route_context,
          manifest_url
        ) do
-    with {:ok, installations} <- ApplicationInstallations.list(current_scope, host_context) do
+    with {:ok, installation_page} <-
+           ApplicationInstallations.list_page(
+             current_scope,
+             host_context,
+             lifecycle_state: :installed,
+             page: 1,
+             page_size: @catalog_page_size,
+             max_total: @max_catalog_applications
+           ),
+         {:ok, contributed} <-
+           contributed_applications(current_scope, route_context, manifest_url) do
       installed_applications =
-        installations
-        |> Enum.filter(&(&1.lifecycle_state == :installed))
+        installation_page.items
         |> Enum.flat_map(&installed_application_document(&1, host_context, manifest_url))
 
-      applications =
-        compatibility_applications(host_context, manifest_url) ++ installed_applications
-
-      if applications == [] do
-        {:error, :application_catalog_unavailable}
-      else
-        {:ok, applications}
-      end
+      finalize_catalog_applications(contributed ++ installed_applications)
     end
   end
 
   defp all_applications(%Scope{}, %{}, _manifest_url),
     do: {:error, :application_catalog_unavailable}
+
+  defp contributed_applications(
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
+         manifest_url
+       ) do
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- CatalogRegistry.validate(),
+         contributions <- CatalogRegistry.all(),
+         true <- length(contributions) <= @max_catalog_applications do
+      {:ok,
+       Enum.flat_map(
+         contributions,
+         &contributed_application_document(&1, current_scope, route_context, manifest_url)
+       )}
+    else
+      false -> {:error, :application_catalog_bounds_exceeded}
+      {:error, reason} -> {:error, reason}
+      _invalid -> {:error, :application_catalog_unavailable}
+    end
+  end
+
+  defp finalize_catalog_applications([]), do: {:error, :application_catalog_unavailable}
+
+  defp finalize_catalog_applications(applications)
+       when length(applications) <= @max_catalog_applications,
+       do: {:ok, applications}
+
+  defp finalize_catalog_applications(_applications),
+    do: {:error, :application_catalog_bounds_exceeded}
+
+  defp contributed_application_document(
+         %CatalogContribution{} = contribution,
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
+         manifest_url
+       ) do
+    case contributed_application(contribution, current_scope, route_context, manifest_url) do
+      {:ok, application} -> [application]
+      {:error, _reason} -> []
+    end
+  end
+
+  defp contributed_application(
+         %CatalogContribution{
+           definition: definition
+         },
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
+         manifest_url
+       ) do
+    case contributed_application_admission(
+           current_scope,
+           definition.application_key,
+           route_context,
+           nil
+         ) do
+      {:ok, application} -> {:ok, application_document(application, manifest_url)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp contributed_application_admission(
+         %Scope{} = current_scope,
+         application_key,
+         %{
+           host_context: %HostContext{placement: placement, mission_id: mission_id},
+           mission: %Mission{organization_id: organization_id}
+         },
+         surface_id
+       )
+       when is_binary(application_key) do
+    with :ok <-
+           Policy.authorize(current_scope, :read_application_catalog, %{
+             organization_id: organization_id,
+             mission_id: mission_id
+           }),
+         {:ok,
+          %CatalogContribution{
+            definition: definition,
+            package_id: package_id,
+            package_version: package_version
+          }} <- CatalogRegistry.fetch(application_key),
+         true <- placement in definition.installable_scopes,
+         {:ok, surface, release} <-
+           resolve_surface(definition, placement, definition.application_key, surface_id) do
+      {:ok,
+       %{
+         definition: definition,
+         installation: nil,
+         package: %{package_id: package_id, version: package_version},
+         release: release,
+         surface: surface
+       }}
+    else
+      false -> {:error, :application_unavailable}
+      {:error, :unknown_catalog_contribution} -> {:error, :application_unavailable}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp registered_application(
          application_key,
@@ -387,44 +652,63 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     }
   end
 
-  defp compatibility_applications(%HostContext{placement: :mission}, manifest_url) do
-    {:ok, release} = ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
-
-    [
-      %{
-        "applicationKey" => "comms_overview",
-        "applicationVersion" => 1,
-        "displayName" => "Communications Overview",
-        "description" => "Review the saved communications setup for a mission.",
-        "package" => %{"packageId" => "cadence.comms_overview", "version" => 1},
-        "surface" => %{
-          "surfaceId" => "overview",
-          "version" => 1,
-          "purpose" => "overview",
-          "scope" => "mission",
-          "placement" => "application_workspace",
-          "navigation" => %{"label" => "Overview", "order" => 10},
-          "dataContract" => %{"id" => "cadence.comms.overview", "version" => 1},
-          "actions" => [],
-          "renderer" => %{
-            "kind" => "federated-vue",
-            "exposedModule" => release.exposed_module
-          }
-        },
-        "release" => release_document(release, manifest_url)
-      }
-    ]
-  end
-
-  defp compatibility_applications(%HostContext{}, _manifest_url), do: []
-
   defp application_href(base_path, application_key, nil),
-    do: base_path <> "/applications/" <> URI.encode(application_key)
+    do: base_path <> "/applications/" <> safe_segment(application_key)
 
   defp application_href(base_path, application_key, surface_id),
     do:
       base_path <>
-        "/applications/" <> URI.encode(application_key) <> "/" <> URI.encode(surface_id)
+        "/applications/" <> safe_segment(application_key) <> "/" <> safe_segment(surface_id)
+
+  defp host_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}),
+    do: "/missions/" <> safe_segment(mission_id)
+
+  defp host_base_path(%{
+         host_context: %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         }
+       }),
+       do:
+         "/missions/" <> safe_segment(mission_id) <> "/spacecraft/" <> safe_segment(spacecraft_id)
+
+  defp safe_segment(value) do
+    case Ids.path_segment(value) do
+      {:ok, segment} -> segment
+      {:error, :invalid_identifier} -> throw(:invalid_application_request)
+    end
+  end
+
+  defp validate_route_identifiers(
+         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
+         application_key
+       ),
+       do: validate_identifiers([mission_id, application_key])
+
+  defp validate_route_identifiers(
+         %{
+           host_context: %HostContext{
+             placement: :spacecraft,
+             mission_id: mission_id,
+             spacecraft_id: spacecraft_id
+           }
+         },
+         application_key
+       ),
+       do: validate_identifiers([mission_id, spacecraft_id, application_key])
+
+  defp validate_route_identifiers(_route_context, _application_key),
+    do: {:error, :invalid_application_request}
+
+  defp validate_optional_identifier(nil), do: :ok
+  defp validate_optional_identifier(value), do: validate_identifiers([value])
+
+  defp validate_identifiers(values) do
+    if Enum.all?(values, &match?({:ok, _value}, Ids.path_segment(&1))),
+      do: :ok,
+      else: {:error, :invalid_application_request}
+  end
 
   defp actor_document(%Scope{user: %{display_name: display_name}}) do
     %{"displayName" => display_name, "permissions" => ["applications:view"]}
@@ -433,6 +717,22 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   defp actor_document(%Scope{}) do
     %{"displayName" => "Authenticated actor", "permissions" => ["applications:view"]}
   end
+
+  defp authorize_catalog_access(
+         %Scope{} = current_scope,
+         %{
+           host_context: %HostContext{mission_id: mission_id},
+           mission: %Mission{organization_id: organization_id}
+         }
+       ) do
+    Policy.authorize(current_scope, :read_application_catalog, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize_catalog_access(_current_scope, _route_context),
+    do: {:error, :application_catalog_unavailable}
 
   defp spacecraft_name(%Spacecraft{display_name: display_name}), do: display_name
   defp spacecraft_name(nil), do: nil
@@ -450,4 +750,11 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp valid_path?(value), do: is_binary(value) and String.starts_with?(value, "/")
   defp valid_text?(value), do: is_binary(value) and value != ""
+
+  defp validate_catalog_output(catalog) do
+    case JSONBoundary.validate(catalog) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_catalog_bounds_exceeded}
+    end
+  end
 end

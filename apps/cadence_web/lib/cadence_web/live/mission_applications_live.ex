@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Applications.{ActionConfirmation, HostContext, LifecycleActions}
-  alias CadenceWeb.{ApplicationInventory, ApplicationInventoryLifecycle}
+  alias CadenceWeb.{ApplicationHostCatalog, ApplicationInventory, ApplicationInventoryLifecycle}
   alias Phoenix.LiveView.JS
 
   @impl true
@@ -83,12 +83,13 @@ defmodule CadenceWeb.MissionApplicationsLive do
       page_presentation_dto(
         socket.assigns.current_mission,
         applications,
-        socket.assigns.application_host_context
+        socket.assigns.application_host_context,
+        socket.assigns.current_scope
       )
     )
   end
 
-  defp page_presentation_dto(mission, applications, host_context) do
+  defp page_presentation_dto(mission, applications, host_context, scope) do
     %{
       "root" => %{
         "attrs" =>
@@ -101,7 +102,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
       "applications_component" => %{
         "attrs" => presentation_attrs(%{"id" => "mission-applications-component"}),
         "props" => %{
-          "applications" => application_rows_dto(applications, host_context, mission.mission_id)
+          "applications" => application_rows_dto(applications, host_context, mission, scope)
         }
       }
     }
@@ -197,12 +198,13 @@ defmodule CadenceWeb.MissionApplicationsLive do
     assign_applications_presentation(socket)
   end
 
-  defp application_rows_dto(applications, host_context, mission_id) do
-    Enum.map(applications, &application_row_dto(&1, host_context, mission_id))
+  defp application_rows_dto(applications, host_context, mission, scope) do
+    Enum.map(applications, &application_row_dto(&1, host_context, mission, scope))
   end
 
-  defp application_row_dto(application, host_context, mission_id) do
+  defp application_row_dto(application, host_context, mission, scope) do
     card_id = ApplicationInventory.dom_id(host_context, application.application_key)
+    route_context = %{host_context: host_context, mission: mission, spacecraft: nil}
 
     %{
       id: card_id,
@@ -215,7 +217,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
       manageable: application.manageable?,
       uninstallable: application.uninstallable?,
       scope_label: "Mission Application",
-      manage_path: ~p"/missions/#{mission_id}/applications/#{application.application_key}",
+      manage_path: workspace_path(scope, route_context, application.application_key),
       status: status_dto(application.status),
       install_action: install_action_dto(application, card_id),
       disable_action: if(application.manageable?, do: lifecycle_action_dto("disable", card_id)),
@@ -239,6 +241,13 @@ defmodule CadenceWeb.MissionApplicationsLive do
           %{id: fact.id, label: fact.label, value: fact.value}
         end)
     }
+  end
+
+  defp workspace_path(scope, route_context, application_key) do
+    case ApplicationHostCatalog.workspace_href(scope, route_context, application_key) do
+      {:ok, path} -> path
+      {:error, :invalid_application_request} -> nil
+    end
   end
 
   defp install_action_dto(application, card_id) do

@@ -113,9 +113,14 @@ defmodule Cadence.Applications.SurfaceDefinition do
     do: valid_versioned_contract?(contract, :schema_id)
 
   defp valid_navigation?(navigation) when is_map(navigation) do
-    Enum.all?(Map.keys(navigation), &(&1 in [:label, :order])) and
+    Enum.all?(
+      Map.keys(navigation),
+      &(&1 in [:label, :order, :fallback_path, :fallback_parent_path])
+    ) and
       optional_text?(Map.get(navigation, :label)) and
-      optional_integer?(Map.get(navigation, :order))
+      optional_integer?(Map.get(navigation, :order)) and
+      optional_path?(Map.get(navigation, :fallback_path)) and
+      optional_path?(Map.get(navigation, :fallback_parent_path))
   end
 
   defp valid_navigation?(_navigation), do: false
@@ -167,4 +172,9 @@ defmodule Cadence.Applications.SurfaceDefinition do
   defp valid_text?(value), do: is_binary(value) and value != ""
   defp optional_text?(nil), do: true
   defp optional_text?(value), do: is_binary(value)
+
+  defp optional_path?(nil), do: true
+
+  defp optional_path?(value),
+    do: is_binary(value) and value != "" and String.starts_with?(value, "/")
 end

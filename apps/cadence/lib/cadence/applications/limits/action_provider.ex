@@ -8,6 +8,9 @@ defmodule Cadence.Applications.Limits.ActionProvider do
   alias Cadence.Limits
   alias Cadence.Limits.Definition
 
+  @impl true
+  def application_key, do: "limits"
+
   @threshold_fields [
     {"red_low", :red_low},
     {"yellow_low", :yellow_low},
@@ -45,6 +48,20 @@ defmodule Cadence.Applications.Limits.ActionProvider do
 
   def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :unsupported_application_action}
+
+  @impl true
+  def result(%Definition{} = definition) do
+    %{
+      "definitionId" => definition.limit_definition_id,
+      "pointId" => definition.point_id,
+      "limitSetName" => definition.limit_set_name,
+      "thresholds" => definition.thresholds,
+      "version" => definition.version
+    }
+  end
+
+  def result(value) when is_map(value), do: value
+  def result(_value), do: nil
 
   defp existing_definition(mission_id, point_id, limit_set_name) do
     mission_id

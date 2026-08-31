@@ -6,10 +6,12 @@ defmodule CadenceWeb.ApplicationHostBridge do
     ActionDispatcher,
     ActionRequest,
     ApplicationDefinition,
-    HostContext,
-    SurfaceDefinition
+    JSONBoundary,
+    SurfaceDefinition,
+    SurfaceDocument
   }
 
+  alias Cadence.Applications.HostQueryRegistry
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces
   alias CadenceWeb.ApplicationHostCatalog
@@ -19,16 +21,11 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
   def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
-    cond do
-      Map.get(params, "queryId") == "cadence.comms.overview" or
-          Map.get(params, "applicationKey") == "comms_overview" ->
-        legacy_query(current_scope, route_context, params)
-
-      Map.has_key?(params, "applicationKey") or Map.has_key?(params, "surfaceId") ->
-        generic_query(current_scope, route_context, params)
-
-      true ->
-        legacy_query(current_scope, route_context, params)
+    with :ok <- validate_request(params) do
+      case HostQueryRegistry.dispatch(current_scope, route_context, params) do
+        :not_handled -> generic_query(current_scope, route_context, params)
+        result -> result
+      end
     end
   end
 
@@ -42,37 +39,16 @@ defmodule CadenceWeb.ApplicationHostBridge do
         params,
         idempotency_key
       )
-      when is_map(params) and is_binary(idempotency_key) and idempotency_key != "" do
-    if Map.has_key?(params, "surfaceId") do
+      when is_map(params) and is_binary(idempotency_key) and
+             idempotency_key != "" do
+    with :ok <- validate_request(params),
+         :ok <- validate_idempotency_key(idempotency_key) do
       generic_action(current_scope, route_context, params, idempotency_key)
-    else
-      {:error, :unsupported_application_action}
     end
   end
 
   def action(%Scope{}, _route_context, _params, _idempotency_key),
     do: {:error, :invalid_application_request}
-
-  defp legacy_query(
-         %Scope{} = current_scope,
-         %{host_context: %HostContext{placement: :mission}, mission: mission},
-         %{"queryId" => "cadence.comms.overview"} = params
-       ) do
-    with :ok <- ensure_comms_identity(params),
-         {:ok, query_version} <- comms_query_version(params) do
-      {:ok,
-       %{
-         "queryVersion" => query_version,
-         "presentation" =>
-           current_scope
-           |> CadenceWeb.CommsOverviewPresenter.build(mission)
-           |> json_safe()
-       }}
-    end
-  end
-
-  defp legacy_query(_current_scope, _route_context, _params),
-    do: {:error, :unsupported_application_query}
 
   defp generic_query(current_scope, route_context, params) do
     with {:ok, request} <- query_request(params),
@@ -87,7 +63,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
              admission.surface,
              request.params
            ) do
-      {:ok, query_response(admission, document)}
+      query_response(admission, document)
     end
   end
 
@@ -106,13 +82,16 @@ defmodule CadenceWeb.ApplicationHostBridge do
                params: request.params,
                idempotency_key: idempotency_key
              }
-           ) do
-      {:ok,
-       %{
-         "receiptId" => receipt_id(idempotency_key),
-         "completedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
-         "result" => action_result(result)
-       }}
+           ),
+         {:ok, action_result} <- action_result(request.application_key, result) do
+      safe_output(
+        %{
+          "receiptId" => receipt_id(idempotency_key),
+          "completedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+          "result" => action_result
+        },
+        :application_action_output_bounds_exceeded
+      )
     end
   end
 
@@ -140,8 +119,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp action_request(params, idempotency_key) do
     with {:ok, application_key} <- required_text(params, "applicationKey"),
          {:ok, application_version} <- positive_integer(params, "applicationVersion"),
-         {:ok, surface_id} <- required_text(params, "surfaceId"),
-         {:ok, surface_version} <- positive_integer(params, "surfaceVersion"),
+         {:ok, {surface_id, surface_version}} <- optional_surface(params),
          {:ok, action_id} <- required_text(params, "actionId"),
          {:ok, action_version} <- action_version(params),
          {:ok, action_params} <- action_params(params) do
@@ -178,33 +156,6 @@ defmodule CadenceWeb.ApplicationHostBridge do
     end
   end
 
-  defp ensure_comms_identity(params) do
-    case Map.take(params, ~w(applicationKey applicationVersion surfaceId surfaceVersion)) do
-      identity when map_size(identity) == 0 ->
-        :ok
-
-      %{
-        "applicationKey" => "comms_overview",
-        "applicationVersion" => 1,
-        "surfaceId" => "overview",
-        "surfaceVersion" => 1
-      } ->
-        :ok
-
-      _invalid ->
-        {:error, :unsupported_application_query}
-    end
-  end
-
-  defp comms_query_version(params) do
-    case {Map.get(params, "queryVersion"), Map.get(params, "version")} do
-      {nil, 1} -> {:ok, 1}
-      {1, nil} -> {:ok, 1}
-      {1, 1} -> {:ok, 1}
-      _invalid -> {:error, :unsupported_application_query}
-    end
-  end
-
   defp query_version(params) do
     case {Map.get(params, "queryVersion"), Map.get(params, "version")} do
       {nil, version} -> positive_integer_value(version)
@@ -220,6 +171,23 @@ defmodule CadenceWeb.ApplicationHostBridge do
       {action_params, nil} when is_map(action_params) -> {:ok, action_params}
       {action_params, input} when is_map(action_params) and action_params == input -> {:ok, input}
       _invalid -> {:error, :invalid_application_request}
+    end
+  end
+
+  defp optional_surface(params) do
+    case {Map.get(params, "surfaceId"), Map.get(params, "surfaceVersion")} do
+      {nil, nil} ->
+        {:ok, {nil, nil}}
+
+      {surface_id, surface_version}
+      when is_binary(surface_id) and surface_id != "" and is_integer(surface_version) ->
+        with {:ok, surface_id} <- required_text(%{"surfaceId" => surface_id}, "surfaceId"),
+             {:ok, surface_version} <- positive_integer_value(surface_version) do
+          {:ok, {surface_id, surface_version}}
+        end
+
+      _invalid ->
+        {:error, :invalid_application_request}
     end
   end
 
@@ -247,6 +215,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
     do: {:error, :application_installation_version_mismatch}
 
   defp ensure_surface_version(%SurfaceDefinition{version: version}, version), do: :ok
+
+  defp ensure_surface_version(%SurfaceDefinition{}, nil), do: :ok
 
   defp ensure_surface_version(%SurfaceDefinition{}, _version),
     do: {:error, :surface_version_mismatch}
@@ -289,7 +259,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp ensure_declared_action_version(%ActionDefinition{}, _version),
     do: {:error, :unsupported_application_action}
 
-  defp query_response(admission, document) do
+  defp query_response(admission, %SurfaceDocument{} = document) do
     presentation =
       Declarative.presentation(
         document,
@@ -299,17 +269,33 @@ defmodule CadenceWeb.ApplicationHostBridge do
         nil
       )
 
-    %{
-      "host" => json_safe(host_dto(admission)),
-      "navigation" => nil,
-      "declarative_surface" => json_safe(presentation),
-      "application_surface_rows" => document |> Declarative.table_row_dtos() |> json_safe(),
-      "application_surface_activity" =>
-        document |> Declarative.activity_item_dtos() |> json_safe(),
-      "application_surface_packet_groups" =>
-        document |> Declarative.packet_group_dtos() |> json_safe()
-    }
+    safe_output(
+      %{
+        "host" => host_dto(admission),
+        "navigation" => nil,
+        "declarative_surface" => presentation,
+        "application_surface_rows" => Declarative.table_row_dtos(document),
+        "application_surface_activity" => Declarative.activity_item_dtos(document),
+        "application_surface_packet_groups" => Declarative.packet_group_dtos(document)
+      },
+      :application_host_query_output_bounds_exceeded
+    )
   end
+
+  defp query_response(admission, %{"navigation" => navigation, "data" => data})
+       when is_map(navigation) and is_map(data) do
+    safe_output(
+      %{
+        "host" => host_dto(admission),
+        "navigation" => navigation,
+        "trusted_surface" => data
+      },
+      :application_host_query_output_bounds_exceeded
+    )
+  end
+
+  defp query_response(_admission, _invalid),
+    do: {:error, :invalid_application_surface_document}
 
   defp host_dto(%{
          definition: %ApplicationDefinition{} = definition,
@@ -322,9 +308,12 @@ defmodule CadenceWeb.ApplicationHostBridge do
       application_version: definition.version,
       application_installation_id: installation.application_installation_id,
       surface_id: surface.surface_id,
-      renderer: "declarative"
+      renderer: renderer_name(surface)
     }
   end
+
+  defp renderer_name(%SurfaceDefinition{renderer: {:trusted, _renderer_id}}), do: "trusted"
+  defp renderer_name(%SurfaceDefinition{}), do: "declarative"
 
   defp host_dom_id(:spacecraft), do: "spacecraft-application-host"
   defp host_dom_id(:mission), do: "mission-application-host"
@@ -332,68 +321,75 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp receipt_id(idempotency_key),
     do: "application-host-receipt-" <> idempotency_key
 
-  defp action_result(%Cadence.Applications.PacketBindingConfiguration{} = configuration) do
-    %{
-      "configurationId" => configuration.packet_binding_configuration_id,
-      "applicationKey" => configuration.application_key,
-      "applicationVersion" => configuration.application_version,
-      "inputId" => configuration.input_id,
-      "inputVersion" => configuration.input_version,
-      "configurationVersion" => configuration.configuration_version,
-      "enabled" => configuration.enabled,
-      "selectedPacketIds" => Enum.map(configuration.bindings, & &1.packet_id),
-      "bindingCount" => length(configuration.bindings)
-    }
-  end
-
-  defp action_result(%Cadence.Applications.TelemetryDecom.Config{} = configuration) do
-    %{
-      "configurationId" => "telemetry_decom:#{configuration.spacecraft_id}",
-      "configurationVersion" => configuration.configuration_version,
-      "enabled" => configuration.enabled,
-      "selectedApids" => configuration.handled_apids
-    }
-  end
-
-  defp action_result(result) when is_map(result), do: json_safe(result)
-  defp action_result(_result), do: nil
-
   defp required_text(params, key) do
     case Map.get(params, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _invalid -> {:error, :invalid_application_request}
+      value when is_binary(value) and value != "" ->
+        case JSONBoundary.validate(value) do
+          :ok -> {:ok, value}
+          {:error, _reason} -> {:error, :invalid_application_request}
+        end
+
+      _invalid ->
+        {:error, :invalid_application_request}
     end
   end
 
   defp positive_integer(params, key), do: positive_integer_value(Map.get(params, key))
 
-  defp positive_integer_value(value) when is_integer(value) and value > 0, do: {:ok, value}
+  defp positive_integer_value(value) when is_integer(value) and value > 0 do
+    case JSONBoundary.validate(value) do
+      :ok -> {:ok, value}
+      {:error, _reason} -> {:error, :invalid_application_request}
+    end
+  end
+
   defp positive_integer_value(_value), do: {:error, :invalid_application_request}
 
   defp optional_map(params, key) do
     case Map.get(params, key, %{}) do
-      value when is_map(value) -> {:ok, value}
-      _invalid -> {:error, :invalid_application_request}
+      value when is_map(value) ->
+        case JSONBoundary.validate(value) do
+          :ok -> {:ok, value}
+          {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+        end
+
+      _invalid ->
+        {:error, :invalid_application_request}
     end
   end
 
-  defp json_safe(nil), do: nil
-  defp json_safe(value) when is_binary(value) or is_boolean(value) or is_number(value), do: value
-  defp json_safe(%DateTime{} = value), do: DateTime.to_iso8601(value)
-  defp json_safe(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
-  defp json_safe(%_{}), do: nil
-
-  defp json_safe(value) when is_atom(value), do: Atom.to_string(value)
-  defp json_safe(value) when is_list(value), do: Enum.map(value, &json_safe/1)
-
-  defp json_safe(value) when is_map(value) do
-    Map.new(value, fn {key, item} -> {json_key(key), json_safe(item)} end)
+  defp validate_request(params) do
+    case JSONBoundary.validate(params) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+    end
   end
 
-  defp json_safe(_value), do: nil
+  defp validate_idempotency_key(key) do
+    case JSONBoundary.validate(key) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :invalid_application_request}
+    end
+  end
 
-  defp json_key(key) when is_binary(key), do: key
-  defp json_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp json_key(key) when is_integer(key), do: Integer.to_string(key)
-  defp json_key(_key), do: "invalid"
+  defp action_result(application_key, result) do
+    result = ActionDispatcher.result(application_key, result)
+
+    if is_nil(result) do
+      {:error, :application_action_output_bounds_exceeded}
+    else
+      safe_output(result, :application_action_output_bounds_exceeded)
+    end
+  rescue
+    _exception -> {:error, :application_action_output_bounds_exceeded}
+  catch
+    _kind, _value -> {:error, :application_action_output_bounds_exceeded}
+  end
+
+  defp safe_output(value, error) do
+    case JSONBoundary.safe(value) do
+      {:ok, safe} -> {:ok, safe}
+      {:error, _reason} -> {:error, error}
+    end
+  end
 end

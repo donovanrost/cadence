@@ -15,9 +15,13 @@ defmodule Cadence.Applications.ApplicationInstallations do
   alias Cadence.Applications.ApplicationInstallations.{InstallationRow, LifecycleEventRow}
   alias Cadence.Applications.{ConfigurationReference, HostContext, Registry}
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
+
+  @max_page 10_000
+  @max_page_size 100
 
   @type fetch_error ::
           :application_not_installed
@@ -153,6 +157,28 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
+  @doc "Returns one bounded page of installations for a host context."
+  @spec list_page(Scope.t(), HostContext.t(), keyword()) ::
+          {:ok, Listing.Page.t()} | {:error, term()}
+  def list_page(%Scope{} = current_scope, %HostContext{} = host_context, opts \\ [])
+      when is_list(opts) do
+    with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
+         :ok <- authorize_management(current_scope, scope_attrs) do
+      query =
+        InstallationRow
+        |> where(
+          [row],
+          row.organization_id == ^scope_attrs.organization_id and
+            row.mission_id == ^scope_attrs.mission_id and
+            row.scope_kind == ^Atom.to_string(scope_attrs.scope_kind) and
+            row.scope_id == ^scope_attrs.scope_id
+        )
+        |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
+
+      bounded_installation_page(query, opts)
+    end
+  end
+
   @spec list_for_mission(Scope.t(), binary(), keyword()) ::
           {:ok, [ApplicationInstallation.t()]} | {:error, term()}
   def list_for_mission(%Scope{} = current_scope, mission_id, opts \\ [])
@@ -183,6 +209,32 @@ defmodule Cadence.Applications.ApplicationInstallations do
         |> Enum.map(&InstallationRow.to_domain/1)
 
       {:ok, installations}
+    else
+      false -> {:error, :application_installation_scope_required}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Returns one bounded page of all installations in a mission."
+  @spec list_for_mission_page(Scope.t(), binary(), keyword()) ::
+          {:ok, Listing.Page.t()} | {:error, term()}
+  def list_for_mission_page(%Scope{} = current_scope, mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    scope_attrs = %{organization_id: current_scope.organization_id, mission_id: mission_id}
+
+    with true <- is_binary(scope_attrs.organization_id),
+         true <- scope_matches_mission?(current_scope.mission_id, mission_id),
+         :ok <- authorize_management(current_scope, scope_attrs),
+         {:ok, _mission} <- Missions.fetch_mission(scope_attrs.organization_id, mission_id) do
+      query =
+        InstallationRow
+        |> where(
+          [row],
+          row.organization_id == ^scope_attrs.organization_id and row.mission_id == ^mission_id
+        )
+        |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
+
+      bounded_installation_page(query, opts)
     else
       false -> {:error, :application_installation_scope_required}
       {:error, reason} -> {:error, reason}
@@ -480,6 +532,46 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   defp maybe_filter_lifecycle_state(query, lifecycle_state) when is_atom(lifecycle_state) do
     where(query, [row], row.lifecycle_state == ^Atom.to_string(lifecycle_state))
+  end
+
+  defp bounded_installation_page(query, opts) do
+    max_total = Keyword.get(opts, :max_total, 100)
+
+    if valid_page_opts?(opts) and is_integer(max_total) and max_total > 0 and max_total <= 100 do
+      total_count = Repo.aggregate(query, :count)
+
+      if total_count <= max_total do
+        %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+        items =
+          query
+          |> order_by([row], asc: row.scope_kind, asc: row.scope_id, asc: row.application_key)
+          |> limit(^page_size)
+          |> offset(^offset)
+          |> Repo.all()
+          |> Enum.map(&InstallationRow.to_domain/1)
+
+        {:ok,
+         %Listing.Page{
+           items: items,
+           total_count: total_count,
+           page: page,
+           page_size: page_size
+         }}
+      else
+        {:error, :application_installation_bounds_exceeded}
+      end
+    else
+      {:error, :application_installation_bounds_exceeded}
+    end
+  end
+
+  defp valid_page_opts?(opts) do
+    page = Keyword.get(opts, :page, 1)
+    page_size = Keyword.get(opts, :page_size, 50)
+
+    is_integer(page) and page > 0 and page <= @max_page and is_integer(page_size) and
+      page_size > 0 and page_size <= @max_page_size
   end
 
   defp actor_id(%Scope{actor_kind: :user, user: %{user_id: user_id}})

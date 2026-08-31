@@ -10,9 +10,12 @@ defmodule Cadence.Comms.TransportStore do
   alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportRow}
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Contacts.ProfileStore
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Platform.RedactedJson
   alias Cadence.Repo
+
+  @max_batch_size 100
 
   @spec persist_transport(binary(), Transport.t(), keyword()) ::
           {:ok, Transport.t()} | {:error, term()}
@@ -55,6 +58,51 @@ defmodule Cadence.Comms.TransportStore do
     end
   end
 
+  @doc "Fetches the active latest versions for one bounded transport batch in one query."
+  @spec fetch_transports(binary(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Transport.t()}} | {:error, :batch_bounds_exceeded}
+  def fetch_transports(organization_id, mission_id, transport_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(transport_ids) do
+    case bounded_transport_ids(transport_ids) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, []} ->
+        {:ok, %{}}
+
+      {:ok, ids} ->
+        latest =
+          TransportRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.transport_id in ^ids
+          )
+          |> distinct([row], row.transport_id)
+          |> order_by([row], asc: row.transport_id, desc: row.version)
+          |> subquery()
+          |> where([row], row.lifecycle_state != "archived")
+          |> Repo.all()
+
+        {:ok, Map.new(latest, fn row -> {row.transport_id, TransportRow.to_domain(row)} end)}
+    end
+  end
+
+  defp bounded_transport_ids(transport_ids) do
+    ids = Enum.take(transport_ids, @max_batch_size + 1)
+
+    cond do
+      length(ids) > @max_batch_size ->
+        {:error, :batch_bounds_exceeded}
+
+      not Enum.all?(ids, &(is_binary(&1) and &1 != "")) ->
+        {:error, :batch_bounds_exceeded}
+
+      true ->
+        {:ok, Enum.uniq(ids)}
+    end
+  end
+
   @spec fetch_transport_version(binary(), binary(), binary(), pos_integer()) ::
           {:ok, Transport.t()} | {:error, term()}
   def fetch_transport_version(organization_id, mission_id, transport_id, version)
@@ -86,6 +134,43 @@ defmodule Cadence.Comms.TransportStore do
     |> Enum.reject(&(&1.lifecycle_state == "archived"))
     |> Enum.sort_by(& &1.display_name)
     |> Enum.map(&TransportRow.to_domain/1)
+  end
+
+  @doc "Returns one bounded page of the active latest transport versions."
+  @spec list_transports_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_transports_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    latest =
+      TransportRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> distinct([row], row.transport_id)
+      |> order_by([row], asc: row.transport_id, desc: row.version)
+
+    filtered =
+      latest
+      |> subquery()
+      |> where([row], row.lifecycle_state != "archived")
+      |> apply_transport_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by([row], asc: row.display_name, asc: row.transport_id)
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&TransportRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
   end
 
   @spec list_transport_versions(binary(), binary(), binary()) :: [Transport.t()]
@@ -221,6 +306,19 @@ defmodule Cadence.Comms.TransportStore do
     |> order_by([row], desc: row.version)
     |> limit(1)
     |> Repo.one()
+  end
+
+  defp apply_transport_search(query, nil), do: query
+  defp apply_transport_search(query, ""), do: query
+
+  defp apply_transport_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [row],
+      ilike(row.display_name, ^pattern) or ilike(row.transport_id, ^pattern)
+    )
   end
 
   defp build_next_transport_version(%Transport{} = transport, attrs) when is_map(attrs) do

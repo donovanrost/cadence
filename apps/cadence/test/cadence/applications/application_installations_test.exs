@@ -84,6 +84,15 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     assert event.actor_id == "installation-operator"
   end
 
+  test "fails closed when a caller requests an installation page above the hard cap", context do
+    assert {:error, :application_installation_bounds_exceeded} =
+             ApplicationInstallations.list_page(
+               context.scope,
+               context.host_context,
+               max_total: 101
+             )
+  end
+
   test "retains configuration across disable, uninstall, and reinstall transitions", context do
     assert {:ok, installed} =
              ApplicationInstallations.install(

@@ -16,6 +16,8 @@ defmodule Cadence.Applications.Registry do
     SurfaceDefinition
   }
 
+  alias Cadence.Applications.Comms, as: CommsApplication
+
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   @type fetch_error ::
@@ -25,7 +27,14 @@ defmodule Cadence.Applications.Registry do
   @type surface_error :: :unknown_surface | :invalid_application_definition
 
   @spec all() :: [ApplicationDefinition.t()]
-  def all, do: [telemetry_decom(), derived_telemetry(), limits(), cfdp()]
+  def all,
+    do: [
+      telemetry_decom(),
+      derived_telemetry(),
+      limits(),
+      CommsApplication.definition(),
+      cfdp()
+    ]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do

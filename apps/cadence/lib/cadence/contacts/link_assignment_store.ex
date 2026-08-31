@@ -13,6 +13,7 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
   alias Cadence.Contacts.PathTemplate
   alias Cadence.Contacts.PathTemplateStore
   alias Cadence.Contacts.ProfileStore
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
@@ -96,6 +97,37 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
     |> Enum.map(&LinkAssignmentRow.to_domain/1)
   end
 
+  @doc "Returns one bounded page of active mission link assignments."
+  @spec list_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    filtered =
+      LinkAssignmentRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.lifecycle_state == "active"
+      )
+      |> apply_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by([row], asc: row.link_assignment_id)
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&LinkAssignmentRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
+  end
+
   @spec delete(binary(), binary(), binary(), map()) ::
           {:ok, LinkAssignment.t()} | {:error, term()}
   def delete(organization_id, mission_id, link_assignment_id, metadata_patch)
@@ -162,6 +194,22 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
          :ok <- validate_profile_refs(assignment) do
       validate_ref_ids(assignment)
     end
+  end
+
+  defp apply_search(query, nil), do: query
+  defp apply_search(query, ""), do: query
+
+  defp apply_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [row],
+      ilike(row.link_assignment_id, ^pattern) or
+        ilike(row.spacecraft_id, ^pattern) or
+        ilike(row.source_endpoint_ref, ^pattern) or
+        ilike(row.path_template_id, ^pattern)
+    )
   end
 
   defp validate_source_endpoint(spacecraft, source_endpoint) do

@@ -16,6 +16,7 @@ defmodule Cadence.Contacts.PathTemplateStore do
   alias Cadence.Contacts.ProviderProfile
   alias Cadence.Contacts.TransportBinding
   alias Cadence.Contacts.TransportProfile
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
 
@@ -146,6 +147,43 @@ defmodule Cadence.Contacts.PathTemplateStore do
     |> latest_versioned_rows(organization_id, mission_id)
     |> Enum.reject(&(&1.lifecycle_state == "deleted"))
     |> Enum.map(&PathTemplateRow.to_domain/1)
+  end
+
+  @doc "Returns one bounded page of active latest path-template versions."
+  @spec list_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    latest =
+      PathTemplateRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> distinct([row], row.path_template_id)
+      |> order_by([row], asc: row.path_template_id, desc: row.version)
+
+    filtered =
+      latest
+      |> subquery()
+      |> where([row], row.lifecycle_state != "deleted")
+      |> apply_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by([row], asc: row.path_template_id)
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&PathTemplateRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
   end
 
   @spec list_versions(binary(), binary()) :: [PathTemplate.t()]
@@ -604,6 +642,21 @@ defmodule Cadence.Contacts.PathTemplateStore do
       Map.put_new(acc, row.path_template_id, row)
     end)
     |> Map.values()
+  end
+
+  defp apply_search(query, nil), do: query
+  defp apply_search(query, ""), do: query
+
+  defp apply_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [row],
+      ilike(row.path_template_id, ^pattern) or
+        ilike(row.path_id, ^pattern) or
+        ilike(row.provider_path_ref, ^pattern)
+    )
   end
 
   defp build_next_version(%PathTemplate{} = path_template, attrs) when is_map(attrs) do

@@ -2,12 +2,19 @@ defmodule CadenceWeb.CommsValidationLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Applications.JSONBoundary
   alias CadenceWeb.CommsValidation
 
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
-    findings = CommsValidation.findings_for_mission(scope, mission.mission_id)
+
+    findings =
+      case CommsValidation.findings_for_mission(scope, mission.mission_id) do
+        {:ok, findings} -> findings
+        {:error, _reason} -> [CommsValidation.unavailable_finding()]
+      end
+
     validation = validation_page_dto(mission, findings)
 
     {:ok,
@@ -34,7 +41,7 @@ defmodule CadenceWeb.CommsValidationLive do
   defp validation_page_dto(mission, findings) do
     finding_count = length(findings)
 
-    %{
+    dto = %{
       id: "comms-validation-page",
       title: "Validation",
       subtitle:
@@ -45,7 +52,7 @@ defmodule CadenceWeb.CommsValidationLive do
         %{label: "Validation", href: nil}
       ],
       finding_count_suffix: "#{finding_count} findings",
-      status: validation_status_dto(finding_count),
+      status: validation_status_dto(findings),
       empty: findings == [],
       empty_state: %{
         id: "comms-validation-empty",
@@ -58,12 +65,39 @@ defmodule CadenceWeb.CommsValidationLive do
         |> CommsValidation.finding_groups()
         |> Enum.map(&finding_group_dto/1)
     }
+
+    case JSONBoundary.validate(dto) do
+      :ok -> dto
+      {:error, _reason} -> blocked_validation_page_dto()
+    end
   end
 
-  defp validation_status_dto(0), do: status_dto(:ready, "No findings")
+  defp blocked_validation_page_dto do
+    %{
+      id: "comms-validation-page",
+      title: "Validation unavailable",
+      subtitle: "Cadence could not safely render the saved communications configuration.",
+      breadcrumbs: [],
+      finding_count_suffix: "0 findings",
+      status: %{tone: "blocked", label: "Validation unavailable"},
+      empty: true,
+      empty_state: %{
+        id: "comms-validation-empty",
+        title: "Validation unavailable",
+        description: "The saved configuration could not be safely evaluated."
+      },
+      findings_id: "comms-validation-findings",
+      finding_groups: []
+    }
+  end
 
-  defp validation_status_dto(finding_count),
-    do: status_dto(:attention, "#{finding_count} findings")
+  defp validation_status_dto([]), do: status_dto(:ready, "No findings")
+
+  defp validation_status_dto([%{id: "comms-validation-unavailable"}]),
+    do: status_dto(:blocked, "Validation unavailable")
+
+  defp validation_status_dto(findings),
+    do: status_dto(:attention, "#{length(findings)} findings")
 
   defp finding_group_dto(group) do
     %{
@@ -77,14 +111,20 @@ defmodule CadenceWeb.CommsValidationLive do
   defp finding_dto(finding) do
     action_href = Map.get(finding, :action_navigate)
 
-    %{
+    base = %{
       id: Map.get(finding, :id),
       title: finding.title,
       body: finding.body,
-      action_label: action_href && Map.get(finding, :action_label, "Review"),
-      action_href: action_href,
       status: status_dto(finding.severity, CommsValidation.finding_label(finding.severity))
     }
+
+    if is_binary(action_href),
+      do:
+        Map.merge(base, %{
+          action_label: Map.get(finding, :action_label, "Review"),
+          action_href: action_href
+        }),
+      else: base
   end
 
   defp status_dto(tone, label), do: %{tone: Atom.to_string(tone), label: label}

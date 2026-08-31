@@ -1,8 +1,10 @@
 defmodule CadenceWeb.CommsOverviewPresenterTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
-  alias CadenceWeb.CommsOverviewPresenter
+  alias CadenceWeb.{CommsOverviewPresenter, CommsValidation, CommsValidationLive}
+  alias Phoenix.LiveView.Socket
 
   test "preserves the exact empty Comms presentation as JSON-safe data" do
     mission =
@@ -44,5 +46,81 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
              "string" => "retained",
              "number" => "7"
            }
+  end
+
+  test "fails closed for an oversized persisted mission display name" do
+    mission =
+      Mission.new(%{
+        mission_id: "mission-presenter-bounds",
+        organization_id: "organization-presenter-bounds",
+        slug: "presenter-bounds",
+        display_name: String.duplicate("x", 241)
+      })
+
+    presentation =
+      CommsOverviewPresenter.presentation(mission, %{
+        transports: [],
+        transport_count: 0,
+        findings: [],
+        finding_groups: []
+      })
+
+    assert presentation["header"]["title"]["text"] == "Mission unavailable"
+    assert is_binary(Jason.encode!(presentation))
+  end
+
+  test "renders validation provider failures as blocked and non-empty" do
+    mission =
+      Mission.new(%{
+        mission_id: "mission-presenter-failure",
+        organization_id: "organization-presenter-failure",
+        slug: "presenter-failure",
+        display_name: "Presenter Failure Mission"
+      })
+
+    presentation =
+      CommsOverviewPresenter.build(%Scope{organization_id: nil}, mission)
+
+    validation = presentation["overview"][:validation]
+
+    assert validation[:status] == %{tone: "blocked", label: "Validation unavailable"}
+    refute validation[:empty]
+    refute validation[:empty_state][:title] == "All clear"
+    assert [%{findings: [%{id: "comms-validation-unavailable"}]}] = validation[:finding_groups]
+  end
+
+  test "preserves core validation errors for the dedicated validation adapter" do
+    assert {:error, :authenticated_user_required} =
+             CommsValidation.findings_for_mission(%Scope{organization_id: nil}, "mission-failure")
+  end
+
+  test "renders LiveView validation provider failures as blocked and non-empty" do
+    mission =
+      Mission.new(%{
+        mission_id: "mission-live-failure",
+        organization_id: "organization-live-failure",
+        slug: "live-failure",
+        display_name: "Live Failure Mission"
+      })
+
+    assert {:ok, socket} =
+             CommsValidationLive.mount(
+               %{},
+               %{},
+               %Socket{
+                 assigns: %{
+                   __changed__: %{},
+                   current_scope: %Scope{organization_id: nil},
+                   current_mission: mission
+                 }
+               }
+             )
+
+    assert socket.assigns.validation.status == %{
+             tone: "blocked",
+             label: "Validation unavailable"
+           }
+
+    refute socket.assigns.validation.empty
   end
 end

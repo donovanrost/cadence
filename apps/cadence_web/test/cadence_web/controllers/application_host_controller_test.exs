@@ -3,25 +3,26 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   import Phoenix.LiveViewTest
 
-  alias Cadence.Applications.HostContext
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
   alias CadenceWeb.{ApplicationHostCatalog, CommsOverviewPresenter, TestFixtures}
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
-  test "the opt-in shell is protected and the existing Comms route remains the fallback", %{
-    conn: conn
-  } do
+  test "the generic compatibility shell is protected and the Comms LiveView remains the fallback",
+       %{
+         conn: conn
+       } do
     assert conn
-           |> get("/missions/mission-missing/comms/federated")
+           |> get("/missions/mission-missing/applications/comms_overview/federated")
            |> redirected_to() == "/sign-in"
 
     {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
 
     federated_html =
       member_conn
-      |> get("/missions/#{mission.mission_id}/comms/federated")
+      |> get("/missions/#{mission.mission_id}/applications/comms_overview/federated")
       |> html_response(200)
 
     assert federated_html =~ ~s(<div id="cadence-federation-root")
@@ -51,15 +52,16 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     mission_context = %{host_context: HostContext.mission("mission-1")}
     spacecraft_context = %{host_context: HostContext.spacecraft("mission-1", "spacecraft-1")}
 
-    assert ApplicationHostCatalog.fallback_href(mission_context, "derived_telemetry", nil) ==
-             "/missions/mission-1/applications/derived_telemetry"
+    assert {:ok, "/missions/mission-1/applications/derived_telemetry"} ==
+             ApplicationHostCatalog.fallback_href(mission_context, "derived_telemetry", nil)
 
-    assert ApplicationHostCatalog.fallback_href(
-             spacecraft_context,
-             "telemetry_decom",
-             "packet_bindings"
-           ) ==
-             "/missions/mission-1/spacecraft/spacecraft-1/applications/telemetry_decom/packet_bindings"
+    assert {:ok,
+            "/missions/mission-1/spacecraft/spacecraft-1/applications/telemetry_decom/packet_bindings"} ==
+             ApplicationHostCatalog.fallback_href(
+               spacecraft_context,
+               "telemetry_decom",
+               "packet_bindings"
+             )
   end
 
   test "the browser-session catalog is server-owned and advertises only Comms overview", %{
@@ -147,6 +149,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     response =
       post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
         "queryId" => "cadence.comms.overview",
         "version" => 1,
         "scope" => forged_scope,
@@ -173,6 +179,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     query_response =
       post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
         "queryId" => "cadence.comms.overview",
         "version" => 1,
         "scope" => valid_scope,
@@ -226,6 +236,18 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
       })
 
     assert %{"code" => "unsupported_query"} = json_response(rejected, 404)
+  end
+
+  test "an installed first-class application without a release is absent from the federated catalog" do
+    {member_conn, _organization, mission, scope} = signed_in_scope_and_mission()
+    host_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    {_catalog_conn, catalog} = fetch_catalog(member_conn, mission)
+
+    refute Enum.any?(catalog["applications"], &(&1["applicationKey"] == "comms"))
   end
 
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{
@@ -283,8 +305,22 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     valid_scope = scope_document(organization, mission)
 
     for request <- [
-          %{"queryId" => "cadence.comms.unknown", "version" => 1},
-          %{"queryId" => "cadence.comms.overview", "version" => 2}
+          %{
+            "applicationKey" => "comms_overview",
+            "applicationVersion" => 1,
+            "surfaceId" => "overview",
+            "surfaceVersion" => 1,
+            "queryId" => "cadence.comms.unknown",
+            "version" => 1
+          },
+          %{
+            "applicationKey" => "comms_overview",
+            "applicationVersion" => 1,
+            "surfaceId" => "overview",
+            "surfaceVersion" => 1,
+            "queryId" => "cadence.comms.overview",
+            "version" => 2
+          }
         ] do
       response =
         post_bridge(
@@ -330,13 +366,22 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
            } = json_response(action_response, 404)
   end
 
-  test "unauthenticated catalog requests receive a JSON 401", %{conn: conn} do
+  test "unauthenticated application-host requests use the browser gate", %{conn: conn} do
     response = get(conn, catalog_path("mission-missing"))
 
-    assert %{
-             "schema" => "cadence.application-host-problem.v1",
-             "code" => "unauthenticated"
-           } = json_response(response, 401)
+    assert redirected_to(response) == "/sign-in"
+  end
+
+  test "authenticated host routes negotiate JSON inside the browser pipeline" do
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+
+    response =
+      member_conn
+      |> put_req_header("accept", "application/json")
+      |> get(catalog_path(mission.mission_id))
+
+    assert response.status == 200
+    assert is_map(json_response(response, 200))
   end
 
   defp signed_in_scope_and_mission do

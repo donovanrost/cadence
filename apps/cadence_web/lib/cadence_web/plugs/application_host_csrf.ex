@@ -8,7 +8,13 @@ defmodule CadenceWeb.Plugs.ApplicationHostCSRF do
   def init(opts), do: opts
 
   def call(conn, opts) do
-    Phoenix.Controller.protect_from_forgery(conn, opts)
+    if application_host_request?(conn) do
+      conn
+      |> Phoenix.Controller.protect_from_forgery(opts)
+      |> put_private(:plug_skip_csrf_protection, true)
+    else
+      conn
+    end
   rescue
     Plug.CSRFProtection.InvalidCSRFTokenError ->
       conn
@@ -19,5 +25,9 @@ defmodule CadenceWeb.Plugs.ApplicationHostCSRF do
         "message" => "The request CSRF token is invalid."
       })
       |> halt()
+  end
+
+  defp application_host_request?(%Plug.Conn{request_path: request_path}) do
+    String.starts_with?(request_path, "/api/cadence/application-host/v1/")
   end
 end
