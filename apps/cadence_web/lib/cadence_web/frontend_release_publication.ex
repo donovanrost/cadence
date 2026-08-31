@@ -17,12 +17,13 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   alias CadenceWeb.FrontendReleasePublication.{
     CatalogPublication,
-    LocalArtifactStore,
+    DatabaseArtifactStore,
     ReleaseArtifact,
     ReleasePublication
   }
 
   @type artifact_input :: map() | list()
+  @max_artifact_bytes 100_000_000
 
   @spec admit_release(binary() | map(), artifact_input(), keyword()) ::
           {:ok, ReleasePublication.t()} | {:error, term()}
@@ -30,9 +31,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
     with {:ok, document_bytes} <- signed_document_bytes(document),
          {:ok, verified} <- verify_release(document_bytes, opts),
          {:ok, artifact_bytes} <- normalize_artifact_inputs(artifact_input),
-         {:ok, artifact_specs} <- validate_artifact_bytes(verified.release, artifact_bytes),
-         {:ok, stored_artifacts} <- store_and_readback(artifact_specs) do
-      persist_release(verified, document_bytes, stored_artifacts)
+         {:ok, artifact_specs} <- validate_artifact_bytes(verified.release, artifact_bytes) do
+      persist_release(verified, document_bytes, artifact_specs)
     end
   end
 
@@ -93,7 +93,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
     )
   end
 
-  defp persist_release(verified, document_bytes, stored_artifacts) do
+  defp persist_release(verified, document_bytes, artifact_specs) do
     release = verified.release
     release_id = release["releaseId"]
 
@@ -101,12 +101,18 @@ defmodule CadenceWeb.FrontendReleasePublication do
       Repo.transaction(fn ->
         :ok = advisory_lock("frontend-release:" <> release_id)
 
-        persist_locked_release(
-          locked_release_by_identity(release_id),
-          verified,
-          document_bytes,
-          stored_artifacts
-        )
+        case store_and_verify(artifact_specs) do
+          {:ok, stored_artifacts} ->
+            persist_locked_release(
+              locked_release_by_identity(release_id),
+              verified,
+              document_bytes,
+              stored_artifacts
+            )
+
+          {:error, reason} ->
+            Repo.rollback(store_error(reason))
+        end
       end)
 
     normalize_transaction_result(transaction_result)
@@ -169,7 +175,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
         with {:ok, verified} <- verify_catalog(document_bytes, opts, accepted_state),
              :ok <- same_sequence_document_is_exact(latest, verified, document_bytes),
-             {:ok, release_references} <- require_admitted_releases(verified.entries) do
+             {:ok, release_references} <-
+               require_admitted_releases(verified.catalog, verified.entries) do
           persist_catalog_result(verified, document_bytes, release_references)
         else
           {:error, failure} -> Repo.rollback(failure)
@@ -217,10 +224,22 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp require_admitted_releases(entries) do
-    Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, references} ->
-      with {:ok, current} <- require_admitted_release(entry.current),
-           {:ok, fallback} <- optional_require_admitted_release(entry.fallback) do
+  defp require_admitted_releases(%{"entries" => raw_entries}, entries)
+       when is_list(raw_entries) and is_list(entries) and length(raw_entries) == length(entries) do
+    raw_entries
+    |> Enum.zip(entries)
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {{raw_entry, entry}, index}, {:ok, references} ->
+      path = "$.payload.entries[#{index}]"
+
+      with {:ok, current} <-
+             require_admitted_release(
+               Map.fetch!(raw_entry, "current"),
+               entry.current,
+               path <> ".current"
+             ),
+           {:ok, fallback} <-
+             optional_require_admitted_release(raw_entry, entry.fallback, path <> ".fallback") do
         reference = release_reference(entry, current, fallback)
         {:cont, {:ok, [reference | references]}}
       else
@@ -233,27 +252,51 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp require_admitted_release(release) do
+  defp require_admitted_releases(_catalog, _entries),
+    do: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
+
+  defp require_admitted_release(signed_envelope, release, path) do
     release_id = release["releaseId"]
-    payload_bytes = Jason.encode!(release, maps: :strict)
+    payload_bytes = canonical_json(release)
     expected_digest = digest(payload_bytes)
+    signed_document_bytes = canonical_json(signed_envelope)
+    signed_document_digest = digest(signed_document_bytes)
 
     case Repo.get_by(ReleasePublication, release_id: release_id) do
       nil ->
-        {:error, error(:missing_release_publication, "$.payload.entries")}
-
-      %ReleasePublication{payload_digest: ^expected_digest, payload_bytes: ^payload_bytes} = row ->
-        if release_identity_matches?(row, release),
-          do: {:ok, row},
-          else: release_publication_mismatch(row)
+        {:error, error(:missing_release_publication, path)}
 
       %ReleasePublication{} = row ->
-        release_publication_mismatch(row)
+        cond do
+          row.payload_digest != expected_digest or row.payload_bytes != payload_bytes ->
+            release_publication_mismatch(path)
+
+          row.signed_document_digest != signed_document_digest or
+              row.signed_document_bytes != signed_document_bytes ->
+            release_publication_mismatch(path)
+
+          release_identity_matches?(row, release) ->
+            {:ok, row}
+
+          true ->
+            release_publication_mismatch(path)
+        end
     end
   end
 
-  defp optional_require_admitted_release(nil), do: {:ok, nil}
-  defp optional_require_admitted_release(release), do: require_admitted_release(release)
+  defp optional_require_admitted_release(raw_entry, nil, _path) do
+    case Map.fetch(raw_entry, "fallback") do
+      :error -> {:ok, nil}
+      {:ok, _value} -> {:error, error(:invalid_catalog_entries, "$.payload.entries")}
+    end
+  end
+
+  defp optional_require_admitted_release(raw_entry, release, path) do
+    case Map.fetch(raw_entry, "fallback") do
+      {:ok, signed_envelope} -> require_admitted_release(signed_envelope, release, path)
+      :error -> {:error, error(:invalid_catalog_entries, path)}
+    end
+  end
 
   defp release_identity_matches?(row, release) do
     row.release_id == release["releaseId"] and
@@ -283,8 +326,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp release_publication_mismatch(_row),
-    do: {:error, error(:release_publication_mismatch, "$.payload.entries")}
+  defp release_publication_mismatch(path),
+    do: {:error, error(:release_publication_mismatch, path)}
 
   defp locked_release_by_identity(release_id) do
     ReleasePublication
@@ -447,10 +490,21 @@ defmodule CadenceWeb.FrontendReleasePublication do
           &validate_artifact_declaration(&1, &2, artifact_bytes)
         )
         |> case do
-          {:ok, values} -> {:ok, Enum.reverse(values)}
-          failure -> failure
+          {:ok, values} ->
+            validate_artifact_total(values)
+
+          failure ->
+            failure
         end
     end
+  end
+
+  defp validate_artifact_total(values) do
+    values = Enum.reverse(values)
+
+    if Enum.sum(Enum.map(values, & &1.size)) <= @max_artifact_bytes,
+      do: {:ok, values},
+      else: {:error, error(:artifact_byte_cap_exceeded, "$.artifacts")}
   end
 
   defp validate_artifact_declaration(
@@ -484,12 +538,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp store_and_readback(artifact_specs) do
-    with {:ok, store} <- artifact_store(),
-         {:ok, stored} <- store_artifacts(store, artifact_specs),
-         :ok <- readback_artifacts(store, stored) do
-      {:ok, stored}
-    end
+  defp store_and_verify(artifact_specs) do
+    store_artifacts(DatabaseArtifactStore, artifact_specs)
   end
 
   defp store_artifacts(store, artifact_specs) do
@@ -517,8 +567,9 @@ defmodule CadenceWeb.FrontendReleasePublication do
     case safe_store_call(store, :put, [digest_value, artifact.bytes]) do
       {:ok, stored} when is_map(stored) ->
         object_key = Map.get(stored, :object_key, Map.get(stored, "object_key"))
+        stored_size = Map.get(stored, :size, Map.get(stored, "size"))
 
-        if is_binary(object_key) do
+        if object_key == digest_value and stored_size == artifact.size do
           {:ok, Map.merge(artifact, %{object_key: object_key, digest: digest_value})}
         else
           {:error, error(:artifact_store_invalid_result, "$.artifacts")}
@@ -532,63 +583,6 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp readback_artifacts(store, artifacts) do
-    Enum.reduce_while(artifacts, :ok, &readback_artifact_step(&1, &2, store))
-  end
-
-  defp readback_artifact_step(artifact, :ok, store) do
-    case readback_one_artifact(store, artifact) do
-      :ok -> {:cont, :ok}
-      {:error, reason} -> {:halt, {:error, reason}}
-    end
-  end
-
-  defp readback_one_artifact(store, artifact) do
-    case safe_store_call(store, :readback, [artifact.digest]) do
-      {:ok, bytes} when is_binary(bytes) ->
-        cond do
-          byte_size(bytes) != artifact.size ->
-            {:error, error(:artifact_readback_size_mismatch, "$.artifacts")}
-
-          digest_hex(bytes) != artifact.sha256 ->
-            {:error, error(:artifact_readback_hash_mismatch, "$.artifacts")}
-
-          true ->
-            :ok
-        end
-
-      {:error, reason} ->
-        {:error, store_error(reason)}
-
-      _other ->
-        {:error, error(:artifact_store_invalid_result, "$.artifacts")}
-    end
-  end
-
-  defp artifact_store do
-    config = publication_config()
-
-    case Keyword.get(config, :artifact_store, LocalArtifactStore) do
-      store when is_atom(store) ->
-        if valid_artifact_store?(store),
-          do: {:ok, store},
-          else: {:error, error(:artifact_store_not_configured, "$.artifactStore")}
-
-      _ ->
-        {:error, error(:artifact_store_not_configured, "$.artifactStore")}
-    end
-  end
-
-  defp valid_artifact_store?(store) do
-    case Code.ensure_loaded(store) do
-      {:module, ^store} ->
-        function_exported?(store, :put, 2) and function_exported?(store, :readback, 1)
-
-      {:error, _reason} ->
-        false
-    end
-  end
-
   defp safe_store_call(store, function, args) do
     apply(store, function, args)
   rescue
@@ -597,20 +591,11 @@ defmodule CadenceWeb.FrontendReleasePublication do
     kind, reason -> {:error, {:artifact_store_throw, kind, reason}}
   end
 
-  defp store_error(:destination_collision), do: error(:destination_collision, "$.artifacts")
-  defp store_error(:destination_symlink), do: error(:destination_symlink, "$.artifacts")
-  defp store_error(:destination_hardlink), do: error(:destination_hardlink, "$.artifacts")
-  defp store_error(:destination_not_regular), do: error(:destination_not_regular, "$.artifacts")
-  defp store_error(:artifact_store_symlink), do: error(:artifact_store_symlink, "$.artifacts")
-
-  defp store_error(:artifact_store_not_directory),
-    do: error(:artifact_store_not_directory, "$.artifacts")
-
-  defp store_error(:artifact_store_root_not_absolute),
-    do: error(:artifact_store_root_not_absolute, "$.artifactStore")
-
-  defp store_error(:artifact_store_root_not_configured),
-    do: error(:artifact_store_root_not_configured, "$.artifactStore")
+  defp store_error(:artifact_bytes_mismatch), do: error(:artifact_conflict, "$.artifacts")
+  defp store_error(:artifact_digest_mismatch), do: error(:artifact_hash_mismatch, "$.artifacts")
+  defp store_error(:artifact_size_mismatch), do: error(:artifact_size_mismatch, "$.artifacts")
+  defp store_error(:artifact_too_large), do: error(:artifact_byte_cap_exceeded, "$.artifacts")
+  defp store_error(:artifact_not_found), do: error(:artifact_not_found, "$.artifacts")
 
   defp store_error(%{code: _code} = failure), do: failure
   defp store_error(reason), do: error(:artifact_store_failure, inspect(reason))
@@ -671,6 +656,25 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   defp digest_hex(bytes),
     do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
+
+  defp canonical_json(value) when is_map(value) do
+    value
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.map_join(",", fn key ->
+      Jason.encode!(key) <> ":" <> canonical_json(Map.fetch!(value, key))
+    end)
+    |> then(&("{" <> &1 <> "}"))
+  end
+
+  defp canonical_json(value) when is_list(value),
+    do: "[" <> Enum.map_join(value, ",", &canonical_json/1) <> "]"
+
+  defp canonical_json(value) when is_binary(value), do: Jason.encode!(value)
+  defp canonical_json(value) when is_integer(value), do: Integer.to_string(value)
+  defp canonical_json(true), do: "true"
+  defp canonical_json(false), do: "false"
+  defp canonical_json(nil), do: "null"
 
   defp error(code, path), do: %{code: code, path: path}
 end

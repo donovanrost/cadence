@@ -1,9 +1,10 @@
 defmodule CadenceWeb.FrontendReleasePublication.ArtifactStore do
   @moduledoc """
-  Offline content-addressed storage boundary for admitted frontend artifacts.
+  Content-addressed storage boundary for admitted frontend artifacts.
 
-  The digest is the complete `sha256:<64 lowercase hex>` object identity. An
-  implementation must never replace an existing object with different bytes.
+  The digest is the complete `sha256:<64 lowercase hex>` logical object identity.
+  An implementation must never replace an existing object with different bytes,
+  and `object_key` is never a filesystem path.
   """
 
   @type digest :: binary()
@@ -15,5 +16,8 @@ defmodule CadenceWeb.FrontendReleasePublication.ArtifactStore do
         }
 
   @callback put(digest(), binary()) :: {:ok, stored_object()} | {:error, term()}
-  @callback readback(digest()) :: {:ok, binary()} | {:error, term()}
+  @callback verify(digest(), binary() | non_neg_integer()) :: :ok | {:error, term()}
+
+  @callback read_chunk(digest(), non_neg_integer(), pos_integer()) ::
+              {:ok, binary()} | {:error, term()}
 end

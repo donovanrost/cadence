@@ -220,50 +220,7 @@ decode_frontend_release_json = fn env_name, default ->
   end
 end
 
-frontend_release_artifact_root = System.get_env("CADENCE_FRONTEND_ARTIFACT_ROOT")
-
-validate_frontend_release_artifact_root = fn
-  root when is_binary(root) and root != "" ->
-    cond do
-      not String.valid?(root) ->
-        {:error, :invalid_utf8}
-
-      String.contains?(root, <<0>>) ->
-        {:error, :nul_byte}
-
-      Path.type(root) != :absolute ->
-        {:error, :not_absolute}
-
-      true ->
-        case File.lstat(root) do
-          {:ok, %File.Stat{type: :directory}} -> :ok
-          {:ok, %File.Stat{type: :symlink}} -> {:error, :symlink}
-          {:ok, _stat} -> {:error, :not_directory}
-          {:error, :enoent} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-    end
-
-  _ ->
-    {:error, :not_configured}
-end
-
-if config_env() == :prod do
-  case validate_frontend_release_artifact_root.(frontend_release_artifact_root) do
-    :ok ->
-      :ok
-
-    {:error, reason} ->
-      raise """
-      CADENCE_FRONTEND_ARTIFACT_ROOT must be an explicit valid absolute local storage root: \
-      #{inspect(reason)}
-      """
-  end
-end
-
 config :cadence_web, :frontend_release_publication,
-  artifact_store: CadenceWeb.FrontendReleasePublication.LocalArtifactStore,
-  artifact_root: frontend_release_artifact_root,
   trust_records: decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_TRUST_RECORDS_JSON", []),
   allowed_origins:
     decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_ALLOWED_ORIGINS_JSON", [])

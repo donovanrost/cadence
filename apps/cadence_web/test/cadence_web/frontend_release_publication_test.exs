@@ -8,7 +8,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
   alias CadenceWeb.FrontendReleasePublication.{
     CatalogPublication,
-    LocalArtifactStore,
+    DatabaseArtifactStore,
+    ReleaseObject,
     ReleasePublication
   }
 
@@ -25,32 +26,19 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
   }
 
   setup do
-    root =
-      Path.join(
-        File.cwd!(),
-        ".cadence-frontend-release-publication-#{System.unique_integer([:positive])}"
-      )
-
-    :ok = File.mkdir_p(root)
     previous_config = Application.get_env(:cadence_web, :frontend_release_publication)
 
     Application.put_env(
       :cadence_web,
       :frontend_release_publication,
-      publication_config(root, @corpus["keys"])
+      publication_config(@corpus["keys"])
     )
 
-    on_exit(fn ->
-      restore_config(previous_config)
-      File.rm_rf!(root)
-    end)
-
-    {:ok, root: root}
+    on_exit(fn -> restore_config(previous_config) end)
+    :ok
   end
 
-  test "valid release admission stores immutable metadata and readback-verified objects", %{
-    root: root
-  } do
+  test "valid release admission stores immutable metadata and database objects" do
     {envelope, payload, release} = release_document(@artifact_bytes, "build-valid")
 
     assert {:ok, %ReleasePublication{} = publication} =
@@ -59,30 +47,90 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert publication.release_id == release["releaseId"]
     assert publication.payload_bytes == payload
     assert publication.payload_digest == sha256(payload)
-    assert publication.signed_document_bytes == Jason.encode!(envelope, maps: :strict)
-
-    assert {:ok, verified} =
-             FrontendReleaseCatalog.verify_release(
-               publication.signed_document_bytes,
-               @corpus["keys"],
-               allowed_origins: [@origin],
-               now: @now
-             )
-
-    assert verified.payload_bytes == publication.payload_bytes
-    assert verified.digest == publication.payload_digest
-    assert publication.signing_key_id == "fixture-release-key"
-    assert publication.signing_role == "release"
-    assert publication.acceptance_state == "accepted"
+    assert publication.signed_document_bytes == canonical(envelope)
     assert length(publication.artifacts) == 2
 
     Enum.each(publication.artifacts, fn artifact ->
       assert artifact.release_id == publication.release_id
-      assert artifact.object_key =~ ~r/^sha256\/[0-9a-f]{2}\/[0-9a-f]{64}$/
+      assert artifact.object_key == "sha256:" <> artifact.sha256
 
-      assert File.read!(Path.join(root, artifact.object_key)) ==
-               Map.fetch!(@artifact_bytes, artifact.path)
+      object = Repo.get!(ReleaseObject, artifact.sha256)
+      assert object.size == artifact.size
+      assert object.bytes == Map.fetch!(@artifact_bytes, artifact.path)
     end)
+  end
+
+  test "put deduplicates identical objects and preserves the logical key" do
+    bytes = "deduplicated-object"
+    digest = sha256(bytes)
+
+    assert {:ok, %{digest: ^digest, object_key: ^digest, status: :stored, size: size}} =
+             DatabaseArtifactStore.put(digest, bytes)
+
+    assert size == byte_size(bytes)
+
+    assert {:ok, %{digest: ^digest, object_key: ^digest, status: :existing}} =
+             DatabaseArtifactStore.put(digest, bytes)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 1
+  end
+
+  test "a conflicting existing object fails closed without replacement" do
+    bytes = "expected-data"
+    conflicting_bytes = String.duplicate("x", byte_size(bytes))
+    digest = sha256(bytes)
+    sha256_hex = digest_hex(bytes)
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_objects (sha256, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, now())
+      """,
+      [sha256_hex, conflicting_bytes, byte_size(conflicting_bytes)]
+    )
+
+    assert {:error, :artifact_bytes_mismatch} = DatabaseArtifactStore.put(digest, bytes)
+    assert Repo.one(from(object in ReleaseObject, select: object.bytes)) == conflicting_bytes
+  end
+
+  test "verify and read_chunk enforce metadata-first bounded reads at chunk boundaries" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    assert {:ok, %{status: :stored}} = DatabaseArtifactStore.put(digest, bytes)
+    assert :ok = DatabaseArtifactStore.verify(digest, byte_size(bytes))
+    assert :ok = DatabaseArtifactStore.verify(digest, bytes)
+
+    assert {:error, :invalid_chunk_bounds} =
+             DatabaseArtifactStore.read_chunk(digest, 0, 1_048_577)
+
+    assert {:ok, first_chunk} = DatabaseArtifactStore.read_chunk(digest, 0, 1_048_576)
+    assert byte_size(first_chunk) == 1_048_576
+
+    assert {:ok, last_chunk} = DatabaseArtifactStore.read_chunk(digest, 1_048_576, 5)
+    assert last_chunk == :binary.copy(<<"a">>, 5)
+
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, byte_size(bytes), 1)
+    assert {:error, :invalid_chunk_bounds} = DatabaseArtifactStore.read_chunk(digest, 1, 0)
+  end
+
+  test "release objects and publication rows roll back together" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-rollback")
+
+    assert {:error, :forced_rollback} =
+             Repo.transaction(fn ->
+               assert {:ok, _publication} =
+                        FrontendReleasePublication.admit_release(
+                          envelope,
+                          @artifact_bytes,
+                          now: @now
+                        )
+
+               Repo.rollback(:forced_rollback)
+             end)
+
+    assert Repo.get_by(ReleasePublication, release_id: release["releaseId"]) == nil
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
   end
 
   test "identical release retry returns the original immutable publication" do
@@ -97,6 +145,7 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert second.publication_id == first.publication_id
     assert second.release_id == release["releaseId"]
     assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
   end
 
   test "same release identity with different signed bytes fails closed" do
@@ -106,15 +155,12 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     Application.put_env(
       :cadence_web,
       :frontend_release_publication,
-      publication_config(
-        Application.get_env(:cadence_web, :frontend_release_publication)[:artifact_root],
-        @corpus["keys"] ++ [alternate_key]
-      )
+      publication_config(@corpus["keys"] ++ [alternate_key])
     )
 
     alternate_envelope =
       sign_fixture(
-        Jason.encode!(release, maps: :strict),
+        canonical(release),
         "fixture-release-key-alt",
         "release",
         @fork_seed
@@ -194,96 +240,98 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     end
   end
 
-  test "destination symlinks, hardlinks, and collisions are rejected", %{root: root} do
-    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-destinations")
-    object_path = prepare_object_path(root, @artifact_bytes["assets/app.js"])
+  test "aggregate artifact byte cap is enforced before storage and by PostgreSQL" do
+    large_bytes = :binary.copy(<<"l">>, 100_000_000)
+    small_bytes = "s"
 
-    outside_path = Path.join(root, "outside")
-    File.write!(outside_path, "outside")
-    File.ln_s(outside_path, object_path)
+    {over_cap_envelope, _payload, over_cap_release} =
+      release_document(
+        %{"assets/large.js" => large_bytes, "mf-manifest.json" => small_bytes},
+        "build-over-cap"
+      )
 
-    assert {:error, %{code: :destination_symlink}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+    assert {:error, %{code: :artifact_byte_cap_exceeded}} =
+             FrontendReleasePublication.admit_release(
+               over_cap_envelope,
+               %{"assets/large.js" => large_bytes, "mf-manifest.json" => small_bytes},
+               now: @now
+             )
 
-    File.rm!(object_path)
-    File.write!(outside_path, "hardlink")
-    :ok = File.ln(outside_path, object_path)
+    assert Repo.get_by(ReleasePublication, release_id: over_cap_release["releaseId"]) == nil
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
 
-    assert {:error, %{code: :destination_hardlink}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+    {seed_envelope, _seed_payload, seed_release} =
+      release_document(%{"mf-manifest.json" => small_bytes}, "build-cap-trigger")
 
-    File.rm!(object_path)
-    File.rm!(outside_path)
-    File.write!(object_path, "collision")
+    assert {:ok, seed_publication} =
+             FrontendReleasePublication.admit_release(
+               seed_envelope,
+               %{"mf-manifest.json" => small_bytes},
+               now: @now
+             )
 
-    assert {:error, %{code: :destination_collision}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+    large_digest = digest_hex(large_bytes)
 
-    File.rm!(object_path)
-    File.rm_rf!(Path.join(root, "sha256"))
-    File.mkdir_p!(Path.join(root, "sha256"))
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_objects (sha256, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, now())
+      """,
+      [large_digest, large_bytes, byte_size(large_bytes)]
+    )
 
-    symlinked_sha_root = Path.join(root, "sha256")
-    outside_sha_root = Path.join(root, "outside-sha-root")
-    File.mkdir!(outside_sha_root)
-    File.rm_rf!(symlinked_sha_root)
-    File.ln_s(outside_sha_root, symlinked_sha_root)
-
-    assert {:error, %{code: :artifact_store_symlink}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
-
-    File.rm!(symlinked_sha_root)
-    File.mkdir!(symlinked_sha_root)
-    bucket = Path.join(symlinked_sha_root, digest_bucket(@artifact_bytes["assets/app.js"]))
-    outside_bucket = Path.join(root, "outside-bucket")
-    File.mkdir!(outside_bucket)
-    File.ln_s(outside_bucket, bucket)
-
-    assert {:error, %{code: :artifact_store_symlink}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
-
-    File.rm!(bucket)
-    File.rm_rf!(outside_bucket)
-    File.rm_rf!(symlinked_sha_root)
-    object_path = prepare_object_path(root, @artifact_bytes["assets/app.js"])
-    File.mkdir!(object_path)
-
-    assert {:error, %{code: :destination_not_regular}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
-
-    refute Enum.any?(Path.wildcard(Path.join(root, "**/.tmp-*")))
+    assert_sql_rejected(
+      """
+      INSERT INTO frontend_release_artifacts
+        (artifact_id, release_publication_id, release_id, path, sha256, size, media_type, object_key, metadata, inserted_at)
+      VALUES
+        ('cap-trigger-artifact', $1, $2, 'assets/large.js', $3, 100000000,
+         'application/javascript', $4, '{}'::jsonb, now())
+      """,
+      [
+        seed_publication.publication_id,
+        seed_release["releaseId"],
+        large_digest,
+        "sha256:" <> large_digest
+      ]
+    )
   end
 
-  test "a release transaction rolls back while an orphaned object remains harmless", %{root: root} do
-    {envelope, _payload, release} = release_document(@artifact_bytes, "build-partial-failure")
-    collision_path = prepare_object_path(root, @artifact_bytes["mf-manifest.json"])
-    File.write!(collision_path, "collision")
+  test "concurrent identical release admissions converge to one publication and objects" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-concurrent")
 
-    assert {:error, %{code: :destination_collision}} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+    release_tasks =
+      Enum.map(1..2, fn _index ->
+        Task.async(fn ->
+          FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+        end)
+      end)
 
-    first_object = prepare_object_path(root, @artifact_bytes["assets/app.js"])
-    assert File.read!(first_object) == @artifact_bytes["assets/app.js"]
-    assert Repo.get_by(ReleasePublication, release_id: release["releaseId"]) == nil
-    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 0
-    refute Enum.any?(Path.wildcard(Path.join(root, "**/.tmp-*")))
+    Enum.each(release_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
+    release_results = Enum.map(release_tasks, &Task.await(&1, 30_000))
+
+    assert Enum.all?(release_results, &match?({:ok, %ReleasePublication{}}, &1))
+    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+
+    catalog_tasks =
+      Enum.map(1..2, fn _index ->
+        Task.async(fn -> FrontendReleasePublication.admit_catalog(catalog, now: @now) end)
+      end)
+
+    Enum.each(catalog_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
+    catalog_results = Enum.map(catalog_tasks, &Task.await(&1, 30_000))
+
+    assert [{:ok, first}, {:ok, second}] =
+             Enum.sort_by(catalog_results, &elem(&1, 1).publication_id)
+
+    assert first.publication_id == second.publication_id
+    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
   end
 
-  test "local readback rejects corruption after admission", %{root: root} do
-    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-corruption")
-
-    assert {:ok, publication} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
-
-    [artifact | _] = publication.artifacts
-    file_path = Path.join(root, artifact.object_key)
-    File.write!(file_path, "corrupted")
-
-    assert {:error, :artifact_digest_mismatch} =
-             LocalArtifactStore.readback("sha256:" <> artifact.sha256)
-  end
-
-  test "catalog admission persists only admitted current and fallback releases" do
+  test "catalog admission binds exact current and fallback nested envelope bytes" do
     {current_envelope, _current_payload, current_release} =
       release_document(@artifact_bytes, "build-catalog-current", "2026-08-30T17:30:00Z")
 
@@ -309,21 +357,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert {:ok, publication} =
              FrontendReleasePublication.admit_catalog(catalog, now: @now)
 
-    assert publication.sequence == 2
-    assert publication.catalog_digest == sha256(payload_from_envelope(catalog))
-    assert publication.acceptance_state == "accepted"
-
-    assert {:ok, verified_catalog} =
-             FrontendReleaseCatalog.verify_catalog(
-               publication.signed_document_bytes,
-               @corpus["keys"],
-               allowed_origins: [@origin],
-               now: @now
-             )
-
-    assert verified_catalog.payload_bytes == publication.payload_bytes
-    assert verified_catalog.digest == publication.catalog_digest
     current_row = Repo.get_by!(ReleasePublication, release_id: current_release["releaseId"])
+    fallback_row = Repo.get_by!(ReleasePublication, release_id: fallback_release["releaseId"])
 
     assert publication.release_references == %{
              "entries" => [
@@ -333,13 +368,49 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
                  "currentReleaseDigest" => current_row.payload_digest,
                  "currentSignedDocumentDigest" => current_row.signed_document_digest,
                  "fallbackReleaseId" => fallback_release["releaseId"],
-                 "fallbackReleaseDigest" =>
-                   Repo.get_by!(ReleasePublication, release_id: fallback_release["releaseId"]).payload_digest,
-                 "fallbackSignedDocumentDigest" =>
-                   Repo.get_by!(ReleasePublication, release_id: fallback_release["releaseId"]).signed_document_digest
+                 "fallbackReleaseDigest" => fallback_row.payload_digest,
+                 "fallbackSignedDocumentDigest" => fallback_row.signed_document_digest
                }
              ]
            }
+  end
+
+  test "alternate valid signature over identical nested payload fails closed" do
+    {canonical_envelope, _payload, release} =
+      release_document(@artifact_bytes, "build-nested-envelope")
+
+    alternate_key = alternate_release_key()
+
+    Application.put_env(
+      :cadence_web,
+      :frontend_release_publication,
+      publication_config(@corpus["keys"] ++ [alternate_key])
+    )
+
+    alternate_envelope =
+      sign_fixture(
+        canonical(release),
+        "fixture-release-key-alt",
+        "release",
+        @fork_seed
+      )
+
+    assert alternate_envelope["payload"] == canonical_envelope["payload"]
+    assert alternate_envelope["signature"] != canonical_envelope["signature"]
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(
+               alternate_envelope,
+               @artifact_bytes,
+               now: @now
+             )
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+
+    assert {:error, %{code: :release_publication_mismatch, path: "$.payload.entries[0].current"}} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
   end
 
   test "catalog replay, fork, lower, and non-monotonic publication cases are enforced" do
@@ -386,39 +457,6 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
   end
 
-  test "concurrent identical release and catalog admissions converge to one row" do
-    {envelope, _payload, release} = release_document(@artifact_bytes, "build-concurrent")
-
-    release_tasks =
-      Enum.map(1..2, fn _index ->
-        Task.async(fn ->
-          FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
-        end)
-      end)
-
-    Enum.each(release_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
-    release_results = Enum.map(release_tasks, &Task.await(&1, 30_000))
-
-    assert Enum.all?(release_results, &match?({:ok, %ReleasePublication{}}, &1))
-    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
-
-    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
-
-    catalog_tasks =
-      Enum.map(1..2, fn _index ->
-        Task.async(fn -> FrontendReleasePublication.admit_catalog(catalog, now: @now) end)
-      end)
-
-    Enum.each(catalog_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
-    catalog_results = Enum.map(catalog_tasks, &Task.await(&1, 30_000))
-
-    assert [{:ok, first}, {:ok, second}] =
-             Enum.sort_by(catalog_results, &elem(&1, 1).publication_id)
-
-    assert first.publication_id == second.publication_id
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
-  end
-
   test "configured trust records and allowed origins are mandatory" do
     {envelope, _payload, _release} = release_document(@artifact_bytes, "build-policy")
     config = Application.get_env(:cadence_web, :frontend_release_publication)
@@ -443,14 +481,39 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert {:error, %{code: :invalid_base_url}} =
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      Keyword.put(config, :artifact_root, "relative-artifact-root")
-    )
+    refute Keyword.has_key?(config, :artifact_root)
+    refute Keyword.has_key?(config, :artifact_store)
+    refute function_exported?(CadenceWeb.FrontendReleasePublication, :readback, 1)
+  end
 
-    assert {:error, %{code: :artifact_store_root_not_absolute}} =
+  test "publication and object tables reject update, delete, and truncate" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-mutations")
+
+    assert {:ok, publication} =
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+    assert {:ok, _catalog} = FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    for sql <- [
+          "UPDATE frontend_release_objects SET size = size",
+          "DELETE FROM frontend_release_objects",
+          "TRUNCATE frontend_release_objects CASCADE",
+          "UPDATE frontend_release_artifacts SET size = size",
+          "DELETE FROM frontend_release_artifacts",
+          "TRUNCATE frontend_release_artifacts CASCADE",
+          "UPDATE frontend_release_publications SET accepted_at = accepted_at",
+          "DELETE FROM frontend_release_publications",
+          "TRUNCATE frontend_release_publications CASCADE",
+          "UPDATE frontend_release_catalog_publications SET accepted_at = accepted_at",
+          "DELETE FROM frontend_release_catalog_publications",
+          "TRUNCATE frontend_release_catalog_publications CASCADE"
+        ] do
+      assert_sql_rejected(sql)
+    end
+
+    assert Repo.get!(ReleasePublication, publication.publication_id).release_id ==
+             release["releaseId"]
   end
 
   test "publication boundary exposes no update or delete API" do
@@ -460,13 +523,20 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     refute function_exported?(FrontendReleasePublication, :delete_catalog, 1)
   end
 
-  defp publication_config(root, trust_records) do
-    [
-      artifact_store: LocalArtifactStore,
-      artifact_root: root,
-      trust_records: trust_records,
-      allowed_origins: [@origin]
-    ]
+  defp assert_sql_rejected(sql, params \\ []) do
+    result =
+      Repo.transaction(fn ->
+        case Repo.query(sql, params) do
+          {:error, %Postgrex.Error{} = error} -> Repo.rollback(error)
+          {:ok, _result} -> flunk("expected SQL rejection: #{sql}")
+        end
+      end)
+
+    assert {:error, %Postgrex.Error{}} = result
+  end
+
+  defp publication_config(trust_records) do
+    [trust_records: trust_records, allowed_origins: [@origin]]
   end
 
   defp restore_config(nil),
@@ -587,18 +657,6 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     }
   end
 
-  defp payload_from_envelope(envelope) do
-    envelope["payload"]
-    |> Base.url_decode64!(padding: false)
-  end
-
-  defp prepare_object_path(root, bytes) do
-    hex = digest_hex(bytes)
-    bucket = Path.join(root, "sha256/" <> binary_part(hex, 0, 2))
-    File.mkdir_p!(bucket)
-    Path.join(bucket, hex)
-  end
-
   defp canonical(value) when is_map(value) do
     value
     |> Map.keys()
@@ -619,6 +677,5 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
   defp canonical(nil), do: "null"
 
   defp sha256(bytes), do: "sha256:" <> digest_hex(bytes)
-  defp digest_bucket(bytes), do: bytes |> digest_hex() |> binary_part(0, 2)
   defp digest_hex(bytes), do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
 end

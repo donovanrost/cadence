@@ -46,5 +46,6 @@ defmodule CadenceWeb.FrontendReleasePublication.ReleaseArtifact do
     |> check_constraint(:sha256, name: :frontend_release_artifacts_sha256_check)
     |> check_constraint(:size, name: :frontend_release_artifacts_size_check)
     |> check_constraint(:object_key, name: :frontend_release_artifacts_object_key_check)
+    |> foreign_key_constraint(:sha256, name: :frontend_release_artifacts_object_fk)
   end
 end
