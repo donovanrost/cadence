@@ -10,5 +10,7 @@ defmodule Cadence.Applications.ActionProvider do
   @callback configuration_reference(ActionRequest.t(), term()) ::
               ConfigurationReference.t() | nil
 
-  @optional_callbacks configuration_reference: 2
+  @callback result(term()) :: term()
+
+  @optional_callbacks configuration_reference: 2, result: 1
 end

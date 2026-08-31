@@ -3,7 +3,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
 
   @behaviour Cadence.Reads.ApplicationSurfaces.SurfaceQueryProvider
 
-  alias Cadence.Applications.{Comms, HostContext, StatusPlacement, SurfaceQueryRequest}
+  alias Cadence.Applications.{
+    ApplicationInstallations,
+    Comms,
+    HostContext,
+    StatusPlacement,
+    SurfaceQueryRequest
+  }
+
   alias Cadence.Auth.Scope
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
   alias Cadence.Contacts.{LinkAssignmentStore, PathTemplateStore, ProfileStore}
@@ -11,6 +18,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   alias Cadence.Ids
   alias Cadence.Listing.Page
   alias Cadence.Reads.Applications.{Inventory, InventoryItem}
+  alias Cadence.Reads.Applications.TelemetryDecomStatus
+  alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
   @application_key "comms"
@@ -45,7 +54,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @doc "Builds the bounded source summary consumed by the legacy presenter."
   @spec overview(Scope.t(), binary()) :: {:ok, map()} | {:error, atom()}
   def overview(%Scope{} = scope, mission_id) when is_binary(mission_id) do
-    with {:ok, resources} <- read_validation_resources(scope.organization_id, mission_id),
+    with :ok <- validate_read_scope(scope, mission_id),
+         {:ok, resources} <- read_validation_resources(scope, mission_id),
          :ok <- validate_resource_identifiers(resources, mission_id),
          {:ok, findings} <- validation_findings(scope, mission_id, resources),
          :ok <- validate_findings_bounds(findings) do
@@ -106,7 +116,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @doc "Returns bounded findings for the dedicated legacy validation page."
   @spec validation(Scope.t(), binary()) :: {:ok, [map()]} | {:error, atom()}
   def validation(%Scope{} = scope, mission_id) when is_binary(mission_id) do
-    with {:ok, resources} <- read_validation_resources(scope.organization_id, mission_id),
+    with :ok <- validate_read_scope(scope, mission_id),
+         {:ok, resources} <- read_validation_resources(scope, mission_id),
          :ok <- validate_resource_identifiers(resources, mission_id),
          {:ok, findings} <- validation_findings(scope, mission_id, resources),
          :ok <- validate_findings_bounds(findings) do
@@ -425,29 +436,35 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   end
 
   defp fetch_spacecraft_names(rules, organization_id, mission_id) do
-    Enum.reduce_while(Enum.uniq(Enum.map(rules, & &1.spacecraft_id)), {:ok, %{}}, fn id,
-                                                                                     {:ok, acc} ->
-      case Cadence.SpacecraftStore.fetch_spacecraft(organization_id, mission_id, id) do
-        {:ok, spacecraft} ->
-          {:cont, {:ok, Map.put(acc, id, display_text(spacecraft.display_name, id))}}
+    with {:ok, spacecrafts} <-
+           SpacecraftStore.fetch_spacecrafts(
+             organization_id,
+             mission_id,
+             Enum.map(rules, & &1.spacecraft_id)
+           ) do
+      {:ok,
+       Map.new(rules, fn rule ->
+         spacecraft = Map.get(spacecrafts, rule.spacecraft_id)
 
-        _missing ->
-          {:cont, {:ok, Map.put(acc, id, id)}}
-      end
-    end)
+         {rule.spacecraft_id,
+          display_text(spacecraft && spacecraft.display_name, rule.spacecraft_id)}
+       end)}
+    end
   end
 
   defp fetch_transport_names(rules, organization_id, mission_id) do
-    Enum.reduce_while(Enum.uniq(Enum.map(rules, & &1.transport_id)), {:ok, %{}}, fn id,
-                                                                                    {:ok, acc} ->
-      case TransportStore.fetch_transport(organization_id, mission_id, id) do
-        {:ok, transport} ->
-          {:cont, {:ok, Map.put(acc, id, display_text(transport.display_name, id))}}
-
-        _missing ->
-          {:cont, {:ok, Map.put(acc, id, id)}}
-      end
-    end)
+    with {:ok, transports} <-
+           TransportStore.fetch_transports(
+             organization_id,
+             mission_id,
+             Enum.map(rules, & &1.transport_id)
+           ) do
+      {:ok,
+       Map.new(rules, fn rule ->
+         transport = Map.get(transports, rule.transport_id)
+         {rule.transport_id, display_text(transport && transport.display_name, rule.transport_id)}
+       end)}
+    end
   end
 
   defp validate_page_bound(%Page{items: items}) when length(items) <= @max_page_size, do: :ok
@@ -459,7 +476,20 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   defp collection_title("routing"), do: "Routing"
   defp collection_title("ground_stations"), do: "Ground Stations"
 
-  defp read_validation_resources(organization_id, mission_id) do
+  defp validate_read_scope(
+         %Scope{organization_id: organization_id, mission_id: scoped_mission_id},
+         mission_id
+       )
+       when is_binary(organization_id) and organization_id != "" and is_binary(mission_id) and
+              (is_nil(scoped_mission_id) or scoped_mission_id == mission_id),
+       do: :ok
+
+  defp validate_read_scope(%Scope{}, _mission_id),
+    do: {:error, :application_installation_scope_required}
+
+  defp read_validation_resources(%Scope{} = scope, mission_id) do
+    organization_id = scope.organization_id
+
     readers = [
       {:spacecraft,
        fn ->
@@ -516,31 +546,56 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
            page: 1,
            page_size: @validation_page_size
          )
+       end},
+      {:installations,
+       fn ->
+         ApplicationInstallations.list_for_mission_page(scope, mission_id,
+           page: 1,
+           page_size: @validation_page_size,
+           max_total: @max_resource_items
+         )
        end}
     ]
 
+    readers
+    |> read_bounded_resources()
+    |> finalize_validation_resources()
+  end
+
+  defp read_bounded_resources(readers) do
     Enum.reduce_while(readers, %{}, fn {key, reader}, acc ->
-      case reader.() do
-        %Page{items: items, total_count: total}
-        when total <= @max_resource_items and length(items) <= @max_resource_items ->
-          {:cont, Map.put(acc, key, items)}
-
-        %Page{} ->
-          {:halt, {:error, :application_surface_bounds_exceeded}}
-
-        _invalid ->
-          {:halt, {:error, :unsupported_application_surface_query}}
+      case normalize_resource_page(reader.()) do
+        {:ok, items} -> {:cont, Map.put(acc, key, items)}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
-    |> case do
-      {:error, _reason} = error ->
-        error
+  end
 
-      resources ->
-        if valid_resource_bounds?(resources),
-          do: {:ok, resources},
-          else: {:error, :application_surface_bounds_exceeded}
-    end
+  defp normalize_resource_page(%Page{items: items, total_count: total}),
+    do: normalize_resource_items(items, total)
+
+  defp normalize_resource_page({:ok, %Page{items: items, total_count: total}}),
+    do: normalize_resource_items(items, total)
+
+  defp normalize_resource_page({:error, reason}), do: {:error, reason}
+
+  defp normalize_resource_page(_invalid),
+    do: {:error, :unsupported_application_surface_query}
+
+  defp normalize_resource_items(items, total)
+       when is_list(items) and is_integer(total) and total <= @max_resource_items and
+              length(items) <= @max_resource_items,
+       do: {:ok, items}
+
+  defp normalize_resource_items(_items, _total),
+    do: {:error, :application_surface_bounds_exceeded}
+
+  defp finalize_validation_resources({:error, _reason} = error), do: error
+
+  defp finalize_validation_resources(resources) do
+    if valid_resource_bounds?(resources),
+      do: {:ok, resources},
+      else: {:error, :application_surface_bounds_exceeded}
   end
 
   defp validation_findings(%Scope{} = scope, mission_id, resources) do
@@ -548,55 +603,99 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     transport_profiles = Map.new(resources.transport_profiles, &{&1.transport_profile_id, &1})
     source_ids = MapSet.new(resources.source_endpoints, & &1.source_endpoint_id)
 
-    findings =
-      []
-      |> add_if(resources.source_endpoints == [], %{
-        owner: :advanced_runtime_identity,
-        severity: :blocked,
-        title: "No internal telemetry identities configured",
-        body:
-          "Internal runtime diagnostics need telemetry identities so ingress can resolve ownership."
-      })
-      |> add_if(resources.path_templates == [], %{
-        owner: :advanced_runtime_identity,
-        severity: :blocked,
-        title: "No internal routing artifacts configured",
-        body:
-          "Create Routing Rules to materialize internal runtime artifacts used during execution."
-      })
-      |> Kernel.++(
-        path_findings(
-          resources.path_templates,
-          source_ids,
-          provider_profiles,
-          transport_profiles,
-          mission_id
+    with {:ok, type_versions} <- spacecraft_type_versions(resources.spacecraft, scope, mission_id),
+         {:ok, status_by_application} <-
+           preloaded_statuses(scope, mission_id, resources.spacecraft),
+         {:ok, application_findings} <-
+           application_status_findings_for_spacecrafts(
+             scope,
+             resources.spacecraft,
+             mission_id,
+             type_versions,
+             resources.installations,
+             status_by_application
+           ) do
+      findings =
+        []
+        |> add_if(resources.source_endpoints == [], %{
+          owner: :advanced_runtime_identity,
+          severity: :blocked,
+          title: "No internal telemetry identities configured",
+          body:
+            "Internal runtime diagnostics need telemetry identities so ingress can resolve ownership."
+        })
+        |> add_if(resources.path_templates == [], %{
+          owner: :advanced_runtime_identity,
+          severity: :blocked,
+          title: "No internal routing artifacts configured",
+          body:
+            "Create Routing Rules to materialize internal runtime artifacts used during execution."
+        })
+        |> Kernel.++(
+          path_findings(
+            resources.path_templates,
+            source_ids,
+            provider_profiles,
+            transport_profiles
+          )
         )
-      )
-      |> Kernel.++(
-        profile_presence_findings(resources.provider_profiles, resources.transport_profiles)
-      )
-      |> Kernel.++(transport_findings(resources.transports, mission_id))
-      |> Kernel.++(
-        routing_findings(
-          resources.spacecraft,
-          resources.transports,
-          resources.routing_rules,
-          mission_id
+        |> Kernel.++(
+          profile_presence_findings(resources.provider_profiles, resources.transport_profiles)
         )
-      )
-      |> Kernel.++(selected_path_findings(resources.link_assignments, resources.source_endpoints))
-      |> Kernel.++(spacecraft_findings(resources.spacecraft, mission_id))
-      |> Kernel.++(
-        Enum.flat_map(resources.spacecraft, &application_status_findings(scope, &1, mission_id))
-      )
+        |> Kernel.++(transport_findings(resources.transports, mission_id))
+        |> Kernel.++(
+          routing_findings(
+            resources.spacecraft,
+            resources.transports,
+            resources.routing_rules,
+            mission_id
+          )
+        )
+        |> Kernel.++(
+          selected_path_findings(resources.link_assignments, resources.source_endpoints)
+        )
+        |> Kernel.++(
+          runtime_artifact_findings(
+            resources.spacecraft,
+            resources.source_endpoints,
+            resources.path_templates,
+            resources.link_assignments,
+            mission_id
+          )
+        )
+        |> Kernel.++(spacecraft_findings(resources.spacecraft, mission_id))
+        |> Kernel.++(application_findings)
 
-    if length(findings) <= @max_findings,
-      do: {:ok, findings},
-      else: {:error, :application_surface_bounds_exceeded}
+      if length(findings) <= @max_findings,
+        do: {:ok, findings},
+        else: {:error, :application_surface_bounds_exceeded}
+    end
   end
 
-  defp path_findings(templates, source_ids, provider_profiles, transport_profiles, mission_id) do
+  defp application_status_findings_for_spacecrafts(
+         scope,
+         spacecraft,
+         mission_id,
+         type_versions,
+         installations,
+         status_by_application
+       ) do
+    Enum.reduce_while(spacecraft, {:ok, []}, fn vehicle, {:ok, findings} ->
+      case application_status_findings(
+             scope,
+             vehicle,
+             mission_id,
+             type_versions,
+             installations,
+             status_by_application
+           ) do
+        {:ok, vehicle_findings} -> {:cont, {:ok, findings ++ vehicle_findings}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp path_findings(templates, source_ids, provider_profiles, transport_profiles) do
     Enum.flat_map(templates, fn template ->
       name = display_text(template.path_id, "Path")
 
@@ -631,8 +730,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
           template.provider_profile_refs,
           provider_profiles,
           template,
-          "provider",
-          mission_id
+          "provider"
         )
       )
       |> Kernel.++(
@@ -640,14 +738,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
           template.transport_profile_refs,
           transport_profiles,
           template,
-          "protocol behavior",
-          mission_id
+          "protocol behavior"
         )
       )
     end)
   end
 
-  defp profile_reference_findings(refs, profiles, template, label, mission_id) do
+  defp profile_reference_findings(refs, profiles, template, label) do
     Enum.flat_map(refs, fn ref ->
       id = Map.get(ref, "provider_profile_id") || Map.get(ref, "transport_profile_id")
       version = ref_version(ref)
@@ -656,8 +753,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
         nil ->
           [
             path_finding(
-              template,
-              mission_id,
               :blocked,
               "#{display_text(template.path_id, "Path")} references a missing #{label}",
               "Refresh the Routing Rule artifact or restore #{label} #{display_text(id, "profile")}"
@@ -667,8 +762,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
         %{lifecycle_state: :deleted} ->
           [
             path_finding(
-              template,
-              mission_id,
               :blocked,
               "#{display_text(template.path_id, "Path")} references an archived #{label}",
               "Refresh the Routing Rule artifact with an active #{label}."
@@ -678,8 +771,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
         %{version: latest} when is_integer(latest) and version < latest ->
           [
             path_finding(
-              template,
-              mission_id,
               :attention,
               "#{display_text(template.path_id, "Path")} uses stale #{label}",
               "The referenced version is stale; refresh the Routing Rule artifact."
@@ -692,14 +783,12 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     end)
   end
 
-  defp path_finding(template, mission_id, severity, title, body),
+  defp path_finding(severity, title, body),
     do: %{
       owner: :advanced_runtime_identity,
       severity: severity,
       title: title,
-      body: body,
-      action_label: "Review",
-      action_navigate: fallback_href(mission_id, "routing_detail", template.path_template_id)
+      body: body
     }
 
   defp profile_presence_findings(provider_profiles, transport_profiles) do
@@ -833,10 +922,102 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
         owner: :advanced_runtime_identity,
         severity: :attention,
         title: "No selected downlink runtime artifact for #{label}",
-        body: "Review this identity's selected downlink artifacts."
+        body:
+          "Downlink can have contributors, but one selected or preferred runtime artifact is useful for operator summaries."
       })
     end)
   end
+
+  defp runtime_artifact_findings(spacecraft, endpoints, path_templates, assignments, mission_id) do
+    available_downlinks =
+      Enum.filter(path_templates, fn template ->
+        is_nil(template.source_endpoint_ref) and template.direction == :downlink and
+          template.provider_profile_refs != []
+      end)
+
+    Enum.flat_map(spacecraft, fn vehicle ->
+      if is_nil(vehicle.scid) do
+        []
+      else
+        runtime_identity = runtime_identity_for(vehicle, endpoints)
+
+        cond do
+          is_nil(runtime_identity) ->
+            [
+              %{
+                owner: :advanced_runtime_identity,
+                severity: :blocked,
+                title:
+                  "#{display_text(vehicle.display_name, "Spacecraft")} has no internal telemetry identity",
+                body:
+                  "Sync internal telemetry identity before execution can resolve this spacecraft.",
+                action_label: "Edit identity",
+                action_navigate: spacecraft_identity_path(mission_id, vehicle)
+              }
+            ]
+
+          assigned_downlink?(runtime_identity, assignments) ->
+            []
+
+          available_downlinks != [] ->
+            [
+              %{
+                owner: :advanced_runtime_identity,
+                severity: :attention,
+                title:
+                  "#{display_text(vehicle.display_name, "Spacecraft")} has no selected downlink runtime artifact",
+                body: "Routing Rules can materialize internal runtime artifacts for execution.",
+                action_label: "Review Routing",
+                action_navigate: spacecraft_routing_path(mission_id, vehicle)
+              }
+            ]
+
+          true ->
+            [
+              %{
+                owner: :advanced_runtime_identity,
+                severity: :blocked,
+                title:
+                  "#{display_text(vehicle.display_name, "Spacecraft")} has no provider-backed downlink artifact available",
+                body:
+                  "Create a Transport and Routing Rule before reviewing internal runtime artifacts.",
+                action_label: "Create Routing Rule",
+                action_navigate: mission_routing_path(mission_id)
+              }
+            ]
+        end
+      end
+    end)
+  end
+
+  defp runtime_identity_for(vehicle, endpoints) do
+    managed_id = "spacecraft_runtime:" <> vehicle.spacecraft_id
+
+    Enum.find(endpoints, &(&1.source_endpoint_id == managed_id)) ||
+      Enum.find(endpoints, &(&1.spacecraft_id == vehicle.spacecraft_id))
+  end
+
+  defp assigned_downlink?(runtime_identity, assignments) do
+    Enum.any?(assignments, fn assignment ->
+      assignment.source_endpoint_ref == runtime_identity.source_endpoint_id and
+        assignment.direction == :downlink and assignment.provider_profile_refs != []
+    end)
+  end
+
+  defp spacecraft_identity_path(mission_id, spacecraft),
+    do:
+      "/missions/" <>
+        validated_segment(mission_id) <>
+        "/spacecraft/" <> validated_segment(spacecraft.spacecraft_id) <> "/identity"
+
+  defp spacecraft_routing_path(mission_id, spacecraft),
+    do:
+      "/missions/" <>
+        validated_segment(mission_id) <>
+        "/spacecraft/" <> validated_segment(spacecraft.spacecraft_id) <> "/routing"
+
+  defp mission_routing_path(mission_id),
+    do: "/missions/" <> validated_segment(mission_id) <> "/comms/routing/new"
 
   defp spacecraft_findings(spacecraft, mission_id) do
     Enum.flat_map(spacecraft, fn vehicle ->
@@ -867,39 +1048,66 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     end)
   end
 
-  defp application_status_findings(%Scope{} = scope, spacecraft, mission_id) do
-    with declarations when is_map(declarations) <- spacecraft_applications(scope, spacecraft),
+  defp application_status_findings(
+         %Scope{} = scope,
+         spacecraft,
+         mission_id,
+         type_versions,
+         installations,
+         status_by_application
+       ) do
+    with declarations when is_map(declarations) <-
+           spacecraft_applications(type_versions, spacecraft),
          {:ok, applications} <-
-           Inventory.declared(
+           Inventory.declared_with_installations(
              scope,
              HostContext.spacecraft(mission_id, spacecraft.spacecraft_id),
              declarations,
-             ExtensionCatalog.applications_for_scope(:spacecraft)
+             ExtensionCatalog.applications_for_scope(:spacecraft),
+             installations,
+             status_by_application: status_by_application
            ) do
-      Enum.flat_map(applications, &status_placement_findings(&1, spacecraft, mission_id))
+      {:ok, Enum.flat_map(applications, &status_placement_findings(&1, spacecraft, mission_id))}
     else
-      _invalid -> []
+      {:error, reason} -> {:error, reason}
     end
   end
 
   defp spacecraft_applications(
-         %Scope{organization_id: organization_id},
+         type_versions,
          %{mission_id: mission_id, spacecraft_type_id: type_id, spacecraft_type_version: version}
        )
-       when is_binary(organization_id) and is_binary(type_id) and is_integer(version) and
-              version > 0 do
-    case SpacecraftTypeStore.fetch_spacecraft_type_version(
-           organization_id,
-           mission_id,
-           type_id,
-           version
-         ) do
-      {:ok, spacecraft_type} -> spacecraft_type.applications
+       when is_map(type_versions) and is_binary(mission_id) and is_binary(type_id) and
+              is_integer(version) and version > 0 do
+    case Map.get(type_versions, {type_id, version}) do
+      %{applications: applications} when is_map(applications) -> applications
       _invalid -> %{}
     end
   end
 
-  defp spacecraft_applications(_scope, _spacecraft), do: %{}
+  defp spacecraft_applications(_type_versions, _spacecraft), do: %{}
+
+  defp preloaded_statuses(%Scope{} = scope, mission_id, spacecraft) do
+    spacecraft_ids = Enum.map(spacecraft, & &1.spacecraft_id)
+
+    with {:ok, statuses} <- TelemetryDecomStatus.load_many(scope, mission_id, spacecraft_ids) do
+      {:ok,
+       Map.new(statuses, fn {spacecraft_id, status} ->
+         {{"telemetry_decom", spacecraft_id}, status}
+       end)}
+    end
+  end
+
+  defp spacecraft_type_versions(spacecraft, %Scope{organization_id: organization_id}, mission_id) do
+    references =
+      spacecraft
+      |> Enum.map(fn vehicle -> {vehicle.spacecraft_type_id, vehicle.spacecraft_type_version} end)
+      |> Enum.filter(fn {type_id, version} ->
+        is_binary(type_id) and is_integer(version) and version > 0
+      end)
+
+    SpacecraftTypeStore.fetch_spacecraft_type_versions(organization_id, mission_id, references)
+  end
 
   defp status_placement_findings(%InventoryItem{definition: nil}, _spacecraft, _mission_id),
     do: []
@@ -1051,14 +1259,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   end
 
   defp finding_data({finding, index}, mission_id) do
-    %{
+    base = %{
       "id" => display_text(Map.get(finding, :id), "finding-#{index + 1}"),
       "title" => display_text(finding.title, "Comms finding"),
       "body" => display_text(finding.body, "Review the saved Comms configuration."),
-      "severity" => finding_label(finding.severity),
-      "action_label" => display_text(Map.get(finding, :action_label), "Review"),
-      "action_href" => safe_action_href(Map.get(finding, :action_navigate), mission_id)
+      "severity" => finding_label(finding.severity)
     }
+
+    Map.merge(base, action_fields(finding, mission_id))
   end
 
   defp overview_dto(mission_id, summary) do
@@ -1129,17 +1337,17 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
               "description" => &1.description,
               "findings" =>
                 Enum.map(&1.findings, fn finding ->
-                  %{
+                  base = %{
                     "id" => Map.get(finding, :id),
                     "title" => finding.title,
                     "body" => finding.body,
-                    "action_label" => Map.get(finding, :action_label),
-                    "action_href" => Map.get(finding, :action_navigate),
                     "status" => %{
                       "tone" => Atom.to_string(finding.severity),
                       "label" => finding_label(finding.severity)
                     }
                   }
+
+                  Map.merge(base, action_fields(finding, mission_id))
                 end)
             }
           )
@@ -1327,10 +1535,27 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
 
   defp safe_action_href(href, mission_id) when is_binary(href) do
     prefix = "/missions/" <> validated_segment(mission_id) <> "/"
-    if String.starts_with?(href, prefix), do: href, else: nil
+
+    if String.valid?(href) and String.starts_with?(href, prefix) and
+         not String.contains?(href, [":subject", "//", "?", "#"]),
+       do: href,
+       else: nil
   end
 
   defp safe_action_href(_href, _mission_id), do: nil
+
+  defp action_fields(finding, mission_id) do
+    case safe_action_href(Map.get(finding, :action_navigate), mission_id) do
+      href when is_binary(href) ->
+        %{
+          "action_label" => display_text(Map.get(finding, :action_label), "Review"),
+          "action_href" => href
+        }
+
+      _missing ->
+        %{}
+    end
+  end
 
   defp ref_version(ref) do
     case Map.get(ref, "version") do
@@ -1383,13 +1608,38 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     identifiers =
       [mission_id] ++
         Enum.flat_map(resources.spacecraft, fn spacecraft ->
-          [spacecraft.spacecraft_id]
+          [spacecraft.spacecraft_id, spacecraft.spacecraft_type_id]
+          |> Enum.reject(&is_nil/1)
+        end) ++
+        Enum.flat_map(resources.source_endpoints, fn endpoint ->
+          [endpoint.source_endpoint_id, endpoint.spacecraft_id]
+          |> Enum.reject(&is_nil/1)
         end) ++
         Enum.flat_map(resources.path_templates, fn template ->
-          [template.path_template_id]
+          refs =
+            [template.path_template_id, template.path_id, template.source_endpoint_ref] ++
+              template.provider_profile_ids ++ template.transport_profile_ids
+
+          Enum.reject(refs, &is_nil/1)
+        end) ++
+        Enum.flat_map(resources.provider_profiles, fn profile ->
+          [profile.provider_profile_id]
+        end) ++
+        Enum.flat_map(resources.transport_profiles, fn profile ->
+          [profile.transport_profile_id]
         end) ++
         Enum.flat_map(resources.transports, fn transport -> [transport.transport_id] end) ++
-        Enum.flat_map(resources.routing_rules, fn rule -> [rule.routing_rule_id] end)
+        Enum.flat_map(resources.routing_rules, fn rule ->
+          [rule.routing_rule_id, rule.spacecraft_id, rule.transport_id]
+        end) ++
+        Enum.flat_map(resources.link_assignments, fn assignment ->
+          [
+            assignment.link_assignment_id,
+            assignment.spacecraft_id,
+            assignment.source_endpoint_ref,
+            assignment.path_template_id
+          ]
+        end)
 
     validate_identifiers(identifiers)
   end

@@ -20,20 +20,13 @@ defmodule Cadence.Applications.ActionDispatcher do
     Registry
   }
 
-  alias Cadence.Applications.DerivedTelemetry.ActionProvider, as: DerivedTelemetryActionProvider
-  alias Cadence.Applications.Limits.ActionProvider, as: LimitsActionProvider
-  alias Cadence.Applications.TelemetryDecom.ActionProvider, as: TelemetryDecomActionProvider
+  alias Cadence.Applications.ActionProviderRegistry
   alias Cadence.Auth.{Policy, Scope}
-
-  @providers %{
-    "telemetry_decom" => TelemetryDecomActionProvider,
-    "derived_telemetry" => DerivedTelemetryActionProvider,
-    "limits" => LimitsActionProvider
-  }
 
   @spec validate_providers() ::
           :ok | {:error, :invalid_application_action_provider_registry}
-  def validate_providers, do: validate_providers(Registry.all(), @providers)
+  def validate_providers,
+    do: validate_providers(Registry.all(), ActionProviderRegistry.providers())
 
   @doc false
   @spec validate_providers([ApplicationDefinition.t()], map()) ::
@@ -146,11 +139,24 @@ defmodule Cadence.Applications.ActionDispatcher do
   end
 
   defp fetch_provider(application_key) do
-    case Map.fetch(@providers, application_key) do
+    case ActionProviderRegistry.fetch(application_key) do
       {:ok, provider} -> {:ok, provider}
-      :error -> {:error, :unknown_application_action_provider}
+      {:error, reason} -> {:error, reason}
     end
   end
+
+  @spec result(binary(), term()) :: term()
+  def result(application_key, value) when is_binary(application_key) do
+    case ActionProviderRegistry.fetch(application_key) do
+      {:ok, provider} ->
+        if function_exported?(provider, :result, 1), do: provider.result(value), else: value
+
+      _other ->
+        value
+    end
+  end
+
+  def result(_application_key, value), do: value
 
   defp same_identities?(left, right),
     do: MapSet.equal?(MapSet.new(left), MapSet.new(right))

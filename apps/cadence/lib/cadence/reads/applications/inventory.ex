@@ -32,7 +32,7 @@ defmodule Cadence.Reads.Applications.Inventory do
 
           definition
           |> exact_definition(installation)
-          |> known_item(definition, installation, current_scope, host_context, false)
+          |> known_item(definition, installation, current_scope, host_context, false, %{})
         end)
 
       known_keys = MapSet.new(definitions, & &1.application_key)
@@ -62,43 +62,77 @@ defmodule Cadence.Reads.Applications.Inventory do
       when is_map(declarations) and is_list(definitions) do
     with :ok <- validate_definitions(definitions, host_context),
          {:ok, installations} <- installation_map(current_scope, host_context) do
-      definitions = Map.new(definitions, &{&1.application_key, &1})
-
-      items =
-        declarations
-        |> Enum.sort()
-        |> Enum.map(fn {application_key, metadata} ->
-          installation = Map.get(installations, application_key)
-
-          declared_item(
-            application_key,
-            metadata,
-            installation,
-            definitions,
-            current_scope,
-            host_context,
-            true
-          )
-        end)
-
-      declared_keys =
-        MapSet.new(declarations, fn {application_key, _metadata} -> application_key end)
-
-      retained_items =
-        installations
-        |> Map.values()
-        |> Enum.reject(&MapSet.member?(declared_keys, &1.application_key))
-        |> Enum.sort_by(& &1.application_key)
-        |> Enum.map(fn installation ->
-          retained_item(installation, definitions, current_scope, host_context)
-        end)
-
-      {:ok, items ++ retained_items}
+      declared_from_installations(
+        current_scope,
+        host_context,
+        declarations,
+        definitions,
+        installations,
+        %{}
+      )
     end
   end
 
   def declared(%Scope{}, %HostContext{}, _declarations, _definitions),
     do: {:error, :invalid_application_declarations}
+
+  @doc "Builds a declared inventory from a caller-preloaded host installation set."
+  @spec declared_with_installations(
+          Scope.t(),
+          HostContext.t(),
+          map(),
+          [ApplicationDefinition.t()],
+          [ApplicationInstallation.t()],
+          keyword()
+        ) :: {:ok, [InventoryItem.t()]} | {:error, term()}
+  def declared_with_installations(
+        current_scope,
+        host_context,
+        declarations,
+        definitions,
+        installations,
+        opts \\ []
+      )
+
+  def declared_with_installations(
+        %Scope{} = current_scope,
+        %HostContext{} = host_context,
+        declarations,
+        definitions,
+        installations,
+        opts
+      )
+      when is_map(declarations) and is_list(definitions) and is_list(installations) and
+             is_list(opts) do
+    with :ok <- validate_definitions(definitions, host_context) do
+      installations =
+        installations
+        |> Enum.filter(fn installation ->
+          installation.scope_kind == host_context.placement and
+            installation.scope_id == host_context_scope_id(host_context)
+        end)
+        |> Map.new(&{&1.application_key, &1})
+
+      declared_from_installations(
+        current_scope,
+        host_context,
+        declarations,
+        definitions,
+        installations,
+        Keyword.get(opts, :status_by_application, %{})
+      )
+    end
+  end
+
+  def declared_with_installations(
+        %Scope{},
+        %HostContext{},
+        _declarations,
+        _definitions,
+        _installations,
+        _opts
+      ),
+      do: {:error, :invalid_application_declarations}
 
   @spec summary([InventoryItem.t()]) :: Status.t()
   def summary([]) do
@@ -133,7 +167,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          definitions,
          current_scope,
          host_context,
-         declared?
+         declared?,
+         status_by_application
        ) do
     case resolve_definition(application_key, installation, definitions) do
       {:ok, definition, exact?} ->
@@ -143,7 +178,8 @@ defmodule Cadence.Reads.Applications.Inventory do
           installation,
           current_scope,
           host_context,
-          declared?
+          declared?,
+          status_by_application
         )
 
       {:error, _reason} ->
@@ -151,12 +187,25 @@ defmodule Cadence.Reads.Applications.Inventory do
     end
   end
 
-  defp retained_item(installation, definitions, current_scope, host_context) do
+  defp retained_item(
+         installation,
+         definitions,
+         current_scope,
+         host_context,
+         status_by_application
+       ) do
     case Map.fetch(definitions, installation.application_key) do
       {:ok, definition} ->
         definition
         |> exact_definition(installation)
-        |> known_item(definition, installation, current_scope, host_context, false)
+        |> known_item(
+          definition,
+          installation,
+          current_scope,
+          host_context,
+          false,
+          status_by_application
+        )
 
       :error ->
         unknown_item(installation.application_key, %{}, installation, false)
@@ -190,7 +239,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          installation,
          current_scope,
          host_context,
-         declared?
+         declared?,
+         status_by_application
        ) do
     lifecycle_state = installation && installation.lifecycle_state
 
@@ -212,7 +262,8 @@ defmodule Cadence.Reads.Applications.Inventory do
           installation,
           exact?,
           current_scope,
-          host_context
+          host_context,
+          status_by_application
         )
     }
   end
@@ -242,11 +293,21 @@ defmodule Cadence.Reads.Applications.Inventory do
          %ApplicationInstallation{lifecycle_state: :installed},
          true,
          current_scope,
-         host_context
+         host_context,
+         status_by_application
        ) do
-    case Applications.load_status(current_scope, definition, host_context) do
-      {:ok, status} -> status
-      {:error, _reason} -> Status.unavailable()
+    case Map.fetch(
+           status_by_application,
+           {definition.application_key, host_context_scope_id(host_context)}
+         ) do
+      {:ok, status} ->
+        status
+
+      :error ->
+        case Applications.load_status(current_scope, definition, host_context) do
+          {:ok, status} -> status
+          {:error, _reason} -> Status.unavailable()
+        end
     end
   end
 
@@ -258,7 +319,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          },
          false,
          _current_scope,
-         _host_context
+         _host_context,
+         _status_by_application
        ) do
     %Status{
       state: :upgrade_required,
@@ -287,7 +349,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          },
          _exact?,
          _current_scope,
-         _host_context
+         _host_context,
+         _status_by_application
        ) do
     lifecycle_status(:disabled, "Disabled", :blocked, installed_version, "Enable to manage")
   end
@@ -300,7 +363,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          },
          _exact?,
          _current_scope,
-         _host_context
+         _host_context,
+         _status_by_application
        ) do
     lifecycle_status(
       :uninstalled,
@@ -316,7 +380,8 @@ defmodule Cadence.Reads.Applications.Inventory do
          nil,
          _exact?,
          _current_scope,
-         _host_context
+         _host_context,
+         _status_by_application
        ) do
     lifecycle_status(
       :not_installed,
@@ -357,6 +422,61 @@ defmodule Cadence.Reads.Applications.Inventory do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp declared_from_installations(
+         current_scope,
+         host_context,
+         declarations,
+         definitions,
+         installations,
+         status_by_application
+       ) do
+    definitions = Map.new(definitions, &{&1.application_key, &1})
+
+    items =
+      declarations
+      |> Enum.sort()
+      |> Enum.map(fn {application_key, metadata} ->
+        installation = Map.get(installations, application_key)
+
+        declared_item(
+          application_key,
+          metadata,
+          installation,
+          definitions,
+          current_scope,
+          host_context,
+          true,
+          status_by_application
+        )
+      end)
+
+    declared_keys =
+      MapSet.new(declarations, fn {application_key, _metadata} -> application_key end)
+
+    retained_items =
+      installations
+      |> Map.values()
+      |> Enum.reject(&MapSet.member?(declared_keys, &1.application_key))
+      |> Enum.sort_by(& &1.application_key)
+      |> Enum.map(fn installation ->
+        retained_item(
+          installation,
+          definitions,
+          current_scope,
+          host_context,
+          status_by_application
+        )
+      end)
+
+    {:ok, items ++ retained_items}
+  end
+
+  defp host_context_scope_id(%HostContext{placement: :mission, mission_id: mission_id}),
+    do: mission_id
+
+  defp host_context_scope_id(%HostContext{placement: :spacecraft, spacecraft_id: spacecraft_id}),
+    do: spacecraft_id
 
   defp validate_definitions(definitions, %HostContext{placement: placement}) do
     identities = Enum.map(definitions, &definition_identity/1)

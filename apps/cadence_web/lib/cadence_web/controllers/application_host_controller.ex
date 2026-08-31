@@ -427,6 +427,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp catalog_problem(conn, reason)
        when reason in [
+              :application_catalog_bounds_exceeded,
+              :application_installation_bounds_exceeded,
               :application_not_installed,
               :application_installation_disabled,
               :application_installation_uninstalled,

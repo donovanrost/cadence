@@ -5,7 +5,6 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     ApplicationDefinition,
     ApplicationInstallation,
     ApplicationInstallations,
-    Comms,
     HostContext,
     Registry,
     SurfaceDefinition,
@@ -17,53 +16,19 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Extensions.Presentation.FieldDefinition
-  alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
-  alias Cadence.Reads.ApplicationSurfaces.DerivedTelemetry, as: DerivedTelemetrySurface
-  alias Cadence.Reads.ApplicationSurfaces.Limits, as: LimitsSurface
-  alias Cadence.Reads.ApplicationSurfaces.PacketBindings, as: PacketBindingsSurface
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
   alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
-
-  @comms_providers Map.new(Comms.surface_ids(), fn surface_id ->
-                     {elem(Comms.query_id(surface_id), 1), CommsSurface}
-                   end)
-
-  @providers Map.merge(@comms_providers, %{
-               "cadence.derived_telemetry.manage" => DerivedTelemetrySurface,
-               "cadence.limits.manage" => LimitsSurface,
-               "cadence.limits.activity" => LimitsSurface,
-               "cadence.packet_bindings.manage" => PacketBindingsSurface
-             })
-
-  @trusted_provider_query_ids Map.keys(@comms_providers)
 
   @spec validate_providers() ::
           :ok | {:error, :invalid_application_surface_provider_registry}
-  def validate_providers, do: validate_providers(Registry.all(), @providers)
+  def validate_providers, do: validate_providers(Registry.all(), ProviderRegistry.providers())
 
   @doc false
   @spec validate_providers([ApplicationDefinition.t()], map()) ::
           :ok | {:error, :invalid_application_surface_provider_registry}
   def validate_providers(definitions, providers)
       when is_list(definitions) and is_map(providers) do
-    required_query_ids =
-      for definition <- definitions,
-          surface <- definition.surfaces,
-          query_id = Map.get(surface.data_contract, :query_id),
-          match?({:declarative, "cadence.host.surface.v1"}, surface.renderer) or
-            query_id in @trusted_provider_query_ids,
-          do: Map.get(surface.data_contract, :query_id)
-
-    registered_query_ids = Map.keys(providers)
-
-    if unique?(required_query_ids) and
-         same_identities?(required_query_ids, registered_query_ids) and
-         Enum.all?(providers, fn {_query_id, provider} ->
-           Code.ensure_loaded?(provider) and function_exported?(provider, :load, 3)
-         end) do
-      :ok
-    else
-      {:error, :invalid_application_surface_provider_registry}
-    end
+    ProviderRegistry.validate(definitions, providers)
   end
 
   def validate_providers(_definitions, _providers),
@@ -243,14 +208,9 @@ defmodule Cadence.Reads.ApplicationSurfaces do
   end
 
   defp fetch_provider(query_id) do
-    case Map.fetch(@providers, query_id) do
+    case ProviderRegistry.fetch(query_id) do
       {:ok, provider} -> {:ok, provider}
-      :error -> {:error, :unknown_application_surface_query}
+      {:error, reason} -> {:error, reason}
     end
   end
-
-  defp same_identities?(left, right),
-    do: MapSet.equal?(MapSet.new(left), MapSet.new(right))
-
-  defp unique?(identities), do: length(identities) == length(Enum.uniq(identities))
 end

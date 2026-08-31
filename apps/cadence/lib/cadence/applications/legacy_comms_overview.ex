@@ -67,6 +67,9 @@ defmodule Cadence.Applications.LegacyCommsOverview do
     }
   end
 
+  @spec host_query_provider() :: module()
+  def host_query_provider, do: Cadence.Applications.LegacyCommsOverview.QueryProvider
+
   defp surface do
     %SurfaceDefinition{
       surface_id: @identity.surface_id,

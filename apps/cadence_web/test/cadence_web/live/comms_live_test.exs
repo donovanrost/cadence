@@ -533,14 +533,16 @@ defmodule CadenceWeb.CommsLiveTest do
   end
 
   defp expected_finding(title, body, tone, label, action_label \\ nil, action_href \\ nil) do
-    %{
+    finding = %{
       "id" => nil,
       "title" => title,
       "body" => body,
-      "action_label" => action_label,
-      "action_href" => action_href,
       "status" => %{"tone" => tone, "label" => label}
     }
+
+    if is_binary(action_href),
+      do: Map.merge(finding, %{"action_label" => action_label, "action_href" => action_href}),
+      else: finding
   end
 
   defp comms_validation_vue(view) do

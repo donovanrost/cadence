@@ -8,6 +8,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     HostContext,
     Registry,
     SurfaceDefinition,
+    SurfaceQueryContribution,
     SurfaceQueryRequest
   }
 
@@ -37,8 +38,10 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec
+  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Telemetry.PacketDefinition
 
   import Ecto.Query
@@ -95,6 +98,133 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     assert document.form.success_message == "Derived telemetry definition saved."
     assert document.table.id == "derived-telemetry-definitions"
     assert document.table.page == %Page{items: [], total_count: 0, page: 1, page_size: 20}
+  end
+
+  test "dispatches two contributed applications concurrently without cross-talk", context do
+    contributions = [
+      %SurfaceQueryContribution{
+        application_key: "synthetic_alpha",
+        application_version: 1,
+        query_id: "synthetic.alpha.read",
+        query_version: 1,
+        provider: Cadence.TestSurfaceQueryProviders.Alpha
+      },
+      %SurfaceQueryContribution{
+        application_key: "synthetic_beta",
+        application_version: 1,
+        query_id: "synthetic.beta.read",
+        query_version: 1,
+        provider: Cadence.TestSurfaceQueryProviders.Beta
+      }
+    ]
+
+    providers = ProviderRegistry.providers(contributions)
+
+    requests = [
+      %SurfaceQueryRequest{
+        application_key: "synthetic_alpha",
+        application_version: 1,
+        surface_id: "read",
+        surface_version: 1,
+        query_id: "synthetic.alpha.read",
+        query_version: 1
+      },
+      %SurfaceQueryRequest{
+        application_key: "synthetic_beta",
+        application_version: 1,
+        surface_id: "read",
+        surface_version: 1,
+        query_id: "synthetic.beta.read",
+        query_version: 1
+      }
+    ]
+
+    results =
+      requests
+      |> Task.async_stream(
+        fn request ->
+          ProviderRegistry.dispatch(context.scope, context.host_context, request, providers)
+        end,
+        max_concurrency: 2,
+        ordered: true,
+        timeout: 1_000
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    assert results == [
+             {:ok, %{"provider" => "alpha", "application_key" => "synthetic_alpha"}},
+             {:ok, %{"provider" => "beta", "application_key" => "synthetic_beta"}}
+           ]
+  end
+
+  test "fails closed when contributed query providers exceed the registry cap" do
+    contributions =
+      Enum.map(1..65, fn index ->
+        %SurfaceQueryContribution{
+          application_key: "synthetic_#{index}",
+          application_version: 1,
+          query_id: "synthetic.read.#{index}",
+          query_version: 1,
+          provider: Cadence.TestSurfaceQueryProviders.Alpha
+        }
+      end)
+
+    assert ProviderRegistry.providers(contributions) == %{}
+  end
+
+  test "validation keeps its repository query count fixed as spacecraft are added", context do
+    persist_test_spacecraft("validation-query-count-a")
+    persist_test_spacecraft("validation-query-count-b")
+
+    for spacecraft_id <- ["validation-query-count-a", "validation-query-count-b"] do
+      assert {:ok, _installation} =
+               ApplicationInstallations.install(
+                 context.scope,
+                 HostContext.spacecraft(@mission_id, spacecraft_id),
+                 "telemetry_decom"
+               )
+    end
+
+    {first_result, first_query_count} =
+      repo_query_count(fn -> CommsSurface.validation(context.scope, @mission_id) end)
+
+    assert {:ok, _findings} = first_result
+
+    persist_test_spacecraft("validation-query-count-c")
+
+    {second_result, second_query_count} =
+      repo_query_count(fn -> CommsSurface.validation(context.scope, @mission_id) end)
+
+    assert {:ok, _findings} = second_result
+    assert second_query_count == first_query_count
+    assert second_query_count <= 24
+  end
+
+  test "spacecraft batch lookup performs one bounded repository query" do
+    persist_test_spacecraft("batch-lookup-a")
+    persist_test_spacecraft("batch-lookup-b")
+
+    {result, query_count} =
+      repo_query_count(fn ->
+        Cadence.SpacecraftStore.fetch_spacecrafts(
+          @organization_id,
+          @mission_id,
+          ["batch-lookup-a", "batch-lookup-b"]
+        )
+      end)
+
+    assert {:ok, spacecrafts} = result
+    assert Map.keys(spacecrafts) |> Enum.sort() == ["batch-lookup-a", "batch-lookup-b"]
+    assert query_count == 1
+  end
+
+  test "spacecraft batch lookup rejects an oversized raw request before querying" do
+    assert {:error, :batch_bounds_exceeded} =
+             Cadence.SpacecraftStore.fetch_spacecrafts(
+               @organization_id,
+               @mission_id,
+               Enum.map(1..101, &"oversized-#{&1}")
+             )
   end
 
   test "loads all Comms v1 read surfaces as bounded trusted DTOs" do
@@ -438,6 +568,12 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
              &(&1.title == "missing-reference-path references a missing provider")
            )
 
+    missing_provider =
+      Enum.find(findings, &(&1.title == "missing-reference-path references a missing provider"))
+
+    refute Map.has_key?(missing_provider, :action_label)
+    refute Map.has_key?(missing_provider, :action_navigate)
+
     assert Enum.any?(
              findings,
              &(&1.title == "missing-reference-path references a missing protocol behavior")
@@ -452,6 +588,116 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     encoded = Jason.encode!(payload)
     assert encoded =~ "missing-reference-path references a missing internal telemetry identity"
     refute encoded =~ "/invalid"
+  end
+
+  test "restores the exact missing runtime identity finding for a spacecraft with SCID" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, HostContext.mission(@mission_id), "comms")
+
+    spacecraft =
+      Cadence.Spacecraft.new(%{
+        mission_id: @mission_id,
+        spacecraft_id: "runtime-identity-missing",
+        display_name: "Runtime Identity Missing",
+        scid: 42
+      })
+
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
+
+    assert {:ok, findings} = CommsSurface.validation(scope, @mission_id)
+
+    assert Enum.any?(findings, fn finding ->
+             finding.title == "Runtime Identity Missing has no internal telemetry identity" and
+               finding.body ==
+                 "Sync internal telemetry identity before execution can resolve this spacecraft." and
+               finding.severity == :blocked and
+               finding.action_label == "Edit identity" and
+               finding.action_navigate ==
+                 "/missions/#{@mission_id}/spacecraft/runtime-identity-missing/identity"
+           end)
+  end
+
+  test "restores the exact missing selected downlink finding when a runtime identity exists" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, HostContext.mission(@mission_id), "comms")
+
+    spacecraft =
+      Cadence.Spacecraft.new(%{
+        mission_id: @mission_id,
+        spacecraft_id: "runtime-downlink-missing",
+        display_name: "Runtime Downlink Missing",
+        scid: 43
+      })
+
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
+
+    endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "runtime-downlink-identity",
+        mission_id: @mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        display_name: "Runtime downlink identity"
+      })
+
+    assert {:ok, _endpoint} =
+             Cadence.SourceEndpoints.persist_source_endpoint(@organization_id, endpoint)
+
+    path_template =
+      PathTemplate.new(%{
+        mission_id: @mission_id,
+        path_template_id: "available-downlink-runtime-path",
+        path_id: "available-downlink-runtime-path",
+        direction: :downlink,
+        selection_role: :selected
+      })
+
+    assert {:ok, _path_template} =
+             Cadence.Contacts.persist_path_template(@organization_id, path_template)
+
+    Repo.update_all(
+      from(row in PathTemplateRow,
+        where:
+          row.organization_id == ^@organization_id and
+            row.mission_id == ^@mission_id and
+            row.path_template_id == "available-downlink-runtime-path"
+      ),
+      set: [
+        provider_profile_ids: ["available-provider-profile"],
+        provider_profile_ref_documents: %{
+          "items" => [%{"provider_profile_id" => "available-provider-profile", "version" => 1}]
+        }
+      ]
+    )
+
+    assert {:ok, findings} = CommsSurface.validation(scope, @mission_id)
+
+    assert Enum.any?(findings, fn finding ->
+             finding.title == "Runtime Downlink Missing has no selected downlink runtime artifact" and
+               finding.body ==
+                 "Routing Rules can materialize internal runtime artifacts for execution." and
+               finding.severity == :attention and
+               finding.action_label == "Review Routing" and
+               finding.action_navigate ==
+                 "/missions/#{@mission_id}/spacecraft/runtime-downlink-missing/routing"
+           end)
   end
 
   test "loads valid detail surfaces and honors a routing rule's pinned transport version" do
@@ -944,6 +1190,49 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                "point_id",
                "channel"
              )
+  end
+
+  defp persist_test_spacecraft(spacecraft_id) do
+    spacecraft =
+      Cadence.Spacecraft.new(%{
+        mission_id: @mission_id,
+        spacecraft_id: spacecraft_id,
+        display_name: spacecraft_id
+      })
+
+    assert {:ok, _spacecraft} =
+             Cadence.SpacecraftStore.persist_spacecraft(@organization_id, spacecraft)
+  end
+
+  defp repo_query_count(fun) do
+    test_pid = self()
+    reference = make_ref()
+    handler_id = {__MODULE__, reference}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :repo, :query],
+        fn _event, _measurements, _metadata, {pid, query_reference} ->
+          send(pid, {:repo_query, query_reference})
+        end,
+        {test_pid, reference}
+      )
+
+    try do
+      result = fun.()
+      {result, drain_repo_queries(reference)}
+    after
+      :telemetry.detach(handler_id)
+    end
+  end
+
+  defp drain_repo_queries(reference, count \\ 0) do
+    receive do
+      {:repo_query, ^reference} -> drain_repo_queries(reference, count + 1)
+    after
+      0 -> count
+    end
   end
 
   defp activate_point_catalog_fixture do

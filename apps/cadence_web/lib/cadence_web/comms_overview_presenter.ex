@@ -17,7 +17,7 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   def build(%Scope{} = current_scope, %Mission{} = mission) do
     case CommsRead.overview(current_scope, mission.mission_id) do
       {:ok, summary} -> presentation(mission, summary)
-      {:error, _reason} -> presentation(mission, empty_summary())
+      {:error, _reason} -> presentation(mission, unavailable_summary())
     end
   end
 
@@ -72,8 +72,21 @@ defmodule CadenceWeb.CommsOverviewPresenter do
     end)
   end
 
-  defp empty_summary do
-    %{transports: [], transport_count: 0, findings: [], finding_groups: []}
+  defp unavailable_summary do
+    finding = %{
+      id: "comms-validation-unavailable",
+      owner: :advanced_runtime_identity,
+      severity: :blocked,
+      title: "Validation unavailable",
+      body: "Cadence could not safely evaluate the saved communications configuration."
+    }
+
+    %{
+      transports: [],
+      transport_count: 0,
+      findings: [finding],
+      finding_groups: CommsRead.finding_groups([finding])
+    }
   end
 
   defp overview_dto(mission_id, summary) do
@@ -123,28 +136,36 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   end
 
   defp validation_summary_dto(summary) do
-    finding_count = length(summary.findings)
+    unavailable? =
+      Enum.any?(summary.findings, &(Map.get(&1, :id) == "comms-validation-unavailable"))
 
     %{
       id: "comms-validation-page",
       eyebrow: "Setup Checks",
       title: "What's missing or broken",
       description: "Checks on saved configuration for spacecraft on this mission.",
-      status: validation_status_dto(finding_count),
+      status: validation_status_dto(summary.findings),
       empty: summary.findings == [],
       empty_state: %{
-        title: "All clear",
-        description: "The saved configuration looks consistent."
+        title: if(unavailable?, do: "Validation unavailable", else: "All clear"),
+        description:
+          if(unavailable?,
+            do: "Cadence could not safely evaluate the saved configuration.",
+            else: "The saved configuration looks consistent."
+          )
       },
       findings_id: "comms-validation-findings",
       finding_groups: Enum.map(summary.finding_groups, &finding_group_dto/1)
     }
   end
 
-  defp validation_status_dto(0), do: status_dto(:ready, "No Findings")
+  defp validation_status_dto([]), do: status_dto(:ready, "No Findings")
 
-  defp validation_status_dto(finding_count),
-    do: status_dto(:attention, "#{finding_count} Findings")
+  defp validation_status_dto([%{id: "comms-validation-unavailable"}]),
+    do: status_dto(:blocked, "Validation unavailable")
+
+  defp validation_status_dto(findings),
+    do: status_dto(:attention, "#{length(findings)} Findings")
 
   defp finding_group_dto(group) do
     %{
@@ -158,14 +179,20 @@ defmodule CadenceWeb.CommsOverviewPresenter do
   defp finding_dto(finding) do
     action_href = Map.get(finding, :action_navigate)
 
-    %{
+    base = %{
       id: Map.get(finding, :id),
       title: finding.title,
       body: finding.body,
-      action_label: action_href && Map.get(finding, :action_label, "Review"),
-      action_href: action_href,
       status: status_dto(finding.severity, CommsRead.finding_label(finding.severity))
     }
+
+    if is_binary(action_href),
+      do:
+        Map.merge(base, %{
+          action_label: Map.get(finding, :action_label, "Review"),
+          action_href: action_href
+        }),
+      else: base
   end
 
   defp status_dto(tone, label) do

@@ -101,4 +101,31 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   end
 
   def configuration_reference(%ActionRequest{}, _result), do: nil
+
+  @impl true
+  def result(%Cadence.Applications.PacketBindingConfiguration{} = configuration) do
+    %{
+      "configurationId" => configuration.packet_binding_configuration_id,
+      "applicationKey" => configuration.application_key,
+      "applicationVersion" => configuration.application_version,
+      "inputId" => configuration.input_id,
+      "inputVersion" => configuration.input_version,
+      "configurationVersion" => configuration.configuration_version,
+      "enabled" => configuration.enabled,
+      "selectedPacketIds" => Enum.map(configuration.bindings, & &1.packet_id),
+      "bindingCount" => length(configuration.bindings)
+    }
+  end
+
+  def result(%Config{} = configuration) do
+    %{
+      "configurationId" => "telemetry_decom:#{configuration.spacecraft_id}",
+      "configurationVersion" => configuration.configuration_version,
+      "enabled" => configuration.enabled,
+      "selectedApids" => configuration.handled_apids
+    }
+  end
+
+  def result(value) when is_map(value), do: value
+  def result(_value), do: nil
 end

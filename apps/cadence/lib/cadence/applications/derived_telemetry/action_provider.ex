@@ -40,6 +40,20 @@ defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
   def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :unsupported_application_action}
 
+  @impl true
+  def result(%Definition{} = definition) do
+    %{
+      "definitionId" => definition.derived_definition_id,
+      "pointId" => definition.point_id,
+      "pointName" => definition.point_name,
+      "expression" => definition.expression,
+      "version" => definition.version
+    }
+  end
+
+  def result(value) when is_map(value), do: value
+  def result(_value), do: nil
+
   defp required_param(params, key, atom_key, label) do
     case optional_param(params, key, atom_key) do
       nil ->

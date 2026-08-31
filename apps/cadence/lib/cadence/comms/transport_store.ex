@@ -15,6 +15,8 @@ defmodule Cadence.Comms.TransportStore do
   alias Cadence.Platform.RedactedJson
   alias Cadence.Repo
 
+  @max_batch_size 100
+
   @spec persist_transport(binary(), Transport.t(), keyword()) ::
           {:ok, Transport.t()} | {:error, term()}
   def persist_transport(organization_id, %Transport{} = transport, opts \\ [])
@@ -53,6 +55,51 @@ defmodule Cadence.Comms.TransportStore do
 
       %TransportRow{} = row ->
         {:ok, TransportRow.to_domain(row)}
+    end
+  end
+
+  @doc "Fetches the active latest versions for one bounded transport batch in one query."
+  @spec fetch_transports(binary(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Transport.t()}} | {:error, :batch_bounds_exceeded}
+  def fetch_transports(organization_id, mission_id, transport_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(transport_ids) do
+    case bounded_transport_ids(transport_ids) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, []} ->
+        {:ok, %{}}
+
+      {:ok, ids} ->
+        latest =
+          TransportRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.transport_id in ^ids
+          )
+          |> distinct([row], row.transport_id)
+          |> order_by([row], asc: row.transport_id, desc: row.version)
+          |> subquery()
+          |> where([row], row.lifecycle_state != "archived")
+          |> Repo.all()
+
+        {:ok, Map.new(latest, fn row -> {row.transport_id, TransportRow.to_domain(row)} end)}
+    end
+  end
+
+  defp bounded_transport_ids(transport_ids) do
+    ids = Enum.take(transport_ids, @max_batch_size + 1)
+
+    cond do
+      length(ids) > @max_batch_size ->
+        {:error, :batch_bounds_exceeded}
+
+      not Enum.all?(ids, &(is_binary(&1) and &1 != "")) ->
+        {:error, :batch_bounds_exceeded}
+
+      true ->
+        {:ok, Enum.uniq(ids)}
     end
   end
 

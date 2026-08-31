@@ -1,7 +1,7 @@
 defmodule Cadence.Applications.Comms do
   @moduledoc "The single source of truth for the first-party Comms application contract."
 
-  alias Cadence.Applications.{ApplicationDefinition, SurfaceDefinition}
+  alias Cadence.Applications.{ApplicationDefinition, SurfaceDefinition, SurfaceQueryContribution}
 
   @identity %{
     application_key: "comms",
@@ -89,6 +89,22 @@ defmodule Cadence.Applications.Comms do
   end
 
   def query_id(_surface_id), do: :error
+
+  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
+  def surface_query_contributions do
+    Enum.map(@surface_specs, fn spec ->
+      %SurfaceQueryContribution{
+        application_key: @identity.application_key,
+        application_version: @identity.application_version,
+        query_id: "cadence.comms." <> spec.id,
+        query_version: @identity.surface_version,
+        provider: Cadence.Reads.ApplicationSurfaces.Comms
+      }
+    end)
+  end
+
+  @spec host_query_providers() :: [module()]
+  def host_query_providers, do: [Cadence.Applications.LegacyCommsOverview.QueryProvider]
 
   @spec definition() :: ApplicationDefinition.t()
   def definition do

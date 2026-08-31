@@ -27,6 +27,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @application_catalog_schema "cadence.first-party-frontend-catalog.v1"
   @application_host_contract "cadence.application-host.v1"
+  @catalog_page_size 100
+  @max_catalog_applications 100
   @type route_context :: %{
           host_context: HostContext.t(),
           mission: Mission.t(),
@@ -35,6 +37,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @type build_error ::
           :application_catalog_unavailable
+          | :application_catalog_bounds_exceeded
           | :application_not_installed
           | :application_installation_disabled
           | :application_installation_uninstalled
@@ -345,20 +348,21 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %{host_context: %HostContext{} = host_context},
          manifest_url
        ) do
-    with {:ok, installations} <- ApplicationInstallations.list(current_scope, host_context) do
+    with {:ok, installation_page} <-
+           ApplicationInstallations.list_page(
+             current_scope,
+             host_context,
+             lifecycle_state: :installed,
+             page: 1,
+             page_size: @catalog_page_size,
+             max_total: @max_catalog_applications
+           ),
+         {:ok, contributed} <- contributed_applications(host_context, manifest_url) do
       installed_applications =
-        installations
-        |> Enum.filter(&(&1.lifecycle_state == :installed))
+        installation_page.items
         |> Enum.flat_map(&installed_application_document(&1, host_context, manifest_url))
 
-      applications =
-        contributed_applications(host_context, manifest_url) ++ installed_applications
-
-      if applications == [] do
-        {:error, :application_catalog_unavailable}
-      else
-        {:ok, applications}
-      end
+      finalize_catalog_applications(contributed ++ installed_applications)
     end
   end
 
@@ -366,13 +370,36 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     do: {:error, :application_catalog_unavailable}
 
   defp contributed_applications(%HostContext{placement: placement}, manifest_url) do
-    CatalogRegistry.all()
-    |> Enum.flat_map(fn %CatalogContribution{} = contribution ->
-      case contributed_application(contribution, placement, manifest_url) do
-        {:ok, application} -> [application]
-        {:error, _reason} -> []
-      end
-    end)
+    contributions = CatalogRegistry.all()
+
+    if length(contributions) > @max_catalog_applications,
+      do: {:error, :application_catalog_bounds_exceeded},
+      else:
+        {:ok,
+         Enum.flat_map(
+           contributions,
+           &contributed_application_document(&1, placement, manifest_url)
+         )}
+  end
+
+  defp finalize_catalog_applications([]), do: {:error, :application_catalog_unavailable}
+
+  defp finalize_catalog_applications(applications)
+       when length(applications) <= @max_catalog_applications,
+       do: {:ok, applications}
+
+  defp finalize_catalog_applications(_applications),
+    do: {:error, :application_catalog_bounds_exceeded}
+
+  defp contributed_application_document(
+         %CatalogContribution{} = contribution,
+         placement,
+         manifest_url
+       ) do
+    case contributed_application(contribution, placement, manifest_url) do
+      {:ok, application} -> [application]
+      {:error, _reason} -> []
+    end
   end
 
   defp contributed_application(

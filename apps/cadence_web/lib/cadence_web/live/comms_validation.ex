@@ -4,12 +4,19 @@ defmodule CadenceWeb.CommsValidation do
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsRead
 
-  @spec findings_for_mission(Scope.t(), binary()) :: [map()]
-  def findings_for_mission(%Scope{} = scope, mission_id) do
-    case CommsRead.validation(scope, mission_id) do
-      {:ok, findings} -> findings
-      {:error, _reason} -> []
-    end
+  @spec findings_for_mission(Scope.t(), binary()) :: {:ok, [map()]} | {:error, term()}
+  def findings_for_mission(%Scope{} = scope, mission_id),
+    do: CommsRead.validation(scope, mission_id)
+
+  @spec unavailable_finding() :: map()
+  def unavailable_finding do
+    %{
+      id: "comms-validation-unavailable",
+      owner: :advanced_runtime_identity,
+      severity: :blocked,
+      title: "Validation unavailable",
+      body: "Cadence could not safely evaluate the saved communications configuration."
+    }
   end
 
   @spec finding_groups([map()]) :: [map()]
