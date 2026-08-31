@@ -4,7 +4,9 @@ defmodule CadenceWeb.ApplicationSurfaces.DocumentState do
   import Phoenix.Component, only: [assign: 3, to_form: 2]
   import Phoenix.LiveView, only: [stream: 4]
 
+  alias Cadence.Applications.JSONBoundary
   alias Cadence.Reads.ApplicationSurfaces
+  alias CadenceWeb.ApplicationSurfaces.Declarative
 
   @doc "Builds the canonical web form used by both LiveView and the JSON bridge."
   @spec form(map()) :: Phoenix.HTML.Form.t() | nil
@@ -24,20 +26,33 @@ defmodule CadenceWeb.ApplicationSurfaces.DocumentState do
              socket.assigns.application_surface_definition,
              params
            ) do
-      rows = (document.table && document.table.page.items) || []
-      activity_items = (document.activity && document.activity.items) || []
-      packet_groups = (document.packet_bindings && document.packet_bindings.packet_groups) || []
+      rows = Declarative.table_row_dtos(document)
+      activity_items = Declarative.activity_item_dtos(document)
+      packet_groups = Declarative.packet_group_dtos(document)
 
       {:ok,
        socket
        |> assign(:application_surface_document, document)
        |> assign(:application_surface_form, surface_form(document))
        |> assign(:application_surface_query_params, params)
-       |> stream(:application_surface_rows, rows, reset: true)
-       |> stream(:application_surface_activity, activity_items, reset: true)
-       |> stream(:application_surface_packet_groups, packet_groups, reset: true)}
+       |> stream(:application_surface_rows, bounded_collection(rows), reset: true)
+       |> stream(:application_surface_activity, bounded_collection(activity_items), reset: true)
+       |> stream(
+         :application_surface_packet_groups,
+         bounded_collection(packet_groups),
+         reset: true
+       )}
     end
   end
+
+  defp bounded_collection(value) when is_list(value) do
+    case JSONBoundary.validate(value) do
+      :ok -> value
+      {:error, _reason} -> []
+    end
+  end
+
+  defp bounded_collection(_value), do: []
 
   defp surface_form(%{form: form}) when not is_nil(form), do: generated_form(form)
 

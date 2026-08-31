@@ -43,6 +43,7 @@ defmodule Cadence.Applications.ActionDispatcher do
     registered_keys = Map.keys(providers)
 
     if unique?(required_keys) and same_identities?(required_keys, registered_keys) and
+         ActionProviderRegistry.validate(providers) == :ok and
          Enum.all?(providers, fn {_application_key, provider} ->
            Code.ensure_loaded?(provider) and function_exported?(provider, :execute, 3)
          end) do

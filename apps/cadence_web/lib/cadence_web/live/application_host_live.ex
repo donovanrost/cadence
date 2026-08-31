@@ -9,6 +9,7 @@ defmodule CadenceWeb.ApplicationHostLive do
     ActionRequest,
     ApplicationInstallations,
     HostContext,
+    JSONBoundary,
     SurfaceDefinition
   }
 
@@ -86,21 +87,24 @@ defmodule CadenceWeb.ApplicationHostLive do
         %{assigns: %{application_renderer_kind: :declarative}} = socket
       ) do
     action_id = Map.get(params, "action-id", Map.get(params, "action_id"))
-    action_params = Map.get(params, "application_action", %{})
+    raw_action_params = Map.get(params, "application_action", %{})
+    action_params = if is_map(raw_action_params), do: raw_action_params, else: %{}
 
-    with true <- action_id in socket.assigns.application_surface_definition.actions,
+    with :ok <- validate_action_params(raw_action_params),
+         true <- action_id in socket.assigns.application_surface_definition.actions,
          request = %ActionRequest{
            application_key: socket.assigns.application_definition.application_key,
            application_version: socket.assigns.application_definition.version,
            action_id: action_id,
            params: action_params
          },
-         {:ok, _result} <-
+         {:ok, result} <-
            ActionDispatcher.dispatch(
              socket.assigns.current_scope,
              socket.assigns.application_host_context,
              request
            ),
+         :ok <- validate_action_output(request.application_key, result),
          {:ok, socket} <- load_declarative_surface(socket) do
       {:noreply,
        assign_action_feedback(
@@ -320,17 +324,17 @@ defmodule CadenceWeb.ApplicationHostLive do
     socket
     |> stream(
       :application_surface_rows,
-      Declarative.table_row_dtos(document),
+      bounded_collection(Declarative.table_row_dtos(document)),
       reset: true
     )
     |> stream(
       :application_surface_activity,
-      Declarative.activity_item_dtos(document),
+      bounded_collection(Declarative.activity_item_dtos(document)),
       reset: true
     )
     |> stream(
       :application_surface_packet_groups,
-      Declarative.packet_group_dtos(document),
+      bounded_collection(Declarative.packet_group_dtos(document)),
       reset: true
     )
   end
@@ -442,7 +446,7 @@ defmodule CadenceWeb.ApplicationHostLive do
     do: "mission-application-host"
 
   defp application_host_dto(assigns) do
-    %{
+    dto = %{
       dom_id: application_host_dom_id(assigns.application_host_context),
       application_key: assigns.application_definition.application_key,
       application_version: assigns.application_definition.version,
@@ -450,11 +454,20 @@ defmodule CadenceWeb.ApplicationHostLive do
       surface_id: assigns.application_surface_definition.surface_id,
       renderer: Atom.to_string(assigns.application_renderer_kind)
     }
+
+    bounded_dto(dto, %{
+      dom_id: application_host_dom_id(assigns.application_host_context),
+      application_key: "unavailable",
+      application_version: 0,
+      application_installation_id: "unavailable",
+      surface_id: "unavailable",
+      renderer: "unavailable"
+    })
   end
 
   defp surface_navigation_dto(assigns) do
     if length(assigns.application_workspace_surfaces) > 1 do
-      %{
+      dto = %{
         id: "application-surface-navigation",
         label: "Application surfaces",
         items:
@@ -473,8 +486,26 @@ defmodule CadenceWeb.ApplicationHostLive do
             }
           end)
       }
+
+      bounded_dto(dto, nil)
     end
   end
+
+  defp bounded_dto(value, fallback) do
+    case JSONBoundary.validate(value) do
+      :ok -> value
+      {:error, _reason} -> fallback
+    end
+  end
+
+  defp bounded_collection(value) when is_list(value) do
+    case JSONBoundary.validate(value) do
+      :ok -> value
+      {:error, _reason} -> []
+    end
+  end
+
+  defp bounded_collection(_value), do: []
 
   defp application_surface_path(
          %HostContext{placement: :mission, mission_id: mission_id},
@@ -511,6 +542,30 @@ defmodule CadenceWeb.ApplicationHostLive do
       code: code,
       message: message
     })
+  end
+
+  defp validate_action_params(params) when is_map(params) do
+    case JSONBoundary.validate(params) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+    end
+  end
+
+  defp validate_action_params(_params),
+    do: {:error, :application_surface_bounds_exceeded}
+
+  defp validate_action_output(application_key, result) do
+    output = ActionDispatcher.result(application_key, result)
+
+    cond do
+      is_nil(output) -> {:error, :application_action_output_bounds_exceeded}
+      JSONBoundary.validate(output) == :ok -> :ok
+      true -> {:error, :application_action_output_bounds_exceeded}
+    end
+  rescue
+    _exception -> {:error, :application_action_output_bounds_exceeded}
+  catch
+    _kind, _value -> {:error, :application_action_output_bounds_exceeded}
   end
 
   defp action_success_message(socket, action_id) do

@@ -3,6 +3,7 @@ defmodule Cadence.Applications.HostQueryProvider do
 
   alias Cadence.Auth.Scope
 
+  @callback application_key() :: binary()
   @callback query_id() :: binary()
   @callback query(Scope.t(), map(), map(), binary()) :: {:ok, map()} | {:error, term()}
 end

@@ -4,10 +4,13 @@ defmodule Cadence.Applications.LegacyCommsOverview.QueryProvider do
   @behaviour Cadence.Applications.HostQueryProvider
 
   alias Cadence.Applications.HostContext
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Reads.ApplicationSurfaces.Comms
 
   @query_id "cadence.comms.overview"
+
+  @impl true
+  def application_key, do: "comms_overview"
 
   @impl true
   def query_id, do: @query_id
@@ -15,15 +18,31 @@ defmodule Cadence.Applications.LegacyCommsOverview.QueryProvider do
   @impl true
   def query(
         %Scope{} = scope,
-        %{host_context: %HostContext{placement: :mission}, mission: mission},
+        %{
+          host_context: %HostContext{placement: :mission},
+          mission: %{
+            mission_id: mission_id,
+            organization_id: organization_id,
+            display_name: display_name
+          }
+        },
         params,
         @query_id
       )
       when is_map(params) do
-    with :ok <- validate_identity(params),
+    with :ok <-
+           Policy.authorize(scope, :read_legacy_application, %{
+             organization_id: organization_id,
+             mission_id: mission_id
+           }),
+         :ok <- validate_identity(params),
          :ok <- validate_query_version(params),
          {:ok, presentation} <-
-           Comms.overview_presentation(scope, mission) do
+           Comms.overview_presentation(scope, %{
+             mission_id: mission_id,
+             organization_id: organization_id,
+             display_name: display_name
+           }) do
       {:ok, %{"queryVersion" => 1, "presentation" => presentation}}
     end
   end

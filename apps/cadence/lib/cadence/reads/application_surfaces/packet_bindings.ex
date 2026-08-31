@@ -33,6 +33,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.PacketBindings do
   @max_group_resources 256
 
   @impl true
+  def application_key, do: "telemetry_decom"
+
+  @impl true
   def load(
         %Scope{organization_id: organization_id} = current_scope,
         %HostContext{

@@ -4,6 +4,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.SurfaceQueryProvider do
   alias Cadence.Applications.{HostContext, SurfaceDocument, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
 
+  @callback application_key() :: binary()
+
   @callback load(Scope.t(), HostContext.t(), SurfaceQueryRequest.t()) ::
               {:ok, SurfaceDocument.t() | map()} | {:error, term()}
 end

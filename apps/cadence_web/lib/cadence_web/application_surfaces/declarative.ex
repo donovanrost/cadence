@@ -5,6 +5,7 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
     ActionConfirmation,
     ActionDefinition,
     ApplicationDefinition,
+    JSONBoundary,
     SurfaceDefinition,
     SurfaceDocument
   }
@@ -40,7 +41,7 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
         form,
         action_feedback
       ) do
-    %{
+    dto = %{
       id: "declarative-application-surface",
       page: %{
         title: document.title,
@@ -54,6 +55,11 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
       table: table_dto(document.table),
       activity: activity_dto(document.activity)
     }
+
+    case JSONBoundary.validate(dto) do
+      :ok -> dto
+      {:error, _reason} -> blocked_presentation()
+    end
   end
 
   @spec table_row_dtos(SurfaceDocument.t()) :: [map()]
@@ -204,6 +210,30 @@ defmodule CadenceWeb.ApplicationSurfaces.Declarative do
       code: feedback.code,
       label: if(feedback.kind == :success, do: "Action complete", else: "Action blocked"),
       message: feedback.message
+    }
+  end
+
+  defp blocked_presentation do
+    %{
+      id: "declarative-application-surface",
+      page: %{
+        title: "Application unavailable",
+        subtitle: "The application returned data outside the host boundary."
+      },
+      action_feedback: %{
+        id: "application-action-feedback",
+        role: "alert",
+        kind: "error",
+        code: "surface_bounds_exceeded",
+        label: "Action blocked",
+        message: "The application surface could not be safely rendered."
+      },
+      stats: [],
+      diagnostics: nil,
+      form: nil,
+      packet_bindings: nil,
+      table: nil,
+      activity: nil
     }
   end
 

@@ -48,6 +48,27 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
            }
   end
 
+  test "fails closed for an oversized persisted mission display name" do
+    mission =
+      Mission.new(%{
+        mission_id: "mission-presenter-bounds",
+        organization_id: "organization-presenter-bounds",
+        slug: "presenter-bounds",
+        display_name: String.duplicate("x", 241)
+      })
+
+    presentation =
+      CommsOverviewPresenter.presentation(mission, %{
+        transports: [],
+        transport_count: 0,
+        findings: [],
+        finding_groups: []
+      })
+
+    assert presentation["header"]["title"]["text"] == "Mission unavailable"
+    assert is_binary(Jason.encode!(presentation))
+  end
+
   test "renders validation provider failures as blocked and non-empty" do
     mission =
       Mission.new(%{
@@ -69,7 +90,7 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
   end
 
   test "preserves core validation errors for the dedicated validation adapter" do
-    assert {:error, :application_installation_scope_required} =
+    assert {:error, :authenticated_user_required} =
              CommsValidation.findings_for_mission(%Scope{organization_id: nil}, "mission-failure")
   end
 

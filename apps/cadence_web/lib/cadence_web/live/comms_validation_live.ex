@@ -2,6 +2,7 @@ defmodule CadenceWeb.CommsValidationLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Applications.JSONBoundary
   alias CadenceWeb.CommsValidation
 
   @impl true
@@ -40,7 +41,7 @@ defmodule CadenceWeb.CommsValidationLive do
   defp validation_page_dto(mission, findings) do
     finding_count = length(findings)
 
-    %{
+    dto = %{
       id: "comms-validation-page",
       title: "Validation",
       subtitle:
@@ -63,6 +64,30 @@ defmodule CadenceWeb.CommsValidationLive do
         findings
         |> CommsValidation.finding_groups()
         |> Enum.map(&finding_group_dto/1)
+    }
+
+    case JSONBoundary.validate(dto) do
+      :ok -> dto
+      {:error, _reason} -> blocked_validation_page_dto()
+    end
+  end
+
+  defp blocked_validation_page_dto do
+    %{
+      id: "comms-validation-page",
+      title: "Validation unavailable",
+      subtitle: "Cadence could not safely render the saved communications configuration.",
+      breadcrumbs: [],
+      finding_count_suffix: "0 findings",
+      status: %{tone: "blocked", label: "Validation unavailable"},
+      empty: true,
+      empty_state: %{
+        id: "comms-validation-empty",
+        title: "Validation unavailable",
+        description: "The saved configuration could not be safely evaluated."
+      },
+      findings_id: "comms-validation-findings",
+      finding_groups: []
     }
   end
 

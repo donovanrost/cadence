@@ -6,6 +6,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     ActionDispatcher,
     ActionRequest,
     ApplicationDefinition,
+    JSONBoundary,
     SurfaceDefinition,
     SurfaceDocument
   }
@@ -16,19 +17,15 @@ defmodule CadenceWeb.ApplicationHostBridge do
   alias CadenceWeb.ApplicationHostCatalog
   alias CadenceWeb.ApplicationSurfaces.{Declarative, DocumentState}
 
-  @max_json_depth 8
-  @max_json_items 100
-  @max_json_text_bytes 240
-  @max_json_integer 9_007_199_254_740_991
-  @min_json_integer -9_007_199_254_740_991
-
   @type route_context :: ApplicationHostCatalog.route_context()
 
   @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
   def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
-    case HostQueryRegistry.dispatch(current_scope, route_context, params) do
-      :not_handled -> generic_query(current_scope, route_context, params)
-      result -> result
+    with :ok <- validate_request(params) do
+      case HostQueryRegistry.dispatch(current_scope, route_context, params) do
+        :not_handled -> generic_query(current_scope, route_context, params)
+        result -> result
+      end
     end
   end
 
@@ -43,11 +40,10 @@ defmodule CadenceWeb.ApplicationHostBridge do
         idempotency_key
       )
       when is_map(params) and is_binary(idempotency_key) and
-             byte_size(idempotency_key) <= @max_json_text_bytes and idempotency_key != "" do
-    if String.valid?(idempotency_key) and Map.has_key?(params, "surfaceId") do
+             idempotency_key != "" do
+    with :ok <- validate_request(params),
+         :ok <- validate_idempotency_key(idempotency_key) do
       generic_action(current_scope, route_context, params, idempotency_key)
-    else
-      {:error, :unsupported_application_action}
     end
   end
 
@@ -86,13 +82,16 @@ defmodule CadenceWeb.ApplicationHostBridge do
                params: request.params,
                idempotency_key: idempotency_key
              }
-           ) do
-      {:ok,
-       %{
-         "receiptId" => receipt_id(idempotency_key),
-         "completedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
-         "result" => json_safe(ActionDispatcher.result(request.application_key, result))
-       }}
+           ),
+         {:ok, action_result} <- action_result(request.application_key, result) do
+      safe_output(
+        %{
+          "receiptId" => receipt_id(idempotency_key),
+          "completedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+          "result" => action_result
+        },
+        :application_action_output_bounds_exceeded
+      )
     end
   end
 
@@ -120,8 +119,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp action_request(params, idempotency_key) do
     with {:ok, application_key} <- required_text(params, "applicationKey"),
          {:ok, application_version} <- positive_integer(params, "applicationVersion"),
-         {:ok, surface_id} <- required_text(params, "surfaceId"),
-         {:ok, surface_version} <- positive_integer(params, "surfaceVersion"),
+         {:ok, {surface_id, surface_version}} <- optional_surface(params),
          {:ok, action_id} <- required_text(params, "actionId"),
          {:ok, action_version} <- action_version(params),
          {:ok, action_params} <- action_params(params) do
@@ -176,6 +174,23 @@ defmodule CadenceWeb.ApplicationHostBridge do
     end
   end
 
+  defp optional_surface(params) do
+    case {Map.get(params, "surfaceId"), Map.get(params, "surfaceVersion")} do
+      {nil, nil} ->
+        {:ok, {nil, nil}}
+
+      {surface_id, surface_version}
+      when is_binary(surface_id) and surface_id != "" and is_integer(surface_version) ->
+        with {:ok, surface_id} <- required_text(%{"surfaceId" => surface_id}, "surfaceId"),
+             {:ok, surface_version} <- positive_integer_value(surface_version) do
+          {:ok, {surface_id, surface_version}}
+        end
+
+      _invalid ->
+        {:error, :invalid_application_request}
+    end
+  end
+
   defp admit_surface(current_scope, route_context, request) do
     with {:ok, admission} <-
            ApplicationHostCatalog.admit_application(
@@ -200,6 +215,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
     do: {:error, :application_installation_version_mismatch}
 
   defp ensure_surface_version(%SurfaceDefinition{version: version}, version), do: :ok
+
+  defp ensure_surface_version(%SurfaceDefinition{}, nil), do: :ok
 
   defp ensure_surface_version(%SurfaceDefinition{}, _version),
     do: {:error, :surface_version_mismatch}
@@ -252,27 +269,29 @@ defmodule CadenceWeb.ApplicationHostBridge do
         nil
       )
 
-    {:ok,
-     %{
-       "host" => json_safe(host_dto(admission)),
-       "navigation" => nil,
-       "declarative_surface" => json_safe(presentation),
-       "application_surface_rows" => document |> Declarative.table_row_dtos() |> json_safe(),
-       "application_surface_activity" =>
-         document |> Declarative.activity_item_dtos() |> json_safe(),
-       "application_surface_packet_groups" =>
-         document |> Declarative.packet_group_dtos() |> json_safe()
-     }}
+    safe_output(
+      %{
+        "host" => host_dto(admission),
+        "navigation" => nil,
+        "declarative_surface" => presentation,
+        "application_surface_rows" => Declarative.table_row_dtos(document),
+        "application_surface_activity" => Declarative.activity_item_dtos(document),
+        "application_surface_packet_groups" => Declarative.packet_group_dtos(document)
+      },
+      :application_host_query_output_bounds_exceeded
+    )
   end
 
   defp query_response(admission, %{"navigation" => navigation, "data" => data})
        when is_map(navigation) and is_map(data) do
-    {:ok,
-     %{
-       "host" => json_safe(host_dto(admission)),
-       "navigation" => json_safe(navigation),
-       "trusted_surface" => json_safe(data)
-     }}
+    safe_output(
+      %{
+        "host" => host_dto(admission),
+        "navigation" => navigation,
+        "trusted_surface" => data
+      },
+      :application_host_query_output_bounds_exceeded
+    )
   end
 
   defp query_response(_admission, _invalid),
@@ -304,8 +323,11 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   defp required_text(params, key) do
     case Map.get(params, key) do
-      value when is_binary(value) and value != "" and byte_size(value) <= @max_json_text_bytes ->
-        if String.valid?(value), do: {:ok, value}, else: {:error, :invalid_application_request}
+      value when is_binary(value) and value != "" ->
+        case JSONBoundary.validate(value) do
+          :ok -> {:ok, value}
+          {:error, _reason} -> {:error, :invalid_application_request}
+        end
 
       _invalid ->
         {:error, :invalid_application_request}
@@ -314,139 +336,60 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   defp positive_integer(params, key), do: positive_integer_value(Map.get(params, key))
 
-  defp positive_integer_value(value)
-       when is_integer(value) and value > 0 and value <= @max_json_integer,
-       do: {:ok, value}
+  defp positive_integer_value(value) when is_integer(value) and value > 0 do
+    case JSONBoundary.validate(value) do
+      :ok -> {:ok, value}
+      {:error, _reason} -> {:error, :invalid_application_request}
+    end
+  end
 
   defp positive_integer_value(_value), do: {:error, :invalid_application_request}
 
   defp optional_map(params, key) do
     case Map.get(params, key, %{}) do
       value when is_map(value) ->
-        if bounded_request_term?(value, 0),
-          do: {:ok, value},
-          else: {:error, :application_surface_bounds_exceeded}
+        case JSONBoundary.validate(value) do
+          :ok -> {:ok, value}
+          {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+        end
 
       _invalid ->
         {:error, :invalid_application_request}
     end
   end
 
-  defp json_safe(value), do: json_safe(value, 0)
-
-  defp json_safe(_value, depth) when depth > @max_json_depth, do: nil
-  defp json_safe(nil, _depth), do: nil
-
-  defp json_safe(value, _depth)
-       when is_binary(value) and byte_size(value) <= @max_json_text_bytes,
-       do: value
-
-  defp json_safe(value, _depth) when is_number(value) do
-    if bounded_number?(value), do: value, else: nil
+  defp validate_request(params) do
+    case JSONBoundary.validate(params) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+    end
   end
 
-  defp json_safe(value, _depth) when is_boolean(value), do: value
-  defp json_safe(%DateTime{} = value, _depth), do: DateTime.to_iso8601(value)
-  defp json_safe(%NaiveDateTime{} = value, _depth), do: NaiveDateTime.to_iso8601(value)
-  defp json_safe(%_{}, _depth), do: nil
-
-  defp json_safe(value, _depth) when is_atom(value) do
-    value = Atom.to_string(value)
-    if byte_size(value) <= @max_json_text_bytes, do: value, else: nil
+  defp validate_idempotency_key(key) do
+    case JSONBoundary.validate(key) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :invalid_application_request}
+    end
   end
 
-  defp json_safe(value, depth) when is_list(value) do
-    reduce_json_list(value, depth, 0, [])
-  end
+  defp action_result(application_key, result) do
+    result = ActionDispatcher.result(application_key, result)
 
-  defp json_safe(value, depth) when is_map(value) do
-    if map_size(value) <= @max_json_items do
-      Map.new(value, fn {key, item} -> {json_key(key), json_safe(item, depth + 1)} end)
+    if is_nil(result) do
+      {:error, :application_action_output_bounds_exceeded}
     else
-      nil
+      safe_output(result, :application_action_output_bounds_exceeded)
+    end
+  rescue
+    _exception -> {:error, :application_action_output_bounds_exceeded}
+  catch
+    _kind, _value -> {:error, :application_action_output_bounds_exceeded}
+  end
+
+  defp safe_output(value, error) do
+    case JSONBoundary.safe(value) do
+      {:ok, safe} -> {:ok, safe}
+      {:error, _reason} -> {:error, error}
     end
   end
-
-  defp json_safe(_value, _depth), do: nil
-
-  defp json_key(key) when is_binary(key) and byte_size(key) <= @max_json_text_bytes, do: key
-
-  defp json_key(key) when is_atom(key) do
-    value = Atom.to_string(key)
-    if byte_size(value) <= @max_json_text_bytes, do: value, else: "invalid"
-  end
-
-  defp json_key(key) when is_integer(key) do
-    if bounded_number?(key), do: Integer.to_string(key), else: "invalid"
-  end
-
-  defp json_key(_key), do: "invalid"
-
-  defp reduce_json_list([], _depth, _count, acc), do: Enum.reverse(acc)
-
-  defp reduce_json_list(_items, _depth, count, _acc) when count >= @max_json_items, do: nil
-
-  defp reduce_json_list([item | rest], depth, count, acc) do
-    case json_safe(item, depth + 1) do
-      nil when item != nil -> nil
-      safe_item -> reduce_json_list(rest, depth, count + 1, [safe_item | acc])
-    end
-  end
-
-  defp bounded_request_term?(_value, depth) when depth > @max_json_depth, do: false
-
-  defp bounded_request_term?(value, _depth)
-       when is_nil(value) or is_boolean(value),
-       do: true
-
-  defp bounded_request_term?(value, _depth) when is_number(value), do: bounded_number?(value)
-
-  defp bounded_request_term?(value, _depth) when is_binary(value),
-    do: String.valid?(value) and byte_size(value) <= @max_json_text_bytes
-
-  defp bounded_request_term?(value, depth) when is_list(value) do
-    reduce_bounded_request_list(value, depth, 0)
-  end
-
-  defp bounded_request_term?(value, depth) when is_map(value),
-    do: bounded_request_map?(value, depth)
-
-  defp bounded_request_term?(_value, _depth), do: false
-
-  defp bounded_request_map?(value, depth) do
-    map_size(value) <= @max_json_items and
-      Enum.all?(value, &bounded_request_entry?(&1, depth))
-  end
-
-  defp bounded_request_entry?({key, item}, depth) do
-    bounded_request_key?(key) and bounded_request_term?(item, depth + 1)
-  end
-
-  defp reduce_bounded_request_list([], _depth, _count), do: true
-
-  defp reduce_bounded_request_list(_items, _depth, count) when count >= @max_json_items,
-    do: false
-
-  defp reduce_bounded_request_list([item | rest], depth, count) do
-    if bounded_request_term?(item, depth + 1),
-      do: reduce_bounded_request_list(rest, depth, count + 1),
-      else: false
-  end
-
-  defp bounded_request_key?(key) when is_binary(key),
-    do: String.valid?(key) and byte_size(key) <= @max_json_text_bytes
-
-  defp bounded_request_key?(key) when is_atom(key) do
-    byte_size(Atom.to_string(key)) <= @max_json_text_bytes
-  end
-
-  defp bounded_request_key?(key) when is_integer(key), do: bounded_number?(key)
-  defp bounded_request_key?(_key), do: false
-
-  defp bounded_number?(value) when is_integer(value),
-    do: value >= @min_json_integer and value <= @max_json_integer
-
-  defp bounded_number?(value) when is_float(value), do: abs(value) <= @max_json_integer
-
-  defp bounded_number?(_value), do: false
 end

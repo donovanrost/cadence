@@ -99,8 +99,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
            ),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
-         {:ok, provider} <- fetch_provider(query_id) do
-      provider.load(
+         {:ok, provider} <- fetch_provider(application_key, query_id) do
+      ProviderRegistry.dispatch(
         current_scope,
         host_context,
         %SurfaceQueryRequest{
@@ -111,7 +111,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
           query_id: query_id,
           query_version: query_version,
           params: params
-        }
+        },
+        %{{application_key, query_id} => provider}
       )
     end
   end
@@ -207,8 +208,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     end
   end
 
-  defp fetch_provider(query_id) do
-    case ProviderRegistry.fetch(query_id) do
+  defp fetch_provider(application_key, query_id) do
+    case ProviderRegistry.fetch(application_key, query_id) do
       {:ok, provider} -> {:ok, provider}
       {:error, reason} -> {:error, reason}
     end

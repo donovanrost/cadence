@@ -11,7 +11,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     SurfaceQueryRequest
   }
 
-  alias Cadence.Auth.Scope
+  alias Cadence.Applications.JSONBoundary
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
   alias Cadence.Contacts.{LinkAssignmentStore, PathTemplateStore, ProfileStore}
   alias Cadence.ExtensionCatalog
@@ -35,7 +36,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @max_map_keys 64
   @max_list_items 100
   @max_json_depth 8
-  @max_dto_bytes 65_536
   @max_json_integer 9_007_199_254_740_991
   @min_json_integer -9_007_199_254_740_991
 
@@ -47,6 +47,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   }
 
   @impl true
+  def application_key, do: @application_key
+
+  @impl true
   def load(%Scope{} = scope, %HostContext{} = host_context, %SurfaceQueryRequest{} = request) do
     guarded(fn -> load_surface(scope, host_context, request) end)
   end
@@ -54,7 +57,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @doc "Builds the bounded source summary consumed by the legacy presenter."
   @spec overview(Scope.t(), binary()) :: {:ok, map()} | {:error, atom()}
   def overview(%Scope{} = scope, mission_id) when is_binary(mission_id) do
-    with :ok <- validate_read_scope(scope, mission_id),
+    with :ok <- authorize_legacy_read(scope, mission_id),
+         :ok <- validate_read_scope(scope, mission_id),
          {:ok, resources} <- read_validation_resources(scope, mission_id),
          :ok <- validate_resource_identifiers(resources, mission_id),
          {:ok, findings} <- validation_findings(scope, mission_id, resources),
@@ -74,8 +78,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @doc "Validates a term against the bounded trusted-payload contract."
   @spec validate_bounded_payload(term()) :: :ok | {:error, :application_surface_bounds_exceeded}
   def validate_bounded_payload(value) do
-    case bounded_json(value) do
-      {:ok, _safe} -> :ok
+    case JSONBoundary.validate(value) do
+      :ok -> :ok
       {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
     end
   end
@@ -84,30 +88,41 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @spec overview_presentation(Scope.t(), map()) :: {:ok, map()} | {:error, atom()}
   def overview_presentation(%Scope{} = scope, %{
         mission_id: mission_id,
+        organization_id: organization_id,
         display_name: display_name
       }) do
-    with {:ok, summary} <- overview(scope, mission_id) do
-      {:ok,
-       %{
-         "root" => %{
-           "attrs" => %{"class" => "space-y-6", "id" => "comms-overview-page"}
-         },
-         "header" => %{
-           "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
-           "body" => %{"attrs" => %{}},
-           "content" => %{"attrs" => %{}},
-           "eyebrow" => %{"attrs" => %{"class" => "hud-label"}, "text" => "Communications"},
-           "title" => %{
-             "attrs" => %{"class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"},
-             "text" => display_name
-           },
-           "title_suffix" => %{
-             "attrs" => %{"class" => "ml-3 font-mono text-base text-base-content/60"},
-             "text" => "· Mission Comms"
-           }
-         },
-         "overview" => overview_dto(mission_id, summary)
-       }}
+    with :ok <-
+           Policy.authorize(scope, :read_legacy_application, %{
+             organization_id: organization_id,
+             mission_id: mission_id
+           }),
+         :ok <- validate_display_name(display_name),
+         {:ok, summary} <- overview(scope, mission_id) do
+      presentation = %{
+        "root" => %{
+          "attrs" => %{"class" => "space-y-6", "id" => "comms-overview-page"}
+        },
+        "header" => %{
+          "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
+          "body" => %{"attrs" => %{}},
+          "content" => %{"attrs" => %{}},
+          "eyebrow" => %{"attrs" => %{"class" => "hud-label"}, "text" => "Communications"},
+          "title" => %{
+            "attrs" => %{"class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"},
+            "text" => display_name
+          },
+          "title_suffix" => %{
+            "attrs" => %{"class" => "ml-3 font-mono text-base text-base-content/60"},
+            "text" => "· Mission Comms"
+          }
+        },
+        "overview" => overview_dto(mission_id, summary)
+      }
+
+      case JSONBoundary.validate(presentation) do
+        :ok -> {:ok, presentation}
+        {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+      end
     end
   end
 
@@ -116,7 +131,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @doc "Returns bounded findings for the dedicated legacy validation page."
   @spec validation(Scope.t(), binary()) :: {:ok, [map()]} | {:error, atom()}
   def validation(%Scope{} = scope, mission_id) when is_binary(mission_id) do
-    with :ok <- validate_read_scope(scope, mission_id),
+    with :ok <- authorize_legacy_read(scope, mission_id),
+         :ok <- validate_read_scope(scope, mission_id),
          {:ok, resources} <- read_validation_resources(scope, mission_id),
          :ok <- validate_resource_identifiers(resources, mission_id),
          {:ok, findings} <- validation_findings(scope, mission_id, resources),
@@ -486,6 +502,23 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
 
   defp validate_read_scope(%Scope{}, _mission_id),
     do: {:error, :application_installation_scope_required}
+
+  defp authorize_legacy_read(%Scope{} = scope, mission_id) do
+    Policy.authorize(scope, :read_legacy_application, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp validate_display_name(value) when is_binary(value) and value != "" do
+    case JSONBoundary.validate(value) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+    end
+  end
+
+  defp validate_display_name(_value),
+    do: {:error, :application_surface_bounds_exceeded}
 
   defp read_validation_resources(%Scope{} = scope, mission_id) do
     organization_id = scope.organization_id
@@ -1716,71 +1749,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   defp bounded_key?(_key), do: false
 
   defp bounded_json(value) do
-    with true <- bounded_term?(value, 0),
-         {:ok, safe} <- json_safe(value, 0),
-         {:ok, encoded} <- Jason.encode(safe),
-         true <- byte_size(encoded) <= @max_dto_bytes do
-      {:ok, safe}
-    else
-      _invalid -> {:error, :application_surface_bounds_exceeded}
+    case JSONBoundary.safe(value) do
+      {:ok, safe} -> {:ok, safe}
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
     end
   end
-
-  defp json_safe(_value, depth) when depth > @max_json_depth, do: {:error, :depth}
-  defp json_safe(nil, _depth), do: {:ok, nil}
-  defp json_safe(value, _depth) when is_boolean(value), do: {:ok, value}
-
-  defp json_safe(value, _depth) when is_number(value) do
-    if json_number?(value), do: {:ok, value}, else: {:error, :number}
-  end
-
-  defp json_safe(value, _depth) when is_binary(value) and byte_size(value) <= @max_text_bytes do
-    if String.valid?(value), do: {:ok, value}, else: {:error, :string}
-  end
-
-  defp json_safe(value, _depth) when is_binary(value), do: {:error, :string}
-  defp json_safe(%DateTime{} = value, _depth), do: {:ok, DateTime.to_iso8601(value)}
-  defp json_safe(%NaiveDateTime{} = value, _depth), do: {:ok, NaiveDateTime.to_iso8601(value)}
-  defp json_safe(%_{} = value, depth), do: json_safe(Map.from_struct(value), depth + 1)
-
-  defp json_safe(value, depth) when is_list(value) do
-    if length(value) <= @max_list_items, do: reduce_json(value, depth, []), else: {:error, :list}
-  end
-
-  defp json_safe(value, depth) when is_map(value) do
-    case map_size(value) <= @max_map_keys do
-      true -> json_map(value, depth)
-      false -> {:error, :map}
-    end
-  end
-
-  defp json_safe(_value, _depth), do: {:error, :unsupported}
-
-  defp json_map(value, depth) do
-    Enum.reduce_while(value, {:ok, %{}}, fn {key, item}, {:ok, acc} ->
-      with {:ok, json_key} <- json_key(key), {:ok, safe_item} <- json_safe(item, depth + 1) do
-        {:cont, {:ok, Map.put(acc, json_key, safe_item)}}
-      else
-        _invalid -> {:halt, {:error, :map}}
-      end
-    end)
-  end
-
-  defp reduce_json([], _depth, acc), do: {:ok, Enum.reverse(acc)}
-
-  defp reduce_json([value | rest], depth, acc) do
-    with {:ok, safe} <- json_safe(value, depth + 1), do: reduce_json(rest, depth, [safe | acc])
-  end
-
-  defp json_key(key) when is_atom(key), do: json_key(Atom.to_string(key))
-
-  defp json_key(key) when is_integer(key), do: json_key(Integer.to_string(key))
-
-  defp json_key(key) when is_binary(key) and byte_size(key) <= @max_text_bytes do
-    if String.valid?(key), do: {:ok, key}, else: {:error, :key}
-  end
-
-  defp json_key(_key), do: {:error, :key}
 
   defp json_number?(value) when is_integer(value),
     do: value >= @min_json_integer and value <= @max_json_integer

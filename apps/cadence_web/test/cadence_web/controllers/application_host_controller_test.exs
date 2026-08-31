@@ -149,6 +149,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     response =
       post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
         "queryId" => "cadence.comms.overview",
         "version" => 1,
         "scope" => forged_scope,
@@ -175,6 +179,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     query_response =
       post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
         "queryId" => "cadence.comms.overview",
         "version" => 1,
         "scope" => valid_scope,
@@ -297,8 +305,22 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     valid_scope = scope_document(organization, mission)
 
     for request <- [
-          %{"queryId" => "cadence.comms.unknown", "version" => 1},
-          %{"queryId" => "cadence.comms.overview", "version" => 2}
+          %{
+            "applicationKey" => "comms_overview",
+            "applicationVersion" => 1,
+            "surfaceId" => "overview",
+            "surfaceVersion" => 1,
+            "queryId" => "cadence.comms.unknown",
+            "version" => 1
+          },
+          %{
+            "applicationKey" => "comms_overview",
+            "applicationVersion" => 1,
+            "surfaceId" => "overview",
+            "surfaceVersion" => 1,
+            "queryId" => "cadence.comms.overview",
+            "version" => 2
+          }
         ] do
       response =
         post_bridge(
@@ -344,13 +366,22 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
            } = json_response(action_response, 404)
   end
 
-  test "unauthenticated catalog requests receive a JSON 401", %{conn: conn} do
+  test "unauthenticated application-host requests use the browser gate", %{conn: conn} do
     response = get(conn, catalog_path("mission-missing"))
 
-    assert %{
-             "schema" => "cadence.application-host-problem.v1",
-             "code" => "unauthenticated"
-           } = json_response(response, 401)
+    assert redirected_to(response) == "/sign-in"
+  end
+
+  test "authenticated host routes negotiate JSON inside the browser pipeline" do
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+
+    response =
+      member_conn
+      |> put_req_header("accept", "application/json")
+      |> get(catalog_path(mission.mission_id))
+
+    assert response.status == 200
+    assert is_map(json_response(response, 200))
   end
 
   defp signed_in_scope_and_mission do

@@ -9,6 +9,9 @@ defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
   alias Cadence.Governance
 
   @impl true
+  def application_key, do: "derived_telemetry"
+
+  @impl true
   def execute(
         %Scope{},
         %HostContext{placement: :mission, mission_id: mission_id},

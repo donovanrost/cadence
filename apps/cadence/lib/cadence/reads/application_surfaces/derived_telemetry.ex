@@ -12,6 +12,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.DerivedTelemetry do
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
 
   @impl true
+  def application_key, do: "derived_telemetry"
+
+  @impl true
   def load(
         %Scope{organization_id: organization_id},
         %HostContext{placement: :mission, mission_id: mission_id},

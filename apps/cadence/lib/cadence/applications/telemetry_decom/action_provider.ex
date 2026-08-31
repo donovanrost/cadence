@@ -16,6 +16,9 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   alias Cadence.Auth.Scope
 
   @impl true
+  def application_key, do: "telemetry_decom"
+
+  @impl true
   def execute(
         %Scope{organization_id: organization_id},
         %HostContext{

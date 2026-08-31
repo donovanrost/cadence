@@ -13,11 +13,12 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     ApplicationInstallations,
     CatalogContribution,
     CatalogRegistry,
-    HostContext
+    HostContext,
+    JSONBoundary
   }
 
   alias Cadence.Applications.Registry, as: ApplicationRegistry
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.ExtensionCatalog
   alias Cadence.Extensions.{ApplicationContribution, ExtensionPackage}
   alias Cadence.Ids
@@ -56,21 +57,28 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         opts
       )
       when is_list(opts) do
-    with :ok <- validate_session_options(opts),
-         {:ok, applications} <- applications(current_scope, route_context, opts) do
-      {:ok,
-       %{
-         "schema" => @application_catalog_schema,
-         "hostContract" => @application_host_contract,
-         "generatedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
-         "session" => %{
-           "sessionId" => Keyword.fetch!(opts, :session_id),
-           "csrfToken" => Keyword.fetch!(opts, :csrf_token),
-           "bridgeBaseUrl" => Keyword.fetch!(opts, :bridge_base_url),
-           "context" => context_document(current_scope, route_context)
-         },
-         "applications" => applications
-       }}
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- validate_session_options(opts),
+         {:ok, applications} <- applications(current_scope, route_context, opts),
+         {:ok, catalog} <-
+           {:ok,
+            %{
+              "schema" => @application_catalog_schema,
+              "hostContract" => @application_host_contract,
+              "generatedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+              "session" => %{
+                "sessionId" => Keyword.fetch!(opts, :session_id),
+                "csrfToken" => Keyword.fetch!(opts, :csrf_token),
+                "bridgeBaseUrl" => Keyword.fetch!(opts, :bridge_base_url),
+                "context" => context_document(current_scope, route_context)
+              },
+              "applications" => applications
+            }},
+         :ok <- validate_catalog_output(catalog) do
+      {:ok, catalog}
+    else
+      {:error, _reason} = error -> error
+      _invalid -> {:error, :application_catalog_bounds_exceeded}
     end
   end
 
@@ -88,28 +96,32 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         surface_id
       )
       when is_binary(application_key) do
-    case ApplicationInstallations.fetch_installed(
-           current_scope,
-           route_context.host_context,
-           application_key
-         ) do
-      {:ok, installation} ->
-        registered_application(
-          application_key,
-          installation,
-          route_context.host_context,
-          surface_id
-        )
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- CatalogRegistry.validate() do
+      case ApplicationInstallations.fetch_installed(
+             current_scope,
+             route_context.host_context,
+             application_key
+           ) do
+        {:ok, installation} ->
+          registered_application(
+            application_key,
+            installation,
+            route_context.host_context,
+            surface_id
+          )
 
-      {:error, :application_not_installed} ->
-        contributed_application_admission(
-          application_key,
-          route_context.host_context.placement,
-          surface_id
-        )
+        {:error, :application_not_installed} ->
+          contributed_application_admission(
+            current_scope,
+            application_key,
+            route_context,
+            surface_id
+          )
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -345,7 +357,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp all_applications(
          %Scope{} = current_scope,
-         %{host_context: %HostContext{} = host_context},
+         %{host_context: %HostContext{} = host_context} = route_context,
          manifest_url
        ) do
     with {:ok, installation_page} <-
@@ -357,7 +369,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              page_size: @catalog_page_size,
              max_total: @max_catalog_applications
            ),
-         {:ok, contributed} <- contributed_applications(host_context, manifest_url) do
+         {:ok, contributed} <-
+           contributed_applications(current_scope, route_context, manifest_url) do
       installed_applications =
         installation_page.items
         |> Enum.flat_map(&installed_application_document(&1, host_context, manifest_url))
@@ -369,17 +382,25 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   defp all_applications(%Scope{}, %{}, _manifest_url),
     do: {:error, :application_catalog_unavailable}
 
-  defp contributed_applications(%HostContext{placement: placement}, manifest_url) do
-    contributions = CatalogRegistry.all()
-
-    if length(contributions) > @max_catalog_applications,
-      do: {:error, :application_catalog_bounds_exceeded},
-      else:
-        {:ok,
-         Enum.flat_map(
-           contributions,
-           &contributed_application_document(&1, placement, manifest_url)
-         )}
+  defp contributed_applications(
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
+         manifest_url
+       ) do
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         :ok <- CatalogRegistry.validate(),
+         contributions <- CatalogRegistry.all(),
+         true <- length(contributions) <= @max_catalog_applications do
+      {:ok,
+       Enum.flat_map(
+         contributions,
+         &contributed_application_document(&1, current_scope, route_context, manifest_url)
+       )}
+    else
+      false -> {:error, :application_catalog_bounds_exceeded}
+      {:error, reason} -> {:error, reason}
+      _invalid -> {:error, :application_catalog_unavailable}
+    end
   end
 
   defp finalize_catalog_applications([]), do: {:error, :application_catalog_unavailable}
@@ -393,10 +414,11 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp contributed_application_document(
          %CatalogContribution{} = contribution,
-         placement,
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
          manifest_url
        ) do
-    case contributed_application(contribution, placement, manifest_url) do
+    case contributed_application(contribution, current_scope, route_context, manifest_url) do
       {:ok, application} -> [application]
       {:error, _reason} -> []
     end
@@ -406,18 +428,37 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %CatalogContribution{
            definition: definition
          },
-         placement,
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
          manifest_url
        ) do
-    case contributed_application_admission(definition.application_key, placement, nil) do
+    case contributed_application_admission(
+           current_scope,
+           definition.application_key,
+           route_context,
+           nil
+         ) do
       {:ok, application} -> {:ok, application_document(application, manifest_url)}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp contributed_application_admission(application_key, placement, surface_id)
+  defp contributed_application_admission(
+         %Scope{} = current_scope,
+         application_key,
+         %{
+           host_context: %HostContext{placement: placement, mission_id: mission_id},
+           mission: %Mission{organization_id: organization_id}
+         },
+         surface_id
+       )
        when is_binary(application_key) do
-    with {:ok,
+    with :ok <-
+           Policy.authorize(current_scope, :read_application_catalog, %{
+             organization_id: organization_id,
+             mission_id: mission_id
+           }),
+         {:ok,
           %CatalogContribution{
             definition: definition,
             package_id: package_id,
@@ -677,6 +718,22 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     %{"displayName" => "Authenticated actor", "permissions" => ["applications:view"]}
   end
 
+  defp authorize_catalog_access(
+         %Scope{} = current_scope,
+         %{
+           host_context: %HostContext{mission_id: mission_id},
+           mission: %Mission{organization_id: organization_id}
+         }
+       ) do
+    Policy.authorize(current_scope, :read_application_catalog, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize_catalog_access(_current_scope, _route_context),
+    do: {:error, :application_catalog_unavailable}
+
   defp spacecraft_name(%Spacecraft{display_name: display_name}), do: display_name
   defp spacecraft_name(nil), do: nil
 
@@ -693,4 +750,11 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp valid_path?(value), do: is_binary(value) and String.starts_with?(value, "/")
   defp valid_text?(value), do: is_binary(value) and value != ""
+
+  defp validate_catalog_output(catalog) do
+    case JSONBoundary.validate(catalog) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_catalog_bounds_exceeded}
+    end
+  end
 end

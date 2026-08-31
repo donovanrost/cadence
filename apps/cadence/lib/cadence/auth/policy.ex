@@ -64,7 +64,30 @@ defmodule Cadence.Auth.Policy do
 
       :service ->
         authorize_service_mission(current_scope, organization_id, mission_id)
+
+      _invalid_actor ->
+        {:error, :authenticated_user_required}
     end
+  end
+
+  def authorize(%Scope{} = current_scope, :read_application_catalog, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      }) do
+    authorize(current_scope, :operate_mission, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  def authorize(%Scope{} = current_scope, :read_legacy_application, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      }) do
+    authorize(current_scope, :operate_mission, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
   end
 
   # Dashboard authoring deliberately starts with the existing mission-operator

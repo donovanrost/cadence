@@ -4,6 +4,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.Auth.Scope
+  alias Cadence.Missions.Mission
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
@@ -71,6 +72,22 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              "/missions/#{route_context.mission.mission_id}/spacecraft/#{route_context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
   end
 
+  test "rejects oversized persisted display data before returning a catalog" do
+    {scope, route_context} = installed_telemetry_context()
+    mission = %{route_context.mission | display_name: String.duplicate("x", 241)}
+    route_context = %{route_context | mission: mission}
+
+    assert {:error, :application_catalog_bounds_exceeded} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "catalog-session",
+               csrf_token: "catalog-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end
+             )
+  end
+
   test "uses native semantic fallbacks when the installed Comms surfaces have no release" do
     {scope, %{mission: mission} = route_context} = installed_comms_context()
 
@@ -125,6 +142,57 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
     result = ApplicationHostCatalog.fallback_href(route_context, "bad/key", "overview")
     assert result == {:error, :invalid_application_request}
     refute inspect(result) =~ "/invalid"
+  end
+
+  test "rejects cross-organization, missing-user, and unauthorized catalog admissions before lookup" do
+    route_context = %{
+      host_context: HostContext.mission("mission-policy"),
+      mission: %Mission{
+        mission_id: "mission-policy",
+        organization_id: "org-beta",
+        slug: "policy",
+        display_name: "Policy Mission"
+      },
+      spacecraft: nil
+    }
+
+    member_scope = %Scope{
+      actor_kind: :user,
+      organization_id: "org-alpha",
+      user: %{user_id: "user-alpha"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    assert {:error, :scope_mismatch} =
+             ApplicationHostCatalog.admit_application(
+               member_scope,
+               route_context,
+               "comms_overview"
+             )
+
+    missing_user_scope = %{member_scope | user: nil}
+
+    assert {:error, :authenticated_user_required} =
+             ApplicationHostCatalog.admit_application(
+               missing_user_scope,
+               %{
+                 route_context
+                 | mission: %{route_context.mission | organization_id: "org-alpha"}
+               },
+               "comms_overview"
+             )
+
+    unauthorized_scope = %{member_scope | organization_membership: nil}
+
+    assert {:error, :forbidden} =
+             ApplicationHostCatalog.admit_application(
+               unauthorized_scope,
+               %{
+                 route_context
+                 | mission: %{route_context.mission | organization_id: "org-alpha"}
+               },
+               "comms_overview"
+             )
   end
 
   defp installed_telemetry_context do

@@ -8,6 +8,9 @@ defmodule Cadence.Applications.Limits.ActionProvider do
   alias Cadence.Limits
   alias Cadence.Limits.Definition
 
+  @impl true
+  def application_key, do: "limits"
+
   @threshold_fields [
     {"red_low", :red_low},
     {"yellow_low", :yellow_low},

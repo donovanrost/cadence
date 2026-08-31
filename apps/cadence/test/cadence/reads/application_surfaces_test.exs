@@ -172,6 +172,47 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     assert ProviderRegistry.providers(contributions) == %{}
   end
 
+  test "surface registry rejects duplicate query identities and invalid providers" do
+    alpha = %SurfaceQueryContribution{
+      application_key: "synthetic_alpha",
+      application_version: 1,
+      query_id: "synthetic.shared.read",
+      query_version: 1,
+      provider: Cadence.TestSurfaceQueryProviders.Alpha
+    }
+
+    beta_collision = %SurfaceQueryContribution{
+      application_key: "synthetic_beta",
+      application_version: 1,
+      query_id: "synthetic.shared.read",
+      query_version: 1,
+      provider: Cadence.TestSurfaceQueryProviders.Beta
+    }
+
+    assert ProviderRegistry.providers([alpha, beta_collision]) == %{}
+    assert ProviderRegistry.providers([alpha, alpha]) == %{}
+
+    assert ProviderRegistry.providers([%{alpha | provider: String}]) == %{}
+
+    mismatched_providers = %{
+      {"synthetic_beta", "synthetic.shared.read"} => Cadence.TestSurfaceQueryProviders.Alpha
+    }
+
+    assert ProviderRegistry.dispatch(
+             %Scope{},
+             HostContext.mission("synthetic-mission"),
+             %SurfaceQueryRequest{
+               application_key: "synthetic_beta",
+               application_version: 1,
+               surface_id: "read",
+               surface_version: 1,
+               query_id: "synthetic.shared.read",
+               query_version: 1
+             },
+             mismatched_providers
+           ) == {:error, :invalid_application_surface_provider_registry}
+  end
+
   test "validation keeps its repository query count fixed as spacecraft are added", context do
     persist_test_spacecraft("validation-query-count-a")
     persist_test_spacecraft("validation-query-count-b")
