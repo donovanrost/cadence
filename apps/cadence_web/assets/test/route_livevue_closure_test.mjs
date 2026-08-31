@@ -20,6 +20,12 @@ const federatedControllerPath = resolve(controllerRoot, "application_host_contro
 const vueRoot = resolve(webRoot, "assets/vue")
 const vueIndexPath = resolve(vueRoot, "index.ts")
 const appPath = resolve(webRoot, "assets/js/app.js")
+const browserTestRoots = [
+  resolve(webRoot, "browser_test"),
+  resolve(webRoot, "assets/test"),
+]
+const browserTestExtensions = new Set([".exs", ".js", ".mjs", ".ts"])
+const retiredCommsHostSuffix = ["comms", "federated"].join("/")
 
 const expectedLiveRoutes = `
 auth|/sign-in|UserSessionLive|new
@@ -219,7 +225,10 @@ assert.deepEqual(
 
 assert.doesNotMatch(
   routerSource,
-  /get\s+"\/missions\/:mission_id\/comms\/federated"/s,
+  new RegExp(
+    `get\\s+"\\/missions\\/:mission_id\\/${retiredCommsHostSuffix.replaceAll("/", "\\/")}"`,
+    "s",
+  ),
   "retired application-specific Comms host path is not routed",
 )
 assert.doesNotMatch(
@@ -260,6 +269,33 @@ assert.match(
 assert.match(
   apiSource,
   /scope "\/api", CadenceWeb do\s+pipe_through \[:api, :authenticated_api\]/s,
+)
+
+const browserTestFiles = (await Promise.all(browserTestRoots.map(walkFiles)))
+  .flat()
+  .filter((path) => browserTestExtensions.has(extname(path)))
+const browserTestSources = await Promise.all(
+  browserTestFiles.map(async (path) => ({path, source: await readFile(path, "utf8")})),
+)
+const retiredCommsHostPattern = new RegExp(`/${retiredCommsHostSuffix.replaceAll("/", "\\/")}`)
+
+for (const {path, source} of browserTestSources) {
+  assert.doesNotMatch(
+    source,
+    retiredCommsHostPattern,
+    `${relative(webRoot, path)} does not generate the retired Comms host alias`,
+  )
+}
+
+assert.match(
+  browserTestSources.find(({path}) => path.endsWith("federation_browser_smoke_setup.exs"))?.source || "",
+  /applications\/comms_overview\/federated/,
+  "production browser setup uses the generic Comms application host route",
+)
+assert.match(
+  browserTestSources.find(({path}) => path.endsWith("federation_browser_smoke.mjs"))?.source || "",
+  /applications\/comms_overview\/federated/,
+  "browser smoke helper uses the generic Comms application host route",
 )
 
 const liveFiles = await walkFiles(liveRoot)

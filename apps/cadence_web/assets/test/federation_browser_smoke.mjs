@@ -496,7 +496,7 @@ export function browserUrls({ port, missionId, spacecraftId, host = "127.0.0.1",
   return {
     baseUrl,
     loginUrl: `${baseUrl}/sign-in`,
-    commsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/comms/federated`,
+    commsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/comms_overview/federated`,
     telemetryUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/applications/telemetry_decom/packet_bindings/federated`,
   };
 }
@@ -1814,7 +1814,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const origin = assertHttpUrl(commsUrl, undefined, "Comms surface URL").origin;
   assert.equal(
     new URL(commsUrl).pathname,
-    `/missions/${encodeURIComponent(missionId)}/comms/federated`,
+    `/missions/${encodeURIComponent(missionId)}/applications/comms_overview/federated`,
     "Comms surface must use the authenticated federated route",
   );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");

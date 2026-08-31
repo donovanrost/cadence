@@ -146,7 +146,7 @@ test("scenario timeout aborts polling and CDP event waiters before gate cleanup 
   const client = new CdpClient("ws://fake", { webSocketImpl: FakeWebSocket });
   const args = [
     "--comms-url",
-    "http://127.0.0.1:43721/missions/mission-1/comms/federated",
+    "http://127.0.0.1:43721/missions/mission-1/applications/comms_overview/federated",
   ];
   let activePollTimers = 0;
   let runtimeClosed = 0;

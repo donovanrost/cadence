@@ -34,7 +34,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     args = [
       Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),
       "--comms-url",
-      "#{base_url}/missions/#{context.mission.mission_id}/comms/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/comms_overview/federated",
       "--telemetry-url",
       "#{base_url}/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated",
       "--login-url",

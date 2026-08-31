@@ -91,7 +91,7 @@ test("the browser URL contract uses an actual isolated HTTP endpoint", async () 
     assert.notEqual(new URL(firstUrls.commsUrl).origin, new URL(secondUrls.commsUrl).origin);
     assert.equal(
       new URL(firstUrls.commsUrl).pathname,
-      "/missions/mission%2Fone/comms/federated",
+      "/missions/mission%2Fone/applications/comms_overview/federated",
     );
     assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));
   } finally {
@@ -592,7 +592,7 @@ test("sign-in URL validation allows only query/hash variation and runs before na
   });
   await assert.rejects(
     runScenario(client, {}, [
-      "--comms-url", `${origin}/missions/mission-1/comms/federated`,
+      "--comms-url", `${origin}/missions/mission-1/applications/comms_overview/federated`,
       "--telemetry-url", `${origin}/missions/mission-1/telemetry/federated`,
       "--login-url", `${origin}/sign-in-extra`,
       "--login-email", "operator@example.test",
