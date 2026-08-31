@@ -195,7 +195,11 @@ export function requireChromeBinary(options = {}) {
 export function assertNoPasswordArgument(args) {
   const forbiddenArgument = "--login-" + "password";
   assert.equal(
-    args.includes(forbiddenArgument),
+    args.some(
+      (argument) =>
+        argument === forbiddenArgument ||
+        (typeof argument === "string" && argument.startsWith(`${forbiddenArgument}=`)),
+    ),
     false,
     "the browser gate must receive credentials over structured stdin, not argv",
   );
@@ -246,19 +250,30 @@ export function signalChild(child, signal) {
 export function waitForChildExit(child, timeout, label, spawnErrorRef = { value: null }) {
   if (childHasExited(child, spawnErrorRef.value)) return Promise.resolve();
 
-  return withTimeout(
-    new Promise((resolveExit) => {
-      const done = () => {
-        child.removeListener("exit", done);
-        child.removeListener("error", done);
-        resolveExit();
-      };
-      child.once("exit", done);
-      child.once("error", done);
-    }),
-    timeout,
-    label,
-  );
+  return new Promise((resolveExit, rejectExit) => {
+    let settled = false;
+    let timer;
+    const cleanup = () => {
+      child.removeListener("exit", done);
+      child.removeListener("error", done);
+      clearTimeout(timer);
+    };
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback(value);
+    };
+    const done = () => finish(resolveExit);
+
+    child.once("exit", done);
+    child.once("error", done);
+    timer = setTimeout(
+      () => finish(rejectExit, new Error(`${label} timed out after ${timeout}ms`)),
+      timeout,
+    );
+    if (childHasExited(child, spawnErrorRef.value)) done();
+  });
 }
 
 export async function terminateProcess(
@@ -321,6 +336,7 @@ export async function launchChrome({
   });
   let child;
   let closePromise;
+  let onSpawnError;
 
   const runtime = {
     child: null,
@@ -340,7 +356,10 @@ export async function launchChrome({
           }
         } finally {
           // Never remove the profile until the process has been observed exited.
-          if (terminated) await removeUserDataDir(userDataDir);
+          if (terminated) {
+            runtime.child?.removeListener("error", onSpawnError);
+            await removeUserDataDir(userDataDir);
+          }
         }
       })();
       return closePromise;
@@ -376,37 +395,43 @@ export async function launchChrome({
     }
     child.stdout?.on("data", (chunk) => output.append(chunk));
     child.stderr?.on("data", (chunk) => output.append(chunk));
-    child.once("error", (error) => {
+    onSpawnError = (error) => {
       spawnErrorRef.value = error;
-    });
+    };
+    child.once("error", onSpawnError);
 
+    let cancelEndpointWait = () => {};
     const endpoint = await raceWithSignalAndTimeout(
       new Promise((resolveEndpoint, rejectEndpoint) => {
         let settled = false;
+        let cleanup;
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          callback(value);
+        };
         const inspect = () => {
           const match = output.value().match(/DevTools listening on (wss?:\/\/[^\s]+)/);
-          if (match && !settled) {
-            settled = true;
-            resolveEndpoint(match[1]);
-          }
+          if (match) finish(resolveEndpoint, match[1]);
         };
         const onData = () => inspect();
         const onError = (error) => {
-          if (!settled) {
-            settled = true;
-            rejectEndpoint(new Error(`Chrome failed to start: ${error.message}`));
-          }
+          finish(rejectEndpoint, new Error(`Chrome failed to start: ${error.message}`));
         };
         const onExit = (code, signalName) => {
-          if (!settled) {
-            settled = true;
-            rejectEndpoint(
-              new Error(
-                `Chrome exited before CDP startup (${code ?? signalName})\n${output.value()}`,
-              ),
-            );
-          }
+          finish(
+            rejectEndpoint,
+            new Error(`Chrome exited before CDP startup (${code ?? signalName})\n${output.value()}`),
+          );
         };
+        cleanup = () => {
+          child.stdout?.removeListener("data", onData);
+          child.stderr?.removeListener("data", onData);
+          child.removeListener("error", onError);
+          child.removeListener("exit", onExit);
+        };
+        cancelEndpointWait = (error) => finish(rejectEndpoint, error);
         child.stdout?.on("data", onData);
         child.stderr?.on("data", onData);
         child.once("error", onError);
@@ -417,6 +442,7 @@ export async function launchChrome({
         signal,
         milliseconds: CHROME_START_TIMEOUT_MS,
         label: "Chrome CDP startup",
+        onCancel: cancelEndpointWait,
       },
     );
 
@@ -705,6 +731,19 @@ export function isIgnoredFavicon(record, expectedOrigin) {
   );
 }
 
+function matchesRequestGeneration(record, generation) {
+  if (generation === undefined || generation === null) return true;
+  const expectedGeneration = typeof generation === "object" ? generation.id : generation;
+  if (record?.generation !== expectedGeneration) return false;
+  if (typeof generation !== "object") return true;
+  if (generation.requestIds?.has(record.requestId)) return false;
+  return !(
+    Number.isFinite(record.sequence) &&
+    Number.isFinite(generation.requestSequence) &&
+    record.sequence <= generation.requestSequence
+  );
+}
+
 export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}) {
   const requests = new Map();
   const consoleErrors = [];
@@ -715,16 +754,31 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const webSocketFailures = [];
   const subscriptions = [];
   let sequence = 0;
+  let nextGeneration = 0;
+  let activeGeneration;
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
+
+  const beginRequestGeneration = (label = "request generation") => {
+    const generation = {
+      id: ++nextGeneration,
+      label,
+      requestSequence: sequence,
+      requestIds: new Set(requests.keys()),
+      startedAtMs: Date.now(),
+    };
+    activeGeneration = generation.id;
+    return generation;
+  };
 
   on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse }) => {
     const prior = requests.get(requestId);
     const redirects = prior?.redirects || [];
     if (redirectResponse) redirects.push({ status: redirectResponse.status, url: redirectResponse.url });
-    requests.set(requestId, {
+    const record = {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
+      generation: prior?.generation ?? activeGeneration,
       method: request.method,
       url: request.url,
       request,
@@ -736,7 +790,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(request.url),
-    });
+    };
+    requests.set(requestId, record);
+    const socket = webSockets.get(requestId);
+    if (socket) {
+      socket.generation = record.generation;
+      socket.sequence = record.sequence;
+    }
   });
 
   on("Network.responseReceived", ({ requestId, response, type }) => {
@@ -748,12 +808,15 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       url: response.url,
       request: {},
       redirects: [],
+      generation: activeGeneration,
+      webSocket: type === "WebSocket",
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(response.url),
     };
     record.response = response;
     record.resourceType = type || record.resourceType;
+    if (type === "WebSocket") record.webSocket = true;
     requests.set(requestId, record);
     if (response.status >= 400 && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
       requestFailures.push(`${response.status} ${record.method} ${response.url}`);
@@ -775,17 +838,34 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   });
 
   on("Network.webSocketCreated", ({ requestId, url }) => {
-    webSockets.set(requestId, { requestId, url, handshake: undefined, error: undefined });
+    webSockets.set(requestId, {
+      requestId,
+      url,
+      generation: requests.get(requestId)?.generation ?? activeGeneration,
+      sequence: requests.get(requestId)?.sequence,
+      handshake: undefined,
+      error: undefined,
+    });
   });
 
   on("Network.webSocketWillSendHandshakeRequest", ({ requestId, request }) => {
-    const socket = webSockets.get(requestId) || { requestId, url: request.url };
+    const socket = webSockets.get(requestId) || {
+      requestId,
+      url: request.url,
+      generation: requests.get(requestId)?.generation ?? activeGeneration,
+      sequence: requests.get(requestId)?.sequence,
+    };
     socket.handshakeRequest = request;
     webSockets.set(requestId, socket);
   });
 
   on("Network.webSocketHandshakeResponseReceived", ({ requestId, response }) => {
-    const socket = webSockets.get(requestId) || { requestId, url: response.url };
+    const socket = webSockets.get(requestId) || {
+      requestId,
+      url: response.url,
+      generation: requests.get(requestId)?.generation ?? activeGeneration,
+      sequence: requests.get(requestId)?.sequence,
+    };
     socket.handshake = response;
     webSockets.set(requestId, socket);
   });
@@ -844,10 +924,17 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     requestFailures,
     webSockets,
     webSocketFailures,
-    completed(predicate) {
-      return [...requests.values()].filter((record) =>
-        record.response && record.finished && !record.failed && predicate(record),
-      );
+    beginRequestGeneration,
+    completed(predicate, { generation } = {}) {
+      return [...requests.values()]
+        .filter((record) =>
+          record.response &&
+          record.finished &&
+          !record.failed &&
+          matchesRequestGeneration(record, generation) &&
+          predicate(record),
+        )
+        .sort((left, right) => left.sequence - right.sequence);
     },
     async drainLateEvents(milliseconds = 250, signal) {
       await sleep(milliseconds, signal);
@@ -871,12 +958,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
             webSockets: [...webSockets.values()].map((socket) => ({
               requestId: socket.requestId,
               url: socket.url,
+              generation: socket.generation,
               status: socket.handshake?.status,
               closed: socket.closed,
               error: socket.error,
             })),
             requests: [...requests.values()].map((record) => ({
               requestId: record.requestId,
+              generation: record.generation,
               method: record.method,
               url: record.url,
               postData: record.postData,
@@ -900,26 +989,47 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 export function assertLiveViewWebSocket(
   { webSockets, webSocketFailures, requests, consoleErrors = [], logErrors = [] },
   expectedOrigin,
-  { beforeRequestIds = new Set() } = {},
+  { beforeRequestIds = new Set(), generation } = {},
 ) {
+  const normalizedExpectedOrigin = new URL(expectedOrigin);
+  assert.ok(
+    ["http:", "https:"].includes(normalizedExpectedOrigin.protocol),
+    `LiveView expected origin must use HTTP(S), got ${normalizedExpectedOrigin.protocol}`,
+  );
   const liveViewSockets = [...webSockets.values()].filter((socket) => {
     try {
       const url = new URL(socket.url);
-      return url.pathname === "/live/websocket" && !beforeRequestIds.has(socket.requestId);
+      return (
+        ["ws:", "wss:"].includes(url.protocol) &&
+        url.pathname === "/live/websocket" &&
+        !beforeRequestIds.has(socket.requestId) &&
+        matchesRequestGeneration(socket, generation)
+      );
     } catch {
       return false;
     }
   });
-  assert.ok(liveViewSockets.length > 0, "LiveView did not create its websocket transport");
+  assert.ok(
+    liveViewSockets.length > 0,
+    `LiveView did not create a websocket transport for the current generation: ${JSON.stringify(
+      [...webSockets.values()].map((socket) => ({
+        requestId: socket.requestId,
+        generation: socket.generation,
+        url: socket.url,
+        closed: socket.closed,
+      })),
+    )}`,
+  );
 
   const connected = liveViewSockets.find((socket) => {
     const url = new URL(socket.url);
     const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
     const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
     return (
-      socketOrigin === expectedOrigin &&
-      originHeader === expectedOrigin &&
+      socketOrigin === normalizedExpectedOrigin.origin &&
+      originHeader === normalizedExpectedOrigin.origin &&
       socket.handshake?.status === 101 &&
+      socket.closed !== true &&
       !socket.error
     );
   });
@@ -937,7 +1047,11 @@ export function assertLiveViewWebSocket(
 
   const fallback = [...requests.values()].find((record) => {
     try {
-      return new URL(record.url).pathname === "/live/longpoll";
+      return (
+        new URL(record.url).pathname === "/live/longpoll" &&
+        !beforeRequestIds.has(record.requestId) &&
+        matchesRequestGeneration(record, generation)
+      );
     } catch {
       return false;
     }
@@ -992,11 +1106,11 @@ export async function waitForResponse(
   diagnostics,
   predicate,
   label,
-  { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {},
+  { timeout = CDP_EVENT_TIMEOUT_MS, signal, generation } = {},
 ) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const match = diagnostics.completed(predicate)[0];
+    const match = diagnostics.completed(predicate, { generation }).at(-1);
     if (match) return match;
     await sleep(POLL_INTERVAL_MS, signal);
   }
@@ -1114,14 +1228,17 @@ export function assertManifestAssetsRequested(
     assertHttpUrl(new URL(asset, manifestLocation).href, origin, `${label} asset`),
   );
   for (const asset of assets) {
-    const loaded = records.find((record) => {
-      if (!record.response || record.failed || !record.finished) return false;
-      try {
-        return new URL(record.url).href === asset.href;
-      } catch {
-        return false;
-      }
-    });
+    const loaded = records
+      .filter((record) => {
+        if (!record.response || record.failed || !record.finished) return false;
+        try {
+          return new URL(record.url).href === asset.href;
+        } catch {
+          return false;
+        }
+      })
+      .sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
+      .at(-1);
     assert.ok(loaded, `${label} asset was not successfully requested: ${asset.href}`);
     assert.equal(loaded.response.status, 200, `${label} asset was not HTTP 200: ${asset.href}`);
     assert.deepEqual(loaded.redirects, [], `${label} asset redirected: ${asset.href}`);
@@ -1142,8 +1259,13 @@ export function requirePostActionRefresh(
   return fresh[fresh.length - 1];
 }
 
-export async function navigate(client, url, { expectedOrigin, expectedPath, signal } = {}) {
+export async function navigate(
+  client,
+  url,
+  { expectedOrigin, expectedPath, signal, diagnostics } = {},
+) {
   const target = assertHttpUrl(url, expectedOrigin, "navigation URL");
+  const generation = diagnostics?.beginRequestGeneration(`navigation ${target.pathname}`);
   reportProgress(`navigating ${target.href}`);
   const navigationController = new AbortController();
   const onAbort = () => navigationController.abort(abortError(signal));
@@ -1177,15 +1299,16 @@ export async function navigate(client, url, { expectedOrigin, expectedPath, sign
     assert.equal(documentState.readyState, "complete", "resulting document did not load");
     assert.equal(documentState.hasBody, true, "resulting document has no body");
     assertHttpUrl(frame.frame.url, expectedOrigin, "frame navigation URL");
+    return generation;
   } finally {
     signal?.removeEventListener("abort", onAbort);
     navigationController.abort(new Error("navigation wait settled"));
   }
 }
 
-async function submitSignIn(client, loginUrl, email, password, expectedOrigin, signal) {
+async function submitSignIn(client, loginUrl, email, password, expectedOrigin, diagnostics, signal) {
   const login = assertHttpUrl(loginUrl, expectedOrigin, "sign-in URL");
-  await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname, signal });
+  await navigate(client, login.href, { expectedOrigin, expectedPath: login.pathname, diagnostics, signal });
   await waitForExpression(
     client,
     "Boolean(document.querySelector('#sign-in-form input[name=\"user[email]\"]') && document.querySelector('#sign-in-form input[name=\"user[password]\"]'))",
@@ -1198,6 +1321,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, s
   signal?.addEventListener("abort", onAbort, { once: true });
   if (signal?.aborted) onAbort();
   const submissionSignal = submissionController.signal;
+  const generation = diagnostics?.beginRequestGeneration("authenticated sign-in");
   try {
     const frameNavigation = client.waitForEvent(
       "Page.frameNavigated",
@@ -1230,6 +1354,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, s
     assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
     assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
     await waitForExpression(client, "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')", "authenticated redirect", { signal: submissionSignal });
+    return generation;
   } finally {
     signal?.removeEventListener("abort", onAbort);
     submissionController.abort(new Error("sign-in wait settled"));
@@ -1286,9 +1411,10 @@ async function assertRemoteSurface({
   queryVersion,
 }) {
   const surfaceUrl = assertHttpUrl(url, expectedOrigin, `${applicationKey} surface URL`);
-  await navigate(client, surfaceUrl.href, {
+  const generation = await navigate(client, surfaceUrl.href, {
     expectedOrigin,
     expectedPath: surfaceUrl.pathname,
+    diagnostics,
     signal,
   });
   reportProgress(`${applicationKey} waiting for REMOTE READY`);
@@ -1299,16 +1425,13 @@ async function assertRemoteSurface({
   }
   reportProgress(`${applicationKey} REMOTE READY observed`);
   diagnostics.assertClean(`${applicationKey} surface`);
-  reportProgress(`${applicationKey} asserting LiveView websocket`);
-  assertLiveViewWebSocket(diagnostics, expectedOrigin);
-  reportProgress(`${applicationKey} LiveView websocket asserted`);
 
   reportProgress(`${applicationKey} waiting for catalog response`);
   const catalogRecord = await waitForResponse(
     diagnostics,
     (record) => pathMatches(record, "GET", catalogPath, expectedOrigin),
     `${applicationKey} catalog`,
-    { signal },
+    { generation, signal },
   );
   reportProgress(`${applicationKey} catalog response observed`);
   assertHttpRequestContract(catalogRecord, {
@@ -1326,7 +1449,7 @@ async function assertRemoteSurface({
     diagnostics,
     (record) => pathMatches(record, "GET", manifestUrl.pathname, expectedOrigin),
     `${applicationKey} manifest`,
-    { signal },
+    { generation, signal },
   );
   reportProgress(`${applicationKey} manifest response observed`);
   assertHttpRequestContract(manifestRecord, {
@@ -1337,7 +1460,7 @@ async function assertRemoteSurface({
   });
   const manifest = await responseJson(client, manifestRecord, `${applicationKey} manifest`, { signal });
   assert.equal(typeof manifest, "object");
-  assertManifestAssetsRequested(manifest, manifestUrl.href, diagnostics.completed(() => true), {
+  assertManifestAssetsRequested(manifest, manifestUrl.href, diagnostics.completed(() => true, { generation }), {
     origin: expectedOrigin,
     label: `${applicationKey} manifest`,
     requiredExposedModule: application.release.exposedModule,
@@ -1346,6 +1469,7 @@ async function assertRemoteSurface({
 
   const hostRecord = diagnostics.completed(
     (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
+    { generation },
   ).at(-1);
   assertHttpRequestContract(hostRecord, {
     origin: expectedOrigin,
@@ -1369,7 +1493,7 @@ async function assertRemoteSurface({
     diagnostics,
     (record) => pathMatches(record, "POST", queryPath, expectedOrigin),
     `${applicationKey} query`,
-    { signal },
+    { generation, signal },
   );
   reportProgress(`${applicationKey} query response observed`);
   const scope = catalog.session.context;
@@ -1390,7 +1514,7 @@ async function assertRemoteSurface({
     }),
   });
   const query = await responseJson(client, queryRecord, `${applicationKey} query`, { signal });
-  return { catalog, application, manifest, query, queryRecord, queryPath };
+  return { catalog, application, manifest, query, queryRecord, queryPath, generation };
 }
 
 export async function runScenario(client, diagnostics, args, { secret, signal } = {}) {
@@ -1417,11 +1541,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   assertHttpUrl(loginUrl, origin, "sign-in URL");
 
   reportProgress("authenticating browser session");
-  await submitSignIn(client, loginUrl, email, secret.password, origin, signal);
+  const authenticatedGeneration = await submitSignIn(
+    client,
+    loginUrl,
+    email,
+    secret.password,
+    origin,
+    diagnostics,
+    signal,
+  );
   reportProgress("authenticated browser session ready");
   diagnostics.assertClean("authenticated sign-in");
   reportProgress("authenticated LiveView websocket asserted");
-  assertLiveViewWebSocket(diagnostics, origin);
+  assertLiveViewWebSocket(diagnostics, origin, { generation: authenticatedGeneration });
 
   const commsQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
   const comms = await assertRemoteSurface({
@@ -1492,6 +1624,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
 
   const queryRecordsBeforeAction = diagnostics.completed(
     (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
+    { generation: telemetry.generation },
   );
   const beforeRequestIds = new Set(queryRecordsBeforeAction.map((record) => record.requestId));
   const beforeCount = queryRecordsBeforeAction.length;
@@ -1512,7 +1645,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     diagnostics,
     (record) => pathMatches(record, "POST", actionPath, origin) && record.startedAtMs >= actionStartedAtMs,
     "Telemetry packet-bindings action",
-    { signal },
+    { generation: telemetry.generation, signal },
   );
   reportProgress("Telemetry packet-bindings action response observed");
   const telemetryScope = telemetry.catalog.session.context;
@@ -1561,11 +1694,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       !beforeRequestIds.has(record.requestId) &&
       record.startedAtMs >= actionStartedAtMs,
     "Telemetry canonical query refresh",
-    { signal },
+    { generation: telemetry.generation, signal },
   );
   reportProgress("Telemetry canonical query refresh observed");
   assert.equal(
-    requirePostActionRefresh(diagnostics.completed(() => true), {
+    requirePostActionRefresh(diagnostics.completed(() => true, { generation: telemetry.generation }), {
       beforeRequestIds,
       beforeCount,
       actionStartedAtMs,
@@ -1617,7 +1750,10 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   return {
     origin,
     remotes: [comms.application.release.releaseId, telemetry.application.release.releaseId],
-    queryResponses: diagnostics.completed((record) => pathMatches(record, "POST", telemetryQueryPath, origin)).length,
+    queryResponses: diagnostics.completed(
+      (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
+      { generation: telemetry.generation },
+    ).length,
     actionReceipt: receipt.receiptId,
     retainedPacketId: packetId,
   };

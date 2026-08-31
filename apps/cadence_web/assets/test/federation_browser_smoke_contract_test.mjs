@@ -16,6 +16,7 @@ import {
   reserveLoopbackPort,
   redactText,
   resolveChromeBinary,
+  waitForResponse,
 } from "./federation_browser_smoke.mjs";
 
 const origin = "http://127.0.0.1:43721";
@@ -33,11 +34,13 @@ function record({
   },
   requestId = "request-1",
   startedAtMs = 10,
+  sequence = startedAtMs,
   redirects = [],
   resourceType = "XHR",
 } = {}) {
   return {
     requestId,
+    sequence,
     startedAtMs,
     url,
     method,
@@ -187,6 +190,27 @@ test("manifest validation follows every declared transitive JavaScript and CSS a
     }).length,
     3,
   );
+  assert.doesNotThrow(() => assertManifestAssetsRequested(manifest, manifestUrl, [
+    ...assets.slice(0, 2),
+    record({
+      url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`,
+      method: "GET",
+      body: undefined,
+      status: 404,
+      sequence: 20,
+    }),
+    record({
+      url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`,
+      method: "GET",
+      body: undefined,
+      status: 200,
+      sequence: 21,
+    }),
+  ], {
+    origin,
+    label: "newest duplicate manifest",
+    requiredExposedModule: "./Application",
+  }));
   assert.throws(
     () => assertManifestAssetsRequested(manifest, manifestUrl, assets.slice(0, 2), { origin, label: "missing asset manifest" }),
     /was not successfully requested.*Application\.css/,
@@ -294,6 +318,7 @@ test("favicon log errors are ignored only with the matching browser request cont
 test("LiveView requires a same-origin websocket handshake and rejects longpoll fallback", () => {
   const connected = {
     requestId: "live-ws-1",
+    generation: 2,
     url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
     handshakeRequest: { headers: { Origin: origin } },
     handshake: { status: 101 },
@@ -301,7 +326,7 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
   };
   const diagnostics = {
     webSockets: new Map([
-      ["live-ws-old", { ...connected, requestId: "live-ws-old" }],
+      ["live-ws-old", { ...connected, requestId: "live-ws-old", generation: 1 }],
       [connected.requestId, connected],
     ]),
     webSocketFailures: [],
@@ -310,19 +335,24 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
     logErrors: [],
   };
   assert.equal(
-    assertLiveViewWebSocket(diagnostics, origin, { beforeRequestIds: new Set(["live-ws-old"]) }),
+    assertLiveViewWebSocket(diagnostics, origin, {
+      beforeRequestIds: new Set(["live-ws-old"]),
+      generation: { id: 2 },
+    }),
     connected,
   );
 
   for (const invalid of [
     { ...connected, url: "wss://evil.example/live/websocket?vsn=2.0.0" },
+    { ...connected, url: `${origin}/live/websocket?vsn=2.0.0` },
     { ...connected, handshake: { status: 403 } },
     { ...connected, handshakeRequest: { headers: { Origin: "http://127.0.0.1:4101" } } },
     { ...connected, error: "WebSocket handshake failed" },
+    { ...connected, closed: true },
   ]) {
     assert.throws(
       () => assertLiveViewWebSocket({ ...diagnostics, webSockets: new Map([[invalid.requestId, invalid]]) }, origin),
-      /same-origin HTTP 101 handshake/,
+      /same-origin HTTP 101 handshake|did not create a websocket transport/,
     );
   }
 
@@ -344,9 +374,35 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
 
 test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
   assert.equal(resolveChromeBinary({ env: { CHROME_BIN: "/missing" }, candidates: ["/also-missing"], fileExists: () => false }), undefined);
-  assert.throws(() => assertNoPasswordArgument(["--login-email", "operator@example.test", "--login-password", "secret"]), /structured stdin/);
+  for (const args of [
+    ["--login-email", "operator@example.test", "--login-password", "secret"],
+    ["--login-email", "operator@example.test", "--login-password=secret"],
+    ["--login-password", "inline-secret-without-an-argv-leak"],
+  ]) {
+    assert.throws(
+      () => assertNoPasswordArgument(args),
+      (error) => /structured stdin/.test(error.message) && !error.message.includes("secret"),
+    );
+  }
   const secret = "correct-horse-battery-staple";
   assert.equal(redactText(`argv=[] failure=${secret}`, [secret]).includes(secret), false);
+});
+
+test("waitForResponse selects the newest completed response in the requested generation", async () => {
+  const generation = { id: 9 };
+  const stale = record({ requestId: "query-stale", sequence: 10 });
+  const newest = record({ requestId: "query-newest", sequence: 11 });
+  const seenOptions = [];
+  const diagnostics = {
+    completed(predicate, options) {
+      seenOptions.push(options);
+      return [stale, newest].filter(predicate);
+    },
+  };
+
+  const result = await waitForResponse(diagnostics, () => true, "duplicate query", { generation });
+  assert.equal(result.requestId, "query-newest");
+  assert.deepEqual(seenOptions, [{ generation }]);
 });
 
 test("raw CDP target creation is abortable and time-bounded", async () => {

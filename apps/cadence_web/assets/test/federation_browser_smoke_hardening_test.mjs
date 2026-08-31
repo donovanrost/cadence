@@ -3,6 +3,7 @@ import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import {
@@ -19,6 +20,20 @@ import {
 
 const node = process.execPath;
 const smokeScript = new URL("./federation_browser_smoke.mjs", import.meta.url);
+
+test("graceful and forced child-exit timeouts remove every exit and error waiter", async () => {
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.signalCode = null;
+  child.kill = () => true;
+
+  await assert.rejects(
+    terminateProcess(child, { gracefulTimeout: 5, forceTimeout: 5 }),
+    /graceful and forced shutdown/,
+  );
+  assert.equal(child.listenerCount("exit"), 0, "child exit timeout left an exit listener");
+  assert.equal(child.listenerCount("error"), 0, "child exit timeout left an error listener");
+});
 
 function assertSecretStreamStopped(stream) {
   assert.equal(stream.listenerCount("data"), 0, "secret reader left a data listener active");
