@@ -4,9 +4,12 @@ defmodule Cadence.Applications.ProviderRegistryTest do
   alias Cadence.Applications.{
     ActionProviderRegistry,
     ActionRequest,
+    ApplicationDefinition,
     HostContext,
     HostQueryRegistry,
     JSONBoundary,
+    Registry,
+    SurfaceDefinition,
     SurfaceQueryContribution
   }
 
@@ -164,6 +167,66 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     }
 
     assert SurfaceProviderRegistry.providers(contributions ++ [query_collision]) == %{}
+  end
+
+  test "surface registry requires authoritative contributions and permits optional surfaces" do
+    definitions = Registry.all()
+    providers = SurfaceProviderRegistry.providers()
+
+    assert :ok = SurfaceProviderRegistry.validate(definitions, providers)
+
+    assert Map.has_key?(providers, {"comms", "cadence.comms.overview"})
+
+    declared_keys =
+      for definition <- definitions,
+          surface <- definition.surfaces,
+          query_id = Map.get(surface.data_contract, :query_id),
+          is_binary(query_id),
+          do: {definition.application_key, query_id}
+
+    authoritative_keys =
+      for contribution <- SurfaceProviderRegistry.contributions(),
+          do: {contribution.application_key, contribution.query_id}
+
+    assert MapSet.subset?(MapSet.new(authoritative_keys), MapSet.new(declared_keys))
+
+    assert {:error, :invalid_application_surface_provider_registry} =
+             SurfaceProviderRegistry.validate(
+               definitions,
+               Map.delete(providers, {"comms", "cadence.comms.overview"})
+             )
+
+    assert {:error, :invalid_application_surface_provider_registry} =
+             SurfaceProviderRegistry.validate(
+               definitions,
+               Map.put(
+                 providers,
+                 {"comms", "cadence.comms.unknown"},
+                 Cadence.Reads.ApplicationSurfaces.Comms
+               )
+             )
+
+    optional_surface = %SurfaceDefinition{
+      surface_id: "optional",
+      version: 1,
+      purpose: :overview,
+      scope: :mission,
+      placement: :application_workspace,
+      data_contract: %{query_id: "cadence.comms.optional", version: 1},
+      renderer: {:trusted, "cadence.comms.optional"}
+    }
+
+    definitions_with_optional_surface =
+      Enum.map(definitions, fn
+        %ApplicationDefinition{application_key: "comms"} = definition ->
+          %{definition | surfaces: definition.surfaces ++ [optional_surface]}
+
+        definition ->
+          definition
+      end)
+
+    assert :ok =
+             SurfaceProviderRegistry.validate(definitions_with_optional_surface, providers)
   end
 
   test "dispatches distinct action providers concurrently and rejects registry drift" do

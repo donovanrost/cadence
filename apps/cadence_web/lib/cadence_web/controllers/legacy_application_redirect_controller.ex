@@ -1,6 +1,6 @@
 defmodule CadenceWeb.LegacyApplicationRedirectController do
   @moduledoc """
-  Redirects retired application-specific URLs to the generic application host.
+  Redirects retired application URLs to their canonical generic destinations.
 
   Legacy mappings are compatibility policy, not application-host dispatch.
   Keeping them here prevents the generic host from acquiring one `live_action`
@@ -8,14 +8,6 @@ defmodule CadenceWeb.LegacyApplicationRedirectController do
   """
 
   use CadenceWeb, :controller
-
-  alias CadenceWeb.ApplicationHostController
-
-  def comms_overview(conn, %{"mission_id" => _mission_id} = params) do
-    conn
-    |> put_view(html: CadenceWeb.ApplicationHostHTML)
-    |> ApplicationHostController.federated(Map.put(params, "application_key", "comms_overview"))
-  end
 
   def telemetry_decom(conn, %{
         "mission_id" => mission_id,

@@ -85,24 +85,25 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   def validate(definitions, registered_providers)
       when is_list(definitions) and is_map(registered_providers) do
     if Enum.all?(definitions, &valid_definition?/1) do
-      required_keys =
+      declared_keys =
         for definition <- definitions,
             surface <- definition.surfaces,
             query_id = Map.get(surface.data_contract, :query_id),
             is_binary(query_id),
-            declarative_renderer?(surface) or
-              Map.has_key?(registered_providers, {definition.application_key, query_id}),
             do: {definition.application_key, query_id}
 
       registered_keys = Map.keys(registered_providers)
 
-      if length(required_keys) <= @max_contributions and
-           unique?(required_keys) and
-           same_identities?(required_keys, registered_keys) and
-           valid_registered_providers?(registered_providers) do
+      with {:ok, authoritative_keys} <- authoritative_provider_keys(),
+           true <- authoritative_keys != [],
+           true <- length(authoritative_keys) <= @max_contributions,
+           true <- unique?(authoritative_keys),
+           true <- same_identities?(authoritative_keys, registered_keys),
+           true <- declares_provider_keys?(authoritative_keys, declared_keys),
+           true <- valid_registered_providers?(registered_providers) do
         :ok
       else
-        {:error, :invalid_application_surface_provider_registry}
+        _invalid -> {:error, :invalid_application_surface_provider_registry}
       end
     else
       {:error, :invalid_application_surface_provider_registry}
@@ -263,11 +264,20 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
       end
   end
 
-  defp same_identities?(left, right), do: MapSet.equal?(MapSet.new(left), MapSet.new(right))
-  defp unique?(identities), do: length(identities) == length(Enum.uniq(identities))
+  defp authoritative_provider_keys do
+    case valid_entries(contributions()) do
+      {:ok, entries} -> {:ok, Enum.map(entries, & &1.key)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-  defp declarative_renderer?(%{renderer: {:declarative, "cadence.host.surface.v1"}}), do: true
-  defp declarative_renderer?(_surface), do: false
+  defp declares_provider_keys?(authoritative_keys, declared_keys) do
+    MapSet.subset?(MapSet.new(authoritative_keys), MapSet.new(declared_keys))
+  end
+
+  defp same_identities?(left, right), do: MapSet.equal?(MapSet.new(left), MapSet.new(right))
+
+  defp unique?(identities), do: length(identities) == length(Enum.uniq(identities))
 
   defp safe_apply(module, function, arguments) do
     {:ok, apply(module, function, arguments)}

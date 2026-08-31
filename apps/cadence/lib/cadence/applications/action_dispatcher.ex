@@ -9,6 +9,7 @@ defmodule Cadence.Applications.ActionDispatcher do
 
   alias Cadence.Applications.{
     ActionDefinition,
+    ActionFailure,
     ActionRequest,
     ApplicationDefinition,
     ApplicationInstallation,
@@ -64,11 +65,27 @@ defmodule Cadence.Applications.ActionDispatcher do
         %ActionRequest{} = request
       )
       when is_binary(organization_id) do
+    dispatch(current_scope, host_context, request, ActionProviderRegistry.providers())
+  end
+
+  def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}),
+    do: {:error, :application_action_scope_required}
+
+  @doc false
+  @spec dispatch(Scope.t(), HostContext.t(), ActionRequest.t(), map()) ::
+          {:ok, term()} | {:error, term()}
+  def dispatch(
+        %Scope{organization_id: organization_id} = current_scope,
+        %HostContext{} = host_context,
+        %ActionRequest{} = request,
+        registered_providers
+      )
+      when is_binary(organization_id) and is_map(registered_providers) do
     with {:ok, definition} <-
            Registry.fetch_available(request.application_key, request.application_version),
          :ok <- ensure_host_scope(definition, host_context),
          {:ok, required_permission} <- declared_action_permission(definition, request.action_id),
-         {:ok, provider} <- fetch_provider(request.application_key),
+         {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
          :ok <- authorize_action(current_scope, host_context, required_permission),
          {:ok, installation} <-
            ApplicationInstallations.fetch_installed(
@@ -80,7 +97,7 @@ defmodule Cadence.Applications.ActionDispatcher do
          :ok <- ensure_expected_configuration_version(installation, request),
          :ok <-
            ensure_action_preflight(current_scope, host_context, definition, request.action_id),
-         {:ok, result} <- provider.execute(current_scope, host_context, request),
+         {:ok, result} <- invoke_execute(provider, current_scope, host_context, request),
          {:ok, _installation} <-
            record_installation_outcome(
              current_scope,
@@ -94,7 +111,7 @@ defmodule Cadence.Applications.ActionDispatcher do
     end
   end
 
-  def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}),
+  def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}, _registered_providers),
     do: {:error, :application_action_scope_required}
 
   defp ensure_host_scope(
@@ -139,8 +156,8 @@ defmodule Cadence.Applications.ActionDispatcher do
     end
   end
 
-  defp fetch_provider(application_key) do
-    case ActionProviderRegistry.fetch(application_key) do
+  defp fetch_provider(application_key, registered_providers) do
+    case ActionProviderRegistry.fetch(application_key, registered_providers) do
       {:ok, provider} -> {:ok, provider}
       {:error, reason} -> {:error, reason}
     end
@@ -158,6 +175,15 @@ defmodule Cadence.Applications.ActionDispatcher do
   end
 
   def result(_application_key, value), do: value
+
+  defp invoke_execute(provider, current_scope, host_context, request) do
+    case safe_apply(provider, :execute, [current_scope, host_context, request]) do
+      {:ok, {:ok, result}} -> {:ok, result}
+      {:ok, {:error, reason}} -> {:error, reason}
+      {:ok, _malformed} -> {:error, action_provider_failure()}
+      {:error, :provider_exception} -> {:error, action_provider_failure()}
+    end
+  end
 
   defp same_identities?(left, right),
     do: MapSet.equal?(MapSet.new(left), MapSet.new(right))
@@ -226,8 +252,8 @@ defmodule Cadence.Applications.ActionDispatcher do
          installation
        ) do
     if function_exported?(provider, :configuration_reference, 2) do
-      case provider.configuration_reference(request, result) do
-        %ConfigurationReference{} = configuration_ref ->
+      case safe_apply(provider, :configuration_reference, [request, result]) do
+        {:ok, %ConfigurationReference{} = configuration_ref} ->
           ApplicationInstallations.put_configuration_reference(
             current_scope,
             host_context,
@@ -235,11 +261,32 @@ defmodule Cadence.Applications.ActionDispatcher do
             configuration_ref
           )
 
-        nil ->
+        {:ok, nil} ->
           {:ok, installation}
+
+        {:ok, _malformed} ->
+          {:error, action_provider_failure()}
+
+        {:error, :provider_exception} ->
+          {:error, action_provider_failure()}
       end
     else
       {:ok, installation}
     end
+  end
+
+  defp action_provider_failure do
+    %ActionFailure{
+      code: "application_action_failed",
+      message: "The application could not complete this action."
+    }
+  end
+
+  defp safe_apply(module, function, arguments) do
+    {:ok, apply(module, function, arguments)}
+  rescue
+    _exception -> {:error, :provider_exception}
+  catch
+    _kind, _value -> {:error, :provider_exception}
   end
 end

@@ -118,7 +118,10 @@ public_page|/invitations/:invitation_token|OrganizationInvitationController|show
 authenticated_page|/admin-mode|AdminModeController|new
 authenticated_page|/no-organization|NoOrganizationController|show
 download|/missions/:mission_id/catalog/artifacts/:artifact_id/download|CatalogArtifactDownloadController|show
-authenticated_page|/missions/:mission_id/comms/federated|ApplicationHostController|federated
+authenticated_page|/missions/:mission_id/applications/:application_key/federated|ApplicationHostController|federated
+authenticated_page|/missions/:mission_id/applications/:application_key/:surface_id/federated|ApplicationHostController|federated
+authenticated_page|/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/federated|ApplicationHostController|federated
+authenticated_page|/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id/federated|ApplicationHostController|federated
 redirect|/missions/:mission_id/ops/telemetry/explore|LegacyOpsRedirectController|telemetry_explore
 download|/missions/:mission_id/ops/dashboards/:dashboard_id/export|DashboardExportController|show
 redirect|/missions/:mission_id/spacecraft/:spacecraft_id/telemetry|LegacyApplicationRedirectController|telemetry_decom
@@ -144,7 +147,7 @@ redirect|/missions/:mission_id/comms/advanced/runtime-identities/new|LegacyComms
 `.trim().split("\n")
 
 assert.equal(expectedLiveRoutes.length, 89)
-assert.equal(expectedBrowserGets.length, 27)
+assert.equal(expectedBrowserGets.length, 30)
 
 const walkFiles = async (directory) => {
   const entries = await readdir(directory, {withFileTypes: true})
@@ -214,6 +217,17 @@ assert.deepEqual(
   expectedBrowserGets.map((entry) => entry.split("|").slice(1).join("|")),
 )
 
+assert.doesNotMatch(
+  routerSource,
+  /get\s+"\/missions\/:mission_id\/comms\/federated"/s,
+  "retired application-specific Comms host path is not routed",
+)
+assert.doesNotMatch(
+  routerSource,
+  /LegacyApplicationRedirectController[\s,]+:comms_overview/s,
+  "retired Comms host dispatch branch is absent",
+)
+
 const publicBrowserScope = browserSource.slice(
   browserSource.indexOf('  scope "/", CadenceWeb do\n    pipe_through :browser'),
   browserSource.indexOf(
@@ -238,7 +252,7 @@ for (const entry of expectedBrowserGets) {
 
 const apiSource = routerSource.slice(apiStart)
 const apiGets = [...apiSource.matchAll(/\bget\s+"[^"]+"\s*,/g)]
-assert.equal(apiGets.length, 62, "JSON API GET declarations remain outside presentation closure")
+assert.equal(apiGets.length, 63, "JSON API GET declarations remain outside presentation closure")
 assert.match(
   apiSource,
   /scope "\/api", CadenceWeb do\s+pipe_through :api\s+get "\/health", HealthController, :show/s,

@@ -74,13 +74,6 @@ defmodule CadenceWeb.Router do
         CatalogArtifactDownloadController,
         :show
 
-    # Preserve the retired Comms federation URL as a compatibility alias. The
-    # alias supplies the generic application key in the compatibility
-    # controller; ApplicationHostController remains application-agnostic.
-    get "/missions/:mission_id/comms/federated",
-        LegacyApplicationRedirectController,
-        :comms_overview
-
     get "/missions/:mission_id/applications/:application_key/federated",
         ApplicationHostController,
         :federated
