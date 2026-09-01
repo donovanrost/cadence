@@ -234,7 +234,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              ApplicationHostCatalog.admit_application(scope, route_context, "telemetry_decom")
   end
 
-  test "post-cutover contributed admission requires its exact package identity" do
+  test "post-cutover contributed admission accepts its exact package identity" do
     {_document, _payload, release} =
       admit_release!(
         @artifact_bytes,
@@ -257,6 +257,80 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert admission.package == %{package_id: "cadence.comms_overview", version: 1}
     assert admission.release.package_id == "cadence.comms_overview"
     assert admission.release.package_version == 1
+  end
+
+  test "post-cutover contributed package mismatch is sanitized across host boundaries" do
+    {scope, route_context} = installed_comms_context()
+    mission_id = route_context.mission.mission_id
+    member_conn = TestFixtures.member_conn(scope.user)
+    catalog_conn = get(member_conn, catalog_path(mission_id))
+    catalog = json_response(catalog_conn, 200)
+
+    {_document, _payload, release} =
+      admit_release!(
+        @artifact_bytes,
+        "reader-package-mismatch-contributed",
+        application: %{"id" => "comms_overview", "version" => 1},
+        package: %{"id" => "cadence.untrusted-package", "version" => 1},
+        surface: %{"id" => "overview", "version" => 1}
+      )
+
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-contributed-key")
+
+    assert {:error, :application_unavailable} =
+             ApplicationHostCatalog.admit_application(scope, route_context, "comms_overview")
+
+    scope_document = ApplicationHostCatalog.scope_document(scope, route_context)
+
+    catalog_response = get(member_conn, catalog_path(mission_id))
+
+    query_response =
+      post_host_bridge(catalog_conn, catalog, query_path(mission_id), %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "version" => 1,
+        "scope" => scope_document
+      })
+
+    action_response =
+      post_host_bridge(
+        catalog_conn,
+        catalog,
+        actions_path(mission_id),
+        %{
+          "applicationKey" => "comms_overview",
+          "applicationVersion" => 1,
+          "surfaceId" => "overview",
+          "surfaceVersion" => 1,
+          "actionId" => "anything",
+          "input" => %{},
+          "scope" => scope_document
+        },
+        "reader-package-mismatch-contributed-action"
+      )
+
+    for response <- [catalog_response, query_response, action_response] do
+      assert %{
+               "schema" => "cadence.application-host-problem.v1",
+               "code" => "application_unavailable",
+               "message" => "The requested application is not available in this scope."
+             } = json_response(response, 404)
+
+      refute response.resp_body =~ "cadence.comms_overview"
+      refute response.resp_body =~ "cadence.untrusted-package"
+      refute response.resp_body =~ "package"
+      refute response.resp_body =~ "no_history"
+      refute response.resp_body =~ "database_unavailable"
+      refute response.resp_body =~ "integrity_failure"
+      refute response.resp_body =~ release["releaseId"]
+      refute response.resp_body =~ "reader-package-mismatch-contributed"
+    end
   end
 
   test "post-cutover authoritative artifact paths remain readable by the registry" do
