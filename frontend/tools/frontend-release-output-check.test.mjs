@@ -9,12 +9,12 @@ import {
   parseOutputDirectoryArgument,
   pathsOverlap,
   validateReleaseOutput,
-} from "./release-build-check.mjs";
+} from "./frontend-release-output-check.mjs";
 
-const repositoryRoot = resolve(import.meta.dirname, "../../..");
+const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-async function makeFixture() {
-  const root = await mkdtemp(join(tmpdir(), "cadence-comms-release-check-"));
+async function makeFixture(baseDirectory = tmpdir()) {
+  const root = await mkdtemp(join(baseDirectory, "cadence-frontend-release-check-"));
   const assets = join(root, "assets");
   await mkdir(assets, { recursive: true });
 
@@ -116,8 +116,8 @@ async function makeFixture() {
   return root;
 }
 
-async function withFixture(callback) {
-  const root = await makeFixture();
+async function withFixture(callback, baseDirectory = tmpdir()) {
+  const root = await makeFixture(baseDirectory);
   try {
     return await callback(root);
   } finally {
@@ -134,6 +134,13 @@ void test("accepts the complete release reference closure, including comments an
     const result = await validateReleaseOutput(root, repositoryRoot);
     assert.equal(result.fileCount > 0, true);
   });
+});
+
+void test("resolves the actual Cadence repository root from the shared tools path", async () => {
+  await withFixture(async (root) => {
+    const result = await validateReleaseOutput(root);
+    assert.equal(result.fileCount > 0, true);
+  }, dirname(repositoryRoot));
 });
 
 void test("scans quoted and unquoted references while keeping query and fragment URLs on the current document", async () => {
@@ -194,7 +201,7 @@ void test("rejects repository overlap in both directions after canonicalizing sy
     /outside the repository/,
   );
 
-  const linkRoot = await mkdtemp(join(tmpdir(), "cadence-comms-release-link-"));
+  const linkRoot = await mkdtemp(join(tmpdir(), "cadence-frontend-release-link-"));
   const link = join(linkRoot, "repository-link");
   try {
     await symlink(repositoryRoot, link, "dir");

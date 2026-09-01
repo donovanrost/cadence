@@ -3,7 +3,7 @@ import { readFile, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repositoryRoot = resolve(import.meta.dirname, "../../..");
+const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
