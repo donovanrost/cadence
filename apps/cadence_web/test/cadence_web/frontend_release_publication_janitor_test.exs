@@ -97,22 +97,25 @@ defmodule CadenceWeb.FrontendReleasePublicationJanitorTest do
     digest = :crypto.hash(:sha256, seed) |> Base.encode16(case: :lower)
     bytes = seed <> "-bytes"
 
-    Repo.query!(
-      """
-      INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
-      VALUES ($1, $2, now() - interval '1 hour', now())
-      """,
-      [digest, byte_size(bytes)]
-    )
+    {:ok, _} =
+      Repo.transaction(fn ->
+        Repo.query!(
+          """
+          INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
+          VALUES ($1, $2, now() - interval '1 hour', now())
+          """,
+          [digest, byte_size(bytes)]
+        )
 
-    Repo.query!(
-      """
-      INSERT INTO frontend_release_staged_object_chunks
-        (sha256, chunk_index, bytes, size, inserted_at)
-      VALUES ($1, 0, $2, $3, now())
-      """,
-      [digest, bytes, byte_size(bytes)]
-    )
+        Repo.query!(
+          """
+          INSERT INTO frontend_release_staged_object_chunks
+            (sha256, chunk_index, bytes, size, inserted_at)
+          VALUES ($1, 0, $2, $3, now())
+          """,
+          [digest, bytes, byte_size(bytes)]
+        )
+      end)
 
     digest
   end

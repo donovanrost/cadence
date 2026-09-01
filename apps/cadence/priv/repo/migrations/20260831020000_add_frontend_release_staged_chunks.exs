@@ -1,6 +1,9 @@
 defmodule Cadence.Repo.Migrations.AddFrontendReleaseStagedChunks do
   use Ecto.Migration
 
+  @max_object_size 100_000_000
+  @max_chunk_size 1_048_576
+
   def up do
     alter table(:frontend_release_objects) do
       modify(:bytes, :binary, null: true)
@@ -190,69 +193,96 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseStagedChunks do
   defp restore_chunk_backed_bytes do
     migration_repo = repo()
 
-    %{rows: objects} =
-      migration_repo.query!("""
+    Ecto.Adapters.SQL.stream(
+      migration_repo,
+      """
       SELECT sha256, size
       FROM frontend_release_objects
       WHERE bytes IS NULL
       ORDER BY sha256
-      """)
-
-    Enum.each(objects, &restore_chunk_backed_object(migration_repo, &1))
+      """,
+      [],
+      max_rows: 1
+    )
+    |> Stream.flat_map(&stream_rows/1)
+    |> Enum.each(&restore_chunk_backed_object(migration_repo, &1))
   end
 
   defp restore_chunk_backed_object(migration_repo, [sha256, size]) do
-    unless is_binary(sha256) and is_integer(size) and size >= 0 and size <= 100_000_000 do
+    unless is_binary(sha256) and is_integer(size) and size >= 0 and size <= @max_object_size do
       migration_failure!(sha256, :invalid_object_metadata)
     end
 
-    %{rows: chunks} =
-      migration_repo.query!("""
-      SELECT chunk_index, bytes, size
-      FROM frontend_release_object_chunks
-      WHERE sha256 = $1
-      ORDER BY chunk_index
-      """, [sha256])
-
-    {total_size, hash_state, parts} =
-      Enum.reduce(Enum.with_index(chunks), {0, :crypto.hash_init(:sha256), []}, fn
-        {[chunk_index, bytes, chunk_size], expected_index}, {total_size, hash_state, parts}
+    {total_size, hash_state, _next_chunk_index} =
+      Ecto.Adapters.SQL.stream(
+        migration_repo,
+        """
+        SELECT chunk_index, bytes, size
+        FROM frontend_release_object_chunks
+        WHERE sha256 = $1
+        ORDER BY chunk_index
+        """,
+        [sha256],
+        max_rows: 1
+      )
+      |> Stream.flat_map(&stream_rows/1)
+      |> Enum.reduce({0, :crypto.hash_init(:sha256), 0}, fn
+        [chunk_index, bytes, chunk_size], {total_size, hash_state, expected_index}
         when chunk_index == expected_index and is_binary(bytes) and is_integer(chunk_size) and
-               chunk_size > 0 and chunk_size <= 1_048_576 and byte_size(bytes) == chunk_size ->
+               chunk_size > 0 and chunk_size <= @max_chunk_size and
+               byte_size(bytes) == chunk_size ->
           next_size = total_size + chunk_size
 
-          if next_size > 100_000_000 do
+          if next_size > @max_object_size do
             migration_failure!(sha256, :object_too_large)
           end
 
-          {next_size, :crypto.hash_update(hash_state, bytes), [bytes | parts]}
+          {next_size, :crypto.hash_update(hash_state, bytes), expected_index + 1}
 
         _invalid_chunk, _accumulator ->
           migration_failure!(sha256, :invalid_or_noncontiguous_chunk)
       end)
 
-    bytes = IO.iodata_to_binary(Enum.reverse(parts))
-
-    if total_size != size or byte_size(bytes) != size or digest_hex(:crypto.hash_final(hash_state)) != sha256 do
+    if total_size != size or digest_hex(:crypto.hash_final(hash_state)) != sha256 do
       migration_failure!(sha256, :incomplete_or_digest_mismatched_chunks)
     end
 
-    case migration_repo.query!("""
-         UPDATE frontend_release_objects
-         SET bytes = $2
-         WHERE sha256 = $1 AND bytes IS NULL
-         """, [sha256, bytes]) do
-      %{num_rows: 1} -> :ok
-      _result -> migration_failure!(sha256, :object_restore_not_applied)
+    case migration_repo.query!(
+           """
+           UPDATE frontend_release_objects
+           SET bytes = COALESCE(
+             (
+               SELECT string_agg(chunk.bytes, ''::bytea ORDER BY chunk.chunk_index)
+               FROM frontend_release_object_chunks AS chunk
+               WHERE chunk.sha256 = frontend_release_objects.sha256
+             ),
+             ''::bytea
+           )
+           WHERE sha256 = $1 AND bytes IS NULL
+           RETURNING octet_length(bytes)
+           """,
+           [sha256]
+         ) do
+      %{num_rows: 1, rows: [[^size]]} ->
+        :ok
+
+      %{num_rows: 1, rows: [[_persisted_size]]} ->
+        migration_failure!(sha256, :object_restore_length_mismatch)
+
+      _result ->
+        migration_failure!(sha256, :object_restore_not_applied)
     end
   end
 
   defp restore_chunk_backed_object(_migration_repo, invalid_object),
     do: migration_failure!(inspect(invalid_object), :invalid_object_row)
 
+  defp stream_rows(%{rows: rows}) when is_list(rows), do: rows
+  defp stream_rows(_result), do: migration_failure!(:stream, :invalid_stream_result)
+
   defp migration_failure!(sha256, reason) do
     raise Ecto.MigrationError,
-      "cannot restore frontend release object #{inspect(sha256)}: #{reason}"
+          "cannot restore frontend release object #{inspect(sha256)}: #{reason}"
   end
 
   defp digest_hex(bytes), do: Base.encode16(bytes, case: :lower)
