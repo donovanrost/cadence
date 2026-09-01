@@ -284,6 +284,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
          true <-
            row.signed_document_digest == FrontendReleaseCatalog.digest(expected_document_bytes),
          :ok <- release_identity_matches?(row, release),
+         :ok <- release_security_metadata_matches?(row, envelope, release),
          :ok <- release_manifest_matches?(row, release),
          {:ok, artifacts} <- reread_artifacts(row, release, path) do
       {:ok,
@@ -322,8 +323,31 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     row.remote_name == release["remoteName"] and
       row.exposed_module == release["exposedModule"] and
       row.artifact_base_url == release["artifactBaseUrl"] and
-      row.signing_role == "release" and row.artifact_count == length(release["artifacts"])
+      row.artifact_count == length(release["artifacts"])
   end
+
+  defp release_security_metadata_matches?(row, envelope, release) do
+    if row.signing_key_id == envelope["keyId"] and
+         row.signing_role == envelope["signingRole"] and
+         row.released_at == persisted_release_datetime(release["releasedAt"]) and
+         row.provenance == release["provenance"] do
+      :ok
+    else
+      {:error, :integrity}
+    end
+  end
+
+  defp persisted_release_datetime(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} ->
+        DateTime.from_unix!(DateTime.to_unix(datetime, :microsecond), :microsecond)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp persisted_release_datetime(_value), do: nil
 
   defp release_manifest_matches?(row, release) do
     manifest = release["manifest"]

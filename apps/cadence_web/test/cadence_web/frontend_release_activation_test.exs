@@ -23,6 +23,17 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     "mf-manifest.json" => "manifest-bytes"
   }
 
+  @fixture_cleanup_tables [
+    "frontend_release_activation_requests",
+    "frontend_release_catalog_bindings",
+    "frontend_release_catalog_generations",
+    "frontend_release_catalog_publications",
+    "frontend_release_artifacts",
+    "frontend_release_publications",
+    "frontend_release_objects",
+    "frontend_release_activation_controls"
+  ]
+
   setup do
     previous = Process.get({FrontendReleasePublication, :publication_config}, :not_configured)
     Process.put({FrontendReleasePublication, :publication_config}, @config)
@@ -279,6 +290,30 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              """).rows
   end
 
+  test "tampered persisted signing key rejects activation without partial writes" do
+    assert_tampered_release_rejected!(
+      :signing_key_id,
+      fn _release -> "tampered-release-key" end,
+      "activation-tampered-signing-key"
+    )
+  end
+
+  test "tampered persisted release time rejects activation without partial writes" do
+    assert_tampered_release_rejected!(
+      :released_at,
+      fn _release -> ~U[2026-09-01 18:00:00Z] end,
+      "activation-tampered-released-at"
+    )
+  end
+
+  test "tampered persisted provenance rejects activation without partial writes" do
+    assert_tampered_release_rejected!(
+      :provenance,
+      fn release -> Map.put(release["provenance"], "buildId", "tampered-build") end,
+      "activation-tampered-provenance"
+    )
+  end
+
   test "promotion and rollback use exact predecessor pairs" do
     {_document, _payload, first_release} = admit_release!(@artifact_bytes, "activation-first")
     first_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", first_release, nil)
@@ -408,6 +443,90 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
   end
 
+  test "fixture cleanup restores exact prior trigger states" do
+    {document, _payload, release} = release_document(@artifact_bytes, "activation-trigger-state")
+    release_id = release["releaseId"]
+
+    run_unboxed_task!(fn ->
+      assert {:ok, %ReleasePublication{}} =
+               FrontendReleasePublication.admit_release(document, @artifact_bytes,
+                 now: @now,
+                 publication_config: @config
+               )
+    end)
+
+    try do
+      before =
+        run_unboxed_task!(fn ->
+          Repo.query!("""
+          ALTER TABLE frontend_release_publications
+          DISABLE TRIGGER frontend_release_publications_append_only
+          """)
+
+          trigger_states!("frontend_release_publications")
+        end)
+
+      cleanup_committed_release_fixture!(release_id)
+
+      after_cleanup =
+        run_unboxed_task!(fn -> trigger_states!("frontend_release_publications") end)
+
+      assert after_cleanup == before
+    after
+      run_unboxed_task!(fn ->
+        Repo.query!("""
+        ALTER TABLE frontend_release_publications
+        ENABLE TRIGGER frontend_release_publications_append_only
+        """)
+      end)
+
+      cleanup_committed_release_fixture!(release_id)
+    end
+  end
+
+  test "fixture cleanup restores exact prior trigger states after partial disable failure" do
+    {document, _payload, release} =
+      release_document(@artifact_bytes, "activation-trigger-failure")
+
+    release_id = release["releaseId"]
+
+    run_unboxed_task!(fn ->
+      assert {:ok, %ReleasePublication{}} =
+               FrontendReleasePublication.admit_release(document, @artifact_bytes,
+                 now: @now,
+                 publication_config: @config
+               )
+    end)
+
+    try do
+      before =
+        run_unboxed_task!(fn -> trigger_states!("frontend_release_publications") end)
+
+      assert {:error, %Postgrex.Error{}} =
+               run_unboxed_task!(fn ->
+                 try do
+                   with_disabled_triggers!(
+                     ["frontend_release_publications"],
+                     fn -> :unexpected_success end,
+                     disable_tables: [
+                       "frontend_release_publications",
+                       "frontend_release_missing_for_partial_disable"
+                     ]
+                   )
+                 rescue
+                   error in Postgrex.Error -> {:error, error}
+                 end
+               end)
+
+      after_failure =
+        run_unboxed_task!(fn -> trigger_states!("frontend_release_publications") end)
+
+      assert after_failure == before
+    after
+      cleanup_committed_release_fixture!(release_id)
+    end
+  end
+
   defp activate(document, key) do
     FrontendReleaseActivation.activate_catalog(document, key,
       now: @now,
@@ -449,6 +568,72 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     Enum.map(tasks, &Task.await(&1, 30_000))
   end
 
+  defp assert_tampered_release_rejected!(field, tampered_value, build_id) do
+    with_committed_release_fixture!(@artifact_bytes, build_id, fn release ->
+      snapshot_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+      document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, snapshot_digest)
+
+      tamper_release_publication!(release["releaseId"], field, tampered_value.(release))
+
+      assert {:error, %{status: 500, body: ~s({"error":{"code":"integrity_failure"}})}} =
+               activate(document, "tampered-" <> Atom.to_string(field))
+
+      assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
+      assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 0
+      assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 0
+      assert Repo.aggregate(Request, :count, :request_id) == 0
+      assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+
+      assert [[0, nil]] =
+               Repo.query!("""
+               SELECT cutover_epoch, legacy_catalog_publication_id
+               FROM frontend_release_activation_controls
+               WHERE control_id = 1
+               """).rows
+    end)
+  end
+
+  defp tamper_release_publication!(release_id, field, value) do
+    run_unboxed_task!(fn ->
+      with_disabled_triggers!(["frontend_release_publications"], fn ->
+        update_tampered_release_field!(release_id, field, value)
+      end)
+    end)
+  end
+
+  defp update_tampered_release_field!(release_id, :signing_key_id, value) do
+    Repo.query!(
+      """
+      UPDATE frontend_release_publications
+      SET signing_key_id = $1
+      WHERE release_id = $2
+      """,
+      [value, release_id]
+    )
+  end
+
+  defp update_tampered_release_field!(release_id, :released_at, value) do
+    Repo.query!(
+      """
+      UPDATE frontend_release_publications
+      SET released_at = $1::timestamptz
+      WHERE release_id = $2
+      """,
+      [value, release_id]
+    )
+  end
+
+  defp update_tampered_release_field!(release_id, :provenance, value) do
+    Repo.query!(
+      """
+      UPDATE frontend_release_publications
+      SET provenance = $1::jsonb
+      WHERE release_id = $2
+      """,
+      [value, release_id]
+    )
+  end
+
   defp with_committed_release_fixture!(bytes_by_path, build_id, fun) do
     {document, _payload, release} = release_document(bytes_by_path, build_id)
     release_id = release["releaseId"]
@@ -481,7 +666,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     |> Task.await(30_000)
   end
 
-  defp cleanup_committed_release_fixture!(release_id) do
+  defp cleanup_committed_release_fixture!(release_id, opts \\ []) do
     run_unboxed_task!(fn ->
       catalog_ids =
         Repo.query!(
@@ -532,90 +717,127 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         ).rows
         |> Enum.map(&List.first/1)
 
-      tables = [
-        "frontend_release_activation_requests",
-        "frontend_release_catalog_bindings",
-        "frontend_release_catalog_generations",
-        "frontend_release_catalog_publications",
-        "frontend_release_artifacts",
-        "frontend_release_publications",
-        "frontend_release_objects",
-        "frontend_release_activation_controls"
-      ]
+      tables = Keyword.get(opts, :trigger_tables, @fixture_cleanup_tables)
+      disable_tables = Keyword.get(opts, :disable_tables, tables)
 
-      Enum.each(tables, &Repo.query!("ALTER TABLE #{&1} DISABLE TRIGGER ALL"))
+      with_disabled_triggers!(
+        tables,
+        fn ->
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_activation_requests
+            WHERE catalog_publication_id = ANY($1::text[])
+               OR generation_id = ANY($2::text[])
+            """,
+            [catalog_ids, generation_ids]
+          )
 
-      try do
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_activation_requests
-          WHERE catalog_publication_id = ANY($1::text[])
-             OR generation_id = ANY($2::text[])
-          """,
-          [catalog_ids, generation_ids]
-        )
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_catalog_bindings
+            WHERE generation_id = ANY($1::text[])
+            """,
+            [generation_ids]
+          )
 
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_catalog_bindings
-          WHERE generation_id = ANY($1::text[])
-          """,
-          [generation_ids]
-        )
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_catalog_generations
+            WHERE generation_id = ANY($1::text[])
+            """,
+            [generation_ids]
+          )
 
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_catalog_generations
-          WHERE generation_id = ANY($1::text[])
-          """,
-          [generation_ids]
-        )
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_catalog_publications
+            WHERE publication_id = ANY($1::text[])
+            """,
+            [catalog_ids]
+          )
 
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_catalog_publications
-          WHERE publication_id = ANY($1::text[])
-          """,
-          [catalog_ids]
-        )
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_artifacts
+            WHERE release_publication_id = ANY($1::text[])
+            """,
+            [publication_ids]
+          )
 
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_artifacts
-          WHERE release_publication_id = ANY($1::text[])
-          """,
-          [publication_ids]
-        )
+          Repo.query!("DELETE FROM frontend_release_publications WHERE release_id = $1", [
+            release_id
+          ])
 
-        Repo.query!("DELETE FROM frontend_release_publications WHERE release_id = $1", [
-          release_id
-        ])
+          Repo.query!(
+            """
+            DELETE FROM frontend_release_objects AS object
+            WHERE object.sha256 = ANY($1::text[])
+              AND NOT EXISTS (
+                SELECT 1
+                FROM frontend_release_artifacts AS artifact
+                WHERE artifact.sha256 = object.sha256
+              )
+            """,
+            [object_digests]
+          )
 
-        Repo.query!(
-          """
-          DELETE FROM frontend_release_objects AS object
-          WHERE object.sha256 = ANY($1::text[])
-            AND NOT EXISTS (
-              SELECT 1
-              FROM frontend_release_artifacts AS artifact
-              WHERE artifact.sha256 = object.sha256
-            )
-          """,
-          [object_digests]
-        )
-
-        Repo.query!("""
-        UPDATE frontend_release_activation_controls
-        SET cutover_epoch = 0, cutover_at = NULL, legacy_catalog_publication_id = NULL
-        WHERE control_id = 1
-          AND cutover_epoch = 1
-          AND NOT EXISTS (SELECT 1 FROM frontend_release_catalog_generations)
-        """)
-      after
-        Enum.each(tables, &Repo.query!("ALTER TABLE #{&1} ENABLE TRIGGER ALL"))
-      end
+          Repo.query!("""
+          UPDATE frontend_release_activation_controls
+          SET cutover_epoch = 0, cutover_at = NULL, legacy_catalog_publication_id = NULL
+          WHERE control_id = 1
+            AND cutover_epoch = 1
+            AND NOT EXISTS (SELECT 1 FROM frontend_release_catalog_generations)
+          """)
+        end,
+        disable_tables: disable_tables
+      )
     end)
   end
+
+  defp with_disabled_triggers!(tables, fun, opts \\ []) do
+    trigger_states = Enum.map(tables, &{&1, trigger_states!(&1)})
+    disable_tables = Keyword.get(opts, :disable_tables, tables)
+
+    try do
+      Enum.each(disable_tables, fn table ->
+        Repo.query!("ALTER TABLE #{quote_identifier(table)} DISABLE TRIGGER ALL")
+      end)
+
+      fun.()
+    after
+      restore_trigger_states!(trigger_states)
+    end
+  end
+
+  defp trigger_states!(table) do
+    Repo.query!(
+      """
+      SELECT tgname, tgenabled::text
+      FROM pg_trigger
+      WHERE tgrelid = to_regclass($1::text)
+      ORDER BY tgname
+      """,
+      [table]
+    ).rows
+    |> Enum.map(fn [name, state] -> {name, state} end)
+  end
+
+  defp restore_trigger_states!(trigger_states) do
+    Enum.each(trigger_states, fn {table, states} ->
+      Enum.each(states, fn {name, state} ->
+        Repo.query!(
+          "ALTER TABLE #{quote_identifier(table)} #{trigger_state_sql(state)} #{quote_identifier(name)}"
+        )
+      end)
+    end)
+  end
+
+  defp trigger_state_sql("O"), do: "ENABLE TRIGGER"
+  defp trigger_state_sql("D"), do: "DISABLE TRIGGER"
+  defp trigger_state_sql("R"), do: "ENABLE REPLICA TRIGGER"
+  defp trigger_state_sql("A"), do: "ENABLE ALWAYS TRIGGER"
+
+  defp quote_identifier(value), do: ~s("#{String.replace(value, "\"", "\"\"")}")
 
   defp assert_immutable_row!(table, key_column, key) do
     assert_raise Postgrex.Error, fn ->
