@@ -7,9 +7,9 @@
     "dev": "vp dev --host 127.0.0.1 --port 4176 --strictPort",
     "build": "vue-tsc -b && vp build",
     "build:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && vue-tsc -b && vp build --mode release --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\"",
-    "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node release-build-check.mjs \"$CADENCE_RELEASE_OUTPUT_DIR\"",
+    "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node release-build-check.mjs --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\"",
     "preview": "vp preview --host 127.0.0.1 --port 4176 --strictPort",
-    "test": "vp test --run"
+    "test": "node --test release-build-check.test.mjs && vp test --run --exclude release-build-check.test.mjs"
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",
