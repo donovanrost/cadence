@@ -1,6 +1,9 @@
 defmodule CadenceWeb.FrontendReleaseActivationTest do
   use Cadence.DataCase, async: false
 
+  import Phoenix.ConnTest
+  import Plug.Conn
+
   alias Ecto.Adapters.SQL.Sandbox
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
@@ -15,11 +18,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   alias CadenceWeb.TestFixtures
 
   @fixture Path.expand("../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
+  @endpoint CadenceWeb.Endpoint
   @corpus @fixture |> File.read!() |> Jason.decode!()
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
   @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @origin "https://cdn.example.com"
   @now "2026-09-01T19:00:00Z"
+  @host_catalog_suffix "/api/cadence/application-host/v1/missions"
   @config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
   @artifact_bytes %{
     "assets/app.js" => "app-bytes",
@@ -150,6 +155,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
       assert entry == %{
                federation: :module_federation,
+               package_id: release["package"]["id"],
+               package_version: release["package"]["version"],
                release_id: release["releaseId"],
                remote_name: release["remoteName"],
                manifest_path:
@@ -170,6 +177,173 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:error, :no_history} =
              ApplicationReleaseRegistry.fetch("missing_application", 1, "missing_surface", 1)
+  end
+
+  test "post-cutover default admission scans to the valid telemetry surface and builds its catalog" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-default-scan")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-default-scan-key")
+
+    {scope, route_context} = installed_telemetry_context()
+
+    assert {:ok, admission} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom"
+             )
+
+    assert admission.surface.surface_id == "packet_bindings"
+    assert admission.release.package_id == "cadence.telemetry-applications"
+    assert admission.release.package_version == 1
+
+    assert {:ok, catalog} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "reader-default-scan-session",
+               csrf_token: "reader-default-scan-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end
+             )
+
+    assert [application] = catalog["applications"]
+    assert application["applicationKey"] == "telemetry_decom"
+    assert application["surface"]["surfaceId"] == "packet_bindings"
+    assert application["release"]["releaseId"] == release["releaseId"]
+  end
+
+  test "post-cutover installed admission rejects a release with a mismatched package" do
+    {_document, _payload, release} =
+      admit_release!(
+        @artifact_bytes,
+        "reader-package-mismatch-installed",
+        package: %{"id" => "cadence.untrusted-package", "version" => 1}
+      )
+
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-installed-key")
+
+    {scope, route_context} = installed_telemetry_context()
+
+    assert {:error, :application_unavailable} =
+             ApplicationHostCatalog.admit_application(scope, route_context, "telemetry_decom")
+  end
+
+  test "post-cutover contributed admission requires its exact package identity" do
+    {_document, _payload, release} =
+      admit_release!(
+        @artifact_bytes,
+        "reader-package-mismatch-contributed",
+        application: %{"id" => "comms_overview", "version" => 1},
+        package: %{"id" => "cadence.comms_overview", "version" => 1},
+        surface: %{"id" => "overview", "version" => 1}
+      )
+
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-contributed-key")
+
+    {scope, route_context} = installed_comms_context()
+
+    assert {:ok, admission} =
+             ApplicationHostCatalog.admit_application(scope, route_context, "comms_overview")
+
+    assert admission.package == %{package_id: "cadence.comms_overview", version: 1}
+    assert admission.release.package_id == "cadence.comms_overview"
+    assert admission.release.package_version == 1
+  end
+
+  test "post-cutover authoritative artifact paths remain readable by the registry" do
+    bytes = %{
+      "assets/app..js" => "app-bytes",
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    {_document, _payload, release} = admit_release!(bytes, "reader-artifact-path-parity")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-artifact-path-parity-key")
+
+    assert {:ok, _release} =
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+  end
+
+  test "post-cutover no_history is sanitized for catalog, registered query, and action paths" do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization, mission_id: "reader-no-history-mission")
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    member_conn = TestFixtures.member_conn(user)
+    catalog_conn = get(member_conn, catalog_path(mission.mission_id))
+    catalog = json_response(catalog_conn, 200)
+
+    scope_document =
+      ApplicationHostCatalog.scope_document(scope, %{
+        host_context: HostContext.mission(mission.mission_id)
+      })
+
+    {_document, _payload, release} =
+      admit_release!(@artifact_bytes, "reader-no-history-controller")
+
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+    assert {:ok, %{status: 201}} = activate(document, "reader-no-history-controller-key")
+
+    catalog_response = get(member_conn, catalog_path(mission.mission_id))
+
+    query_response =
+      post_host_bridge(catalog_conn, catalog, query_path(mission.mission_id), %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "version" => 1,
+        "scope" => scope_document
+      })
+
+    action_response =
+      post_host_bridge(
+        catalog_conn,
+        catalog,
+        actions_path(mission.mission_id),
+        %{
+          "applicationKey" => "comms_overview",
+          "applicationVersion" => 1,
+          "actionId" => "anything",
+          "input" => %{},
+          "scope" => scope_document
+        },
+        "reader-no-history-action"
+      )
+
+    for response <- [catalog_response, query_response, action_response] do
+      assert %{
+               "schema" => "cadence.application-host-problem.v1",
+               "code" => "application_unavailable",
+               "message" => "The requested application is not available in this scope."
+             } = json_response(response, 404)
+
+      refute response.resp_body =~ "no_history"
+      refute response.resp_body =~ "database_unavailable"
+      refute response.resp_body =~ "integrity_failure"
+    end
   end
 
   test "host catalog propagates database no_history for a missing default surface" do
@@ -753,6 +927,34 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end
 
+  defp installed_telemetry_context do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission)
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "telemetry_decom")
+
+    {scope,
+     %{
+       host_context: host_context,
+       mission: mission,
+       spacecraft: spacecraft
+     }}
+  end
+
   defp concurrently(functions) do
     parent = self()
 
@@ -1077,8 +1279,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end
   end
 
-  defp admit_release!(bytes_by_path, build_id) do
-    {document, payload, release} = release_document(bytes_by_path, build_id)
+  defp admit_release!(bytes_by_path, build_id, opts \\ []) do
+    {document, payload, release} =
+      release_document(bytes_by_path, build_id, "2026-09-01T17:00:00Z", opts)
 
     assert {:ok, %ReleasePublication{}} =
              FrontendReleasePublication.admit_release(document, bytes_by_path, now: @now)
@@ -1173,8 +1376,16 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     Repo.insert!(CatalogPublication.changeset(attrs))
   end
 
-  defp release_document(bytes_by_path, build_id, released_at \\ "2026-09-01T17:00:00Z") do
-    base = Jason.decode!(@corpus["release"]["payload"])
+  defp release_document(
+         bytes_by_path,
+         build_id,
+         released_at \\ "2026-09-01T17:00:00Z",
+         opts \\ []
+       ) do
+    base =
+      @corpus["release"]["payload"]
+      |> Jason.decode!()
+      |> apply_release_options(opts)
 
     artifacts =
       bytes_by_path
@@ -1201,6 +1412,42 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     {sign_fixture(payload, "fixture-release-key", "release", @release_seed) |> canonical(),
      payload, release}
+  end
+
+  defp apply_release_options(release, opts) do
+    Enum.reduce([:application, :package, :surface], release, fn key, release ->
+      case Keyword.fetch(opts, key) do
+        {:ok, value} -> Map.put(release, Atom.to_string(key), value)
+        :error -> release
+      end
+    end)
+  end
+
+  defp catalog_path(mission_id),
+    do: @host_catalog_suffix <> "/" <> mission_id <> "/catalog"
+
+  defp query_path(mission_id),
+    do: @host_catalog_suffix <> "/" <> mission_id <> "/query"
+
+  defp actions_path(mission_id),
+    do: @host_catalog_suffix <> "/" <> mission_id <> "/actions"
+
+  defp post_host_bridge(conn, catalog, path, body, idempotency_key \\ nil) do
+    conn =
+      conn
+      |> recycle()
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("x-cadence-poc-session", catalog["session"]["sessionId"])
+      |> put_req_header("x-csrf-token", catalog["session"]["csrfToken"])
+
+    conn =
+      if idempotency_key do
+        put_req_header(conn, "idempotency-key", idempotency_key)
+      else
+        conn
+      end
+
+    post(conn, path, Jason.encode!(body))
   end
 
   defp release_envelope(release),

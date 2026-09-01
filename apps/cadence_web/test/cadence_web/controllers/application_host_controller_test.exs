@@ -386,7 +386,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   end
 
   test "post-cutover missing-generation catalog failure is a sanitized service-unavailable response" do
-    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+    {member_conn, organization, mission, _scope} = signed_in_scope_and_mission()
+    {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
+    valid_scope = scope_document(organization, mission)
 
     assert [[1]] =
              Repo.query!("""
@@ -396,16 +398,45 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              RETURNING cutover_epoch
              """).rows
 
-    response = get(member_conn, catalog_path(mission.mission_id))
+    catalog_response = get(member_conn, catalog_path(mission.mission_id))
 
-    assert %{
-             "schema" => "cadence.application-host-problem.v1",
-             "code" => "application_catalog_unavailable",
-             "message" => "The application catalog is temporarily unavailable."
-           } = json_response(response, 503)
+    query_response =
+      post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms_overview",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "version" => 1,
+        "scope" => valid_scope
+      })
 
-    assert get_resp_header(response, "cache-control") == ["no-store"]
-    refute response.resp_body =~ "integrity_failure"
+    action_response =
+      post_bridge(
+        catalog,
+        catalog_conn,
+        mission.mission_id,
+        %{
+          "applicationKey" => "comms_overview",
+          "applicationVersion" => 1,
+          "actionId" => "anything",
+          "input" => %{},
+          "scope" => valid_scope
+        },
+        :actions
+      )
+
+    for response <- [catalog_response, query_response, action_response] do
+      assert %{
+               "schema" => "cadence.application-host-problem.v1",
+               "code" => "application_catalog_unavailable",
+               "message" => "The application catalog is temporarily unavailable."
+             } = json_response(response, 503)
+
+      assert get_resp_header(response, "cache-control") == ["no-store"]
+      refute response.resp_body =~ "integrity_failure"
+      refute response.resp_body =~ "active_generation_missing"
+    end
   end
 
   defp signed_in_scope_and_mission do

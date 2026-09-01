@@ -482,8 +482,8 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   defp valid_release_delivery?(release) do
     release["transport"] == "module_federation" and
-      valid_token?(release["remoteName"]) and
-      valid_token?(release["exposedModule"]) and
+      valid_identifier?(release["remoteName"]) and
+      valid_exposed_module?(release["exposedModule"]) and
       valid_artifact_base_url?(release["artifactBaseUrl"], release) and
       valid_artifact_state?(release["manifest"], release["artifacts"])
   end
@@ -555,14 +555,19 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   defp valid_artifact_path?(value) when is_binary(value) do
     byte_size(value) > 0 and byte_size(value) <= 256 and String.valid?(value) and
-      not String.starts_with?(value, "/") and not String.contains?(value, "..") and
-      not String.contains?(value, "//")
+      not String.starts_with?(value, "/") and not String.contains?(value, "\\") and
+      Enum.all?(String.split(value, "/"), &(&1 not in ["", ".", ".."]))
   end
 
   defp valid_artifact_path?(_value), do: false
 
-  defp valid_media_type?(value) when is_binary(value),
-    do: byte_size(value) > 0 and byte_size(value) <= 128 and String.contains?(value, "/")
+  defp valid_media_type?(value) when is_binary(value) do
+    byte_size(value) <= 128 and String.valid?(value) and
+      Regex.match?(
+        ~r/^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}$/,
+        value
+      )
+  end
 
   defp valid_media_type?(_value), do: false
 
@@ -590,18 +595,12 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
       "workflow",
       "builtAt"
     ]) and
-      Enum.all?(
-        Map.take(provenance, [
-          "sourceRepository",
-          "sourceRevision",
-          "buildId",
-          "builder",
-          "workflow"
-        ]),
-        fn
-          {_key, value} -> valid_token?(value)
-        end
-      ) and valid_timestamp_string?(provenance["builtAt"])
+      valid_https_url?(provenance["sourceRepository"]) and
+      valid_source_revision?(provenance["sourceRevision"]) and
+      valid_token?(provenance["buildId"]) and
+      valid_token?(provenance["builder"]) and
+      valid_token?(provenance["workflow"]) and
+      valid_timestamp_string?(provenance["builtAt"])
   end
 
   defp valid_provenance?(_provenance), do: false
@@ -640,17 +639,74 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   defp valid_token?(_value), do: false
 
   defp valid_identifier?(value) when is_binary(value) do
-    byte_size(value) > 0 and byte_size(value) <= 128 and
-      Regex.match?(~r/^[A-Za-z0-9][A-Za-z0-9_.-]*$/, value)
+    byte_size(value) <= 128 and String.valid?(value) and
+      Regex.match?(~r/^[a-z][a-z0-9._-]{0,127}$/, value)
   end
 
   defp valid_identifier?(_value), do: false
 
-  defp valid_timestamp_string?(value) when is_binary(value) do
-    case DateTime.from_iso8601(value) do
-      {:ok, _datetime, 0} -> true
-      _ -> false
+  defp valid_exposed_module?(value) when is_binary(value) do
+    byte_size(value) <= 512 and String.valid?(value) and
+      Regex.match?(~r/^\.[\/][A-Za-z][A-Za-z0-9._-]{0,127}$/, value)
+  end
+
+  defp valid_exposed_module?(_value), do: false
+
+  defp valid_source_revision?(value) when is_binary(value),
+    do: Regex.match?(~r/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/, value)
+
+  defp valid_source_revision?(_value), do: false
+
+  defp valid_https_url?(value) when is_binary(value) do
+    byte_size(value) <= 512 and String.valid?(value) and
+      not Enum.any?(String.to_charlist(value), &(&1 <= 0x20)) and
+      not Enum.any?(["\\", "%", "?", "#"], &String.contains?(value, &1)) and
+      String.starts_with?(value, "https://") and
+      case split_authority_path(binary_part(value, 8, byte_size(value) - 8)) do
+        {authority, path} ->
+          valid_raw_authority?(authority) and (path == "" or String.starts_with?(path, "/"))
+      end
+  end
+
+  defp valid_https_url?(_value), do: false
+
+  defp split_authority_path(rest) do
+    case :binary.match(rest, "/") do
+      :nomatch ->
+        {rest, ""}
+
+      {index, 1} ->
+        {binary_part(rest, 0, index), binary_part(rest, index, byte_size(rest) - index)}
     end
+  end
+
+  defp valid_raw_authority?(authority) do
+    case Regex.run(
+           ~r/^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)(?::([1-9][0-9]{0,4}))?$/,
+           authority,
+           capture: :all_but_first
+         ) do
+      [host] when host != "" ->
+        true
+
+      [host, nil] when host != "" ->
+        true
+
+      [host, port] when host != "" and is_binary(port) ->
+        String.to_integer(port) <= 65_535 and String.to_integer(port) != 443
+
+      _ ->
+        false
+    end
+  end
+
+  defp valid_timestamp_string?(value) when is_binary(value) do
+    byte_size(value) <= 512 and String.valid?(value) and
+      Regex.match?(~r/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/, value) and
+      case DateTime.from_iso8601(value) do
+        {:ok, datetime, 0} -> datetime.year >= 1970 and datetime.year <= 9999
+        _ -> false
+      end
   end
 
   defp valid_timestamp_string?(_value), do: false
@@ -919,11 +975,14 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   defp entry_pair(entry) do
     release = entry.current.release
     identity = entry.identity
+    package = release["package"]
 
     {{identity["application"]["id"], identity["application"]["version"],
       identity["surface"]["id"], identity["surface"]["version"]},
      %{
        federation: :module_federation,
+       package_id: package["id"],
+       package_version: package["version"],
        release_id: release["releaseId"],
        remote_name: release["remoteName"],
        manifest_path:

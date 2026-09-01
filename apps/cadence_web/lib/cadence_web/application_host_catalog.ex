@@ -548,7 +548,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              definition.application_key,
              surface_id,
              release_snapshot
-           ) do
+           ),
+         :ok <- ensure_release_package(release, package_id, package_version) do
       {:ok,
        %{
          definition: definition,
@@ -582,7 +583,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              surface_id,
              release_snapshot
            ),
-         {:ok, package} <- package_for(application_key, application_version) do
+         {:ok, package} <- package_for(application_key, application_version),
+         :ok <- ensure_release_package(release, package.package_id, package.version) do
       {:ok,
        %{
          definition: definition,
@@ -628,9 +630,14 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   defp resolve_surface(definition, placement, application_key, nil, release_snapshot) do
-    definition
-    |> ApplicationRegistry.workspace_surfaces(placement)
-    |> Enum.find_value({:error, :unknown_application_release}, fn surface ->
+    missing_result =
+      case release_snapshot.source do
+        :database -> :no_history
+        :static -> :unknown_application_release
+      end
+
+    ApplicationRegistry.workspace_surfaces(definition, placement)
+    |> Enum.reduce_while({:missing, missing_result}, fn surface, {:missing, missing} ->
       case ApplicationReleaseRegistry.fetch_from_snapshot(
              release_snapshot,
              application_key,
@@ -638,11 +645,15 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              surface.surface_id,
              surface.version
            ) do
-        {:ok, release} -> {:ok, surface, release}
-        {:error, :unknown_application_release} -> nil
-        {:error, :no_history} = error -> error
+        {:ok, release} -> {:halt, {:ok, surface, release}}
+        {:error, :unknown_application_release} -> {:cont, {:missing, missing}}
+        {:error, :no_history} -> {:cont, {:missing, :no_history}}
       end
     end)
+    |> case do
+      {:missing, missing} -> {:error, missing}
+      result -> result
+    end
   end
 
   defp resolve_surface(definition, placement, application_key, surface_id, release_snapshot)
@@ -669,6 +680,22 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       nil -> {:error, :application_unavailable}
     end
   end
+
+  defp ensure_release_package(
+         %{package_id: package_id, package_version: package_version},
+         package_id,
+         package_version
+       ),
+       do: :ok
+
+  defp ensure_release_package(
+         %{package_id: _package_id, package_version: _package_version},
+         _id,
+         _version
+       ),
+       do: {:error, :application_unavailable}
+
+  defp ensure_release_package(_release, _id, _version), do: :ok
 
   defp installed_application_documents(
          installations,

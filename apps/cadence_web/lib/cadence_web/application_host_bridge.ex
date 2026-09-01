@@ -21,11 +21,20 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
   def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
-    with :ok <- validate_request(params) do
-      case HostQueryRegistry.dispatch(current_scope, route_context, params) do
-        :not_handled -> generic_query(current_scope, route_context, params)
-        result -> result
+    result =
+      with :ok <- validate_request(params),
+           {:ok, request} <- query_request(params),
+           {:ok, admission} <- admit_surface(current_scope, route_context, request),
+           :ok <- ensure_query_contract(admission, request) do
+        case HostQueryRegistry.dispatch(current_scope, route_context, params) do
+          :not_handled -> generic_query(current_scope, route_context, request, admission)
+          result -> result
+        end
       end
+
+    case result do
+      {:error, :unknown_surface} -> {:error, :unsupported_application_query}
+      result -> result
     end
   end
 
@@ -50,11 +59,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
   def action(%Scope{}, _route_context, _params, _idempotency_key),
     do: {:error, :invalid_application_request}
 
-  defp generic_query(current_scope, route_context, params) do
-    with {:ok, request} <- query_request(params),
-         {:ok, admission} <- admit_surface(current_scope, route_context, request),
-         :ok <- ensure_query_contract(admission, request),
-         {:ok, document} <-
+  defp generic_query(current_scope, route_context, request, admission) do
+    with {:ok, document} <-
            ApplicationSurfaces.load(
              current_scope,
              route_context.host_context,
