@@ -184,6 +184,9 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       {:ok, publication, outcome} ->
         {:ok, outcome, publication}
 
+      {:error, %DBConnection.ConnectionError{}} ->
+        {:error, :transient_persistence_failure}
+
       {:error, %{code: code}}
       when code in [
              :release_identity_fork,
@@ -195,9 +198,6 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
       {:error, %{code: _code}} ->
         {:error, :admission_rejected}
-
-      {:error, %DBConnection.ConnectionError{}} ->
-        {:error, :transient_persistence_failure}
 
       other ->
         other

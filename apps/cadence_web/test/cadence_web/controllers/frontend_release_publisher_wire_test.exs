@@ -105,20 +105,22 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
   defp raw_request(port, headers, body) do
     {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false], 5_000)
 
-    request = [
-      "POST ",
-      @path,
-      " HTTP/1.1\r\n",
-      Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end),
-      "\r\n",
-      body
-    ]
+    try do
+      request = [
+        "POST ",
+        @path,
+        " HTTP/1.1\r\n",
+        Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end),
+        "\r\n",
+        body
+      ]
 
-    :ok = :gen_tcp.send(socket, request)
-    :ok = :gen_tcp.shutdown(socket, :write)
-    response = recv_headers(socket, <<>>)
-    :ok = :gen_tcp.close(socket)
-    response
+      :ok = :gen_tcp.send(socket, request)
+      :ok = :gen_tcp.shutdown(socket, :write)
+      recv_headers(socket, <<>>)
+    after
+      :gen_tcp.close(socket)
+    end
   end
 
   defp recv_headers(socket, buffer) do

@@ -560,14 +560,14 @@ defmodule CadenceWeb.FrontendReleasePublication do
   end
 
   defp store_and_verify(artifact_specs) do
-    store_artifacts(DatabaseArtifactStore, artifact_specs)
+    store_artifacts(artifact_specs)
   end
 
-  defp store_artifacts(store, artifact_specs) do
+  defp store_artifacts(artifact_specs) do
     Enum.reduce_while(
       artifact_specs,
       {:ok, []},
-      &store_artifact_step(&1, &2, store)
+      &store_artifact_step/2
     )
     |> case do
       {:ok, values} -> {:ok, Enum.reverse(values)}
@@ -575,17 +575,17 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp store_artifact_step(artifact, {:ok, acc}, store) do
-    case store_one_artifact(store, artifact) do
+  defp store_artifact_step(artifact, {:ok, acc}) do
+    case store_one_artifact(artifact) do
       {:ok, stored_artifact} -> {:cont, {:ok, [stored_artifact | acc]}}
       {:error, reason} -> {:halt, {:error, store_error(reason)}}
     end
   end
 
-  defp store_one_artifact(store, artifact) do
+  defp store_one_artifact(artifact) do
     digest_value = "sha256:" <> artifact.sha256
 
-    case safe_store_call(store, :put, [digest_value, artifact.bytes]) do
+    case DatabaseArtifactStore.put(digest_value, artifact.bytes) do
       {:ok, stored} when is_map(stored) ->
         object_key = Map.get(stored, :object_key, Map.get(stored, "object_key"))
         stored_size = Map.get(stored, :size, Map.get(stored, "size"))
@@ -604,20 +604,14 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp safe_store_call(store, function, args) do
-    apply(store, function, args)
-  rescue
-    error -> {:error, {:artifact_store_exception, Exception.message(error)}}
-  catch
-    kind, reason -> {:error, {:artifact_store_throw, kind, reason}}
-  end
-
   defp store_error(:artifact_bytes_mismatch), do: error(:artifact_conflict, "$.artifacts")
   defp store_error(:artifact_digest_mismatch), do: error(:artifact_hash_mismatch, "$.artifacts")
   defp store_error(:artifact_size_mismatch), do: error(:artifact_size_mismatch, "$.artifacts")
   defp store_error(:artifact_too_large), do: error(:artifact_byte_cap_exceeded, "$.artifacts")
   defp store_error(:artifact_not_found), do: error(:artifact_not_found, "$.artifacts")
 
+  defp store_error(%DBConnection.ConnectionError{} = failure), do: failure
+  defp store_error({_operation, %DBConnection.ConnectionError{} = failure}), do: failure
   defp store_error(%{code: _code} = failure), do: failure
   defp store_error(reason), do: error(:artifact_store_failure, inspect(reason))
 

@@ -523,6 +523,22 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     refute function_exported?(FrontendReleasePublication, :delete_catalog, 1)
   end
 
+  test "artifact-store failures retain runtime exception and connection boundaries" do
+    source_path =
+      Path.expand("../../lib/cadence_web/frontend_release_publication.ex", __DIR__)
+
+    source = File.read!(source_path)
+
+    refute source =~ "safe_store_call"
+    refute source =~ "artifact_store_exception"
+    refute source =~ "artifact_store_throw"
+    assert source =~ "case DatabaseArtifactStore.put(digest_value, artifact.bytes) do"
+    assert source =~ "defp store_error(%DBConnection.ConnectionError{} = failure), do: failure"
+
+    assert source =~
+             "defp store_error({_operation, %DBConnection.ConnectionError{} = failure}), do: failure"
+  end
+
   defp assert_sql_rejected(sql, params \\ []) do
     result =
       Repo.transaction(fn ->
