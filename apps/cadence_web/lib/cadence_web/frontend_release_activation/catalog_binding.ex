@@ -42,6 +42,18 @@ defmodule CadenceWeb.FrontendReleaseActivation.CatalogBinding do
     %__MODULE__{}
     |> cast(attrs, @fields)
     |> validate_required(@fields -- [:previous_publication_id, :previous_release_id])
+    |> unique_constraint(
+      [
+        :generation_id,
+        :application_id,
+        :application_version,
+        :package_id,
+        :package_version,
+        :surface_id,
+        :surface_version
+      ],
+      name: :frcb_identity_pkey
+    )
     |> foreign_key_constraint(:generation_id)
     |> foreign_key_constraint(:current_publication_id, name: :frcb_current_release_fk)
     |> foreign_key_constraint(:previous_publication_id, name: :frcb_previous_release_fk)

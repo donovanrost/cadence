@@ -3,6 +3,16 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseManifestMetadata do
 
   @release_table :frontend_release_publications
   @max_manifest_size 100_000_000
+  @envelope_schema "cadence.signed-frontend-document.v1"
+  @envelope_fields [
+    "schema",
+    "keyId",
+    "algorithm",
+    "signingRole",
+    "payloadEncoding",
+    "payload",
+    "signature"
+  ]
 
   def up do
     alter table(@release_table) do
@@ -90,15 +100,35 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseManifestMetadata do
     migration_repo = repo()
 
     migration_repo.query!("""
-    SELECT publication_id, release_id, payload_bytes, payload_digest
+    SELECT publication_id, release_id, signed_document_bytes, signed_document_digest,
+           payload_bytes, payload_digest, signing_key_id, signing_role
     FROM frontend_release_publications
     ORDER BY publication_id
     """).rows
     |> Enum.each(fn row -> backfill_row!(migration_repo, row) end)
   end
 
-  defp backfill_row!(migration_repo, [publication_id, release_id, payload_bytes, payload_digest]) do
-    release = decode_canonical_release!(payload_bytes, payload_digest, publication_id)
+  defp backfill_row!(migration_repo, [
+         publication_id,
+         release_id,
+         signed_document_bytes,
+         signed_document_digest,
+         payload_bytes,
+         payload_digest,
+         signing_key_id,
+         signing_role
+       ]) do
+    release =
+      decode_canonical_release!(
+        signed_document_bytes,
+        signed_document_digest,
+        payload_bytes,
+        payload_digest,
+        signing_key_id,
+        signing_role,
+        publication_id
+      )
+
     manifest = Map.get(release, "manifest")
 
     unless is_map(manifest) and
@@ -165,8 +195,49 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseManifestMetadata do
     end
   end
 
-  defp decode_canonical_release!(payload_bytes, payload_digest, publication_id)
-       when is_binary(payload_bytes) and is_binary(payload_digest) do
+  defp decode_canonical_release!(
+         signed_document_bytes,
+         signed_document_digest,
+         payload_bytes,
+         payload_digest,
+         signing_key_id,
+         signing_role,
+         publication_id
+       )
+       when is_binary(signed_document_bytes) and is_binary(signed_document_digest) and
+              is_binary(payload_bytes) and is_binary(payload_digest) and
+              is_binary(signing_key_id) and is_binary(signing_role) do
+    envelope =
+      decode_signed_release_envelope!(
+        signed_document_bytes,
+        signed_document_digest,
+        signing_key_id,
+        signing_role,
+        publication_id
+      )
+
+    embedded_payload_bytes =
+      decode_base64url!(
+        Map.get(envelope, "payload"),
+        publication_id,
+        :invalid_signed_document_payload
+      )
+
+    signature =
+      decode_base64url!(
+        Map.get(envelope, "signature"),
+        publication_id,
+        :invalid_signed_document_signature
+      )
+
+    if byte_size(signature) != 64 do
+      migration_failure!(publication_id, :invalid_signed_document_signature)
+    end
+
+    if embedded_payload_bytes != payload_bytes do
+      migration_failure!(publication_id, :signed_document_payload_mismatch)
+    end
+
     with {:ok, release} <- Jason.decode(payload_bytes),
          true <- is_map(release),
          true <- canonical_payload?(release, payload_bytes),
@@ -174,12 +245,83 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseManifestMetadata do
          true <- Map.get(release, "schema") == "cadence.first-party-frontend-release.v1" do
       release
     else
+      false -> migration_failure!(publication_id, :noncanonical_release_payload)
       _ -> migration_failure!(publication_id, :noncanonical_release_payload)
     end
   end
 
-  defp decode_canonical_release!(_payload_bytes, _payload_digest, publication_id),
-    do: migration_failure!(publication_id, :invalid_release_payload)
+  defp decode_canonical_release!(
+         _signed_document_bytes,
+         _signed_document_digest,
+         _payload_bytes,
+         _payload_digest,
+         _signing_key_id,
+         _signing_role,
+         publication_id
+       ),
+       do: migration_failure!(publication_id, :invalid_release_payload)
+
+  defp decode_signed_release_envelope!(
+         signed_document_bytes,
+         signed_document_digest,
+         signing_key_id,
+         signing_role,
+         publication_id
+       ) do
+    cond do
+      digest(signed_document_bytes) != signed_document_digest ->
+        migration_failure!(publication_id, :signed_document_digest_mismatch)
+
+      true ->
+        case Jason.decode(signed_document_bytes) do
+          {:ok, envelope} when is_map(envelope) ->
+            cond do
+              not exact_keys?(envelope, @envelope_fields) ->
+                migration_failure!(publication_id, :signed_document_fields_mismatch)
+
+              envelope["schema"] != @envelope_schema ->
+                migration_failure!(publication_id, :signed_document_schema_mismatch)
+
+              envelope["algorithm"] != "ed25519" ->
+                migration_failure!(publication_id, :signed_document_algorithm_mismatch)
+
+              envelope["signingRole"] != "release" or
+                  envelope["signingRole"] != signing_role ->
+                migration_failure!(publication_id, :signed_document_role_mismatch)
+
+              envelope["keyId"] != signing_key_id ->
+                migration_failure!(publication_id, :signed_document_key_mismatch)
+
+              envelope["payloadEncoding"] != "base64url-json" ->
+                migration_failure!(publication_id, :signed_document_payload_encoding_mismatch)
+
+              canonical_json(envelope) != signed_document_bytes ->
+                migration_failure!(publication_id, :noncanonical_signed_document)
+
+              true ->
+                envelope
+            end
+
+          _ ->
+            migration_failure!(publication_id, :invalid_signed_document)
+        end
+    end
+  end
+
+  defp decode_base64url!(value, publication_id, reason) when is_binary(value) do
+    case Base.url_decode64(value, padding: false) do
+      {:ok, decoded} ->
+        if Base.url_encode64(decoded, padding: false) == value,
+          do: decoded,
+          else: migration_failure!(publication_id, reason)
+
+      _ ->
+        migration_failure!(publication_id, reason)
+    end
+  end
+
+  defp decode_base64url!(_value, publication_id, reason),
+    do: migration_failure!(publication_id, reason)
 
   defp refuse_if_phase_a_state_remains do
     migration_repo = repo()

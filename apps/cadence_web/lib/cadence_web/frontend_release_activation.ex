@@ -594,24 +594,18 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp read_generation_bindings(bindings) do
     bindings
-    |> Enum.reduce_while({:ok, []}, fn binding, {:ok, acc} ->
-      with {:ok, current} <-
-             reread_persisted_pair(binding.current_publication_id, binding.current_release_id),
-           {:ok, previous} <-
-             reread_optional_pair(binding.previous_publication_id, binding.previous_release_id),
-           :ok <- binding_matches_release?(binding, current) do
-        {:cont,
-         {:ok,
-          [%{identity: binding_identity(binding), current: current, fallback: previous} | acc]}}
-      else
-        _ -> {:halt, {:error, :integrity}}
-      end
-    end)
+    |> Enum.reduce_while({:ok, MapSet.new(), []}, &read_generation_binding/2)
     |> case do
-      {:ok, entries} -> {:ok, Enum.reverse(entries)}
+      {:ok, _identities, entries} -> {:ok, Enum.reverse(entries)}
       failure -> failure
     end
   end
+
+  defp read_generation_binding(binding, state),
+    do: read_binding(binding, state, &generation_entry/3)
+
+  defp generation_entry(binding, current, previous),
+    do: %{identity: binding_identity(binding), current: current, fallback: previous}
 
   defp reread_persisted_pair(publication_id, release_id)
        when is_binary(publication_id) and is_binary(release_id) do
@@ -945,17 +939,42 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   end
 
   defp read_snapshot_bindings(bindings) do
-    Enum.reduce_while(bindings, {:ok, []}, fn binding, {:ok, acc} ->
-      with {:ok, current} <-
-             reread_persisted_pair(binding.current_publication_id, binding.current_release_id),
-           {:ok, previous} <-
-             reread_optional_pair(binding.previous_publication_id, binding.previous_release_id),
-           :ok <- binding_matches_release?(binding, current) do
-        {:cont, {:ok, [snapshot_entry(binding, current, previous) | acc]}}
-      else
-        _ -> {:halt, {:error, :integrity}}
-      end
-    end)
+    Enum.reduce_while(bindings, {:ok, MapSet.new(), []}, &read_snapshot_binding/2)
+    |> case do
+      {:ok, _identities, entries} -> {:ok, entries}
+      failure -> failure
+    end
+  end
+
+  defp read_snapshot_binding(binding, state),
+    do: read_binding(binding, state, &snapshot_entry/3)
+
+  defp read_binding(binding, {:ok, identities, acc}, entry_builder) do
+    identity_key = binding_identity_key(binding)
+
+    case MapSet.member?(identities, identity_key) do
+      true -> {:halt, {:error, :integrity}}
+      false -> reread_binding(binding, identity_key, identities, acc, entry_builder)
+    end
+  end
+
+  defp reread_binding(binding, identity_key, identities, acc, entry_builder) do
+    with {:ok, current} <-
+           reread_persisted_pair(binding.current_publication_id, binding.current_release_id),
+         {:ok, previous} <-
+           reread_optional_pair(binding.previous_publication_id, binding.previous_release_id),
+         :ok <- binding_matches_release?(binding, current) do
+      {:cont,
+       {:ok, MapSet.put(identities, identity_key),
+        [entry_builder.(binding, current, previous) | acc]}}
+    else
+      _ -> {:halt, {:error, :integrity}}
+    end
+  end
+
+  defp binding_identity_key(binding) do
+    {binding.generation_id, binding.application_id, binding.application_version,
+     binding.package_id, binding.package_version, binding.surface_id, binding.surface_version}
   end
 
   defp snapshot_entry(binding, current, previous) do

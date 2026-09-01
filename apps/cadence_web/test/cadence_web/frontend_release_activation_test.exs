@@ -102,6 +102,63 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              """).rows
   end
 
+  test "duplicate binding identities are rejected and snapshot reconstruction fails closed" do
+    {_document, _payload, release} =
+      admit_release!(@artifact_bytes, "activation-duplicate-binding")
+
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, response} = activate(document, "duplicate-binding-key")
+    binding = Repo.one!(CatalogBinding)
+
+    duplicate_attrs = %{
+      generation_id: binding.generation_id,
+      application_id: binding.application_id,
+      application_version: binding.application_version,
+      package_id: binding.package_id,
+      package_version: binding.package_version,
+      surface_id: binding.surface_id,
+      surface_version: binding.surface_version,
+      current_publication_id: binding.current_publication_id,
+      current_release_id: binding.current_release_id,
+      previous_publication_id: binding.previous_publication_id,
+      previous_release_id: binding.previous_release_id,
+      inserted_at: binding.inserted_at
+    }
+
+    assert {:error, changeset} = Repo.insert(CatalogBinding.changeset(duplicate_attrs))
+    assert changeset.errors != []
+
+    Repo.query!(
+      "ALTER TABLE frontend_release_catalog_bindings DROP CONSTRAINT frcb_identity_pkey"
+    )
+
+    Repo.query!("""
+    ALTER TABLE frontend_release_catalog_generations
+    DISABLE TRIGGER frontend_release_catalog_generations_immutable
+    """)
+
+    Repo.query!(
+      """
+      UPDATE frontend_release_catalog_generations
+      SET identity_count = 2
+      WHERE generation_id = $1
+      """,
+      [response.generation_id]
+    )
+
+    Repo.query!("""
+    ALTER TABLE frontend_release_catalog_generations
+    ENABLE TRIGGER frontend_release_catalog_generations_immutable
+    """)
+
+    assert {:ok, _duplicate} = Repo.insert(CatalogBinding.changeset(duplicate_attrs))
+
+    assert {:error, :integrity} =
+             FrontendReleaseActivation.persisted_snapshot_digest(response.catalog_publication_id)
+  end
+
   test "same key replays exact accepted bytes, while a different document is a 409" do
     {_document, _payload, release} = admit_release!(@artifact_bytes, "activation-replay")
     digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
@@ -122,61 +179,68 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   end
 
   test "concurrent same-key same-document activation commits one row and one exact replay" do
-    {_document, _payload, release} =
-      admit_release!(@artifact_bytes, "activation-concurrent-replay")
+    with_committed_release_fixture!(
+      @artifact_bytes,
+      "activation-concurrent-replay",
+      fn release ->
+        digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+        document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
 
-    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
-    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+        results =
+          concurrently([
+            fn -> activate(document, "concurrent-replay-key") end,
+            fn -> activate(document, "concurrent-replay-key") end
+          ])
 
-    results =
-      concurrently([
-        fn -> activate(document, "concurrent-replay-key") end,
-        fn -> activate(document, "concurrent-replay-key") end
-      ])
+        assert Enum.count(results, &match?({:ok, %{status: 201, replay?: false}}, &1)) == 1
+        assert Enum.count(results, &match?({:ok, %{status: 201, replay?: true}}, &1)) == 1
 
-    assert Enum.count(results, &match?({:ok, %{status: 201, replay?: false}}, &1)) == 1
-    assert Enum.count(results, &match?({:ok, %{status: 201, replay?: true}}, &1)) == 1
+        [{:ok, accepted}, {:ok, replay}] =
+          Enum.sort_by(results, &Map.fetch!(elem(&1, 1), :replay?))
 
-    [{:ok, accepted}, {:ok, replay}] =
-      Enum.sort_by(results, &Map.fetch!(elem(&1, 1), :replay?))
-
-    assert replay.body == accepted.body
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
-    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
-    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
-    assert Repo.aggregate(Request, :count, :request_id) == 1
+        assert replay.body == accepted.body
+        assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
+        assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
+        assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
+        assert Repo.aggregate(Request, :count, :request_id) == 1
+      end
+    )
   end
 
   test "concurrent same-key different-document activation commits one and returns one exact 409" do
-    {_document, _payload, release} =
-      admit_release!(@artifact_bytes, "activation-concurrent-conflict")
+    with_committed_release_fixture!(
+      @artifact_bytes,
+      "activation-concurrent-conflict",
+      fn release ->
+        first_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+        first = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, first_digest)
 
-    first_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
-    first = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, first_digest)
+        second_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:01Z", release, nil)
+        second = v2_document("initial", 1, "2026-09-01T18:00:01Z", release, nil, second_digest)
 
-    second_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:01Z", release, nil)
-    second = v2_document("initial", 1, "2026-09-01T18:00:01Z", release, nil, second_digest)
+        results =
+          concurrently([
+            fn -> activate(first, "concurrent-conflict-key") end,
+            fn -> activate(second, "concurrent-conflict-key") end
+          ])
 
-    results =
-      concurrently([
-        fn -> activate(first, "concurrent-conflict-key") end,
-        fn -> activate(second, "concurrent-conflict-key") end
-      ])
+        assert Enum.count(results, &match?({:ok, %{status: 201, replay?: false}}, &1)) == 1
 
-    assert Enum.count(results, &match?({:ok, %{status: 201, replay?: false}}, &1)) == 1
+        assert Enum.count(
+                 results,
+                 &match?(
+                   {:error,
+                    %{status: 409, body: ~s({"error":{"code":"idempotency_key_reused"}})}},
+                   &1
+                 )
+               ) == 1
 
-    assert Enum.count(
-             results,
-             &match?(
-               {:error, %{status: 409, body: ~s({"error":{"code":"idempotency_key_reused"}})}},
-               &1
-             )
-           ) == 1
-
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
-    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
-    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
-    assert Repo.aggregate(Request, :count, :request_id) == 1
+        assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
+        assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
+        assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
+        assert Repo.aggregate(Request, :count, :request_id) == 1
+      end
+    )
   end
 
   test "semantic rejection is committed once without a catalog or generation" do
@@ -353,21 +417,204 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   end
 
   defp concurrently(functions) do
+    parent = self()
+
     tasks =
       Enum.map(functions, fn function ->
         Task.async(fn ->
-          receive do
-            :activate -> function.()
+          :ok = Sandbox.checkout(Repo, sandbox: false)
+
+          try do
+            [[backend_pid]] = Repo.query!("SELECT pg_backend_pid()").rows
+            send(parent, {:activation_worker_ready, self(), backend_pid})
+
+            receive do
+              :activate -> function.()
+            end
+          after
+            :ok = Sandbox.checkin(Repo)
           end
         end)
       end)
 
-    Enum.each(tasks, fn %Task{pid: pid} ->
-      :ok = Sandbox.allow(Repo, self(), pid)
-    end)
+    backend_pids =
+      Enum.map(tasks, fn %Task{pid: pid} ->
+        assert_receive {:activation_worker_ready, ^pid, backend_pid}, 30_000
+        backend_pid
+      end)
+
+    assert length(Enum.uniq(backend_pids)) == length(tasks)
 
     Enum.each(tasks, fn %Task{pid: pid} -> send(pid, :activate) end)
     Enum.map(tasks, &Task.await(&1, 30_000))
+  end
+
+  defp with_committed_release_fixture!(bytes_by_path, build_id, fun) do
+    {document, _payload, release} = release_document(bytes_by_path, build_id)
+    release_id = release["releaseId"]
+
+    try do
+      run_unboxed_task!(fn ->
+        assert {:ok, %ReleasePublication{}} =
+                 FrontendReleasePublication.admit_release(document, bytes_by_path,
+                   now: @now,
+                   publication_config: @config
+                 )
+      end)
+
+      fun.(release)
+    after
+      cleanup_committed_release_fixture!(release_id)
+    end
+  end
+
+  defp run_unboxed_task!(fun) do
+    Task.async(fn ->
+      :ok = Sandbox.checkout(Repo, sandbox: false)
+
+      try do
+        fun.()
+      after
+        :ok = Sandbox.checkin(Repo)
+      end
+    end)
+    |> Task.await(30_000)
+  end
+
+  defp cleanup_committed_release_fixture!(release_id) do
+    run_unboxed_task!(fn ->
+      catalog_ids =
+        Repo.query!(
+          """
+          SELECT publication_id
+          FROM frontend_release_catalog_publications
+          WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(release_references->'entries') AS entry
+            WHERE entry->>'currentReleaseId' = $1
+               OR entry->>'fallbackReleaseId' = $1
+          )
+          """,
+          [release_id]
+        ).rows
+        |> Enum.map(&List.first/1)
+
+      generation_ids =
+        Repo.query!(
+          """
+          SELECT generation_id
+          FROM frontend_release_catalog_generations
+          WHERE catalog_publication_id = ANY($1::text[])
+          """,
+          [catalog_ids]
+        ).rows
+        |> Enum.map(&List.first/1)
+
+      publication_ids =
+        Repo.query!(
+          """
+          SELECT publication_id
+          FROM frontend_release_publications
+          WHERE release_id = $1
+          """,
+          [release_id]
+        ).rows
+        |> Enum.map(&List.first/1)
+
+      object_digests =
+        Repo.query!(
+          """
+          SELECT DISTINCT sha256
+          FROM frontend_release_artifacts
+          WHERE release_publication_id = ANY($1::text[])
+          """,
+          [publication_ids]
+        ).rows
+        |> Enum.map(&List.first/1)
+
+      tables = [
+        "frontend_release_activation_requests",
+        "frontend_release_catalog_bindings",
+        "frontend_release_catalog_generations",
+        "frontend_release_catalog_publications",
+        "frontend_release_artifacts",
+        "frontend_release_publications",
+        "frontend_release_objects",
+        "frontend_release_activation_controls"
+      ]
+
+      Enum.each(tables, &Repo.query!("ALTER TABLE #{&1} DISABLE TRIGGER ALL"))
+
+      try do
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_activation_requests
+          WHERE catalog_publication_id = ANY($1::text[])
+             OR generation_id = ANY($2::text[])
+          """,
+          [catalog_ids, generation_ids]
+        )
+
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_catalog_bindings
+          WHERE generation_id = ANY($1::text[])
+          """,
+          [generation_ids]
+        )
+
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_catalog_generations
+          WHERE generation_id = ANY($1::text[])
+          """,
+          [generation_ids]
+        )
+
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_catalog_publications
+          WHERE publication_id = ANY($1::text[])
+          """,
+          [catalog_ids]
+        )
+
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_artifacts
+          WHERE release_publication_id = ANY($1::text[])
+          """,
+          [publication_ids]
+        )
+
+        Repo.query!("DELETE FROM frontend_release_publications WHERE release_id = $1", [
+          release_id
+        ])
+
+        Repo.query!(
+          """
+          DELETE FROM frontend_release_objects AS object
+          WHERE object.sha256 = ANY($1::text[])
+            AND NOT EXISTS (
+              SELECT 1
+              FROM frontend_release_artifacts AS artifact
+              WHERE artifact.sha256 = object.sha256
+            )
+          """,
+          [object_digests]
+        )
+
+        Repo.query!("""
+        UPDATE frontend_release_activation_controls
+        SET cutover_epoch = 0, cutover_at = NULL, legacy_catalog_publication_id = NULL
+        WHERE control_id = 1
+          AND cutover_epoch = 1
+          AND NOT EXISTS (SELECT 1 FROM frontend_release_catalog_generations)
+        """)
+      after
+        Enum.each(tables, &Repo.query!("ALTER TABLE #{&1} ENABLE TRIGGER ALL"))
+      end
+    end)
   end
 
   defp assert_immutable_row!(table, key_column, key) do

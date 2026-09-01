@@ -9,6 +9,7 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
   @create_chunks_version 20_260_831_020_000
   @manifest_version 20_260_901_000_000
   @activation_version 20_260_901_010_000
+  @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 
   test "manifest metadata is backfilled from the exact release artifact and object" do
     with_base_repo(fn repo ->
@@ -102,6 +103,79 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
     end)
   end
 
+  test "invalid signed document bytes roll back the manifest migration" do
+    with_base_repo(fn repo ->
+      signed_document_bytes = <<1>>
+
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_bytes: signed_document_bytes,
+        signed_document_digest: digest(signed_document_bytes)
+      )
+
+      assert_manifest_migration_failure!(repo, :invalid_signed_document)
+    end)
+  end
+
+  test "signed document digest mismatch rolls back the manifest migration" do
+    with_base_repo(fn repo ->
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_digest: "sha256:" <> String.duplicate("b", 64)
+      )
+
+      assert_manifest_migration_failure!(repo, :signed_document_digest_mismatch)
+    end)
+  end
+
+  test "noncanonical signed document bytes roll back the manifest migration" do
+    with_base_repo(fn repo ->
+      signed_document_bytes = " " <> release_envelope(release_payload())
+
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_bytes: signed_document_bytes
+      )
+
+      assert_manifest_migration_failure!(repo, :noncanonical_signed_document)
+    end)
+  end
+
+  test "wrong signed document role rolls back the manifest migration" do
+    with_base_repo(fn repo ->
+      signed_document_bytes = release_envelope(release_payload(), signing_role: "promotion")
+
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_bytes: signed_document_bytes
+      )
+
+      assert_manifest_migration_failure!(repo, :signed_document_role_mismatch)
+    end)
+  end
+
+  test "wrong signed document schema rolls back the manifest migration" do
+    with_base_repo(fn repo ->
+      signed_document_bytes =
+        release_envelope(release_payload(), schema: "cadence.other-signed-document.v1")
+
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_bytes: signed_document_bytes
+      )
+
+      assert_manifest_migration_failure!(repo, :signed_document_schema_mismatch)
+    end)
+  end
+
+  test "signed document payload mismatch rolls back the manifest migration" do
+    with_base_repo(fn repo ->
+      signed_document_bytes =
+        release_envelope(String.replace(release_payload(), "assets/main.js", "assets/other.js"))
+
+      insert_release_fixture!(repo, release_payload(),
+        signed_document_bytes: signed_document_bytes
+      )
+
+      assert_manifest_migration_failure!(repo, :signed_document_payload_mismatch)
+    end)
+  end
+
   test "activation migration preserves epoch-zero legacy writes and guards positive epochs" do
     with_phase_a_repo(fn repo ->
       insert_catalog!(repo, "legacy-catalog", 1)
@@ -153,6 +227,23 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
       assert_raise Postgrex.Error, fn ->
         repo.query!("TRUNCATE frontend_release_activation_controls")
       end
+
+      assert [["frcb_identity_pkey", "p"]] =
+               repo.query!("""
+               SELECT conname, contype
+               FROM pg_constraint
+               WHERE conrelid = 'frontend_release_catalog_bindings'::regclass
+                 AND conname = 'frcb_identity_pkey'
+               """).rows
+
+      assert [["frcb_current_release_fk", "f"], ["frcb_previous_release_fk", "f"]] =
+               repo.query!("""
+               SELECT conname, confmatchtype
+               FROM pg_constraint
+               WHERE conrelid = 'frontend_release_catalog_bindings'::regclass
+                 AND conname IN ('frcb_current_release_fk', 'frcb_previous_release_fk')
+               ORDER BY conname
+               """).rows
 
       assert_raise Ecto.MigrationError, ~r/nonzero_cutover_epoch/, fn ->
         repo.query!("""
@@ -257,7 +348,11 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
 
     release_id = "sha256:" <> String.duplicate("a", 64)
     payload_digest = "sha256:" <> digest_hex(payload)
-    signed_digest = "sha256:" <> String.duplicate("b", 64)
+    signed_document_bytes = Keyword.get(opts, :signed_document_bytes, release_envelope(payload))
+
+    signed_digest =
+      Keyword.get(opts, :signed_document_digest, digest(signed_document_bytes))
+
     object_bytes = "test"
     sha256 = digest_hex(object_bytes)
     path = "assets/main.js"
@@ -275,7 +370,15 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
       VALUES ($1, $2, 'app', 1, 'pkg', 1, 'surface', 1, 'remote', './Main', 'https://example.test/assets',
               $3, $4, $5, $6, 'release-key', 'release', $7, 1, $7, $7)
       """,
-      [publication_id, release_id, payload_digest, signed_digest, <<1>>, payload, inserted_at]
+      [
+        publication_id,
+        release_id,
+        payload_digest,
+        signed_digest,
+        signed_document_bytes,
+        payload,
+        inserted_at
+      ]
     )
 
     repo.query!(
@@ -319,6 +422,19 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
     }
   end
 
+  defp assert_manifest_migration_failure!(repo, reason) do
+    assert_raise Ecto.MigrationError, ~r/#{reason}/, fn ->
+      Ecto.Migrator.run(repo, migration_source(), :up, step: 1, log: false)
+    end
+
+    assert [[nil]] =
+             repo.query!(
+               "SELECT to_regclass('frontend_release_publications_manifest_path_check')::text"
+             ).rows
+
+    assert [["O"]] = trigger_state(repo, "frontend_release_publications_append_only")
+  end
+
   defp release_payload do
     canonical_json(%{
       "manifest" => %{
@@ -328,6 +444,21 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
         "size" => 4
       },
       "schema" => "cadence.first-party-frontend-release.v1"
+    })
+  end
+
+  defp release_envelope(payload, opts \\ []) do
+    private_key = Base.decode16!(@release_seed, case: :lower)
+    signature = :crypto.sign(:eddsa, :none, payload, [private_key, :ed25519])
+
+    canonical_json(%{
+      "algorithm" => "ed25519",
+      "keyId" => "release-key",
+      "payload" => Base.url_encode64(payload, padding: false),
+      "payloadEncoding" => "base64url-json",
+      "schema" => Keyword.get(opts, :schema, "cadence.signed-frontend-document.v1"),
+      "signature" => Base.url_encode64(signature, padding: false),
+      "signingRole" => Keyword.get(opts, :signing_role, "release")
     })
   end
 
@@ -403,5 +534,6 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
   defp canonical_json(true), do: "true"
   defp canonical_json(false), do: "false"
   defp canonical_json(nil), do: "null"
+  defp digest(bytes), do: "sha256:" <> digest_hex(bytes)
   defp digest_hex(bytes), do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
 end

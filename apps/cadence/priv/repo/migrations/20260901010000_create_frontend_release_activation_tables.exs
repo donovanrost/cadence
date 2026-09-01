@@ -181,6 +181,13 @@ defmodule Cadence.Repo.Migrations.CreateFrontendReleaseActivationTables do
       add(:inserted_at, :utc_datetime_usec, null: false)
     end
 
+    execute("""
+    ALTER TABLE frontend_release_catalog_bindings
+    ADD CONSTRAINT frcb_identity_pkey PRIMARY KEY
+      (generation_id, application_id, application_version, package_id, package_version,
+       surface_id, surface_version)
+    """)
+
     create(
       index(:frontend_release_catalog_bindings, [:generation_id], name: :frcb_generation_idx)
     )
