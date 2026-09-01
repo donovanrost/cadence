@@ -7,8 +7,18 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
-import { mkdir, open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+} from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url));
@@ -219,6 +229,10 @@ function isWithin(root, candidate) {
     remainder === "" ||
     (!remainder.startsWith(`..${sep}`) && remainder !== ".." && !isAbsolute(remainder))
   );
+}
+
+function pathsOverlap(left, right) {
+  return isWithin(left, right) || isWithin(right, left);
 }
 
 function mediaTypeForPath(path) {
@@ -630,28 +644,103 @@ async function readJsonFile(filePath, label) {
   }
 }
 
-async function ensureOutputDestination(outputDirectory, inputRoot) {
-  const resolvedOutput = resolve(outputDirectory);
-  if (isWithin(REPOSITORY_ROOT, resolvedOutput)) {
+async function canonicalPathWithMissingTail(path) {
+  const missingTail = [];
+  let current = resolve(path);
+  while (true) {
+    try {
+      const canonical = await realpath(current);
+      return join(canonical, ...missingTail.reverse());
+    } catch (error) {
+      if (error?.code !== "ENOENT") fail("output destination cannot be resolved");
+      const parent = dirname(current);
+      if (parent === current) fail("output destination cannot be resolved");
+      missingTail.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
+function assertOutputDoesNotOverlap(candidate, repositoryRoot, inputRoot) {
+  if (pathsOverlap(repositoryRoot, candidate)) {
     fail("output directory must be outside the repository");
   }
-  if (isWithin(inputRoot, resolvedOutput) || isWithin(resolvedOutput, inputRoot)) {
+  if (pathsOverlap(inputRoot, candidate)) {
     fail("output directory must not overlap the input tree");
   }
-  const parent = dirname(resolvedOutput);
-  await mkdir(parent, { recursive: true });
-  const parentReal = await realpath(parent).catch(() => fail("output parent is unavailable"));
-  if (isWithin(REPOSITORY_ROOT, parentReal))
-    fail("output directory must be outside the repository");
+}
+
+async function assertOutputDoesNotExist(outputDirectory) {
   try {
-    const existing = await lstat(resolvedOutput);
+    const existing = await lstat(outputDirectory);
     if (existing.isSymbolicLink()) fail("output directory must not be a symlink");
     fail("output directory already exists; choose a new immutable destination");
   } catch (error) {
     if (error instanceof ReleasePackagerError) throw error;
     if (error?.code !== "ENOENT") fail("output destination cannot be inspected");
   }
-  return resolvedOutput;
+}
+
+async function createMissingDirectories(directory) {
+  const missing = [];
+  let current = resolve(directory);
+  while (true) {
+    try {
+      await realpath(current);
+      break;
+    } catch (error) {
+      if (error?.code !== "ENOENT") fail("output parent is unavailable");
+      const parent = dirname(current);
+      if (parent === current) fail("output parent is unavailable");
+      missing.push(current);
+      current = parent;
+    }
+  }
+
+  const created = [];
+  try {
+    for (const path of missing.reverse()) {
+      try {
+        await mkdir(path, { recursive: false });
+        created.push(path);
+      } catch (error) {
+        if (error?.code !== "EEXIST") fail("output parent is unavailable");
+        await realpath(path).catch(() => fail("output parent is unavailable"));
+      }
+    }
+  } catch (error) {
+    await removeCreatedDirectories(created);
+    throw error;
+  }
+  return created;
+}
+
+async function removeCreatedDirectories(directories) {
+  for (const directory of directories.slice().reverse()) {
+    await rmdir(directory).catch(() => {});
+  }
+}
+
+async function ensureOutputDestination(outputDirectory, inputRoot) {
+  const resolvedOutput = resolve(outputDirectory);
+  const repositoryRoot = await realpath(REPOSITORY_ROOT).catch(() =>
+    fail("repository root is unavailable"),
+  );
+  const canonicalBefore = await canonicalPathWithMissingTail(resolvedOutput);
+  assertOutputDoesNotOverlap(canonicalBefore, repositoryRoot, inputRoot);
+  await assertOutputDoesNotExist(resolvedOutput);
+
+  let createdParentDirectories = [];
+  try {
+    createdParentDirectories = await createMissingDirectories(dirname(canonicalBefore));
+    const canonicalAfter = await canonicalPathWithMissingTail(resolvedOutput);
+    assertOutputDoesNotOverlap(canonicalAfter, repositoryRoot, inputRoot);
+    await assertOutputDoesNotExist(resolvedOutput);
+    return { path: canonicalAfter, createdParentDirectories };
+  } catch (error) {
+    await removeCreatedDirectories(createdParentDirectories);
+    throw error;
+  }
 }
 
 async function writeAtomic(filePath, bytes) {
@@ -725,9 +814,14 @@ export async function packageRelease({
 }) {
   if (!outputDirectory) fail("output directory is required");
   const built = await buildRelease({ inputDirectory, metadata, artifactOrigin, keyId, privateKey });
-  const output = await ensureOutputDestination(outputDirectory, built.inputRoot);
-  await writePackage(output, built.documentBytes, built.artifacts);
-  return { ...built, outputDirectory: output };
+  const destination = await ensureOutputDestination(outputDirectory, built.inputRoot);
+  try {
+    await writePackage(destination.path, built.documentBytes, built.artifacts);
+  } catch (error) {
+    await removeCreatedDirectories(destination.createdParentDirectories);
+    throw error;
+  }
+  return { ...built, outputDirectory: destination.path };
 }
 
 function usage() {
@@ -761,6 +855,10 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") return { help: true };
+    if (argument === "--") {
+      if (index !== 0) fail("unexpected option separator");
+      continue;
+    }
     const name = argument.includes("=") ? argument.slice(0, argument.indexOf("=")) : argument;
     const key = aliases.get(name);
     if (!key) fail(`unknown option ${argument}`);

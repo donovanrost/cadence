@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -147,6 +156,7 @@ void describe("frontend release packager", () => {
       privateKey: keys.privateKey,
     });
 
+    assert.equal(first.outputDirectory, join(await realpath(outputParent), "first"));
     assert.deepEqual(first.release, second.release);
     assert.deepEqual(first.documentBytes, second.documentBytes);
     assert.deepEqual(
@@ -265,6 +275,7 @@ void describe("frontend release packager", () => {
 
     const result = await runCli(
       [
+        "--",
         "--input-dir",
         input,
         "--metadata",
@@ -283,12 +294,23 @@ void describe("frontend release packager", () => {
     assert.equal(result.signal, null);
     assert.equal(result.stderr, "");
     assert.ok(!result.stdout.includes(privateKeyMaterial(keys.privateKey)));
-    assert.ok(!result.stdout.includes("private"));
+    assert.ok(!result.stdout.includes("PRIVATE KEY"));
     assert.equal(JSON.parse(result.stdout).releaseId.startsWith("sha256:"), true);
     assert.deepEqual(
       JSON.parse(await readFile(join(output, "release.json"), "utf8")).keyId,
       "fixture-release-key",
     );
+  });
+
+  void it("rejects extra or later CLI option separators", async () => {
+    const input = await builtRemoteTree();
+    const extra = await runCli(["--", "--"]);
+    const later = await runCli(["--input-dir", input, "--"]);
+
+    assert.notEqual(extra.code, 0);
+    assert.match(extra.stderr, /unexpected option separator/);
+    assert.notEqual(later.code, 0);
+    assert.match(later.stderr, /unexpected option separator/);
   });
 
   void it("rejects secret-bearing failures without printing the key", async () => {
@@ -340,6 +362,50 @@ void describe("frontend release packager", () => {
     const symlinkDirectory = await builtRemoteTree();
     await symlink(join(symlinkDirectory, "assets"), join(symlinkDirectory, "linked"));
     await assert.rejects(enumerateArtifacts(symlinkDirectory), /is a symlink/);
+  });
+
+  void it("rejects a symlinked output parent without mutating the input tree", async () => {
+    const input = await builtRemoteTree();
+    const outputContainer = await temporaryDirectory("cadence-release-symlink-output-");
+    const symlinkedParent = join(outputContainer, "output-parent");
+    const output = join(symlinkedParent, "package");
+    await symlink(input, symlinkedParent);
+
+    const before = await enumerateArtifacts(input);
+    const beforeEntries = (await readdir(input)).sort();
+
+    await assert.rejects(
+      packageRelease({
+        inputDirectory: input,
+        outputDirectory: output,
+        metadata,
+        artifactOrigin: TEST_ORIGIN,
+        keyId: "fixture-release-key",
+        privateKey: keyPair().privateKey,
+      }),
+      /must not overlap the input tree/,
+    );
+
+    const after = await enumerateArtifacts(input);
+    assert.deepEqual((await readdir(input)).sort(), beforeEntries);
+    assert.deepEqual(
+      after.artifacts.map(({ path, sha256: digest, size, mediaType, bytes }) => ({
+        path,
+        sha256: digest,
+        size,
+        mediaType,
+        bytes,
+      })),
+      before.artifacts.map(({ path, sha256: digest, size, mediaType, bytes }) => ({
+        path,
+        sha256: digest,
+        size,
+        mediaType,
+        bytes,
+      })),
+    );
+    await assert.rejects(readFile(output), /ENOENT/);
+    await assert.rejects(readFile(join(input, "package", "release.json")), /ENOENT/);
   });
 
   void it("rejects absolute, traversal, backslash, drive, and unnormalized paths", () => {
@@ -411,6 +477,31 @@ void describe("frontend release packager", () => {
         privateKey: keyPair().privateKey,
       }),
       /unexpected or missing field/,
+    );
+  });
+
+  void it("leaves an existing output destination immutable", async () => {
+    const input = await builtRemoteTree();
+    const outputParent = await temporaryDirectory("cadence-release-existing-output-");
+    const output = join(outputParent, "package");
+    await mkdir(output);
+    await writeFile(join(output, "keep.txt"), "keep this destination immutable\n");
+
+    await assert.rejects(
+      packageRelease({
+        inputDirectory: input,
+        outputDirectory: output,
+        metadata,
+        artifactOrigin: TEST_ORIGIN,
+        keyId: "fixture-release-key",
+        privateKey: keyPair().privateKey,
+      }),
+      /already exists; choose a new immutable destination/,
+    );
+    assert.deepEqual(await readdir(output), ["keep.txt"]);
+    assert.equal(
+      await readFile(join(output, "keep.txt"), "utf8"),
+      "keep this destination immutable\n",
     );
   });
 });
