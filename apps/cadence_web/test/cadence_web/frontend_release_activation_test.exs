@@ -259,12 +259,15 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert admission.release.package_version == 1
   end
 
-  test "post-cutover contributed package mismatch is sanitized across host boundaries" do
+  test "post-cutover contributed package mismatch is sanitized across targeted host boundaries" do
     {scope, route_context} = installed_comms_context()
     mission_id = route_context.mission.mission_id
     member_conn = TestFixtures.member_conn(scope.user)
-    catalog_conn = get(member_conn, catalog_path(mission_id))
-    catalog = json_response(catalog_conn, 200)
+
+    # This pre-activation catalog only bootstraps the host session and CSRF token
+    # used by the post-activation query and action requests below.
+    catalog_bootstrap_conn = get(member_conn, catalog_path(mission_id))
+    catalog_bootstrap = json_response(catalog_bootstrap_conn, 200)
 
     {_document, _payload, release} =
       admit_release!(
@@ -285,10 +288,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     scope_document = ApplicationHostCatalog.scope_document(scope, route_context)
 
-    catalog_response = get(member_conn, catalog_path(mission_id))
+    package_mismatch_catalog_response =
+      get(member_conn, targeted_catalog_path(mission_id))
 
     query_response =
-      post_host_bridge(catalog_conn, catalog, query_path(mission_id), %{
+      post_host_bridge(catalog_bootstrap_conn, catalog_bootstrap, query_path(mission_id), %{
         "applicationKey" => "comms_overview",
         "applicationVersion" => 1,
         "surfaceId" => "overview",
@@ -300,8 +304,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     action_response =
       post_host_bridge(
-        catalog_conn,
-        catalog,
+        catalog_bootstrap_conn,
+        catalog_bootstrap,
         actions_path(mission_id),
         %{
           "applicationKey" => "comms_overview",
@@ -315,7 +319,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         "reader-package-mismatch-contributed-action"
       )
 
-    for response <- [catalog_response, query_response, action_response] do
+    for response <- [package_mismatch_catalog_response, query_response, action_response] do
       assert %{
                "schema" => "cadence.application-host-problem.v1",
                "code" => "application_unavailable",
@@ -364,8 +368,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       })
 
     member_conn = TestFixtures.member_conn(user)
-    catalog_conn = get(member_conn, catalog_path(mission.mission_id))
-    catalog = json_response(catalog_conn, 200)
+
+    # This pre-activation catalog only bootstraps the host session and CSRF token
+    # used by the post-activation query and action requests below.
+    catalog_bootstrap_conn = get(member_conn, catalog_path(mission.mission_id))
+    catalog_bootstrap = json_response(catalog_bootstrap_conn, 200)
 
     scope_document =
       ApplicationHostCatalog.scope_document(scope, %{
@@ -379,23 +386,28 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
     assert {:ok, %{status: 201}} = activate(document, "reader-no-history-controller-key")
 
-    catalog_response = get(member_conn, catalog_path(mission.mission_id))
+    no_history_catalog_response = get(member_conn, catalog_path(mission.mission_id))
 
     query_response =
-      post_host_bridge(catalog_conn, catalog, query_path(mission.mission_id), %{
-        "applicationKey" => "comms_overview",
-        "applicationVersion" => 1,
-        "surfaceId" => "overview",
-        "surfaceVersion" => 1,
-        "queryId" => "cadence.comms.overview",
-        "version" => 1,
-        "scope" => scope_document
-      })
+      post_host_bridge(
+        catalog_bootstrap_conn,
+        catalog_bootstrap,
+        query_path(mission.mission_id),
+        %{
+          "applicationKey" => "comms_overview",
+          "applicationVersion" => 1,
+          "surfaceId" => "overview",
+          "surfaceVersion" => 1,
+          "queryId" => "cadence.comms.overview",
+          "version" => 1,
+          "scope" => scope_document
+        }
+      )
 
     action_response =
       post_host_bridge(
-        catalog_conn,
-        catalog,
+        catalog_bootstrap_conn,
+        catalog_bootstrap,
         actions_path(mission.mission_id),
         %{
           "applicationKey" => "comms_overview",
@@ -407,7 +419,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         "reader-no-history-action"
       )
 
-    for response <- [catalog_response, query_response, action_response] do
+    for response <- [no_history_catalog_response, query_response, action_response] do
       assert %{
                "schema" => "cadence.application-host-problem.v1",
                "code" => "application_unavailable",
@@ -1499,6 +1511,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
   defp catalog_path(mission_id),
     do: @host_catalog_suffix <> "/" <> mission_id <> "/catalog"
+
+  defp targeted_catalog_path(mission_id),
+    do: catalog_path(mission_id) <> "?application_key=comms_overview&surface_id=overview"
 
   defp query_path(mission_id),
     do: @host_catalog_suffix <> "/" <> mission_id <> "/query"
