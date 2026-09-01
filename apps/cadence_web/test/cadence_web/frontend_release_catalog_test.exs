@@ -344,6 +344,35 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
              FrontendReleaseCatalog.verify_release(%{"schema" => nil}, @corpus["keys"], @opts)
   end
 
+  test "verifier boundaries preserve explicit malformed errors and propagate misuse" do
+    malformed_tree = Map.put(@corpus["release"]["envelope"], "untrusted", [1 | :tail])
+
+    assert {:error, %{code: :invalid_type, path: "$.untrusted"}} =
+             FrontendReleaseCatalog.verify_release(malformed_tree, @corpus["keys"], @opts)
+
+    assert {:error, %{code: :invalid_key_record, path: "$.keys"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               [hd(@corpus["keys"]) | :tail],
+               @opts
+             )
+
+    assert {:error, %{code: :invalid_base_url, path: "$.allowedOrigins"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               @corpus["keys"],
+               Keyword.put(@opts, :allowed_origins, ["https://cdn.example.com" | :tail])
+             )
+
+    assert_raise FunctionClauseError, fn ->
+      FrontendReleaseCatalog.verify_release(@corpus["release"]["envelope"], @corpus["keys"], nil)
+    end
+
+    assert_raise FunctionClauseError, fn ->
+      FrontendReleaseCatalog.verify_catalog(@corpus["catalog"]["envelope"], @corpus["keys"], nil)
+    end
+  end
+
   defp build_large_release do
     release = Jason.decode!(@corpus["release"]["payload"])
 

@@ -5,6 +5,7 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
+  alias CadenceWeb.FrontendReleasePublisherController
 
   alias CadenceWeb.FrontendReleasePublication.{
     CatalogPublication,
@@ -523,20 +524,40 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     refute function_exported?(FrontendReleasePublication, :delete_catalog, 1)
   end
 
-  test "artifact-store failures retain runtime exception and connection boundaries" do
-    source_path =
-      Path.expand("../../lib/cadence_web/frontend_release_publication.ex", __DIR__)
+  test "artifact-store connection failures normalize through production boundaries" do
+    failure = %DBConnection.ConnectionError{message: "database connection lost"}
 
-    source = File.read!(source_path)
+    assert FrontendReleasePublication.normalize_artifact_store_error(failure) == failure
 
-    refute source =~ "safe_store_call"
-    refute source =~ "artifact_store_exception"
-    refute source =~ "artifact_store_throw"
-    assert source =~ "case DatabaseArtifactStore.put(digest_value, artifact.bytes) do"
-    assert source =~ "defp store_error(%DBConnection.ConnectionError{} = failure), do: failure"
+    for operation <- [:object_insert, :object_metadata, :object_chunk] do
+      tagged_failure = {operation, failure}
 
-    assert source =~
-             "defp store_error({_operation, %DBConnection.ConnectionError{} = failure}), do: failure"
+      assert FrontendReleasePublication.normalize_artifact_store_error(tagged_failure) ==
+               failure
+
+      assert FrontendReleasePublisherController.classify_publish_result({:error, tagged_failure}) ==
+               {:error, 503, "transient_persistence_failure"}
+    end
+
+    assert FrontendReleasePublisherController.classify_publish_result({:error, failure}) ==
+             {:error, 503, "transient_persistence_failure"}
+
+    assert FrontendReleasePublisherController.classify_publish_result(
+             {:error, %{code: :invalid_document}}
+           ) == {:error, 422, "admission_rejected"}
+
+    assert FrontendReleasePublisherController.classify_publish_result(
+             {:error, %{code: :artifact_conflict}}
+           ) == {:error, 409, "conflict"}
+  end
+
+  test "invalid direct signed-document terms remain coded without masking" do
+    assert {:error, %{code: :invalid_document, path: "$"}} =
+             FrontendReleasePublication.admit_release(
+               %{"unsupported" => self()},
+               %{},
+               now: @now
+             )
   end
 
   defp assert_sql_rejected(sql, params \\ []) do

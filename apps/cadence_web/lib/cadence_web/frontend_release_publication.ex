@@ -132,7 +132,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
             )
 
           {:error, reason} ->
-            Repo.rollback(store_error(reason))
+            Repo.rollback(normalize_artifact_store_error(reason))
         end
       end)
 
@@ -455,23 +455,29 @@ defmodule CadenceWeb.FrontendReleasePublication do
     do: {:error, error(:invalid_artifact_input, "$.artifacts")}
 
   defp normalize_artifact_pairs(pairs) do
-    pairs
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, MapSet.new(), %{}}, &normalize_artifact_pair(&1, &2))
-    |> case do
-      {:ok, _paths, values} -> {:ok, values}
-      failure -> failure
-    end
-  rescue
-    _ -> {:error, error(:invalid_artifact_input, "$.artifacts")}
+    normalize_artifact_pairs(pairs, 0, MapSet.new(), %{})
   end
 
-  defp normalize_artifact_pair({pair, index}, {:ok, paths, acc}) do
+  defp normalize_artifact_pairs([], _index, _paths, values), do: {:ok, values}
+
+  defp normalize_artifact_pairs([pair | rest], index, paths, acc) do
     case artifact_pair(pair) do
-      {:ok, path, bytes} -> add_artifact(path, bytes, index, paths, acc)
-      :error -> {:halt, {:error, error(:invalid_artifact_input, "$.artifacts[#{index}]")}}
+      {:ok, path, bytes} ->
+        case add_artifact(path, bytes, index, paths, acc) do
+          {:cont, {:ok, paths, acc}} ->
+            normalize_artifact_pairs(rest, index + 1, paths, acc)
+
+          {:halt, failure} ->
+            failure
+        end
+
+      :error ->
+        {:error, error(:invalid_artifact_input, "$.artifacts[#{index}]")}
     end
   end
+
+  defp normalize_artifact_pairs(_pairs, _index, _paths, _acc),
+    do: {:error, error(:invalid_artifact_input, "$.artifacts")}
 
   defp add_artifact(path, bytes, index, paths, acc) do
     cond do
@@ -578,7 +584,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp store_artifact_step(artifact, {:ok, acc}) do
     case store_one_artifact(artifact) do
       {:ok, stored_artifact} -> {:cont, {:ok, [stored_artifact | acc]}}
-      {:error, reason} -> {:halt, {:error, store_error(reason)}}
+      {:error, reason} -> {:halt, {:error, normalize_artifact_store_error(reason)}}
     end
   end
 
@@ -604,23 +610,37 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp store_error(:artifact_bytes_mismatch), do: error(:artifact_conflict, "$.artifacts")
-  defp store_error(:artifact_digest_mismatch), do: error(:artifact_hash_mismatch, "$.artifacts")
-  defp store_error(:artifact_size_mismatch), do: error(:artifact_size_mismatch, "$.artifacts")
-  defp store_error(:artifact_too_large), do: error(:artifact_byte_cap_exceeded, "$.artifacts")
-  defp store_error(:artifact_not_found), do: error(:artifact_not_found, "$.artifacts")
+  @doc false
+  def normalize_artifact_store_error(:artifact_bytes_mismatch),
+    do: error(:artifact_conflict, "$.artifacts")
 
-  defp store_error(%DBConnection.ConnectionError{} = failure), do: failure
-  defp store_error({_operation, %DBConnection.ConnectionError{} = failure}), do: failure
-  defp store_error(%{code: _code} = failure), do: failure
-  defp store_error(reason), do: error(:artifact_store_failure, inspect(reason))
+  def normalize_artifact_store_error(:artifact_digest_mismatch),
+    do: error(:artifact_hash_mismatch, "$.artifacts")
+
+  def normalize_artifact_store_error(:artifact_size_mismatch),
+    do: error(:artifact_size_mismatch, "$.artifacts")
+
+  def normalize_artifact_store_error(:artifact_too_large),
+    do: error(:artifact_byte_cap_exceeded, "$.artifacts")
+
+  def normalize_artifact_store_error(:artifact_not_found),
+    do: error(:artifact_not_found, "$.artifacts")
+
+  def normalize_artifact_store_error(%DBConnection.ConnectionError{} = failure), do: failure
+
+  def normalize_artifact_store_error({_operation, %DBConnection.ConnectionError{} = failure}),
+    do: failure
+
+  def normalize_artifact_store_error(%{code: _code} = failure), do: failure
+  def normalize_artifact_store_error(reason), do: error(:artifact_store_failure, inspect(reason))
 
   defp signed_document_bytes(document) when is_binary(document), do: {:ok, document}
 
   defp signed_document_bytes(document) when is_map(document) do
-    {:ok, Jason.encode!(document, maps: :strict)}
-  rescue
-    _ -> {:error, error(:invalid_document, "$")}
+    case Jason.encode(document, maps: :strict) do
+      {:ok, bytes} -> {:ok, bytes}
+      {:error, _reason} -> {:error, error(:invalid_document, "$")}
+    end
   end
 
   defp signed_document_bytes(_document), do: {:error, error(:invalid_document, "$")}

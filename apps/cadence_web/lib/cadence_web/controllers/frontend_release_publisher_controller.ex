@@ -37,6 +37,9 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
       {:error, :transient_persistence_failure} ->
         error_response(conn, 503, "transient_persistence_failure")
+
+      {:error, status, code} ->
+        error_response(conn, status, code)
     end
   end
 
@@ -180,31 +183,35 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
   defp publish(%{document: document, artifacts: artifacts}, publisher_identity) do
     opts = if publisher_identity, do: [publisher_identity: publisher_identity], else: []
 
-    case FrontendReleasePublication.publish_release_with_outcome(document, artifacts, opts) do
-      {:ok, publication, outcome} ->
-        {:ok, outcome, publication}
+    FrontendReleasePublication.publish_release_with_outcome(document, artifacts, opts)
+    |> classify_publish_result()
+  rescue
+    _error in DBConnection.ConnectionError -> {:error, 503, "transient_persistence_failure"}
+  end
 
-      {:error, %DBConnection.ConnectionError{}} ->
-        {:error, :transient_persistence_failure}
+  @doc false
+  def classify_publish_result({:ok, publication, outcome}),
+    do: {:ok, outcome, publication}
 
-      {:error, %{code: code}}
+  def classify_publish_result({:error, %DBConnection.ConnectionError{}}),
+    do: {:error, 503, "transient_persistence_failure"}
+
+  def classify_publish_result({:error, {_operation, %DBConnection.ConnectionError{}}}),
+    do: {:error, 503, "transient_persistence_failure"}
+
+  def classify_publish_result({:error, %{code: code}})
       when code in [
              :release_identity_fork,
              :release_digest_conflict,
              :release_document_conflict,
              :artifact_conflict
-           ] ->
-        {:error, :conflict}
+           ],
+      do: {:error, 409, "conflict"}
 
-      {:error, %{code: _code}} ->
-        {:error, :admission_rejected}
+  def classify_publish_result({:error, %{code: _code}}),
+    do: {:error, 422, "admission_rejected"}
 
-      other ->
-        other
-    end
-  rescue
-    _error in DBConnection.ConnectionError -> {:error, :transient_persistence_failure}
-  end
+  def classify_publish_result(other), do: other
 
   defp response(conn, :created, publication) do
     json(conn |> put_status(:created), %{data: publication_data(publication, "published")})

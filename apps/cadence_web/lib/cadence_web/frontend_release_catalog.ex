@@ -73,10 +73,6 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
           {:ok, map()} | {:error, error()}
   def verify(document, key_records, opts \\ []) do
     verify_envelope(document, key_records, opts, nil)
-  rescue
-    _ -> {:error, error(:invalid_document, "$")}
-  catch
-    _, _ -> {:error, error(:invalid_document, "$")}
   end
 
   @doc "Verify a release-role envelope and return the verified release."
@@ -96,10 +92,6 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
          digest: digest(verified.payload_bytes)
        }}
     end
-  rescue
-    _ -> {:error, error(:invalid_document, "$")}
-  catch
-    _, _ -> {:error, error(:invalid_document, "$")}
   end
 
   @doc "Verify a promotion catalog, every nested release envelope, and its admission state."
@@ -138,10 +130,6 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
          accepted_state: accepted_state
        }}
     end
-  rescue
-    _ -> {:error, error(:invalid_document, "$")}
-  catch
-    _, _ -> {:error, error(:invalid_document, "$")}
   end
 
   def verify_signed_frontend_document(document, key_records, opts \\ []),
@@ -258,17 +246,21 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   end
 
   defp plain_json_tree(value, path, depth) when is_list(value) do
-    cond do
-      depth >= @max_depth ->
-        {:error, error(:unbounded_value, path)}
+    if depth >= @max_depth do
+      {:error, error(:unbounded_value, path)}
+    else
+      case bounded_list(value, @max_array_items) do
+        {:ok, _size} ->
+          value
+          |> Enum.with_index()
+          |> Enum.reduce_while(:ok, &plain_json_array_item(&1, &2, path, depth))
 
-      length(value) > @max_array_items ->
-        {:error, error(:unbounded_value, path)}
+        :too_many ->
+          {:error, error(:unbounded_value, path)}
 
-      true ->
-        value
-        |> Enum.with_index()
-        |> Enum.reduce_while(:ok, &plain_json_array_item(&1, &2, path, depth))
+        :improper ->
+          {:error, error(:invalid_type, path)}
+      end
     end
   end
 
@@ -317,9 +309,11 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
     do: {:error, error(:incomplete_required_fields, "$.payload.schema")}
 
   defp normalize_key_records(records) when is_list(records) do
-    if length(records) > @max_key_records,
-      do: {:error, error(:unbounded_value, "$.keys")},
-      else: normalize_key_record_list(records)
+    case bounded_list(records, @max_key_records) do
+      {:ok, _size} -> normalize_key_record_list(records)
+      :too_many -> {:error, error(:unbounded_value, "$.keys")}
+      :improper -> {:error, error(:invalid_key_record, "$.keys")}
+    end
   end
 
   defp normalize_key_records(records) when is_map(records) do
@@ -459,10 +453,6 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
     if :crypto.verify(:eddsa, :none, payload_bytes, signature, [public_key, :ed25519]),
       do: :ok,
       else: {:error, error(:invalid_signature, "$.signature")}
-  rescue
-    _ -> {:error, error(:invalid_signature, "$.signature")}
-  catch
-    _, _ -> {:error, error(:invalid_signature, "$.signature")}
   end
 
   defp exact_decoded_payload_size(value, path) when is_binary(value) do
@@ -674,14 +664,19 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   end
 
   defp validate_allowed_origin_list(origins) do
-    if length(origins) > @max_key_records do
-      {:error, error(:unbounded_value, "$.allowedOrigins")}
-    else
-      case Enum.with_index(origins)
-           |> Enum.reduce_while({:ok, MapSet.new()}, &validate_allowed_origin/2) do
-        {:ok, _} -> {:ok, origins}
-        failure -> failure
-      end
+    case bounded_list(origins, @max_key_records) do
+      :too_many ->
+        {:error, error(:unbounded_value, "$.allowedOrigins")}
+
+      :improper ->
+        {:error, error(:invalid_base_url, "$.allowedOrigins")}
+
+      {:ok, _size} ->
+        case Enum.with_index(origins)
+             |> Enum.reduce_while({:ok, MapSet.new()}, &validate_allowed_origin/2) do
+          {:ok, _} -> {:ok, origins}
+          failure -> failure
+        end
     end
   end
 
@@ -1137,10 +1132,12 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   defp validate_state_entries(_entries, _origins, _published_at),
     do: {:error, error(:invalid_state, "$.acceptedState.entries")}
 
-  defp state_entries_bound(entries) when length(entries) <= @max_catalog_entries, do: :ok
-
-  defp state_entries_bound(_entries),
-    do: {:error, error(:invalid_state, "$.acceptedState.entries")}
+  defp state_entries_bound(entries) do
+    case bounded_list(entries, @max_catalog_entries) do
+      {:ok, _size} -> :ok
+      _ -> {:error, error(:invalid_state, "$.acceptedState.entries")}
+    end
+  end
 
   defp validate_state_entry(
          {entry, index},
@@ -1506,6 +1503,16 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
 
   defp bounded_binary(value, max, path) when is_binary(value),
     do: if(byte_size(value) <= max, do: :ok, else: {:error, error(:unbounded_value, path)})
+
+  defp bounded_list(value, max), do: bounded_list(value, max, 0)
+
+  defp bounded_list([], _max, size), do: {:ok, size}
+
+  defp bounded_list([_head | _tail], max, size) when size >= max,
+    do: :too_many
+
+  defp bounded_list([_head | tail], max, size), do: bounded_list(tail, max, size + 1)
+  defp bounded_list(_value, _max, _size), do: :improper
 
   defp valid_utf8(value, path) when is_binary(value),
     do: if(String.valid?(value), do: :ok, else: {:error, error(:invalid_utf8, path)})
