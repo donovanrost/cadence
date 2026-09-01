@@ -102,6 +102,82 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
     assert result.accepted_state["digest"] == result.digest
   end
 
+  test "v2 catalog verifies transition, identity count, exact nested envelopes, and snapshot digest" do
+    release = Jason.decode!(@corpus["release"]["payload"])
+    entry = catalog_entry(release, nil)
+
+    payload =
+      canonical(%{
+        "entries" => [entry],
+        "expiresAt" => "2026-08-31T18:00:00Z",
+        "identityCount" => 1,
+        "publishedAt" => "2026-08-30T18:00:00Z",
+        "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
+        "sequence" => 1,
+        "snapshotDigest" => "sha256:" <> String.duplicate("a", 64),
+        "transition" => "initial"
+      })
+
+    assert {:ok, result} =
+             FrontendReleaseCatalog.verify_catalog_v2(
+               catalog_envelope(payload),
+               @corpus["keys"],
+               @opts
+             )
+
+    assert result.transition == "initial"
+    assert result.sequence == 1
+    assert result.identity_count == 1
+    assert result.snapshot_digest == "sha256:" <> String.duplicate("a", 64)
+    assert [%{current_envelope: current_envelope}] = result.entries
+    assert current_envelope == entry["current"]
+  end
+
+  test "v2 catalogs reject extra fields, duplicate identities, count mismatches, and floats" do
+    release = Jason.decode!(@corpus["release"]["payload"])
+    entry = catalog_entry(release, nil)
+
+    payload = %{
+      "entries" => [entry],
+      "expiresAt" => "2026-08-31T18:00:00Z",
+      "identityCount" => 1,
+      "publishedAt" => "2026-08-30T18:00:00Z",
+      "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
+      "sequence" => 1,
+      "snapshotDigest" => "sha256:" <> String.duplicate("b", 64),
+      "transition" => "initial"
+    }
+
+    extra = payload |> Map.put("extra", true) |> canonical() |> catalog_envelope()
+
+    assert {:error, %{code: :unknown_fields, path: "$.payload"}} =
+             FrontendReleaseCatalog.verify_catalog_v2(extra, @corpus["keys"], @opts)
+
+    duplicate =
+      payload
+      |> Map.put("entries", [entry, entry])
+      |> Map.put("identityCount", 2)
+      |> canonical()
+      |> catalog_envelope()
+
+    assert {:error, %{code: :unsorted_entries}} =
+             FrontendReleaseCatalog.verify_catalog_v2(duplicate, @corpus["keys"], @opts)
+
+    count_mismatch = payload |> Map.put("identityCount", 2) |> canonical() |> catalog_envelope()
+
+    assert {:error, %{code: :identity_count_mismatch, path: "$.payload.identityCount"}} =
+             FrontendReleaseCatalog.verify_catalog_v2(count_mismatch, @corpus["keys"], @opts)
+
+    float_payload = Jason.encode!(Map.put(payload, "sequence", 1.5))
+
+    assert {:error, %{code: :invalid_scalar, path: "$.payload.sequence"}} =
+             FrontendReleaseCatalog.verify_catalog_v2(
+               catalog_envelope(float_payload),
+               @corpus["keys"],
+               @opts
+             )
+  end
+
   test "catalog admission is time-aware, replay-safe, monotonic, and supports rollback swaps" do
     catalog = @corpus["catalog"]["envelope"]
 

@@ -10,6 +10,7 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   @token_digest_key :token_sha256
   @digest_bytes 32
   @publisher_path "/api/cadence/frontend-release/v1/releases"
+  @promotion_path "/api/cadence/frontend-release/v1/promotions"
   @artifact_path_prefix "/api/cadence/frontend-release/v1/objects/"
   @publisher_config_key :frontend_release_publisher_config
 
@@ -17,7 +18,10 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   def init(opts), do: opts
 
   @spec publisher_request?(Plug.Conn.t()) :: boolean()
-  def publisher_request?(%Plug.Conn{method: "POST", request_path: @publisher_path}), do: true
+  def publisher_request?(%Plug.Conn{method: "POST", request_path: path})
+      when path in [@publisher_path, @promotion_path],
+      do: true
+
   def publisher_request?(%Plug.Conn{} = conn), do: artifact_upload_request?(conn)
 
   @spec artifact_upload_request?(Plug.Conn.t()) :: boolean()

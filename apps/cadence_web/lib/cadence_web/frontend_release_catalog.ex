@@ -9,6 +9,7 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   @envelope_schema "cadence.signed-frontend-document.v1"
   @release_schema "cadence.first-party-frontend-release.v1"
   @catalog_schema "cadence.first-party-frontend-release-catalog.v1"
+  @catalog_v2_schema "cadence.first-party-frontend-release-catalog.v2"
   @algorithm "ed25519"
   @payload_encoding "base64url-json"
   @host_contract "cadence.application-host.v1"
@@ -60,6 +61,16 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   ]
 
   @catalog_fields ["schema", "sequence", "publishedAt", "expiresAt", "entries"]
+  @catalog_v2_fields [
+    "schema",
+    "transition",
+    "sequence",
+    "publishedAt",
+    "expiresAt",
+    "identityCount",
+    "snapshotDigest",
+    "entries"
+  ]
 
   @type error :: %{code: atom(), path: String.t()}
   @type key_record :: map()
@@ -67,6 +78,7 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   def envelope_schema, do: @envelope_schema
   def release_schema, do: @release_schema
   def catalog_schema, do: @catalog_schema
+  def catalog_v2_schema, do: @catalog_v2_schema
 
   @doc "Verify an envelope and its exact decoded UTF-8 payload bytes."
   @spec verify(binary() | map(), [key_record()] | map(), keyword()) ::
@@ -99,8 +111,28 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
           {:ok, map()} | {:error, error()}
   def verify_catalog(document, key_records, opts \\ []) do
     with {:ok, origins} <- allowed_origins(opts),
-         {:ok, verified} <- verify_envelope(document, key_records, opts, "promotion"),
-         {:ok, catalog} <- validate_catalog(verified.payload, key_records, opts, origins),
+         {:ok, verified} <- verify_envelope(document, key_records, opts, "promotion") do
+      case verified.payload["schema"] do
+        @catalog_v2_schema -> verify_catalog_v2_verified(verified, key_records, opts, origins)
+        _ -> verify_catalog_v1_verified(verified, key_records, opts, origins)
+      end
+    end
+  end
+
+  @doc "Verify a v2 promotion catalog without performing persisted-state admission."
+  @spec verify_catalog_v2(binary() | map(), [key_record()] | map(), keyword()) ::
+          {:ok, map()} | {:error, error()}
+  def verify_catalog_v2(document, key_records, opts \\ []) do
+    with {:ok, origins} <- allowed_origins(opts),
+         {:ok, verified} <- verify_envelope(document, key_records, opts, "promotion") do
+      if verified.payload["schema"] == @catalog_v2_schema,
+        do: verify_catalog_v2_verified(verified, key_records, opts, origins),
+        else: {:error, error(:unknown_schema, "$.payload.schema")}
+    end
+  end
+
+  defp verify_catalog_v1_verified(verified, key_records, opts, origins) do
+    with {:ok, catalog} <- validate_catalog(verified.payload, key_records, opts, origins),
          {:ok, now_ms} <- verification_time(opts),
          :ok <- catalog_current(catalog, now_ms),
          catalog_digest = digest(verified.payload_bytes),
@@ -128,6 +160,28 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
          signing_role: verified.signing_role,
          acceptance: acceptance,
          accepted_state: accepted_state
+       }}
+    end
+  end
+
+  defp verify_catalog_v2_verified(verified, key_records, opts, origins) do
+    with {:ok, catalog} <- validate_catalog_v2(verified.payload, key_records, opts, origins),
+         {:ok, now_ms} <- verification_time(opts),
+         :ok <- catalog_current(catalog, now_ms) do
+      {:ok,
+       %{
+         catalog: verified.payload,
+         entries: catalog.entries,
+         digest: digest(verified.payload_bytes),
+         payload_bytes: verified.payload_bytes,
+         key_id: verified.key_id,
+         signing_role: verified.signing_role,
+         transition: catalog.transition,
+         sequence: catalog.sequence,
+         published_at: catalog.published_at,
+         expires_at: catalog.expires_at,
+         identity_count: catalog.identity_count,
+         snapshot_digest: catalog.snapshot_digest
        }}
     end
   end
@@ -223,6 +277,8 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
 
   defp canonical_payload(bytes, value, path) do
     if canonical_json(value) == bytes, do: :ok, else: {:error, error(:noncanonical_json, path)}
+  rescue
+    FunctionClauseError -> {:error, error(:invalid_scalar, path)}
   end
 
   defp plain_json_tree(value, path), do: plain_json_tree(value, path, 0)
@@ -301,6 +357,7 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
 
   defp payload_schema_for_role(%{"schema" => @release_schema}, "release"), do: :ok
   defp payload_schema_for_role(%{"schema" => @catalog_schema}, "promotion"), do: :ok
+  defp payload_schema_for_role(%{"schema" => @catalog_v2_schema}, "promotion"), do: :ok
 
   defp payload_schema_for_role(%{"schema" => _}, _),
     do: {:error, error(:schema_role_mismatch, "$.payload.schema")}
@@ -791,6 +848,73 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
          entries: entries
        }}
     end
+  end
+
+  defp validate_catalog_v2(value, key_records, opts, origins) when is_map(value) do
+    path = "$.payload"
+
+    with :ok <- exact_fields(value, @catalog_v2_fields, path),
+         :ok <-
+           exact_constant(value, "schema", @catalog_v2_schema, :unknown_schema, path <> ".schema"),
+         {:ok, transition} <-
+           catalog_transition(Map.get(value, "transition"), path <> ".transition"),
+         :ok <- sequence(Map.get(value, "sequence"), path <> ".sequence"),
+         {:ok, published_at} <-
+           parse_timestamp(Map.get(value, "publishedAt"), path <> ".publishedAt"),
+         {:ok, expires_at} <- parse_timestamp(Map.get(value, "expiresAt"), path <> ".expiresAt"),
+         :ok <- catalog_window(published_at, expires_at, path),
+         :ok <-
+           bounded_integer(
+             Map.get(value, "identityCount"),
+             1,
+             @max_catalog_entries,
+             path <> ".identityCount"
+           ),
+         {:ok, entries} <-
+           catalog_entries(
+             Map.get(value, "entries"),
+             published_at,
+             key_records,
+             opts,
+             origins,
+             path <> ".entries"
+           ),
+         identity_count = Map.get(value, "identityCount"),
+         true <- identity_count == length(entries),
+         :ok <- digest_value(Map.get(value, "snapshotDigest"), path <> ".snapshotDigest") do
+      {:ok,
+       %{
+         payload: value,
+         transition: transition,
+         sequence: Map.get(value, "sequence"),
+         published_at: published_at,
+         expires_at: expires_at,
+         identity_count: identity_count,
+         snapshot_digest: Map.get(value, "snapshotDigest"),
+         entries: add_v2_entry_envelopes(Map.get(value, "entries"), entries)
+       }}
+    else
+      false -> {:error, error(:identity_count_mismatch, path <> ".identityCount")}
+      {:error, _} = failure -> failure
+    end
+  end
+
+  defp validate_catalog_v2(_value, _key_records, _opts, _origins),
+    do: {:error, error(:invalid_type, "$.payload")}
+
+  defp catalog_transition(value, _path)
+       when value in ["initial", "legacy_successor", "promotion", "rollback"],
+       do: {:ok, value}
+
+  defp catalog_transition(_value, path), do: {:error, error(:invalid_value, path)}
+
+  defp add_v2_entry_envelopes(raw_entries, entries) do
+    Enum.zip(raw_entries, entries)
+    |> Enum.map(fn {raw, entry} ->
+      entry
+      |> Map.put(:current_envelope, Map.fetch!(raw, "current"))
+      |> Map.put(:fallback_envelope, Map.get(raw, "fallback"))
+    end)
   end
 
   defp catalog_entries(entries, published_at, key_records, opts, origins, path) do
@@ -1602,7 +1726,9 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   defp timestamp_in_bounds(value, _path) when is_integer(value) and value >= 0, do: :ok
   defp timestamp_in_bounds(_value, path), do: {:error, error(:invalid_timestamp, path)}
 
-  defp digest(bytes), do: "sha256:" <> digest_hex(bytes)
+  @doc "Return the lowercase SHA-256 digest used by persisted signed records."
+  @spec digest(binary()) :: binary()
+  def digest(bytes) when is_binary(bytes), do: "sha256:" <> digest_hex(bytes)
   defp digest_hex(bytes), do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
   defp error(code, path), do: %{code: code, path: path}
   defp relocate(%{code: code, path: "$"}, prefix), do: %{code: code, path: prefix}
@@ -1852,7 +1978,9 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
 
   defp skip_whitespace(_bytes, index), do: index
 
-  defp canonical_json(value) when is_map(value) do
+  @doc "Canonical JSON used by all signed frontend documents and snapshots."
+  @spec canonical_json(term()) :: binary()
+  def canonical_json(value) when is_map(value) do
     value
     |> Map.keys()
     |> Enum.sort()
@@ -1862,12 +1990,12 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
     |> then(&("{" <> &1 <> "}"))
   end
 
-  defp canonical_json(value) when is_list(value),
+  def canonical_json(value) when is_list(value),
     do: "[" <> Enum.map_join(value, ",", &canonical_json/1) <> "]"
 
-  defp canonical_json(value) when is_binary(value), do: Jason.encode!(value)
-  defp canonical_json(value) when is_integer(value), do: Integer.to_string(value)
-  defp canonical_json(true), do: "true"
-  defp canonical_json(false), do: "false"
-  defp canonical_json(nil), do: "null"
+  def canonical_json(value) when is_binary(value), do: Jason.encode!(value)
+  def canonical_json(value) when is_integer(value), do: Integer.to_string(value)
+  def canonical_json(true), do: "true"
+  def canonical_json(false), do: "false"
+  def canonical_json(nil), do: "null"
 end

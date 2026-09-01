@@ -3,11 +3,14 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
   use CadenceWeb, :controller
 
+  alias CadenceWeb.FrontendReleaseActivation
   alias CadenceWeb.FrontendReleasePublication
   alias CadenceWeb.Plugs.FrontendReleasePublisher
   alias CadenceWeb.Plugs.FrontendReleaseRequestBody
 
   @publisher_identity_header "x-cadence-publisher-identity"
+  @idempotency_key_header "idempotency-key"
+  @promotion_route "/api/cadence/frontend-release/v1/promotions"
   @max_publisher_identity_bytes 128
   @publication_config_key :frontend_release_publication_config
 
@@ -41,6 +44,41 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
       {:error, status, code} ->
         error_response(conn, status, code)
+    end
+  end
+
+  @spec promote(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def promote(conn, _params) do
+    if conn.request_path == @promotion_route do
+      with :ok <- application_json?(conn),
+           {:ok, body} <- FrontendReleaseRequestBody.raw_body(conn),
+           {:ok, document} <- decode_promotion_request(body),
+           {:ok, idempotency_key} <- idempotency_key(conn),
+           {:ok, publisher_identity} <- publisher_identity(conn),
+           {:ok, response} <-
+             activate_catalog(document, idempotency_key, publisher_identity, conn) do
+        send_exact_response(conn, response)
+      else
+        {:error, :unsupported_media_type} ->
+          error_response(conn, 415, "unsupported_media_type")
+
+        {:error, :malformed_json} ->
+          error_response(conn, 400, "malformed_json")
+
+        {:error, :malformed_body} ->
+          error_response(conn, 400, "malformed_body")
+
+        {:error, :malformed_idempotency_key} ->
+          error_response(conn, 400, "malformed_idempotency_key")
+
+        {:error, %{status: status, body: body}} ->
+          send_exact_response(conn, %{status: status, body: body})
+
+        {:error, status, code} ->
+          error_response(conn, status, code)
+      end
+    else
+      send_resp(conn, 404, "")
     end
   end
 
@@ -86,6 +124,58 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       {:ok, value} -> strict_request(value)
       {:error, :malformed_json} -> {:error, :malformed_json}
     end
+  end
+
+  defp decode_promotion_request(body) when is_binary(body) do
+    case strict_decode(body) do
+      {:ok, %Jason.OrderedObject{values: values}} ->
+        with {:ok, request} <- strict_object(values),
+             ["document"] <- Map.keys(request) |> Enum.sort(),
+             {:ok, document} <- required_string(request, "document") do
+          {:ok, document}
+        else
+          _ -> {:error, :malformed_body}
+        end
+
+      {:ok, _value} ->
+        {:error, :malformed_body}
+
+      {:error, :malformed_json} ->
+        {:error, :malformed_json}
+    end
+  end
+
+  defp idempotency_key(conn) do
+    case get_req_header(conn, @idempotency_key_header) do
+      [value] when is_binary(value) and byte_size(value) in 1..128 ->
+        {:ok, value}
+
+      _invalid ->
+        {:error, :malformed_idempotency_key}
+    end
+  end
+
+  defp activate_catalog(document, idempotency_key, publisher_identity, conn) do
+    opts =
+      []
+      |> maybe_put(:publisher_identity, publisher_identity)
+      |> maybe_put(:publication_config, Map.get(conn.private, @publication_config_key))
+
+    case FrontendReleaseActivation.activate_catalog(document, idempotency_key, opts) do
+      {:ok, response} -> {:ok, response}
+      {:error, %{status: _status, body: _body} = response} -> {:error, response}
+      {:error, _failure} -> {:error, 500, "integrity_failure"}
+    end
+  end
+
+  defp maybe_put(opts, _key, nil), do: opts
+  defp maybe_put(opts, _key, :undefined), do: opts
+  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp send_exact_response(conn, %{status: status, body: body}) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, body)
   end
 
   defp strict_decode(body) do

@@ -600,6 +600,7 @@ defmodule CadenceWeb.Router do
 
     put "/objects/:digest", FrontendReleasePublisherController, :upload
     post "/releases", FrontendReleasePublisherController, :create
+    post "/promotions", FrontendReleasePublisherController, :promote
   end
 
   scope "/api/cadence/application-host/v1", CadenceWeb do

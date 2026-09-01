@@ -7,7 +7,6 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
   alias CadenceWeb.FrontendReleasePublication
 
   alias CadenceWeb.FrontendReleasePublication.{
-    CatalogPublication,
     DatabaseArtifactStore,
     ReleaseObject,
     ReleasePublication
@@ -444,27 +443,20 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
 
-    catalog_tasks =
-      Enum.map(1..2, fn _index ->
-        Task.async(fn ->
-          FrontendReleasePublication.admit_catalog(catalog,
-            now: @now,
-            publication_config: @publication_config
-          )
-        end)
-      end)
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog,
+               now: @now,
+               publication_config: @publication_config
+             )
 
-    Enum.each(catalog_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
-    catalog_results = Enum.map(catalog_tasks, &Task.await(&1, 30_000))
-
-    assert [{:ok, first}, {:ok, second}] =
-             Enum.sort_by(catalog_results, &elem(&1, 1).publication_id)
-
-    assert first.publication_id == second.publication_id
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
   end
 
-  test "catalog admission binds exact current and fallback nested envelope bytes" do
+  test "direct catalog admission is closed to preserve the sole activation writer" do
     {current_envelope, _current_payload, current_release} =
       release_document(@artifact_bytes, "build-catalog-current", "2026-08-30T17:30:00Z")
 
@@ -487,25 +479,14 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     catalog = catalog_document(current_release, fallback_release, 2, "2026-08-30T18:00:00Z")
 
-    assert {:ok, publication} =
+    assert {:error, :catalog_activation_required} =
              FrontendReleasePublication.admit_catalog(catalog, now: @now)
 
-    current_row = Repo.get_by!(ReleasePublication, release_id: current_release["releaseId"])
-    fallback_row = Repo.get_by!(ReleasePublication, release_id: fallback_release["releaseId"])
-
-    assert publication.release_references == %{
-             "entries" => [
-               %{
-                 "identity" => identity(current_release),
-                 "currentReleaseId" => current_release["releaseId"],
-                 "currentReleaseDigest" => current_row.payload_digest,
-                 "currentSignedDocumentDigest" => current_row.signed_document_digest,
-                 "fallbackReleaseId" => fallback_release["releaseId"],
-                 "fallbackReleaseDigest" => fallback_row.payload_digest,
-                 "fallbackSignedDocumentDigest" => fallback_row.signed_document_digest
-               }
-             ]
-           }
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
   end
 
   test "alternate valid signature over identical nested payload fails closed" do
@@ -536,10 +517,14 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
 
-    assert {:error, %{code: :release_publication_mismatch, path: "$.payload.entries[0].current"}} =
+    assert {:error, :catalog_activation_required} =
              FrontendReleasePublication.admit_catalog(catalog, now: @now)
 
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
   end
 
   test "catalog replay, fork, lower, and non-monotonic publication cases are enforced" do
@@ -554,24 +539,20 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
              )
 
     catalog = catalog_document(current_release, nil, 2, "2026-08-30T18:00:00Z")
-    assert {:ok, first} = FrontendReleasePublication.admit_catalog(catalog, now: @now)
-    assert {:ok, retry} = FrontendReleasePublication.admit_catalog(catalog, now: @now)
-    assert retry.publication_id == first.publication_id
-
     fork = catalog_document(current_release, nil, 2, "2026-08-30T18:01:00Z")
-
-    assert {:error, %{code: :same_sequence_fork}} =
-             FrontendReleasePublication.admit_catalog(fork, now: @now)
-
     lower = catalog_document(current_release, nil, 1, "2026-08-30T18:02:00Z")
-
-    assert {:error, %{code: :lower_sequence}} =
-             FrontendReleasePublication.admit_catalog(lower, now: @now)
-
     non_monotonic = catalog_document(current_release, nil, 3, "2026-08-30T18:00:00Z")
 
-    assert {:error, %{code: :non_monotonic_publication}} =
-             FrontendReleasePublication.admit_catalog(non_monotonic, now: @now)
+    for candidate <- [catalog, fork, lower, non_monotonic] do
+      assert {:error, :catalog_activation_required} =
+               FrontendReleasePublication.admit_catalog(candidate, now: @now)
+    end
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
   end
 
   test "catalog references to a missing release roll back the catalog transaction" do
@@ -580,10 +561,14 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     catalog = catalog_document(missing_release, nil, 1, "2026-08-30T18:00:00Z")
 
-    assert {:error, %{code: :missing_release_publication}} =
+    assert {:error, :catalog_activation_required} =
              FrontendReleasePublication.admit_catalog(catalog, now: @now)
 
-    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
   end
 
   test "configured trust records and allowed origins are mandatory" do
@@ -616,7 +601,9 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
 
     catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
-    assert {:ok, _catalog} = FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
 
     for sql <- [
           "UPDATE frontend_release_objects SET size = size",
@@ -627,10 +614,7 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
           "TRUNCATE frontend_release_artifacts CASCADE",
           "UPDATE frontend_release_publications SET accepted_at = accepted_at",
           "DELETE FROM frontend_release_publications",
-          "TRUNCATE frontend_release_publications CASCADE",
-          "UPDATE frontend_release_catalog_publications SET accepted_at = accepted_at",
-          "DELETE FROM frontend_release_catalog_publications",
-          "TRUNCATE frontend_release_catalog_publications CASCADE"
+          "TRUNCATE frontend_release_publications CASCADE"
         ] do
       assert_sql_rejected(sql)
     end

@@ -12,10 +12,12 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   alias CadenceWeb.Plugs.FrontendReleasePublisher
 
   @path "/api/cadence/frontend-release/v1/releases"
+  @promotion_path "/api/cadence/frontend-release/v1/promotions"
   @object_prefix "/api/cadence/frontend-release/v1/objects/"
   @fixture Path.expand("../../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+  @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
   @origin "https://cdn.example.com"
   @token "frontend-release-publisher-test-token"
@@ -115,6 +117,111 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       |> post(@path, request_body(rejected_document, bytes_by_path))
 
     assert %{"error" => %{"code" => "admission_rejected"}} = json_response(response, 422)
+  end
+
+  test "POST promotions activates the exact signed catalog document and stores its response", %{
+    conn: conn
+  } do
+    {release_document, release, bytes_by_path} = release_document("http-promotion")
+
+    assert %{"data" => %{"status" => "published"}} =
+             conn
+             |> authenticated()
+             |> post(@path, request_body(release_document, bytes_by_path))
+             |> json_response(201)
+
+    published_at = "2026-08-31T18:00:00Z"
+    snapshot_digest = route_snapshot_digest("initial", 1, published_at, release, nil)
+    catalog = promotion_document("initial", 1, published_at, release, nil, snapshot_digest)
+
+    response =
+      conn
+      |> authenticated()
+      |> put_req_header("idempotency-key", "http-promotion-key")
+      |> post(@promotion_path, promotion_body(catalog))
+
+    assert %{
+             "data" => %{
+               "identityCount" => 1,
+               "outcome" => "initial",
+               "sequence" => 1,
+               "status" => "activated"
+             }
+           } = json_response(response, 201)
+
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_activation_requests", []).rows ==
+             [[1]]
+  end
+
+  test "promotion wire shape and exact path classification are bounded", %{conn: conn} do
+    malformed =
+      conn
+      |> authenticated()
+      |> put_req_header("idempotency-key", "malformed-promotion-key")
+      |> post(@promotion_path, Jason.encode!(%{"document" => "bytes", "extra" => true}))
+
+    assert %{"error" => %{"code" => "malformed_body"}} = json_response(malformed, 400)
+
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_activation_requests", []).rows ==
+             [[0]]
+
+    near_path =
+      post(
+        build_conn() |> put_req_header("content-type", "application/json"),
+        @promotion_path <> "/",
+        "{}"
+      )
+
+    other_method =
+      put(
+        build_conn() |> put_req_header("content-type", "application/json"),
+        @promotion_path,
+        "{}"
+      )
+
+    unmatched =
+      post(
+        build_conn() |> put_req_header("content-type", "application/json"),
+        @promotion_path <> "/extra",
+        "{}"
+      )
+
+    assert near_path.status == 404
+    assert other_method.status == 404
+    assert unmatched.status == 404
+  end
+
+  test "promotion route returns the stored 422 rejection body for semantic state errors", %{
+    conn: conn
+  } do
+    {release_document, release, bytes_by_path} = release_document("http-promotion-rejection")
+
+    assert %{"data" => %{"status" => "published"}} =
+             conn
+             |> authenticated()
+             |> post(@path, request_body(release_document, bytes_by_path))
+             |> json_response(201)
+
+    catalog =
+      promotion_document(
+        "initial",
+        2,
+        "2026-08-31T18:00:00Z",
+        release,
+        nil,
+        sha256("not-the-persisted-snapshot")
+      )
+
+    response =
+      conn
+      |> authenticated()
+      |> put_req_header("idempotency-key", "http-rejection-key")
+      |> post(@promotion_path, promotion_body(catalog))
+
+    assert response.status == 422
+
+    assert response.resp_body ==
+             ~s({"error":{"code":"invalid_sequence","path":"$.payload.sequence"}})
   end
 
   test "public publication rejects improper configured role and origin lists", %{conn: conn} do
@@ -567,6 +674,89 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       "document" => document,
       "artifacts" => artifact_entries(bytes_by_path)
     })
+  end
+
+  defp promotion_body(document), do: Jason.encode!(%{"document" => document})
+
+  defp promotion_document(transition, sequence, published_at, current, fallback, snapshot_digest) do
+    entry = %{"identity" => identity(current), "current" => release_envelope(current)}
+    entry = if fallback, do: Map.put(entry, "fallback", release_envelope(fallback)), else: entry
+
+    payload =
+      canonical(%{
+        "entries" => [entry],
+        "expiresAt" => "2026-09-02T18:00:00Z",
+        "identityCount" => 1,
+        "publishedAt" => published_at,
+        "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
+        "sequence" => sequence,
+        "snapshotDigest" => snapshot_digest,
+        "transition" => transition
+      })
+
+    payload
+    |> sign_fixture("fixture-promotion-key", "promotion", @promotion_seed)
+    |> canonical()
+  end
+
+  defp route_snapshot_digest(transition, sequence, published_at, current, previous) do
+    snapshot = %{
+      "entries" => [
+        %{
+          "current" => route_snapshot_release(current),
+          "identity" => identity(current),
+          "previous" => if(previous, do: route_snapshot_release(previous), else: nil)
+        }
+      ],
+      "expiresAt" => "2026-09-02T18:00:00.000000Z",
+      "identityCount" => 1,
+      "publishedAt" => normalize_datetime(published_at),
+      "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",
+      "sequence" => sequence,
+      "transition" => transition
+    }
+
+    sha256(canonical(snapshot))
+  end
+
+  defp route_snapshot_release(release) do
+    publication = Repo.get_by!(ReleasePublication, release_id: release["releaseId"])
+
+    %{
+      "artifactBaseUrl" => publication.artifact_base_url,
+      "artifactCount" => publication.artifact_count,
+      "exposedModule" => publication.exposed_module,
+      "identity" => identity(release),
+      "manifest" => %{
+        "mediaType" => publication.manifest_media_type,
+        "path" => publication.manifest_path,
+        "sha256" => publication.manifest_sha256,
+        "size" => publication.manifest_size
+      },
+      "payloadDigest" => publication.payload_digest,
+      "provenance" => publication.provenance,
+      "releaseId" => publication.release_id,
+      "releasedAt" => normalize_datetime(publication.released_at),
+      "remoteName" => publication.remote_name,
+      "signedDocumentDigest" => publication.signed_document_digest,
+      "signingKeyId" => publication.signing_key_id,
+      "signingRole" => publication.signing_role
+    }
+  end
+
+  defp identity(release), do: Map.take(release, ["application", "package", "surface"])
+
+  defp release_envelope(release),
+    do: sign_fixture(canonical(release), "fixture-release-key", "release", @release_seed)
+
+  defp normalize_datetime(datetime) when is_binary(datetime) do
+    {:ok, value, _offset} = DateTime.from_iso8601(datetime)
+    normalize_datetime(value)
+  end
+
+  defp normalize_datetime(datetime) do
+    datetime = DateTime.from_unix!(DateTime.to_unix(datetime, :microsecond), :microsecond)
+    Calendar.strftime(datetime, "%Y-%m-%dT%H:%M:%S.%fZ")
   end
 
   defp staged_request_body(document, bytes_by_path) do

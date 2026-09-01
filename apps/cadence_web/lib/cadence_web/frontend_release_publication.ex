@@ -64,15 +64,11 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   @spec admit_catalog(binary() | map(), keyword()) ::
           {:ok, CatalogPublication.t()} | {:error, term()}
-  def admit_catalog(document, opts \\ []) when is_list(opts) do
-    with {:ok, document_bytes} <- signed_document_bytes(document) do
-      persist_catalog(document_bytes, opts)
-    end
-  end
+  def admit_catalog(_document, _opts \\ []), do: {:error, :catalog_activation_required}
 
   @spec publish_catalog(binary() | map(), keyword()) ::
           {:ok, CatalogPublication.t()} | {:error, term()}
-  def publish_catalog(document, opts \\ []), do: admit_catalog(document, opts)
+  def publish_catalog(_document, _opts \\ []), do: {:error, :catalog_activation_required}
 
   @spec fetch_release(binary()) :: {:ok, ReleasePublication.t()} | {:error, :not_found}
   def fetch_release(release_id) when is_binary(release_id) do
@@ -114,14 +110,6 @@ defmodule CadenceWeb.FrontendReleasePublication do
       document,
       configured_trust_records(opts),
       verifier_opts(opts)
-    )
-  end
-
-  defp verify_catalog(document, opts, accepted_state) do
-    FrontendReleaseCatalog.verify_catalog(
-      document,
-      configured_trust_records(opts),
-      verifier_opts(opts) |> Keyword.put(:accepted_state, accepted_state)
     )
   end
 
@@ -204,194 +192,9 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp persist_catalog(document_bytes, opts) do
-    transaction_result =
-      Repo.transaction(fn ->
-        :ok = advisory_lock("frontend-release-catalog")
-
-        latest = locked_latest_catalog()
-        accepted_state = latest && latest.accepted_state
-
-        with {:ok, verified} <- verify_catalog(document_bytes, opts, accepted_state),
-             :ok <- same_sequence_document_is_exact(latest, verified, document_bytes),
-             {:ok, release_references} <-
-               require_admitted_releases(verified.catalog, verified.entries) do
-          persist_catalog_result(verified, document_bytes, release_references)
-        else
-          {:error, failure} -> Repo.rollback(failure)
-        end
-      end)
-
-    normalize_transaction_result(transaction_result)
-  end
-
-  defp persist_catalog_result(
-         %{acceptance: :identical, catalog: catalog},
-         _document_bytes,
-         _release_references
-       ) do
-    Repo.get_by!(CatalogPublication, sequence: catalog["sequence"])
-  end
-
-  defp persist_catalog_result(verified, document_bytes, release_references) do
-    attrs = catalog_publication_attrs(verified, document_bytes, release_references)
-
-    case Repo.insert(CatalogPublication.changeset(attrs)) do
-      {:ok, row} -> row
-      {:error, changeset} -> Repo.rollback(persistence_error(changeset))
-    end
-  end
-
-  defp same_sequence_document_is_exact(nil, _verified, _document_bytes), do: :ok
-
-  defp same_sequence_document_is_exact(existing, verified, document_bytes) do
-    sequence = verified.catalog["sequence"]
-
-    if existing.sequence == sequence do
-      cond do
-        existing.catalog_digest != verified.digest ->
-          {:error, error(:same_sequence_fork, "$.payload.sequence")}
-
-        existing.signed_document_bytes != document_bytes ->
-          {:error, error(:same_sequence_fork, "$.payload.sequence")}
-
-        true ->
-          :ok
-      end
-    else
-      :ok
-    end
-  end
-
-  defp require_admitted_releases(%{"entries" => raw_entries}, entries) do
-    if same_length_lists?(raw_entries, entries),
-      do: require_admitted_release_pairs(raw_entries, entries),
-      else: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
-  end
-
-  defp require_admitted_releases(_catalog, _entries),
-    do: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
-
-  defp require_admitted_release_pairs(raw_entries, entries) do
-    raw_entries
-    |> Enum.zip(entries)
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, []}, fn {{raw_entry, entry}, index}, {:ok, references} ->
-      path = "$.payload.entries[#{index}]"
-
-      with {:ok, current} <-
-             require_admitted_release(
-               Map.fetch!(raw_entry, "current"),
-               entry.current,
-               path <> ".current"
-             ),
-           {:ok, fallback} <-
-             optional_require_admitted_release(raw_entry, entry.fallback, path <> ".fallback") do
-        reference = release_reference(entry, current, fallback)
-        {:cont, {:ok, [reference | references]}}
-      else
-        {:error, _} = failure -> {:halt, failure}
-      end
-    end)
-    |> case do
-      {:ok, references} -> {:ok, Enum.reverse(references)}
-      failure -> failure
-    end
-  end
-
-  defp same_length_lists?([], []), do: true
-
-  defp same_length_lists?([_head | tail], [_other_head | other_tail]),
-    do: same_length_lists?(tail, other_tail)
-
-  defp same_length_lists?(_left, _right), do: false
-
-  defp require_admitted_release(signed_envelope, release, path) do
-    release_id = release["releaseId"]
-    payload_bytes = canonical_json(release)
-    expected_digest = digest(payload_bytes)
-    signed_document_bytes = canonical_json(signed_envelope)
-    signed_document_digest = digest(signed_document_bytes)
-
-    case Repo.get_by(ReleasePublication, release_id: release_id) do
-      nil ->
-        {:error, error(:missing_release_publication, path)}
-
-      %ReleasePublication{} = row ->
-        cond do
-          row.payload_digest != expected_digest or row.payload_bytes != payload_bytes ->
-            release_publication_mismatch(path)
-
-          row.signed_document_digest != signed_document_digest or
-              row.signed_document_bytes != signed_document_bytes ->
-            release_publication_mismatch(path)
-
-          release_identity_matches?(row, release) ->
-            {:ok, row}
-
-          true ->
-            release_publication_mismatch(path)
-        end
-    end
-  end
-
-  defp optional_require_admitted_release(raw_entry, nil, _path) do
-    case Map.fetch(raw_entry, "fallback") do
-      :error -> {:ok, nil}
-      {:ok, _value} -> {:error, error(:invalid_catalog_entries, "$.payload.entries")}
-    end
-  end
-
-  defp optional_require_admitted_release(raw_entry, release, path) do
-    case Map.fetch(raw_entry, "fallback") do
-      {:ok, signed_envelope} -> require_admitted_release(signed_envelope, release, path)
-      :error -> {:error, error(:invalid_catalog_entries, path)}
-    end
-  end
-
-  defp release_identity_matches?(row, release) do
-    row.release_id == release["releaseId"] and
-      row.application_id == release["application"]["id"] and
-      row.application_version == release["application"]["version"] and
-      row.package_id == release["package"]["id"] and
-      row.package_version == release["package"]["version"] and
-      row.surface_id == release["surface"]["id"] and
-      row.surface_version == release["surface"]["version"]
-  end
-
-  defp release_reference(entry, current, fallback) do
-    reference = %{
-      "identity" => entry.identity,
-      "currentReleaseId" => current.release_id,
-      "currentReleaseDigest" => current.payload_digest,
-      "currentSignedDocumentDigest" => current.signed_document_digest
-    }
-
-    if fallback do
-      reference
-      |> Map.put("fallbackReleaseId", fallback.release_id)
-      |> Map.put("fallbackReleaseDigest", fallback.payload_digest)
-      |> Map.put("fallbackSignedDocumentDigest", fallback.signed_document_digest)
-    else
-      reference
-    end
-  end
-
-  defp release_publication_mismatch(path),
-    do: {:error, error(:release_publication_mismatch, path)}
-
   defp locked_release_by_identity(release_id) do
     ReleasePublication
     |> where([row], row.release_id == ^release_id)
-    |> lock("FOR UPDATE")
-    |> Repo.one()
-  end
-
-  defp locked_latest_catalog do
-    CatalogPublication
-    |> where([row], row.acceptance_state == "accepted")
-    |> order_by(desc: :sequence)
-    |> limit(1)
     |> lock("FOR UPDATE")
     |> Repo.one()
   end
@@ -421,6 +224,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
       remote_name: release["remoteName"],
       exposed_module: release["exposedModule"],
       artifact_base_url: release["artifactBaseUrl"],
+      manifest_path: release["manifest"]["path"],
+      manifest_sha256: release["manifest"]["sha256"],
+      manifest_size: release["manifest"]["size"],
+      manifest_media_type: release["manifest"]["mediaType"],
       payload_digest: verified.digest,
       signed_document_digest: digest(document_bytes),
       signed_document_bytes: document_bytes,
@@ -446,28 +253,6 @@ defmodule CadenceWeb.FrontendReleasePublication do
       size: artifact.size,
       media_type: artifact.media_type,
       object_key: artifact.object_key,
-      metadata: %{}
-    }
-  end
-
-  defp catalog_publication_attrs(verified, document_bytes, release_references) do
-    catalog = verified.catalog
-
-    %{
-      publication_id: Ids.new("frontend_release_catalog_publication"),
-      sequence: catalog["sequence"],
-      catalog_digest: verified.digest,
-      signed_document_digest: digest(document_bytes),
-      signed_document_bytes: document_bytes,
-      payload_bytes: verified.payload_bytes,
-      signing_key_id: verified.key_id,
-      signing_role: verified.signing_role,
-      published_at: timestamp!(catalog["publishedAt"]),
-      expires_at: timestamp!(catalog["expiresAt"]),
-      acceptance_state: "accepted",
-      accepted_state: verified.accepted_state,
-      release_references: %{"entries" => release_references},
-      accepted_at: DateTime.utc_now(),
       metadata: %{}
     }
   end
@@ -785,9 +570,6 @@ defmodule CadenceWeb.FrontendReleasePublication do
     :ok
   end
 
-  defp normalize_transaction_result({:ok, row}), do: {:ok, row}
-  defp normalize_transaction_result({:error, reason}), do: {:error, reason}
-
   defp normalize_transaction_result({:ok, {outcome, row}}, true), do: {:ok, row, outcome}
   defp normalize_transaction_result({:ok, {_outcome, row}}, false), do: {:ok, row}
   defp normalize_transaction_result({:error, reason}, _return_outcome), do: {:error, reason}
@@ -924,7 +706,9 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp digest_hex(bytes),
     do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
 
-  defp canonical_json(value) when is_map(value) do
+  @doc "Canonical JSON used by signed release and catalog documents."
+  @spec canonical_json(term()) :: binary()
+  def canonical_json(value) when is_map(value) do
     value
     |> Map.keys()
     |> Enum.sort()
@@ -934,14 +718,14 @@ defmodule CadenceWeb.FrontendReleasePublication do
     |> then(&("{" <> &1 <> "}"))
   end
 
-  defp canonical_json(value) when is_list(value),
+  def canonical_json(value) when is_list(value),
     do: "[" <> Enum.map_join(value, ",", &canonical_json/1) <> "]"
 
-  defp canonical_json(value) when is_binary(value), do: Jason.encode!(value)
-  defp canonical_json(value) when is_integer(value), do: Integer.to_string(value)
-  defp canonical_json(true), do: "true"
-  defp canonical_json(false), do: "false"
-  defp canonical_json(nil), do: "null"
+  def canonical_json(value) when is_binary(value), do: Jason.encode!(value)
+  def canonical_json(value) when is_integer(value), do: Integer.to_string(value)
+  def canonical_json(true), do: "true"
+  def canonical_json(false), do: "false"
+  def canonical_json(nil), do: "null"
 
   defp error(code, path), do: %{code: code, path: path}
 end

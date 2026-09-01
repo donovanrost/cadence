@@ -21,6 +21,10 @@ defmodule CadenceWeb.FrontendReleasePublication.ReleasePublication do
     field(:remote_name, :string)
     field(:exposed_module, :string)
     field(:artifact_base_url, :string)
+    field(:manifest_path, :string)
+    field(:manifest_sha256, :string)
+    field(:manifest_size, :integer)
+    field(:manifest_media_type, :string)
     field(:payload_digest, :string)
     field(:signed_document_digest, :string)
     field(:signed_document_bytes, :binary)
@@ -54,6 +58,10 @@ defmodule CadenceWeb.FrontendReleasePublication.ReleasePublication do
     :remote_name,
     :exposed_module,
     :artifact_base_url,
+    :manifest_path,
+    :manifest_sha256,
+    :manifest_size,
+    :manifest_media_type,
     :payload_digest,
     :signed_document_digest,
     :signed_document_bytes,

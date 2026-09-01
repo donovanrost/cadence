@@ -19,6 +19,9 @@ defmodule CadenceWeb.FrontendReleasePublication.CatalogPublication do
     field(:published_at, :utc_datetime_usec)
     field(:expires_at, :utc_datetime_usec)
     field(:acceptance_state, :string)
+    field(:transition, :string)
+    field(:identity_count, :integer)
+    field(:snapshot_digest, :string)
     field(:accepted_state, :map, default: %{})
     field(:release_references, :map, default: %{})
     field(:metadata, :map, default: %{})
@@ -39,13 +42,16 @@ defmodule CadenceWeb.FrontendReleasePublication.CatalogPublication do
     :published_at,
     :expires_at,
     :acceptance_state,
+    :transition,
+    :identity_count,
+    :snapshot_digest,
     :accepted_state,
     :release_references,
     :metadata,
     :accepted_at
   ]
 
-  @required_fields @fields -- [:metadata]
+  @required_fields @fields -- [:metadata, :transition, :identity_count, :snapshot_digest]
 
   @spec changeset(map()) :: Ecto.Changeset.t()
   def changeset(attrs) when is_map(attrs) do
@@ -62,5 +68,6 @@ defmodule CadenceWeb.FrontendReleasePublication.CatalogPublication do
     |> check_constraint(:signing_role, name: :frcp_signing_role_check)
     |> check_constraint(:acceptance_state, name: :frcp_acceptance_state_check)
     |> check_constraint(:expires_at, name: :frcp_window_check)
+    |> check_constraint(:transition, name: :frcp_v2_transition_fields_check)
   end
 end
