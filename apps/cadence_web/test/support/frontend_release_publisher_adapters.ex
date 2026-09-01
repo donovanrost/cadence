@@ -33,6 +33,9 @@ defmodule CadenceWeb.FrontendReleasePublisherTestAdapter do
       {:raise, exception} when is_atom(exception) ->
         raise exception
 
+      {:exit, reason} ->
+        exit(reason)
+
       {:throw, value} ->
         throw(value)
     end

@@ -218,13 +218,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     referenced_digest = sha256(@artifact_bytes["assets/app.js"])
     unreferenced_bytes = "unreferenced-staged-object"
     unreferenced_digest = sha256(unreferenced_bytes)
-    stage_file!(referenced_digest, @artifact_bytes["assets/app.js"])
-    stage_file!(unreferenced_digest, unreferenced_bytes)
-
-    Repo.query!(
-      "UPDATE frontend_release_staged_objects SET expires_at = now() - interval '1 hour'",
-      []
-    )
+    insert_expired_stage!(referenced_digest, @artifact_bytes["assets/app.js"])
+    insert_expired_stage!(unreferenced_digest, unreferenced_bytes)
 
     assert {:ok, 1} = DatabaseArtifactStore.cleanup_expired_staged_artifacts()
     assert [[1]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
@@ -233,6 +228,21 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     assert [[^expected_stage_digest]] =
              Repo.query!("SELECT sha256 FROM frontend_release_staged_objects", []).rows
+  end
+
+  test "staged metadata and chunk rows reject updates after insert" do
+    bytes = "immutable-staged-object"
+    digest = sha256(bytes)
+    insert_expired_stage!(digest, bytes)
+
+    for sql <- [
+          "UPDATE frontend_release_staged_objects SET size = size",
+          "UPDATE frontend_release_staged_objects SET expires_at = expires_at",
+          "UPDATE frontend_release_staged_object_chunks SET bytes = bytes",
+          "UPDATE frontend_release_staged_object_chunks SET chunk_index = chunk_index"
+        ] do
+      assert_sql_rejected(sql)
+    end
   end
 
   test "release objects and publication rows roll back together" do
@@ -798,6 +808,27 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     assert {:ok, %{digest: ^digest}} = DatabaseArtifactStore.put_file(digest, file_path)
     file_path
+  end
+
+  defp insert_expired_stage!(digest, bytes) do
+    sha256_hex = String.replace_prefix(digest, "sha256:", "")
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
+      VALUES ($1, $2, now() - interval '1 hour', now())
+      """,
+      [sha256_hex, byte_size(bytes)]
+    )
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_object_chunks
+        (sha256, chunk_index, bytes, size, inserted_at)
+      VALUES ($1, 0, $2, $3, now())
+      """,
+      [sha256_hex, bytes, byte_size(bytes)]
+    )
   end
 
   defp write_temp_file(bytes) do

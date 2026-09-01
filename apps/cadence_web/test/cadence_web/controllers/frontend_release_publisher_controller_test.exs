@@ -400,6 +400,27 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     refute_receive {:frontend_release_publisher_read, _, _}
   end
 
+  test "production endpoint propagates body-reader exits, exceptions, and throws" do
+    signals = [
+      {:exit, :adapter_exit},
+      {:raise, RuntimeError},
+      {:throw, :adapter_throw}
+    ]
+
+    for signal <- signals do
+      conn =
+        endpoint_conn_with_adapter(
+          FrontendReleasePublisherTestAdapter.responses([signal], self()),
+          [
+            {"authorization", "Bearer " <> @token},
+            {"content-type", "application/json"}
+          ]
+        )
+
+      assert_signal_propagated(signal, fn -> Endpoint.call(conn, []) end)
+    end
+  end
+
   test "publisher auth is exact-path and idempotent when the router repeats it" do
     conn =
       Plug.Test.conn(:post, @path, "")
@@ -542,15 +563,12 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   end
 
   defp endpoint_conn(headers) do
+    endpoint_conn_with_adapter(FrontendReleasePublisherTestAdapter.body("", self()), headers)
+  end
+
+  defp endpoint_conn_with_adapter(adapter_state, headers) do
     Plug.Test.conn(:post, @path, "")
-    |> then(
-      &%{
-        &1
-        | adapter:
-            {FrontendReleasePublisherTestAdapter,
-             FrontendReleasePublisherTestAdapter.body("", self())}
-      }
-    )
+    |> then(&%{&1 | adapter: {FrontendReleasePublisherTestAdapter, adapter_state}})
     |> then(
       &Enum.reduce(headers, &1, fn {name, value}, conn -> put_req_header(conn, name, value) end)
     )
@@ -648,6 +666,12 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       GenServer.stop(connection)
     end
   end
+
+  defp assert_signal_propagated({:exit, reason}, fun), do: assert(catch_exit(fun.()) == reason)
+
+  defp assert_signal_propagated({:raise, exception}, fun), do: assert_raise(exception, fun)
+
+  defp assert_signal_propagated({:throw, value}, fun), do: assert(catch_throw(fun.()) == value)
 
   defp stage_worker_artifacts(bytes_by_path) do
     Enum.each(bytes_by_path, fn {_artifact_path, bytes} ->
