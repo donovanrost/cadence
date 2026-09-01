@@ -515,18 +515,21 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   defp release_id(_value, path, _release), do: {:error, error(:invalid_sha256, path)}
 
   defp validate_artifacts(manifest, artifacts, path) when is_list(artifacts) do
-    cond do
-      artifacts == [] ->
+    case bounded_list(artifacts, @max_artifacts) do
+      {:ok, 0} ->
         {:error, error(:incomplete_required_fields, path <> ".artifacts")}
 
-      length(artifacts) > @max_artifacts ->
-        {:error, error(:unbounded_value, path <> ".artifacts")}
-
-      true ->
+      {:ok, _size} ->
         with {:ok, manifest_entry} <- validate_artifact(manifest, path <> ".manifest"),
              {:ok, entries} <- validate_artifact_list(artifacts, path <> ".artifacts") do
           manifest_in_inventory(manifest_entry, entries, path <> ".manifest")
         end
+
+      :too_many ->
+        {:error, error(:unbounded_value, path <> ".artifacts")}
+
+      :improper ->
+        {:error, error(:invalid_type, path <> ".artifacts")}
     end
   end
 
@@ -790,16 +793,23 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
     end
   end
 
-  defp catalog_entries(entries, _published_at, _keys, _opts, _origins, path)
-       when not is_list(entries), do: {:error, error(:invalid_type, path)}
-
-  defp catalog_entries([], _published_at, _keys, _opts, _origins, path),
-    do: {:error, error(:incomplete_required_fields, path)}
-
-  defp catalog_entries(entries, _published_at, _keys, _opts, _origins, path)
-       when length(entries) > @max_catalog_entries, do: {:error, error(:unbounded_value, path)}
-
   defp catalog_entries(entries, published_at, key_records, opts, origins, path) do
+    case bounded_list(entries, @max_catalog_entries) do
+      {:ok, 0} ->
+        {:error, error(:incomplete_required_fields, path)}
+
+      {:ok, _size} ->
+        catalog_entries_bounded(entries, published_at, key_records, opts, origins, path)
+
+      :too_many ->
+        {:error, error(:unbounded_value, path)}
+
+      :improper ->
+        {:error, error(:invalid_type, path)}
+    end
+  end
+
+  defp catalog_entries_bounded(entries, published_at, key_records, opts, origins, path) do
     Enum.with_index(entries)
     |> Enum.reduce_while({:ok, nil, MapSet.new(), MapSet.new(), %{}, %{}, []}, fn {entry, index},
                                                                                   {:ok,
@@ -1437,12 +1447,23 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
   defp role(_value, path), do: {:error, error(:invalid_role, path)}
 
   defp key_roles(value, path) when is_list(value) do
-    cond do
-      value == [] or length(value) > 2 -> {:error, error(:invalid_value, path)}
-      value != Enum.uniq(value) -> {:error, error(:duplicate_role, path)}
-      value != Enum.sort(value) -> {:error, error(:unsorted_array, path)}
-      Enum.all?(value, &(&1 in ["release", "promotion"])) -> {:ok, value}
-      true -> {:error, error(:invalid_role, path)}
+    case bounded_list(value, 2) do
+      {:ok, 0} ->
+        {:error, error(:invalid_value, path)}
+
+      {:ok, _size} ->
+        cond do
+          value != Enum.uniq(value) -> {:error, error(:duplicate_role, path)}
+          value != Enum.sort(value) -> {:error, error(:unsorted_array, path)}
+          Enum.all?(value, &(&1 in ["release", "promotion"])) -> {:ok, value}
+          true -> {:error, error(:invalid_role, path)}
+        end
+
+      :too_many ->
+        {:error, error(:invalid_value, path)}
+
+      :improper ->
+        {:error, error(:invalid_type, path)}
     end
   end
 

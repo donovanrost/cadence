@@ -10,13 +10,32 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   @token_digest_key :token_sha256
   @digest_bytes 32
   @publisher_path "/api/cadence/frontend-release/v1/releases"
+  @artifact_path_prefix "/api/cadence/frontend-release/v1/objects/"
 
   @spec init(Plug.opts()) :: Plug.opts()
   def init(opts), do: opts
 
   @spec publisher_request?(Plug.Conn.t()) :: boolean()
   def publisher_request?(%Plug.Conn{method: "POST", request_path: @publisher_path}), do: true
-  def publisher_request?(%Plug.Conn{}), do: false
+  def publisher_request?(%Plug.Conn{} = conn), do: artifact_upload_request?(conn)
+
+  @spec artifact_upload_request?(Plug.Conn.t()) :: boolean()
+  def artifact_upload_request?(%Plug.Conn{method: "PUT", request_path: request_path}) do
+    with true <- String.starts_with?(request_path, @artifact_path_prefix),
+         digest when digest != "" <-
+           binary_part(
+             request_path,
+             byte_size(@artifact_path_prefix),
+             byte_size(request_path) - byte_size(@artifact_path_prefix)
+           ),
+         false <- String.contains?(digest, "/") do
+      true
+    else
+      _invalid -> false
+    end
+  end
+
+  def artifact_upload_request?(%Plug.Conn{}), do: false
 
   @spec application_json?(Plug.Conn.t()) :: :ok | {:error, :unsupported_media_type}
   def application_json?(conn) do
@@ -39,6 +58,7 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
         :ok -> conn
         {:error, :unauthenticated} -> unauthorized(conn)
         {:error, :unsupported_media_type} -> unsupported_media_type(conn)
+        {:error, :malformed_artifact_path} -> malformed_artifact_path(conn)
       end
     else
       conn
@@ -46,8 +66,45 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   end
 
   defp preflight(conn) do
-    with :ok <- authenticate(conn) do
-      application_json?(conn)
+    with :ok <- authenticate(conn),
+         :ok <- publisher_media_type(conn) do
+      artifact_path(conn)
+    end
+  end
+
+  defp publisher_media_type(conn) do
+    if artifact_upload_request?(conn),
+      do: artifact_octet_stream?(conn),
+      else: application_json?(conn)
+  end
+
+  defp artifact_octet_stream?(conn) do
+    case get_req_header(conn, "content-type") do
+      [value] ->
+        case Utils.content_type(value) do
+          {:ok, "application", "octet-stream", _params} -> :ok
+          _invalid -> {:error, :unsupported_media_type}
+        end
+
+      _missing_or_duplicate ->
+        {:error, :unsupported_media_type}
+    end
+  end
+
+  defp artifact_path(conn) do
+    if artifact_upload_request?(conn) do
+      digest =
+        binary_part(
+          conn.request_path,
+          byte_size(@artifact_path_prefix),
+          byte_size(conn.request_path) - byte_size(@artifact_path_prefix)
+        )
+
+      if Regex.match?(~r/^sha256:[0-9a-f]{64}$/, digest),
+        do: :ok,
+        else: {:error, :malformed_artifact_path}
+    else
+      :ok
     end
   end
 
@@ -107,6 +164,13 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(415, Jason.encode!(%{error: %{code: "unsupported_media_type"}}))
+    |> halt()
+  end
+
+  defp malformed_artifact_path(conn) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(400, Jason.encode!(%{error: %{code: "malformed_artifact_path"}}))
     |> halt()
   end
 end

@@ -1,21 +1,25 @@
 defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Ecto.Adapters.SQL.Sandbox
+
   alias Cadence.Repo
   alias CadenceWeb.Endpoint
   alias CadenceWeb.FrontendReleaseCatalog
+  alias CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore
   alias CadenceWeb.FrontendReleasePublication.ReleasePublication
   alias CadenceWeb.FrontendReleasePublisherTestAdapter
   alias CadenceWeb.Plugs.FrontendReleasePublisher
 
   @path "/api/cadence/frontend-release/v1/releases"
+  @object_prefix "/api/cadence/frontend-release/v1/objects/"
   @fixture Path.expand("../../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
   @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
   @origin "https://cdn.example.com"
   @token "frontend-release-publisher-test-token"
-  @max_body_bytes 140_000_000
+  @max_envelope_bytes 4_000_000
 
   setup do
     previous_publication_config =
@@ -141,6 +145,71 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     assert %{"error" => %{"code" => "admission_rejected"}} = json_response(response, 422)
   end
 
+  test "public publication rejects improper configured role and origin lists", %{conn: conn} do
+    {document, _release, bytes_by_path} = release_document("http-improper-config")
+    first_key = hd(@corpus["keys"])
+    improper_key = Map.put(first_key, "allowedRoles", ["release" | :tail])
+
+    Application.put_env(
+      :cadence_web,
+      :frontend_release_publication,
+      trust_records: [improper_key | tl(@corpus["keys"])],
+      allowed_origins: [@origin]
+    )
+
+    role_response =
+      conn
+      |> authenticated()
+      |> post(@path, request_body(document, bytes_by_path))
+
+    assert %{"error" => %{"code" => "admission_rejected"}} = json_response(role_response, 422)
+
+    Application.put_env(
+      :cadence_web,
+      :frontend_release_publication,
+      trust_records: @corpus["keys"],
+      allowed_origins: [@origin | :tail]
+    )
+
+    origin_response =
+      conn
+      |> authenticated()
+      |> post(@path, request_body(document, bytes_by_path))
+
+    assert %{"error" => %{"code" => "admission_rejected"}} =
+             json_response(origin_response, 422)
+  end
+
+  test "maps direct and tagged database connection failures to 503 at the endpoint" do
+    {document, _release, bytes_by_path} = release_document("http-db-failure")
+    inline_body = request_body(document, bytes_by_path)
+    staged_body = staged_request_body(document, bytes_by_path)
+
+    assert 503 ==
+             endpoint_db_failure("pg_advisory_xact_lock", inline_body, fn -> :ok end)
+
+    assert 503 ==
+             endpoint_db_failure(
+               "FROM \"frontend_release_publications\"",
+               inline_body,
+               fn -> :ok end
+             )
+
+    assert 503 ==
+             endpoint_db_failure(
+               "FROM \"frontend_release_publications\"",
+               staged_body,
+               fn -> stage_worker_artifacts(bytes_by_path) end
+             )
+
+    assert 503 ==
+             endpoint_db_failure(
+               "SELECT size FROM frontend_release_staged_objects",
+               staged_body,
+               fn -> stage_worker_artifacts(bytes_by_path) end
+             )
+  end
+
   test "does not use browser session authentication or current scope", %{conn: conn} do
     response =
       conn
@@ -200,12 +269,117 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     assert %{"error" => %{"code" => "unsupported_media_type"}} = json_response(response, 415)
   end
 
+  test "PUT upload authenticates, validates media and digest path, and is idempotent", %{
+    conn: conn
+  } do
+    body = "controller-staged-artifact"
+    digest = sha256(body)
+
+    unauthenticated =
+      conn
+      |> put_req_header("content-type", "application/octet-stream")
+      |> put(@object_prefix <> digest, body)
+
+    unsupported =
+      conn
+      |> authenticated()
+      |> put_req_header("content-type", "application/json")
+      |> put(@object_prefix <> digest, body)
+
+    malformed_path =
+      conn
+      |> authenticated_upload()
+      |> put(@object_prefix <> "not-a-digest", body)
+
+    first = conn |> authenticated_upload() |> put(@object_prefix <> digest, body)
+    second = conn |> authenticated_upload() |> put(@object_prefix <> digest, body)
+
+    assert %{"error" => %{"code" => "unauthenticated"}} = json_response(unauthenticated, 401)
+    assert %{"error" => %{"code" => "unsupported_media_type"}} = json_response(unsupported, 415)
+
+    assert %{"error" => %{"code" => "malformed_artifact_path"}} =
+             json_response(malformed_path, 400)
+
+    assert %{"data" => %{"status" => "stored"}} = json_response(first, 201)
+    assert %{"data" => %{"status" => "existing"}} = json_response(second, 200)
+
+    assert Repo.aggregate(CadenceWeb.FrontendReleasePublication.ReleaseObject, :count, :sha256) ==
+             0
+  end
+
+  test "staged uploads are invisible until release finalization", %{conn: conn} do
+    {document, release, bytes_by_path} = release_document("http-staged-publication")
+
+    Enum.each(bytes_by_path, fn {_artifact_path, bytes} ->
+      digest = sha256(bytes)
+
+      assert %{"data" => %{"status" => "stored"}} =
+               conn
+               |> authenticated_upload()
+               |> put(@object_prefix <> digest, bytes)
+               |> json_response(201)
+    end)
+
+    assert Repo.aggregate(CadenceWeb.FrontendReleasePublication.ReleaseObject, :count, :sha256) ==
+             0
+
+    response =
+      conn
+      |> authenticated()
+      |> post(@path, staged_request_body(document, bytes_by_path))
+
+    assert %{"data" => %{"release_id" => release_id, "status" => "published"}} =
+             json_response(response, 201)
+
+    assert release_id == release["releaseId"]
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows == [[0]]
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_objects", []).rows == [[2]]
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows == [[2]]
+  end
+
+  test "failed controller finalization retains a stage for retry", %{conn: conn} do
+    {document, _release, bytes_by_path} = release_document("http-staged-retry")
+    app_bytes = bytes_by_path["assets/app.js"]
+    manifest_bytes = bytes_by_path["mf-manifest.json"]
+    app_digest = sha256(app_bytes)
+    manifest_digest = sha256(manifest_bytes)
+
+    assert %{"data" => %{"status" => "stored"}} =
+             conn
+             |> authenticated_upload()
+             |> put(@object_prefix <> app_digest, app_bytes)
+             |> json_response(201)
+
+    failed =
+      conn
+      |> authenticated()
+      |> post(@path, staged_request_body(document, bytes_by_path))
+
+    assert %{"error" => %{"code" => "admission_rejected"}} = json_response(failed, 422)
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows == [[1]]
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_objects", []).rows == [[0]]
+
+    assert %{"data" => %{"status" => "stored"}} =
+             conn
+             |> authenticated_upload()
+             |> put(@object_prefix <> manifest_digest, manifest_bytes)
+             |> json_response(201)
+
+    assert %{"data" => %{"status" => "published"}} =
+             conn
+             |> authenticated()
+             |> post(@path, staged_request_body(document, bytes_by_path))
+             |> json_response(201)
+
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows == [[0]]
+  end
+
   test "endpoint preflight rejects invalid auth before any body read" do
     result =
       endpoint_conn([
         {"authorization", "Bearer wrong-token"},
         {"content-type", "application/json"},
-        {"content-length", Integer.to_string(@max_body_bytes)}
+        {"content-length", Integer.to_string(@max_envelope_bytes)}
       ])
       |> Endpoint.call([])
 
@@ -218,7 +392,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       endpoint_conn([
         {"authorization", "Bearer " <> @token},
         {"content-type", "text/plain"},
-        {"content-length", Integer.to_string(@max_body_bytes)}
+        {"content-length", Integer.to_string(@max_envelope_bytes)}
       ])
       |> Endpoint.call([])
 
@@ -322,7 +496,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     oversized =
       conn
       |> authenticated()
-      |> put_req_header("content-length", Integer.to_string(@max_body_bytes + 1))
+      |> put_req_header("content-length", Integer.to_string(@max_envelope_bytes + 1))
       |> post(@path, "{}")
 
     assert %{"error" => %{"code" => "malformed_body"}} = json_response(malformed, 400)
@@ -330,7 +504,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   end
 
   test "rejects an over-limit chunked body without invoking the JSON parser", %{conn: conn} do
-    body = String.duplicate("x", @max_body_bytes + 1)
+    body = String.duplicate("x", @max_envelope_bytes + 1)
 
     response =
       conn
@@ -343,7 +517,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   test "bypasses the default parser limit while retaining the exact bounded raw body", %{
     conn: conn
   } do
-    body = " " <> String.duplicate("x", 8_000_000)
+    body = String.duplicate("x", @max_envelope_bytes)
 
     response =
       conn
@@ -357,6 +531,13 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     conn
     |> put_req_header("accept", "application/json")
     |> put_req_header("content-type", "application/json")
+    |> put_req_header("authorization", "Bearer " <> @token)
+  end
+
+  defp authenticated_upload(conn) do
+    conn
+    |> put_req_header("accept", "application/json")
+    |> put_req_header("content-type", "application/octet-stream")
     |> put_req_header("authorization", "Bearer " <> @token)
   end
 
@@ -380,6 +561,112 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
       "document" => document,
       "artifacts" => artifact_entries(bytes_by_path)
     })
+  end
+
+  defp staged_request_body(document, bytes_by_path) do
+    Jason.encode!(%{
+      "document" => document,
+      "artifacts" =>
+        Enum.map(bytes_by_path, fn {file_path, bytes} ->
+          %{"path" => file_path, "sha256" => sha256(bytes), "size" => byte_size(bytes)}
+        end)
+    })
+  end
+
+  defp endpoint_db_failure(query_fragment, body, setup_fun) do
+    owner = self()
+
+    task =
+      Task.async(fn ->
+        :ok = Sandbox.checkout(Repo)
+
+        try do
+          setup_fun.()
+          [[backend_pid]] = Repo.query!("SELECT pg_backend_pid()", []).rows
+          send(owner, {:r5_worker_backend, backend_pid})
+
+          receive do
+            :publish ->
+              Plug.Test.conn(:post, @path, body)
+              |> put_req_header("accept", "application/json")
+              |> put_req_header("content-type", "application/json")
+              |> put_req_header("authorization", "Bearer " <> @token)
+              |> Endpoint.call([])
+              |> Map.fetch!(:status)
+          end
+        after
+          try do
+            Sandbox.checkin(Repo)
+          catch
+            _kind, _reason -> :ok
+          end
+        end
+      end)
+
+    assert_receive {:r5_worker_backend, backend_pid}, 5_000
+    handler_id = {__MODULE__, :r5_db_failure, System.unique_integer([:positive])}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:cadence, :repo, :query],
+        fn _event, _measurements, %{query: query}, {owner, query_fragment, backend_pid} ->
+          if String.contains?(query, query_fragment) do
+            terminate_backend!(backend_pid)
+            send(owner, {:r5_db_failure_terminated, query_fragment})
+          end
+        end,
+        {owner, query_fragment, backend_pid}
+      )
+
+    result =
+      try do
+        send(task.pid, :publish)
+        assert_receive {:r5_db_failure_terminated, ^query_fragment}, 5_000
+        Task.await(task, 10_000)
+      after
+        :telemetry.detach(handler_id)
+      end
+
+    result
+  end
+
+  defp terminate_backend!(backend_pid) do
+    repo_config = Application.fetch_env!(:cadence, Repo)
+
+    connection_options =
+      repo_config
+      |> Keyword.take([:username, :password, :hostname, :database, :port, :socket_dir, :ssl])
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+    {:ok, connection} = Postgrex.start_link(connection_options)
+
+    try do
+      %{rows: [[true]]} =
+        Postgrex.query!(connection, "SELECT pg_terminate_backend($1)", [backend_pid])
+    after
+      GenServer.stop(connection)
+    end
+  end
+
+  defp stage_worker_artifacts(bytes_by_path) do
+    Enum.each(bytes_by_path, fn {_artifact_path, bytes} ->
+      digest = sha256(bytes)
+
+      file_path =
+        Path.join(
+          System.tmp_dir!(),
+          ".cadence_frontend_release_worker_#{System.unique_integer([:positive])}"
+        )
+
+      File.write!(file_path, bytes)
+
+      try do
+        {:ok, _stored} = DatabaseArtifactStore.put_file(digest, file_path)
+      after
+        File.rm(file_path)
+      end
+    end)
   end
 
   defp artifact_entries(bytes_by_path) do

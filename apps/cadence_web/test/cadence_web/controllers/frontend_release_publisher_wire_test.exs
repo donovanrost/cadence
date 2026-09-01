@@ -4,8 +4,9 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
   @moduletag timeout: 120_000
 
   @path "/api/cadence/frontend-release/v1/releases"
+  @object_prefix "/api/cadence/frontend-release/v1/objects/"
   @token "frontend-release-publisher-test-token"
-  @max_body_bytes 140_000_000
+  @max_envelope_bytes 4_000_000
 
   setup do
     previous_publisher_config =
@@ -43,7 +44,7 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
   end
 
   test "real HTTP/1.1 rejects an over-limit chunked body", %{port: port} do
-    body = String.duplicate("x", @max_body_bytes + 1)
+    body = String.duplicate("x", @max_envelope_bytes + 1)
     framing = Integer.to_string(byte_size(body), 16) <> "\r\n" <> body <> "\r\n0\r\n\r\n"
 
     response = raw_request(port, common_headers() ++ [{"transfer-encoding", "chunked"}], framing)
@@ -84,13 +85,42 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
           {"host", "localhost"},
           {"authorization", "Bearer wrong-token"},
           {"content-type", "application/json"},
-          {"content-length", Integer.to_string(@max_body_bytes)},
+          {"content-length", Integer.to_string(@max_envelope_bytes)},
           {"connection", "close"}
         ],
         ""
       )
 
     assert response_status(response) == 401
+  end
+
+  test "real HTTP/1.1 uploads bounded bytes into staging", %{port: port} do
+    body = "wire-staged-artifact"
+    digest = "sha256:" <> Base.encode16(:crypto.hash(:sha256, body), case: :lower)
+
+    response =
+      raw_request(
+        port,
+        upload_headers(byte_size(body)),
+        body,
+        "PUT",
+        @object_prefix <> digest
+      )
+
+    assert response_status(response) == 201
+  end
+
+  test "real HTTP/1.1 rejects an over-limit upload before body consumption", %{port: port} do
+    response =
+      raw_request(
+        port,
+        upload_headers(100_000_001),
+        "",
+        "PUT",
+        @object_prefix <> "sha256:" <> String.duplicate("0", 64)
+      )
+
+    assert response_status(response) == 413
   end
 
   defp common_headers do
@@ -102,13 +132,24 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
     ]
   end
 
-  defp raw_request(port, headers, body) do
+  defp upload_headers(size) do
+    [
+      {"host", "localhost"},
+      {"authorization", "Bearer " <> @token},
+      {"content-type", "application/octet-stream"},
+      {"content-length", Integer.to_string(size)},
+      {"connection", "close"}
+    ]
+  end
+
+  defp raw_request(port, headers, body, method \\ "POST", request_path \\ @path) do
     {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false], 5_000)
 
     try do
       request = [
-        "POST ",
-        @path,
+        method,
+        " ",
+        request_path,
         " HTTP/1.1\r\n",
         Enum.map(headers, fn {name, value} -> [name, ": ", value, "\r\n"] end),
         "\r\n",

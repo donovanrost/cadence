@@ -34,7 +34,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
     with {:ok, document_bytes} <- signed_document_bytes(document),
          {:ok, verified} <- verify_release(document_bytes, opts),
          {:ok, artifact_bytes} <- normalize_artifact_inputs(artifact_input),
-         {:ok, artifact_specs} <- validate_artifact_bytes(verified.release, artifact_bytes) do
+         {:ok, artifact_specs} <- validate_artifact_inputs(verified.release, artifact_bytes) do
       persist_release(verified, document_bytes, artifact_specs, opts)
     end
   end
@@ -49,6 +49,17 @@ defmodule CadenceWeb.FrontendReleasePublication do
   def publish_release_with_outcome(document, artifact_input, opts \\ []) when is_list(opts) do
     admit_release(document, artifact_input, Keyword.put(opts, :return_outcome, true))
   end
+
+  @spec stage_artifact(binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def stage_artifact(digest, file_path) when is_binary(digest) and is_binary(file_path) do
+    case DatabaseArtifactStore.put_file(digest, file_path) do
+      {:ok, stored} -> {:ok, stored}
+      {:error, reason} -> {:error, normalize_artifact_store_error(reason)}
+    end
+  end
+
+  def stage_artifact(_digest, _file_path),
+    do: {:error, error(:invalid_artifact_input, "$.artifact")}
 
   @spec admit_catalog(binary() | map(), keyword()) ::
           {:ok, CatalogPublication.t()} | {:error, term()}
@@ -120,23 +131,32 @@ defmodule CadenceWeb.FrontendReleasePublication do
     transaction_result =
       Repo.transaction(fn ->
         :ok = advisory_lock("frontend-release:" <> release_id)
-
-        case store_and_verify(artifact_specs) do
-          {:ok, stored_artifacts} ->
-            persist_locked_release(
-              locked_release_by_identity(release_id),
-              verified,
-              document_bytes,
-              stored_artifacts,
-              opts
-            )
-
-          {:error, reason} ->
-            Repo.rollback(normalize_artifact_store_error(reason))
-        end
+        persist_locked_or_new_release(verified, document_bytes, artifact_specs, opts)
       end)
 
     normalize_transaction_result(transaction_result, Keyword.get(opts, :return_outcome, false))
+  end
+
+  defp persist_locked_or_new_release(verified, document_bytes, artifact_specs, opts) do
+    release_id = verified.release["releaseId"]
+
+    case locked_release_by_identity(release_id) do
+      %ReleasePublication{} = existing ->
+        persist_locked_release(existing, verified, document_bytes, opts)
+
+      nil ->
+        persist_missing_release(verified, document_bytes, artifact_specs, opts)
+    end
+  end
+
+  defp persist_missing_release(verified, document_bytes, artifact_specs, opts) do
+    case store_and_verify(artifact_specs) do
+      {:ok, stored_artifacts} ->
+        {:created, persist_new_release(verified, document_bytes, stored_artifacts, opts)}
+
+      {:error, reason} ->
+        Repo.rollback(normalize_artifact_store_error(reason))
+    end
   end
 
   defp persist_new_release(verified, document_bytes, stored_artifacts, opts) do
@@ -175,10 +195,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp persist_locked_release(nil, verified, document_bytes, stored_artifacts, opts),
-    do: {:created, persist_new_release(verified, document_bytes, stored_artifacts, opts)}
-
-  defp persist_locked_release(existing, verified, document_bytes, _stored_artifacts, _opts) do
+  defp persist_locked_release(existing, verified, document_bytes, _opts) do
     if exact_release_retry?(existing, verified, document_bytes) do
       {:replayed, Repo.preload(existing, :artifacts)}
     else
@@ -245,8 +262,16 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp require_admitted_releases(%{"entries" => raw_entries}, entries)
-       when is_list(raw_entries) and is_list(entries) and length(raw_entries) == length(entries) do
+  defp require_admitted_releases(%{"entries" => raw_entries}, entries) do
+    if same_length_lists?(raw_entries, entries),
+      do: require_admitted_release_pairs(raw_entries, entries),
+      else: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
+  end
+
+  defp require_admitted_releases(_catalog, _entries),
+    do: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
+
+  defp require_admitted_release_pairs(raw_entries, entries) do
     raw_entries
     |> Enum.zip(entries)
     |> Enum.with_index()
@@ -273,8 +298,12 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp require_admitted_releases(_catalog, _entries),
-    do: {:error, error(:invalid_catalog_entries, "$.payload.entries")}
+  defp same_length_lists?([], []), do: true
+
+  defp same_length_lists?([_head | tail], [_other_head | other_tail]),
+    do: same_length_lists?(tail, other_tail)
+
+  defp same_length_lists?(_left, _right), do: false
 
   defp require_admitted_release(signed_envelope, release, path) do
     release_id = release["releaseId"]
@@ -462,8 +491,8 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   defp normalize_artifact_pairs([pair | rest], index, paths, acc) do
     case artifact_pair(pair) do
-      {:ok, path, bytes} ->
-        case add_artifact(path, bytes, index, paths, acc) do
+      {:ok, path, source} ->
+        case add_artifact(path, source, index, paths, acc) do
           {:cont, {:ok, paths, acc}} ->
             normalize_artifact_pairs(rest, index + 1, paths, acc)
 
@@ -479,28 +508,40 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp normalize_artifact_pairs(_pairs, _index, _paths, _acc),
     do: {:error, error(:invalid_artifact_input, "$.artifacts")}
 
-  defp add_artifact(path, bytes, index, paths, acc) do
+  defp add_artifact(path, source, index, paths, acc) do
     cond do
-      not is_binary(path) or not is_binary(bytes) ->
+      not is_binary(path) or not valid_artifact_source?(source) ->
         {:halt, {:error, error(:invalid_artifact_input, "$.artifacts[#{index}]")}}
 
       MapSet.member?(paths, path) ->
         {:halt, {:error, error(:duplicate_artifact_path, "$.artifacts[#{index}].path")}}
 
       true ->
-        {:cont, {:ok, MapSet.put(paths, path), Map.put(acc, path, bytes)}}
+        {:cont, {:ok, MapSet.put(paths, path), Map.put(acc, path, source)}}
     end
   end
 
   defp artifact_pair({path, bytes}), do: {:ok, path, bytes}
   defp artifact_pair(%{"path" => path, "bytes" => bytes}), do: {:ok, path, bytes}
+
+  defp artifact_pair(%{"path" => path, "sha256" => digest, "size" => size}),
+    do: {:ok, path, {:object, digest, size}}
+
   defp artifact_pair(%{path: path, bytes: bytes}), do: {:ok, path, bytes}
   defp artifact_pair(_pair), do: :error
 
-  defp validate_artifact_bytes(release, artifact_bytes) do
+  defp valid_artifact_source?(source) when is_binary(source), do: true
+
+  defp valid_artifact_source?({:object, digest, size})
+       when is_binary(digest) and is_integer(size) and size >= 0,
+       do: true
+
+  defp valid_artifact_source?(_source), do: false
+
+  defp validate_artifact_inputs(release, artifact_inputs) do
     declarations = release["artifacts"]
     declared_paths = Enum.map(declarations, & &1["path"])
-    actual_paths = Map.keys(artifact_bytes)
+    actual_paths = Map.keys(artifact_inputs)
 
     cond do
       actual_paths -- declared_paths != [] ->
@@ -514,7 +555,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
         |> Enum.with_index()
         |> Enum.reduce_while(
           {:ok, []},
-          &validate_artifact_declaration(&1, &2, artifact_bytes)
+          &validate_artifact_declaration(&1, &2, artifact_inputs)
         )
         |> case do
           {:ok, values} ->
@@ -537,11 +578,24 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp validate_artifact_declaration(
          {declaration, index},
          {:ok, acc},
-         artifact_bytes
+         artifact_inputs
        ) do
     path = declaration["path"]
-    bytes = Map.fetch!(artifact_bytes, path)
+    source = Map.fetch!(artifact_inputs, path)
 
+    case source do
+      bytes when is_binary(bytes) ->
+        validate_inline_artifact(declaration, index, acc, bytes)
+
+      {:object, digest, size} ->
+        validate_staged_artifact(declaration, index, acc, source, digest, size)
+
+      _invalid ->
+        {:halt, {:error, error(:invalid_artifact_input, "$.artifacts[#{index}]")}}
+    end
+  end
+
+  defp validate_inline_artifact(declaration, index, acc, bytes) do
     cond do
       byte_size(bytes) != declaration["size"] ->
         {:halt, {:error, error(:artifact_size_mismatch, "$.artifacts[#{index}].size")}}
@@ -550,19 +604,31 @@ defmodule CadenceWeb.FrontendReleasePublication do
         {:halt, {:error, error(:artifact_hash_mismatch, "$.artifacts[#{index}].sha256")}}
 
       true ->
-        {:cont,
-         {:ok,
-          [
-            %{
-              path: path,
-              bytes: bytes,
-              sha256: declaration["sha256"],
-              size: declaration["size"],
-              media_type: declaration["mediaType"]
-            }
-            | acc
-          ]}}
+        {:cont, {:ok, [artifact_spec(declaration, bytes) | acc]}}
     end
+  end
+
+  defp validate_staged_artifact(declaration, index, acc, source, digest, size) do
+    cond do
+      digest != "sha256:" <> declaration["sha256"] ->
+        {:halt, {:error, error(:artifact_hash_mismatch, "$.artifacts[#{index}].sha256")}}
+
+      size != declaration["size"] ->
+        {:halt, {:error, error(:artifact_size_mismatch, "$.artifacts[#{index}].size")}}
+
+      true ->
+        {:cont, {:ok, [artifact_spec(declaration, source) | acc]}}
+    end
+  end
+
+  defp artifact_spec(declaration, source) do
+    %{
+      path: declaration["path"],
+      source: source,
+      sha256: declaration["sha256"],
+      size: declaration["size"],
+      media_type: declaration["mediaType"]
+    }
   end
 
   defp store_and_verify(artifact_specs) do
@@ -591,7 +657,13 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp store_one_artifact(artifact) do
     digest_value = "sha256:" <> artifact.sha256
 
-    case DatabaseArtifactStore.put(digest_value, artifact.bytes) do
+    result =
+      case artifact.source do
+        bytes when is_binary(bytes) -> DatabaseArtifactStore.put(digest_value, bytes)
+        {:object, digest, size} -> DatabaseArtifactStore.promote_staged(digest, size)
+      end
+
+    case result do
       {:ok, stored} when is_map(stored) ->
         object_key = Map.get(stored, :object_key, Map.get(stored, "object_key"))
         stored_size = Map.get(stored, :size, Map.get(stored, "size"))
@@ -610,29 +682,42 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  @doc false
-  def normalize_artifact_store_error(:artifact_bytes_mismatch),
+  defp normalize_artifact_store_error(:artifact_bytes_mismatch),
     do: error(:artifact_conflict, "$.artifacts")
 
-  def normalize_artifact_store_error(:artifact_digest_mismatch),
+  defp normalize_artifact_store_error(:artifact_digest_mismatch),
     do: error(:artifact_hash_mismatch, "$.artifacts")
 
-  def normalize_artifact_store_error(:artifact_size_mismatch),
+  defp normalize_artifact_store_error(:artifact_size_mismatch),
     do: error(:artifact_size_mismatch, "$.artifacts")
 
-  def normalize_artifact_store_error(:artifact_too_large),
+  defp normalize_artifact_store_error(:artifact_too_large),
     do: error(:artifact_byte_cap_exceeded, "$.artifacts")
 
-  def normalize_artifact_store_error(:artifact_not_found),
+  defp normalize_artifact_store_error(:artifact_not_found),
     do: error(:artifact_not_found, "$.artifacts")
 
-  def normalize_artifact_store_error(%DBConnection.ConnectionError{} = failure), do: failure
+  defp normalize_artifact_store_error(%DBConnection.ConnectionError{} = failure), do: failure
 
-  def normalize_artifact_store_error({_operation, %DBConnection.ConnectionError{} = failure}),
-    do: failure
+  defp normalize_artifact_store_error(
+         %Postgrex.Error{postgres: %{code: :admin_shutdown}} = failure
+       ),
+       do: failure
 
-  def normalize_artifact_store_error(%{code: _code} = failure), do: failure
-  def normalize_artifact_store_error(reason), do: error(:artifact_store_failure, inspect(reason))
+  defp normalize_artifact_store_error(
+         {operation, %DBConnection.ConnectionError{}} = tagged_failure
+       )
+       when operation in [:object_insert, :object_metadata, :object_chunk],
+       do: tagged_failure
+
+  defp normalize_artifact_store_error(
+         {operation, %Postgrex.Error{postgres: %{code: :admin_shutdown}}} = tagged_failure
+       )
+       when operation in [:object_insert, :object_metadata, :object_chunk],
+       do: tagged_failure
+
+  defp normalize_artifact_store_error(%{code: _code} = failure), do: failure
+  defp normalize_artifact_store_error(reason), do: error(:artifact_store_failure, inspect(reason))
 
   defp signed_document_bytes(document) when is_binary(document), do: {:ok, document}
 

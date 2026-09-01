@@ -357,6 +357,15 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
                @opts
              )
 
+    improper_roles = Map.put(hd(@corpus["keys"]), "allowedRoles", ["release" | :tail])
+
+    assert {:error, %{code: :invalid_key_record, path: "$.keys[0].allowedRoles"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               [improper_roles | tl(@corpus["keys"])],
+               @opts
+             )
+
     assert {:error, %{code: :invalid_base_url, path: "$.allowedOrigins"}} =
              FrontendReleaseCatalog.verify_release(
                @corpus["release"]["envelope"],

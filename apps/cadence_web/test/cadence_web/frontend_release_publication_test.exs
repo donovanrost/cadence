@@ -5,7 +5,6 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
-  alias CadenceWeb.FrontendReleasePublisherController
 
   alias CadenceWeb.FrontendReleasePublication.{
     CatalogPublication,
@@ -113,6 +112,127 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, byte_size(bytes), 1)
     assert {:error, :invalid_chunk_bounds} = DatabaseArtifactStore.read_chunk(digest, 1, 0)
+  end
+
+  test "file uploads stay staged until promotion and serve from immutable chunks" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+    file_path = write_temp_file(bytes)
+
+    assert {:ok, %{status: :stored, size: 1_048_581}} =
+             DatabaseArtifactStore.put_file(digest, file_path)
+
+    assert [[1, 1_048_581]] =
+             Repo.query!(
+               "SELECT COUNT(*), MAX(size) FROM frontend_release_staged_objects",
+               []
+             ).rows
+
+    assert [[2]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks",
+               []
+             ).rows
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+    assert {:error, :artifact_not_found} = DatabaseArtifactStore.read_chunk(digest, 0, 1)
+
+    assert {:ok, %{status: :existing}} = DatabaseArtifactStore.put_file(digest, file_path)
+
+    assert {:ok, %{status: :stored}} =
+             Repo.transaction(fn ->
+               {:ok, stored} = DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+               stored
+             end)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 1
+    assert [[nil]] = Repo.query!("SELECT bytes FROM frontend_release_objects", []).rows
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert :ok = DatabaseArtifactStore.verify(digest, bytes)
+    assert {:ok, first_chunk} = DatabaseArtifactStore.read_chunk(digest, 0, 1_048_576)
+    assert byte_size(first_chunk) == 1_048_576
+    assert {:ok, last_chunk} = DatabaseArtifactStore.read_chunk(digest, 1_048_576, 5)
+    assert last_chunk == :binary.copy(<<"a">>, 5)
+  end
+
+  test "failed finalization retains stages and retry promotes them atomically" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-staged-retry")
+    app_digest = sha256(@artifact_bytes["assets/app.js"])
+    manifest_digest = sha256(@artifact_bytes["mf-manifest.json"])
+
+    stage_file!(app_digest, @artifact_bytes["assets/app.js"])
+
+    assert {:error, %{code: :artifact_not_found}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               %{
+                 "assets/app.js" =>
+                   {:object, app_digest, byte_size(@artifact_bytes["assets/app.js"])},
+                 "mf-manifest.json" =>
+                   {:object, manifest_digest, byte_size(@artifact_bytes["mf-manifest.json"])}
+               },
+               now: @now
+             )
+
+    assert [[1]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+
+    stage_file!(manifest_digest, @artifact_bytes["mf-manifest.json"])
+
+    assert {:ok, publication} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               staged_artifacts(@artifact_bytes),
+               now: @now
+             )
+
+    assert length(publication.artifacts) == 2
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_objects", []).rows
+  end
+
+  test "exact release replay is honored before staged-object promotion" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-replay-stage")
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    assert {:ok, replayed} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               staged_artifacts(@artifact_bytes),
+               now: @now
+             )
+
+    assert replayed.release_id == release["releaseId"]
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+  end
+
+  test "expiry cleanup removes only unreferenced stages" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-stage-expiry")
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    referenced_digest = sha256(@artifact_bytes["assets/app.js"])
+    unreferenced_bytes = "unreferenced-staged-object"
+    unreferenced_digest = sha256(unreferenced_bytes)
+    stage_file!(referenced_digest, @artifact_bytes["assets/app.js"])
+    stage_file!(unreferenced_digest, unreferenced_bytes)
+
+    Repo.query!(
+      "UPDATE frontend_release_staged_objects SET expires_at = now() - interval '1 hour'",
+      []
+    )
+
+    assert {:ok, 1} = DatabaseArtifactStore.cleanup_expired_staged_artifacts()
+    assert [[1]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+
+    expected_stage_digest = digest_hex(@artifact_bytes["assets/app.js"])
+
+    assert [[^expected_stage_digest]] =
+             Repo.query!("SELECT sha256 FROM frontend_release_staged_objects", []).rows
   end
 
   test "release objects and publication rows roll back together" do
@@ -524,33 +644,6 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     refute function_exported?(FrontendReleasePublication, :delete_catalog, 1)
   end
 
-  test "artifact-store connection failures normalize through production boundaries" do
-    failure = %DBConnection.ConnectionError{message: "database connection lost"}
-
-    assert FrontendReleasePublication.normalize_artifact_store_error(failure) == failure
-
-    for operation <- [:object_insert, :object_metadata, :object_chunk] do
-      tagged_failure = {operation, failure}
-
-      assert FrontendReleasePublication.normalize_artifact_store_error(tagged_failure) ==
-               failure
-
-      assert FrontendReleasePublisherController.classify_publish_result({:error, tagged_failure}) ==
-               {:error, 503, "transient_persistence_failure"}
-    end
-
-    assert FrontendReleasePublisherController.classify_publish_result({:error, failure}) ==
-             {:error, 503, "transient_persistence_failure"}
-
-    assert FrontendReleasePublisherController.classify_publish_result(
-             {:error, %{code: :invalid_document}}
-           ) == {:error, 422, "admission_rejected"}
-
-    assert FrontendReleasePublisherController.classify_publish_result(
-             {:error, %{code: :artifact_conflict}}
-           ) == {:error, 409, "conflict"}
-  end
-
   test "invalid direct signed-document terms remain coded without masking" do
     assert {:error, %{code: :invalid_document, path: "$"}} =
              FrontendReleasePublication.admit_release(
@@ -692,6 +785,31 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
       "validUntil" => "2027-01-01T00:00:00Z",
       "revokedAt" => nil
     }
+  end
+
+  defp staged_artifacts(bytes_by_path) do
+    Map.new(bytes_by_path, fn {file_path, bytes} ->
+      {file_path, {:object, sha256(bytes), byte_size(bytes)}}
+    end)
+  end
+
+  defp stage_file!(digest, bytes) do
+    file_path = write_temp_file(bytes)
+
+    assert {:ok, %{digest: ^digest}} = DatabaseArtifactStore.put_file(digest, file_path)
+    file_path
+  end
+
+  defp write_temp_file(bytes) do
+    file_path =
+      Path.join(
+        System.tmp_dir!(),
+        ".cadence_frontend_release_test_" <> Integer.to_string(System.unique_integer([:positive]))
+      )
+
+    File.write!(file_path, bytes)
+    on_exit(fn -> File.rm(file_path) end)
+    file_path
   end
 
   defp canonical(value) when is_map(value) do

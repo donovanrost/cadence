@@ -14,12 +14,13 @@ defmodule CadenceWeb.FrontendReleasePublication.ReleaseObject do
   end
 
   @fields [:sha256, :bytes, :size, :inserted_at]
+  @required_fields @fields -- [:bytes]
 
   @spec changeset(map()) :: Ecto.Changeset.t()
   def changeset(attrs) when is_map(attrs) do
     %__MODULE__{}
     |> cast(attrs, @fields)
-    |> validate_required(@fields)
+    |> validate_required(@required_fields)
     |> check_constraint(:sha256, name: :frontend_release_objects_sha256_check)
     |> check_constraint(:size, name: :frontend_release_objects_size_check)
     |> check_constraint(:bytes, name: :frontend_release_objects_octet_length_check)

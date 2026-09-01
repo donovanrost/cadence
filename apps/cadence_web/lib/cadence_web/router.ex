@@ -598,6 +598,7 @@ defmodule CadenceWeb.Router do
   scope "/api/cadence/frontend-release/v1", CadenceWeb do
     pipe_through [:api, :frontend_release_publisher]
 
+    put "/objects/:digest", FrontendReleasePublisherController, :upload
     post "/releases", FrontendReleasePublisherController, :create
   end
 

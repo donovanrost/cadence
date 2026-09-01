@@ -5,6 +5,7 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
   alias CadenceWeb.FrontendReleaseArtifactController
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
+  alias CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore
 
   @fixture Path.expand("../../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
@@ -39,6 +40,32 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     assert get_resp_header(conn, "cache-control") == ["public, max-age=31536000, immutable"]
     assert get_resp_header(conn, "x-content-type-options") == ["nosniff"]
     assert get_resp_header(conn, "access-control-allow-origin") == []
+  end
+
+  test "public GET serves an atomically promoted chunked artifact", %{conn: conn} do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    bytes_by_path = %{"assets/app.js" => bytes, "mf-manifest.json" => "manifest-bytes"}
+    {envelope, _payload, release} = release_document(bytes_by_path)
+
+    staged =
+      Map.new(bytes_by_path, fn {artifact_path, file_bytes} ->
+        digest = sha256(file_bytes)
+        stage_file!(digest, file_bytes)
+        {artifact_path, {:object, digest, byte_size(file_bytes)}}
+      end)
+
+    assert {:ok, publication} =
+             FrontendReleasePublication.admit_release(envelope, staged, now: @now)
+
+    artifact = Enum.find(publication.artifacts, &(&1.path == "assets/app.js"))
+
+    assert Repo.query!("SELECT bytes FROM frontend_release_objects WHERE sha256 = $1", [
+             artifact.sha256
+           ]).rows == [[nil]]
+
+    conn = get(conn, artifact_path(release, "assets/app.js"))
+    assert response(conn, 200) == bytes
+    assert get_resp_header(conn, "content-length") == [Integer.to_string(byte_size(bytes))]
   end
 
   test "context lookup requires the exact accepted application, release, path, and object metadata" do
@@ -386,7 +413,10 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
 
   defp any_chunk_read?(queries), do: Enum.any?(queries, &chunk_query?/1)
 
-  defp chunk_query?({query, _params}), do: String.contains?(query, "substring(bytes FROM")
+  defp chunk_query?({query, _params}),
+    do:
+      String.contains?(query, "substring(bytes FROM") or
+        String.contains?(query, "frontend_release_object_chunks")
 
   defp full_bytea_select?(queries) do
     Enum.any?(queries, fn {query, _params} ->
@@ -461,6 +491,19 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
       "payload" => Base.url_encode64(payload, padding: false),
       "signature" => Base.url_encode64(signature, padding: false)
     }
+  end
+
+  defp stage_file!(digest, bytes) do
+    file_path =
+      Path.join(
+        System.tmp_dir!(),
+        ".cadence_frontend_release_test_" <> Integer.to_string(System.unique_integer([:positive]))
+      )
+
+    File.write!(file_path, bytes)
+    on_exit(fn -> File.rm(file_path) end)
+    assert {:ok, %{digest: ^digest}} = DatabaseArtifactStore.put_file(digest, file_path)
+    file_path
   end
 
   defp canonical(value) when is_map(value) do

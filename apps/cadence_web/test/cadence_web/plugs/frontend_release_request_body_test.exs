@@ -7,12 +7,13 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBodyTest do
   alias CadenceWeb.Plugs.FrontendReleaseRequestBody
 
   @path "/api/cadence/frontend-release/v1/releases"
-  @max_body_bytes 140_000_000
+  @upload_path "/api/cadence/frontend-release/v1/objects/sha256:" <> String.duplicate("a", 64)
+  @max_envelope_bytes 4_000_000
 
-  test "accepts exactly 140000000 body bytes and retains the exact bytes" do
-    body = String.duplicate("a", @max_body_bytes)
+  test "accepts a bounded envelope and retains the exact bytes" do
+    body = "bounded-release-envelope"
 
-    conn = body_conn(body, [{"content-length", Integer.to_string(@max_body_bytes)}])
+    conn = body_conn(body, [{"content-length", Integer.to_string(byte_size(body))}])
     result = FrontendReleaseRequestBody.call(conn, [])
 
     assert {:ok, ^body} = FrontendReleaseRequestBody.raw_body(result)
@@ -22,7 +23,7 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBodyTest do
 
   test "rejects one byte over the body limit before reading a declared body" do
     conn =
-      body_conn("", [{"content-length", Integer.to_string(@max_body_bytes + 1)}])
+      body_conn("", [{"content-length", Integer.to_string(@max_envelope_bytes + 1)}])
 
     result = FrontendReleaseRequestBody.call(conn, [])
 
@@ -98,10 +99,68 @@ defmodule CadenceWeb.Plugs.FrontendReleaseRequestBodyTest do
     end
   end
 
+  test "cleans the staged upload file after a successful handoff" do
+    body = "staged-artifact"
+    result = FrontendReleaseRequestBody.call(upload_conn(body), [])
+
+    assert {:ok, file_path} = FrontendReleaseRequestBody.staged_artifact_path(result)
+    assert File.read!(file_path) == body
+    assert File.exists?(file_path)
+
+    _ = FrontendReleaseRequestBody.cleanup_staged_artifact(result)
+    refute File.exists?(file_path)
+  end
+
+  test "cleans a staged upload after rejection and disconnect" do
+    before = staged_residue()
+
+    rejected =
+      upload_conn("", [{"content-length", "100000001"}])
+      |> FrontendReleaseRequestBody.call([])
+
+    disconnected =
+      Plug.Test.conn(:put, @upload_path, "")
+      |> put_req_header("content-type", "application/octet-stream")
+      |> replace_adapter(
+        FrontendReleasePublisherTestAdapter.responses([{:error, :closed}], self())
+      )
+      |> FrontendReleaseRequestBody.call([])
+
+    assert rejected.status == 413
+    assert disconnected.status == 400
+    assert staged_residue() == before
+  end
+
+  test "cleans a staged upload after an adapter exception while propagating it" do
+    before = staged_residue()
+
+    conn =
+      Plug.Test.conn(:put, @upload_path, "")
+      |> put_req_header("content-type", "application/octet-stream")
+      |> replace_adapter(
+        FrontendReleasePublisherTestAdapter.responses([{:raise, RuntimeError}], self())
+      )
+
+    assert_raise RuntimeError, fn -> FrontendReleaseRequestBody.call(conn, []) end
+    assert staged_residue() == before
+  end
+
   defp body_conn(body, headers) do
     Plug.Test.conn(:post, @path, "")
     |> then(&replace_adapter(&1, FrontendReleasePublisherTestAdapter.body(body, self())))
     |> put_headers(headers)
+  end
+
+  defp upload_conn(body, headers \\ []) do
+    Plug.Test.conn(:put, @upload_path, "")
+    |> then(&replace_adapter(&1, FrontendReleasePublisherTestAdapter.body(body, self())))
+    |> put_req_header("content-type", "application/octet-stream")
+    |> put_headers(headers)
+  end
+
+  defp staged_residue do
+    Path.wildcard(Path.join(System.tmp_dir!(), ".cadence_frontend_release_*"))
+    |> Enum.sort()
   end
 
   defp put_headers(conn, headers),
