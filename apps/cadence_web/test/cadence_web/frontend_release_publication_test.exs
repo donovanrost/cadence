@@ -13,6 +13,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     ReleasePublication
   }
 
+  @publication_config_key {FrontendReleasePublication, :publication_config}
+
   @fixture Path.expand("../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
@@ -20,21 +22,17 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
   @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
   @origin "https://cdn.example.com"
   @now "2026-08-30T18:30:00Z"
+  @publication_config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
   @artifact_bytes %{
     "assets/app.js" => "app-bytes",
     "mf-manifest.json" => "manifest-bytes"
   }
 
   setup do
-    previous_config = Application.get_env(:cadence_web, :frontend_release_publication)
+    previous_config = Process.get(@publication_config_key, :not_configured)
+    set_publication_config(publication_config(@corpus["keys"]))
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      publication_config(@corpus["keys"])
-    )
-
-    on_exit(fn -> restore_config(previous_config) end)
+    on_exit(fn -> restore_process_config(previous_config) end)
     :ok
   end
 
@@ -283,11 +281,7 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     {envelope, _payload, release} = release_document(@artifact_bytes, "build-fork")
     alternate_key = alternate_release_key()
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      publication_config(@corpus["keys"] ++ [alternate_key])
-    )
+    set_publication_config(publication_config(@corpus["keys"] ++ [alternate_key]))
 
     alternate_envelope =
       sign_fixture(
@@ -434,7 +428,10 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     release_tasks =
       Enum.map(1..2, fn _index ->
         Task.async(fn ->
-          FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+          FrontendReleasePublication.admit_release(envelope, @artifact_bytes,
+            now: @now,
+            publication_config: @publication_config
+          )
         end)
       end)
 
@@ -449,7 +446,12 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     catalog_tasks =
       Enum.map(1..2, fn _index ->
-        Task.async(fn -> FrontendReleasePublication.admit_catalog(catalog, now: @now) end)
+        Task.async(fn ->
+          FrontendReleasePublication.admit_catalog(catalog,
+            now: @now,
+            publication_config: @publication_config
+          )
+        end)
       end)
 
     Enum.each(catalog_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
@@ -512,11 +514,7 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     alternate_key = alternate_release_key()
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      publication_config(@corpus["keys"] ++ [alternate_key])
-    )
+    set_publication_config(publication_config(@corpus["keys"] ++ [alternate_key]))
 
     alternate_envelope =
       sign_fixture(
@@ -590,20 +588,14 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
   test "configured trust records and allowed origins are mandatory" do
     {envelope, _payload, _release} = release_document(@artifact_bytes, "build-policy")
-    config = Application.get_env(:cadence_web, :frontend_release_publication)
+    config = @publication_config
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      Keyword.put(config, :trust_records, [])
-    )
+    set_publication_config(Keyword.put(config, :trust_records, []))
 
     assert {:error, %{code: :unknown_key}} =
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
+    set_publication_config(
       config
       |> Keyword.put(:trust_records, @corpus["keys"])
       |> Keyword.put(:allowed_origins, ["https://other.example.com"])
@@ -679,11 +671,13 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     [trust_records: trust_records, allowed_origins: [@origin]]
   end
 
-  defp restore_config(nil),
-    do: Application.delete_env(:cadence_web, :frontend_release_publication)
+  defp set_publication_config(config), do: Process.put(@publication_config_key, config)
 
-  defp restore_config(config),
-    do: Application.put_env(:cadence_web, :frontend_release_publication, config)
+  defp restore_process_config(:not_configured),
+    do: Process.delete(@publication_config_key)
+
+  defp restore_process_config(config),
+    do: Process.put(@publication_config_key, config)
 
   defp release_document(bytes_by_path, build_id, released_at \\ "2026-08-30T17:00:00Z") do
     base = Jason.decode!(@corpus["release"]["payload"])

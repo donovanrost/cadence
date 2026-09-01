@@ -12,20 +12,7 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
   @origin "https://cdn.example.com"
   @now "2026-08-30T18:30:00Z"
-
-  setup do
-    previous_config = Application.get_env(:cadence_web, :frontend_release_publication)
-
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      trust_records: @corpus["keys"],
-      allowed_origins: [@origin]
-    )
-
-    on_exit(fn -> restore_config(previous_config) end)
-    :ok
-  end
+  @publication_config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
 
   test "public GET serves the release-addressed manifest with signed metadata", %{conn: conn} do
     published = publish_release!(%{"mf-manifest.json" => "manifest-bytes"})
@@ -55,7 +42,10 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
       end)
 
     assert {:ok, publication} =
-             FrontendReleasePublication.admit_release(envelope, staged, now: @now)
+             FrontendReleasePublication.admit_release(envelope, staged,
+               now: @now,
+               publication_config: @publication_config
+             )
 
     artifact = Enum.find(publication.artifacts, &(&1.path == "assets/app.js"))
 
@@ -362,7 +352,10 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
     {envelope, _payload, release} = release_document(bytes_by_path)
 
     assert {:ok, publication} =
-             FrontendReleasePublication.admit_release(envelope, bytes_by_path, now: @now)
+             FrontendReleasePublication.admit_release(envelope, bytes_by_path,
+               now: @now,
+               publication_config: @publication_config
+             )
 
     artifacts = Map.new(publication.artifacts, &{&1.path, &1})
 
@@ -427,12 +420,6 @@ defmodule CadenceWeb.FrontendReleaseArtifactControllerTest do
   defp any_octet_length_query?(queries) do
     Enum.any?(queries, fn {query, _params} -> String.contains?(query, "octet_length(bytes)") end)
   end
-
-  defp restore_config(nil),
-    do: Application.delete_env(:cadence_web, :frontend_release_publication)
-
-  defp restore_config(config),
-    do: Application.put_env(:cadence_web, :frontend_release_publication, config)
 
   defp release_document(bytes_by_path) do
     base = Jason.decode!(@corpus["release"]["payload"])

@@ -20,34 +20,8 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   @origin "https://cdn.example.com"
   @token "frontend-release-publisher-test-token"
   @max_envelope_bytes 4_000_000
-
-  setup do
-    previous_publication_config =
-      Application.get_env(:cadence_web, :frontend_release_publication)
-
-    previous_publisher_config =
-      Application.get_env(:cadence_web, :frontend_release_publisher)
-
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      trust_records: @corpus["keys"],
-      allowed_origins: [@origin]
-    )
-
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publisher,
-      token_sha256: :crypto.hash(:sha256, @token)
-    )
-
-    on_exit(fn ->
-      restore_config(:frontend_release_publication, previous_publication_config)
-      restore_config(:frontend_release_publisher, previous_publisher_config)
-    end)
-
-    :ok
-  end
+  @publication_config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
+  @publisher_config [token_sha256: :crypto.hash(:sha256, @token)]
 
   test "publishes exact document bytes through the API-only route and records provenance", %{
     conn: conn
@@ -107,13 +81,6 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
 
     alternate_key = alternate_release_key()
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      trust_records: @corpus["keys"] ++ [alternate_key],
-      allowed_origins: [@origin]
-    )
-
     alternate_document =
       release
       |> canonical()
@@ -122,7 +89,12 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
 
     response =
       conn
-      |> authenticated()
+      |> authenticated(
+        publication_config: [
+          trust_records: @corpus["keys"] ++ [alternate_key],
+          allowed_origins: [@origin]
+        ]
+      )
       |> post(@path, request_body(alternate_document, bytes_by_path))
 
     assert %{"error" => %{"code" => "conflict"}} = json_response(response, 409)
@@ -150,30 +122,26 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     first_key = hd(@corpus["keys"])
     improper_key = Map.put(first_key, "allowedRoles", ["release" | :tail])
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      trust_records: [improper_key | tl(@corpus["keys"])],
-      allowed_origins: [@origin]
-    )
-
     role_response =
       conn
-      |> authenticated()
+      |> authenticated(
+        publication_config: [
+          trust_records: [improper_key | tl(@corpus["keys"])],
+          allowed_origins: [@origin]
+        ]
+      )
       |> post(@path, request_body(document, bytes_by_path))
 
     assert %{"error" => %{"code" => "admission_rejected"}} = json_response(role_response, 422)
 
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publication,
-      trust_records: @corpus["keys"],
-      allowed_origins: [@origin | :tail]
-    )
-
     origin_response =
       conn
-      |> authenticated()
+      |> authenticated(
+        publication_config: [
+          trust_records: @corpus["keys"],
+          allowed_origins: [@origin | :tail]
+        ]
+      )
       |> post(@path, request_body(document, bytes_by_path))
 
     assert %{"error" => %{"code" => "admission_rejected"}} =
@@ -246,11 +214,9 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
              &(json_response(&1, 401) == %{"error" => %{"code" => "unauthenticated"}})
            )
 
-    Application.put_env(:cadence_web, :frontend_release_publisher, token_sha256: "not-a-digest")
-
     response =
       conn
-      |> authenticated()
+      |> authenticated(publisher_config: [token_sha256: "not-a-digest"])
       |> post(@path, "{}")
 
     assert %{"error" => %{"code" => "unauthenticated"}} = json_response(response, 401)
@@ -424,6 +390,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   test "publisher auth is exact-path and idempotent when the router repeats it" do
     conn =
       Plug.Test.conn(:post, @path, "")
+      |> configured([])
       |> put_req_header("authorization", "Bearer " <> @token)
       |> put_req_header("content-type", "application/json")
 
@@ -549,17 +516,37 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   end
 
   defp authenticated(conn) do
+    authenticated(conn, [])
+  end
+
+  defp authenticated(conn, opts) do
     conn
+    |> configured(opts)
     |> put_req_header("accept", "application/json")
     |> put_req_header("content-type", "application/json")
     |> put_req_header("authorization", "Bearer " <> @token)
   end
 
-  defp authenticated_upload(conn) do
+  defp authenticated_upload(conn), do: authenticated_upload(conn, [])
+
+  defp authenticated_upload(conn, opts) do
     conn
+    |> configured(opts)
     |> put_req_header("accept", "application/json")
     |> put_req_header("content-type", "application/octet-stream")
     |> put_req_header("authorization", "Bearer " <> @token)
+  end
+
+  defp configured(conn, opts) do
+    conn
+    |> put_private(
+      :frontend_release_publication_config,
+      Keyword.get(opts, :publication_config, @publication_config)
+    )
+    |> put_private(
+      :frontend_release_publisher_config,
+      Keyword.get(opts, :publisher_config, @publisher_config)
+    )
   end
 
   defp endpoint_conn(headers) do
@@ -568,6 +555,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
 
   defp endpoint_conn_with_adapter(adapter_state, headers) do
     Plug.Test.conn(:post, @path, "")
+    |> configured([])
     |> then(&%{&1 | adapter: {FrontendReleasePublisherTestAdapter, adapter_state}})
     |> then(
       &Enum.reduce(headers, &1, fn {name, value}, conn -> put_req_header(conn, name, value) end)
@@ -606,6 +594,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
           receive do
             :publish ->
               Plug.Test.conn(:post, @path, body)
+              |> configured([])
               |> put_req_header("accept", "application/json")
               |> put_req_header("content-type", "application/json")
               |> put_req_header("authorization", "Bearer " <> @token)
@@ -800,7 +789,4 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
 
   defp sha256(bytes), do: "sha256:" <> digest_hex(bytes)
   defp digest_hex(bytes), do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
-
-  defp restore_config(key, nil), do: Application.delete_env(:cadence_web, key)
-  defp restore_config(key, value), do: Application.put_env(:cadence_web, key, value)
 end

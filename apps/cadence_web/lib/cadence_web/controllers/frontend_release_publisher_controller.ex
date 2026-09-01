@@ -9,6 +9,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
   @publisher_identity_header "x-cadence-publisher-identity"
   @max_publisher_identity_bytes 128
+  @publication_config_key :frontend_release_publication_config
 
   @spec create(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def create(conn, _params) do
@@ -17,7 +18,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
          {:ok, request} <- decode_request(body),
          {:ok, publisher_identity} <- publisher_identity(conn),
          {:ok, outcome, publication} <-
-           publish(request, publisher_identity) do
+           publish(request, publisher_identity, conn) do
       response(conn, outcome, publication)
     else
       {:error, :unsupported_media_type} ->
@@ -250,8 +251,14 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
     end
   end
 
-  defp publish(%{document: document, artifacts: artifacts}, publisher_identity) do
+  defp publish(%{document: document, artifacts: artifacts}, publisher_identity, conn) do
     opts = if publisher_identity, do: [publisher_identity: publisher_identity], else: []
+
+    opts =
+      case Map.get(conn.private, @publication_config_key) do
+        config when is_list(config) -> Keyword.put(opts, :publication_config, config)
+        _missing_or_invalid -> opts
+      end
 
     FrontendReleasePublication.publish_release_with_outcome(document, artifacts, opts)
     |> classify_publish_result()

@@ -7,27 +7,21 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
   @object_prefix "/api/cadence/frontend-release/v1/objects/"
   @token "frontend-release-publisher-test-token"
   @max_envelope_bytes 4_000_000
+  @publisher_config [token_sha256: :crypto.hash(:sha256, @token)]
 
   setup do
-    previous_publisher_config =
-      Application.get_env(:cadence_web, :frontend_release_publisher)
-
-    Application.put_env(
-      :cadence_web,
-      :frontend_release_publisher,
-      token_sha256: :crypto.hash(:sha256, @token)
-    )
-
     server =
-      start_supervised!(
-        {Bandit, plug: CadenceWeb.Endpoint, ip: {127, 0, 0, 1}, port: 0, startup_log: false}
-      )
+      start_supervised!({
+        Bandit,
+        plug:
+          {CadenceWeb.FrontendReleasePublisherWireTestEndpoint,
+           publisher_config: @publisher_config},
+        ip: {127, 0, 0, 1},
+        port: 0,
+        startup_log: false
+      })
 
     {:ok, {_ip, port}} = ThousandIsland.listener_info(server)
-
-    on_exit(fn ->
-      restore_config(:frontend_release_publisher, previous_publisher_config)
-    end)
 
     {:ok, port: port}
   end
@@ -185,7 +179,4 @@ defmodule CadenceWeb.FrontendReleasePublisherWireTest do
     |> Enum.at(1)
     |> String.to_integer()
   end
-
-  defp restore_config(key, nil), do: Application.delete_env(:cadence_web, key)
-  defp restore_config(key, value), do: Application.put_env(:cadence_web, key, value)
 end

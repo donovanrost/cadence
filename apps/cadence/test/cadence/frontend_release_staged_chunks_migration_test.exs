@@ -10,7 +10,7 @@ defmodule Cadence.FrontendReleaseStagedChunksMigrationTest do
   @max_object_size 100_000_000
   @migration_telemetry_prefix [:cadence, :frontend_release_migration_test_repo, :query]
 
-  test "rollback reconstructs inline and chunk-backed bytes and re-up succeeds" do
+  test "rollback reconstructs multiple chunk-backed objects in order and repeated up is stable" do
     with_migrated_repo(fn repo ->
       inline_bytes = <<0, 1, 2, 3>>
       inline_digest = digest_hex(inline_bytes)
@@ -21,13 +21,23 @@ defmodule Cadence.FrontendReleaseStagedChunksMigrationTest do
                @migration_version
              ]
 
-      chunked_bytes = <<255, 0, 1, 2, 3, 4, 5, 6, 7>>
-      chunked_digest = digest_hex(chunked_bytes)
+      first_chunked_bytes = <<255, 0, 1, 2, 3, 4, 5, 6, 7>>
+      first_chunked_digest = digest_hex(first_chunked_bytes)
 
-      insert_chunked_object!(repo, chunked_digest, byte_size(chunked_bytes), [
+      insert_chunked_object!(repo, first_chunked_digest, byte_size(first_chunked_bytes), [
         {2, <<4, 5, 6, 7>>},
         {0, <<255, 0, 1>>},
         {1, <<2, 3>>}
+      ])
+
+      second_chunked_bytes = <<10, 11, 12, 13, 14, 15, 16, 17, 18, 19>>
+      second_chunked_digest = digest_hex(second_chunked_bytes)
+
+      insert_chunked_object!(repo, second_chunked_digest, byte_size(second_chunked_bytes), [
+        {2, <<16, 17, 18>>},
+        {0, <<10, 11>>},
+        {3, <<19>>},
+        {1, <<12, 13, 14, 15>>}
       ])
 
       assert Ecto.Migrator.run(repo, migration_source(), :down, step: 1, log: false) == [
@@ -39,9 +49,14 @@ defmodule Cadence.FrontendReleaseStagedChunksMigrationTest do
                  inline_digest
                ]).rows
 
-      assert [[^chunked_bytes, 9]] =
+      assert [[^first_chunked_bytes, 9]] =
                repo.query!("SELECT bytes, size FROM frontend_release_objects WHERE sha256 = $1", [
-                 chunked_digest
+                 first_chunked_digest
+               ]).rows
+
+      assert [[^second_chunked_bytes, 10]] =
+               repo.query!("SELECT bytes, size FROM frontend_release_objects WHERE sha256 = $1", [
+                 second_chunked_digest
                ]).rows
 
       assert [[nil]] = repo.query!("SELECT to_regclass('frontend_release_object_chunks')").rows
@@ -51,11 +66,18 @@ defmodule Cadence.FrontendReleaseStagedChunksMigrationTest do
                @migration_version
              ]
 
-      assert [[2]] = repo.query!("SELECT COUNT(*) FROM frontend_release_objects").rows
+      assert Ecto.Migrator.run(repo, migration_source(), :up, step: 1, log: false) == []
 
-      assert [[^chunked_bytes]] =
+      assert [[3]] = repo.query!("SELECT COUNT(*) FROM frontend_release_objects").rows
+
+      assert [[^first_chunked_bytes]] =
                repo.query!("SELECT bytes FROM frontend_release_objects WHERE sha256 = $1", [
-                 chunked_digest
+                 first_chunked_digest
+               ]).rows
+
+      assert [[^second_chunked_bytes]] =
+               repo.query!("SELECT bytes FROM frontend_release_objects WHERE sha256 = $1", [
+                 second_chunked_digest
                ]).rows
     end)
   end

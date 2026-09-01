@@ -11,6 +11,7 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   @digest_bytes 32
   @publisher_path "/api/cadence/frontend-release/v1/releases"
   @artifact_path_prefix "/api/cadence/frontend-release/v1/objects/"
+  @publisher_config_key :frontend_release_publisher_config
 
   @spec init(Plug.opts()) :: Plug.opts()
   def init(opts), do: opts
@@ -52,9 +53,9 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
   end
 
   @spec call(Plug.Conn.t(), Plug.opts()) :: Plug.Conn.t()
-  def call(%Plug.Conn{} = conn, _opts) do
+  def call(%Plug.Conn{} = conn, opts) do
     if publisher_request?(conn) do
-      case preflight(conn) do
+      case preflight(conn, opts) do
         :ok -> conn
         {:error, :unauthenticated} -> unauthorized(conn)
         {:error, :unsupported_media_type} -> unsupported_media_type(conn)
@@ -65,8 +66,8 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
     end
   end
 
-  defp preflight(conn) do
-    with :ok <- authenticate(conn),
+  defp preflight(conn, opts) do
+    with :ok <- authenticate(conn, opts),
          :ok <- publisher_media_type(conn) do
       artifact_path(conn)
     end
@@ -108,8 +109,8 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
     end
   end
 
-  defp authenticate(conn) do
-    with {:ok, expected_digest} <- configured_digest(),
+  defp authenticate(conn, opts) do
+    with {:ok, expected_digest} <- configured_digest(conn, opts),
          {:ok, token} <- bearer_token(conn),
          true <- secure_compare(:crypto.hash(:sha256, token), expected_digest) do
       :ok
@@ -118,21 +119,38 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisher do
     end
   end
 
-  defp configured_digest do
-    case Application.get_env(:cadence_web, @token_config, []) do
-      config when is_list(config) ->
-        case Keyword.get(config, @token_digest_key) do
-          digest when is_binary(digest) and byte_size(digest) == @digest_bytes ->
-            {:ok, digest}
+  defp configured_digest(conn, opts) do
+    config = Map.get(conn.private, @publisher_config_key, :application)
 
-          _invalid ->
-            :error
-        end
+    config =
+      case Keyword.fetch(opts, :publisher_config) do
+        {:ok, configured} -> configured
+        :error -> config
+      end
 
-      _invalid_config ->
+    case config do
+      :application -> application_publisher_config()
+      configured when is_list(configured) -> configured_digest_from(configured)
+      _invalid_config -> :error
+    end
+  end
+
+  defp application_publisher_config do
+    Application.get_env(:cadence_web, @token_config, [])
+    |> configured_digest_from()
+  end
+
+  defp configured_digest_from(config) when is_list(config) do
+    case Keyword.get(config, @token_digest_key) do
+      digest when is_binary(digest) and byte_size(digest) == @digest_bytes ->
+        {:ok, digest}
+
+      _invalid ->
         :error
     end
   end
+
+  defp configured_digest_from(_invalid_config), do: :error
 
   defp bearer_token(conn) do
     case get_req_header(conn, "authorization") do

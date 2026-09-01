@@ -27,6 +27,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
   @max_artifact_bytes 100_000_000
   @max_media_type_bytes 128
   @safe_media_type ~r/^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}$/
+  @process_publication_config_key {__MODULE__, :publication_config}
 
   @spec admit_release(binary() | map(), artifact_input(), keyword()) ::
           {:ok, ReleasePublication.t()} | {:error, term()}
@@ -111,7 +112,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp verify_release(document, opts) do
     FrontendReleaseCatalog.verify_release(
       document,
-      configured_trust_records(),
+      configured_trust_records(opts),
       verifier_opts(opts)
     )
   end
@@ -119,7 +120,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
   defp verify_catalog(document, opts, accepted_state) do
     FrontendReleaseCatalog.verify_catalog(
       document,
-      configured_trust_records(),
+      configured_trust_records(opts),
       verifier_opts(opts) |> Keyword.put(:accepted_state, accepted_state)
     )
   end
@@ -730,10 +731,11 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   defp signed_document_bytes(_document), do: {:error, error(:invalid_document, "$")}
 
-  defp configured_trust_records, do: Keyword.get(publication_config(), :trust_records, [])
+  defp configured_trust_records(opts),
+    do: Keyword.get(publication_config(opts), :trust_records, [])
 
   defp verifier_opts(opts) do
-    base = [allowed_origins: Keyword.get(publication_config(), :allowed_origins, [])]
+    base = [allowed_origins: Keyword.get(publication_config(opts), :allowed_origins, [])]
 
     case Keyword.fetch(opts, :now) do
       {:ok, now} -> Keyword.put(base, :now, now)
@@ -741,12 +743,29 @@ defmodule CadenceWeb.FrontendReleasePublication do
     end
   end
 
-  defp publication_config do
+  defp publication_config(opts) do
+    case Keyword.fetch(opts, :publication_config) do
+      {:ok, config} -> normalize_publication_config(config)
+      :error -> process_or_application_publication_config()
+    end
+  end
+
+  defp process_or_application_publication_config do
+    case Process.get(@process_publication_config_key, :not_configured) do
+      :not_configured -> application_publication_config()
+      config -> normalize_publication_config(config)
+    end
+  end
+
+  defp application_publication_config do
     case Application.get_env(:cadence_web, :frontend_release_publication, []) do
       config when is_list(config) -> config
       _ -> []
     end
   end
+
+  defp normalize_publication_config(config) when is_list(config), do: config
+  defp normalize_publication_config(_config), do: []
 
   defp publication_metadata(opts) do
     case Keyword.get(opts, :publisher_identity) do
