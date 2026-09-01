@@ -51,6 +51,50 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
     end)
   end
 
+  test "manifest path database constraint rejects one backslash and accepts ordinary paths" do
+    with_base_repo(fn repo ->
+      assert Ecto.Migrator.run(repo, migration_source(), :up, step: 1, log: false) == [
+               @manifest_version
+             ]
+
+      ordinary_id = "manifest-path-ordinary-#{System.unique_integer([:positive])}"
+
+      assert {:ok, _result} =
+               insert_manifest_constraint_probe(repo, ordinary_id, "assets/main.js")
+
+      assert [[1]] =
+               repo.query!(
+                 """
+                 SELECT COUNT(*)
+                 FROM frontend_release_publications
+                 WHERE publication_id = $1 AND manifest_path = 'assets/main.js'
+                 """,
+                 [ordinary_id]
+               ).rows
+
+      one_backslash_id = "manifest-path-backslash-#{System.unique_integer([:positive])}"
+      one_backslash_path = "assets" <> <<92>> <> "main.js"
+
+      assert {:error,
+              %Postgrex.Error{
+                postgres: %{
+                  code: :check_violation,
+                  constraint: "frontend_release_publications_manifest_path_check"
+                }
+              }} = insert_manifest_constraint_probe(repo, one_backslash_id, one_backslash_path)
+
+      assert [[0]] =
+               repo.query!(
+                 """
+                 SELECT COUNT(*)
+                 FROM frontend_release_publications
+                 WHERE publication_id = $1
+                 """,
+                 [one_backslash_id]
+               ).rows
+    end)
+  end
+
   test "malformed payload and mismatched artifact/object roll back the manifest migration" do
     with_base_repo(fn repo ->
       malformed =
@@ -420,6 +464,38 @@ defmodule Cadence.FrontendReleaseActivationMigrationTest do
       size: size,
       media_type: media_type
     }
+  end
+
+  defp insert_manifest_constraint_probe(repo, publication_id, manifest_path) do
+    release_id = digest(publication_id)
+    payload_digest = digest("payload:" <> publication_id)
+    signed_document_digest = digest("signed:" <> publication_id)
+    inserted_at = ~U[2026-09-01 00:00:00.123456Z]
+
+    repo.query(
+      """
+      INSERT INTO frontend_release_publications
+        (publication_id, release_id, application_id, application_version, package_id, package_version,
+         surface_id, surface_version, remote_name, exposed_module, artifact_base_url, payload_digest,
+         signed_document_digest, signed_document_bytes, payload_bytes, signing_key_id, signing_role,
+         released_at, artifact_count, accepted_at, manifest_path, manifest_sha256, manifest_size,
+         manifest_media_type, inserted_at)
+      VALUES ($1, $2, 'app', 1, 'pkg', 1, 'surface', 1, 'remote', './Main',
+              'https://example.test/assets', $3, $4, $5, $6, 'release-key', 'release', $7, 1, $7,
+              $8, $9, 4, 'application/javascript', $7)
+      """,
+      [
+        publication_id,
+        release_id,
+        payload_digest,
+        signed_document_digest,
+        <<1>>,
+        <<2>>,
+        inserted_at,
+        manifest_path,
+        digest_hex("test")
+      ]
+    )
   end
 
   defp assert_manifest_migration_failure!(repo, reason) do

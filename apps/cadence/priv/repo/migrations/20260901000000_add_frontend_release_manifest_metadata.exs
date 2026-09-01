@@ -44,7 +44,7 @@ defmodule Cadence.Repo.Migrations.AddFrontendReleaseManifestMetadata do
         @release_table,
         :frontend_release_publications_manifest_path_check,
         check:
-          "octet_length(manifest_path) > 0 AND octet_length(manifest_path) <= 256 AND position('\\\\' in manifest_path) = 0 AND manifest_path !~ '(^/|//|(^|/)\\.{1,2}(/|$))'"
+          "octet_length(manifest_path) > 0 AND octet_length(manifest_path) <= 256 AND position(chr(92) in manifest_path) = 0 AND manifest_path !~ '(^/|//|(^|/)\\.{1,2}(/|$))'"
       )
     )
 
