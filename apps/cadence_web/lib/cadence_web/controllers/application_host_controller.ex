@@ -80,6 +80,13 @@ defmodule CadenceWeb.ApplicationHostController do
       {:error, reason} when reason in [:mission_not_found, :spacecraft_not_found] ->
         problem(conn, :not_found, "mission_not_found", mission_not_found_message())
 
+      {:error, :no_history} ->
+        catalog_problem(conn, :no_history)
+
+      {:error, reason}
+      when is_tuple(reason) and elem(reason, 0) in [:database_unavailable, :integrity_failure] ->
+        catalog_problem(conn, reason)
+
       {:error, reason} ->
         bridge_problem(conn, reason)
 
@@ -124,6 +131,13 @@ defmodule CadenceWeb.ApplicationHostController do
     else
       {:error, reason} when reason in [:mission_not_found, :spacecraft_not_found] ->
         problem(conn, :not_found, "mission_not_found", mission_not_found_message())
+
+      {:error, :no_history} ->
+        catalog_problem(conn, :no_history)
+
+      {:error, reason}
+      when is_tuple(reason) and elem(reason, 0) in [:database_unavailable, :integrity_failure] ->
+        catalog_problem(conn, reason)
 
       {:error, reason} ->
         bridge_problem(conn, reason)
@@ -452,6 +466,26 @@ defmodule CadenceWeb.ApplicationHostController do
       :forbidden,
       "forbidden",
       "You do not have authority to access this application catalog."
+    )
+  end
+
+  defp catalog_problem(conn, :no_history) do
+    problem(
+      conn,
+      :not_found,
+      "application_unavailable",
+      "The requested application is not available in this scope."
+    )
+  end
+
+  defp catalog_problem(conn, reason)
+       when is_tuple(reason) and elem(reason, 0) in [:database_unavailable, :integrity_failure] do
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> problem(
+      :service_unavailable,
+      "application_catalog_unavailable",
+      "The application catalog is temporarily unavailable."
     )
   end
 

@@ -6,6 +6,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
+  alias Cadence.Repo
   alias CadenceWeb.{ApplicationHostCatalog, CommsOverviewPresenter, TestFixtures}
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
@@ -382,6 +383,29 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     assert response.status == 200
     assert is_map(json_response(response, 200))
+  end
+
+  test "post-cutover missing-generation catalog failure is a sanitized service-unavailable response" do
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+
+    assert [[1]] =
+             Repo.query!("""
+             UPDATE frontend_release_activation_controls
+             SET cutover_epoch = 1, cutover_at = now()
+             WHERE control_id = 1
+             RETURNING cutover_epoch
+             """).rows
+
+    response = get(member_conn, catalog_path(mission.mission_id))
+
+    assert %{
+             "schema" => "cadence.application-host-problem.v1",
+             "code" => "application_catalog_unavailable",
+             "message" => "The application catalog is temporarily unavailable."
+           } = json_response(response, 503)
+
+    assert get_resp_header(response, "cache-control") == ["no-store"]
+    refute response.resp_body =~ "integrity_failure"
   end
 
   defp signed_in_scope_and_mission do

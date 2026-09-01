@@ -59,7 +59,9 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       when is_list(opts) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- validate_session_options(opts),
-         {:ok, applications} <- applications(current_scope, route_context, opts),
+         {:ok, release_snapshot} <- ApplicationReleaseRegistry.snapshot(),
+         {:ok, applications} <-
+           applications(current_scope, route_context, opts, release_snapshot),
          {:ok, catalog} <-
            {:ok,
             %{
@@ -97,36 +99,55 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       )
       when is_binary(application_key) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
-         :ok <- CatalogRegistry.validate() do
-      case ApplicationInstallations.fetch_installed(
-             current_scope,
-             route_context.host_context,
-             application_key
-           ) do
-        {:ok, installation} ->
-          registered_application(
-            application_key,
-            installation,
-            route_context.host_context,
-            surface_id
-          )
-
-        {:error, :application_not_installed} ->
-          contributed_application_admission(
-            current_scope,
-            application_key,
-            route_context,
-            surface_id
-          )
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+         :ok <- CatalogRegistry.validate(),
+         {:ok, release_snapshot} <- ApplicationReleaseRegistry.snapshot() do
+      admit_application_from_snapshot(
+        current_scope,
+        route_context,
+        application_key,
+        surface_id,
+        release_snapshot
+      )
     end
   end
 
   def admit_application(%Scope{}, %{}, _application_key, _surface_id),
     do: {:error, :application_catalog_unavailable}
+
+  defp admit_application_from_snapshot(
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{}} = route_context,
+         application_key,
+         surface_id,
+         release_snapshot
+       ) do
+    case ApplicationInstallations.fetch_installed(
+           current_scope,
+           route_context.host_context,
+           application_key
+         ) do
+      {:ok, installation} ->
+        registered_application(
+          application_key,
+          installation,
+          route_context.host_context,
+          surface_id,
+          release_snapshot
+        )
+
+      {:error, :application_not_installed} ->
+        contributed_application_admission(
+          current_scope,
+          application_key,
+          route_context,
+          surface_id,
+          release_snapshot
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   @spec scope_document(Scope.t(), route_context()) :: map()
   def scope_document(
@@ -193,6 +214,9 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              do: href <> "/federated",
              else: href
            )}
+
+        {:error, reason} when reason == :no_history or is_tuple(reason) ->
+          {:error, reason}
 
         {:error, _reason} ->
           fallback_href(route_context, application_key, nil)
@@ -337,16 +361,22 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     end
   end
 
-  defp applications(current_scope, route_context, opts) do
+  defp applications(current_scope, route_context, opts, release_snapshot) do
     manifest_url = Keyword.fetch!(opts, :manifest_url)
 
     case {Keyword.get(opts, :application_key), Keyword.get(opts, :surface_id)} do
       {nil, nil} ->
-        all_applications(current_scope, route_context, manifest_url)
+        all_applications(current_scope, route_context, manifest_url, release_snapshot)
 
       {application_key, surface_id} when is_binary(application_key) ->
         with {:ok, application} <-
-               admit_application(current_scope, route_context, application_key, surface_id) do
+               admit_application_from_snapshot(
+                 current_scope,
+                 route_context,
+                 application_key,
+                 surface_id,
+                 release_snapshot
+               ) do
           {:ok, [application_document(application, manifest_url)]}
         end
 
@@ -358,7 +388,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   defp all_applications(
          %Scope{} = current_scope,
          %{host_context: %HostContext{} = host_context} = route_context,
-         manifest_url
+         manifest_url,
+         release_snapshot
        ) do
     with {:ok, installation_page} <-
            ApplicationInstallations.list_page(
@@ -370,36 +401,68 @@ defmodule CadenceWeb.ApplicationHostCatalog do
              max_total: @max_catalog_applications
            ),
          {:ok, contributed} <-
-           contributed_applications(current_scope, route_context, manifest_url) do
-      installed_applications =
-        installation_page.items
-        |> Enum.flat_map(&installed_application_document(&1, host_context, manifest_url))
-
+           contributed_applications(current_scope, route_context, manifest_url, release_snapshot),
+         {:ok, installed_applications} <-
+           installed_application_documents(
+             installation_page.items,
+             host_context,
+             manifest_url,
+             release_snapshot
+           ) do
       finalize_catalog_applications(contributed ++ installed_applications)
     end
   end
 
-  defp all_applications(%Scope{}, %{}, _manifest_url),
+  defp all_applications(%Scope{}, %{}, _manifest_url, _release_snapshot),
     do: {:error, :application_catalog_unavailable}
 
   defp contributed_applications(
          %Scope{} = current_scope,
          %{host_context: %HostContext{}} = route_context,
-         manifest_url
+         manifest_url,
+         release_snapshot
        ) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- CatalogRegistry.validate(),
          contributions <- CatalogRegistry.all(),
          true <- length(contributions) <= @max_catalog_applications do
-      {:ok,
-       Enum.flat_map(
-         contributions,
-         &contributed_application_document(&1, current_scope, route_context, manifest_url)
-       )}
+      collect_contributed_applications(
+        contributions,
+        current_scope,
+        route_context,
+        manifest_url,
+        release_snapshot
+      )
     else
       false -> {:error, :application_catalog_bounds_exceeded}
       {:error, reason} -> {:error, reason}
       _invalid -> {:error, :application_catalog_unavailable}
+    end
+  end
+
+  defp collect_contributed_applications(
+         contributions,
+         current_scope,
+         route_context,
+         manifest_url,
+         release_snapshot
+       ) do
+    contributions
+    |> Enum.reduce_while({:ok, []}, fn contribution, {:ok, acc} ->
+      case contributed_application_document(
+             contribution,
+             current_scope,
+             route_context,
+             manifest_url,
+             release_snapshot
+           ) do
+        {:ok, documents} -> {:cont, {:ok, [documents | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, documents} -> {:ok, documents |> Enum.reverse() |> Enum.concat()}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -416,11 +479,21 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %CatalogContribution{} = contribution,
          %Scope{} = current_scope,
          %{host_context: %HostContext{}} = route_context,
-         manifest_url
+         manifest_url,
+         release_snapshot
        ) do
-    case contributed_application(contribution, current_scope, route_context, manifest_url) do
-      {:ok, application} -> [application]
-      {:error, _reason} -> []
+    case contributed_application(
+           contribution,
+           current_scope,
+           route_context,
+           manifest_url,
+           release_snapshot
+         ) do
+      {:ok, application} ->
+        {:ok, [application]}
+
+      {:error, reason} ->
+        if intentional_application_omission?(reason), do: {:ok, []}, else: {:error, reason}
     end
   end
 
@@ -430,13 +503,15 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          },
          %Scope{} = current_scope,
          %{host_context: %HostContext{}} = route_context,
-         manifest_url
+         manifest_url,
+         release_snapshot
        ) do
     case contributed_application_admission(
            current_scope,
            definition.application_key,
            route_context,
-           nil
+           nil,
+           release_snapshot
          ) do
       {:ok, application} -> {:ok, application_document(application, manifest_url)}
       {:error, reason} -> {:error, reason}
@@ -450,7 +525,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
            host_context: %HostContext{placement: placement, mission_id: mission_id},
            mission: %Mission{organization_id: organization_id}
          },
-         surface_id
+         surface_id,
+         release_snapshot
        )
        when is_binary(application_key) do
     with :ok <-
@@ -466,7 +542,13 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           }} <- CatalogRegistry.fetch(application_key),
          true <- placement in definition.installable_scopes,
          {:ok, surface, release} <-
-           resolve_surface(definition, placement, definition.application_key, surface_id) do
+           resolve_surface(
+             definition,
+             placement,
+             definition.application_key,
+             surface_id,
+             release_snapshot
+           ) do
       {:ok,
        %{
          definition: definition,
@@ -486,13 +568,20 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          application_key,
          %ApplicationInstallation{application_version: application_version} = installation,
          %HostContext{placement: placement},
-         surface_id
+         surface_id,
+         release_snapshot
        ) do
     with {:ok, definition} <-
            ExtensionCatalog.fetch_available_application(application_key, application_version),
          true <- placement in definition.installable_scopes,
          {:ok, surface, release} <-
-           resolve_surface(definition, placement, application_key, surface_id),
+           resolve_surface(
+             definition,
+             placement,
+             application_key,
+             surface_id,
+             release_snapshot
+           ),
          {:ok, package} <- package_for(application_key, application_version) do
       {:ok,
        %{
@@ -524,19 +613,26 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       {:error, :unknown_application_release} = error ->
         error
 
+      {:error, :no_history} = error ->
+        error
+
       {:error, :unknown_application_contribution} ->
         {:error, :application_unavailable}
 
       {:error, :unsupported_application_contribution_version} ->
         {:error, :application_unavailable}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
-  defp resolve_surface(definition, placement, application_key, nil) do
+  defp resolve_surface(definition, placement, application_key, nil, release_snapshot) do
     definition
     |> ApplicationRegistry.workspace_surfaces(placement)
     |> Enum.find_value({:error, :unknown_application_release}, fn surface ->
-      case ApplicationReleaseRegistry.fetch(
+      case ApplicationReleaseRegistry.fetch_from_snapshot(
+             release_snapshot,
              application_key,
              definition.version,
              surface.surface_id,
@@ -544,15 +640,17 @@ defmodule CadenceWeb.ApplicationHostCatalog do
            ) do
         {:ok, release} -> {:ok, surface, release}
         {:error, :unknown_application_release} -> nil
+        {:error, :no_history} = error -> error
       end
     end)
   end
 
-  defp resolve_surface(definition, placement, application_key, surface_id)
+  defp resolve_surface(definition, placement, application_key, surface_id, release_snapshot)
        when is_binary(surface_id) do
     with {:ok, surface} <- ApplicationRegistry.fetch_surface(definition, placement, surface_id),
          {:ok, release} <-
-           ApplicationReleaseRegistry.fetch(
+           ApplicationReleaseRegistry.fetch_from_snapshot(
+             release_snapshot,
              application_key,
              definition.version,
              surface.surface_id,
@@ -572,17 +670,60 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     end
   end
 
-  defp installed_application_document(installation, host_context, manifest_url) do
+  defp installed_application_documents(
+         installations,
+         host_context,
+         manifest_url,
+         release_snapshot
+       ) do
+    installations
+    |> Enum.reduce_while({:ok, []}, fn installation, {:ok, acc} ->
+      case installed_application_document(
+             installation,
+             host_context,
+             manifest_url,
+             release_snapshot
+           ) do
+        {:ok, documents} -> {:cont, {:ok, [documents | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, documents} -> {:ok, documents |> Enum.reverse() |> Enum.concat()}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp installed_application_document(installation, host_context, manifest_url, release_snapshot) do
     case registered_application(
            installation.application_key,
            installation,
            host_context,
-           nil
+           nil,
+           release_snapshot
          ) do
-      {:ok, application} -> [application_document(application, manifest_url)]
-      {:error, _reason} -> []
+      {:ok, application} ->
+        {:ok, [application_document(application, manifest_url)]}
+
+      {:error, reason} ->
+        if intentional_application_omission?(reason), do: {:ok, []}, else: {:error, reason}
     end
   end
+
+  defp intentional_application_omission?(reason)
+       when reason in [
+              :application_unavailable,
+              :unknown_application,
+              :unknown_application_contribution,
+              :unsupported_application_contribution_version,
+              :unsupported_application_version,
+              :invalid_application_definition,
+              :unknown_application_release,
+              :unknown_surface
+            ],
+       do: true
+
+  defp intentional_application_omission?(_reason), do: false
 
   defp package_contributes?(
          %ExtensionPackage{contributions: contributions},

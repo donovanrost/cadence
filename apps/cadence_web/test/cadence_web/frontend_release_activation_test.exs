@@ -3,13 +3,16 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
   alias Ecto.Adapters.SQL.Sandbox
 
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
+  alias Cadence.Auth.Scope
+  alias CadenceWeb.ApplicationHostCatalog
+  alias CadenceWeb.ApplicationReleaseRegistry
   alias CadenceWeb.FrontendReleaseActivation
+  alias CadenceWeb.FrontendReleaseActivation.{CatalogBinding, CatalogGeneration, Request}
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
-
-  alias CadenceWeb.FrontendReleaseActivation.{CatalogBinding, CatalogGeneration, Request}
-
   alias CadenceWeb.FrontendReleasePublication.{CatalogPublication, ReleasePublication}
+  alias CadenceWeb.TestFixtures
 
   @fixture Path.expand("../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
@@ -113,6 +116,145 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              """).rows
   end
 
+  test "post-cutover registry reads the active generation and emits its immutable manifest route" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-post-cutover")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-post-cutover-key")
+
+    handler_id = {__MODULE__, make_ref()}
+
+    :telemetry.attach(
+      handler_id,
+      [:cadence, :repo, :query],
+      fn _event, _measurements, metadata, pid ->
+        send(pid, {:application_release_registry_query, Map.get(metadata, :query)})
+      end,
+      self()
+    )
+
+    try do
+      assert {:ok,
+              %{
+                source: :database,
+                entries: [{{"telemetry_decom", 1, "packet_bindings", 1}, entry}]
+              }} =
+               ApplicationReleaseRegistry.snapshot()
+
+      assert_receive {:application_release_registry_query, query}
+      refute_receive {:application_release_registry_query, _query}, 50
+      refute inspect(query) =~ "payload_bytes"
+      refute inspect(query) =~ "signed_document_bytes"
+      refute inspect(query) =~ "object_bytes"
+
+      assert entry == %{
+               federation: :module_federation,
+               release_id: release["releaseId"],
+               remote_name: release["remoteName"],
+               manifest_path:
+                 "/releases/telemetry_decom/#{release["releaseId"]}/artifacts/mf-manifest.json",
+               exposed_module: "./Application"
+             }
+
+      assert {:ok, ^entry} =
+               ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+
+      assert release["artifactBaseUrl"] ==
+               @origin <> "/releases/telemetry_decom/" <> release["releaseId"] <> "/artifacts/"
+
+      refute entry.manifest_path =~ "cdn.example.com"
+    after
+      :telemetry.detach(handler_id)
+    end
+
+    assert {:error, :no_history} =
+             ApplicationReleaseRegistry.fetch("missing_application", 1, "missing_surface", 1)
+  end
+
+  test "host catalog propagates database no_history for a missing default surface" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-host-miss")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-host-miss-key")
+
+    {scope, route_context} = installed_comms_context()
+
+    assert {:error, :no_history} =
+             ApplicationHostCatalog.admit_application(scope, route_context, "comms")
+  end
+
+  test "host catalog build does not swallow database no_history for an installed application" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-host-build-miss")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-host-build-miss-key")
+
+    {scope, route_context} = installed_comms_context()
+
+    assert {:error, :no_history} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "reader-host-session",
+               csrf_token: "reader-host-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end
+             )
+  end
+
+  test "epoch zero preserves the static registry while inactive database history remains" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-static-cutover")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-static-cutover-key")
+
+    with_disabled_triggers!(["frontend_release_activation_controls"], fn ->
+      Repo.query!("""
+      UPDATE frontend_release_activation_controls
+      SET cutover_epoch = 0, cutover_at = NULL, legacy_catalog_publication_id = NULL
+      WHERE control_id = 1
+      """)
+    end)
+
+    assert {:ok, %{source: :static, entries: entries}} = ApplicationReleaseRegistry.snapshot()
+
+    assert {:ok, static_release} =
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+
+    assert static_release.manifest_path ==
+             "/assets/application-host/telemetry-decom/mf-manifest.json"
+
+    assert Enum.any?(entries, fn {key, _release} ->
+             key == {"telemetry_decom", 1, "packet_bindings", 1}
+           end)
+
+    assert static_release.release_id == "telemetry-decom-v1"
+    refute static_release.release_id == release["releaseId"]
+  end
+
+  test "post-cutover registry rejects tampered accepted publication metadata" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-integrity")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, %{status: 201}} = activate(document, "reader-integrity-key")
+
+    tampered_provenance = Map.put(release["provenance"], "buildId", "tampered-reader-build")
+
+    tamper_release_publication_in_transaction!(
+      release["releaseId"],
+      :provenance,
+      tampered_provenance
+    )
+
+    assert {:error, {:integrity_failure, :release_publication_integrity_failure}} =
+             ApplicationReleaseRegistry.snapshot()
+  end
+
   test "duplicate binding identities are rejected and snapshot reconstruction fails closed" do
     {_document, _payload, release} =
       admit_release!(@artifact_bytes, "activation-duplicate-binding")
@@ -168,6 +310,39 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:error, :integrity} =
              FrontendReleaseActivation.persisted_snapshot_digest(response.catalog_publication_id)
+  end
+
+  test "distinct package bindings collapsing to one host identity fail closed" do
+    {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-duplicate-host")
+    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+
+    assert {:ok, _response} = activate(document, "reader-duplicate-host-key")
+    binding = Repo.one!(CatalogBinding)
+
+    duplicate_attrs = %{
+      generation_id: binding.generation_id,
+      application_id: binding.application_id,
+      application_version: binding.application_version,
+      package_id: binding.package_id <> "-other",
+      package_version: binding.package_version + 1,
+      surface_id: binding.surface_id,
+      surface_version: binding.surface_version,
+      current_publication_id: binding.current_publication_id,
+      current_release_id: binding.current_release_id,
+      previous_publication_id: nil,
+      previous_release_id: nil,
+      inserted_at: binding.inserted_at
+    }
+
+    Repo.query!(
+      "ALTER TABLE frontend_release_catalog_bindings DROP CONSTRAINT frcb_identity_pkey"
+    )
+
+    assert {:ok, _duplicate} = Repo.insert(CatalogBinding.changeset(duplicate_attrs))
+
+    assert {:error, {:integrity_failure, :duplicate_application_surface_identity}} =
+             ApplicationReleaseRegistry.snapshot()
   end
 
   test "same key replays exact accepted bytes, while a different document is a 409" do
@@ -369,6 +544,20 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert binding.current_release_id == first_release["releaseId"]
     assert binding.previous_release_id == second_release["releaseId"]
+
+    with_disabled_triggers!(["frontend_release_catalog_generations"], fn ->
+      Repo.query!(
+        """
+        UPDATE frontend_release_catalog_generations
+        SET identity_count = identity_count + 1
+        WHERE generation_id = $1
+        """,
+        [latest.generation_id]
+      )
+    end)
+
+    assert {:error, {:integrity_failure, :generation_identity_count_mismatch}} =
+             ApplicationReleaseRegistry.snapshot()
   end
 
   test "first legacy successor records exact legacy provenance and ignores only legacy expiry" do
@@ -431,6 +620,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              FROM frontend_release_activation_controls
              WHERE control_id = 1
              """).rows
+
+    assert {:ok, %{source: :database}} = ApplicationReleaseRegistry.snapshot()
+
+    assert {:ok, reader_release} =
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+
+    assert reader_release.release_id == second_release["releaseId"]
   end
 
   test "direct catalog writers return the activation-required closure without reading or writing" do
@@ -535,6 +731,28 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     )
   end
 
+  defp installed_comms_context do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization, mission_id: "reader-comms-mission")
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    host_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
+  end
+
   defp concurrently(functions) do
     parent = self()
 
@@ -598,6 +816,12 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       with_disabled_triggers!(["frontend_release_publications"], fn ->
         update_tampered_release_field!(release_id, field, value)
       end)
+    end)
+  end
+
+  defp tamper_release_publication_in_transaction!(release_id, field, value) do
+    with_disabled_triggers!(["frontend_release_publications"], fn ->
+      update_tampered_release_field!(release_id, field, value)
     end)
   end
 

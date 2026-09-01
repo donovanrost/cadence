@@ -1,5 +1,5 @@
 defmodule CadenceWeb.ApplicationReleaseRegistryTest do
-  use ExUnit.Case, async: true
+  use Cadence.DataCase, async: false
 
   alias CadenceWeb.ApplicationReleaseRegistry
 
@@ -46,5 +46,25 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              String.starts_with?(release.manifest_path, "/assets/") and
                not String.contains?(release.manifest_path, "/releases/current")
            end)
+  end
+
+  test "reports missing post-cutover active history as an integrity failure" do
+    assert [[0]] =
+             Repo.query!("""
+             SELECT cutover_epoch
+             FROM frontend_release_activation_controls
+             WHERE control_id = 1
+             """).rows
+
+    assert [[1]] =
+             Repo.query!("""
+             UPDATE frontend_release_activation_controls
+             SET cutover_epoch = 1, cutover_at = now()
+             WHERE control_id = 1
+             RETURNING cutover_epoch
+             """).rows
+
+    assert {:error, {:integrity_failure, :active_generation_missing}} =
+             ApplicationReleaseRegistry.snapshot()
   end
 end
