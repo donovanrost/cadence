@@ -7,6 +7,7 @@
     "dev": "vp run -r --parallel dev",
     "build": "vp run -r build",
     "build:publication": "corepack pnpm --filter @cadence/plugin-host build:phoenix && corepack pnpm --filter @cadence/comms-overview-plugin build && corepack pnpm --filter @cadence/telemetry-decom-plugin build:phoenix && node tools/production-publication-output-check.mjs",
+    "release:package": "node tools/frontend-release-package.mjs",
     "test:publication": "node tools/production-publication-output-check.mjs",
     "test:browser:contract": "node --test ../apps/cadence_web/assets/test/federation_browser_smoke_contract_test.mjs ../apps/cadence_web/assets/test/federation_browser_smoke_hardening_test.mjs ../apps/cadence_web/assets/test/federation_publication_build_lock_test.mjs",
     "preview": "node tools/production-server.ts",

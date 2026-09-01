@@ -1,0 +1,416 @@
+import assert from "node:assert/strict";
+import { createHash, generateKeyPairSync, verify } from "node:crypto";
+import { spawn } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, describe, it } from "node:test";
+
+import {
+  buildRelease,
+  buildReleasePayload,
+  canonicalJson,
+  enumerateArtifacts,
+  packageRelease,
+  validateRelativeArtifactPath,
+} from "./frontend-release-package.mjs";
+
+const TOOL_PATH = fileURLToPath(new URL("./frontend-release-package.mjs", import.meta.url));
+const NODE_PATH = process.execPath;
+const TEST_ORIGIN = "https://cdn.example.com";
+
+const metadata = {
+  application: { id: "telemetry_decom", version: 1 },
+  package: { id: "cadence.telemetry-applications", version: 1 },
+  surface: { id: "packet_bindings", version: 1 },
+  query: { id: "cadence.packet_bindings.manage", version: 1 },
+  actions: ["save_packet_bindings"],
+  remote: { name: "cadence_telemetry_decom" },
+  module: { exposedModule: "./Application" },
+  hostCompatibility: {
+    hostContract: "cadence.application-host.v1",
+    compatibility: {
+      cadenceApplicationContract: 1,
+      cadenceSurfaceContract: 1,
+      cadenceFederatedRendererContract: 1,
+      cadenceThemeContract: 1,
+    },
+    vueRange: "^3.5.40",
+  },
+  provenance: {
+    sourceRepository: "https://github.com/cadence/cadence",
+    sourceRevision: "0123456789abcdef0123456789abcdef01234567",
+    buildId: "phase-c-test-build",
+    builder: "test-runner",
+    workflow: "frontend-release",
+    builtAt: "2026-08-30T16:00:00Z",
+  },
+  releasedAt: "2026-08-30T17:00:00Z",
+};
+
+const temporaryDirectories = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+function keyPair() {
+  return generateKeyPairSync("ed25519");
+}
+
+function privateKeyMaterial(privateKey) {
+  return `base64url:${privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url")}`;
+}
+
+function sha256(bytes) {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+async function temporaryDirectory(prefix = "cadence-release-package-") {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+async function builtRemoteTree() {
+  const directory = await temporaryDirectory();
+  await mkdir(join(directory, "assets"), { recursive: true });
+  await mkdir(join(directory, "nested"), { recursive: true });
+  await writeFile(
+    join(directory, "mf-manifest.json"),
+    Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8"),
+  );
+  await writeFile(
+    join(directory, "remoteEntry.js"),
+    Buffer.from("export { default } from './assets/app.js';\n", "utf8"),
+  );
+  await writeFile(
+    join(directory, "assets", "app.js"),
+    Buffer.from("export const release = 'phase-c';\n", "utf8"),
+  );
+  await writeFile(
+    join(directory, "nested", "theme.css"),
+    Buffer.from(":root { --phase: c; }\n", "utf8"),
+  );
+  return directory;
+}
+
+async function runCli(argumentsList, environment = {}) {
+  return new Promise((resolveResult) => {
+    const child = spawn(NODE_PATH, [TOOL_PATH, ...argumentsList], {
+      cwd: dirname(dirname(TOOL_PATH)),
+      env: { ...process.env, ...environment },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("close", (code, signal) =>
+      resolveResult({
+        code,
+        signal,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      }),
+    );
+  });
+}
+
+void describe("frontend release packager", () => {
+  void it("builds a deterministic complete package with the exact release identity and signature", async () => {
+    const input = await builtRemoteTree();
+    const outputParent = await temporaryDirectory("cadence-release-output-");
+    const firstOutput = join(outputParent, "first");
+    const secondOutput = join(outputParent, "second");
+    const keys = keyPair();
+
+    const first = await packageRelease({
+      inputDirectory: input,
+      outputDirectory: firstOutput,
+      metadata,
+      artifactOrigin: TEST_ORIGIN,
+      keyId: "fixture-release-key",
+      privateKey: keys.privateKey,
+    });
+    const second = await packageRelease({
+      inputDirectory: input,
+      outputDirectory: secondOutput,
+      metadata,
+      artifactOrigin: TEST_ORIGIN,
+      keyId: "fixture-release-key",
+      privateKey: keys.privateKey,
+    });
+
+    assert.deepEqual(first.release, second.release);
+    assert.deepEqual(first.documentBytes, second.documentBytes);
+    assert.deepEqual(
+      first.artifacts.map(({ path, sha256: digest, size, mediaType }) => ({
+        path,
+        sha256: digest,
+        size,
+        mediaType,
+      })),
+      [
+        {
+          path: "assets/app.js",
+          sha256: sha256(Buffer.from("export const release = 'phase-c';\n", "utf8")).slice(
+            "sha256:".length,
+          ),
+          size: 34,
+          mediaType: "application/javascript",
+        },
+        {
+          path: "mf-manifest.json",
+          sha256: sha256(Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8")).slice(
+            "sha256:".length,
+          ),
+          size: 32,
+          mediaType: "application/json",
+        },
+        {
+          path: "nested/theme.css",
+          sha256: sha256(Buffer.from(":root { --phase: c; }\n", "utf8")).slice("sha256:".length),
+          size: 22,
+          mediaType: "text/css",
+        },
+        {
+          path: "remoteEntry.js",
+          sha256: sha256(Buffer.from("export { default } from './assets/app.js';\n", "utf8")).slice(
+            "sha256:".length,
+          ),
+          size: 43,
+          mediaType: "application/javascript",
+        },
+      ],
+    );
+
+    const logical = { ...first.release };
+    delete logical.releaseId;
+    delete logical.artifactBaseUrl;
+    assert.equal(first.releaseId, sha256(Buffer.from(canonicalJson(logical), "utf8")));
+    assert.equal(
+      first.release.artifactBaseUrl,
+      `${TEST_ORIGIN}/releases/telemetry_decom/${first.releaseId}/artifacts/`,
+    );
+    assert.deepEqual(Object.keys(first.release).sort(), [
+      "application",
+      "artifactBaseUrl",
+      "artifacts",
+      "exposedModule",
+      "hostCompatibility",
+      "manifest",
+      "package",
+      "provenance",
+      "releaseId",
+      "releasedAt",
+      "remoteName",
+      "schema",
+      "surface",
+      "transport",
+    ]);
+    assert.equal(first.release.manifest.path, "mf-manifest.json");
+    assert.equal(first.envelope.payload, first.payloadBytes.toString("base64url"));
+    assert.equal(
+      verify(
+        null,
+        Buffer.from(first.envelope.payload, "base64url"),
+        keys.publicKey,
+        Buffer.from(first.envelope.signature, "base64url"),
+      ),
+      true,
+    );
+
+    const firstEnvelope = await readFile(join(firstOutput, "release.json"));
+    assert.deepEqual(firstEnvelope, first.documentBytes);
+    for (const artifact of first.artifacts) {
+      assert.deepEqual(
+        await readFile(join(firstOutput, "artifacts", ...artifact.path.split("/"))),
+        artifact.bytes,
+      );
+      assert.deepEqual(
+        await readFile(join(secondOutput, "artifacts", ...artifact.path.split("/"))),
+        artifact.bytes,
+      );
+    }
+  });
+
+  void it("matches the repository's canonical JSON and release-ID fixture rules exactly", async () => {
+    const corpus = JSON.parse(
+      await readFile(
+        new URL("../../test/fixtures/frontend_release_catalog_v1.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    const payload = JSON.parse(corpus.release.payload);
+    assert.equal(canonicalJson(payload), corpus.release.payload);
+    const logical = { ...payload };
+    delete logical.releaseId;
+    delete logical.artifactBaseUrl;
+    assert.equal(sha256(Buffer.from(canonicalJson(logical), "utf8")), payload.releaseId);
+  });
+
+  void it("accepts the safe environment key contract without exposing the secret", async () => {
+    const input = await builtRemoteTree();
+    const outputParent = await temporaryDirectory("cadence-release-cli-");
+    const metadataFile = join(outputParent, "metadata.json");
+    const output = join(outputParent, "package");
+    const keys = keyPair();
+    await writeFile(metadataFile, JSON.stringify(metadata), { mode: 0o600 });
+
+    const result = await runCli(
+      [
+        "--input-dir",
+        input,
+        "--metadata",
+        metadataFile,
+        "--artifact-origin",
+        TEST_ORIGIN,
+        "--key-id",
+        "fixture-release-key",
+        "--output-dir",
+        output,
+      ],
+      { CADENCE_RELEASE_PRIVATE_KEY: privateKeyMaterial(keys.privateKey) },
+    );
+
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.signal, null);
+    assert.equal(result.stderr, "");
+    assert.ok(!result.stdout.includes(privateKeyMaterial(keys.privateKey)));
+    assert.ok(!result.stdout.includes("private"));
+    assert.equal(JSON.parse(result.stdout).releaseId.startsWith("sha256:"), true);
+    assert.deepEqual(
+      JSON.parse(await readFile(join(output, "release.json"), "utf8")).keyId,
+      "fixture-release-key",
+    );
+  });
+
+  void it("rejects secret-bearing failures without printing the key", async () => {
+    const input = await temporaryDirectory("cadence-release-invalid-");
+    const outputParent = await temporaryDirectory("cadence-release-cli-invalid-");
+    const metadataFile = join(outputParent, "metadata.json");
+    await writeFile(metadataFile, JSON.stringify(metadata), { mode: 0o600 });
+    const secret = privateKeyMaterial(keyPair().privateKey);
+
+    const result = await runCli(
+      [
+        "--input-dir",
+        input,
+        "--metadata",
+        metadataFile,
+        "--artifact-origin",
+        TEST_ORIGIN,
+        "--key-id",
+        "fixture-release-key",
+        "--output-dir",
+        join(outputParent, "package"),
+      ],
+      { CADENCE_RELEASE_PRIVATE_KEY: secret },
+    );
+
+    assert.notEqual(result.code, 0);
+    assert.ok(!result.stdout.includes(secret));
+    assert.ok(!result.stderr.includes(secret));
+    assert.match(result.stderr, /missing required mf-manifest\.json/);
+  });
+
+  void it("fails closed for missing required files, directories, and symlinks", async () => {
+    const missingManifest = await temporaryDirectory();
+    await writeFile(join(missingManifest, "remoteEntry.js"), "remote");
+    await assert.rejects(enumerateArtifacts(missingManifest), /missing required mf-manifest\.json/);
+
+    const directoryManifest = await temporaryDirectory();
+    await mkdir(join(directoryManifest, "mf-manifest.json"));
+    await writeFile(join(directoryManifest, "remoteEntry.js"), "remote");
+    await assert.rejects(
+      enumerateArtifacts(directoryManifest),
+      /missing required mf-manifest\.json/,
+    );
+
+    const symlinkFile = await builtRemoteTree();
+    await symlink(join(symlinkFile, "remoteEntry.js"), join(symlinkFile, "linked.js"));
+    await assert.rejects(enumerateArtifacts(symlinkFile), /is a symlink/);
+
+    const symlinkDirectory = await builtRemoteTree();
+    await symlink(join(symlinkDirectory, "assets"), join(symlinkDirectory, "linked"));
+    await assert.rejects(enumerateArtifacts(symlinkDirectory), /is a symlink/);
+  });
+
+  void it("rejects absolute, traversal, backslash, drive, and unnormalized paths", () => {
+    for (const path of [
+      "/absolute.js",
+      "../escape.js",
+      "assets/../escape.js",
+      "assets//app.js",
+      "assets\\app.js",
+      "C:app.js",
+    ]) {
+      assert.throws(
+        () => validateRelativeArtifactPath(path),
+        /relative|forbidden|traversal|normalized/,
+      );
+    }
+  });
+
+  void it("rejects malformed identities and duplicate normalized inventory paths", async () => {
+    const input = await builtRemoteTree();
+    const inventory = await enumerateArtifacts(input);
+    const duplicateInventory = {
+      ...inventory,
+      artifacts: [...inventory.artifacts, { ...inventory.artifacts[0] }],
+    };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory: duplicateInventory,
+          metadata,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /duplicate normalized artifact path/,
+    );
+
+    const malformed = { ...metadata, application: { id: "../telemetry", version: 1 } };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory,
+          metadata: malformed,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /application\.id is not a safe identifier/,
+    );
+  });
+
+  void it("keeps the package output outside the repository and requires explicit metadata", async () => {
+    const input = await builtRemoteTree();
+    await assert.rejects(
+      packageRelease({
+        inputDirectory: input,
+        outputDirectory: join(dirname(TOOL_PATH), "generated-release"),
+        metadata,
+        artifactOrigin: TEST_ORIGIN,
+        keyId: "fixture-release-key",
+        privateKey: keyPair().privateKey,
+      }),
+      /outside the repository/,
+    );
+    const incomplete = { ...metadata };
+    delete incomplete.releasedAt;
+    await assert.rejects(
+      buildRelease({
+        inputDirectory: input,
+        metadata: incomplete,
+        artifactOrigin: TEST_ORIGIN,
+        keyId: "fixture-release-key",
+        privateKey: keyPair().privateKey,
+      }),
+      /unexpected or missing field/,
+    );
+  });
+});
