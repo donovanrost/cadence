@@ -154,6 +154,87 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert last_chunk == :binary.copy(<<"a">>, 5)
   end
 
+  test "staged promotion rejects an extra suffix chunk before finalization" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    stage_file!(digest, bytes)
+
+    assert %{num_rows: 1} =
+             Repo.query!(
+               """
+               INSERT INTO frontend_release_staged_object_chunks
+                 (sha256, chunk_index, bytes, size, inserted_at)
+               VALUES ($1, 2, $2, $3, now())
+               """,
+               [digest_hex(bytes), <<"x">>, 1]
+             )
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_objects WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[1]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_objects WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[3]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+  end
+
+  test "staged promotion rejects malformed chunk topology before finalization" do
+    cases = [
+      {"zero-sized stage with a row", 0, [{0, <<"x">>, 1}]},
+      {"nonzero-sized stage with no rows", 1, []},
+      {
+        "undersized non-final chunk",
+        1_048_581,
+        [
+          {0, :binary.copy(<<"a">>, 1_048_575), 1_048_575},
+          {1, :binary.copy(<<"a">>, 6), 6}
+        ]
+      },
+      {
+        "noncontiguous index with a beyond-gap suffix",
+        1_048_581,
+        [
+          {0, :binary.copy(<<"a">>, 1_048_576), 1_048_576},
+          {2, :binary.copy(<<"a">>, 5), 5}
+        ]
+      }
+    ]
+
+    for {label, size, chunks} <- cases do
+      digest = sha256("staged-topology-" <> label)
+      insert_staged_object!(digest, size)
+
+      Enum.each(chunks, fn {chunk_index, bytes, declared_size} ->
+        insert_staged_chunk!(digest, chunk_index, bytes, declared_size)
+      end)
+
+      assert {:error, :stored_object_size_mismatch} =
+               DatabaseArtifactStore.promote_staged(digest, size)
+
+      assert_staged_object_retained!(digest, size, length(chunks))
+    end
+  end
+
   test "stage_artifact and release admission preserve zero-byte chunk-backed objects" do
     bytes_by_path = %{
       "assets/empty.js" => <<>>,
@@ -1014,8 +1095,57 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     digest
   end
 
+  defp insert_staged_object!(digest, size) do
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
+      VALUES ($1, $2, now() + interval '1 hour', now())
+      """,
+      [digest_hex_value(digest), size]
+    )
+  end
+
+  defp insert_staged_chunk!(digest, chunk_index, bytes, declared_size) do
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_object_chunks
+        (sha256, chunk_index, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, $4, now())
+      """,
+      [digest_hex_value(digest), chunk_index, bytes, declared_size]
+    )
+  end
+
+  defp assert_staged_object_retained!(digest, size, chunk_count) do
+    digest_value = digest_hex_value(digest)
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_objects WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[1, ^size]] =
+             Repo.query!(
+               "SELECT COUNT(*), MAX(size) FROM frontend_release_staged_objects WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[^chunk_count]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+  end
+
   defp insert_expired_stage!(digest, bytes) do
-    sha256_hex = String.replace_prefix(digest, "sha256:", "")
+    sha256_hex = digest_hex_value(digest)
 
     Repo.query!(
       """
@@ -1034,6 +1164,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
       [sha256_hex, bytes, byte_size(bytes)]
     )
   end
+
+  defp digest_hex_value(digest), do: String.replace_prefix(digest, "sha256:", "")
 
   defp write_temp_file(bytes) do
     file_path =

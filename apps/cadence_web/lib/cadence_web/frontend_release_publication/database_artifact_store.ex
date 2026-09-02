@@ -82,10 +82,12 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
          :ok <- validate_size(expected_size),
          {:ok, stage_size} <- staged_object_size(sha256),
          :ok <- expected_size(stage_size, expected_size),
+         :ok <- validate_staged_chunk_topology(sha256, stage_size),
          :ok <- verify_staged_chunks(sha256, stage_size),
          {:ok, status} <- insert_final_object_from_stage(sha256),
          :ok <- verify_existing_final(status, digest, expected_size),
-         :ok <- copy_staged_chunks(sha256, status),
+         :ok <- validate_staged_chunk_topology(sha256, stage_size),
+         :ok <- copy_staged_chunks(sha256, stage_size, status),
          :ok <- delete_stage(sha256) do
       {:ok, stored_object(digest, expected_size, status)}
     end
@@ -369,22 +371,34 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   defp verify_existing_final(:existing, digest, size),
     do: verify(digest, size)
 
-  defp copy_staged_chunks(_sha256, :existing), do: :ok
+  defp copy_staged_chunks(_sha256, _size, :existing), do: :ok
 
-  defp copy_staged_chunks(sha256, :stored) do
+  defp copy_staged_chunks(sha256, size, :stored) do
+    expected_chunk_count = expected_chunk_count(size)
+    expected_last_index = expected_chunk_count - 1
+
     case Repo.query(
            """
            INSERT INTO frontend_release_object_chunks
              (sha256, chunk_index, bytes, size, inserted_at)
            SELECT sha256, chunk_index, bytes, size, now()
            FROM frontend_release_staged_object_chunks
-           WHERE sha256 = $1
+           WHERE sha256 = $1 AND chunk_index BETWEEN 0 AND $2
            ORDER BY chunk_index
            """,
-           [sha256]
+           [sha256, expected_last_index]
          ) do
-      {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:object_chunk, reason}}
+      {:ok, %{num_rows: count}} when count == expected_chunk_count ->
+        :ok
+
+      {:ok, %{num_rows: count}} when is_integer(count) ->
+        {:error, :stored_object_size_mismatch}
+
+      {:ok, _result} ->
+        {:error, :invalid_stage_chunk_result}
+
+      {:error, reason} ->
+        {:error, {:object_chunk, reason}}
     end
   end
 
@@ -399,15 +413,97 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
 
   defp staged_object_size(sha256) do
     case Repo.query(
-           "SELECT size FROM frontend_release_staged_objects WHERE sha256 = $1",
+           "SELECT size FROM frontend_release_staged_objects WHERE sha256 = $1 FOR UPDATE",
            [sha256]
          ) do
-      {:ok, %{rows: [[size]]}} when is_integer(size) -> {:ok, size}
-      {:ok, %{rows: []}} -> {:error, :artifact_not_found}
-      {:ok, _result} -> {:error, :invalid_stage_metadata}
-      {:error, reason} -> {:error, {:object_metadata, reason}}
+      {:ok, %{rows: [[size]]}}
+      when is_integer(size) and size >= 0 and size <= @max_object_size ->
+        {:ok, size}
+
+      {:ok, %{rows: []}} ->
+        {:error, :artifact_not_found}
+
+      {:ok, _result} ->
+        {:error, :invalid_stage_metadata}
+
+      {:error, reason} ->
+        {:error, {:object_metadata, reason}}
     end
   end
+
+  defp validate_staged_chunk_topology(sha256, size) do
+    expected_chunk_count = expected_chunk_count(size)
+    expected_last_index = expected_chunk_count - 1
+    expected_final_size = size - max(expected_last_index, 0) * @max_chunk_size
+
+    case Repo.query(
+           """
+           SELECT
+             COUNT(*),
+             COUNT(DISTINCT chunk_index),
+             MIN(chunk_index),
+             MAX(chunk_index),
+             COALESCE(
+               BOOL_AND(
+                 size = CASE WHEN chunk_index < $2::integer THEN $3::integer ELSE $4::integer END
+                 AND octet_length(bytes) =
+                   CASE WHEN chunk_index < $2::integer THEN $3::integer ELSE $4::integer END
+               ),
+               TRUE
+             )
+           FROM frontend_release_staged_object_chunks
+           WHERE sha256 = $1
+           """,
+           [sha256, expected_last_index, @max_chunk_size, expected_final_size]
+         ) do
+      {:ok, result} ->
+        validate_staged_chunk_topology_result(
+          result,
+          expected_chunk_count,
+          expected_last_index
+        )
+
+      {:error, reason} ->
+        {:error, {:object_chunk, reason}}
+    end
+  end
+
+  defp validate_staged_chunk_topology_result(
+         %{rows: [[count, distinct_count, min_index, max_index, sizes_match]]},
+         expected_chunk_count,
+         expected_last_index
+       )
+       when is_integer(count) and is_integer(distinct_count) and is_boolean(sizes_match) do
+    if valid_index_result?(min_index) and valid_index_result?(max_index) do
+      if Enum.all?([
+           count == expected_chunk_count,
+           distinct_count == expected_chunk_count,
+           min_index == expected_min_index(expected_chunk_count),
+           max_index == expected_max_index(expected_chunk_count, expected_last_index),
+           sizes_match
+         ]) do
+        :ok
+      else
+        {:error, :stored_object_size_mismatch}
+      end
+    else
+      {:error, :invalid_stage_metadata}
+    end
+  end
+
+  defp validate_staged_chunk_topology_result(
+         _result,
+         _expected_chunk_count,
+         _expected_last_index
+       ),
+       do: {:error, :invalid_stage_metadata}
+
+  defp valid_index_result?(index) when is_integer(index), do: true
+  defp valid_index_result?(nil), do: true
+  defp valid_index_result?(_index), do: false
+
+  defp expected_chunk_count(size),
+    do: div(size + @max_chunk_size - 1, @max_chunk_size)
 
   defp select_staged_chunk(sha256, chunk_index) do
     case Repo.query(
@@ -519,7 +615,7 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   defp expected_min_index(_expected_chunk_count), do: 0
 
   defp expected_max_index(0, _expected_last_index), do: nil
-  defp expected_max_index(_size, expected_last_index), do: expected_last_index
+  defp expected_max_index(_expected_chunk_count, expected_last_index), do: expected_last_index
 
   defp select_chunk(sha256, offset, length) do
     case object_storage_kind(sha256) do
