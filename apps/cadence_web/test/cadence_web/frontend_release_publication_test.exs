@@ -198,6 +198,60 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
              ).rows
   end
 
+  test "direct staged promotion rolls back final writes after post-validation mutation" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    stage_file!(digest, bytes)
+
+    with_promotion_fault_trigger!(digest, fn ->
+      assert {:error, :stored_object_size_mismatch} =
+               DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+    end)
+
+    assert_staged_object_retained!(digest, byte_size(bytes), 2)
+
+    assert [[0, 1_048_576, 1_048_576], [1, 5, 5]] =
+             Repo.query!(
+               """
+               SELECT chunk_index, size, octet_length(bytes)
+               FROM frontend_release_staged_object_chunks
+               WHERE sha256 = $1
+               ORDER BY chunk_index
+               """,
+               [digest_hex(bytes)]
+             ).rows
+  end
+
+  test "direct staged promotion accepts canonical multi-chunk and zero-byte objects" do
+    multi_chunk_bytes = :binary.copy(<<"a">>, 1_048_581)
+    multi_chunk_digest = sha256(multi_chunk_bytes)
+    stage_file!(multi_chunk_digest, multi_chunk_bytes)
+
+    assert {:ok, %{digest: ^multi_chunk_digest, status: :stored, size: 1_048_581}} =
+             DatabaseArtifactStore.promote_staged(
+               multi_chunk_digest,
+               byte_size(multi_chunk_bytes)
+             )
+
+    zero_bytes = <<>>
+    zero_digest = sha256(zero_bytes)
+    stage_file!(zero_digest, zero_bytes)
+
+    assert {:ok, %{digest: ^zero_digest, status: :stored, size: 0}} =
+             DatabaseArtifactStore.promote_staged(zero_digest, 0)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks",
+               []
+             ).rows
+  end
+
   test "staged promotion rejects malformed chunk topology before finalization" do
     cases = [
       {"zero-sized stage with a row", 0, [{0, <<"x">>, 1}]},
@@ -941,12 +995,58 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     end)
   end
 
+  defp with_promotion_fault_trigger!(digest, fun) do
+    function_name = "cadence_test_promotion_fault"
+    trigger_name = "cadence_test_promotion_fault_trigger"
+
+    try do
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_objects"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+
+      Repo.query!("""
+      CREATE FUNCTION #{quote_identifier(function_name)}()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF NEW.sha256 = TG_ARGV[0] THEN
+          INSERT INTO frontend_release_staged_object_chunks
+            (sha256, chunk_index, bytes, size, inserted_at)
+          VALUES (NEW.sha256, 2, decode('78', 'hex'), 1, now());
+        END IF;
+
+        RETURN NEW;
+      END;
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER #{quote_identifier(trigger_name)}
+      AFTER INSERT ON frontend_release_objects
+      FOR EACH ROW
+      EXECUTE FUNCTION #{quote_identifier(function_name)}(#{quote_literal(digest_hex_value(digest))})
+      """)
+
+      fun.()
+    after
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_objects"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+    end
+  end
+
   defp trigger_state_sql("O"), do: "ENABLE TRIGGER"
   defp trigger_state_sql("D"), do: "DISABLE TRIGGER"
   defp trigger_state_sql("R"), do: "ENABLE REPLICA TRIGGER"
   defp trigger_state_sql("A"), do: "ENABLE ALWAYS TRIGGER"
 
   defp quote_identifier(value), do: ~s("#{String.replace(value, "\"", "\"\"")}")
+  defp quote_literal(value), do: "'" <> String.replace(value, "'", "''") <> "'"
 
   defp publication_config(trust_records) do
     [trust_records: trust_records, allowed_origins: [@origin]]

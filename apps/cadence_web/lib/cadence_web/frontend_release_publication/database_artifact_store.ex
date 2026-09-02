@@ -79,8 +79,20 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   def promote_staged(digest, expected_size)
       when is_binary(digest) and is_integer(expected_size) do
     with {:ok, sha256} <- parse_digest(digest),
-         :ok <- validate_size(expected_size),
-         {:ok, stage_size} <- staged_object_size(sha256),
+         :ok <- validate_size(expected_size) do
+      transaction_result =
+        Repo.transaction(fn ->
+          promote_staged_transaction(digest, expected_size, sha256)
+        end)
+
+      normalize_transaction_result(transaction_result)
+    end
+  end
+
+  def promote_staged(_digest, _expected_size), do: {:error, :invalid_artifact_input}
+
+  defp promote_staged_transaction(digest, expected_size, sha256) do
+    with {:ok, stage_size} <- staged_object_size(sha256),
          :ok <- expected_size(stage_size, expected_size),
          :ok <- validate_staged_chunk_topology(sha256, stage_size),
          :ok <- verify_staged_chunks(sha256, stage_size),
@@ -89,11 +101,11 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
          :ok <- validate_staged_chunk_topology(sha256, stage_size),
          :ok <- copy_staged_chunks(sha256, stage_size, status),
          :ok <- delete_stage(sha256) do
-      {:ok, stored_object(digest, expected_size, status)}
+      stored_object(digest, expected_size, status)
+    else
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
-
-  def promote_staged(_digest, _expected_size), do: {:error, :invalid_artifact_input}
 
   @doc "Deletes only expired stages that have no release linkage."
   @spec cleanup_expired_staged_artifacts() :: {:ok, non_neg_integer()} | {:error, term()}
