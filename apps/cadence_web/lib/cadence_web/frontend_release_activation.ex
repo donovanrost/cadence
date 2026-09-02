@@ -219,6 +219,9 @@ defmodule CadenceWeb.FrontendReleaseActivation do
       {:error, {:persistence, reason}} ->
         Repo.rollback({:integrity, reason})
 
+      {:error, {:transient, reason}} ->
+        Repo.rollback({:transient, reason})
+
       {:error, reason} ->
         Repo.rollback({:integrity, reason})
     end
@@ -395,6 +398,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
       else
         false -> {:halt, {:error, :integrity}}
         {:error, :integrity} -> {:halt, {:error, :integrity}}
+        {:error, {:transient, _reason} = failure} -> {:halt, {:error, failure}}
       end
     end)
     |> case do
@@ -420,12 +424,26 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp verify_chunk_backed_object(sha256, size) do
     case DatabaseArtifactStore.verify("sha256:" <> sha256, size) do
-      :ok -> {:ok, %{sha256: sha256, size: size}}
-      _failure -> {:error, :integrity}
+      :ok ->
+        {:ok, %{sha256: sha256, size: size}}
+
+      {:error, reason} ->
+        if transient_artifact_store_failure?(reason) do
+          {:error, {:transient, reason}}
+        else
+          {:error, :integrity}
+        end
+
+      _other ->
+        {:error, :integrity}
     end
-  rescue
-    _failure -> {:error, :integrity}
   end
+
+  defp transient_artifact_store_failure?({operation, reason})
+       when operation in [:object_metadata, :object_chunk],
+       do: transient_database_failure?(reason)
+
+  defp transient_artifact_store_failure?(reason), do: transient_database_failure?(reason)
 
   defp validate_transition(verified, entries, latest_catalog, latest_generation, control, opts) do
     transition = verified.transition
@@ -1286,6 +1304,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp transient_database_failure?(%Postgrex.Error{postgres: %{code: :connection_failure}}),
     do: true
+
+  defp transient_database_failure?(%DBConnection.ConnectionError{}), do: true
 
   defp transient_database_failure?(_error), do: false
 

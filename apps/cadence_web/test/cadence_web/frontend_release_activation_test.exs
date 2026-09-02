@@ -173,6 +173,43 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert_activation_integrity_failure!(release, "chunk-backed-tampered-key")
   end
 
+  test "an oversized final chunk fails activation closed without accepted side effects" do
+    bytes_by_path = chunked_artifact_bytes()
+
+    {_document, release} =
+      publish_staged_release!(bytes_by_path, "activation-chunk-oversized-final")
+
+    app_sha256 = digest_hex(bytes_by_path["assets/app.js"])
+
+    tamper_object_chunk!(app_sha256, 1, :binary.copy(<<"a">>, 6))
+
+    assert_activation_integrity_failure!(release, "chunk-backed-oversized-final-key")
+  end
+
+  test "an extra trailing chunk row fails activation closed without accepted side effects" do
+    bytes_by_path = chunked_artifact_bytes()
+    {_document, release} = publish_staged_release!(bytes_by_path, "activation-chunk-extra-row")
+    app_sha256 = digest_hex(bytes_by_path["assets/app.js"])
+
+    insert_object_chunk!(app_sha256, 2, <<"x">>)
+
+    assert_activation_integrity_failure!(release, "chunk-backed-extra-row-key")
+  end
+
+  test "a noncontiguous chunk topology fails activation closed without accepted side effects" do
+    bytes_by_path = chunked_artifact_bytes()
+
+    {_document, release} =
+      publish_staged_release!(bytes_by_path, "activation-chunk-noncontiguous")
+
+    app_sha256 = digest_hex(bytes_by_path["assets/app.js"])
+
+    delete_object_chunk!(app_sha256, 1)
+    insert_object_chunk!(app_sha256, 2, :binary.copy(<<"a">>, 5))
+
+    assert_activation_integrity_failure!(release, "chunk-backed-noncontiguous-key")
+  end
+
   test "post-cutover registry reads the active generation and emits its immutable manifest route" do
     {_document, _payload, release} = admit_release!(@artifact_bytes, "reader-post-cutover")
     digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
@@ -1468,6 +1505,20 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                  WHERE sha256 = $3 AND chunk_index = $4
                  """,
                  [bytes, byte_size(bytes), sha256, chunk_index]
+               )
+    end)
+  end
+
+  defp insert_object_chunk!(sha256, chunk_index, bytes) do
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 INSERT INTO frontend_release_object_chunks
+                   (sha256, chunk_index, bytes, size, inserted_at)
+                 VALUES ($1, $2, $3, $4, now())
+                 """,
+                 [sha256, chunk_index, bytes, byte_size(bytes)]
                )
     end)
   end

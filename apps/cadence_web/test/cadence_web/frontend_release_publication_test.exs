@@ -146,11 +146,132 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert [[nil]] = Repo.query!("SELECT bytes FROM frontend_release_objects", []).rows
     assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
     assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert :ok = DatabaseArtifactStore.verify(digest, byte_size(bytes))
     assert :ok = DatabaseArtifactStore.verify(digest, bytes)
     assert {:ok, first_chunk} = DatabaseArtifactStore.read_chunk(digest, 0, 1_048_576)
     assert byte_size(first_chunk) == 1_048_576
     assert {:ok, last_chunk} = DatabaseArtifactStore.read_chunk(digest, 1_048_576, 5)
     assert last_chunk == :binary.copy(<<"a">>, 5)
+  end
+
+  test "verify rejects an oversized final chunk before hashing its declared prefix" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 UPDATE frontend_release_object_chunks
+                 SET bytes = $1, size = $2
+                 WHERE sha256 = $3 AND chunk_index = 1
+                 """,
+                 [:binary.copy(<<"a">>, 6), 6, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects an extra trailing chunk row" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 INSERT INTO frontend_release_object_chunks
+                   (sha256, chunk_index, bytes, size, inserted_at)
+                 VALUES ($1, 2, $2, $3, now())
+                 """,
+                 [digest_hex(bytes), <<"x">>, 1]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects a missing chunk index" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "DELETE FROM frontend_release_object_chunks WHERE sha256 = $1 AND chunk_index = 1",
+                 [digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects noncontiguous chunk indexes" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "DELETE FROM frontend_release_object_chunks WHERE sha256 = $1 AND chunk_index = 1",
+                 [digest_hex(bytes)]
+               )
+
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 INSERT INTO frontend_release_object_chunks
+                   (sha256, chunk_index, bytes, size, inserted_at)
+                 VALUES ($1, 2, $2, $3, now())
+                 """,
+                 [digest_hex(bytes), :binary.copy(<<"a">>, 5), 5]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects a wrong stored object size" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_objects"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "UPDATE frontend_release_objects SET size = $1 WHERE sha256 = $2",
+                 [byte_size(bytes) + 1, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :artifact_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects same-size tampered chunk data" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 UPDATE frontend_release_object_chunks
+                 SET bytes = $1, size = $2
+                 WHERE sha256 = $3 AND chunk_index = 1
+                 """,
+                 [:binary.copy(<<"b">>, 5), 5, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :artifact_bytes_mismatch} = DatabaseArtifactStore.verify(digest, bytes)
+
+    assert {:error, :artifact_digest_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
   end
 
   test "failed finalization retains stages and retry promotes them atomically" do
@@ -651,6 +772,50 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert {:error, %Postgrex.Error{}} = result
   end
 
+  defp with_disabled_triggers!(tables, fun) do
+    trigger_states = Enum.map(tables, &{&1, trigger_states!(&1)})
+
+    try do
+      Enum.each(tables, fn table ->
+        Repo.query!("ALTER TABLE #{quote_identifier(table)} DISABLE TRIGGER ALL")
+      end)
+
+      fun.()
+    after
+      restore_trigger_states!(trigger_states)
+    end
+  end
+
+  defp trigger_states!(table) do
+    Repo.query!(
+      """
+      SELECT tgname, tgenabled::text
+      FROM pg_trigger
+      WHERE tgrelid = to_regclass($1::text)
+      ORDER BY tgname
+      """,
+      [table]
+    ).rows
+    |> Enum.map(fn [name, state] -> {name, state} end)
+  end
+
+  defp restore_trigger_states!(trigger_states) do
+    Enum.each(trigger_states, fn {table, states} ->
+      Enum.each(states, fn {name, state} ->
+        Repo.query!(
+          "ALTER TABLE #{quote_identifier(table)} #{trigger_state_sql(state)} #{quote_identifier(name)}"
+        )
+      end)
+    end)
+  end
+
+  defp trigger_state_sql("O"), do: "ENABLE TRIGGER"
+  defp trigger_state_sql("D"), do: "DISABLE TRIGGER"
+  defp trigger_state_sql("R"), do: "ENABLE REPLICA TRIGGER"
+  defp trigger_state_sql("A"), do: "ENABLE ALWAYS TRIGGER"
+
+  defp quote_identifier(value), do: ~s("#{String.replace(value, "\"", "\"\"")}")
+
   defp publication_config(trust_records) do
     [trust_records: trust_records, allowed_origins: [@origin]]
   end
@@ -786,6 +951,16 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
 
     assert {:ok, %{digest: ^digest}} = DatabaseArtifactStore.put_file(digest, file_path)
     file_path
+  end
+
+  defp promote_chunked_object!(bytes) do
+    digest = sha256(bytes)
+    _file_path = stage_file!(digest, bytes)
+
+    assert {:ok, %{status: :stored}} =
+             DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+
+    digest
   end
 
   defp insert_expired_stage!(digest, bytes) do

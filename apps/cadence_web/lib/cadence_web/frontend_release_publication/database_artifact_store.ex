@@ -114,8 +114,9 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   def verify(digest, expected) when is_binary(digest) and is_binary(expected) do
     with {:ok, sha256} <- parse_digest(digest),
          :ok <- validate_bytes(sha256, expected),
-         {:ok, size} <- object_size(sha256),
-         :ok <- expected_size(size, byte_size(expected)) do
+         {:ok, {size, storage_kind}} <- object_storage_kind(sha256),
+         :ok <- expected_size(size, byte_size(expected)),
+         :ok <- validate_chunk_topology(sha256, size, storage_kind) do
       verify_chunks(sha256, expected, size, 0, :crypto.hash_init(:sha256))
     end
   end
@@ -123,8 +124,9 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   def verify(digest, expected_size) when is_binary(digest) and is_integer(expected_size) do
     with {:ok, sha256} <- parse_digest(digest),
          :ok <- validate_size(expected_size),
-         {:ok, size} <- object_size(sha256),
-         :ok <- expected_size(size, expected_size) do
+         {:ok, {size, storage_kind}} <- object_storage_kind(sha256),
+         :ok <- expected_size(size, expected_size),
+         :ok <- validate_chunk_topology(sha256, size, storage_kind) do
       verify_chunks(sha256, nil, size, 0, :crypto.hash_init(:sha256))
     end
   end
@@ -439,13 +441,6 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
     end
   end
 
-  defp object_size(sha256) do
-    case object_storage_kind(sha256) do
-      {:ok, {size, _kind}} -> {:ok, size}
-      failure -> failure
-    end
-  end
-
   defp object_storage_kind(sha256) do
     case Repo.query(
            """
@@ -471,6 +466,56 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
         {:error, {:object_metadata, reason}}
     end
   end
+
+  defp validate_chunk_topology(_sha256, _size, :bytea), do: :ok
+
+  defp validate_chunk_topology(sha256, size, :chunks) do
+    expected_chunk_count = div(size + @max_chunk_size - 1, @max_chunk_size)
+    expected_last_index = expected_chunk_count - 1
+    expected_final_size = size - max(expected_last_index, 0) * @max_chunk_size
+
+    case Repo.query(
+           """
+           SELECT
+             COUNT(*),
+             COUNT(DISTINCT chunk_index),
+             MIN(chunk_index),
+             MAX(chunk_index),
+             COALESCE(
+               BOOL_AND(
+                 size = CASE WHEN chunk_index < $2 THEN #{@max_chunk_size} ELSE $3 END
+                 AND octet_length(bytes) =
+                   CASE WHEN chunk_index < $2 THEN #{@max_chunk_size} ELSE $3 END
+               ),
+               TRUE
+             )
+           FROM frontend_release_object_chunks
+           WHERE sha256 = $1
+           """,
+           [sha256, expected_last_index, expected_final_size]
+         ) do
+      {:ok, %{rows: [[count, distinct_count, min_index, max_index, true]]}} ->
+        if count == expected_chunk_count and distinct_count == expected_chunk_count and
+             min_index == expected_min_index(expected_chunk_count) and
+             max_index == expected_last_index do
+          :ok
+        else
+          {:error, :stored_object_size_mismatch}
+        end
+
+      {:ok, %{rows: [[_count, _distinct_count, _min_index, _max_index, _sizes_match]]}} ->
+        {:error, :stored_object_size_mismatch}
+
+      {:ok, _result} ->
+        {:error, :invalid_object_metadata}
+
+      {:error, reason} ->
+        {:error, {:object_metadata, reason}}
+    end
+  end
+
+  defp expected_min_index(0), do: nil
+  defp expected_min_index(_expected_chunk_count), do: 0
 
   defp select_chunk(sha256, offset, length) do
     case object_storage_kind(sha256) do
