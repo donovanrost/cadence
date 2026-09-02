@@ -18,6 +18,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   alias CadenceWeb.FrontendReleasePublication.{
     CatalogPublication,
+    DatabaseArtifactStore,
     ReleaseArtifact,
     ReleaseObject,
     ReleasePublication
@@ -409,9 +410,21 @@ defmodule CadenceWeb.FrontendReleaseActivation do
           do: {:ok, %{sha256: sha256, size: size}},
           else: {:error, :integrity}
 
+      %ReleaseObject{sha256: ^sha256, size: ^size, bytes: nil} ->
+        verify_chunk_backed_object(sha256, size)
+
       _ ->
         {:error, :integrity}
     end
+  end
+
+  defp verify_chunk_backed_object(sha256, size) do
+    case DatabaseArtifactStore.verify("sha256:" <> sha256, size) do
+      :ok -> {:ok, %{sha256: sha256, size: size}}
+      _failure -> {:error, :integrity}
+    end
+  rescue
+    _failure -> {:error, :integrity}
   end
 
   defp validate_transition(verified, entries, latest_catalog, latest_generation, control, opts) do

@@ -26,6 +26,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   @now "2026-09-01T19:00:00Z"
   @host_catalog_suffix "/api/cadence/application-host/v1/missions"
   @config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
+  @chunk_size 1_048_576
   @artifact_bytes %{
     "assets/app.js" => "app-bytes",
     "mf-manifest.json" => "manifest-bytes"
@@ -119,6 +120,57 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                (SELECT COUNT(*) FROM frontend_release_catalog_bindings),
                (SELECT COUNT(*) FROM frontend_release_activation_requests)
              """).rows
+  end
+
+  test "chunk-backed staged publication activates after bounded content verification" do
+    bytes_by_path = chunked_artifact_bytes()
+    {document, _payload, release} = release_document(bytes_by_path, "activation-chunk-backed")
+
+    assert {:ok, %ReleasePublication{}} =
+             FrontendReleasePublication.admit_release(
+               document,
+               staged_artifacts!(bytes_by_path),
+               now: @now
+             )
+
+    assert [[2, 0]] =
+             Repo.query!(
+               "SELECT COUNT(*), COUNT(bytes) FROM frontend_release_objects",
+               []
+             ).rows
+
+    assert [[3]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
+
+    snapshot_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    catalog = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, snapshot_digest)
+
+    assert {:ok, %{status: 201, outcome: "initial", replay?: false}} =
+             activate(catalog, "chunk-backed-valid-key")
+
+    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
+    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
+    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
+    assert Repo.aggregate(Request, :count, :request_id) == 1
+  end
+
+  test "missing chunk data fails activation closed without accepted side effects" do
+    bytes_by_path = chunked_artifact_bytes()
+    {_document, release} = publish_staged_release!(bytes_by_path, "activation-chunk-missing")
+    app_sha256 = digest_hex(bytes_by_path["assets/app.js"])
+
+    delete_object_chunk!(app_sha256, 0)
+
+    assert_activation_integrity_failure!(release, "chunk-backed-missing-key")
+  end
+
+  test "tampered chunk data fails activation closed without accepted side effects" do
+    bytes_by_path = chunked_artifact_bytes()
+    {_document, release} = publish_staged_release!(bytes_by_path, "activation-chunk-tampered")
+    app_sha256 = digest_hex(bytes_by_path["assets/app.js"])
+
+    tamper_object_chunk!(app_sha256, 0, :binary.copy(<<"b">>, @chunk_size))
+
+    assert_activation_integrity_failure!(release, "chunk-backed-tampered-key")
   end
 
   test "post-cutover registry reads the active generation and emits its immutable manifest route" do
@@ -1363,6 +1415,106 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert_raise Postgrex.Error, fn ->
       Repo.query!("TRUNCATE #{table}")
     end
+  end
+
+  defp assert_activation_integrity_failure!(release, key) do
+    assert {:error, %{status: 500, body: ~s({"error":{"code":"integrity_failure"}})}} =
+             activate(
+               v2_document(
+                 "initial",
+                 1,
+                 "2026-09-01T18:00:00Z",
+                 release,
+                 nil,
+                 snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+               ),
+               key
+             )
+
+    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 0
+    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 0
+    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 0
+    assert Repo.aggregate(Request, :count, :request_id) == 0
+    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+
+    assert [[0, nil]] =
+             Repo.query!("""
+             SELECT cutover_epoch, legacy_catalog_publication_id
+             FROM frontend_release_activation_controls
+             WHERE control_id = 1
+             """).rows
+  end
+
+  defp delete_object_chunk!(sha256, chunk_index) do
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 DELETE FROM frontend_release_object_chunks
+                 WHERE sha256 = $1 AND chunk_index = $2
+                 """,
+                 [sha256, chunk_index]
+               )
+    end)
+  end
+
+  defp tamper_object_chunk!(sha256, chunk_index, bytes) do
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 UPDATE frontend_release_object_chunks
+                 SET bytes = $1, size = $2
+                 WHERE sha256 = $3 AND chunk_index = $4
+                 """,
+                 [bytes, byte_size(bytes), sha256, chunk_index]
+               )
+    end)
+  end
+
+  defp publish_staged_release!(bytes_by_path, build_id) do
+    {document, _payload, release} = release_document(bytes_by_path, build_id)
+
+    assert {:ok, %ReleasePublication{}} =
+             FrontendReleasePublication.admit_release(
+               document,
+               staged_artifacts!(bytes_by_path),
+               now: @now
+             )
+
+    {document, release}
+  end
+
+  defp staged_artifacts!(bytes_by_path) do
+    Map.new(bytes_by_path, fn {path, bytes} ->
+      digest = sha256(bytes)
+      file_path = write_temp_file(bytes)
+
+      assert {:ok, %{digest: ^digest}} =
+               FrontendReleasePublication.stage_artifact(digest, file_path)
+
+      {path, {:object, digest, byte_size(bytes)}}
+    end)
+  end
+
+  defp chunked_artifact_bytes do
+    %{
+      "assets/app.js" => :binary.copy(<<"a">>, @chunk_size + 5),
+      "mf-manifest.json" => "manifest-bytes"
+    }
+  end
+
+  defp write_temp_file(bytes) do
+    file_path =
+      Path.join(
+        System.tmp_dir!(),
+        ".cadence_frontend_release_activation_test_" <>
+          Integer.to_string(System.unique_integer([:positive]))
+      )
+
+    File.write!(file_path, bytes)
+    on_exit(fn -> File.rm(file_path) end)
+    file_path
   end
 
   defp admit_release!(bytes_by_path, build_id, opts \\ []) do
