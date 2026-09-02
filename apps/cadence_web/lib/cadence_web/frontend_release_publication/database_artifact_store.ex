@@ -473,6 +473,7 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
     expected_chunk_count = div(size + @max_chunk_size - 1, @max_chunk_size)
     expected_last_index = expected_chunk_count - 1
     expected_final_size = size - max(expected_last_index, 0) * @max_chunk_size
+    expected_max_index = expected_max_index(size, expected_last_index)
 
     case Repo.query(
            """
@@ -497,7 +498,7 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
       {:ok, %{rows: [[count, distinct_count, min_index, max_index, true]]}} ->
         if count == expected_chunk_count and distinct_count == expected_chunk_count and
              min_index == expected_min_index(expected_chunk_count) and
-             max_index == expected_last_index do
+             max_index == expected_max_index do
           :ok
         else
           {:error, :stored_object_size_mismatch}
@@ -516,6 +517,9 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
 
   defp expected_min_index(0), do: nil
   defp expected_min_index(_expected_chunk_count), do: 0
+
+  defp expected_max_index(0, _expected_last_index), do: nil
+  defp expected_max_index(_size, expected_last_index), do: expected_last_index
 
   defp select_chunk(sha256, offset, length) do
     case object_storage_kind(sha256) do

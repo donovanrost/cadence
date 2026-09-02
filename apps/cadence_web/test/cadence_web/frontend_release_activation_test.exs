@@ -153,6 +153,79 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert Repo.aggregate(Request, :count, :request_id) == 1
   end
 
+  test "zero-byte chunk-backed staged publication activates authoritatively" do
+    bytes_by_path = %{
+      "assets/empty.js" => <<>>,
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    {document, _payload, release} = release_document(bytes_by_path, "activation-zero-length")
+
+    assert {:ok, %ReleasePublication{} = publication} =
+             FrontendReleasePublication.admit_release(
+               document,
+               staged_artifacts!(bytes_by_path),
+               now: @now
+             )
+
+    assert publication.release_id == release["releaseId"]
+
+    zero_digest = digest_hex(<<>>)
+
+    assert [[0, nil, 0]] =
+             Repo.query!(
+               """
+               SELECT size, bytes,
+                 (SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1)
+               FROM frontend_release_objects
+               WHERE sha256 = $1
+               """,
+               [zero_digest]
+             ).rows
+
+    snapshot_digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
+    catalog = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, snapshot_digest)
+
+    assert {:ok, %{status: 201, outcome: "initial", replay?: false} = response} =
+             activate(catalog, "zero-length-authoritative-key")
+
+    assert response.body ==
+             canonical_response(%{
+               "data" => %{
+                 "catalogPublicationId" => response.catalog_publication_id,
+                 "generationId" => response.generation_id,
+                 "identityCount" => 1,
+                 "outcome" => "initial",
+                 "sequence" => 1,
+                 "status" => "activated"
+               }
+             })
+
+    assert Repo.aggregate(CatalogPublication, :count, :publication_id) == 1
+    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 1
+    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 1
+    assert Repo.aggregate(Request, :count, :request_id) == 1
+
+    generation = Repo.get_by!(CatalogGeneration, generation_id: response.generation_id)
+    assert generation.catalog_publication_id == response.catalog_publication_id
+    assert generation.sequence == 1
+    assert generation.identity_count == 1
+    assert generation.predecessor_kind == "none"
+    assert generation.predecessor_catalog_publication_id == nil
+
+    binding = Repo.get_by!(CatalogBinding, generation_id: response.generation_id)
+    assert binding.current_release_id == release["releaseId"]
+    assert binding.previous_publication_id == nil
+    assert binding.previous_release_id == nil
+
+    assert [[1, nil, false]] =
+             Repo.query!("""
+             SELECT cutover_epoch, legacy_catalog_publication_id, cutover_at IS NULL
+             FROM frontend_release_activation_controls
+             WHERE control_id = 1
+             """).rows
+  end
+
   test "missing chunk data fails activation closed without accepted side effects" do
     bytes_by_path = chunked_artifact_bytes()
     {_document, release} = publish_staged_release!(bytes_by_path, "activation-chunk-missing")

@@ -154,6 +154,57 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     assert last_chunk == :binary.copy(<<"a">>, 5)
   end
 
+  test "stage_artifact and release admission preserve zero-byte chunk-backed objects" do
+    bytes_by_path = %{
+      "assets/empty.js" => <<>>,
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    digest = sha256(<<>>)
+    file_path = write_temp_file(<<>>)
+
+    assert {:ok, %{digest: ^digest, status: :stored, size: 0}} =
+             FrontendReleasePublication.stage_artifact(digest, file_path)
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_hex(<<>>)]
+             ).rows
+
+    {envelope, _payload, release} = release_document(bytes_by_path, "build-zero-length")
+
+    artifact_input = %{
+      "assets/empty.js" => {:object, digest, 0},
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    assert {:ok, %ReleasePublication{} = publication} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               artifact_input,
+               now: @now
+             )
+
+    assert publication.release_id == release["releaseId"]
+
+    object = Repo.get!(ReleaseObject, digest_hex(<<>>))
+    assert object.size == 0
+    assert object.bytes == nil
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_hex(<<>>)]
+             ).rows
+
+    assert :ok = DatabaseArtifactStore.verify(digest, 0)
+    assert :ok = DatabaseArtifactStore.verify(digest, <<>>)
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, 0, 1)
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, 1, 1)
+    assert {:error, :invalid_chunk_bounds} = DatabaseArtifactStore.read_chunk(digest, 0, 0)
+  end
+
   test "verify rejects an oversized final chunk before hashing its declared prefix" do
     bytes = :binary.copy(<<"a">>, 1_048_581)
     digest = promote_chunked_object!(bytes)
