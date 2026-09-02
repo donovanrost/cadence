@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import {
   assertOutputOutsideRepository,
   canonicalPathWithMissingTail,
+  parseRemoteNameArgument,
   parseOutputDirectoryArgument,
   pathsOverlap,
   validateReleaseOutput,
 } from "./frontend-release-output-check.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+const checkerPath = resolve(import.meta.dirname, "frontend-release-output-check.mjs");
+const execFileAsync = promisify(execFile);
 
 async function makeFixture(baseDirectory = tmpdir()) {
   const root = await mkdtemp(join(baseDirectory, "cadence-frontend-release-check-"));
@@ -62,8 +67,8 @@ async function makeFixture(baseDirectory = tmpdir()) {
       <a href="https://example.test/docs">external</a>
     `,
     "mf-manifest.json": JSON.stringify({
-      id: "cadence_comms_overview",
-      name: "cadence_comms_overview",
+      id: "fixture_remote",
+      name: "fixture_remote",
       metaData: { publicPath: "auto", remoteEntry: { path: "", name: "remoteEntry.js" } },
       shared: [
         {
@@ -116,6 +121,14 @@ async function makeFixture(baseDirectory = tmpdir()) {
   return root;
 }
 
+async function setManifestIdentity(root, id, name = id) {
+  const manifestPath = join(root, "mf-manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.id = id;
+  manifest.name = name;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+}
+
 async function withFixture(callback, baseDirectory = tmpdir()) {
   const root = await makeFixture(baseDirectory);
   try {
@@ -125,20 +138,51 @@ async function withFixture(callback, baseDirectory = tmpdir()) {
   }
 }
 
-async function expectCheckFailure(root, pattern) {
-  await assert.rejects(() => validateReleaseOutput(root, repositoryRoot), pattern);
+async function expectCheckFailure(root, expectedRemoteName, pattern) {
+  await assert.rejects(
+    () => validateReleaseOutput(root, expectedRemoteName, repositoryRoot),
+    pattern,
+  );
 }
 
 void test("accepts the complete release reference closure, including comments and external URLs", async () => {
   await withFixture(async (root) => {
-    const result = await validateReleaseOutput(root, repositoryRoot);
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
+  });
+});
+
+void test("accepts the explicit Comms Module Federation identity", async () => {
+  await withFixture(async (root) => {
+    await setManifestIdentity(root, "cadence_comms_overview");
+    const result = await validateReleaseOutput(root, "cadence_comms_overview", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+});
+
+void test("accepts Telemetry after mutating only the fixture manifest identity", async () => {
+  await withFixture(async (root) => {
+    await setManifestIdentity(root, "cadence_telemetry_decom");
+    const result = await validateReleaseOutput(root, "cadence_telemetry_decom", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+});
+
+void test("requires both generated manifest identity fields to match the expected remote", async () => {
+  await withFixture(async (root) => {
+    await setManifestIdentity(root, "cadence_comms_overview", "cadence_telemetry_decom");
+    await expectCheckFailure(root, "cadence_comms_overview", /manifest identity/);
+  });
+
+  await withFixture(async (root) => {
+    await setManifestIdentity(root, "cadence_telemetry_decom", "cadence_comms_overview");
+    await expectCheckFailure(root, "cadence_telemetry_decom", /manifest identity/);
   });
 });
 
 void test("resolves the actual Cadence repository root from the shared tools path", async () => {
   await withFixture(async (root) => {
-    const result = await validateReleaseOutput(root);
+    const result = await validateReleaseOutput(root, "fixture_remote");
     assert.equal(result.fileCount > 0, true);
   }, dirname(repositoryRoot));
 });
@@ -146,26 +190,26 @@ void test("resolves the actual Cadence repository root from the shared tools pat
 void test("scans quoted and unquoted references while keeping query and fragment URLs on the current document", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "remoteEntry.js"), 'import "../outside.js";\n');
-    await expectCheckFailure(root, /escapes the output/);
+    await expectCheckFailure(root, "fixture_remote", /escapes the output/);
   });
 
   await withFixture(async (root) => {
     const html = await readFile(join(root, "index.html"), "utf8");
     assert.match(html, /src=assets\/image\.svg/);
     assert.doesNotThrow(() => parseOutputDirectoryArgument(["--outDir", root]));
-    await validateReleaseOutput(root, repositoryRoot);
+    await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
   });
 });
 
 void test("rejects a real CSS or HTML reference that is absent", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "assets/style.css"), '.real { background: url("./missing.png"); }');
-    await expectCheckFailure(root, /CSS URL points to missing/);
+    await expectCheckFailure(root, "fixture_remote", /CSS URL points to missing/);
   });
 
   await withFixture(async (root) => {
     await writeFile(join(root, "index.html"), "<img src=assets/missing.svg>");
-    await expectCheckFailure(root, /HTML reference points to missing/);
+    await expectCheckFailure(root, "fixture_remote", /HTML reference points to missing/);
   });
 });
 
@@ -175,7 +219,7 @@ void test("requires manifest imports and dynamicImports to be manifest keys with
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest["src/main.js"].dynamicImports = ["chunks/missing.js"];
     await writeFile(manifestPath, JSON.stringify(manifest));
-    await expectCheckFailure(root, /references missing manifest key/);
+    await expectCheckFailure(root, "fixture_remote", /references missing manifest key/);
   });
 
   await withFixture(async (root) => {
@@ -183,7 +227,7 @@ void test("requires manifest imports and dynamicImports to be manifest keys with
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest["chunks/chunk.js"].file = "chunks/missing.js";
     await writeFile(manifestPath, JSON.stringify(manifest));
-    await expectCheckFailure(root, /\.file points to missing/);
+    await expectCheckFailure(root, "fixture_remote", /\.file points to missing/);
   });
 });
 
@@ -235,6 +279,7 @@ void test("parses exactly one strict --outDir form and rejects malformed aliases
       ["--outDir", root, "--outDir", root],
       [`--outDir=${root}`, "--outDir", root],
       ["--outDirfoo", root],
+      ["--outDirfoo", root, "--outDir", root],
       ["--outDir==/tmp/release"],
       ["--outDir", "relative-output"],
       ["--outDir", "-release"],
@@ -242,6 +287,60 @@ void test("parses exactly one strict --outDir form and rejects malformed aliases
 
     for (const argumentsList of invalidArguments) {
       assert.throws(() => parseOutputDirectoryArgument(argumentsList), /outDir/);
+    }
+  });
+});
+
+void test("parses exactly one strict --remoteName form and rejects malformed or invalid values", async () => {
+  assert.equal(
+    parseRemoteNameArgument(["--mode", "release", "--remoteName", "cadence_comms_overview"]),
+    "cadence_comms_overview",
+  );
+  assert.equal(
+    parseRemoteNameArgument(["--remoteName=cadence_telemetry_decom"]),
+    "cadence_telemetry_decom",
+  );
+
+  const invalidArguments = [
+    [],
+    ["--remoteName"],
+    ["--remoteName", "--mode"],
+    ["--remoteName", ""],
+    ["--remoteName", "cadence_comms_overview", "--remoteName", "cadence_telemetry_decom"],
+    ["--remoteName=cadence_comms_overview", "--remoteName", "cadence_telemetry_decom"],
+    ["--remoteNamefoo", "cadence_comms_overview"],
+    ["--remoteName==cadence_comms_overview"],
+    ["--remoteName", "1cadence_remote"],
+    ["--remoteName", "cadence/telemetry"],
+    ["--remoteName", "a".repeat(129)],
+  ];
+
+  for (const argumentsList of invalidArguments) {
+    assert.throws(() => parseRemoteNameArgument(argumentsList), /remoteName/);
+  }
+});
+
+void test("direct CLI invocation binds the expected remote identity independent of cwd", async () => {
+  await withFixture(async (root) => {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [checkerPath, "--outDir", root, "--remoteName", "fixture_remote"],
+      { cwd: root },
+    );
+    assert.match(stdout, /Release output is relocatable: 15 files checked/);
+
+    const invalidCliArguments = [
+      ["--outDir", root],
+      ["--outDir", root, "--remoteName", "fixture_remote", "--remoteName", "fixture_remote"],
+      ["--outDir", root, "--remoteNamefoo", "fixture_remote"],
+      ["--outDir", root, "--remoteName", "1fixture_remote"],
+    ];
+
+    for (const argumentsList of invalidCliArguments) {
+      await assert.rejects(
+        () => execFileAsync(process.execPath, [checkerPath, ...argumentsList], { cwd: root }),
+        (error) => error.code === 1 && /remoteName/.test(error.stderr),
+      );
     }
   });
 });

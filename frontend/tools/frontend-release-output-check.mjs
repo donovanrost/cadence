@@ -4,6 +4,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+const remoteNamePattern = /^[a-z][a-z0-9._-]{0,127}$/;
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
@@ -27,6 +28,8 @@ export function parseOutputDirectoryArgument(argumentsList) {
       if (!value || value.startsWith("-")) {
         fail("--outDir requires one absolute, non-option value");
       }
+    } else if (argument.startsWith("--outDir")) {
+      fail("--outDir option is malformed");
     } else {
       continue;
     }
@@ -39,6 +42,47 @@ export function parseOutputDirectoryArgument(argumentsList) {
 
   if (values.length !== 1) {
     fail("exactly one --outDir with one absolute, non-option value is required");
+  }
+
+  return values[0];
+}
+
+function assertRemoteName(value, label) {
+  if (typeof value !== "string" || !remoteNamePattern.test(value)) {
+    fail(`${label} must be a valid Module Federation identifier`);
+  }
+  return value;
+}
+
+export function parseRemoteNameArgument(argumentsList) {
+  const values = [];
+
+  for (let index = 0; index < argumentsList.length; index += 1) {
+    const argument = argumentsList[index];
+    let value;
+
+    if (argument === "--remoteName") {
+      value = argumentsList[index + 1];
+      index += 1;
+      if (!value || value.startsWith("-")) {
+        fail("--remoteName requires one valid, non-option value");
+      }
+    } else if (argument.startsWith("--remoteName=")) {
+      value = argument.slice("--remoteName=".length);
+      if (!value || value.startsWith("-")) {
+        fail("--remoteName requires one valid, non-option value");
+      }
+    } else if (argument.startsWith("--remoteName")) {
+      fail("--remoteName option is malformed");
+    } else {
+      continue;
+    }
+
+    values.push(assertRemoteName(value, "--remoteName"));
+  }
+
+  if (values.length !== 1) {
+    fail("exactly one --remoteName with one valid, non-option value is required");
   }
 
   return values[0];
@@ -164,9 +208,9 @@ function assertAssetLists(value, files, label, outputRoot) {
   }
 }
 
-function assertGeneratedManifest(manifest, files, outputRoot) {
-  if (manifest.id !== "cadence_comms_overview" || manifest.name !== "cadence_comms_overview") {
-    fail("the federation manifest identity is not cadence_comms_overview");
+function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot) {
+  if (manifest.id !== expectedRemoteName || manifest.name !== expectedRemoteName) {
+    fail(`the federation manifest identity is not ${JSON.stringify(expectedRemoteName)}`);
   }
 
   const metadata = manifest.metaData;
@@ -577,7 +621,12 @@ export function assertHtmlReferences(source, origin, files, outputRoot) {
   }
 }
 
-export async function validateReleaseOutput(outputArgument, repositoryRootInput = repositoryRoot) {
+export async function validateReleaseOutput(
+  outputArgument,
+  expectedRemoteName,
+  repositoryRootInput = repositoryRoot,
+) {
+  assertRemoteName(expectedRemoteName, "expected remote name");
   const canonicalRepositoryRoot = await realpath(repositoryRootInput).catch(() =>
     fail("repository root is unavailable"),
   );
@@ -597,7 +646,7 @@ export async function validateReleaseOutput(outputArgument, repositoryRootInput 
   }
 
   const manifest = JSON.parse(await readFile(join(outputRoot, "mf-manifest.json"), "utf8"));
-  assertGeneratedManifest(manifest, files, outputRoot);
+  assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot);
 
   const stats = JSON.parse(await readFile(join(outputRoot, "mf-stats.json"), "utf8"));
   assertStats(stats, files, outputRoot);
@@ -629,7 +678,8 @@ export async function validateReleaseOutput(outputArgument, repositoryRootInput 
 
 export async function main(argumentsList = process.argv.slice(2)) {
   const outputArgument = parseOutputDirectoryArgument(argumentsList);
-  const result = await validateReleaseOutput(outputArgument);
+  const expectedRemoteName = parseRemoteNameArgument(argumentsList);
+  const result = await validateReleaseOutput(outputArgument, expectedRemoteName);
   console.log(
     `Release output is relocatable: ${result.fileCount} files checked at ${result.outputRoot}`,
   );
