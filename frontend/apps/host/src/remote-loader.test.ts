@@ -5,7 +5,12 @@ import {
   FEDERATED_APPLICATION_MANIFEST_SCHEMA,
 } from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { loadFederatedApplication, type FederatedRuntime } from "./remote-loader";
+import {
+  createReleaseAwareRuntime,
+  loadFederatedApplication,
+  type FederatedRuntime,
+  type ReleaseAwareModuleFederationClient,
+} from "./remote-loader";
 
 const application: CatalogApplication = {
   applicationKey: "contract_probe",
@@ -54,6 +59,61 @@ const manifest = defineApplicationManifest({
 });
 
 describe("the generic federated application loader", () => {
+  it("reuses per-release runtimes across N-1 -> N -> N-1 without stale modules", async () => {
+    const clients: Array<{
+      registerRemotes: ReturnType<typeof vi.fn>;
+      loadRemote: ReturnType<typeof vi.fn>;
+    }> = [];
+    const createClient = vi.fn((identity: string) => {
+      let registration: { entry: string; type: "module" } | undefined;
+      const registerRemotes = vi.fn(
+        (remotes: Array<{ name: string; entry: string; type: "module" }>) => {
+          registration = remotes[0];
+        },
+      );
+      const loadRemote = vi.fn(async <T = unknown>(id: string): Promise<T | null> => {
+        if (!registration) throw new Error(`missing registration for ${id}`);
+        return { identity, entry: registration.entry } as T;
+      });
+      clients.push({ registerRemotes, loadRemote });
+      return { registerRemotes, loadRemote } as ReleaseAwareModuleFederationClient;
+    });
+    const runtime = createReleaseAwareRuntime(createClient);
+    const release = (releaseId: string) => ({
+      ...application,
+      release: {
+        ...application.release,
+        releaseId,
+        manifestUrl: `http://127.0.0.1:4175/${releaseId}/mf-manifest.json`,
+      },
+    });
+
+    const nMinus1 = await runtime.load(release("sha256:" + "1".repeat(64)));
+    const n = await runtime.load(release("sha256:" + "2".repeat(64)));
+    const rolledBack = await runtime.load(release("sha256:" + "1".repeat(64)));
+
+    expect(nMinus1).toMatchObject({
+      entry:
+        "http://127.0.0.1:4175/sha256:1111111111111111111111111111111111111111111111111111111111111111/mf-manifest.json",
+    });
+    expect(n).toEqual({
+      identity: expect.any(String),
+      entry:
+        "http://127.0.0.1:4175/sha256:2222222222222222222222222222222222222222222222222222222222222222/mf-manifest.json",
+    });
+    expect(rolledBack).toEqual(nMinus1);
+    expect(createClient).toHaveBeenCalledTimes(2);
+    expect(new Set(createClient.mock.calls.map(([identity]) => identity)).size).toBe(2);
+    expect(clients[0].registerRemotes).toHaveBeenCalledTimes(1);
+    expect(clients[1].registerRemotes).toHaveBeenCalledTimes(1);
+    expect(clients[0].loadRemote).toHaveBeenCalledTimes(2);
+    expect(clients[1].loadRemote).toHaveBeenCalledTimes(1);
+    expect(() => runtime.load(release("sha256:" + "3".repeat(64)))).toThrow(
+      "current and fallback release already",
+    );
+    expect(createClient).toHaveBeenCalledTimes(2);
+  });
+
   it("registers and loads the exact release approved by the catalog", async () => {
     const load = vi.fn(async () => ({ manifest, default: { name: "ContractProbe" } }));
     const runtime: FederatedRuntime = { load };

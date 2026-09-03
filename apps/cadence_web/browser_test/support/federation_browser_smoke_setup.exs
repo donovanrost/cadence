@@ -49,7 +49,10 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       DashboardRenderedViewportRunner.start_browser_endpoint_on_ephemeral_port!(sandbox_owner)
 
     base_url = "http://127.0.0.1:#{port}"
-    release_fixture = FederationReleaseFixture.prepare_and_activate!(app_root)
+
+    release_fixture =
+      FederationReleaseFixture.prepare_and_activate!(app_root, sandbox_owner: sandbox_owner)
+
     on_exit(fn -> FederationReleaseFixture.cleanup!(release_fixture) end)
     IO.puts("federation release generation activated: #{inspect(release_fixture.release_ids)}")
 
@@ -72,7 +75,17 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--source-endpoint-id",
       context.source_endpoint_id,
       "--expected-apid",
-      "42"
+      "42",
+      "--federation-lifecycle-url",
+      release_fixture.lifecycle.url,
+      "--n-minus-1-comms-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "comms_overview"),
+      "--n-minus-1-telemetry-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "telemetry_decom"),
+      "--n-comms-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "comms_overview"),
+      "--n-telemetry-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "telemetry_decom")
     ]
 
     args =

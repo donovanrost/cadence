@@ -1,7 +1,12 @@
 defmodule CadenceWeb.ApplicationReleaseRegistryTest do
   use Cadence.DataCase, async: false
 
+  Code.require_file(
+    Path.expand("../../browser_test/support/federation_release_fixture.exs", __DIR__)
+  )
+
   alias CadenceWeb.ApplicationReleaseRegistry
+  alias CadenceWeb.Assets.FederationReleaseFixture
 
   test "keys the checked-in Comms release by application and surface versions" do
     assert {:ok, release} = ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
@@ -66,5 +71,75 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     assert {:error, {:integrity_failure, :active_generation_missing}} =
              ApplicationReleaseRegistry.snapshot()
+  end
+
+  test "fails closed for an expired active catalog without changing accepted state" do
+    previous_config =
+      Application.get_env(:cadence_web, :frontend_release_publication, :not_configured)
+
+    Application.put_env(
+      :cadence_web,
+      :frontend_release_publication,
+      FederationReleaseFixture.publication_config()
+    )
+
+    on_exit(fn ->
+      case previous_config do
+        :not_configured -> Application.delete_env(:cadence_web, :frontend_release_publication)
+        config -> Application.put_env(:cadence_web, :frontend_release_publication, config)
+      end
+    end)
+
+    fixture =
+      FederationReleaseFixture.prepare_and_activate!(
+        Path.expand("../..", __DIR__),
+        sandbox_owner: self()
+      )
+
+    on_exit(fn -> FederationReleaseFixture.cleanup!(fixture) end)
+
+    previous_snapshot_clock =
+      Process.get(ApplicationReleaseRegistry.snapshot_clock_key(), :not_configured)
+
+    Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), "2026-09-02T00:00:00Z")
+
+    on_exit(fn ->
+      if previous_snapshot_clock == :not_configured do
+        Process.delete(ApplicationReleaseRegistry.snapshot_clock_key())
+      else
+        Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), previous_snapshot_clock)
+      end
+    end)
+
+    accepted = ApplicationReleaseRegistry.snapshot()
+    assert {:ok, %{source: :database, entries: entries}} = accepted
+    assert length(entries) == 2
+
+    accepted_control =
+      Repo.query!("""
+      SELECT cutover_epoch, cutover_at, legacy_catalog_publication_id
+      FROM frontend_release_activation_controls
+      WHERE control_id = 1
+      """).rows
+
+    accepted_generation =
+      Repo.query!("""
+      SELECT generation_id, catalog_publication_id, sequence
+      FROM frontend_release_catalog_generations
+      """).rows
+
+    assert {:error, {:integrity_failure, :active_catalog_expired}} =
+             ApplicationReleaseRegistry.snapshot(now: "2026-10-01T00:00:00Z")
+
+    assert Repo.query!("""
+           SELECT cutover_epoch, cutover_at, legacy_catalog_publication_id
+           FROM frontend_release_activation_controls
+           WHERE control_id = 1
+           """).rows == accepted_control
+
+    assert Repo.query!("""
+           SELECT generation_id, catalog_publication_id, sequence
+           FROM frontend_release_catalog_generations
+           """).rows == accepted_generation
   end
 end

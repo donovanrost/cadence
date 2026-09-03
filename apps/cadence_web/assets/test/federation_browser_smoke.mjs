@@ -774,6 +774,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const requestFailures = [];
   const webSockets = new Map();
   const webSocketFailures = [];
+  const servedFromCacheRequestIds = new Set();
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
@@ -829,6 +830,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       frameId: frameId || prior?.frameId,
       loaderId: loaderId || prior?.loaderId,
       response: responseOnly ? prior.response : undefined,
+      responseExtra: prior?.responseExtra,
+      requestExtra: prior?.requestExtra,
+      servedFromCache: prior?.servedFromCache || servedFromCacheRequestIds.has(requestId),
       resourceType: type,
       redirects,
       webSocket: type === "WebSocket",
@@ -882,6 +886,60 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
   });
 
+  on("Network.requestWillBeSentExtraInfo", ({ requestId, headers, associatedCookies }) => {
+    const record = requests.get(requestId);
+    if (record) {
+      record.requestExtra = { headers, associatedCookies };
+      return;
+    }
+
+    requests.set(requestId, {
+      requestId,
+      sequence: ++sequence,
+      startedAtMs: Date.now(),
+      generation: undefined,
+      method: "?",
+      url: "",
+      request: {},
+      requestExtra: { headers, associatedCookies },
+      redirects: [],
+      webSocket: false,
+      finished: false,
+      failed: undefined,
+      dataUrl: false,
+    });
+  });
+
+  on("Network.responseReceivedExtraInfo", ({ requestId, statusCode, headers, blockedCookies }) => {
+    const record = requests.get(requestId);
+    if (record) {
+      record.responseExtra = { statusCode, headers, blockedCookies };
+      return;
+    }
+
+    requests.set(requestId, {
+      requestId,
+      sequence: ++sequence,
+      startedAtMs: Date.now(),
+      generation: undefined,
+      method: "?",
+      url: "",
+      request: {},
+      responseExtra: { statusCode, headers, blockedCookies },
+      redirects: [],
+      webSocket: false,
+      finished: false,
+      failed: undefined,
+      dataUrl: false,
+    });
+  });
+
+  on("Network.requestServedFromCache", ({ requestId }) => {
+    servedFromCacheRequestIds.add(requestId);
+    const record = requests.get(requestId);
+    if (record) record.servedFromCache = true;
+  });
+
   on("Network.loadingFinished", ({ requestId }) => {
     const record = requests.get(requestId);
     if (record) record.finished = true;
@@ -890,7 +948,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   on("Network.loadingFailed", ({ requestId, errorText, canceled, blockedReason }) => {
     const record = requests.get(requestId);
     const detail = `${errorText || "request failed"}${canceled ? " (canceled)" : ""}${blockedReason ? ` (${blockedReason})` : ""}`;
-    if (!record?.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
+    const expectedConditional304Cancellation =
+      canceled === true &&
+      errorText === "net::ERR_ABORTED" &&
+      record?.finished === false &&
+      record?.responseExtra?.statusCode === 304;
+    if (!expectedConditional304Cancellation && !record?.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
       requestFailures.push(`${record?.method || "?"} ${record?.url || requestId}: ${detail}`);
     }
     if (record) record.failed = detail;
@@ -1029,6 +1092,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     requestFailures,
     webSockets,
     webSocketFailures,
+    servedFromCacheRequestIds,
     beginRequestGeneration,
     bindRequestGeneration,
     requestForGeneration,
@@ -1100,6 +1164,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
               frameId: record.frameId,
               loaderId: record.loaderId,
               status: record.response?.status,
+              responseExtraStatus: record.responseExtra?.statusCode,
+              servedFromCache: record.servedFromCache,
+              fromDiskCache: record.response?.fromDiskCache,
+              fromServiceWorker: record.response?.fromServiceWorker,
+              fromPrefetchCache: record.response?.fromPrefetchCache,
               resourceType: record.resourceType,
               redirects: record.redirects,
               webSocket: record.webSocket,
@@ -1284,6 +1353,67 @@ export async function responseJson(client, record, label, { signal } = {}) {
   }
 }
 
+export async function assertConditionalEtagRevalidation(
+  client,
+  diagnostics,
+  manifestRecord,
+  manifestUrl,
+  expectedOrigin,
+  { signal, label = "immutable manifest", generation: requestGeneration } = {},
+) {
+  const expectedEtag = responseHeader(manifestRecord, "etag");
+  assert.match(expectedEtag || "", /^"sha256:[0-9a-f]{64}"$/, `${label} has no usable ETag`);
+  const parsed = assertHttpUrl(manifestUrl, expectedOrigin, `${label} URL`);
+  const generation = requestGeneration || diagnostics.beginRequestGeneration(`${label} conditional revalidation`);
+
+  const browserResult = await evaluate(
+    client,
+    `fetch(${JSON.stringify(parsed.href)}, {cache: "no-cache", headers: {"Cache-Control": "no-cache", "If-None-Match": ${JSON.stringify(expectedEtag)}}}).then((response) => ({status: response.status, ok: response.ok}))`,
+    `${label} conditional fetch`,
+    { signal },
+  );
+  assert.ok([200, 304].includes(browserResult.status), `${label} conditional fetch was not successful`);
+
+  const deadline = Date.now() + CDP_EVENT_TIMEOUT_MS;
+  let record;
+  while (Date.now() < deadline) {
+    record = [...diagnostics.requests.values()]
+      .filter(
+        (candidate) =>
+          matchesRequestGeneration(candidate, generation) &&
+          pathMatches(candidate, "GET", parsed.pathname, expectedOrigin) &&
+          candidate.url === parsed.href &&
+          candidate.responseExtra?.statusCode === 304,
+      )
+      .sort((left, right) => left.sequence - right.sequence)
+      .at(-1);
+    if (record) break;
+    await sleep(POLL_INTERVAL_MS, signal);
+  }
+  assert.ok(record, `${label} conditional response was not observed`);
+  assert.equal(requestHeader(record, "if-none-match"), expectedEtag, `${label} did not send the cached ETag`);
+  assert.equal(record.responseExtra?.statusCode, 304, `${label} did not prove an HTTP 304 revalidation`);
+  assert.ok([200, 304].includes(record.response.status), `${label} returned an unexpected browser status`);
+  assert.ok(
+    record.failed === undefined ||
+      (record.finished === false && record.failed === "net::ERR_ABORTED (canceled)"),
+    `${label} conditional request failed unexpectedly: ${record.failed}`,
+  );
+  assert.equal(responseHeader(record, "etag"), expectedEtag, `${label} changed its ETag during revalidation`);
+  assert.notEqual(record.response.fromServiceWorker, true, `${label} revalidation used a service worker`);
+  assert.notEqual(record.response.fromPrefetchCache, true, `${label} revalidation used a prefetch cache`);
+  return { browserResult, record, generation };
+}
+
+export async function assertMountedRelease(client, releaseId, label, { signal } = {}) {
+  await waitForExpression(
+    client,
+    `document.querySelector('.phoenix-host-surface__chrome span:nth-child(2)')?.textContent?.trim().startsWith(${JSON.stringify(`${releaseId} ·`)}) === true`,
+    `${label} mounted release ${releaseId}`,
+    { signal },
+  );
+}
+
 export function parseRequestBody(record, label) {
   assert.equal(typeof record?.postData, "string", `${label} request body was unavailable`);
   try {
@@ -1294,15 +1424,103 @@ export function parseRequestBody(record, label) {
 }
 
 function requestHeader(record, name) {
-  const headers = record?.request?.headers || {};
   const expected = name.toLowerCase();
-  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === expected);
-  return key ? headers[key] : undefined;
+  for (const headers of [record?.requestExtra?.headers, record?.request?.headers]) {
+    const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === expected);
+    if (key) return headers[key];
+  }
+  return undefined;
+}
+
+function responseHeader(record, name) {
+  const expected = name.toLowerCase();
+  for (const headers of [record?.responseExtra?.headers, record?.response?.headers]) {
+    const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === expected);
+    if (key) return headers[key];
+  }
+  return undefined;
+}
+
+export function assertImmutableArtifactResponse(record, label = "release artifact") {
+  assert.ok(record, `${label} response was not observed`);
+  assert.ok(record.response, `${label} response was not observed`);
+  assert.equal(record.response.status, 200, `${label} response must be HTTP 200`);
+  assert.equal(record.finished, true, `${label} response was not finished`);
+  assert.equal(record.failed, undefined, `${label} request failed`);
+  assert.deepEqual(record.redirects, [], `${label} redirected`);
+  assert.notEqual(record.response.fromServiceWorker, true, `${label} used a service worker response`);
+  assert.notEqual(record.response.fromPrefetchCache, true, `${label} used a prefetch cache response`);
+  assert.equal(
+    responseHeader(record, "cache-control"),
+    "public, max-age=31536000, immutable",
+    `${label} did not advertise immutable caching`,
+  );
+  assert.match(
+    responseHeader(record, "etag") || "",
+    /^"sha256:[0-9a-f]{64}"$/,
+    `${label} did not return a strong digest ETag`,
+  );
+  return record;
+}
+
+export function assertImmutableReleaseCacheReuse(records, releases, label = "release cache reuse") {
+  const prefixes = releases.map(({ applicationKey, releaseId }) =>
+    releaseArtifactPrefix(applicationKey, releaseId),
+  );
+  const candidates = records.filter((record) => {
+    if (!record?.response || record.response.status !== 200 || record.failed || !record.finished) return false;
+    if (record.response.fromServiceWorker === true || record.response.fromPrefetchCache === true) return false;
+    return prefixes.some((prefix) => {
+      try {
+        return new URL(record.url).pathname.startsWith(prefix);
+      } catch {
+        return false;
+      }
+    });
+  });
+  assert.ok(candidates.length > 0, `${label} observed no immutable release artifacts`);
+  assert.ok(
+    candidates.some(
+      (record) =>
+        record.servedFromCache === true ||
+        record.response.fromDiskCache === true ||
+        record.response.fromMemoryCache === true,
+    ),
+    `${label} did not observe Chrome cache reuse: ${JSON.stringify(candidates.map((record) => ({ url: record.url, servedFromCache: record.servedFromCache, fromDiskCache: record.response.fromDiskCache })))}`,
+  );
+  return candidates;
+}
+
+export function assertNoReleaseArtifactRequests(records, releases, label = "release isolation") {
+  const prefixes = releases.map(({ applicationKey, releaseId }) =>
+    releaseArtifactPrefix(applicationKey, releaseId),
+  );
+  const stale = records.filter((record) => {
+    try {
+      return prefixes.some((prefix) => new URL(record.url).pathname.startsWith(prefix));
+    } catch {
+      return false;
+    }
+  });
+  assert.deepEqual(
+    stale,
+    [],
+    `${label} observed forbidden release artifacts: ${JSON.stringify(stale.map((record) => record.url))}`,
+  );
 }
 
 export function assertHttpRequestContract(
   record,
-  { origin, method, pathname, label, body, headers = {}, requireIdempotencyKey = false },
+  {
+    origin,
+    method,
+    pathname,
+    label,
+    body,
+    headers = {},
+    responseHeaders = {},
+    requireIdempotencyKey = false,
+  },
 ) {
   assert.ok(record, `${label} request was not observed`);
   const url = assertHttpUrl(record.url, origin, `${label} request URL`);
@@ -1322,6 +1540,9 @@ export function assertHttpRequestContract(
 
   for (const [name, value] of Object.entries(headers)) {
     assert.equal(requestHeader(record, name), value, `${label} missing or incorrect ${name} header`);
+  }
+  for (const [name, value] of Object.entries(responseHeaders)) {
+    assert.equal(responseHeader(record, name), value, `${label} missing or incorrect response ${name} header`);
   }
   if (requireIdempotencyKey) {
     const key = requestHeader(record, "idempotency-key");
@@ -1362,7 +1583,14 @@ export function assertManifestAssetsRequested(
   manifest,
   manifestUrl,
   records,
-  { origin, applicationKey, releaseId, label = "remote manifest", requiredExposedModule } = {},
+  {
+    origin,
+    applicationKey,
+    releaseId,
+    label = "remote manifest",
+    requiredExposedModule,
+    requireImmutableCache = false,
+  } = {},
 ) {
   const manifestLocation = assertReleaseArtifactUrl(manifestUrl, origin, {
     applicationKey,
@@ -1421,6 +1649,7 @@ export function assertManifestAssetsRequested(
     assert.ok(loaded, `${label} asset was not successfully requested: ${asset.href}`);
     assert.equal(loaded.response.status, 200, `${label} asset was not HTTP 200: ${asset.href}`);
     assert.deepEqual(loaded.redirects, [], `${label} asset redirected: ${asset.href}`);
+    if (requireImmutableCache) assertImmutableArtifactResponse(loaded, `${label} asset`);
   }
   return assets.map((asset) => asset.href);
 }
@@ -1677,7 +1906,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
   }
 }
 
-function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin) {
+function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin, expectedReleaseId) {
   assert.equal(catalog.schema, "cadence.first-party-frontend-catalog.v1");
   assert.equal(catalog.hostContract, "cadence.application-host.v1");
   assert.ok(!Number.isNaN(Date.parse(catalog.generatedAt)), "catalog generatedAt is not a timestamp");
@@ -1694,6 +1923,9 @@ function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expect
   assert.equal(application.surface.version, 1);
   assert.equal(application.release.federation, "module_federation");
   assert.equal(application.release.exposedModule, "./Application");
+  if (expectedReleaseId !== undefined) {
+    assert.equal(application.release.releaseId, expectedReleaseId, `${applicationKey} catalog release changed`);
+  }
   assertReleaseArtifactUrl(application.release.manifestUrl, expectedOrigin, {
     applicationKey,
     releaseId: application.release.releaseId,
@@ -1729,6 +1961,8 @@ async function assertRemoteSurface({
   queryPath,
   queryId,
   queryVersion,
+  expectedReleaseId,
+  readPublishedHostBody = false,
 }) {
   const surfaceUrl = assertHttpUrl(url, expectedOrigin, `${applicationKey} surface URL`);
   const generation = await navigate(client, surfaceUrl.href, {
@@ -1744,6 +1978,9 @@ async function assertRemoteSurface({
     throw new Error(`${error.message}\n${diagnostics.describe()}`, { cause: error });
   }
   reportProgress(`${applicationKey} REMOTE READY observed`);
+  if (expectedReleaseId !== undefined) {
+    await assertMountedRelease(client, expectedReleaseId, applicationKey, { signal });
+  }
   diagnostics.assertClean(`${applicationKey} surface`);
 
   reportProgress(`${applicationKey} waiting for catalog response`);
@@ -1759,9 +1996,17 @@ async function assertRemoteSurface({
     method: "GET",
     pathname: catalogPath,
     label: `${applicationKey} catalog`,
+    responseHeaders: { "cache-control": "no-store" },
   });
   const catalog = await responseJson(client, catalogRecord, `${applicationKey} catalog`, { signal });
-  const application = assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin);
+  const application = assertCatalog(
+    catalog,
+    applicationKey,
+    surfaceId,
+    expectedScope,
+    expectedOrigin,
+    expectedReleaseId,
+  );
   const releaseId = application.release.releaseId;
 
   const manifestUrl = assertReleaseArtifactUrl(application.release.manifestUrl, expectedOrigin, {
@@ -1786,6 +2031,7 @@ async function assertRemoteSurface({
     pathname: manifestUrl.pathname,
     label: `${applicationKey} manifest`,
   });
+  assertImmutableArtifactResponse(manifestRecord, `${applicationKey} manifest`);
   assertReleaseArtifactUrl(manifestRecord.url, expectedOrigin, {
     applicationKey,
     releaseId,
@@ -1800,6 +2046,7 @@ async function assertRemoteSurface({
     releaseId,
     label: `${applicationKey} manifest`,
     requiredExposedModule: application.release.exposedModule,
+    requireImmutableCache: true,
   });
   reportProgress(`${applicationKey} manifest assets asserted`);
 
@@ -1827,21 +2074,32 @@ async function assertRemoteSurface({
     (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
     { generation },
   ).at(-1);
-  assertHttpRequestContract(hostRecord, {
-    origin: expectedOrigin,
-    method: "GET",
-    pathname: "/assets/application-host/host/host.js",
-    label: "published Phoenix host bundle",
-  });
-  reportProgress(`${applicationKey} reading published host bundle body`);
-  const hostBody = await client.send(
-    "Network.getResponseBody",
-    { requestId: hostRecord.requestId },
-    CDP_COMMAND_TIMEOUT_MS,
-    signal,
+  assert.ok(hostRecord, "published Phoenix host bundle request was not observed");
+  assert.ok(hostRecord.response, "published Phoenix host bundle response was not observed");
+  assert.ok(
+    [200, 304].includes(hostRecord.response.status),
+    `published Phoenix host bundle response must be HTTP 200 or 304\n\n${hostRecord.response.status} !== 200 or 304`,
   );
-  parseResponseBody(hostBody, "published Phoenix host bundle");
-  reportProgress(`${applicationKey} published host bundle body asserted`);
+  assert.equal(hostRecord.finished, true, "published Phoenix host bundle response was not finished");
+  assert.equal(hostRecord.failed, undefined, "published Phoenix host bundle request failed");
+  assert.deepEqual(hostRecord.redirects, [], "published Phoenix host bundle redirected");
+  if (readPublishedHostBody) {
+    assertHttpRequestContract(hostRecord, {
+      origin: expectedOrigin,
+      method: "GET",
+      pathname: "/assets/application-host/host/host.js",
+      label: "published Phoenix host bundle body",
+    });
+    reportProgress(`${applicationKey} reading published host bundle body`);
+    const hostBody = await client.send(
+      "Network.getResponseBody",
+      { requestId: hostRecord.requestId },
+      CDP_COMMAND_TIMEOUT_MS,
+      signal,
+    );
+    parseResponseBody(hostBody, "published Phoenix host bundle body");
+    reportProgress(`${applicationKey} published Phoenix host bundle body asserted`);
+  }
 
   reportProgress(`${applicationKey} waiting for query response`);
   const queryRecord = await waitForResponse(
@@ -1869,7 +2127,35 @@ async function assertRemoteSurface({
     }),
   });
   const query = await responseJson(client, queryRecord, `${applicationKey} query`, { signal });
-  return { catalog, application, manifest, query, queryRecord, queryPath, generation };
+  return {
+    catalog,
+    application,
+    manifest,
+    manifestRecord,
+    manifestUrl: manifestUrl.href,
+    query,
+    queryRecord,
+    queryPath,
+    generation,
+  };
+}
+
+async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
+  const endpoint = assertHttpUrl(
+    new URL(`/${transition}`, `${lifecycleUrl.replace(/\/$/, "")}/`).href,
+    undefined,
+    "release transition URL",
+  );
+  assert.equal(endpoint.hostname, "127.0.0.1", "release transition must stay on loopback");
+  assert.equal(endpoint.pathname, `/${transition}`, "release transition path changed");
+  const response = await fetch(endpoint.href, { method: "POST", cache: "no-store" });
+  const bodyText = await response.text();
+  assert.equal(response.status, 200, `${transition} coordinator response changed: ${bodyText}`);
+  const body = JSON.parse(bodyText);
+  const expectedTransition = transition === "promote" ? "promotion" : transition;
+  assert.equal(body.transition, expectedTransition, `${transition} coordinator transition changed`);
+  assert.deepEqual(body.releaseIds, expectedReleaseIds, `${transition} coordinator release IDs changed`);
+  return body;
 }
 
 export async function runScenario(client, diagnostics, args, { secret, signal } = {}) {
@@ -1894,6 +2180,23 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
   assertSignInUrl(loginUrl, origin);
+  const lifecycleUrl = requiredArg(args, "--federation-lifecycle-url");
+  assertHttpUrl(lifecycleUrl, undefined, "federation lifecycle URL");
+  const releases = {
+    nMinus1: {
+      comms_overview: requiredArg(args, "--n-minus-1-comms-release-id"),
+      telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
+    },
+    n: {
+      comms_overview: requiredArg(args, "--n-comms-release-id"),
+      telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
+    },
+  };
+  for (const releaseIds of Object.values(releases)) {
+    for (const [applicationKey, releaseId] of Object.entries(releaseIds)) {
+      releaseArtifactPrefix(applicationKey, releaseId);
+    }
+  }
 
   reportProgress("authenticating browser session");
   const authenticatedGeneration = await submitSignIn(
@@ -1925,6 +2228,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryPath: commsQueryPath,
     queryId: "cadence.comms.overview",
     queryVersion: 1,
+    expectedReleaseId: releases.nMinus1.comms_overview,
+    readPublishedHostBody: true,
   });
   assert.equal(comms.query.queryVersion, 1);
   assert.equal(comms.query.presentation.root.attrs.id, "comms-overview-page");
@@ -1952,7 +2257,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryPath: telemetryQueryPath,
     queryId: "cadence.packet_bindings.manage",
     queryVersion: 1,
+    expectedReleaseId: releases.nMinus1.telemetry_decom,
   });
+
+  reportProgress("proving immutable manifest ETag revalidation");
+  await assertConditionalEtagRevalidation(
+    client,
+    diagnostics,
+    telemetry.manifestRecord,
+    telemetry.manifestUrl,
+    origin,
+    { signal, generation: telemetry.generation, label: "Telemetry N-1 manifest" },
+  );
+  reportProgress("immutable manifest ETag revalidation observed");
 
   assert.equal(telemetry.query.host.application_key, "telemetry_decom");
   assert.equal(telemetry.query.declarative_surface.packet_bindings.action.action_id, "save_packet_bindings");
@@ -2096,13 +2413,116 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     true,
   );
 
+  reportProgress("promoting signed federation generation N");
+  await applyReleaseTransition(`${lifecycleUrl}/`, "promote", releases.n);
+  const promotedComms = await assertRemoteSurface({
+    client,
+    diagnostics,
+    signal,
+    url: commsUrl,
+    expectedOrigin: origin,
+    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+    applicationKey: "comms_overview",
+    surfaceId: "overview",
+    expectedScope: "mission",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    queryPath: commsQueryPath,
+    queryId: "cadence.comms.overview",
+    queryVersion: 1,
+    expectedReleaseId: releases.n.comms_overview,
+  });
+  const promotedTelemetry = await assertRemoteSurface({
+    client,
+    diagnostics,
+    signal,
+    url: telemetryUrl,
+    expectedOrigin: origin,
+    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
+    applicationKey: "telemetry_decom",
+    surfaceId: "packet_bindings",
+    expectedScope: "spacecraft",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
+    queryPath: telemetryQueryPath,
+    queryId: "cadence.packet_bindings.manage",
+    queryVersion: 1,
+    expectedReleaseId: releases.n.telemetry_decom,
+  });
+  assertNoReleaseArtifactRequests(
+    diagnostics.completed(() => true, { generation: promotedTelemetry.generation }),
+    [
+      { applicationKey: "comms_overview", releaseId: releases.nMinus1.comms_overview },
+      { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
+    ],
+    "generation N reload",
+  );
+  reportProgress("generation N catalog, manifest, and runtime identities observed");
+
+  reportProgress("rolling back signed federation generation N-1");
+  await applyReleaseTransition(`${lifecycleUrl}/`, "rollback", releases.nMinus1);
+  const rolledBackComms = await assertRemoteSurface({
+    client,
+    diagnostics,
+    signal,
+    url: commsUrl,
+    expectedOrigin: origin,
+    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+    applicationKey: "comms_overview",
+    surfaceId: "overview",
+    expectedScope: "mission",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    queryPath: commsQueryPath,
+    queryId: "cadence.comms.overview",
+    queryVersion: 1,
+    expectedReleaseId: releases.nMinus1.comms_overview,
+  });
+  const rolledBackTelemetry = await assertRemoteSurface({
+    client,
+    diagnostics,
+    signal,
+    url: telemetryUrl,
+    expectedOrigin: origin,
+    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
+    applicationKey: "telemetry_decom",
+    surfaceId: "packet_bindings",
+    expectedScope: "spacecraft",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
+    queryPath: telemetryQueryPath,
+    queryId: "cadence.packet_bindings.manage",
+    queryVersion: 1,
+    expectedReleaseId: releases.nMinus1.telemetry_decom,
+  });
+  assertNoReleaseArtifactRequests(
+    diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
+    [
+      { applicationKey: "comms_overview", releaseId: releases.n.comms_overview },
+      { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
+    ],
+    "generation N-1 rollback",
+  );
+  assertImmutableReleaseCacheReuse(
+    diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
+    [
+      { applicationKey: "comms_overview", releaseId: releases.nMinus1.comms_overview },
+      { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
+    ],
+    "generation N-1 rollback",
+  );
+  reportProgress("generation N-1 rollback identities and cache reuse observed");
+
   reportProgress("draining late browser events");
   await diagnostics.drainLateEvents(250, signal);
   reportProgress("late browser events drained");
   diagnostics.assertClean("federation browser gate");
   return {
     origin,
-    remotes: [comms.application.release.releaseId, telemetry.application.release.releaseId],
+    remotes: [
+      comms.application.release.releaseId,
+      telemetry.application.release.releaseId,
+      promotedComms.application.release.releaseId,
+      promotedTelemetry.application.release.releaseId,
+      rolledBackComms.application.release.releaseId,
+      rolledBackTelemetry.application.release.releaseId,
+    ],
     queryResponses: diagnostics.completed(
       (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
       { generation: telemetry.generation },
@@ -2271,12 +2691,6 @@ export async function runBrowserGate(
     );
     await state.client.send("Runtime.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
     await state.client.send("Network.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
-    await state.client.send(
-      "Network.setCacheDisabled",
-      { cacheDisabled: true },
-      CDP_COMMAND_TIMEOUT_MS,
-      controller.signal,
-    );
     await state.client.send("Log.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
     await state.client.send("Emulation.setDeviceMetricsOverride", {
       width: 1440,

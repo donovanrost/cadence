@@ -45,13 +45,24 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
   setup do
     previous = Process.get({FrontendReleasePublication, :publication_config}, :not_configured)
+
+    previous_snapshot_clock =
+      Process.get(ApplicationReleaseRegistry.snapshot_clock_key(), :not_configured)
+
     Process.put({FrontendReleasePublication, :publication_config}, @config)
+    Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), @now)
 
     on_exit(fn ->
       if previous == :not_configured do
         Process.delete({FrontendReleasePublication, :publication_config})
       else
         Process.put({FrontendReleasePublication, :publication_config}, previous)
+      end
+
+      if previous_snapshot_clock == :not_configured do
+        Process.delete(ApplicationReleaseRegistry.snapshot_clock_key())
+      else
+        Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), previous_snapshot_clock)
       end
     end)
 

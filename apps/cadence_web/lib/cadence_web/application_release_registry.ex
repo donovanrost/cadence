@@ -6,6 +6,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   alias CadenceWeb.FrontendReleaseCatalog
 
   @publication_config_key {CadenceWeb.FrontendReleasePublication, :publication_config}
+  @snapshot_clock_key {__MODULE__, :snapshot_clock}
 
   @type federation :: :module_federation | :native_federation
 
@@ -29,10 +30,13 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
           | {:database_unavailable, term()}
           | {:integrity_failure, term()}
 
-  @spec snapshot() :: {:ok, snapshot()} | {:error, error_reason()}
-  def snapshot do
-    with {:ok, rows} <- read_catalog_rows() do
-      build_snapshot(rows)
+  @spec snapshot(keyword()) :: {:ok, snapshot()} | {:error, error_reason()}
+  def snapshot(opts \\ [])
+
+  def snapshot(opts) when is_list(opts) do
+    with {:ok, now_ms} <- snapshot_now(Keyword.get_lazy(opts, :now, &snapshot_clock/0)),
+         {:ok, rows} <- read_catalog_rows() do
+      build_snapshot(rows, now_ms)
     end
   rescue
     error in [DBConnection.ConnectionError, Postgrex.Error] ->
@@ -41,6 +45,12 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     error ->
       {:error, {:integrity_failure, error}}
   end
+
+  def snapshot(_opts), do: {:error, {:integrity_failure, :invalid_snapshot_options}}
+
+  @doc "Returns the process-scoped key used to override the registry snapshot clock in tests."
+  @spec snapshot_clock_key() :: {module(), atom()}
+  def snapshot_clock_key, do: @snapshot_clock_key
 
   @spec all() :: [{key(), release()}] | {:error, error_reason()}
   def all do
@@ -120,17 +130,17 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  defp build_snapshot([first | rows]) do
+  defp build_snapshot([first | rows], now_ms) do
     with :ok <- consistent_control(first, rows) do
       case first.control_epoch do
         0 -> build_static_snapshot(first)
-        1 -> build_database_snapshot(first, rows)
+        1 -> build_database_snapshot(first, rows, now_ms)
         _other -> {:error, {:integrity_failure, :invalid_cutover_epoch}}
       end
     end
   end
 
-  defp build_snapshot(_rows),
+  defp build_snapshot(_rows, _now_ms),
     do: {:error, {:integrity_failure, :activation_control_missing}}
 
   defp build_static_snapshot(row) do
@@ -141,7 +151,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  defp build_database_snapshot(row, rows) do
+  defp build_database_snapshot(row, rows, now_ms) do
     cond do
       not is_binary(row.cutover_at) ->
         {:error, {:integrity_failure, :cutover_timestamp_missing}}
@@ -150,15 +160,15 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
         {:error, {:integrity_failure, :active_generation_missing}}
 
       true ->
-        validate_database_snapshot(row, rows)
+        validate_database_snapshot(row, rows, now_ms)
     end
   end
 
-  defp validate_database_snapshot(row, rows) do
+  defp validate_database_snapshot(row, rows, now_ms) do
     bindings = Enum.reject([row | rows], &is_nil(&1.binding_generation_id))
 
     with :ok <- validate_generation(row, bindings),
-         {:ok, catalog} <- validate_catalog(row),
+         {:ok, catalog} <- validate_catalog(row, now_ms),
          {:ok, entries} <- validate_bindings(bindings, catalog.entries),
          :ok <- validate_snapshot_digest(row, entries) do
       {:ok, %{source: :database, entries: Enum.map(entries, &entry_pair/1)}}
@@ -211,7 +221,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  defp validate_catalog(row) do
+  defp validate_catalog(row, now_ms) do
     result =
       with true <- row.catalog_acceptance_state == "accepted",
            true <- valid_digest?(row.catalog_digest),
@@ -223,11 +233,13 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
            true <- valid_identity_count?(row.catalog_identity_count),
            true <- valid_digest?(row.catalog_snapshot_digest),
            true <- catalog_window_valid?(row),
+           :ok <- active_catalog_current(row, now_ms),
            {:ok, entries} <- accepted_catalog_entries(row),
            {:ok, entries} <- validate_release_references(row.catalog_release_references, entries) do
         {:ok, %{entries: entries}}
       else
         false -> integrity(:catalog_metadata_mismatch)
+        {:error, {:integrity_failure, :active_catalog_expired}} = reason -> reason
         {:error, _reason} -> integrity(:catalog_metadata_mismatch)
         _other -> integrity(:catalog_metadata_mismatch)
       end
@@ -742,6 +754,32 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     else
       _ -> false
     end
+  end
+
+  defp active_catalog_current(row, now_ms) do
+    with {:ok, expires_at} <- timestamp_milliseconds(row.catalog_expires_at),
+         true <- expires_at > now_ms do
+      :ok
+    else
+      _ -> integrity(:active_catalog_expired)
+    end
+  end
+
+  defp snapshot_now(value) when is_integer(value), do: {:ok, value}
+
+  defp snapshot_now(%DateTime{} = value), do: {:ok, DateTime.to_unix(value, :millisecond)}
+
+  defp snapshot_now(value) when is_binary(value) do
+    case timestamp_milliseconds(value) do
+      {:ok, milliseconds} -> {:ok, milliseconds}
+      :error -> {:error, {:integrity_failure, :invalid_snapshot_clock}}
+    end
+  end
+
+  defp snapshot_now(_value), do: {:error, {:integrity_failure, :invalid_snapshot_clock}}
+
+  defp snapshot_clock do
+    Process.get(@snapshot_clock_key, System.system_time(:millisecond))
   end
 
   defp timestamp_milliseconds(value) when is_binary(value) do

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { test } from "node:test";
 import {
   assertHttpRequestContract,
+  assertImmutableArtifactResponse,
+  assertImmutableReleaseCacheReuse,
   assertLiveViewWebSocket,
   assertManifestAssetsRequested,
   assertNoPasswordArgument,
@@ -43,6 +46,12 @@ function record({
   sequence = startedAtMs,
   redirects = [],
   resourceType = "XHR",
+  responseHeaders = {},
+  fromDiskCache = false,
+  fromMemoryCache = false,
+  fromServiceWorker = false,
+  fromPrefetchCache = false,
+  servedFromCache = false,
 } = {}) {
   return {
     requestId,
@@ -52,7 +61,15 @@ function record({
     method,
     postData: body === undefined ? undefined : JSON.stringify(body),
     request: { headers },
-    response: { status },
+    response: {
+      status,
+      headers: responseHeaders,
+      fromDiskCache,
+      fromMemoryCache,
+      fromServiceWorker,
+      fromPrefetchCache,
+    },
+    servedFromCache,
     redirects,
     resourceType,
     finished: true,
@@ -277,6 +294,132 @@ test("manifest validation follows every declared transitive JavaScript and CSS a
       `invalid asset URL was accepted: ${invalidAsset}`,
     );
   }
+});
+
+test("immutable release artifacts advertise safe reuse and reject opaque cache sources", () => {
+  const releaseId = `sha256:${"a".repeat(64)}`;
+  const artifact = record({
+    url: `${origin}${releaseArtifactPrefix("telemetry_decom", releaseId)}mf-manifest.json`,
+    method: "GET",
+    body: undefined,
+    resourceType: "Fetch",
+    responseHeaders: {
+      "cache-control": "public, max-age=31536000, immutable",
+      etag: `"${releaseId}"`,
+    },
+    servedFromCache: true,
+  });
+  assert.doesNotThrow(() => assertImmutableArtifactResponse(artifact, "cached manifest"));
+  assert.equal(
+    assertImmutableReleaseCacheReuse(
+      [artifact],
+      [{ applicationKey: "telemetry_decom", releaseId }],
+      "cached release",
+    ).length,
+    1,
+  );
+
+  for (const invalid of [
+    { responseHeaders: { "cache-control": "public, max-age=60" } },
+    { responseHeaders: { "cache-control": "public, max-age=31536000, immutable", etag: "W/\"weak\"" } },
+    { fromServiceWorker: true },
+    { fromPrefetchCache: true },
+  ]) {
+    const invalidRecord = {
+      ...artifact,
+      response: {
+        ...artifact.response,
+        headers: invalid.responseHeaders || artifact.response.headers,
+        fromServiceWorker: invalid.fromServiceWorker || false,
+        fromPrefetchCache: invalid.fromPrefetchCache || false,
+      },
+    };
+    assert.throws(
+      () => assertImmutableArtifactResponse(invalidRecord, "invalid cached manifest"),
+      /immutable|ETag|service worker|prefetch/,
+    );
+  }
+});
+
+test("conditional 304 cancellation is accepted only with exact ExtraInfo evidence", () => {
+  const diagnosticClient = () => {
+    const listeners = new Map();
+    return {
+      on(method, listener) {
+        const methodListeners = listeners.get(method) || new Set();
+        methodListeners.add(listener);
+        listeners.set(method, methodListeners);
+        return () => methodListeners.delete(listener);
+      },
+      emit(method, event) {
+        for (const listener of listeners.get(method) || []) listener(event);
+      },
+    };
+  };
+  const url = `${origin}/releases/telemetry_decom/${`sha256:${"a".repeat(64)}`}/artifacts/mf-manifest.json`;
+  const etag = `"sha256:${"a".repeat(64)}"`;
+  const client = diagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const generation = diagnostics.beginRequestGeneration("conditional manifest revalidation");
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "conditional-304",
+    request: { url, method: "GET", headers: { "If-None-Match": etag } },
+    type: "Fetch",
+  });
+  client.emit("Network.requestWillBeSentExtraInfo", {
+    requestId: "conditional-304",
+    headers: { "If-None-Match": etag },
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "conditional-304",
+    response: { url, status: 304 },
+    type: "Fetch",
+  });
+  client.emit("Network.responseReceivedExtraInfo", {
+    requestId: "conditional-304",
+    statusCode: 304,
+    headers: { etag },
+  });
+  client.emit("Network.loadingFailed", {
+    requestId: "conditional-304",
+    errorText: "net::ERR_ABORTED",
+    canceled: true,
+  });
+
+  const accepted = diagnostics.requests.get("conditional-304");
+  assert.equal(accepted.generation, generation.id);
+  assert.equal(accepted.finished, false);
+  assert.equal(accepted.failed, "net::ERR_ABORTED (canceled)");
+  assert.equal(accepted.requestExtra.headers["If-None-Match"], etag);
+  assert.equal(accepted.responseExtra.statusCode, 304);
+  assert.doesNotThrow(() => diagnostics.assertClean("conditional 304"));
+  diagnostics.dispose();
+
+  const rejectedClient = diagnosticClient();
+  const rejectedDiagnostics = installDiagnostics(rejectedClient, { expectedOrigin: origin });
+  rejectedClient.emit("Network.requestWillBeSent", {
+    requestId: "conditional-200",
+    request: { url, method: "GET", headers: { "If-None-Match": etag } },
+    type: "Fetch",
+  });
+  rejectedClient.emit("Network.responseReceivedExtraInfo", {
+    requestId: "conditional-200",
+    statusCode: 200,
+    headers: { etag },
+  });
+  rejectedClient.emit("Network.loadingFailed", {
+    requestId: "conditional-200",
+    errorText: "net::ERR_ABORTED",
+    canceled: true,
+  });
+  assert.throws(() => rejectedDiagnostics.assertClean("non-304 cancellation"), /browser diagnostics failed/);
+  rejectedDiagnostics.dispose();
+});
+
+test("the cache-enabled federation browser gate never disables Chrome cache", async () => {
+  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
+  assert.equal(source.includes("Network.setCacheDisabled"), false);
 });
 
 test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
