@@ -4,12 +4,11 @@ import type {
   FirstPartyApplicationManifest,
   FrontendApplicationCatalog,
   HostActivityEvent,
-  HostBridge,
 } from "@cadence/plugin-sdk";
 import { CButton, CStatus, CTooltip } from "@cadence/ui";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadFrontendApplicationCatalog } from "./catalog-client";
-import { createHttpHostBridge } from "./http-host-bridge";
+import { createHttpHostBridge, type HttpHostBridge } from "./http-host-bridge";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 
 const emit = defineEmits<{
@@ -23,13 +22,15 @@ const requestedRelease =
 const requestedScenario = pageUrl.searchParams.get("scenario") ?? undefined;
 
 const catalog = shallowRef<FrontendApplicationCatalog>();
-const bridge = shallowRef<HostBridge>();
+const bridge = shallowRef<HttpHostBridge>();
 const manifest = shallowRef<FirstPartyApplicationManifest>();
 const bootError = ref<string>();
 const activeApplicationKey = ref(requestedApplication ?? "telemetry_decom");
 const activity = ref<HostActivityEvent[]>([]);
 const activityOpen = ref(true);
 const mountGeneration = ref(0);
+let catalogGeneration = 0;
+let currentBridgeOwner: HttpHostBridge | undefined;
 let stopListening: (() => void) | undefined;
 
 const context = computed(() => catalog.value?.session.context);
@@ -56,18 +57,24 @@ const operatorTooltip = computed(() => {
 });
 
 onMounted(loadCatalog);
-onBeforeUnmount(() => stopListening?.());
+onBeforeUnmount(() => {
+  catalogGeneration += 1;
+  abandonCurrentBridge();
+});
 
 async function loadCatalog(): Promise<void> {
+  const generation = ++catalogGeneration;
+  abandonCurrentBridge();
   bootError.value = undefined;
   manifest.value = undefined;
-  stopListening?.();
+  catalog.value = undefined;
 
   try {
     const nextCatalog = await loadFrontendApplicationCatalog({
       release: requestedRelease,
       scenario: requestedScenario,
     });
+    if (generation !== catalogGeneration) return;
     catalog.value = nextCatalog;
 
     if (!nextCatalog.applications.some(matchesActiveApplication)) {
@@ -79,13 +86,16 @@ async function loadCatalog(): Promise<void> {
       throw new Error("The host catalog did not provide an active application.");
 
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication);
-    bridge.value = nextBridge;
-    stopListening = nextBridge.subscribe(recordActivity);
+    if (generation !== catalogGeneration) {
+      nextBridge.invalidate();
+      return;
+    }
+    installBridge(nextBridge);
 
     mountGeneration.value += 1;
   } catch (reason) {
+    if (generation !== catalogGeneration) return;
     catalog.value = undefined;
-    bridge.value = undefined;
     bootError.value = messageFor(reason, "The host catalog could not be loaded.");
   }
 }
@@ -100,10 +110,9 @@ function selectApplication(application: CatalogApplication): void {
   manifest.value = undefined;
   const currentCatalog = catalog.value;
   if (!currentCatalog) return;
-  stopListening?.();
+  abandonCurrentBridge();
   const nextBridge = createHttpHostBridge(currentCatalog.session, application);
-  bridge.value = nextBridge;
-  stopListening = nextBridge.subscribe(recordActivity);
+  installBridge(nextBridge);
   mountGeneration.value += 1;
   pageUrl.searchParams.set("application", application.applicationKey);
   window.history.replaceState({}, "", pageUrl);
@@ -111,7 +120,31 @@ function selectApplication(application: CatalogApplication): void {
 
 function remountActiveApplication(): void {
   manifest.value = undefined;
+  const currentCatalog = catalog.value;
+  const application = activeApplication.value;
+  if (currentCatalog && application) {
+    abandonCurrentBridge();
+    installBridge(createHttpHostBridge(currentCatalog.session, application));
+  } else {
+    abandonCurrentBridge();
+  }
   mountGeneration.value += 1;
+}
+
+function installBridge(nextBridge: HttpHostBridge): void {
+  currentBridgeOwner = nextBridge;
+  bridge.value = nextBridge;
+  stopListening = nextBridge.subscribe(recordActivity);
+}
+
+function abandonCurrentBridge(): void {
+  const abandonedBridge = currentBridgeOwner;
+  const unsubscribe = stopListening;
+  currentBridgeOwner = undefined;
+  stopListening = undefined;
+  bridge.value = undefined;
+  unsubscribe?.();
+  abandonedBridge?.invalidate();
 }
 
 function recordManifest(value: FirstPartyApplicationManifest): void {
