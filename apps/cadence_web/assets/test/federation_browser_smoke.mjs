@@ -804,12 +804,30 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     for (const entry of allowance.consumedEntries || []) logError(entry);
     for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
   };
-  const invalidateExpectedFailure = (record, reason) => {
-    const allowance = record?.expectedFailureAllowance;
-    if (!allowance || allowance.revoked) return;
-    allowance.revoked = true;
-    allowance.invalidatedBy = reason;
-    replayInvalidatedAllowance(allowance);
+  const invalidateExpectedFailure = (target, reason, boundAllowance) => {
+    const allowance = boundAllowance || target?.expectedFailureAllowance;
+    if (allowance) {
+      if (allowance.revoked) return;
+      allowance.revoked = true;
+      allowance.invalidatedBy = reason;
+      replayInvalidatedAllowance(allowance);
+      return;
+    }
+
+    const registration = target;
+    if (!registration || registration.invalidated) return;
+    for (const registrationAllowance of registration.allowances || []) {
+      invalidateExpectedFailure(registration, reason, registrationAllowance);
+    }
+    registration.invalidated = true;
+    registration.active = false;
+    delete registration.pendingRequestId;
+    for (const record of requests.values()) {
+      if (record.expectedFailureRegistration === registration) delete record.expectedFailureRegistration;
+    }
+    const index = expectedFailureRegistrations.indexOf(registration);
+    if (index >= 0) expectedFailureRegistrations.splice(index, 1);
+    reconcilePendingNetworkLogs();
   };
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
@@ -911,6 +929,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       suppressedFailures: [],
       replayed: false,
     };
+    registration.allowances.add(record.expectedFailureAllowance);
     return true;
   };
   const canonicalNetworkResourceStatus = (entry) => {
@@ -1390,15 +1409,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         registeredAfterSequence: sequence,
         requestId: undefined,
         active: true,
+        allowances: new Set(),
       };
       expectedFailureRegistrations.push(registration);
       return () => {
-        if (!registration.active) return;
-        registration.active = false;
-        delete registration.pendingRequestId;
-        const index = expectedFailureRegistrations.indexOf(registration);
-        if (index >= 0) expectedFailureRegistrations.splice(index, 1);
-        reconcilePendingNetworkLogs();
+        invalidateExpectedFailure(registration, "expected failure registration removed");
       };
     },
     async waitForRequest(generation, predicate, label, { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {}) {
@@ -1433,8 +1448,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       await sleep(milliseconds, signal);
     },
     dispose() {
+      if (disposed) return;
+      for (const registration of [...expectedFailureRegistrations]) {
+        invalidateExpectedFailure(registration, "diagnostics disposed");
+      }
       disposed = true;
-      for (const registration of expectedFailureRegistrations) registration.active = false;
       reconcilePendingNetworkLogs();
       flushPendingNetworkLogs();
       while (subscriptions.length) subscriptions.pop()?.();
@@ -3130,8 +3148,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   await diagnostics.drainLateEvents(250, signal);
   reportProgress("late browser events drained");
   diagnostics.assertClean("federation browser gate");
-  csrfFailureCleanup();
-  return {
+  const result = {
     origin,
     remotes: [
       comms.application.release.releaseId,
@@ -3148,6 +3165,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     actionReceipt: receipt.receiptId,
     retainedPacketId: packetId,
   };
+  Object.defineProperty(result, "cleanupExpectedFailures", {
+    value: csrfFailureCleanup,
+    enumerable: false,
+  });
+  return result;
 }
 
 export async function readStructuredLoginSecret({ stream = process.stdin, signal, timeout = 5_000 } = {}) {
@@ -3335,6 +3357,7 @@ export async function runBrowserGate(
     });
     reportProgress("federation browser scenario settled successfully");
     diagnostics.assertClean("federation browser gate final");
+    result?.cleanupExpectedFailures?.();
     reportProgress("browser gate returning successfully");
     return result;
   } catch (error) {

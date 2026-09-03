@@ -42,6 +42,26 @@ function makeDiagnosticClient() {
     emit(method, event) {
       for (const listener of listeners.get(method) || []) listener(event);
     },
+    waitForEvent(method, predicate = () => true, timeout = 30_000) {
+      return new Promise((resolveEvent, rejectEvent) => {
+        let settled = false;
+        let off;
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          off?.();
+          callback(value);
+        };
+        const timer = setTimeout(
+          () => finish(rejectEvent, new Error(`synthetic ${method} timed out after ${timeout}ms`)),
+          timeout,
+        );
+        off = this.on(method, (event) => {
+          if (predicate(event)) finish(resolveEvent, event);
+        });
+      });
+    },
   };
 }
 
@@ -508,6 +528,153 @@ test("one canonical delayed Chrome network resource error is attributed to one e
   assert.doesNotThrow(() => diagnostics.assertClean("expected CSRF rejection"));
   removeAllowance();
   diagnostics.dispose();
+});
+
+test("cleanup replays one consumed canonical log exactly once after a finished expected request", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "cleanup-consumed-log", url);
+  emitActionResponse(client, "cleanup-consumed-log", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "cleanup-consumed-log");
+  client.emit("Network.loadingFinished", { requestId: "cleanup-consumed-log" });
+  assert.doesNotThrow(() => diagnostics.assertClean("finished expected 403 baseline"));
+
+  removeAllowance();
+  removeAllowance();
+  const failure = assertDirty(diagnostics, "cleanup replayed canonical log");
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  diagnostics.dispose();
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+});
+
+test("cleanup replays one suppressed loadingFailed evidence exactly once after a finished expected request", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "cleanup-suppressed-failure", url);
+  emitActionResponse(client, "cleanup-suppressed-failure", url, 403);
+  emitActionLoadingFailed(client, "cleanup-suppressed-failure", "net::ERR_EXPECTED_FAILURE");
+  assert.doesNotThrow(() => diagnostics.assertClean("finished expected 403 failure baseline"));
+
+  removeAllowance();
+  const failure = assertDirty(diagnostics, "cleanup replayed loading failure");
+  assert.equal(diagnostics.requestFailures.length, 1);
+  assert.match(failure, /ERR_EXPECTED_FAILURE/);
+  removeAllowance();
+  diagnostics.dispose();
+  diagnostics.dispose();
+  assert.equal(diagnostics.requestFailures.length, 1);
+});
+
+test("dispose replays consumed canonical log evidence exactly once", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "dispose-consumed-log", url);
+  emitActionResponse(client, "dispose-consumed-log", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "dispose-consumed-log");
+  client.emit("Network.loadingFinished", { requestId: "dispose-consumed-log" });
+  assert.doesNotThrow(() => diagnostics.assertClean("dispose consumed log baseline"));
+
+  diagnostics.dispose();
+  const failure = assertDirty(diagnostics, "dispose replayed canonical log");
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+});
+
+test("dispose replays suppressed loadingFailed evidence exactly once", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "dispose-suppressed-failure", url);
+  emitActionResponse(client, "dispose-suppressed-failure", url, 403);
+  emitActionLoadingFailed(client, "dispose-suppressed-failure", "net::ERR_DISPOSED_EXPECTED_FAILURE");
+  assert.doesNotThrow(() => diagnostics.assertClean("dispose loading failure baseline"));
+
+  diagnostics.dispose();
+  const failure = assertDirty(diagnostics, "dispose replayed loading failure");
+  assert.equal(diagnostics.requestFailures.length, 1);
+  assert.match(failure, /ERR_DISPOSED_EXPECTED_FAILURE/);
+  diagnostics.dispose();
+  assert.equal(diagnostics.requestFailures.length, 1);
+});
+
+test("a waitForRequest timeout does not discard consumed evidence before cleanup", async () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+  const generation = diagnostics.beginRequestGeneration("synthetic timeout");
+
+  emitExpectedActionRequest(client, "wait-timeout-consumed", url);
+  emitActionResponse(client, "wait-timeout-consumed", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "wait-timeout-consumed");
+  client.emit("Network.loadingFinished", { requestId: "wait-timeout-consumed" });
+  assert.doesNotThrow(() => diagnostics.assertClean("wait timeout baseline"));
+
+  await assert.rejects(
+    diagnostics.waitForRequest(generation, () => false, "synthetic waitForRequest", { timeout: 1 }),
+    /timed out/,
+  );
+  removeAllowance();
+  const failure = assertDirty(diagnostics, "wait timeout cleanup replay");
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  diagnostics.dispose();
+});
+
+test("repeated cleanup and dispose combinations replay consumed and suppressed evidence once", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "repeated-invalidation", url);
+  emitActionResponse(client, "repeated-invalidation", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "repeated-invalidation");
+  emitActionLoadingFailed(client, "repeated-invalidation", "net::ERR_REPEATED_INVALIDATION");
+  assert.doesNotThrow(() => diagnostics.assertClean("repeated invalidation baseline"));
+
+  removeAllowance();
+  diagnostics.dispose();
+  removeAllowance();
+  diagnostics.dispose();
+  const failure = assertDirty(diagnostics, "repeated invalidation replay");
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(diagnostics.requestFailures.length, 1);
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  assert.equal((failure.match(/ERR_REPEATED_INVALIDATION/g) || []).length, 1);
 });
 
 test("a canonical network resource error without networkRequestId remains visible", () => {
