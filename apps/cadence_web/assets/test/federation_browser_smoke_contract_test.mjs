@@ -6,6 +6,7 @@ import {
   assertLiveViewWebSocket,
   assertManifestAssetsRequested,
   assertNoPasswordArgument,
+  assertReleaseArtifactUrl,
   assertSignInUrl,
   browserUrls,
   createPage,
@@ -17,6 +18,7 @@ import {
   requirePostActionRefresh,
   reserveLoopbackPort,
   redactText,
+  releaseArtifactPrefix,
   resolveChromeBinary,
   runScenario,
   waitForPageNavigation,
@@ -171,7 +173,9 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
 });
 
 test("manifest validation follows every declared transitive JavaScript and CSS asset", () => {
-  const manifestUrl = `${origin}/assets/application-host/telemetry-decom/mf-manifest.json`;
+  const releaseId = `sha256:${"a".repeat(64)}`;
+  const releasePrefix = releaseArtifactPrefix("telemetry_decom", releaseId);
+  const manifestUrl = `${origin}${releasePrefix}mf-manifest.json`;
   const manifest = {
     metaData: { remoteEntry: { name: "remoteEntry.js" }, ssrRemoteEntry: { name: "remoteEntry.ssr.js" } },
     entry: "remoteEntry.js",
@@ -182,54 +186,97 @@ test("manifest validation follows every declared transitive JavaScript and CSS a
     ],
   };
   const assets = [
-    record({ url: `${origin}/assets/application-host/telemetry-decom/remoteEntry.js`, method: "GET", body: undefined, resourceType: "Script" }),
-    record({ url: `${origin}/assets/application-host/telemetry-decom/chunks/Application-1.js`, method: "GET", body: undefined, resourceType: "Script" }),
-    record({ url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`, method: "GET", body: undefined, resourceType: "Stylesheet" }),
+    record({ url: `${origin}${releasePrefix}remoteEntry.js`, method: "GET", body: undefined, resourceType: "Script" }),
+    record({ url: `${origin}${releasePrefix}chunks/Application-1.js`, method: "GET", body: undefined, resourceType: "Script" }),
+    record({ url: `${origin}${releasePrefix}styles/Application.css`, method: "GET", body: undefined, resourceType: "Stylesheet" }),
   ];
+  const releaseOptions = {
+    origin,
+    applicationKey: "telemetry_decom",
+    releaseId,
+    requiredExposedModule: "./Application",
+  };
   assert.equal(
     assertManifestAssetsRequested(manifest, manifestUrl, assets, {
-      origin,
       label: "telemetry manifest",
-      requiredExposedModule: "./Application",
+      ...releaseOptions,
     }).length,
     3,
   );
   assert.doesNotThrow(() => assertManifestAssetsRequested(manifest, manifestUrl, [
     ...assets.slice(0, 2),
     record({
-      url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`,
+      url: `${origin}${releasePrefix}styles/Application.css`,
       method: "GET",
       body: undefined,
       status: 404,
       sequence: 20,
     }),
     record({
-      url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`,
+      url: `${origin}${releasePrefix}styles/Application.css`,
       method: "GET",
       body: undefined,
       status: 200,
       sequence: 21,
     }),
   ], {
-    origin,
     label: "newest duplicate manifest",
-    requiredExposedModule: "./Application",
+    ...releaseOptions,
   }));
   assert.throws(
-    () => assertManifestAssetsRequested(manifest, manifestUrl, assets.slice(0, 2), { origin, label: "missing asset manifest" }),
+    () => assertManifestAssetsRequested(manifest, manifestUrl, assets.slice(0, 2), { ...releaseOptions, label: "missing asset manifest" }),
     /was not successfully requested.*Application\.css/,
   );
   assert.throws(
     () => assertManifestAssetsRequested(manifest, manifestUrl, [
       ...assets.slice(0, 2),
-      record({ url: `${origin}/assets/application-host/telemetry-decom/styles/Application.css`, method: "GET", body: undefined, status: 404 }),
-    ], { origin, label: "404 asset manifest" }),
+      record({ url: `${origin}${releasePrefix}styles/Application.css`, method: "GET", body: undefined, status: 404 }),
+    ], { ...releaseOptions, label: "404 asset manifest" }),
     /was not successfully requested|HTTP 200/,
   );
   assert.throws(
-    () => assertManifestAssetsRequested({ entry: "https://evil.example/remote.js" }, manifestUrl, [], { origin, label: "foreign asset manifest" }),
-    /escaped the expected origin/,
+    () => assertManifestAssetsRequested({ entry: "https://evil.example/remote.js" }, manifestUrl, [], {
+      ...releaseOptions,
+      requiredExposedModule: undefined,
+      label: "foreign asset manifest",
+    }),
+    /escaped the expected origin|escaped its expected release path/,
   );
+
+  for (const invalidUrl of [
+    `${origin}/assets/application-host/telemetry-decom/mf-manifest.json`,
+    `${origin}/releases/comms_overview/${releaseId}/artifacts/mf-manifest.json`,
+    `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/mf-manifest.json`,
+    `${origin}${releasePrefix}remoteEntry.js`,
+  ]) {
+    assert.throws(
+      () => assertReleaseArtifactUrl(invalidUrl, origin, {
+        applicationKey: "telemetry_decom",
+        releaseId,
+        artifactPath: "mf-manifest.json",
+        label: "invalid release manifest",
+      }),
+      /escaped its expected release path|path changed/,
+      `invalid manifest URL was accepted: ${invalidUrl}`,
+    );
+  }
+
+  for (const invalidAsset of [
+    `${origin}/assets/application-host/telemetry-decom/remoteEntry.js`,
+    `${origin}/releases/comms_overview/${releaseId}/artifacts/remoteEntry.js`,
+    `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/remoteEntry.js`,
+  ]) {
+    assert.throws(
+      () => assertManifestAssetsRequested(
+        { entry: new URL(invalidAsset).href },
+        manifestUrl,
+        [],
+        { ...releaseOptions, requiredExposedModule: undefined, label: "invalid release asset" },
+      ),
+      /escaped its expected release path/,
+      `invalid asset URL was accepted: ${invalidAsset}`,
+    );
+  }
 });
 
 test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {

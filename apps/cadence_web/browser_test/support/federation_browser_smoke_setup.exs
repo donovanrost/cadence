@@ -1,15 +1,18 @@
 Code.require_file(Path.join(__DIR__, "dashboard_rendered_viewport_runner.exs"))
+Code.require_file(Path.join(__DIR__, "federation_release_fixture.exs"))
 
 defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
   @moduledoc false
 
   import ExUnit.Assertions
+  import ExUnit.Callbacks
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
   alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner
+  alias CadenceWeb.Assets.FederationReleaseFixture
   alias CadenceWeb.TestFixtures
 
   @publication_paths [
@@ -23,6 +26,22 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     app_root = Path.expand("../..", __DIR__)
     assert_production_publication!(app_root)
 
+    previous_publication_config =
+      Application.get_env(:cadence_web, :frontend_release_publication, :not_configured)
+
+    Application.put_env(
+      :cadence_web,
+      :frontend_release_publication,
+      FederationReleaseFixture.publication_config()
+    )
+
+    on_exit(fn ->
+      case previous_publication_config do
+        :not_configured -> Application.delete_env(:cadence_web, :frontend_release_publication)
+        config -> Application.put_env(:cadence_web, :frontend_release_publication, config)
+      end
+    end)
+
     context = persist_context!()
     # Bandit owns the ephemeral listener before its actual port is returned.
     # The published catalog and manifest URLs are derived from that origin.
@@ -30,6 +49,9 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       DashboardRenderedViewportRunner.start_browser_endpoint_on_ephemeral_port!(sandbox_owner)
 
     base_url = "http://127.0.0.1:#{port}"
+    release_fixture = FederationReleaseFixture.prepare_and_activate!(app_root)
+    on_exit(fn -> FederationReleaseFixture.cleanup!(release_fixture) end)
+    IO.puts("federation release generation activated: #{inspect(release_fixture.release_ids)}")
 
     args = [
       Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),

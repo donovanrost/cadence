@@ -1336,13 +1336,41 @@ export function pathMatches(record, method, pathname, origin) {
   return url.origin === origin && url.pathname === pathname;
 }
 
+export function releaseArtifactPrefix(applicationKey, releaseId) {
+  assert.match(applicationKey || "", /^[a-z][a-z0-9._-]{0,127}$/, "release application key is invalid");
+  assert.match(releaseId || "", /^sha256:[0-9a-f]{64}$/, "release ID is invalid");
+  return `/releases/${applicationKey}/${releaseId}/artifacts/`;
+}
+
+export function assertReleaseArtifactUrl(
+  url,
+  origin,
+  { applicationKey, releaseId, artifactPath, label = "release artifact" } = {},
+) {
+  const parsed = assertHttpUrl(url, origin, `${label} URL`);
+  const prefix = releaseArtifactPrefix(applicationKey, releaseId);
+  assert.equal(parsed.search, "", `${label} URL must not include a query string`);
+  assert.equal(parsed.hash, "", `${label} URL must not include a fragment`);
+  assert.ok(parsed.pathname.startsWith(prefix), `${label} escaped its expected release path`);
+  if (artifactPath !== undefined) {
+    assert.equal(parsed.pathname, `${prefix}${artifactPath}`, `${label} path changed`);
+  }
+  return parsed;
+}
+
 export function assertManifestAssetsRequested(
   manifest,
   manifestUrl,
   records,
-  { origin, label = "remote manifest", requiredExposedModule } = {},
+  { origin, applicationKey, releaseId, label = "remote manifest", requiredExposedModule } = {},
 ) {
-  const manifestLocation = assertHttpUrl(manifestUrl, origin, `${label} URL`);
+  const manifestLocation = assertReleaseArtifactUrl(manifestUrl, origin, {
+    applicationKey,
+    releaseId,
+    artifactPath: "mf-manifest.json",
+    label,
+  });
+  const releasePrefix = releaseArtifactPrefix(applicationKey, releaseId);
   const assetStrings = new Set();
 
   let manifestForBrowser = manifest;
@@ -1368,7 +1396,15 @@ export function assertManifestAssetsRequested(
 
   assert.ok(assetStrings.size > 0, `${label} declared no JavaScript or CSS assets`);
   const assets = [...assetStrings].map((asset) =>
-    assertHttpUrl(new URL(asset, manifestLocation).href, origin, `${label} asset`),
+    assertReleaseArtifactUrl(new URL(asset, manifestLocation).href, origin, {
+      applicationKey,
+      releaseId,
+      label: `${label} asset`,
+    }),
+  );
+  assert.ok(
+    assets.every((asset) => asset.pathname.startsWith(releasePrefix)),
+    `${label} declared an asset outside its release path`,
   );
   for (const asset of assets) {
     const loaded = records
@@ -1658,7 +1694,12 @@ function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expect
   assert.equal(application.surface.version, 1);
   assert.equal(application.release.federation, "module_federation");
   assert.equal(application.release.exposedModule, "./Application");
-  assertHttpUrl(application.release.manifestUrl, expectedOrigin, `${applicationKey} manifest URL`);
+  assertReleaseArtifactUrl(application.release.manifestUrl, expectedOrigin, {
+    applicationKey,
+    releaseId: application.release.releaseId,
+    artifactPath: "mf-manifest.json",
+    label: `${applicationKey} manifest`,
+  });
   return application;
 }
 
@@ -1684,7 +1725,6 @@ async function assertRemoteSurface({
   applicationKey,
   surfaceId,
   expectedScope,
-  remotePath,
   readyExpression,
   queryPath,
   queryId,
@@ -1722,12 +1762,20 @@ async function assertRemoteSurface({
   });
   const catalog = await responseJson(client, catalogRecord, `${applicationKey} catalog`, { signal });
   const application = assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expectedOrigin);
+  const releaseId = application.release.releaseId;
 
-  const manifestUrl = assertHttpUrl(application.release.manifestUrl, expectedOrigin, `${applicationKey} manifest URL`);
+  const manifestUrl = assertReleaseArtifactUrl(application.release.manifestUrl, expectedOrigin, {
+    applicationKey,
+    releaseId,
+    artifactPath: "mf-manifest.json",
+    label: `${applicationKey} manifest`,
+  });
   reportProgress(`${applicationKey} waiting for manifest response`);
   const manifestRecord = await waitForResponse(
     diagnostics,
-    (record) => pathMatches(record, "GET", manifestUrl.pathname, expectedOrigin),
+    (record) =>
+      pathMatches(record, "GET", manifestUrl.pathname, expectedOrigin) &&
+      record.url === manifestUrl.href,
     `${applicationKey} manifest`,
     { generation, signal },
   );
@@ -1738,14 +1786,42 @@ async function assertRemoteSurface({
     pathname: manifestUrl.pathname,
     label: `${applicationKey} manifest`,
   });
+  assertReleaseArtifactUrl(manifestRecord.url, expectedOrigin, {
+    applicationKey,
+    releaseId,
+    artifactPath: "mf-manifest.json",
+    label: `${applicationKey} manifest request`,
+  });
   const manifest = await responseJson(client, manifestRecord, `${applicationKey} manifest`, { signal });
   assert.equal(typeof manifest, "object");
   assertManifestAssetsRequested(manifest, manifestUrl.href, diagnostics.completed(() => true, { generation }), {
     origin: expectedOrigin,
+    applicationKey,
+    releaseId,
     label: `${applicationKey} manifest`,
     requiredExposedModule: application.release.exposedModule,
   });
   reportProgress(`${applicationKey} manifest assets asserted`);
+
+  const staticRemotePrefix =
+    applicationKey === "comms_overview"
+      ? "/assets/application-host/comms-overview/"
+      : "/assets/application-host/telemetry-decom/";
+  const staticFallback = diagnostics.completed(
+    (record) => {
+      try {
+        const requestUrl = new URL(record.url);
+        return (
+          pathMatches(record, "GET", requestUrl.pathname, expectedOrigin) &&
+          requestUrl.pathname.startsWith(staticRemotePrefix)
+        );
+      } catch {
+        return false;
+      }
+    },
+    { generation },
+  ).at(-1);
+  assert.equal(staticFallback, undefined, `${applicationKey} used a static /assets remote fallback`);
 
   const hostRecord = diagnostics.completed(
     (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
@@ -1767,7 +1843,6 @@ async function assertRemoteSurface({
   parseResponseBody(hostBody, "published Phoenix host bundle");
   reportProgress(`${applicationKey} published host bundle body asserted`);
 
-  assert.ok(manifestUrl.pathname.startsWith(remotePath), `${applicationKey} manifest escaped its published remote path`);
   reportProgress(`${applicationKey} waiting for query response`);
   const queryRecord = await waitForResponse(
     diagnostics,
@@ -1846,7 +1921,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     applicationKey: "comms_overview",
     surfaceId: "overview",
     expectedScope: "mission",
-    remotePath: "/assets/application-host/comms-overview/",
     readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
     queryPath: commsQueryPath,
     queryId: "cadence.comms.overview",
@@ -1874,7 +1948,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     applicationKey: "telemetry_decom",
     surfaceId: "packet_bindings",
     expectedScope: "spacecraft",
-    remotePath: "/assets/application-host/telemetry-decom/",
     readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
     queryPath: telemetryQueryPath,
     queryId: "cadence.packet_bindings.manage",
