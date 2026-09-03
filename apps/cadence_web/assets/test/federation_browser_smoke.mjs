@@ -775,22 +775,120 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const webSockets = new Map();
   const webSocketFailures = [];
   const servedFromCacheRequestIds = new Set();
-  const expectedFailurePredicates = [];
+  const expectedFailureRegistrations = [];
+  const pendingNetworkLogs = [];
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
   let activeGeneration;
+  let disposed = false;
   const generations = new Map();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
-  const expectedFailure = (record) =>
-    expectedFailurePredicates.some((predicate) => {
+  const observedResponseStatus = (record) => {
+    const statuses = [record?.response?.status, record?.responseExtra?.statusCode].filter(
+      (status) => Number.isInteger(status),
+    );
+    if (!statuses.length || new Set(statuses).size !== 1) return undefined;
+    return statuses[0];
+  };
+  const expectedFailureRegistrationFor = (record) => {
+    const status = observedResponseStatus(record);
+    if (!Number.isInteger(status)) return undefined;
+    return expectedFailureRegistrations.find((registration) => {
+      if (
+        !registration.active ||
+        registration.expectedStatus !== status ||
+        record.sequence <= registration.registeredAfterSequence ||
+        (registration.requestId && registration.requestId !== record.requestId)
+      ) return false;
       try {
-        return predicate(record);
+        return registration.predicate(record);
       } catch {
         return false;
       }
     });
-
+  };
+  const markExpectedFailure = (record) => {
+    if (record?.expectedFailure === true) {
+      return observedResponseStatus(record) === record.expectedFailureAllowance?.status;
+    }
+    const registration = expectedFailureRegistrationFor(record);
+    if (!registration) return false;
+    registration.requestId = record.requestId;
+    record.expectedFailure = true;
+    record.expectedFailureAllowance = {
+      registration,
+      requestId: record.requestId,
+      url: record.url,
+      status: observedResponseStatus(record),
+      consumed: false,
+    };
+    return true;
+  };
+  const canonicalNetworkResourceStatus = (entry) => {
+    if (
+      entry?.source !== "network" ||
+      entry?.level !== "error" ||
+      typeof entry?.url !== "string" ||
+      typeof entry?.text !== "string"
+    ) return undefined;
+    const match = /^Failed to load resource: the server responded with a status of ([1-5]\d{2}) \([^()\r\n]*\)$/.exec(entry.text);
+    return match ? Number(match[1]) : undefined;
+  };
+  const expectedFailureLogRecords = (entry, status, registrations) =>
+    [...requests.values()].filter((record) => {
+      const allowance = record.expectedFailureAllowance;
+      return (
+        allowance &&
+        allowance.registration.active &&
+        (!registrations || registrations.has(allowance.registration)) &&
+        !allowance.consumed &&
+        allowance.requestId === record.requestId &&
+        allowance.url === entry.url &&
+        record.url === entry.url &&
+        record.method !== "?" &&
+        record.expectedFailure === true &&
+        observedResponseStatus(record) === status &&
+        (entry.networkRequestId === undefined || entry.networkRequestId === record.requestId)
+      );
+    });
+  const consumeExpectedFailureLog = (entry, status, registrations) => {
+    const candidates = expectedFailureLogRecords(entry, status, registrations);
+    if (candidates.length !== 1) return false;
+    candidates[0].expectedFailureAllowance.consumed = true;
+    return true;
+  };
+  const knownResponseForLog = (entry, status) =>
+    [...requests.values()].some(
+      (record) =>
+        record.method !== "?" &&
+        record.url === entry.url &&
+        observedResponseStatus(record) === status,
+    );
+  const logError = (entry) => {
+    logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+  };
+  const reconcilePendingNetworkLogs = () => {
+    const remaining = [];
+    for (const pending of pendingNetworkLogs) {
+      if (consumeExpectedFailureLog(pending.entry, pending.status, pending.registrations)) continue;
+      if (
+        disposed ||
+        ![...pending.registrations].some((registration) => registration.active) ||
+        knownResponseForLog(pending.entry, pending.status)
+      ) {
+        logError(pending.entry);
+      } else {
+        remaining.push(pending);
+      }
+    }
+    pendingNetworkLogs.length = 0;
+    pendingNetworkLogs.push(...remaining);
+  };
+  const flushPendingNetworkLogs = () => {
+    for (const pending of pendingNetworkLogs) logError(pending.entry);
+    pendingNetworkLogs.length = 0;
+  };
   const beginRequestGeneration = (label = "request generation") => {
     const generation = {
       id: ++nextGeneration,
@@ -857,6 +955,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       dataUrl: isDataUrl(request.url),
     };
     requests.set(requestId, record);
+    markExpectedFailure(record);
+    reconcilePendingNetworkLogs();
     const socket = webSockets.get(requestId);
     const sameObservedGeneration =
       socket?.observedGeneration !== undefined && socket.observedGeneration === record.generation;
@@ -897,21 +997,23 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     record.resourceType = type || record.resourceType;
     if (type === "WebSocket") record.webSocket = true;
     requests.set(requestId, record);
+    const expected = markExpectedFailure(record);
     if (
       response.status >= 400 &&
       !record.dataUrl &&
       !isIgnoredFavicon(record, expectedOrigin) &&
-      !expectedFailure(record)
+      !expected
     ) {
       requestFailures.push(`${response.status} ${record.method} ${response.url}`);
     }
-    if (expectedFailure(record)) record.expectedFailure = true;
+    reconcilePendingNetworkLogs();
   });
 
   on("Network.requestWillBeSentExtraInfo", ({ requestId, headers, associatedCookies }) => {
     const record = requests.get(requestId);
     if (record) {
       record.requestExtra = { headers, associatedCookies };
+      reconcilePendingNetworkLogs();
       return;
     }
 
@@ -936,6 +1038,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const record = requests.get(requestId);
     if (record) {
       record.responseExtra = { statusCode, headers, blockedCookies };
+      markExpectedFailure(record);
+      reconcilePendingNetworkLogs();
       return;
     }
 
@@ -954,6 +1058,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       failed: undefined,
       dataUrl: false,
     });
+    markExpectedFailure(requests.get(requestId));
+    reconcilePendingNetworkLogs();
   });
 
   on("Network.requestServedFromCache", ({ requestId }) => {
@@ -975,11 +1081,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       errorText === "net::ERR_ABORTED" &&
       record?.finished === false &&
       record?.responseExtra?.statusCode === 304;
+    const expected = record?.expectedFailure === true || markExpectedFailure(record);
     if (
       !expectedConditional304Cancellation &&
       !record?.dataUrl &&
       !isIgnoredFavicon(record, expectedOrigin) &&
-      !expectedFailure(record)
+      !expected
     ) {
       requestFailures.push(`${record?.method || "?"} ${record?.url || requestId}: ${detail}`);
     }
@@ -1082,11 +1189,19 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const matchingFavicon = entry.url && [...requests.values()].some(
         (record) => record.url === entry.url && isIgnoredFavicon(record, expectedOrigin),
       );
-      const matchingExpectedFailure = entry.url && [...requests.values()].some(
-        (record) => record.url === entry.url && expectedFailure(record),
-      );
-      if (!matchingFavicon && !matchingExpectedFailure) {
-        logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+      if (matchingFavicon) return;
+      const status = canonicalNetworkResourceStatus(entry);
+      if (status === undefined || entry.level !== "error") {
+        logError(entry);
+        return;
+      }
+      const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
+      if (!registrations.size || !consumeExpectedFailureLog(entry, status, registrations)) {
+        if (!registrations.size || knownResponseForLog(entry, status)) {
+          logError(entry);
+        } else {
+          pendingNetworkLogs.push({ entry, status, registrations });
+        }
       }
     }
   });
@@ -1126,11 +1241,23 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     beginRequestGeneration,
     bindRequestGeneration,
     requestForGeneration,
-    allowExpectedFailure(predicate) {
-      expectedFailurePredicates.push(predicate);
+    allowExpectedFailure(predicate, { status = 403 } = {}) {
+      assert.equal(typeof predicate, "function", "expected failure predicate must be a function");
+      assert.equal(Number.isInteger(status), true, "expected failure status must be an integer");
+      const registration = {
+        predicate,
+        expectedStatus: status,
+        registeredAfterSequence: sequence,
+        requestId: undefined,
+        active: true,
+      };
+      expectedFailureRegistrations.push(registration);
       return () => {
-        const index = expectedFailurePredicates.indexOf(predicate);
-        if (index >= 0) expectedFailurePredicates.splice(index, 1);
+        if (!registration.active) return;
+        registration.active = false;
+        const index = expectedFailureRegistrations.indexOf(registration);
+        if (index >= 0) expectedFailureRegistrations.splice(index, 1);
+        reconcilePendingNetworkLogs();
       };
     },
     async waitForRequest(generation, predicate, label, { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {}) {
@@ -1165,9 +1292,15 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       await sleep(milliseconds, signal);
     },
     dispose() {
+      disposed = true;
+      for (const registration of expectedFailureRegistrations) registration.active = false;
+      reconcilePendingNetworkLogs();
+      flushPendingNetworkLogs();
       while (subscriptions.length) subscriptions.pop()?.();
     },
     assertClean(stage) {
+      reconcilePendingNetworkLogs();
+      flushPendingNetworkLogs();
       const failure = describeFailures(stage);
       if (failure) throw new Error(redactText(failure, secrets));
     },
