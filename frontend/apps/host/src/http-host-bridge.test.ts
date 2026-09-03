@@ -283,6 +283,63 @@ describe("the HTTP host bridge", () => {
     ).rejects.toMatchObject({ status: 403, code: "forbidden" } satisfies Partial<HostBridgeError>);
   });
 
+  it("rejects malformed and empty successful query responses with sanitized operation errors", async () => {
+    for (const body of ["not-json", ""]) {
+      const fetcher = vi.fn(async () => new Response(body, { status: 200 }));
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as typeof fetch,
+      });
+
+      const error = await bridge.query(queryRequest()).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 200, code: "invalid_response" });
+      expect((error as HostBridgeError).message).toContain("host query response");
+      if (body.length > 0) expect((error as HostBridgeError).message).not.toContain(body);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rejects malformed and empty successful action responses with sanitized operation errors", async () => {
+    for (const body of ["not-json", ""]) {
+      const fetcher = vi.fn(async () => new Response(body, { status: 201 }));
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as typeof fetch,
+      });
+
+      const error = await bridge
+        .execute(actionRequest("invalid-response-action"))
+        .catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 201, code: "invalid_response" });
+      expect((error as HostBridgeError).message).toContain("host action response");
+      if (body.length > 0) expect((error as HostBridgeError).message).not.toContain(body);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("preserves non-success status for malformed query and action error responses", async () => {
+    const rawErrorBody = "SECRET-RAW-MALFORMED-HOST-ERROR";
+    const fetcher = vi.fn(async () => new Response(rawErrorBody, { status: 502 }));
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    for (const operation of ["query", "action"] as const) {
+      const error =
+        operation === "query"
+          ? await bridge.query(queryRequest()).catch((reason: unknown) => reason)
+          : await bridge
+              .execute(actionRequest("malformed-error-action"))
+              .catch((reason: unknown) => reason);
+
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 502, code: "host_request_failed" });
+      expect((error as HostBridgeError).message).not.toContain(rawErrorBody);
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("stops a rejected action without replaying it and reports a sanitized reference", async () => {
     const fetcher = vi.fn(async () =>
       Response.json(
@@ -384,6 +441,34 @@ describe("the HTTP host bridge", () => {
     jsonResult.resolve({ queryVersion: 1 });
     await flushMicrotasks();
     expect(activity.map(({ status }) => status)).toEqual(["started"]);
+  });
+
+  it("does not retain post-invalidation subscribers and makes lifecycle cleanup idempotent", async () => {
+    const fetchResult = deferred<Response>();
+    const fetcher = vi.fn(() => fetchResult.promise);
+    const activity = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+    const unsubscribeBeforeInvalidation = bridge.subscribe(activity);
+    const pending = bridge.query(queryRequest());
+    await flushMicrotasks();
+
+    bridge.invalidate();
+    unsubscribeBeforeInvalidation();
+    unsubscribeBeforeInvalidation();
+
+    const postInvalidationListener = vi.fn();
+    const unsubscribeAfterInvalidation = bridge.subscribe(postInvalidationListener);
+    unsubscribeAfterInvalidation();
+    unsubscribeAfterInvalidation();
+    bridge.invalidate();
+
+    fetchResult.resolve(Response.json({ queryVersion: 1 }));
+    await expect(pending).rejects.toMatchObject({ code: "stale_context" });
+    await flushMicrotasks();
+    expect(activity).toHaveBeenCalledTimes(1);
+    expect(postInvalidationListener).not.toHaveBeenCalled();
   });
 
   it("maps a fetch deadline to request_timed_out without session recovery", async () => {

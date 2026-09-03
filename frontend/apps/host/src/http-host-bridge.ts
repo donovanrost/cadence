@@ -86,6 +86,7 @@ export function createHttpHostBridge(
   }
 
   async function request<TResult>(
+    operation: HostActivityEvent["kind"],
     path: string,
     body: unknown,
     idempotencyKey?: string,
@@ -142,6 +143,7 @@ export function createHttpHostBridge(
       } catch (error) {
         if (!active) throw staleContextError();
         if (isRequestControlError(error)) throw error;
+        if (response.ok) throw invalidResponseFor(response.status, operation);
         payload = undefined;
       }
 
@@ -163,7 +165,7 @@ export function createHttpHostBridge(
 
       try {
         return await withActivity("query", query.queryId, () =>
-          request<TResult>("query", {
+          request<TResult>("query", "query", {
             applicationKey: application.applicationKey,
             applicationVersion: application.applicationVersion,
             surfaceId: application.surface.surfaceId,
@@ -193,6 +195,7 @@ export function createHttpHostBridge(
       try {
         return await withActivity("action", action.actionId, () =>
           request<HostActionReceipt<TResult>>(
+            "action",
             "actions",
             {
               applicationKey: application.applicationKey,
@@ -213,8 +216,16 @@ export function createHttpHostBridge(
     },
 
     subscribe(listener: HostActivityListener): () => void {
+      if (!active) return () => undefined;
+
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      let subscribed = true;
+
+      return () => {
+        if (!subscribed) return;
+        subscribed = false;
+        listeners.delete(listener);
+      };
     },
 
     invalidate(): void {
@@ -344,6 +355,14 @@ function assertSelectedAction<TInput>(
 function problemFor(status: number, payload: unknown): HostBridgeError {
   const code = validProblem(payload) ? payload.code : "host_request_failed";
   return new HostBridgeError(status, code, stableProblemMessage(status, code));
+}
+
+function invalidResponseFor(status: number, operation: HostActivityEvent["kind"]): HostBridgeError {
+  return new HostBridgeError(
+    status,
+    "invalid_response",
+    `The host ${operation} response was not valid JSON.`,
+  );
 }
 
 export function isHostSessionFailure(reason: unknown): boolean {
