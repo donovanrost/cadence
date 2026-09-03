@@ -130,9 +130,19 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
              |> post(@path, request_body(release_document, bytes_by_path))
              |> json_response(201)
 
-    published_at = "2026-08-31T18:00:00Z"
-    snapshot_digest = route_snapshot_digest("initial", 1, published_at, release, nil)
-    catalog = promotion_document("initial", 1, published_at, release, nil, snapshot_digest)
+    {published_at, expires_at} = publication_window()
+    snapshot_digest = route_snapshot_digest("initial", 1, published_at, expires_at, release, nil)
+
+    catalog =
+      promotion_document(
+        "initial",
+        1,
+        published_at,
+        expires_at,
+        release,
+        nil,
+        snapshot_digest
+      )
 
     response =
       conn
@@ -202,11 +212,14 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
              |> post(@path, request_body(release_document, bytes_by_path))
              |> json_response(201)
 
+    {published_at, expires_at} = publication_window()
+
     catalog =
       promotion_document(
         "initial",
         2,
-        "2026-08-31T18:00:00Z",
+        published_at,
+        expires_at,
         release,
         nil,
         sha256("not-the-persisted-snapshot")
@@ -678,14 +691,22 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
 
   defp promotion_body(document), do: Jason.encode!(%{"document" => document})
 
-  defp promotion_document(transition, sequence, published_at, current, fallback, snapshot_digest) do
+  defp promotion_document(
+         transition,
+         sequence,
+         published_at,
+         expires_at,
+         current,
+         fallback,
+         snapshot_digest
+       ) do
     entry = %{"identity" => identity(current), "current" => release_envelope(current)}
     entry = if fallback, do: Map.put(entry, "fallback", release_envelope(fallback)), else: entry
 
     payload =
       canonical(%{
         "entries" => [entry],
-        "expiresAt" => "2026-09-02T18:00:00Z",
+        "expiresAt" => expires_at,
         "identityCount" => 1,
         "publishedAt" => published_at,
         "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
@@ -699,7 +720,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     |> canonical()
   end
 
-  defp route_snapshot_digest(transition, sequence, published_at, current, previous) do
+  defp route_snapshot_digest(transition, sequence, published_at, expires_at, current, previous) do
     snapshot = %{
       "entries" => [
         %{
@@ -708,7 +729,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
           "previous" => if(previous, do: route_snapshot_release(previous), else: nil)
         }
       ],
-      "expiresAt" => "2026-09-02T18:00:00.000000Z",
+      "expiresAt" => normalize_datetime(expires_at),
       "identityCount" => 1,
       "publishedAt" => normalize_datetime(published_at),
       "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",
@@ -717,6 +738,14 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     }
 
     sha256(canonical(snapshot))
+  end
+
+  defp publication_window do
+    now = DateTime.utc_now()
+    published_at = now |> DateTime.add(-1, :second) |> DateTime.truncate(:millisecond)
+    expires_at = now |> DateTime.add(7 * 24 * 60 * 60, :second) |> DateTime.truncate(:millisecond)
+
+    {DateTime.to_iso8601(published_at), DateTime.to_iso8601(expires_at)}
   end
 
   defp route_snapshot_release(release) do

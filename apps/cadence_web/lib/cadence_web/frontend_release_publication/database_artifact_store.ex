@@ -100,6 +100,7 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
          :ok <- verify_existing_final(status, digest, expected_size),
          :ok <- validate_staged_chunk_topology(sha256, stage_size),
          :ok <- copy_staged_chunks(sha256, stage_size, status),
+         :ok <- verify_final_object(digest, expected_size),
          :ok <- delete_stage(sha256) do
       stored_object(digest, expected_size, status)
     else
@@ -381,7 +382,30 @@ defmodule CadenceWeb.FrontendReleasePublication.DatabaseArtifactStore do
   defp verify_existing_final(:stored, _digest, _size), do: :ok
 
   defp verify_existing_final(:existing, digest, size),
-    do: verify(digest, size)
+    do: verify_final_object(digest, size)
+
+  defp verify_final_object(digest, size) do
+    with {:ok, sha256} <- parse_digest(digest),
+         :ok <- lock_final_object(sha256) do
+      verify(digest, size)
+    end
+  end
+
+  # The stage parent lock does not protect an already-existing final object's
+  # child rows. The final child FK takes a PostgreSQL FOR KEY SHARE lock on the
+  # parent during an insert, so this FOR UPDATE lock blocks a concurrent suffix
+  # insert until this transaction has verified the immutable final topology.
+  defp lock_final_object(sha256) do
+    case Repo.query(
+           "SELECT sha256 FROM frontend_release_objects WHERE sha256 = $1 FOR UPDATE",
+           [sha256]
+         ) do
+      {:ok, %{rows: [[_sha256]]}} -> :ok
+      {:ok, %{rows: []}} -> {:error, :artifact_not_found}
+      {:ok, _result} -> {:error, :invalid_object_metadata}
+      {:error, reason} -> {:error, {:object_metadata, reason}}
+    end
+  end
 
   defp copy_staged_chunks(_sha256, _size, :existing), do: :ok
 
