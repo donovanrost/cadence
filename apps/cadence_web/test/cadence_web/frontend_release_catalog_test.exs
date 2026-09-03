@@ -290,10 +290,15 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
       |> with_release_id()
 
     duplicate_remote =
-      catalog_payload(
-        [catalog_entry(release, nil), catalog_entry(second, nil)],
-        22,
-        "2026-08-30T19:00:00Z"
+      second
+      |> Map.put("exposedModule", "./Failure")
+      |> with_release_id()
+      |> then(
+        &catalog_payload(
+          [catalog_entry(release, nil), catalog_entry(&1, nil)],
+          22,
+          "2026-08-30T19:00:00Z"
+        )
       )
 
     assert {:error, %{code: :duplicate_remote_or_exposed_module}} =
@@ -303,7 +308,7 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
                @opts
              )
 
-    duplicate_exposed =
+    distinct_remote_shared_exposure =
       second
       |> Map.put("remoteName", "cadence_telemetry_other")
       |> with_release_id()
@@ -311,16 +316,22 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
         &catalog_payload(
           [catalog_entry(release, nil), catalog_entry(&1, nil)],
           23,
-          "2026-08-30T19:00:00Z"
+          "2026-08-30T18:00:00Z"
         )
       )
 
-    assert {:error, %{code: :duplicate_remote_or_exposed_module}} =
+    assert {:ok, %{entries: entries}} =
              FrontendReleaseCatalog.verify_catalog(
-               catalog_envelope(duplicate_exposed),
+               catalog_envelope(distinct_remote_shared_exposure),
                @corpus["keys"],
                @opts
              )
+
+    assert Enum.map(entries, &{&1.current["remoteName"], &1.current["exposedModule"]}) ==
+             [
+               {"cadence_telemetry_decom", "./Application"},
+               {"cadence_telemetry_other", "./Application"}
+             ]
   end
 
   test "canonical JSON, array order, paths, URLs, compatibility, and key trust are closed-world" do

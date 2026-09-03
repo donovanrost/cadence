@@ -966,14 +966,15 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
            {:ok, exposed} <-
              unique_named(
                exposed,
-               verified.exposed_module,
+               {verified.remote_name, verified.exposed_module},
                verified.identity,
                item_path <> ".current.exposedModule"
              ),
            {:ok, exposed} <-
              optional_unique_name(
                exposed,
-               verified.fallback && verified.fallback["exposedModule"],
+               verified.fallback &&
+                 {verified.fallback["remoteName"], verified.fallback["exposedModule"]},
                verified.identity,
                item_path <> ".fallback.exposedModule"
              ) do
@@ -1258,7 +1259,7 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
       &validate_state_entry(&1, &2, origins, published_at)
     )
     |> case do
-      {:ok, _previous_identity, _ids, _release_ids, _remotes, _exposed} -> :ok
+      {:ok, _previous_identity, _ids, _release_ids, _remotes, _exposures} -> :ok
       failure -> failure
     end
   end
@@ -1275,7 +1276,7 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
 
   defp validate_state_entry(
          {entry, index},
-         {:ok, previous_identity, ids, release_ids, remotes, exposed},
+         {:ok, previous_identity, ids, release_ids, remotes, exposures},
          origins,
          published_at
        ) do
@@ -1353,23 +1354,23 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
                identity,
                "$.acceptedState.entries[#{index}].fallback.remoteName"
              ),
-           {:ok, exposed} <-
+           {:ok, exposures} <-
              unique_named(
-               exposed,
-               current["exposedModule"],
+               exposures,
+               {current["remoteName"], current["exposedModule"]},
                identity,
                "$.acceptedState.entries[#{index}].current.exposedModule"
              ),
-           {:ok, exposed} <-
+           {:ok, exposures} <-
              optional_unique_name(
-               exposed,
-               fallback && fallback["exposedModule"],
+               exposures,
+               fallback && {fallback["remoteName"], fallback["exposedModule"]},
                identity,
                "$.acceptedState.entries[#{index}].fallback.exposedModule"
              ) do
         {:cont,
          {:ok, identity_key(identity), MapSet.put(ids, identity_key(identity)), release_ids,
-          remotes, exposed}}
+          remotes, exposures}}
       else
         failure -> {:halt, failure}
       end

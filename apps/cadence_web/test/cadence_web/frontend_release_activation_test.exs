@@ -122,6 +122,95 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              """).rows
   end
 
+  test "two signed remotes sharing Application survive initial activation and promotion" do
+    {_document, _payload, initial_comms} =
+      admit_release!(
+        @artifact_bytes,
+        "activation-two-remotes-initial-comms",
+        application: %{"id" => "comms_overview", "version" => 1},
+        package: %{"id" => "cadence.comms_overview", "version" => 1},
+        surface: %{"id" => "overview", "version" => 1},
+        remote_name: "cadence_comms_overview"
+      )
+
+    {_document, _payload, initial_telemetry} =
+      admit_release!(@artifact_bytes, "activation-two-remotes-initial-telemetry")
+
+    initial_pairs = [{initial_comms, nil}, {initial_telemetry, nil}]
+
+    initial_digest =
+      snapshot_digest_for_entries(
+        "initial",
+        1,
+        "2026-09-01T18:00:00Z",
+        initial_pairs
+      )
+
+    initial_catalog =
+      v2_document_for_entries(
+        "initial",
+        1,
+        "2026-09-01T18:00:00Z",
+        initial_pairs,
+        initial_digest
+      )
+
+    assert {:ok, %{status: 201, outcome: "initial"}} =
+             activate(initial_catalog, "two-remotes-initial-key")
+
+    {_document, _payload, promoted_comms} =
+      admit_release!(
+        @artifact_bytes,
+        "activation-two-remotes-promoted-comms",
+        application: %{"id" => "comms_overview", "version" => 1},
+        package: %{"id" => "cadence.comms_overview", "version" => 1},
+        surface: %{"id" => "overview", "version" => 1},
+        remote_name: "cadence_comms_overview"
+      )
+
+    {_document, _payload, promoted_telemetry} =
+      admit_release!(@artifact_bytes, "activation-two-remotes-promoted-telemetry")
+
+    promoted_pairs = [
+      {promoted_comms, initial_comms},
+      {promoted_telemetry, initial_telemetry}
+    ]
+
+    promoted_digest =
+      snapshot_digest_for_entries(
+        "promotion",
+        2,
+        "2026-09-01T18:30:00Z",
+        promoted_pairs
+      )
+
+    promoted_catalog =
+      v2_document_for_entries(
+        "promotion",
+        2,
+        "2026-09-01T18:30:00Z",
+        promoted_pairs,
+        promoted_digest
+      )
+
+    assert {:ok, %{status: 201, outcome: "promotion"}} =
+             activate(promoted_catalog, "two-remotes-promotion-key")
+
+    assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 2
+    assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 4
+
+    assert {:ok, %{source: :database, entries: entries}} = ApplicationReleaseRegistry.snapshot()
+
+    assert Enum.map(entries, fn {key, release} ->
+             {key, release.remote_name, release.exposed_module, release.release_id}
+           end) == [
+             {{"comms_overview", 1, "overview", 1}, "cadence_comms_overview", "./Application",
+              promoted_comms["releaseId"]},
+             {{"telemetry_decom", 1, "packet_bindings", 1}, "cadence_telemetry_decom",
+              "./Application", promoted_telemetry["releaseId"]}
+           ]
+  end
+
   test "chunk-backed staged publication activates after bounded content verification" do
     bytes_by_path = chunked_artifact_bytes()
     {document, _payload, release} = release_document(bytes_by_path, "activation-chunk-backed")
@@ -1671,6 +1760,35 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     |> canonical()
   end
 
+  defp v2_document_for_entries(
+         transition,
+         sequence,
+         published_at,
+         release_pairs,
+         snapshot_digest
+       ) do
+    entries =
+      Enum.map(release_pairs, fn {current, previous} ->
+        entry = %{"identity" => identity(current), "current" => release_envelope(current)}
+        if previous, do: Map.put(entry, "fallback", release_envelope(previous)), else: entry
+      end)
+
+    payload =
+      canonical(%{
+        "entries" => entries,
+        "expiresAt" => "2026-09-02T18:00:00Z",
+        "identityCount" => length(entries),
+        "publishedAt" => published_at,
+        "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
+        "sequence" => sequence,
+        "snapshotDigest" => snapshot_digest,
+        "transition" => transition
+      })
+
+    sign_fixture(payload, "fixture-promotion-key", "promotion", @promotion_seed)
+    |> canonical()
+  end
+
   defp snapshot_digest(transition, sequence, published_at, current, previous) do
     snapshot = %{
       "entries" => [
@@ -1682,6 +1800,27 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       ],
       "expiresAt" => "2026-09-02T18:00:00.000000Z",
       "identityCount" => 1,
+      "publishedAt" => normalize_timestamp(published_at),
+      "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",
+      "sequence" => sequence,
+      "transition" => transition
+    }
+
+    sha256(canonical(snapshot))
+  end
+
+  defp snapshot_digest_for_entries(transition, sequence, published_at, release_pairs) do
+    snapshot = %{
+      "entries" =>
+        Enum.map(release_pairs, fn {current, previous} ->
+          %{
+            "current" => snapshot_release(current),
+            "identity" => identity(current),
+            "previous" => if(previous, do: snapshot_release(previous), else: nil)
+          }
+        end),
+      "expiresAt" => "2026-09-02T18:00:00.000000Z",
+      "identityCount" => length(release_pairs),
       "publishedAt" => normalize_timestamp(published_at),
       "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",
       "sequence" => sequence,
@@ -1777,12 +1916,18 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   end
 
   defp apply_release_options(release, opts) do
-    Enum.reduce([:application, :package, :surface], release, fn key, release ->
-      case Keyword.fetch(opts, key) do
-        {:ok, value} -> Map.put(release, Atom.to_string(key), value)
-        :error -> release
-      end
-    end)
+    release =
+      Enum.reduce([:application, :package, :surface], release, fn key, release ->
+        case Keyword.fetch(opts, key) do
+          {:ok, value} -> Map.put(release, Atom.to_string(key), value)
+          :error -> release
+        end
+      end)
+
+    case Keyword.fetch(opts, :remote_name) do
+      {:ok, value} -> Map.put(release, "remoteName", value)
+      :error -> release
+    end
   end
 
   defp catalog_path(mission_id),

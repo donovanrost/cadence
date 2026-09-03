@@ -257,29 +257,28 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
       entries,
       {:ok, MapSet.new(), MapSet.new(), MapSet.new(), MapSet.new(), []},
       fn
-        entry, {:ok, identities, release_ids, remote_names, exposed_modules, acc} ->
+        entry, {:ok, identities, release_ids, remote_names, exposures, acc} ->
           with {:ok, normalized} <- normalize_catalog_entry(entry),
                identity_key <- identity_key(normalized.identity),
                release_values <- release_values(normalized),
                remote_values <- remote_values(normalized),
-               exposed_values <- exposed_values(normalized),
+               exposure_values <- exposure_values(normalized),
                false <- MapSet.member?(identities, identity_key),
                false <- Enum.any?(release_values, &MapSet.member?(release_ids, &1)),
                false <- Enum.any?(remote_values, &MapSet.member?(remote_names, &1)),
-               false <- Enum.any?(exposed_values, &MapSet.member?(exposed_modules, &1)) do
+               false <- Enum.any?(exposure_values, &MapSet.member?(exposures, &1)) do
             {:cont,
              {:ok, MapSet.put(identities, identity_key),
               Enum.reduce(release_values, release_ids, &MapSet.put(&2, &1)),
               Enum.reduce(remote_values, remote_names, &MapSet.put(&2, &1)),
-              Enum.reduce(exposed_values, exposed_modules, &MapSet.put(&2, &1)),
-              [normalized | acc]}}
+              Enum.reduce(exposure_values, exposures, &MapSet.put(&2, &1)), [normalized | acc]}}
           else
             _ -> {:halt, {:error, :invalid_accepted_catalog_entry}}
           end
       end
     )
     |> case do
-      {:ok, _identities, _release_ids, _remote_names, _exposed_modules, entries} ->
+      {:ok, _identities, _release_ids, _remote_names, _exposures, entries} ->
         {:ok, Enum.sort_by(entries, &identity_key(&1.identity))}
 
       failure ->
@@ -442,8 +441,14 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   defp remote_values(%{current: current, fallback: fallback}),
     do: [current["remoteName"] | if(fallback, do: [fallback["remoteName"]], else: [])]
 
-  defp exposed_values(%{current: current, fallback: fallback}),
-    do: [current["exposedModule"] | if(fallback, do: [fallback["exposedModule"]], else: [])]
+  defp exposure_values(%{current: current, fallback: fallback}),
+    do: [
+      {current["remoteName"], current["exposedModule"]}
+      | if(fallback,
+          do: [{fallback["remoteName"], fallback["exposedModule"]}],
+          else: []
+        )
+    ]
 
   defp valid_release_state?(release) when is_map(release) do
     valid_release_shape?(release) and
