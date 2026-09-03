@@ -9,7 +9,11 @@ import * as Vue from "vue";
 import type { Component } from "vue";
 
 export interface FederatedRuntime {
-  load(application: CatalogApplication): Promise<unknown>;
+  load(application: CatalogApplication, options?: FederatedRuntimeLoadOptions): Promise<unknown>;
+}
+
+export interface FederatedRuntimeLoadOptions {
+  signal?: AbortSignal;
 }
 
 export interface ReleaseAwareModuleFederationClient {
@@ -40,6 +44,8 @@ type RuntimeFamily = {
 };
 
 type ReleaseAwareClientFactory = (runtimeIdentity: string) => ReleaseAwareModuleFederationClient;
+
+export const FEDERATED_LOAD_TIMEOUT_MS = 15_000;
 
 function canonicalManifestUrl(manifestUrl: string): string {
   return new URL(manifestUrl).href;
@@ -97,7 +103,8 @@ export function createReleaseAwareRuntime(
   };
 
   return {
-    load(application) {
+    load(application, { signal } = {}) {
+      assertNotAborted(signal);
       const familyKey = runtimeFamilyIdentity(application);
       const identity = runtimeIdentity(application);
       const family = runtimeFamilies.get(familyKey) || {};
@@ -126,7 +133,11 @@ export function createReleaseAwareRuntime(
 
       runtimeFamilies.set(familyKey, family);
       const exposedModule = application.release.exposedModule.replace(/^\.\//, "");
-      return slot.client.loadRemote(`${application.release.remoteName}/${exposedModule}`);
+      const load = slot.client.loadRemote(`${application.release.remoteName}/${exposedModule}`);
+      return load.then((remote) => {
+        assertNotAborted(signal);
+        return remote;
+      });
     },
   };
 }
@@ -147,15 +158,33 @@ const federationRuntimeAdapters: Partial<Record<FederationTransport, FederatedRu
 export async function loadFederatedApplication(
   application: CatalogApplication,
   runtime?: FederatedRuntime,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<FederatedApplicationModule<Component>> {
   let remote: unknown;
+  const timeoutMs = options.timeoutMs ?? FEDERATED_LOAD_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("The federated application load timeout must be positive.");
+  }
+
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  if (options.signal?.aborted) onAbort();
 
   try {
-    remote = await (runtime ?? runtimeFor(application)).load(application);
+    assertNotAborted(controller.signal);
+    const load = (runtime ?? runtimeFor(application)).load(application, {
+      signal: controller.signal,
+    });
+    remote = await withLoadDeadline(load, timeoutMs, controller);
+    assertNotAborted(controller.signal);
   } catch (cause) {
     throw new Error(`Approved release ${application.release.releaseId} could not be loaded.`, {
       cause,
     });
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+    controller.abort(new Error("Federated application load settled."));
   }
 
   assertReleaseMatchesModule(application, remote);
@@ -171,4 +200,50 @@ function runtimeFor(application: CatalogApplication): FederatedRuntime {
     );
   }
   return runtime;
+}
+
+function withLoadDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  controller: AbortController,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      controller.abort(new Error("Federated application load timed out."));
+      finishReject(new Error("Federated application load timed out."));
+    }, timeoutMs);
+
+    const finishResolve = (value: T): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+
+    const finishReject = (reason: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
+      reject(reason);
+    };
+
+    const onAbort = (): void => {
+      finishReject(controller.signal.reason ?? new Error("Federated application load cancelled."));
+    };
+
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(
+      finishResolve,
+      finishReject,
+    );
+  });
+}
+
+function assertNotAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new Error("Federated application load cancelled.");
+  }
 }

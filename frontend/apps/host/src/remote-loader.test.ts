@@ -120,7 +120,7 @@ describe("the generic federated application loader", () => {
 
     await loadFederatedApplication(application, runtime);
 
-    expect(load).toHaveBeenCalledWith(application);
+    expect(load).toHaveBeenCalledWith(application, { signal: expect.any(AbortSignal) });
   });
 
   it("rejects a remote that claims a different application version", async () => {
@@ -146,6 +146,27 @@ describe("the generic federated application loader", () => {
     await expect(loadFederatedApplication(application, runtime)).rejects.toThrow(
       "Approved release 2026.08.22.1 could not be loaded.",
     );
+  });
+
+  it("bounds a late runtime result and never returns it after the deadline", async () => {
+    let resolveLoad: ((value: unknown) => void) | undefined;
+    const runtime: FederatedRuntime = {
+      load: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveLoad = resolve;
+          }),
+      ),
+    };
+
+    const pending = loadFederatedApplication(application, runtime, { timeoutMs: 10 });
+    await expect(pending).rejects.toThrow(
+      "Approved release 2026.08.22.1 could not be loaded.",
+    );
+
+    resolveLoad?.({ manifest, default: { name: "LateRemote" } });
+    await Promise.resolve();
+    expect(runtime.load).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when a catalog release uses an unregistered transport", async () => {

@@ -181,13 +181,16 @@ describe("the HTTP host bridge", () => {
       fetch: fetcher as typeof fetch,
     });
 
-    await bridge.execute({
+    const action = {
       applicationKey: "telemetry_decom",
       applicationVersion: 1,
       actionId: "save_packet_bindings",
       input: { expectedConfigurationVersion: 7, selectedApids: [100] },
       context,
-    });
+      idempotencyKey: "logical-action-retry-1",
+    };
+    await bridge.execute(action);
+    await bridge.execute(action);
 
     const request = fetcher.mock.calls[0]?.[1];
     const serializedBody = request?.body;
@@ -208,7 +211,13 @@ describe("the HTTP host bridge", () => {
     const headers = new Headers(request?.headers);
     expect(headers.get("x-cadence-poc-session")).toBe("session-1");
     expect(headers.get("x-csrf-token")).toBe("csrf-1");
-    expect(headers.get("idempotency-key")).toBeTruthy();
+    expect(headers.get("idempotency-key")).toBe("logical-action-retry-1");
+    const secondRequest = (
+      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
+    )[1]?.[1];
+    expect(new Headers(secondRequest?.headers).get("idempotency-key")).toBe(
+      "logical-action-retry-1",
+    );
     expect(request?.credentials).toBe("same-origin");
   });
 
@@ -236,6 +245,49 @@ describe("the HTTP host bridge", () => {
         context,
       }),
     ).rejects.toMatchObject({ status: 403, code: "forbidden" } satisfies Partial<HostBridgeError>);
+  });
+
+  it("stops a rejected action without replaying it and reports a sanitized reference", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          schema: "cadence.application-host-problem.v1",
+          code: "invalid_csrf",
+          message: "SECRET-RAW-CSRF-DETAIL",
+        },
+        { status: 403 },
+      ),
+    );
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+
+    const action = {
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      actionId: "save_packet_bindings",
+      input: { expectedConfigurationVersion: 7, selectedApids: [100] },
+      context,
+      idempotencyKey: "logical-action-retry-2",
+    };
+
+    await expect(bridge.execute(action)).rejects.toMatchObject({
+      status: 403,
+      code: "invalid_csrf",
+      message: expect.stringContaining("The action was stopped because its security token was rejected."),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const sentRequest = (
+      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
+    )[0]?.[1];
+    expect(JSON.stringify(sentRequest)).not.toContain("SECRET-RAW-CSRF-DETAIL");
+    expect(onSessionFailure).toHaveBeenCalledWith("action", expect.any(HostBridgeError));
+
+    bridge.invalidate();
+    await expect(bridge.execute(action)).rejects.toMatchObject({ code: "stale_context" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 

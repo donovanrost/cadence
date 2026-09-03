@@ -775,12 +775,21 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const webSockets = new Map();
   const webSocketFailures = [];
   const servedFromCacheRequestIds = new Set();
+  const expectedFailurePredicates = [];
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
   let activeGeneration;
   const generations = new Map();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
+  const expectedFailure = (record) =>
+    expectedFailurePredicates.some((predicate) => {
+      try {
+        return predicate(record);
+      } catch {
+        return false;
+      }
+    });
 
   const beginRequestGeneration = (label = "request generation") => {
     const generation = {
@@ -797,7 +806,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return generation;
   };
 
-  const bindRequestGeneration = (generation, request) => {
+  const bindRequestGeneration = (generation, request, { admitObservedSockets = false } = {}) => {
     const generationId = typeof generation === "object" ? generation.id : generation;
     const current = generations.get(generationId);
     assert.ok(current, "request generation is not owned by these diagnostics");
@@ -806,7 +815,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     current.causalRequestId = request.requestId;
     current.causalRequestSequence = request.sequence;
     for (const socket of webSockets.values()) {
-      if (socket.generation === generationId && socket.boundToRequest === true) {
+      const observedAfterBoundary =
+        admitObservedSockets &&
+        socket.generation === undefined &&
+        socket.observedGeneration === generationId &&
+        socket.observedSequence >= request.sequence;
+      if (socket.generation === generationId && (socket.boundToRequest === true || observedAfterBoundary)) {
+        socket.generation = generationId;
+        socket.boundToRequest = true;
         socket.causalRequestId = request.requestId;
       }
     }
@@ -881,9 +897,15 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     record.resourceType = type || record.resourceType;
     if (type === "WebSocket") record.webSocket = true;
     requests.set(requestId, record);
-    if (response.status >= 400 && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
+    if (
+      response.status >= 400 &&
+      !record.dataUrl &&
+      !isIgnoredFavicon(record, expectedOrigin) &&
+      !expectedFailure(record)
+    ) {
       requestFailures.push(`${response.status} ${record.method} ${response.url}`);
     }
+    if (expectedFailure(record)) record.expectedFailure = true;
   });
 
   on("Network.requestWillBeSentExtraInfo", ({ requestId, headers, associatedCookies }) => {
@@ -953,7 +975,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       errorText === "net::ERR_ABORTED" &&
       record?.finished === false &&
       record?.responseExtra?.statusCode === 304;
-    if (!expectedConditional304Cancellation && !record?.dataUrl && !isIgnoredFavicon(record, expectedOrigin)) {
+    if (
+      !expectedConditional304Cancellation &&
+      !record?.dataUrl &&
+      !isIgnoredFavicon(record, expectedOrigin) &&
+      !expectedFailure(record)
+    ) {
       requestFailures.push(`${record?.method || "?"} ${record?.url || requestId}: ${detail}`);
     }
     if (record) record.failed = detail;
@@ -1055,7 +1082,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const matchingFavicon = entry.url && [...requests.values()].some(
         (record) => record.url === entry.url && isIgnoredFavicon(record, expectedOrigin),
       );
-      if (!matchingFavicon) {
+      const matchingExpectedFailure = entry.url && [...requests.values()].some(
+        (record) => record.url === entry.url && expectedFailure(record),
+      );
+      if (!matchingFavicon && !matchingExpectedFailure) {
         logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
       }
     }
@@ -1096,6 +1126,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     beginRequestGeneration,
     bindRequestGeneration,
     requestForGeneration,
+    allowExpectedFailure(predicate) {
+      expectedFailurePredicates.push(predicate);
+      return () => {
+        const index = expectedFailurePredicates.indexOf(predicate);
+        if (index >= 0) expectedFailurePredicates.splice(index, 1);
+      };
+    },
     async waitForRequest(generation, predicate, label, { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {}) {
       const existing = requestForGeneration(generation, predicate);
       if (existing) return existing;
@@ -1789,7 +1826,7 @@ export async function navigate(
     );
     const { result, frame } = navigation;
     if (diagnostics) {
-      await diagnostics.waitForRequest(
+      const navigationRequest = await diagnostics.waitForRequest(
         generation,
         (record) =>
           record.resourceType === "Document" &&
@@ -1798,6 +1835,7 @@ export async function navigate(
         `navigation to ${target.href}`,
         { signal: navigationSignal },
       );
+      diagnostics.bindRequestGeneration(generation, navigationRequest, { admitObservedSockets: true });
     }
     const documentState = await evaluate(
       client,
@@ -1843,9 +1881,194 @@ export function assertSignInUrl(url, expectedOrigin, label = "sign-in URL") {
   return parsed;
 }
 
+async function assertUnauthenticatedCatalogContained(
+  client,
+  diagnostics,
+  catalogUrl,
+  expectedOrigin,
+  signal,
+) {
+  const target = assertHttpUrl(catalogUrl, expectedOrigin, "unauthenticated catalog URL");
+  const generation = await navigate(client, target.href, {
+    expectedOrigin,
+    expectedPath: "/sign-in",
+    diagnostics,
+    signal,
+  });
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('#sign-in-form')) && !document.querySelector('#cadence-phoenix-host')",
+    "unauthenticated catalog containment",
+    { signal },
+  );
+
+  const catalogRecord = diagnostics.requestForGeneration(generation, (record) =>
+    record.url === target.href ||
+    record.redirects?.some((redirect) => redirect.url === target.href),
+  );
+  assert.ok(catalogRecord, "unauthenticated catalog request was not observed");
+  const catalogRedirect = catalogRecord.redirects?.find((redirect) => redirect.url === target.href);
+  const catalogStatus = catalogRedirect?.status ?? catalogRecord.response?.status;
+  assert.ok(
+    [302, 303, 401, 403].includes(catalogStatus),
+    `unauthenticated catalog escaped the auth boundary: ${catalogStatus}`,
+  );
+  assert.equal(
+    diagnostics.completed(
+      (record) => {
+        try {
+          return new URL(record.url).pathname.endsWith("/actions");
+        } catch {
+          return false;
+        }
+      },
+      { generation },
+    ).length,
+    0,
+    "unauthenticated catalog issued an action",
+  );
+  assert.equal(
+    diagnostics.completed(
+      (record) => /\/releases\/[^/]+\/sha256:[0-9a-f]{64}\/artifacts\//.test(record.url),
+      { generation },
+    ).length,
+    0,
+    "unauthenticated catalog mounted a release artifact",
+  );
+  return generation;
+}
+
+async function armNextManifestFailure(client, signal) {
+  const result = await client.send(
+    "Page.addScriptToEvaluateOnNewDocument",
+    {
+      source: `(() => {
+        const nativeFetch = window.fetch.bind(window);
+        let failed = false;
+        window.fetch = (input, init) => {
+          const candidate = typeof input === "string" ? input : input?.url;
+          const pathname = candidate ? new URL(candidate, location.href).pathname : "";
+          if (!failed && pathname.endsWith("/mf-manifest.json")) {
+            failed = true;
+            window.fetch = nativeFetch;
+            return Promise.reject(new Error("FEDERATION_INTERNAL_MANIFEST_FAILURE"));
+          }
+          return nativeFetch(input, init);
+        };
+      })();`,
+    },
+    CDP_COMMAND_TIMEOUT_MS,
+    signal,
+  );
+  assert.ok(result?.identifier, "manifest failure injection was not installed");
+  return result.identifier;
+}
+
+async function removeNewDocumentScript(client, identifier, signal) {
+  if (!identifier) return;
+  await client.send(
+    "Page.removeScriptToEvaluateOnNewDocument",
+    { identifier },
+    CDP_COMMAND_TIMEOUT_MS,
+    signal,
+  );
+}
+
+async function assertContainedRemoteFailureAndRetry({
+  client,
+  diagnostics,
+  signal,
+  url,
+  expectedOrigin,
+  expectedReleaseId,
+  readyExpression,
+}) {
+  const scriptId = await armNextManifestFailure(client, signal);
+  let generation;
+  try {
+    const surfaceUrl = assertHttpUrl(url, expectedOrigin, "remote failure surface URL");
+    generation = await navigate(client, surfaceUrl.href, {
+      expectedOrigin,
+      expectedPath: surfaceUrl.pathname,
+      diagnostics,
+      signal,
+    });
+    await waitForExpression(
+      client,
+      "Boolean(document.querySelector('#remote-error') && document.querySelector('#remote-error-message') && document.querySelector('#remote-error-reference') && !document.querySelector('#comms-overview-application'))",
+      "contained manifest failure",
+      { signal },
+    );
+  } finally {
+    await removeNewDocumentScript(client, scriptId, signal);
+  }
+
+  const errorState = await evaluate(
+    client,
+    `(() => ({
+      message: document.querySelector('#remote-error-message')?.textContent?.trim(),
+      reference: document.querySelector('#remote-error-reference')?.textContent?.trim(),
+      release: document.querySelector('.phoenix-host-surface__chrome span:nth-child(2)')?.textContent?.trim(),
+      retry: Boolean(document.querySelector('#retry-remote'))
+    }))()`,
+    "contained manifest failure state",
+    { signal },
+  );
+  assert.equal(errorState.message, "The approved application release could not be loaded.");
+  assert.match(errorState.reference || "", /^Reference ID: [0-9a-f-]{36}$/);
+  assert.doesNotMatch(errorState.message || "", /FEDERATION_INTERNAL_MANIFEST_FAILURE/);
+  assert.equal(errorState.release?.startsWith(`${expectedReleaseId} ·`), true);
+  assert.equal(errorState.retry, true);
+
+  const clicked = await evaluate(
+    client,
+    "(() => { const button = document.querySelector('#retry-remote'); if (!button) return false; button.click(); return true; })()",
+    "approved remote retry",
+    { signal },
+  );
+  assert.equal(clicked, true);
+  await waitForExpression(client, readyExpression, "approved remote retry readiness", { signal });
+  await assertMountedRelease(client, expectedReleaseId, "approved remote retry", { signal });
+  return generation;
+}
+
+async function armNextActionCsrfRejection(client, signal) {
+  const result = await client.send(
+    "Page.addScriptToEvaluateOnNewDocument",
+    {
+      source: `(() => {
+        const nativeFetch = window.fetch.bind(window);
+        let rejected = false;
+        window.fetch = (input, init) => {
+          const candidate = typeof input === "string" ? input : input?.url;
+          const pathname = candidate ? new URL(candidate, location.href).pathname : "";
+          const method = (init?.method || (typeof input === "object" ? input?.method : "GET")).toUpperCase();
+          if (!rejected && method === "POST" && pathname.endsWith("/actions")) {
+            rejected = true;
+            window.fetch = nativeFetch;
+            const headers = new Headers(init?.headers || {});
+            headers.set("x-csrf-token", "federation-browser-invalid-csrf");
+            return nativeFetch(input, {...init, headers});
+          }
+          return nativeFetch(input, init);
+        };
+      })();`,
+    },
+    CDP_COMMAND_TIMEOUT_MS,
+    signal,
+  );
+  assert.ok(result?.identifier, "CSRF rejection injection was not installed");
+  return result.identifier;
+}
+
 async function submitSignIn(client, loginUrl, email, password, expectedOrigin, diagnostics, signal) {
   const login = assertSignInUrl(loginUrl, expectedOrigin);
-  await navigate(client, login.href, { expectedOrigin, expectedPath: "/sign-in", diagnostics, signal });
+  const loginGeneration = await navigate(client, login.href, {
+    expectedOrigin,
+    expectedPath: "/sign-in",
+    diagnostics,
+    signal,
+  });
   await waitForExpression(
     client,
     "Boolean(document.querySelector('#sign-in-form input[name=\"user[email]\"]') && document.querySelector('#sign-in-form input[name=\"user[password]\"]'))",
@@ -1899,7 +2122,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
     assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
     assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
     await waitForExpression(client, "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')", "authenticated redirect", { signal: submissionSignal });
-    return generation;
+    return loginGeneration;
   } finally {
     signal?.removeEventListener("abort", onAbort);
     submissionController.abort(new Error("sign-in wait settled"));
@@ -2198,6 +2421,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     }
   }
 
+  const commsQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
+  const commsCatalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`;
+  reportProgress("proving unauthenticated catalog cannot mount or act");
+  await assertUnauthenticatedCatalogContained(
+    client,
+    diagnostics,
+    `${origin}${commsCatalogPath}`,
+    origin,
+    signal,
+  );
+  diagnostics.assertClean("unauthenticated catalog containment");
+  reportProgress("unauthenticated catalog containment observed");
+
   reportProgress("authenticating browser session");
   const authenticatedGeneration = await submitSignIn(
     client,
@@ -2213,14 +2449,13 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   reportProgress("authenticated LiveView websocket asserted");
   assertLiveViewWebSocket(diagnostics, origin, { generation: authenticatedGeneration });
 
-  const commsQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
   const comms = await assertRemoteSurface({
     client,
     diagnostics,
     signal,
     url: commsUrl,
     expectedOrigin: origin,
-    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+    catalogPath: commsCatalogPath,
     applicationKey: "comms_overview",
     surfaceId: "overview",
     expectedScope: "mission",
@@ -2242,7 +2477,20 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     true,
   );
 
+  reportProgress("proving manifest failure containment and immutable-release retry");
+  await assertContainedRemoteFailureAndRetry({
+    client,
+    diagnostics,
+    signal,
+    url: commsUrl,
+    expectedOrigin: origin,
+    expectedReleaseId: releases.nMinus1.comms_overview,
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+  });
+  reportProgress("manifest failure containment and immutable-release retry observed");
+
   const telemetryQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/query`;
+  const csrfScriptId = await armNextActionCsrfRejection(client, signal);
   const telemetry = await assertRemoteSurface({
     client,
     diagnostics,
@@ -2292,6 +2540,102 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   assert.deepEqual(telemetryState, { group: true, checked: true });
 
+  const actionPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/actions`;
+  const csrfFailureCleanup = diagnostics.allowExpectedFailure(
+    (record) => pathMatches(record, "POST", actionPath, origin),
+  );
+  const csrfActionStartedAtMs = Date.now();
+  reportProgress("submitting Telemetry action with a rejected CSRF token");
+  const csrfClicked = await evaluate(
+    client,
+    "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
+    "Telemetry CSRF rejection submit",
+    { signal },
+  );
+  assert.equal(csrfClicked, true);
+
+  const csrfRecord = await waitForResponse(
+    diagnostics,
+    (record) =>
+      pathMatches(record, "POST", actionPath, origin) &&
+      record.startedAtMs >= csrfActionStartedAtMs,
+    "Telemetry CSRF rejection action",
+    { generation: telemetry.generation, signal },
+  );
+  assert.equal(csrfRecord.response.status, 403, "CSRF rejection did not stop the action");
+  await removeNewDocumentScript(client, csrfScriptId, signal);
+
+  const csrfActionRecords = diagnostics.completed(
+    (record) => pathMatches(record, "POST", actionPath, origin),
+    { generation: telemetry.generation },
+  );
+  assert.equal(csrfActionRecords.length, 1, "CSRF rejection replayed the mutation");
+
+  const telemetryCatalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`;
+  const recoveryCatalogRecord = await waitForResponse(
+    diagnostics,
+    (record) =>
+      pathMatches(record, "GET", telemetryCatalogPath, origin) &&
+      record.startedAtMs >= csrfActionStartedAtMs,
+    "bounded host rebootstrap catalog",
+    { generation: telemetry.generation, signal },
+  );
+  assert.equal(recoveryCatalogRecord.response.status, 200);
+  const recoveryCatalog = await responseJson(
+    client,
+    recoveryCatalogRecord,
+    "bounded host rebootstrap catalog",
+    { signal },
+  );
+  const recoveryApplication = assertCatalog(
+    recoveryCatalog,
+    "telemetry_decom",
+    "packet_bindings",
+    "spacecraft",
+    origin,
+    releases.nMinus1.telemetry_decom,
+  );
+  assert.equal(
+    recoveryApplication.release.releaseId,
+    telemetry.application.release.releaseId,
+    "CSRF rebootstrap changed the approved release identity",
+  );
+  const recoveryCatalogRecords = diagnostics.completed(
+    (record) =>
+      pathMatches(record, "GET", telemetryCatalogPath, origin) &&
+      record.startedAtMs >= csrfActionStartedAtMs,
+    { generation: telemetry.generation },
+  );
+  assert.equal(recoveryCatalogRecords.length, 1, "CSRF rejection triggered more than one rebootstrap");
+  telemetry.catalog = recoveryCatalog;
+  telemetry.application = recoveryApplication;
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('#phoenix-host-action-stopped') && document.querySelector('#phoenix-host-action-stopped').textContent.includes('No automatic retry was attempted.') && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface'))",
+    "sanitized stopped-action result and recovered host",
+    { signal },
+  );
+  const stoppedAction = await evaluate(
+    client,
+    `(() => ({text: document.querySelector('#phoenix-host-action-stopped')?.textContent?.trim(), release: document.querySelector('.phoenix-host-surface__chrome span:nth-child(2)')?.textContent?.trim()}))()`,
+    "sanitized stopped-action state",
+    { signal },
+  );
+  assert.match(stoppedAction.text || "", /No automatic retry was attempted\./);
+  assert.match(stoppedAction.text || "", /Reference ID: [0-9a-f-]{36}/);
+  assert.doesNotMatch(stoppedAction.text || "", /invalid-csrf|SECRET|token was invalid/i);
+  assert.equal(stoppedAction.release?.startsWith(`${releases.nMinus1.telemetry_decom} ·`), true);
+  await diagnostics.drainLateEvents(300, signal);
+  assert.equal(
+    diagnostics.completed(
+      (record) => pathMatches(record, "POST", actionPath, origin),
+      { generation: telemetry.generation },
+    ).length,
+    1,
+    "CSRF rejection produced a duplicate action after rebootstrap",
+  );
+  reportProgress("CSRF rejection produced one stopped action and one bounded rebootstrap");
+
   const queryRecordsBeforeAction = diagnostics.completed(
     (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
     { generation: telemetry.generation },
@@ -2309,7 +2653,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   assert.equal(clicked, true);
 
-  const actionPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/actions`;
   reportProgress("waiting for Telemetry packet-bindings action response");
   const actionRecord = await waitForResponse(
     diagnostics,
@@ -2513,6 +2856,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   await diagnostics.drainLateEvents(250, signal);
   reportProgress("late browser events drained");
   diagnostics.assertClean("federation browser gate");
+  csrfFailureCleanup();
   return {
     origin,
     remotes: [
