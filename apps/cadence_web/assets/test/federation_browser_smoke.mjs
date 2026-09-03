@@ -784,6 +784,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   let disposed = false;
   const generations = new Map();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
+  const logError = (entry) => {
+    logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+  };
   const observedResponseStatus = (record) => {
     const statuses = [record?.response?.status, record?.responseExtra?.statusCode].filter(
       (status) => Number.isInteger(status),
@@ -791,15 +794,54 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (!statuses.length || new Set(statuses).size !== 1) return undefined;
     return statuses[0];
   };
+  const reportStatusDisagreement = (record) => {
+    if (!record.statusDisagreement || record.statusDisagreementReported || record.method === "?") return;
+    record.statusDisagreementReported = true;
+    requestFailures.push(`${record.method} ${record.url || record.requestId}: ${record.statusDisagreement}`);
+  };
+  const observeStatusEvidence = (record, source, status) => {
+    if (!Number.isInteger(status)) return;
+    record.statusEvidence ||= [];
+    record.statusEvidence.push({ source, status });
+    const allowance = record.expectedFailureAllowance;
+    if (!allowance || allowance.revoked) return;
+    const hasCrossSourceDisagreement = record.statusEvidence.some(
+      (evidence) => evidence.source !== source && evidence.status !== status,
+    );
+    const hasExpectedStatusDrift = Boolean(
+      allowance &&
+      !allowance.revoked &&
+      allowance.status !== status &&
+      record.statusEvidence.some((evidence) => evidence.source === source && evidence.status !== status),
+    );
+    if (!hasCrossSourceDisagreement && !hasExpectedStatusDrift) return;
+    if (!record.statusDisagreement) {
+      record.statusDisagreement = `status evidence disagreed: ${record.statusEvidence
+        .map((evidence) => `${evidence.source}=${evidence.status}`)
+        .join(", ")}`;
+      if (allowance && !allowance.revoked) invalidateExpectedFailure(record, record.statusDisagreement);
+    }
+    reportStatusDisagreement(record);
+  };
+  const invalidateExpectedFailure = (record, reason) => {
+    const allowance = record?.expectedFailureAllowance;
+    if (!allowance || allowance.revoked) return;
+    allowance.revoked = true;
+    allowance.invalidatedBy = reason;
+    for (const entry of allowance.consumedEntries || []) logError(entry);
+    for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
+  };
   const expectedFailureRegistrationFor = (record) => {
     const status = observedResponseStatus(record);
     if (!Number.isInteger(status)) return undefined;
     return expectedFailureRegistrations.find((registration) => {
+      const allowance = record.expectedFailureAllowance;
       if (
         !registration.active ||
         registration.expectedStatus !== status ||
         record.sequence <= registration.registeredAfterSequence ||
-        (registration.requestId && registration.requestId !== record.requestId)
+        (registration.requestId && registration.requestId !== record.requestId) ||
+        allowance?.revoked
       ) return false;
       try {
         return registration.predicate(record);
@@ -808,20 +850,33 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       }
     });
   };
-  const markExpectedFailure = (record) => {
-    if (record?.expectedFailure === true) {
-      return observedResponseStatus(record) === record.expectedFailureAllowance?.status;
+  const validExpectedFailureAllowance = (record) => {
+    const allowance = record?.expectedFailureAllowance;
+    if (!allowance || allowance.revoked || !allowance.registration.active) return undefined;
+    if (allowance.requestId !== record.requestId || allowance.url !== record.url) {
+      invalidateExpectedFailure(record, "expected failure request identity changed");
+      return undefined;
     }
+    if (observedResponseStatus(record) !== allowance.status) {
+      invalidateExpectedFailure(record, "expected failure status evidence changed");
+      return undefined;
+    }
+    return allowance;
+  };
+  const markExpectedFailure = (record) => {
+    const existing = record?.expectedFailureAllowance;
+    if (existing) return Boolean(validExpectedFailureAllowance(record));
     const registration = expectedFailureRegistrationFor(record);
     if (!registration) return false;
     registration.requestId = record.requestId;
-    record.expectedFailure = true;
     record.expectedFailureAllowance = {
       registration,
       requestId: record.requestId,
       url: record.url,
       status: observedResponseStatus(record),
       consumed: false,
+      consumedEntries: [],
+      suppressedFailures: [],
     };
     return true;
   };
@@ -837,7 +892,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const expectedFailureLogRecords = (entry, status, registrations) =>
     [...requests.values()].filter((record) => {
-      const allowance = record.expectedFailureAllowance;
+      const allowance = validExpectedFailureAllowance(record);
       return (
         allowance &&
         allowance.registration.active &&
@@ -847,15 +902,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         allowance.url === entry.url &&
         record.url === entry.url &&
         record.method !== "?" &&
-        record.expectedFailure === true &&
         observedResponseStatus(record) === status &&
-        (entry.networkRequestId === undefined || entry.networkRequestId === record.requestId)
+        typeof entry.networkRequestId === "string" &&
+        entry.networkRequestId.length > 0 &&
+        entry.networkRequestId === record.requestId
       );
     });
   const consumeExpectedFailureLog = (entry, status, registrations) => {
     const candidates = expectedFailureLogRecords(entry, status, registrations);
     if (candidates.length !== 1) return false;
-    candidates[0].expectedFailureAllowance.consumed = true;
+    const allowance = candidates[0].expectedFailureAllowance;
+    allowance.consumed = true;
+    allowance.consumedEntries.push(entry);
     return true;
   };
   const knownResponseForLog = (entry, status) =>
@@ -865,9 +923,6 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         record.url === entry.url &&
         observedResponseStatus(record) === status,
     );
-  const logError = (entry) => {
-    logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
-  };
   const reconcilePendingNetworkLogs = () => {
     const remaining = [];
     for (const pending of pendingNetworkLogs) {
@@ -946,6 +1001,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       response: responseOnly ? prior.response : undefined,
       responseExtra: prior?.responseExtra,
       requestExtra: prior?.requestExtra,
+      statusEvidence: responseOnly ? prior?.statusEvidence || [] : [],
+      statusDisagreement: responseOnly ? prior?.statusDisagreement : undefined,
       servedFromCache: prior?.servedFromCache || servedFromCacheRequestIds.has(requestId),
       resourceType: type,
       redirects,
@@ -956,6 +1013,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     };
     requests.set(requestId, record);
     markExpectedFailure(record);
+    reportStatusDisagreement(record);
     reconcilePendingNetworkLogs();
     const socket = webSockets.get(requestId);
     const sameObservedGeneration =
@@ -990,12 +1048,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(response.url),
+      statusEvidence: [],
     };
     record.response = response;
     record.frameId ||= frameId;
     record.loaderId ||= loaderId;
     record.resourceType = type || record.resourceType;
     if (type === "WebSocket") record.webSocket = true;
+    observeStatusEvidence(record, "response", response.status);
     requests.set(requestId, record);
     const expected = markExpectedFailure(record);
     if (
@@ -1026,6 +1086,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       url: "",
       request: {},
       requestExtra: { headers, associatedCookies },
+      statusEvidence: [],
       redirects: [],
       webSocket: false,
       finished: false,
@@ -1038,6 +1099,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const record = requests.get(requestId);
     if (record) {
       record.responseExtra = { statusCode, headers, blockedCookies };
+      observeStatusEvidence(record, "ExtraInfo", statusCode);
       markExpectedFailure(record);
       reconcilePendingNetworkLogs();
       return;
@@ -1052,12 +1114,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       url: "",
       request: {},
       responseExtra: { statusCode, headers, blockedCookies },
+      statusEvidence: [],
       redirects: [],
       webSocket: false,
       finished: false,
       failed: undefined,
       dataUrl: false,
     });
+    observeStatusEvidence(requests.get(requestId), "ExtraInfo", statusCode);
     markExpectedFailure(requests.get(requestId));
     reconcilePendingNetworkLogs();
   });
@@ -1081,14 +1145,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       errorText === "net::ERR_ABORTED" &&
       record?.finished === false &&
       record?.responseExtra?.statusCode === 304;
-    const expected = record?.expectedFailure === true || markExpectedFailure(record);
+    const allowance = validExpectedFailureAllowance(record);
+    const expected = Boolean(allowance);
+    const failure = `${record?.method || "?"} ${record?.url || requestId}: ${detail}`;
     if (
       !expectedConditional304Cancellation &&
       !record?.dataUrl &&
       !isIgnoredFavicon(record, expectedOrigin) &&
       !expected
     ) {
-      requestFailures.push(`${record?.method || "?"} ${record?.url || requestId}: ${detail}`);
+      requestFailures.push(failure);
+    } else if (expected) {
+      allowance.suppressedFailures.push(failure);
     }
     if (record) record.failed = detail;
   });
