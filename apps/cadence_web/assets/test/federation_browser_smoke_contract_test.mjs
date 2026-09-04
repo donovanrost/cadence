@@ -23,8 +23,10 @@ import {
   redactText,
   releaseArtifactPrefix,
   resolveChromeBinary,
+  raceWithSignalAndTimeout,
   runBrowserGate,
   runScenario,
+  toOrdinarySerializableResult,
   waitForPageNavigation,
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
@@ -629,6 +631,57 @@ test("confirmation finalizes one exact terminal 403 without replay or later supp
   assert.equal(fixture.diagnostics.logErrors.length, 1);
 });
 
+test("confirmation requires exact canonical evidence and exact terminal record identity", () => {
+  const forgedEvidence = expectedFailureFixture({ requestId: "forged-canonical" });
+  const forgedRecord = forgedEvidence.diagnostics.requests.get(forgedEvidence.requestId);
+  const canonicalEntry = forgedRecord.expectedFailureAllowance.consumedEntries[0];
+  assert.throws(
+    () => forgedEvidence.diagnostics.confirmExpectedFailure(
+      forgedEvidence.cleanup,
+      confirmationEvidence(forgedEvidence, { canonicalEvidence: { ...canonicalEntry } }),
+    ),
+    /expected failure confirmation rejected.*identity/,
+  );
+  assert.equal(forgedEvidence.diagnostics.logErrors.length, 1);
+  forgedEvidence.cleanup();
+  forgedEvidence.diagnostics.dispose();
+
+  const staleRecord = expectedFailureFixture({ requestId: "stale-terminal-record" });
+  const exactRecord = staleRecord.diagnostics.requests.get(staleRecord.requestId);
+  const staleClone = { ...exactRecord };
+  staleRecord.diagnostics.requests.set(staleRecord.requestId, staleClone);
+  assert.throws(
+    () => staleRecord.diagnostics.confirmExpectedFailure(
+      staleRecord.cleanup,
+      confirmationEvidence(staleRecord, {
+        canonicalEvidence: exactRecord.expectedFailureAllowance.consumedEntries[0],
+      }),
+    ),
+    /expected failure confirmation rejected.*identity/,
+  );
+  assert.equal(staleRecord.diagnostics.logErrors.length, 1);
+  staleRecord.cleanup();
+  staleRecord.diagnostics.dispose();
+});
+
+test("finalized expected failures retain exact authority for contradictory late response and ExtraInfo status", () => {
+  for (const [label, emitContradiction] of [
+    ["response", (fixture) => emitActionResponse(fixture.client, fixture.requestId, fixture.url, 200)],
+    ["ExtraInfo", (fixture) => emitActionExtraInfo(fixture.client, fixture.requestId, 200)],
+  ]) {
+    const fixture = expectedFailureFixture({ requestId: `late-${label}` });
+    const record = fixture.diagnostics.requests.get(fixture.requestId);
+    assert.equal(fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)), true);
+    assert.equal(record.expectedFailureAllowance.record, record);
+    assert.equal(record.finalizedExpectedFailure, record.expectedFailureAllowance);
+    assert.doesNotThrow(() => fixture.diagnostics.assertClean(`${label} finalized baseline`));
+
+    emitContradiction(fixture);
+    assertDirty(fixture.diagnostics, `${label} status after finalization`);
+    fixture.diagnostics.dispose();
+  }
+});
+
 test("the browser gate confirms before returning and exposes only ordinary result data", async () => {
   const dependencies = syntheticGateDependencies();
   let diagnostics;
@@ -678,6 +731,160 @@ test("the browser gate confirms before returning and exposes only ordinary resul
   assert.equal(cleanupCalls, 0);
   assert.equal(diagnostics.logErrors.length, 0);
   assert.equal(diagnostics.requestFailures.length, 0);
+});
+
+test("the browser gate drains late finalized status events before disposing diagnostics", async () => {
+  for (const [label, emitLateStatus] of [
+    ["response", (client) => emitActionResponse(client, "gate-late-status", `${origin}/late`, 200)],
+    ["ExtraInfo", (client) => emitActionExtraInfo(client, "gate-late-status", 200)],
+  ]) {
+    let diagnostics;
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        ...syntheticGateDependencies(),
+        runScenarioImpl: async (client, installedDiagnostics) => {
+          diagnostics = installedDiagnostics;
+          const fixtureUrl = `${origin}/late`;
+          const generation = diagnostics.beginRequestGeneration(`late ${label}`);
+          const cleanup = diagnostics.allowExpectedFailure(
+            (record) => record.method === "POST" && record.url === fixtureUrl,
+            { status: 403 },
+          );
+          emitExpectedActionRequest(client, "gate-late-status", fixtureUrl);
+          emitActionResponse(client, "gate-late-status", fixtureUrl, 403);
+          emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-late-status");
+          client.emit("Network.loadingFinished", { requestId: "gate-late-status" });
+          diagnostics.confirmExpectedFailure(cleanup, {
+            requestId: "gate-late-status",
+            method: "POST",
+            url: fixtureUrl,
+            generation,
+            status: 403,
+          });
+          setImmediate(() => emitLateStatus(client));
+          return { status: "confirmed" };
+        },
+      }),
+      /browser diagnostics failed/,
+      label,
+    );
+    assert.equal(diagnostics.requestFailures.length, 1, `${label} late status was not attributed`);
+  }
+});
+
+test("ordinary result conversion rejects hostile arrays before reading or iterating them", () => {
+  let mapCalls = 0;
+  const ownMap = ["safe"];
+  Object.defineProperty(ownMap, "map", {
+    value: () => { mapCalls += 1; },
+    enumerable: false,
+  });
+
+  let accessorCalls = 0;
+  const elementAccessor = [];
+  Object.defineProperty(elementAccessor, "0", {
+    get: () => {
+      accessorCalls += 1;
+      return "secret";
+    },
+    enumerable: true,
+  });
+
+  let symbolCalls = 0;
+  const ownSymbol = Symbol("authority");
+  const symbolArray = ["safe"];
+  symbolArray[ownSymbol] = () => { symbolCalls += 1; };
+
+  let customPrototypeCalls = 0;
+  const customPrototypeArray = ["safe"];
+  Object.setPrototypeOf(customPrototypeArray, {
+    [Symbol.iterator]: () => { customPrototypeCalls += 1; },
+  });
+
+  let functionCalls = 0;
+  const elementFunction = [() => { functionCalls += 1; }];
+  const hole = new Array(1);
+  const extraKey = ["safe"];
+  extraKey.extra = "unexpected";
+  const serializationHook = ["safe"];
+  Object.defineProperty(serializationHook, "toJSON", {
+    value: () => { functionCalls += 1; },
+    enumerable: false,
+  });
+
+  for (const [label, value, pattern] of [
+    ["own map capability", ownMap, /extra own key map/],
+    ["element accessor", elementAccessor, /0 was an accessor/],
+    ["own symbol", symbolArray, /contained an own symbol/],
+    ["custom prototype", customPrototypeArray, /not an ordinary array/],
+    ["element function", elementFunction, /non-serializable capability/],
+    ["hole", hole, /was a hole/],
+    ["extra key", extraKey, /extra own key extra/],
+    ["serialization hook", serializationHook, /extra own key toJSON/],
+  ]) {
+    assert.throws(() => toOrdinarySerializableResult(value), pattern, label);
+  }
+
+  assert.equal(mapCalls, 0);
+  assert.equal(accessorCalls, 0);
+  assert.equal(symbolCalls, 0);
+  assert.equal(customPrototypeCalls, 0);
+  assert.equal(functionCalls, 0);
+});
+
+test("race rejects synchronous thenables without invoking hooks and guards native Promise results", async () => {
+  let thenCalls = 0;
+  const synchronousThenable = Object.create(null);
+  Object.defineProperty(synchronousThenable, "then", {
+    get: () => {
+      thenCalls += 1;
+      return () => {};
+    },
+  });
+  await assert.rejects(
+    raceWithSignalAndTimeout(synchronousThenable, { milliseconds: 50, label: "sync thenable" }),
+    /arbitrary thenable/,
+  );
+  assert.equal(thenCalls, 0);
+
+  const nativeResult = { status: "native-promise" };
+  assert.deepEqual(
+    await raceWithSignalAndTimeout(Promise.resolve(nativeResult), { milliseconds: 50, label: "native promise" }),
+    nativeResult,
+  );
+
+  let overriddenThenCalls = 0;
+  const hostilePromise = Promise.resolve({ status: "hostile-promise" });
+  Object.defineProperty(hostilePromise, "then", {
+    get: () => {
+      overriddenThenCalls += 1;
+      return () => {};
+    },
+  });
+  await assert.rejects(
+    raceWithSignalAndTimeout(hostilePromise, { milliseconds: 50, label: "hostile promise" }),
+    /arbitrary thenable/,
+  );
+  assert.equal(overriddenThenCalls, 0);
+
+  let resultAccessorCalls = 0;
+  const hostileResult = { status: "hostile-result" };
+  Object.defineProperty(hostileResult, "cleanup", {
+    get: () => {
+      resultAccessorCalls += 1;
+      return () => {};
+    },
+    enumerable: true,
+  });
+  const resolvedHostileResult = await raceWithSignalAndTimeout(
+    Promise.resolve(hostileResult),
+    { milliseconds: 50, label: "hostile promise result" },
+  );
+  assert.throws(
+    () => toOrdinarySerializableResult(resolvedHostileResult),
+    /cleanup was an accessor/,
+  );
+  assert.equal(resultAccessorCalls, 0);
 });
 
 test("the browser gate rejects an unconfirmed allowance after fail-closed cleanup replay", async () => {

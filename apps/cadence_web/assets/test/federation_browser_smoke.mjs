@@ -69,6 +69,63 @@ export function sleep(milliseconds, signal) {
   });
 }
 
+function rejectedPromise(error) {
+  const rejection = Promise.reject(error);
+  rejection.catch(() => {});
+  return rejection;
+}
+
+function allowedNativePromise(value) {
+  if (value === null || typeof value !== "object") return false;
+
+  try {
+    if (Object.getPrototypeOf(value) !== Promise.prototype) return false;
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key === "string") return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !Object.hasOwn(descriptor, "value") ||
+          (descriptor.value !== null && typeof descriptor.value === "object") ||
+          typeof descriptor.value === "function") return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function unsafeThenDescriptor(value) {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) return undefined;
+
+  const visited = new Set();
+  let prototype = value;
+  try {
+    while (prototype !== null) {
+      if (visited.has(prototype)) return "prototype chain was cyclic";
+      visited.add(prototype);
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "then");
+      if (descriptor && (!Object.hasOwn(descriptor, "value") || typeof descriptor.value === "function")) {
+        return "then is an accessor or callable property";
+      }
+      prototype = Object.getPrototypeOf(prototype);
+    }
+  } catch (error) {
+    return `thenability inspection failed: ${error.message}`;
+  }
+
+  return undefined;
+}
+
+function validateRaceValue(value, label) {
+  if (typeof value === "function") {
+    throw new TypeError(`${label} returned a callable value`);
+  }
+  if (value === null || typeof value !== "object") return;
+  if (allowedNativePromise(value)) return;
+
+  const unsafeThen = unsafeThenDescriptor(value);
+  if (unsafeThen) throw new TypeError(`${label} returned an arbitrary thenable: ${unsafeThen}`);
+}
+
 export function withTimeout(promise, milliseconds, label, onTimeout) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -89,13 +146,16 @@ export function raceWithSignalAndTimeout(
   operation,
   { signal, milliseconds, label, onTimeout, onCancel } = {},
 ) {
-  const operationPromise = Promise.resolve(operation);
-  operationPromise.catch(() => {});
+  try {
+    validateRaceValue(operation, label || "operation");
+  } catch (error) {
+    return rejectedPromise(error);
+  }
 
   if (signal?.aborted) {
     const error = abortError(signal);
     onCancel?.(error);
-    return Promise.reject(error);
+    return rejectedPromise(error);
   }
 
   return new Promise((resolveRace, rejectRace) => {
@@ -116,6 +176,16 @@ export function raceWithSignalAndTimeout(
       finish(rejectRace, error);
     };
 
+    const settleSuccess = (value) => {
+      try {
+        validateRaceValue(value, label || "operation");
+      } catch (error) {
+        finish(rejectRace, error);
+        return;
+      }
+      finish(resolveRace, value);
+    };
+
     signal?.addEventListener("abort", onAbort, { once: true });
     if (milliseconds) {
       timer = setTimeout(() => {
@@ -126,10 +196,16 @@ export function raceWithSignalAndTimeout(
       }, milliseconds);
     }
 
-    operationPromise.then(
-      (value) => finish(resolveRace, value),
-      (error) => finish(rejectRace, error),
-    );
+    if (allowedNativePromise(operation)) {
+      const observedPromise = Promise.prototype.then.call(
+        operation,
+        settleSuccess,
+        (error) => finish(rejectRace, error),
+      );
+      Promise.prototype.then.call(observedPromise, undefined, () => {});
+    } else {
+      queueMicrotask(() => settleSuccess(operation));
+    }
   });
 }
 
@@ -783,6 +859,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   let disposed = false;
   const generations = new Map();
   const expectedFailureCleanups = new WeakMap();
+  const expectedFailureRecordBindings = new WeakMap();
+  const expectedFailureCanonicalBindings = new WeakMap();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
   const logError = (entry) => {
     logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
@@ -802,7 +880,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const replayInvalidatedAllowance = (allowance) => {
     if (allowance.replayed) return;
     allowance.replayed = true;
-    for (const entry of allowance.consumedEntries || []) logError(entry);
+    const canonicalEvidence = expectedFailureCanonicalBindings.get(allowance);
+    if (canonicalEvidence) logError(canonicalEvidence);
     for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
   };
   const detachExpectedFailureRegistration = (registration, reason, { finalized = false } = {}) => {
@@ -836,10 +915,27 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     detachExpectedFailureRegistration(registration, reason);
   };
+  const revokeUnconfirmedExpectedFailures = (reason) => {
+    for (const registration of [...expectedFailureRegistrations]) {
+      invalidateExpectedFailure(registration, reason);
+    }
+  };
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
     record.statusEvidence ||= [];
     record.statusEvidence.push({ source, status });
+    const finalizedAllowance = record.finalizedExpectedFailure;
+    if (
+      finalizedAllowance?.record === record &&
+      finalizedAllowance.finalized &&
+      finalizedAllowance.status !== status
+    ) {
+      if (!record.statusDisagreement) {
+        record.statusDisagreement = `finalized expected failure status disagreed: expected=${finalizedAllowance.status}, ${source}=${status}`;
+      }
+      reportStatusDisagreement(record);
+      return;
+    }
     const allowance = record.expectedFailureAllowance;
     if (!allowance || allowance.revoked) return;
     const hasCrossSourceDisagreement = record.statusEvidence.some(
@@ -906,6 +1002,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const validExpectedFailureAllowance = (record) => {
     const allowance = record?.expectedFailureAllowance;
     if (!allowance || allowance.revoked || allowance.finalized || !allowance.registration.active) return undefined;
+    const boundRecord = expectedFailureRecordBindings.get(allowance);
+    if (boundRecord !== record || allowance.record !== record) {
+      invalidateExpectedFailure(boundRecord || record, "expected failure record identity changed", allowance);
+      return undefined;
+    }
     if (allowance.requestId !== record.requestId || allowance.url !== record.url) {
       invalidateExpectedFailure(record, "expected failure request identity changed");
       return undefined;
@@ -926,7 +1027,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     registration.requestId = record.requestId;
     delete registration.pendingRequestId;
     record.expectedFailureRegistration = registration;
-    record.expectedFailureAllowance = {
+    const allowance = {
       registration,
       record,
       requestId: record.requestId,
@@ -939,7 +1040,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       suppressedFailures: [],
       replayed: false,
     };
-    registration.allowances.add(record.expectedFailureAllowance);
+    expectedFailureRecordBindings.set(allowance, record);
+    record.expectedFailureAllowance = allowance;
+    registration.allowances.add(allowance);
     return true;
   };
   const canonicalNetworkResourceStatus = (entry) => {
@@ -979,14 +1082,15 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const finalizeExpectedFailure = (allowance) => {
     if (allowance.revoked || allowance.finalized) return false;
     allowance.finalized = true;
+    expectedFailureRecordBindings.get(allowance).finalizedExpectedFailure = allowance;
     detachExpectedFailureRegistration(
       allowance.registration,
       "expected failure confirmed",
       { finalized: true },
     );
-    for (const record of requests.values()) {
-      if (record.expectedFailureAllowance === allowance) delete record.expectedFailureAllowance;
-    }
+    // Keep the exact record/allowance binding through the bounded late-event
+    // drain and final assertion. A finalized request must still attribute
+    // contradictory response and ExtraInfo status evidence.
     return true;
   };
   const consumeExpectedFailureLog = (entry, status, registrations) => {
@@ -1006,6 +1110,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       observedResponseStatus(record) !== status
     ) return false;
     allowance.consumed = true;
+    expectedFailureCanonicalBindings.set(allowance, entry);
     allowance.consumedEntries.push(entry);
     return true;
   };
@@ -1445,6 +1550,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     beginRequestGeneration,
     bindRequestGeneration,
     requestForGeneration,
+    revokeUnconfirmedExpectedFailures,
     allowExpectedFailure(predicate, { status = 403 } = {}) {
       assert.equal(typeof predicate, "function", "expected failure predicate must be a function");
       assert.equal(Number.isInteger(status), true, "expected failure status must be an integer");
@@ -1481,6 +1587,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const expectedGeneration =
         typeof evidence?.generation === "object" ? evidence.generation?.id : evidence?.generation;
       const canonicalEntries = allowance.consumedEntries || [];
+      const canonicalEntry = expectedFailureCanonicalBindings.get(allowance);
       const canonicalEvidence =
         evidence?.canonicalEvidence ?? evidence?.canonicalEntry ?? evidence?.canonical ?? evidence?.log;
       const suppliedFailures = evidence?.failureEvidence ?? evidence?.loadingFailed;
@@ -1497,26 +1604,35 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       requireEvidence(Boolean(requestId), "request id missing");
       requireEvidence(Boolean(record), "request record missing");
       if (record) {
-        requireEvidence(record.expectedFailureAllowance === allowance, "allowance binding changed");
-        requireEvidence(allowance.requestId === requestId, "request id changed");
-        requireEvidence(record.finished, "request is not terminal");
-        requireEvidence(!record.pendingExpectedFailureLog, "canonical evidence is pending");
-        requireEvidence(record.method === evidence?.method, "request method changed");
-        requireEvidence(record.url === evidence?.url, "request URL changed");
-        requireEvidence(record.generation === expectedGeneration, "request generation changed");
-        requireEvidence(allowance.method === evidence?.method, "allowance method changed");
-        requireEvidence(allowance.url === evidence?.url, "allowance URL changed");
-        requireEvidence(allowance.generation === expectedGeneration, "allowance generation changed");
-        requireEvidence(allowance.status === evidence?.status, "allowance status changed");
-        requireEvidence(record.response?.status === evidence?.status, "response status changed");
-        requireEvidence(observedResponseStatus(record) === evidence?.status, "status evidence changed");
-        requireEvidence(!record.statusDisagreement, "status evidence contradicts");
+        const exactRecord = expectedFailureRecordBindings.get(allowance) === record && allowance.record === record;
+        requireEvidence(exactRecord, "request record identity changed");
+        if (exactRecord) {
+          requireEvidence(record.expectedFailureAllowance === allowance, "allowance binding changed");
+          requireEvidence(allowance.requestId === requestId, "request id changed");
+          requireEvidence(record.finished, "request is not terminal");
+          requireEvidence(!record.pendingExpectedFailureLog, "canonical evidence is pending");
+          requireEvidence(record.method === evidence?.method, "request method changed");
+          requireEvidence(record.url === evidence?.url, "request URL changed");
+          requireEvidence(record.generation === expectedGeneration, "request generation changed");
+          requireEvidence(allowance.method === evidence?.method, "allowance method changed");
+          requireEvidence(allowance.url === evidence?.url, "allowance URL changed");
+          requireEvidence(allowance.generation === expectedGeneration, "allowance generation changed");
+          requireEvidence(allowance.status === evidence?.status, "allowance status changed");
+          requireEvidence(record.response?.status === evidence?.status, "response status changed");
+          requireEvidence(observedResponseStatus(record) === evidence?.status, "status evidence changed");
+          requireEvidence(!record.statusDisagreement, "status evidence contradicts");
+        }
       }
       requireEvidence(canonicalEntries.length === 1, "canonical evidence count changed");
-      requireEvidence(canonicalEvidenceMatches(canonicalEntries[0], allowance), "canonical evidence changed");
+      requireEvidence(canonicalEntries[0] === canonicalEntry, "canonical evidence binding changed");
+      requireEvidence(canonicalEvidenceMatches(canonicalEntry, allowance), "canonical evidence changed");
       if (canonicalEvidence) {
-        requireEvidence(canonicalEvidenceMatches(canonicalEvidence, allowance), "provided canonical evidence changed");
-        requireEvidence(canonicalEvidenceIsSame(canonicalEvidence, canonicalEntries[0]), "provided canonical evidence differs");
+        const exactCanonicalEvidence = canonicalEvidence === canonicalEntry;
+        requireEvidence(exactCanonicalEvidence, "provided canonical evidence identity changed");
+        if (exactCanonicalEvidence) {
+          requireEvidence(canonicalEvidenceMatches(canonicalEvidence, allowance), "provided canonical evidence changed");
+          requireEvidence(canonicalEvidenceIsSame(canonicalEvidence, canonicalEntry), "provided canonical evidence differs");
+        }
       }
       if (expectedFailures) {
         requireEvidence(
@@ -1566,12 +1682,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     },
     async drainLateEvents(milliseconds = 250, signal) {
       await sleep(milliseconds, signal);
+      reconcilePendingNetworkLogs();
     },
     dispose() {
       if (disposed) return;
-      for (const registration of [...expectedFailureRegistrations]) {
-        invalidateExpectedFailure(registration, "diagnostics disposed");
-      }
+      revokeUnconfirmedExpectedFailures("diagnostics disposed");
       disposed = true;
       reconcilePendingNetworkLogs();
       flushPendingNetworkLogs();
@@ -3411,28 +3526,106 @@ export function installShutdownGuards({ onAbort }) {
   };
 }
 
-function toOrdinarySerializableResult(value, path = "result") {
+function conversionFailure(path, reason) {
+  throw new Error(`${path} ${reason}`);
+}
+
+function descriptorsBeforeRead(value, path) {
+  let keys;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch (error) {
+    conversionFailure(path, `could not enumerate own keys: ${error.message}`);
+  }
+
+  const descriptors = new Map();
+  for (const key of keys) {
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch (error) {
+      conversionFailure(path, `could not inspect ${String(key)}: ${error.message}`);
+    }
+    if (!descriptor) conversionFailure(path, `lost own descriptor for ${String(key)}`);
+    if (!Object.hasOwn(descriptor, "value")) {
+      conversionFailure(path, `${String(key)} was an accessor`);
+    }
+    descriptors.set(key, descriptor);
+  }
+  return { keys, descriptors };
+}
+
+function arrayIndexKey(key) {
+  if (typeof key !== "string" || key === "") return false;
+  if (key !== "0" && (key[0] === "0" || !/^\d+$/.test(key))) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index >= 0 && index < 2 ** 32 - 1 && String(index) === key;
+}
+
+export function toOrdinarySerializableResult(value, path = "result") {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (value === undefined) throw new Error(`${path} was not serializable`);
-  if (typeof value !== "object") throw new Error(`${path} contained a non-serializable capability`);
+  if (value === undefined) conversionFailure(path, "was not serializable");
+  if (typeof value !== "object") conversionFailure(path, "contained a non-serializable capability");
+
   if (Array.isArray(value)) {
-    return value.map((item, index) =>
-      item === undefined ? null : toOrdinarySerializableResult(item, `${path}[${index}]`),
-    );
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error(`${path} was not an ordinary object`);
-  }
-
-  const ordinaryResult = {};
-  for (const key of Object.keys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (!descriptor || !("value" in descriptor)) {
-      throw new Error(`${path}.${key} was not an ordinary value`);
+    let prototype;
+    try {
+      prototype = Object.getPrototypeOf(value);
+    } catch (error) {
+      conversionFailure(path, `prototype inspection failed: ${error.message}`);
     }
+    if (prototype !== Array.prototype) conversionFailure(path, "was not an ordinary array");
+    if (unsafeThenDescriptor(value)) conversionFailure(path, "was thenable or exposed an unsafe then property");
+
+    const { keys, descriptors } = descriptorsBeforeRead(value, path);
+    const lengthDescriptor = descriptors.get("length");
+    if (!lengthDescriptor || !Number.isInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+      conversionFailure(path, "had an invalid array length");
+    }
+    const length = lengthDescriptor.value;
+    for (const key of keys) {
+      if (typeof key === "symbol") conversionFailure(path, "contained an own symbol");
+      if (key !== "length" && (!arrayIndexKey(key) || Number(key) >= length)) {
+        conversionFailure(path, `contained an extra own key ${key}`);
+      }
+    }
+    for (let index = 0; index < length; index += 1) {
+      if (!descriptors.has(String(index))) conversionFailure(`${path}[${index}]`, "was a hole");
+    }
+
+    const ordinaryResult = new Array(length);
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = descriptors.get(String(index));
+      const converted = descriptor.value === undefined
+        ? null
+        : toOrdinarySerializableResult(descriptor.value, `${path}[${index}]`);
+      Object.defineProperty(ordinaryResult, String(index), {
+        value: converted,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return ordinaryResult;
+  }
+
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch (error) {
+    conversionFailure(path, `prototype inspection failed: ${error.message}`);
+  }
+  if (prototype !== Object.prototype && prototype !== null) {
+    conversionFailure(path, "was not an ordinary object");
+  }
+  if (unsafeThenDescriptor(value)) conversionFailure(path, "was thenable or exposed an unsafe then property");
+
+  const { keys, descriptors } = descriptorsBeforeRead(value, path);
+  const ordinaryResult = {};
+  for (const key of keys) {
+    if (typeof key !== "string" || !descriptors.get(key).enumerable) continue;
+    const descriptor = descriptors.get(key);
     if (descriptor.value === undefined) continue;
     Object.defineProperty(ordinaryResult, key, {
       value: toOrdinarySerializableResult(descriptor.value, `${path}.${key}`),
@@ -3519,7 +3712,8 @@ export async function runBrowserGate(
       },
     });
     reportProgress("federation browser scenario settled successfully");
-    diagnostics.dispose();
+    diagnostics.revokeUnconfirmedExpectedFailures("browser gate final assertion");
+    await diagnostics.drainLateEvents(250, controller.signal);
     diagnostics.assertClean("federation browser gate final");
     const publicResult = toOrdinarySerializableResult(result);
     reportProgress("browser gate returning successfully");
