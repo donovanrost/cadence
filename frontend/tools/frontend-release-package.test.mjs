@@ -458,6 +458,75 @@ void describe("frontend release packager", () => {
     );
   });
 
+  void it("rejects artifact bytes whose size or digest does not match the inventory", async () => {
+    const input = await builtRemoteTree();
+    const inventory = await enumerateArtifacts(input);
+    const original = inventory.artifacts.find(({ path }) => path === "assets/app.js");
+    const changedBytes = Buffer.from("export const release = 'phase-d';\n", "utf8");
+    assert.equal(changedBytes.byteLength, original.bytes.byteLength);
+
+    const changedInventory = {
+      ...inventory,
+      artifacts: inventory.artifacts.map((artifact) =>
+        artifact.path === original.path ? { ...artifact, bytes: changedBytes } : artifact,
+      ),
+    };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory: changedInventory,
+          metadata,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /digest does not match bytes/,
+    );
+
+    const mismatchedSizeInventory = {
+      ...inventory,
+      artifacts: inventory.artifacts.map((artifact) =>
+        artifact.path === original.path ? { ...artifact, size: artifact.size + 1 } : artifact,
+      ),
+    };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory: mismatchedSizeInventory,
+          metadata,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /artifact size does not match bytes/,
+    );
+  });
+
+  void it("validates and packages one frozen byte snapshot across a deterministic disk swap", async () => {
+    const input = await builtRemoteTree();
+    const outputParent = await temporaryDirectory("cadence-release-snapshot-output-");
+    const output = join(outputParent, "package");
+    const appPath = join(input, "assets", "app.js");
+    const originalBytes = await readFile(appPath);
+    const swappedBytes = Buffer.from("export const release = 'swapped';\n", "utf8");
+    assert.equal(swappedBytes.byteLength, originalBytes.byteLength);
+
+    const result = await packageRelease({
+      inputDirectory: input,
+      outputDirectory: output,
+      metadata,
+      artifactOrigin: TEST_ORIGIN,
+      keyId: "fixture-release-key",
+      privateKey: keyPair().privateKey,
+      afterSnapshot: async () => {
+        await writeFile(appPath, swappedBytes);
+      },
+    });
+
+    assert.deepEqual(await readFile(join(output, "artifacts", "assets", "app.js")), originalBytes);
+    assert.deepEqual(
+      result.artifacts.find(({ path }) => path === "assets/app.js").bytes,
+      originalBytes,
+    );
+    assert.deepEqual(await readFile(appPath), swappedBytes);
+  });
+
   void it("keeps the package output outside the repository and requires explicit metadata", async () => {
     const input = await builtRemoteTree();
     await assert.rejects(

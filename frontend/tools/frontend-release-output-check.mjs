@@ -1,38 +1,135 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+  win32,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const remoteNamePattern = /^[a-z][a-z0-9._-]{0,127}$/;
 const releaseMetadataFiles = new Set(["mf-manifest.json", "mf-stats.json"]);
-const forbiddenArtifactNamePattern =
-  /(?:^|[-_.])(?:contract[-_.]?probe|demo[-_.]?auth(?:[-_.]?service)?|failure[-_.]?application|index|main|phoenix[-_.]?main|phoenix[-_.]?bootstrap|standalone|spec|test)(?:[-_.]|$)/i;
+const forbiddenArtifactNameSequences = [
+  ["contract", "probe"],
+  ["demo", "auth"],
+  ["demo", "auth", "service"],
+  ["failure", "application"],
+  ["index"],
+  ["main"],
+  ["phoenix", "main"],
+  ["phoenix", "bootstrap"],
+  ["standalone"],
+  ["spec"],
+  ["test"],
+];
+const statsPathKeyPattern =
+  /^(?:asset|assets|chunk|chunks|entry|entries|file|filename|fileName|output|outputs|paths|source|sources)$/i;
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
 }
 
 export function assertReleaseArtifactPath(path) {
+  assertPathSyntax(path, "release artifact path");
   const lowerPath = path.toLowerCase();
-  const name = basename(path);
 
   if (lowerPath.endsWith(".map")) fail(`source-map artifact ${JSON.stringify(path)} is forbidden`);
   if (lowerPath.endsWith(".html")) {
     fail(`standalone HTML artifact ${JSON.stringify(path)} is forbidden`);
   }
+  assertNoForbiddenPathName(path, "release artifact path");
   if (!releaseMetadataFiles.has(path) && path !== "remoteEntry.js" && !path.startsWith("assets/")) {
     fail(`unexpected release artifact ${JSON.stringify(path)}`);
   }
-  if (forbiddenArtifactNamePattern.test(name)) {
-    fail(`standalone, test, or contract artifact ${JSON.stringify(path)} is forbidden`);
+}
+
+function decodePathForPolicy(value, label) {
+  if (!value.includes("%")) return value;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    fail(`${label} contains an invalid percent encoding`);
+  }
+  if (decoded.includes("%")) {
+    fail(`${label} contains a doubly encoded or ambiguous path`);
+  }
+  return decoded;
+}
+
+function isAbsoluteLocalPath(value) {
+  return (
+    isAbsolute(value) ||
+    win32.isAbsolute(value) ||
+    /^[A-Za-z]:/.test(value) ||
+    value.startsWith("\\") ||
+    value.startsWith("file:")
+  );
+}
+
+function isExternalReference(value) {
+  return (
+    value.startsWith("//") ||
+    (/^(?:[a-z][a-z\d+.-]*:)/i.test(value) &&
+      !/^[A-Za-z]:[\\/]/.test(value) &&
+      !value.startsWith("file:"))
+  );
+}
+
+function assertPathSyntax(value, label, { allowTraversal = false } = {}) {
+  if (typeof value !== "string" || value.length === 0) fail(`${label} is not a path`);
+  const decoded = decodePathForPolicy(value, label);
+  if (decoded !== value) fail(`${label} contains URL-encoded/percent path syntax`);
+  if (isAbsoluteLocalPath(value)) fail(`${label} must be relative`);
+  if (value.includes("\\") || value.includes("\0")) {
+    fail(`${label} contains a forbidden separator`);
+  }
+  const parts = value.split("/");
+  if (
+    parts.some(
+      (part, index) =>
+        part === "" || (!allowTraversal && part === "..") || (part === "." && index !== 0),
+    )
+  ) {
+    fail(`${label} contains traversal or an empty path component`);
+  }
+}
+
+function pathPolicyTokens(value, label) {
+  const decoded = decodePathForPolicy(value, label).replaceAll("\\", "/");
+  return decoded
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token.toLowerCase());
+}
+
+function hasSequence(tokens, sequence) {
+  return tokens.some((_, index) =>
+    sequence.every((token, offset) => tokens[index + offset] === token),
+  );
+}
+
+function assertNoForbiddenPathName(value, label) {
+  const tokens = pathPolicyTokens(value, label);
+  if (forbiddenArtifactNameSequences.some((sequence) => hasSequence(tokens, sequence))) {
+    fail(`standalone, test, or contract artifact ${JSON.stringify(value)} is forbidden`);
   }
 }
 
 export function assertNoForbiddenPublicationReferences(source, origin) {
   const forbiddenReferences = [
     ["demo-auth service", /\bdemo[-_]?auth(?:[-_]?service)?\b/i],
-    ["contract probe", /(?:\bcontract[-_]?probe\b|cadence[._-]contract[._-]probe)/i],
+    [
+      "contract probe",
+      /(?:\bcontract[-_./\\]|contract%2d|contract%2e|contract%2f|contract%5c)+probe\b|cadence[._-]contract[._-]probe/i,
+    ],
     [
       "development URL",
       /\bhttps?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#"'`),;\s]|$)/i,
@@ -209,32 +306,51 @@ async function outputFiles(directory, outputRoot) {
   return paths;
 }
 
-export function assertLocalReference(reference, origin, files, label, outputRoot) {
+export function assertLocalReference(
+  reference,
+  origin,
+  files,
+  label,
+  outputRoot,
+  { allowGeneratedHostInitializationParent = false } = {},
+) {
   const value = reference.trim();
   if (value === "" || /^\$\{[^}]+\}$/.test(value)) return;
 
-  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(value)) return;
-  if (value.startsWith("/")) {
-    fail(`${label} contains an absolute local reference ${JSON.stringify(value)}`);
-  }
+  if (isExternalReference(value)) return;
 
   const pathPart =
     value.startsWith("?") || value.startsWith("#") ? origin : value.split(/[?#]/, 1)[0];
   if (pathPart === "") return;
+
+  if (isAbsoluteLocalPath(pathPart)) {
+    fail(`${label} contains an absolute local reference ${JSON.stringify(value)}`);
+  }
+  assertPathSyntax(pathPart, label, { allowTraversal: true });
+  assertNoForbiddenPathName(pathPart, label);
 
   const target = resolve(outputRoot, dirname(origin), pathPart);
   const targetRelative = relativePath(outputRoot, target);
   if (targetRelative === "" || targetRelative.startsWith("../") || targetRelative === "..") {
     fail(`${label} escapes the output with ${JSON.stringify(value)}`);
   }
+  if (
+    pathPart.split("/").some((part) => part === "..") &&
+    !(allowGeneratedHostInitializationParent && pathPart === "../remoteEntry.js")
+  ) {
+    fail(`${label} contains a normalization collision with ${JSON.stringify(value)}`);
+  }
   if (!files.has(targetRelative)) {
     fail(`${label} points to missing ${JSON.stringify(targetRelative)}`);
   }
+  return targetRelative;
 }
 
 function assertManifestPath(value, files, label, outputRoot) {
   if (typeof value !== "string" || value.trim() === "") fail(`${label} is not a path`);
-  assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
+  const target = assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
+  if (!target) fail(`${label} must be a local output path`);
+  return target;
 }
 
 function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
@@ -250,8 +366,8 @@ function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
     for (const phase of ["async", "sync"]) {
       if (!Array.isArray(assets[phase])) fail(`${label}.${kind}.${phase} is not a list`);
       for (const asset of assets[phase]) {
-        assertManifestPath(asset, files, `${label}.${kind}.${phase}`, outputRoot);
-        referencedFiles?.add(asset);
+        const target = assertManifestPath(asset, files, `${label}.${kind}.${phase}`, outputRoot);
+        referencedFiles?.add(target);
       }
     }
   }
@@ -271,8 +387,13 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
   if (!remoteEntry || remoteEntry.path !== "" || remoteEntry.name !== "remoteEntry.js") {
     fail("manifest remoteEntry is not the relocatable remoteEntry.js");
   }
-  assertManifestPath(remoteEntry.name, files, "manifest remoteEntry.name", outputRoot);
-  const referencedFiles = new Set([remoteEntry.name]);
+  const remoteEntryPath = assertManifestPath(
+    remoteEntry.name,
+    files,
+    "manifest remoteEntry.name",
+    outputRoot,
+  );
+  const referencedFiles = new Set([remoteEntryPath]);
 
   if (!Array.isArray(manifest.shared) || manifest.shared.length === 0) {
     fail("manifest shared assets are missing");
@@ -298,6 +419,7 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
     ) {
       fail(`manifest exposes a non-publication module ${JSON.stringify(exposedModule)}`);
     }
+    assertNoForbiddenPathName(exposedModule, "manifest exposed module");
     assertAssetLists(
       expose.assets,
       files,
@@ -310,15 +432,92 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
   return referencedFiles;
 }
 
+function assertStatsMetadata(
+  value,
+  files,
+  outputRoot,
+  trail,
+  pathContext = false,
+  seen = new Set(),
+  referencedFiles = new Set(),
+) {
+  if (typeof value === "string") {
+    if (value.trim() === "") return;
+    const decoded = value.includes("%") ? decodePathForPolicy(value, trail) : value;
+    if (isAbsoluteLocalPath(value) || isAbsoluteLocalPath(decoded)) {
+      fail(`${trail} contains an absolute local path ${JSON.stringify(value)}`);
+    }
+    if (isExternalReference(value)) return;
+    assertNoForbiddenPathName(value, trail);
+    if (
+      pathContext ||
+      value.includes("%") ||
+      (/[/\\]/.test(decoded) && /\.[^/\\]+$/.test(decoded))
+    ) {
+      referencedFiles.add(assertManifestPath(value, files, trail, outputRoot));
+    }
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  if (seen.has(value)) fail(`${trail} contains a cyclic metadata value`);
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      assertStatsMetadata(
+        item,
+        files,
+        outputRoot,
+        `${trail}[${index}]`,
+        pathContext,
+        seen,
+        referencedFiles,
+      ),
+    );
+  } else {
+    for (const [key, child] of Object.entries(value)) {
+      assertStatsMetadata(
+        child,
+        files,
+        outputRoot,
+        `${trail}.${key}`,
+        pathContext || statsPathKeyPattern.test(key),
+        seen,
+        referencedFiles,
+      );
+    }
+  }
+  seen.delete(value);
+}
+
 function assertStats(stats, files, outputRoot) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
   const referencedFiles = new Set();
   for (const output of stats.buildOutput) {
-    assertManifestPath(output.fileName, files, "federation buildOutput.fileName", outputRoot);
-    referencedFiles.add(output.fileName);
+    if (!output || typeof output !== "object" || Array.isArray(output)) {
+      fail("federation buildOutput entry is not an object");
+    }
+    const target = assertManifestPath(
+      output.fileName,
+      files,
+      "federation buildOutput.fileName",
+      outputRoot,
+    );
+    if (referencedFiles.has(target)) {
+      fail(`federation stats contains duplicate artifact ${JSON.stringify(target)}`);
+    }
+    referencedFiles.add(target);
   }
+  assertStatsMetadata(
+    stats,
+    files,
+    outputRoot,
+    "federation stats",
+    false,
+    new Set(),
+    referencedFiles,
+  );
   return referencedFiles;
 }
 
@@ -363,7 +562,7 @@ export function assertViteManifest(manifest, files, outputRoot) {
   for (const key of manifestKeys) visitManifestEntry(key, `.vite/manifest.${key}`);
 }
 
-function javascriptTokens(source) {
+function javascriptTokens(source, origin = "JavaScript") {
   const tokens = [];
   let index = 0;
 
@@ -380,7 +579,32 @@ function javascriptTokens(source) {
     }
     if (character === "/" && source[index + 1] === "*") {
       const end = source.indexOf("*/", index + 2);
-      index = end === -1 ? source.length : end + 2;
+      if (end === -1) fail(`${origin} contains an unterminated comment`);
+      index = end + 2;
+      continue;
+    }
+    if (character === "/" && canStartRegex(tokens)) {
+      let inCharacterClass = false;
+      let closed = false;
+      index += 1;
+      while (index < source.length) {
+        const current = source[index];
+        if (current === "\\") {
+          index += 2;
+          continue;
+        }
+        if (current === "[") inCharacterClass = true;
+        if (current === "]") inCharacterClass = false;
+        if (current === "/" && !inCharacterClass) {
+          index += 1;
+          while (/[A-Za-z]/.test(source[index] ?? "")) index += 1;
+          closed = true;
+          break;
+        }
+        index += 1;
+      }
+      if (!closed) fail(`${origin} contains an unterminated regular expression`);
+      tokens.push({ kind: "regex", value: "regex" });
       continue;
     }
     if (character === "'" || character === '"' || character === "`") {
@@ -388,6 +612,7 @@ function javascriptTokens(source) {
       const template = quote === "`";
       let value = "";
       let dynamic = false;
+      let closed = false;
       index += 1;
       while (index < source.length) {
         const current = source[index];
@@ -399,11 +624,13 @@ function javascriptTokens(source) {
         if (template && current === "$" && source[index + 1] === "{") dynamic = true;
         if (current === quote) {
           index += 1;
+          closed = true;
           break;
         }
         value += current;
         index += 1;
       }
+      if (!closed) fail(`${origin} contains an unterminated string or template`);
       tokens.push({ kind: template ? "template" : "string", value, dynamic });
       continue;
     }
@@ -429,8 +656,237 @@ function isMemberProperty(tokens, index) {
   return tokens[index - 1]?.value === ".";
 }
 
-export function assertImportReferences(source, origin, files, outputRoot) {
-  const tokens = javascriptTokens(source);
+function canStartRegex(tokens) {
+  const previous = tokens.at(-1);
+  return (
+    !previous ||
+    previous.value === "(" ||
+    previous.value === "[" ||
+    previous.value === "{" ||
+    previous.value === "," ||
+    previous.value === ";" ||
+    previous.value === ":" ||
+    previous.value === "?" ||
+    previous.value === "=" ||
+    previous.value === "!" ||
+    previous.value === "&" ||
+    previous.value === "|" ||
+    previous.value === "+" ||
+    previous.value === "-" ||
+    previous.value === "*" ||
+    previous.value === "%" ||
+    previous.value === "~" ||
+    previous.value === "<" ||
+    previous.value === ">" ||
+    previous.value === "return" ||
+    previous.value === "throw" ||
+    previous.value === "case" ||
+    previous.value === "=>"
+  );
+}
+
+function isGeneratedEmptyFederationCssUrl(tokens, index) {
+  const argument = tokens[index + 3];
+  if (argument?.kind !== "word") return false;
+
+  const callbackShape = [
+    [index - 1, "="],
+    [index - 2, "word"],
+    [index - 3, "word"],
+    [index - 4, "{"],
+    [index - 5, ">"],
+    [index - 6, "="],
+    [index - 7, argument.value],
+    [index - 8, "("],
+    [index - 9, "map"],
+    [index - 10, "."],
+    [index - 11, "word"],
+  ];
+  if (
+    callbackShape.some(([tokenIndex, expected]) => {
+      const token = tokens[tokenIndex];
+      return expected === "word"
+        ? token?.kind !== "word"
+        : token?.value !== expected;
+    })
+  ) {
+    return false;
+  }
+
+  const mappedSource = tokens[index - 11].value;
+  for (let cursor = 0; cursor < index - 11; cursor += 1) {
+    if (
+      tokens[cursor]?.value === "let" &&
+      tokens[cursor + 1]?.value === mappedSource &&
+      tokens[cursor + 2]?.value === "=" &&
+      tokens[cursor + 3]?.value === "t" &&
+      tokens[cursor + 4]?.value === "[" &&
+      tokens[cursor + 5]?.value === argument.value &&
+      tokens[cursor + 6]?.value === "]" &&
+      tokens[cursor + 7]?.value === "|" &&
+      tokens[cursor + 8]?.value === "|" &&
+      tokens[cursor + 9]?.value === "[" &&
+      tokens[cursor + 10]?.value === "]"
+    ) {
+      for (let declaration = 0; declaration < cursor; declaration += 1) {
+        if (
+          tokens[declaration]?.value === "var" &&
+          tokens[declaration + 1]?.value === "t" &&
+          tokens[declaration + 2]?.value === "=" &&
+          tokens[declaration + 3]?.value === "{" &&
+          tokens[declaration + 4]?.value === "}"
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function isGeneratedVitePreloadUrl(tokens, index) {
+  const argument = tokens[index + 3];
+  const expected = [
+    [index - 1, ":"],
+    [index - 2, ")"],
+    [index - 3, argument?.value],
+    [index - 4, "("],
+    [index - 5, "resolve"],
+    [index - 6, "."],
+    [index - 7, "meta"],
+    [index - 8, "."],
+    [index - 9, "import"],
+    [index - 10, "?"],
+    [index - 11, "resolve"],
+    [index - 12, "."],
+    [index - 13, "meta"],
+    [index - 14, "."],
+    [index - 15, "import"],
+    [index - 16, "return"],
+    [index - 17, "{"],
+    [index - 18, ")"],
+    [index - 19, argument?.value],
+    [index - 20, "("],
+    [index - 21, "word"],
+    [index - 22, "function"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedFederationRemoteImport(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ">"],
+    [index - 2, "="],
+    [index - 3, ")"],
+    [index - 4, "("],
+    [index - 5, "("],
+    [index - 6, "word"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, ","],
+    [index + 10, "["],
+    [index + 11, "]"],
+    [index + 12, ","],
+    [index + 13, "import"],
+    [index + 14, "."],
+    [index + 15, "meta"],
+    [index + 16, "."],
+    [index + 17, "url"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedFederationExternalImport(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ":"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, "."],
+    [index + 10, "catch"],
+    [index + 11, "("],
+    [index + 12, "word"],
+    [index + 13, ")"],
+  ];
+  if (argument?.kind !== "word") return false;
+  if (
+    !expected.every(([tokenIndex, value]) => {
+      const token = tokens[tokenIndex];
+      return value === "word" ? token?.kind === "word" : token?.value === value;
+    })
+  ) {
+    return false;
+  }
+  return tokens
+    .slice(Math.max(0, index - 100), index)
+    .some((token) => token.value === "FEDERATION_ALLOW_NEW_FUNCTION");
+}
+
+function isGeneratedFederationRuntimeImport(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ">"],
+    [index - 2, "="],
+    [index - 3, ")"],
+    [index - 4, "("],
+    [index - 5, "("],
+    [index - 6, "word"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, ","],
+    [index + 10, "["],
+    [index + 11, "]"],
+    [index + 12, ")"],
+    [index + 13, "."],
+    [index + 14, "catch"],
+    [index + 15, "("],
+    [index + 16, "word"],
+    [index + 17, ")"],
+  ];
+  if (argument?.kind !== "word") return false;
+  if (
+    !expected.every(([tokenIndex, value]) => {
+      const token = tokens[tokenIndex];
+      return value === "word" ? token?.kind === "word" : token?.value === value;
+    })
+  ) {
+    return false;
+  }
+  return tokens
+    .slice(Math.max(0, index - 100), index)
+    .some((token) => token.value === "FEDERATION_ALLOW_NEW_FUNCTION");
+}
+
+export function assertImportReferences(
+  source,
+  origin,
+  files,
+  outputRoot,
+  referencedFiles = new Set(),
+  options = {},
+) {
+  const tokens = javascriptTokens(source, origin);
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     const next = tokens[index + 1];
@@ -441,27 +897,54 @@ export function assertImportReferences(source, origin, files, outputRoot) {
       !isMemberProperty(tokens, index) &&
       staticReferenceToken(next)
     ) {
-      assertLocalReference(next.value, origin, files, `${origin} import`, outputRoot);
+      const target = assertLocalReference(
+        next.value,
+        origin,
+        files,
+        `${origin} import`,
+        outputRoot,
+        options,
+      );
+      if (target) referencedFiles.add(target);
       continue;
     }
 
     if (token.kind === "word" && token.value === "import" && !isMemberProperty(tokens, index)) {
       if (staticReferenceToken(next)) {
-        assertLocalReference(next.value, origin, files, `${origin} import`, outputRoot);
-        continue;
-      }
-      if (
-        next?.value === "(" &&
-        staticReferenceToken(tokens[index + 2]) &&
-        tokens[index + 3]?.value === ")"
-      ) {
-        assertLocalReference(
-          tokens[index + 2].value,
+        const target = assertLocalReference(
+          next.value,
           origin,
           files,
           `${origin} import`,
           outputRoot,
+          options,
         );
+        if (target) referencedFiles.add(target);
+        continue;
+      }
+      if (next?.value === "(") {
+        if (
+          staticReferenceToken(tokens[index + 2]) &&
+          tokens[index + 3]?.value === ")"
+        ) {
+          const target = assertLocalReference(
+            tokens[index + 2].value,
+            origin,
+            files,
+            `${origin} import`,
+            outputRoot,
+            options,
+          );
+          if (target) referencedFiles.add(target);
+        } else if (
+          isGeneratedFederationRemoteImport(tokens, index) ||
+          isGeneratedFederationExternalImport(tokens, index) ||
+          isGeneratedFederationRuntimeImport(tokens, index)
+        ) {
+          continue;
+        } else {
+          fail(`${origin} contains an unresolved dynamic local import`);
+        }
       }
       continue;
     }
@@ -480,15 +963,40 @@ export function assertImportReferences(source, origin, files, outputRoot) {
       tokens[index + 9]?.value === "url" &&
       tokens[index + 10]?.value === ")"
     ) {
-      assertLocalReference(
+      const target = assertLocalReference(
         tokens[index + 3].value,
         origin,
         files,
         `${origin} asset URL`,
         outputRoot,
+        options,
       );
+      if (target) referencedFiles.add(target);
+      continue;
+    }
+
+    if (
+      token.kind === "word" &&
+      token.value === "new" &&
+      tokens[index + 1]?.value === "URL" &&
+      tokens[index + 2]?.value === "(" &&
+      tokens[index + 4]?.value === "," &&
+      tokens[index + 5]?.value === "import" &&
+      tokens[index + 6]?.value === "." &&
+      tokens[index + 7]?.value === "meta" &&
+      tokens[index + 8]?.value === "." &&
+      tokens[index + 9]?.value === "url"
+    ) {
+      if (
+        isGeneratedEmptyFederationCssUrl(tokens, index) ||
+        isGeneratedVitePreloadUrl(tokens, index)
+      ) {
+        continue;
+      }
+      fail(`${origin} contains an unresolved dynamic local asset URL`);
     }
   }
+  return referencedFiles;
 }
 
 function skipCssTrivia(source, start) {
@@ -553,7 +1061,13 @@ function readCssUrlFunction(source, start) {
   return { value, next: index + 1 };
 }
 
-export function assertCssReferences(source, origin, files, outputRoot) {
+export function assertCssReferences(
+  source,
+  origin,
+  files,
+  outputRoot,
+  referencedFiles = new Set(),
+) {
   let index = 0;
   while (index < source.length) {
     if (source[index] === "/" && source[index + 1] === "*") {
@@ -572,13 +1086,27 @@ export function assertCssReferences(source, origin, files, outputRoot) {
         const next = skipCssTrivia(source, atRule.next);
         const url = readCssUrlFunction(source, next);
         if (url) {
-          assertLocalReference(url.value, origin, files, `${origin} CSS import`, outputRoot);
+          const target = assertLocalReference(
+            url.value,
+            origin,
+            files,
+            `${origin} CSS import`,
+            outputRoot,
+          );
+          if (target) referencedFiles.add(target);
           index = url.next;
           continue;
         }
         if (source[next] === "'" || source[next] === '"') {
           const imported = readCssString(source, next);
-          assertLocalReference(imported.value, origin, files, `${origin} CSS import`, outputRoot);
+          const target = assertLocalReference(
+            imported.value,
+            origin,
+            files,
+            `${origin} CSS import`,
+            outputRoot,
+          );
+          if (target) referencedFiles.add(target);
           index = imported.next;
           continue;
         }
@@ -587,13 +1115,21 @@ export function assertCssReferences(source, origin, files, outputRoot) {
 
     const url = readCssUrlFunction(source, index);
     if (url) {
-      assertLocalReference(url.value, origin, files, `${origin} CSS URL`, outputRoot);
+      const target = assertLocalReference(
+        url.value,
+        origin,
+        files,
+        `${origin} CSS URL`,
+        outputRoot,
+      );
+      if (target) referencedFiles.add(target);
       index = url.next;
       continue;
     }
 
     index += 1;
   }
+  return referencedFiles;
 }
 
 function findHtmlTagEnd(source, start) {
@@ -701,6 +1237,30 @@ async function assertOutputDirectory(outputArgument) {
   if (!stats.isDirectory()) fail("output path must be a directory");
 }
 
+function snapshotOutputFiles(snapshot, outputRoot) {
+  if (!snapshot || !Array.isArray(snapshot.artifacts)) {
+    fail("artifact snapshot is invalid");
+  }
+  const byName = new Map();
+  for (const artifact of snapshot.artifacts) {
+    if (!artifact || typeof artifact.path !== "string" || !Buffer.isBuffer(artifact.bytes)) {
+      fail("artifact snapshot entry is invalid");
+    }
+    assertReleaseArtifactPath(artifact.path);
+    if (byName.has(artifact.path)) {
+      fail(`artifact snapshot contains duplicate ${JSON.stringify(artifact.path)}`);
+    }
+    byName.set(artifact.path, artifact);
+  }
+  const names = [...byName.keys()].sort((left, right) => left.localeCompare(right));
+  return {
+    files: new Set(names),
+    names,
+    paths: names.map((name) => join(outputRoot, ...name.split("/"))),
+    readText: async (name) => byName.get(name)?.bytes.toString("utf8") ?? null,
+  };
+}
+
 function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
   const references = [...source.matchAll(/\/assets\/application-host\/[A-Za-z0-9._/-]+/g)].map(
     ([reference]) => reference,
@@ -718,10 +1278,23 @@ function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
   }
 }
 
+function isGeneratedHostInitializationArtifact(name, source) {
+  return (
+    /^assets\/hostInit-[A-Za-z0-9_-]+\.js$/.test(name) &&
+    source.includes("hostInitPromise") &&
+    source.includes("initHost")
+  );
+}
+
 export async function validateFederationOutput(
   outputArgument,
   expectedRemoteName,
-  { repositoryRootInput = repositoryRoot, requireExternal = true, allowedDeploymentPath } = {},
+  {
+    repositoryRootInput = repositoryRoot,
+    requireExternal = true,
+    allowedDeploymentPath,
+    artifactSnapshot,
+  } = {},
 ) {
   assertRemoteName(expectedRemoteName, "expected remote name");
   const canonicalRepositoryRoot = await realpath(repositoryRootInput).catch(() =>
@@ -730,18 +1303,31 @@ export async function validateFederationOutput(
   await assertOutputDirectory(outputArgument);
   const outputRoot = canonicalPathWithMissingTail(outputArgument);
   if (requireExternal) assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot);
+  if (artifactSnapshot) {
+    if (typeof artifactSnapshot.root !== "string") fail("artifact snapshot root is invalid");
+    if (canonicalPathWithMissingTail(artifactSnapshot.root) !== outputRoot) {
+      fail("artifact snapshot root does not match the output directory");
+    }
+  }
 
-  const paths = await outputFiles(outputRoot, outputRoot);
+  const snapshot = artifactSnapshot
+    ? snapshotOutputFiles(artifactSnapshot, outputRoot)
+    : {
+        paths: await outputFiles(outputRoot, outputRoot),
+        readText: async (name) =>
+          readFile(join(outputRoot, ...name.split("/")), "utf8").catch(() => null),
+      };
+  const paths = snapshot.paths;
   if (paths.length === 0) fail("output is empty");
 
-  const files = new Set(paths.map((path) => relativePath(outputRoot, path)));
+  const files = snapshot.files ?? new Set(paths.map((path) => relativePath(outputRoot, path)));
   for (const path of files) assertReleaseArtifactPath(path);
   for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
     if (!files.has(required)) fail(`missing required ${required}`);
   }
   if (!paths.some((path) => extname(path) === ".css")) fail("no CSS asset was emitted");
 
-  const manifest = JSON.parse(await readFile(join(outputRoot, "mf-manifest.json"), "utf8"));
+  const manifest = JSON.parse(await snapshot.readText("mf-manifest.json"));
   const manifestReferences = assertGeneratedManifest(
     manifest,
     expectedRemoteName,
@@ -749,11 +1335,45 @@ export async function validateFederationOutput(
     outputRoot,
   );
 
-  const stats = JSON.parse(await readFile(join(outputRoot, "mf-stats.json"), "utf8"));
+  const stats = JSON.parse(await snapshot.readText("mf-stats.json"));
   const statsReferences = assertStats(stats, files, outputRoot);
-  for (const reference of manifestReferences) {
+
+  const manifestClosure = new Set(manifestReferences);
+  const pending = [...manifestClosure];
+  const visited = new Set();
+  while (pending.length > 0) {
+    const name = pending.pop();
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const source = await snapshot.readText(name);
+    if (source === null) fail(`manifest closure cannot read ${JSON.stringify(name)}`);
+    const discovered = new Set();
+    if (/\.(?:js|mjs|cjs)$/i.test(name)) {
+      assertImportReferences(source, name, files, outputRoot, discovered);
+    }
+    if (extname(name).toLowerCase() === ".css") {
+      assertCssReferences(source, name, files, outputRoot, discovered);
+    }
+    for (const reference of discovered) {
+      if (!manifestClosure.has(reference)) {
+        manifestClosure.add(reference);
+        pending.push(reference);
+      }
+    }
+  }
+
+  for (const reference of manifestClosure) {
     if (!statsReferences.has(reference)) {
       fail(`manifest references ${JSON.stringify(reference)} missing from federation stats`);
+    }
+  }
+  for (const reference of statsReferences) {
+    if (!manifestClosure.has(reference)) {
+      const source = await snapshot.readText(reference);
+      if (!isGeneratedHostInitializationArtifact(reference, source ?? "")) {
+        fail(`federation stats references ${JSON.stringify(reference)} missing from manifest closure`);
+      }
+      manifestClosure.add(reference);
     }
   }
   for (const path of files) {
@@ -765,13 +1385,24 @@ export async function validateFederationOutput(
 
   for (const path of paths) {
     const name = relativePath(outputRoot, path);
-    const source = await readFile(path, "utf8").catch(() => null);
+    const source = await snapshot.readText(name);
     if (source === null) continue;
 
     assertNoForbiddenPublicationReferences(source, name);
     assertDeploymentReferences(source, name, allowedDeploymentPath);
 
-    if (/\.(?:js|mjs|cjs)$/i.test(name)) assertImportReferences(source, name, files, outputRoot);
+    if (/\.(?:js|mjs|cjs)$/i.test(name)) {
+      assertImportReferences(
+        source,
+        name,
+        files,
+        outputRoot,
+        new Set(),
+        isGeneratedHostInitializationArtifact(name, source)
+          ? { allowGeneratedHostInitializationParent: true }
+          : undefined,
+      );
+    }
     if (extname(name).toLowerCase() === ".css")
       assertCssReferences(source, name, files, outputRoot);
     if (extname(name).toLowerCase() === ".html")
@@ -785,10 +1416,12 @@ export async function validateReleaseOutput(
   outputArgument,
   expectedRemoteName,
   repositoryRootInput = repositoryRoot,
+  options = {},
 ) {
   return validateFederationOutput(outputArgument, expectedRemoteName, {
     repositoryRootInput,
     requireExternal: true,
+    ...options,
   });
 }
 

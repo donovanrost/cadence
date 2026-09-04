@@ -17,6 +17,7 @@ const publicationBundles = [
   ["telemetry-decom", "cadence_telemetry_decom"],
 ];
 const hostFiles = new Set(["host.js", "plugin-host.css"]);
+const publicationEntries = new Set(["host", ...publicationBundles.map(([bundle]) => bundle)]);
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);
@@ -90,6 +91,16 @@ export async function validateProductionPublication(root = publicationRoot) {
   const stats = await lstat(root).catch(() => fail(`publication root is unavailable: ${root}`));
   if (stats.isSymbolicLink()) fail("publication root must not be a symlink");
   if (!stats.isDirectory()) fail("publication root must be a directory");
+
+  const entries = await readdir(root, { withFileTypes: true });
+  const entryNames = new Set(entries.map((entry) => entry.name));
+  if (
+    entryNames.size !== publicationEntries.size ||
+    [...publicationEntries].some((name) => !entryNames.has(name)) ||
+    entries.some((entry) => !entry.isDirectory())
+  ) {
+    fail(`publication root inventory is not exactly ${[...publicationEntries].sort().join(", ")}`);
+  }
 
   const host = await validateHostPublication(join(root, "host"));
   const remotes = [];

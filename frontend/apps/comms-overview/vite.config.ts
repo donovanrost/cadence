@@ -9,6 +9,7 @@ const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vu
 const federatedEntry = resolve(__dirname, "src/federated-application.ts");
 const releaseFederationConfig = {
   ...federationConfig,
+  hostInitInjectLocation: "entry" as const,
   manifest: {
     additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
       if (!Object.hasOwn(stats, "assetAnalysis")) return stats;
@@ -38,6 +39,11 @@ const releaseIdentityEnvironmentNames = [
 function releaseOutputDirectory() {
   const configuredOutput = process.env[releaseOutputEnvironmentName];
   if (!configuredOutput) {
+    throw new Error(
+      `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`,
+    );
+  }
+  if (!isAbsolute(configuredOutput)) {
     throw new Error(
       `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`,
     );
@@ -152,11 +158,40 @@ function releaseOutputPlugin() {
       config.build ??= {};
       config.build.manifest = false;
     },
+    generateBundle(
+      _options: unknown,
+      bundle: Record<string, { fileName?: string; type?: string; source?: string | Uint8Array }>,
+    ) {
+      for (const fileName of Object.keys(bundle)) {
+        if (basename(fileName).startsWith("hostInit-")) {
+          delete bundle[fileName];
+        }
+      }
+      const statsAsset = bundle["mf-stats.json"];
+      if (statsAsset?.type === "asset" && statsAsset.source !== undefined) {
+        const statsText =
+          typeof statsAsset.source === "string"
+            ? statsAsset.source
+            : new TextDecoder().decode(statsAsset.source);
+        const stats = JSON.parse(statsText) as {
+          buildOutput?: Array<{ fileName?: string }>;
+        };
+        if (Array.isArray(stats.buildOutput)) {
+          stats.buildOutput = stats.buildOutput.filter(
+            (output) => !basename(output.fileName ?? "").startsWith("hostInit-"),
+          );
+          statsAsset.source = JSON.stringify(stats);
+        }
+      }
+    },
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const releaseBuild = mode === "release";
+  if (releaseBuild && command !== "build") {
+    throw new Error("Release mode requires the Vite build command.");
+  }
   const outputDirectory = releaseBuild ? releaseOutputDirectory() : undefined;
 
   if (

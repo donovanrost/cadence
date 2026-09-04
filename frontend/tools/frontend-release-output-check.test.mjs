@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
+  assertLocalReference,
   assertOutputOutsideRepository,
+  assertReleaseArtifactPath,
   canonicalPathWithMissingTail,
   parseRemoteNameArgument,
   parseOutputDirectoryArgument,
@@ -190,6 +192,64 @@ void test("scans quoted and unquoted JavaScript and CSS references", async () =>
   });
 });
 
+void test("fails closed for unresolved dynamic local imports and asset URLs", async () => {
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const directory = "../";\nimport(directory + "outside.js");\n',
+    );
+    await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const name = "image";\nnew URL(`./assets/${name}.svg`, import.meta.url);\n',
+    );
+    await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local asset URL/);
+  });
+});
+
+void test("rejects encoded, split, invalid, and cross-platform forbidden artifact paths", () => {
+  for (const path of [
+    "assets/contract%2Dprobe.js",
+    "assets/contract%2eprobe.js",
+    "assets/contract/probe.js",
+    "assets/contract\\probe.js",
+    "assets/invalid%ZZ.js",
+    "assets/contract%2Fprobe.js",
+  ]) {
+    assert.throws(() => assertReleaseArtifactPath(path), /forbidden|percent|separator/);
+  }
+
+  assert.doesNotThrow(() => assertReleaseArtifactPath("assets/Contest.js"));
+  assert.doesNotThrow(() => assertReleaseArtifactPath("assets/Latest.js"));
+});
+
+void test("rejects local-reference normalization collisions and Windows or POSIX escapes", () => {
+  const files = new Set(["remoteEntry.js", "assets/Latest.js"]);
+  const outputRoot = "/tmp/cadence-release-reference-fixture";
+  assert.doesNotThrow(() =>
+    assertLocalReference("./assets/Latest.js", "remoteEntry.js", files, "fixture import", outputRoot),
+  );
+
+  for (const reference of [
+    "assets/../remoteEntry.js",
+    "assets//Latest.js",
+    "assets\\Latest.js",
+    "assets/%2e%2e/remoteEntry.js",
+    "C:/checkout/secret.js",
+    "C:\\checkout\\secret.js",
+    "/checkout/secret.js",
+    "assets/%ZZ.js",
+  ]) {
+    assert.throws(
+      () => assertLocalReference(reference, "remoteEntry.js", files, "fixture import", outputRoot),
+      /absolute|traversal|empty|separator|percent|missing|normalization/,
+    );
+  }
+});
+
 void test("rejects a real CSS reference that is absent and any standalone HTML", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "assets/style.css"), '.real { background: url("./missing.png"); }');
@@ -217,6 +277,33 @@ void test("requires federation manifest and stats references to existing files",
     stats.buildOutput.push({ fileName: "assets/missing.js" });
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /points to missing/);
+  });
+});
+
+void test("rejects stats-only artifacts and recursively nested absolute or invalid paths", async () => {
+  await withFixture(async (root) => {
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.buildOutput.push({ fileName: "assets/stats-only.js" });
+    await writeFile(join(root, "assets", "stats-only.js"), "export const statsOnly = true;\n");
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /missing from manifest closure/);
+  });
+
+  await withFixture(async (root) => {
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.nested = { metadata: { path: join(repositoryRoot, "checkout-secret.js") } };
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /nested\.metadata\.path.*absolute local path/);
+  });
+
+  await withFixture(async (root) => {
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.nested = { metadata: { fileName: "assets/invalid%ZZ.js" } };
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /invalid percent encoding/);
   });
 });
 

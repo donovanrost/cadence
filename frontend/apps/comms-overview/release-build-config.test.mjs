@@ -131,3 +131,30 @@ void test("keeps the standalone entry available outside release mode", async () 
     assert.notEqual(await lstat(join(output, "index.html")).catch(() => null), null);
   });
 });
+
+void test("requires release builds to use the build command and an absolute configured output", async () => {
+  await withTemporaryDirectory(async (root) => {
+    const output = join(root, "release");
+    const served = await runVite(
+      [
+        "dev",
+        "--config",
+        resolve(appRoot, "vite.config.ts"),
+        "--mode",
+        "release",
+      ],
+      { CADENCE_RELEASE_OUTPUT_DIR: output },
+    );
+    assert.notEqual(served.code, 0);
+    assert.match(`${served.stdout}\n${served.stderr}`, /requires the Vite build command/);
+
+    const relative = await runVite(releaseArguments(output), {
+      CADENCE_RELEASE_OUTPUT_DIR: "relative-release-output",
+    });
+    assert.notEqual(relative.code, 0);
+    assert.match(
+      `${relative.stdout}\n${relative.stderr}`,
+      /CADENCE_RELEASE_OUTPUT_DIR must be an absolute output directory/,
+    );
+  });
+});

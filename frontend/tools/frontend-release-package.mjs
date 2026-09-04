@@ -343,6 +343,13 @@ async function enumerateArtifacts(inputDirectory) {
   return { root, artifacts };
 }
 
+function freezeArtifactSnapshot(inventory) {
+  const artifacts = inventory.artifacts.map((artifact) =>
+    Object.freeze({ ...artifact, bytes: Buffer.from(artifact.bytes) }),
+  );
+  return Object.freeze({ root: inventory.root, artifacts: Object.freeze(artifacts) });
+}
+
 function validateMetadata(metadata) {
   exactFields(metadata, METADATA_FIELDS, "release metadata");
   const application = requireIdentity(metadata.application, "application");
@@ -464,6 +471,15 @@ function buildReleasePayload({ inventory, metadata, artifactOrigin }) {
     }
     if (mediaTypeForPath(path) !== artifact.mediaType) {
       fail(`invalid media type for ${path}`);
+    }
+    if (!Buffer.isBuffer(artifact.bytes)) {
+      fail(`artifact bytes are missing for ${path}`);
+    }
+    if (artifact.bytes.byteLength !== artifact.size) {
+      fail(`artifact size does not match bytes for ${path}`);
+    }
+    if (sha256Digest(artifact.bytes) !== `sha256:${artifact.sha256}`) {
+      fail(`artifact digest does not match bytes for ${path}`);
     }
     return {
       path,
@@ -792,11 +808,18 @@ export async function buildRelease({
   artifactOrigin,
   keyId,
   privateKey,
+  afterSnapshot,
 }) {
   if (!inputDirectory) fail("input directory is required");
-  const inventory = await enumerateArtifacts(inputDirectory);
+  const inventory = freezeArtifactSnapshot(await enumerateArtifacts(inputDirectory));
+  if (afterSnapshot !== undefined) {
+    if (typeof afterSnapshot !== "function") fail("afterSnapshot must be a function");
+    await afterSnapshot(inventory.root);
+  }
   const release = buildReleasePayload({ inventory, metadata, artifactOrigin });
-  await validateReleaseOutput(inventory.root, release.metadata.remoteName);
+  await validateReleaseOutput(inventory.root, release.metadata.remoteName, REPOSITORY_ROOT, {
+    artifactSnapshot: inventory,
+  });
   const signed = createSignedEnvelope({ payloadBytes: release.payloadBytes, keyId, privateKey });
   return {
     inputRoot: inventory.root,
@@ -817,9 +840,17 @@ export async function packageRelease({
   artifactOrigin,
   keyId,
   privateKey,
+  afterSnapshot,
 }) {
   if (!outputDirectory) fail("output directory is required");
-  const built = await buildRelease({ inputDirectory, metadata, artifactOrigin, keyId, privateKey });
+  const built = await buildRelease({
+    inputDirectory,
+    metadata,
+    artifactOrigin,
+    keyId,
+    privateKey,
+    afterSnapshot,
+  });
   const destination = await ensureOutputDestination(outputDirectory, built.inputRoot);
   try {
     await writePackage(destination.path, built.documentBytes, built.artifacts);
