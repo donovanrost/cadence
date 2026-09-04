@@ -10,7 +10,7 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
 
   alias Cadence.Auth.Scope
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias CadenceWeb.TestFixtures
+  alias CadenceWeb.{ApplicationActionIdempotency, TestFixtures}
 
   @bridge_prefix "/api/cadence/application-host/v1/missions"
 
@@ -116,10 +116,14 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
       |> put_req_header("idempotency-key", "telemetry-save-1")
       |> post_json(action_path(context), action_body(context, revision, endpoint, packet_id))
 
+    first_response_body = action_response.resp_body
     receipt = json_response(action_response, 200)
 
+    assert {:ok, idempotency_key_digest} =
+             ApplicationActionIdempotency.key_digest("telemetry-save-1")
+
     assert Map.keys(receipt) |> Enum.sort() == ["completedAt", "receiptId", "result"]
-    assert receipt["receiptId"] == "application-host-receipt-telemetry-save-1"
+    assert receipt["receiptId"] == "application-host-receipt-" <> idempotency_key_digest
     assert {:ok, _completed_at, 0} = DateTime.from_iso8601(receipt["completedAt"])
 
     assert %{
@@ -135,6 +139,15 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
            } = receipt["result"]
 
     assert is_binary(configuration_id) and configuration_id != ""
+
+    replay_response =
+      catalog_conn
+      |> bridge_conn(catalog)
+      |> put_req_header("idempotency-key", "telemetry-save-1")
+      |> post_json(action_path(context), action_body(context, revision, endpoint, packet_id))
+
+    assert replay_response.status == 200
+    assert replay_response.resp_body == first_response_body
 
     assert {:ok, [configuration]} =
              PacketBindings.list(

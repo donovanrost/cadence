@@ -14,9 +14,10 @@ defmodule CadenceWeb.ApplicationHostController do
   alias Cadence.Missions.Mission
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
-  alias CadenceWeb.{ApplicationHostBridge, ApplicationHostCatalog}
+  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationHostBridge, ApplicationHostCatalog}
 
   @problem_schema "cadence.application-host-problem.v1"
+  @json_content_type "application/json; charset=utf-8"
   @host_context_key :application_host_context
   @host_mission_key :application_host_mission_id
 
@@ -125,9 +126,22 @@ defmodule CadenceWeb.ApplicationHostController do
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
          {:ok, idempotency_key} <- idempotency_key(conn),
-         {:ok, response} <-
-           ApplicationHostBridge.action(current_scope, route_context, params, idempotency_key) do
-      json(conn, response)
+         {:ok, prepared} <-
+           ApplicationHostBridge.prepare_action(
+             current_scope,
+             route_context,
+             params,
+             idempotency_key
+           ),
+         {:ok, {_disposition, response}} <-
+           ApplicationActionIdempotency.run(
+             current_scope,
+             prepared.identity,
+             idempotency_key,
+             prepared.request_document,
+             fn -> action_execution_outcome(conn, current_scope, route_context, prepared) end
+           ) do
+      send_action_response(conn, response)
     else
       {:error, reason} when reason in [:mission_not_found, :spacecraft_not_found] ->
         problem(conn, :not_found, "mission_not_found", mission_not_found_message())
@@ -138,6 +152,9 @@ defmodule CadenceWeb.ApplicationHostController do
       {:error, reason}
       when is_tuple(reason) and elem(reason, 0) in [:database_unavailable, :integrity_failure] ->
         catalog_problem(conn, reason)
+
+      {:error, {:idempotency_persistence_failure, _reason}} = reason ->
+        bridge_problem(conn, reason)
 
       {:error, reason} ->
         bridge_problem(conn, reason)
@@ -167,6 +184,73 @@ defmodule CadenceWeb.ApplicationHostController do
       reason ->
         bridge_problem(conn, reason)
     end
+  end
+
+  defp action_execution_outcome(conn, current_scope, route_context, prepared) do
+    case ApplicationHostBridge.execute_action(current_scope, route_context, prepared) do
+      {:ok, response} -> {:ok, success_action_response(response)}
+      {:error, reason} -> {:error, action_problem_response(conn, reason)}
+    end
+  end
+
+  defp success_action_response(response) do
+    %{status: 200, content_type: @json_content_type, body: Jason.encode!(response)}
+  end
+
+  defp action_problem_response(conn, reason) do
+    conn
+    |> action_problem_conn(reason)
+    |> stored_response()
+  end
+
+  defp action_problem_conn(conn, reason)
+       when reason in [:mission_not_found, :spacecraft_not_found],
+       do: problem(conn, :not_found, "mission_not_found", mission_not_found_message())
+
+  defp action_problem_conn(conn, :no_history), do: catalog_problem(conn, :no_history)
+
+  defp action_problem_conn(conn, reason)
+       when is_tuple(reason) and elem(reason, 0) in [:database_unavailable, :integrity_failure],
+       do: catalog_problem(conn, reason)
+
+  defp action_problem_conn(conn, {:invalid_scope, _reason}),
+    do: problem(conn, :bad_request, "invalid_scope", invalid_scope_message())
+
+  defp action_problem_conn(conn, :invalid_scope),
+    do: problem(conn, :bad_request, "invalid_scope", invalid_scope_message())
+
+  defp action_problem_conn(conn, :invalid_application_request),
+    do:
+      problem(
+        conn,
+        :unprocessable_entity,
+        "invalid_input",
+        "The application request is invalid."
+      )
+
+  defp action_problem_conn(conn, :unsupported_application_action),
+    do:
+      problem(
+        conn,
+        :not_found,
+        "unsupported_action",
+        "The host does not provide that action contract."
+      )
+
+  defp action_problem_conn(conn, reason), do: bridge_problem(conn, reason)
+
+  defp stored_response(conn) do
+    %{
+      status: conn.status,
+      content_type: List.first(get_resp_header(conn, "content-type")) || @json_content_type,
+      body: conn.resp_body
+    }
+  end
+
+  defp send_action_response(conn, %{status: status, content_type: content_type, body: body}) do
+    conn
+    |> put_resp_header("content-type", content_type)
+    |> send_resp(status, body)
   end
 
   defp render_shell(
@@ -333,6 +417,62 @@ defmodule CadenceWeb.ApplicationHostController do
       :bad_request,
       "idempotency_key_required",
       "The Idempotency-Key header is required."
+    )
+  end
+
+  defp bridge_problem(conn, :malformed_idempotency_key) do
+    problem(
+      conn,
+      :bad_request,
+      "invalid_idempotency_key",
+      "The Idempotency-Key header is invalid or exceeds the permitted size."
+    )
+  end
+
+  defp bridge_problem(conn, :idempotency_key_collision) do
+    problem(
+      conn,
+      :conflict,
+      "idempotency_key_collision",
+      "The Idempotency-Key was already used for a different request."
+    )
+  end
+
+  defp bridge_problem(conn, :idempotency_in_progress) do
+    conn
+    |> put_resp_header("retry-after", "1")
+    |> problem(
+      :too_early,
+      "action_in_progress",
+      "An identical action is already in progress. Retry after it completes."
+    )
+  end
+
+  defp bridge_problem(conn, reason)
+       when reason in [:active_generation_unavailable, :idempotency_secret_unavailable] do
+    problem(
+      conn,
+      :service_unavailable,
+      "idempotency_unavailable",
+      "The action cannot be safely executed until durable idempotency is available."
+    )
+  end
+
+  defp bridge_problem(conn, {:idempotency_persistence_failure, _reason}) do
+    problem(
+      conn,
+      :service_unavailable,
+      "idempotency_unavailable",
+      "The action cannot be safely executed until durable idempotency is available."
+    )
+  end
+
+  defp bridge_problem(conn, reason) when reason in [:claim_lost, :action_indeterminate] do
+    problem(
+      conn,
+      :conflict,
+      "action_indeterminate",
+      "The action may have executed, but its durable result is unavailable. Operator action is required."
     )
   end
 
