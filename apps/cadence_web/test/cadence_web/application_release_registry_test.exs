@@ -21,6 +21,47 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
   end
 
+  test "accepts canonical Z clocks and rejects pre-epoch, offset, malformed, and bad options" do
+    assert {:ok, _milliseconds} = ApplicationReleaseRegistry.normalize_now(@now)
+
+    assert {:ok, _milliseconds} =
+             ApplicationReleaseRegistry.normalize_now("2026-09-01T19:00:00.000Z")
+
+    assert {:ok, _milliseconds} =
+             ApplicationReleaseRegistry.normalize_now(~U[2026-09-01 19:00:00Z])
+
+    assert {:ok, _snapshot} = ApplicationReleaseRegistry.snapshot(now: @now)
+
+    invalid_clocks = [
+      -1,
+      ~U[1969-12-31 23:59:59Z],
+      "1969-12-31T23:59:59Z",
+      "2026-09-03 00:00:00",
+      "2026-09-03T00:00:00+00:00",
+      "not-a-canonical-timestamp"
+    ]
+
+    for invalid <- invalid_clocks do
+      assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+               ApplicationReleaseRegistry.normalize_now(invalid)
+
+      assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+               ApplicationReleaseRegistry.snapshot(now: invalid)
+    end
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_options}} =
+             ApplicationReleaseRegistry.snapshot(%{})
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_options}} =
+             ApplicationReleaseRegistry.all(%{})
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_options}} =
+             ApplicationReleaseRegistry.all([:not_a_keyword])
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_options}} =
+             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1, %{})
+  end
+
   test "keys the checked-in Comms release by application and surface versions" do
     assert {:ok, release} =
              ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1, now: @now)

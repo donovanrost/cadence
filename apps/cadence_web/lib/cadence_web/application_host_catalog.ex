@@ -59,7 +59,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       when is_list(opts) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- validate_session_options(opts),
-         {:ok, release_snapshot} <- release_snapshot(opts),
+         {:ok, release_snapshot, generated_at} <- release_snapshot(opts),
          {:ok, applications} <-
            applications(current_scope, route_context, opts, release_snapshot),
          {:ok, catalog} <-
@@ -67,7 +67,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
             %{
               "schema" => @application_catalog_schema,
               "hostContract" => @application_host_contract,
-              "generatedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+              "generatedAt" => generated_at,
               "session" => %{
                 "sessionId" => Keyword.fetch!(opts, :session_id),
                 "csrfToken" => Keyword.fetch!(opts, :csrf_token),
@@ -105,9 +105,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         opts
       )
       when is_binary(application_key) and is_list(opts) do
-    with :ok <- authorize_catalog_access(current_scope, route_context),
+    with true <- Keyword.keyword?(opts),
+         :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- CatalogRegistry.validate(),
-         {:ok, release_snapshot} <- release_snapshot(opts) do
+         {:ok, release_snapshot, _generated_at} <- release_snapshot(opts) do
       admit_application_from_snapshot(
         current_scope,
         route_context,
@@ -115,8 +116,20 @@ defmodule CadenceWeb.ApplicationHostCatalog do
         surface_id,
         release_snapshot
       )
+    else
+      false -> {:error, {:integrity_failure, :invalid_snapshot_options}}
+      {:error, reason} -> {:error, reason}
     end
   end
+
+  def admit_application(
+        %Scope{},
+        %{host_context: %HostContext{}},
+        _application_key,
+        _surface_id,
+        _opts
+      ),
+      do: {:error, :application_catalog_unavailable}
 
   def admit_application(%Scope{}, %{}, _application_key, _surface_id, _opts),
     do: {:error, :application_catalog_unavailable}
@@ -205,12 +218,12 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   @doc "Selects the admitted native or federated workspace path for an application."
-  @spec workspace_href(Scope.t(), route_context(), binary()) ::
+  @spec workspace_href(Scope.t(), route_context(), binary(), keyword()) ::
           {:ok, binary()} | {:error, :invalid_application_request}
-  def workspace_href(%Scope{} = scope, route_context, application_key)
+  def workspace_href(%Scope{} = scope, route_context, application_key, opts \\ [])
       when is_binary(application_key) do
     with :ok <- validate_route_identifiers(route_context, application_key) do
-      case admit_application(scope, route_context, application_key) do
+      case admit_application(scope, route_context, application_key, nil, opts) do
         {:ok, %{surface: surface, release: %{federation: federation}}} ->
           href =
             application_href(host_base_path(route_context), application_key, surface.surface_id)
@@ -393,7 +406,20 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   defp release_snapshot(opts) do
-    ApplicationReleaseRegistry.snapshot(now: Keyword.get(opts, :now, DateTime.utc_now()))
+    with {:ok, now} <- Keyword.fetch(opts, :now),
+         {:ok, now_ms} <- ApplicationReleaseRegistry.normalize_now(now),
+         {:ok, snapshot} <- ApplicationReleaseRegistry.snapshot(now: now_ms) do
+      {:ok, snapshot, format_timestamp(now, now_ms)}
+    else
+      :error -> {:error, {:integrity_failure, :invalid_snapshot_clock}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp format_timestamp(value, _milliseconds) when is_binary(value), do: value
+
+  defp format_timestamp(_value, milliseconds) do
+    DateTime.from_unix!(milliseconds, :millisecond) |> DateTime.to_iso8601()
   end
 
   defp all_applications(
@@ -917,7 +943,8 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   defp spacecraft_name(nil), do: nil
 
   defp validate_session_options(opts) do
-    with true <- valid_text?(Keyword.get(opts, :session_id)),
+    with true <- Keyword.keyword?(opts),
+         true <- valid_text?(Keyword.get(opts, :session_id)),
          true <- valid_text?(Keyword.get(opts, :csrf_token)),
          true <- valid_path?(Keyword.get(opts, :bridge_base_url)),
          true <- is_function(Keyword.get(opts, :manifest_url), 1) do

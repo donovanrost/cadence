@@ -25,6 +25,8 @@ defmodule CadenceWeb.ApplicationHostController do
         conn,
         %{"mission_id" => _mission_id, "application_key" => application_key} = params
       ) do
+    now = request_boundary_now()
+
     with %Scope{} = current_scope <- conn.assigns.current_scope,
          :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
@@ -33,7 +35,8 @@ defmodule CadenceWeb.ApplicationHostController do
              current_scope,
              route_context,
              application_key,
-             Map.get(params, "surface_id")
+             Map.get(params, "surface_id"),
+             now: now
            ) do
       render_shell(
         conn,
@@ -49,10 +52,12 @@ defmodule CadenceWeb.ApplicationHostController do
 
   @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def catalog(conn, %{"mission_id" => _mission_id} = params) do
+    now = request_boundary_now()
+
     with %Scope{} = current_scope <- conn.assigns.current_scope,
          :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
-         {:ok, catalog} <- build_catalog(conn, current_scope, route_context, params) do
+         {:ok, catalog} <- build_catalog(conn, current_scope, route_context, params, now) do
       conn
       |> put_session(
         @host_context_key,
@@ -69,12 +74,15 @@ defmodule CadenceWeb.ApplicationHostController do
 
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def query(conn, %{"mission_id" => _mission_id} = params) do
+    now = request_boundary_now()
+
     with %Scope{} = current_scope <- conn.assigns.current_scope,
          :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          :ok <- validate_host_context(conn, current_scope, route_context),
          :ok <- validate_request_scope(params, current_scope, route_context),
-         {:ok, response} <- ApplicationHostBridge.query(current_scope, route_context, params) do
+         {:ok, response} <-
+           ApplicationHostBridge.query(current_scope, route_context, params, now: now) do
       json(conn, response)
     else
       {:error, reason} when reason in [:mission_not_found, :spacecraft_not_found] ->
@@ -119,6 +127,8 @@ defmodule CadenceWeb.ApplicationHostController do
 
   @spec actions(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def actions(conn, %{"mission_id" => _mission_id} = params) do
+    now = request_boundary_now()
+
     with %Scope{} = current_scope <- conn.assigns.current_scope,
          :ok <- authorize_route_scope(current_scope, params),
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
@@ -126,7 +136,9 @@ defmodule CadenceWeb.ApplicationHostController do
          :ok <- validate_request_scope(params, current_scope, route_context),
          {:ok, idempotency_key} <- idempotency_key(conn),
          {:ok, response} <-
-           ApplicationHostBridge.action(current_scope, route_context, params, idempotency_key) do
+           ApplicationHostBridge.action(current_scope, route_context, params, idempotency_key,
+             now: now
+           ) do
       json(conn, response)
     else
       {:error, reason} when reason in [:mission_not_found, :spacecraft_not_found] ->
@@ -203,12 +215,13 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
-  defp build_catalog(conn, current_scope, route_context, params) do
+  defp build_catalog(conn, current_scope, route_context, params, now) do
     opts = [
       session_id: conn.assigns.application_host_session_id,
       csrf_token: get_csrf_token(),
       bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-      manifest_url: fn manifest_path -> unverified_url(conn, manifest_path) end
+      manifest_url: fn manifest_path -> unverified_url(conn, manifest_path) end,
+      now: now
     ]
 
     opts =
@@ -227,6 +240,12 @@ defmodule CadenceWeb.ApplicationHostController do
       end
 
     ApplicationHostCatalog.build(current_scope, route_context, opts)
+  end
+
+  defp request_boundary_now do
+    DateTime.utc_now()
+    |> DateTime.truncate(:millisecond)
+    |> DateTime.to_iso8601()
   end
 
   defp fetch_route_context(

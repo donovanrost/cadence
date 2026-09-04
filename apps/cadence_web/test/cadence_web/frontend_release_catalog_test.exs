@@ -89,6 +89,17 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
     assert second.signing_role == first.signing_role
   end
 
+  test "rejects a pre-epoch DateTime verification clock" do
+    opts = Keyword.put(@opts, :now, ~U[1969-12-31 23:59:59Z])
+
+    assert {:error, %{code: :invalid_timestamp, path: "$.now"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               @corpus["keys"],
+               opts
+             )
+  end
+
   test "the bounded v2 adversarial corpus is consumed in order with exact outcomes" do
     assert @corpus["version"] == 2
     assert @corpus["corpusSchema"] == "cadence.frontend-release-contract.adversarial.v2"

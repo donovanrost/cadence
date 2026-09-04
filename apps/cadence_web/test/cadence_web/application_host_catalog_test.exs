@@ -29,6 +29,14 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                scope,
                route_context,
                "telemetry_decom",
+               "packet_bindings"
+             )
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom",
                "packet_bindings",
                now: "not-a-canonical-timestamp"
              )
@@ -56,7 +64,8 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                scope,
                route_context,
                "telemetry_decom",
-               "packet_bindings"
+               "packet_bindings",
+               now: @now
              )
 
     assert admission.release.release_id == "telemetry-decom-v1"
@@ -78,9 +87,11 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                session_id: "catalog-session",
                csrf_token: "catalog-csrf",
                bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
              )
 
+    assert catalog["generatedAt"] == @now
     assert [application] = catalog["applications"]
     assert application["applicationKey"] == "telemetry_decom"
     assert application["surface"]["surfaceId"] == "packet_bindings"
@@ -109,7 +120,8 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                session_id: "catalog-session",
                csrf_token: "catalog-csrf",
                bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
              )
   end
 
@@ -122,15 +134,16 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                  scope,
                  route_context,
                  "comms",
-                 surface_id
+                 surface_id,
+                 now: @now
                )
     end
 
     assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
-             ApplicationHostCatalog.workspace_href(scope, route_context, "comms")
+             ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
 
     assert {:ok, workspace_href} =
-             ApplicationHostCatalog.workspace_href(scope, route_context, "comms")
+             ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
 
     refute workspace_href =~ "/federated"
 

@@ -71,6 +71,8 @@ defmodule CadenceWeb.MissionApplicationsLive do
   end
 
   defp assign_applications_presentation(socket) do
+    now = request_boundary_now()
+
     applications =
       application_rows(
         socket.assigns.current_scope,
@@ -84,12 +86,13 @@ defmodule CadenceWeb.MissionApplicationsLive do
         socket.assigns.current_mission,
         applications,
         socket.assigns.application_host_context,
-        socket.assigns.current_scope
+        socket.assigns.current_scope,
+        now
       )
     )
   end
 
-  defp page_presentation_dto(mission, applications, host_context, scope) do
+  defp page_presentation_dto(mission, applications, host_context, scope, now) do
     %{
       "root" => %{
         "attrs" =>
@@ -102,7 +105,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
       "applications_component" => %{
         "attrs" => presentation_attrs(%{"id" => "mission-applications-component"}),
         "props" => %{
-          "applications" => application_rows_dto(applications, host_context, mission, scope)
+          "applications" => application_rows_dto(applications, host_context, mission, scope, now)
         }
       }
     }
@@ -198,11 +201,11 @@ defmodule CadenceWeb.MissionApplicationsLive do
     assign_applications_presentation(socket)
   end
 
-  defp application_rows_dto(applications, host_context, mission, scope) do
-    Enum.map(applications, &application_row_dto(&1, host_context, mission, scope))
+  defp application_rows_dto(applications, host_context, mission, scope, now) do
+    Enum.map(applications, &application_row_dto(&1, host_context, mission, scope, now))
   end
 
-  defp application_row_dto(application, host_context, mission, scope) do
+  defp application_row_dto(application, host_context, mission, scope, now) do
     card_id = ApplicationInventory.dom_id(host_context, application.application_key)
     route_context = %{host_context: host_context, mission: mission, spacecraft: nil}
 
@@ -217,7 +220,7 @@ defmodule CadenceWeb.MissionApplicationsLive do
       manageable: application.manageable?,
       uninstallable: application.uninstallable?,
       scope_label: "Mission Application",
-      manage_path: workspace_path(scope, route_context, application.application_key),
+      manage_path: workspace_path(scope, route_context, application.application_key, now),
       status: status_dto(application.status),
       install_action: install_action_dto(application, card_id),
       disable_action: if(application.manageable?, do: lifecycle_action_dto("disable", card_id)),
@@ -243,8 +246,8 @@ defmodule CadenceWeb.MissionApplicationsLive do
     }
   end
 
-  defp workspace_path(scope, route_context, application_key) do
-    case ApplicationHostCatalog.workspace_href(scope, route_context, application_key) do
+  defp workspace_path(scope, route_context, application_key, now) do
+    case ApplicationHostCatalog.workspace_href(scope, route_context, application_key, now: now) do
       {:ok, path} -> path
       {:error, :invalid_application_request} -> nil
     end
@@ -297,4 +300,10 @@ defmodule CadenceWeb.MissionApplicationsLive do
 
   defp atom_string(nil), do: nil
   defp atom_string(value) when is_atom(value), do: Atom.to_string(value)
+
+  defp request_boundary_now do
+    DateTime.utc_now()
+    |> DateTime.truncate(:millisecond)
+    |> DateTime.to_iso8601()
+  end
 end

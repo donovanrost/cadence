@@ -144,6 +144,25 @@ describe("signed first-party frontend release contracts", () => {
     expect(second.value.signingRole).toBe(first.value.signingRole);
   });
 
+  it("rejects a pre-epoch Date verification clock while preserving valid Date clocks", async () => {
+    const beforeEpoch = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { ...options, now: new Date(-1) },
+    );
+    expect(beforeEpoch).toEqual({
+      ok: false,
+      error: { code: "invalid_timestamp", path: "$.now" },
+    });
+
+    const validDate = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { ...options, now: new Date(Date.parse(corpus.now)) },
+    );
+    expect(validDate.ok).toBe(true);
+  });
+
   it("binds intentional release timestamp changes to the signed release identity", async () => {
     const release = JSON.parse(corpus.release.payload) as JsonRecord;
     const shifted = await withReleaseId({

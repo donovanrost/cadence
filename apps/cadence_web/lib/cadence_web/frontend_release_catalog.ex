@@ -1702,7 +1702,11 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
         {:ok, value}
 
       {:ok, %DateTime{} = value} ->
-        {:ok, DateTime.to_unix(value, :millisecond)}
+        milliseconds = DateTime.to_unix(value, :millisecond)
+
+        if milliseconds >= 0,
+          do: {:ok, milliseconds},
+          else: {:error, error(:invalid_timestamp, "$.now")}
 
       {:ok, value} when is_binary(value) ->
         parse_timestamp(value, "$.now")
