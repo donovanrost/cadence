@@ -188,6 +188,22 @@ function syntheticGateArgs(timeout) {
   ];
 }
 
+function waitForMilliseconds(milliseconds) {
+  return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+}
+
+function unhandledRejectionProbe() {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  return {
+    unhandled,
+    dispose() {
+      process.removeListener("unhandledRejection", onUnhandled);
+    },
+  };
+}
+
 function record({
   url = `${origin}/api/query`,
   method = "POST",
@@ -1217,6 +1233,232 @@ test("timeout and signal cleanup invoke each captured close handle exactly once"
   );
   assert.equal(clientCloseCalls, 1);
   assert.equal(runtimeCloseCalls, 1);
+});
+
+test("normal native client acquisition remains owned through final cleanup", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => { clientCloseCalls += 1; };
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  try {
+    const result = await runBrowserGate(syntheticGateArgs(), {
+      clientCreationTimeout: 100,
+      launchChromeImpl: async () => ({
+        endpoint: "ws://synthetic",
+        close: async () => { runtimeCloseCalls += 1; },
+      }),
+      createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+      createClientImpl: () => Promise.resolve(client),
+      runScenarioImpl: async () => ({ status: "normal" }),
+    });
+    assert.deepEqual(result, { status: "normal" });
+    assert.equal(clientCloseCalls, 1);
+    assert.equal(runtimeCloseCalls, 1);
+    await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a delayed native client is closed after SIGTERM wins acquisition", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => { clientCloseCalls += 1; };
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        clientCreationTimeout: 200,
+        launchChromeImpl: async () => ({
+          endpoint: "ws://synthetic",
+          close: async () => { runtimeCloseCalls += 1; },
+        }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => new Promise((resolveClient) => {
+          setImmediate(() => process.emit("SIGTERM"));
+          setTimeout(() => resolveClient(client), 25);
+        }),
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(clientCloseCalls, 1);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a delayed native client is closed after acquisition timeout", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => { clientCloseCalls += 1; };
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        clientCreationTimeout: 10,
+        launchChromeImpl: async () => ({
+          endpoint: "ws://synthetic",
+          close: async () => { runtimeCloseCalls += 1; },
+        }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => new Promise((resolveClient) => {
+          setTimeout(() => resolveClient(client), 30);
+        }),
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /createClient implementation timed out after 10ms/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(clientCloseCalls, 1);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a delayed factory rejection is observed after SIGTERM without an unhandled rejection", async () => {
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        clientCreationTimeout: 200,
+        launchChromeImpl: async () => ({
+          endpoint: "ws://synthetic",
+          close: async () => { runtimeCloseCalls += 1; },
+        }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => new Promise((_resolveClient, rejectClient) => {
+          setImmediate(() => process.emit("SIGTERM"));
+          setTimeout(() => rejectClient(new Error("late client creation rejected")), 25);
+        }),
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("late client close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closeClient] of [
+    ["rejection", (calls) => {
+      calls.value += 1;
+      return Promise.reject(new Error("late client close rejected"));
+    }],
+    ["throw", (calls) => {
+      calls.value += 1;
+      throw new Error("late client close threw");
+    }],
+  ]) {
+    const client = makeDiagnosticClient();
+    const clientCloseCalls = { value: 0 };
+    client.close = () => closeClient(clientCloseCalls);
+    let runtimeCloseCalls = 0;
+    const probe = unhandledRejectionProbe();
+    try {
+      await assert.rejects(
+        runBrowserGate(syntheticGateArgs(), {
+          clientCreationTimeout: 200,
+          launchChromeImpl: async () => ({
+            endpoint: "ws://synthetic",
+            close: async () => { runtimeCloseCalls += 1; },
+          }),
+          createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+          createClientImpl: () => new Promise((resolveClient) => {
+            setImmediate(() => process.emit("SIGTERM"));
+            setTimeout(() => resolveClient(client), 25);
+          }),
+          runScenarioImpl: () => { throw new Error("scenario must not start"); },
+        }),
+        (error) => /browser gate received SIGTERM/.test(error.message),
+        `${kind} primary cause`,
+      );
+      await waitForMilliseconds(60);
+      assert.equal(clientCloseCalls.value, 1, `${kind} close was not invoked exactly once`);
+      assert.equal(runtimeCloseCalls, 1);
+      assert.deepEqual(probe.unhandled, []);
+    } finally {
+      probe.dispose();
+    }
+  }
+});
+
+test("duplicate abort and final cleanup calls close a late client exactly once", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => { clientCloseCalls += 1; };
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        clientCreationTimeout: 200,
+        launchChromeImpl: async () => ({
+          endpoint: "ws://synthetic",
+          close: async () => { runtimeCloseCalls += 1; },
+        }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => new Promise((resolveClient) => {
+          setImmediate(() => {
+            process.emit("SIGTERM");
+            resolveClient(client);
+          });
+        }),
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(20);
+    assert.equal(clientCloseCalls, 1);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a never-settling client factory does not delay abort cleanup", async () => {
+  let runtimeCloseCalls = 0;
+  const probe = unhandledRejectionProbe();
+  const startedAt = Date.now();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        clientCreationTimeout: 200,
+        launchChromeImpl: async () => ({
+          endpoint: "ws://synthetic",
+          close: async () => { runtimeCloseCalls += 1; },
+        }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => {
+          setImmediate(() => process.emit("SIGTERM"));
+          return new Promise(() => {});
+        },
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    assert.ok(Date.now() - startedAt < 500, "abort cleanup waited for the client factory");
+    assert.equal(runtimeCloseCalls, 1);
+    await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
 });
 
 test("diagnostic disposal continues after one unsubscribe throws", async () => {

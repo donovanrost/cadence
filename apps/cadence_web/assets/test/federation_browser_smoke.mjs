@@ -4547,6 +4547,7 @@ export async function runBrowserGate(
     createPageImpl = createPage,
     createClientImpl = (endpoint) => new CdpClient(endpoint),
     runScenarioImpl = runScenario,
+    clientCreationTimeout = CDP_COMMAND_TIMEOUT_MS,
   } = {},
 ) {
   assertNoPasswordArgument(args);
@@ -4572,10 +4573,33 @@ export async function runBrowserGate(
     promise.catch(() => {});
     return promise;
   };
-  const triggerOwnedCleanup = (key, operation, label, timeout = CDP_COMMAND_TIMEOUT_MS) => {
-    runOwnedCleanup(key, operation, label, timeout)?.catch(() => {});
+  const triggerOwnedCleanup = (
+    key,
+    operation,
+    label,
+    timeout = CDP_COMMAND_TIMEOUT_MS,
+    onFailure,
+  ) => {
+    const cleanup = runOwnedCleanup(key, operation, label, timeout);
+    cleanup?.catch((error) => {
+      if (!onFailure) return;
+      try {
+        onFailure(error);
+      } catch {
+        // Failure observation must not create a second unhandled rejection.
+      }
+    });
   };
   const secrets = [];
+  const reportLateClientCreationFailure = (kind, error) => {
+    let safeMessage;
+    try {
+      safeMessage = redactError(error, secrets);
+    } catch {
+      safeMessage = "failure could not be formatted";
+    }
+    reportProgress(`late CDP client ${kind} observed after gate failure: ${safeMessage}`);
+  };
   let diagnostics;
   let diagnosticsDispose;
   const guards = installShutdownGuards({
@@ -4647,52 +4671,89 @@ export async function runBrowserGate(
     );
     state.pageId = safeOptionalDataProperty(createdPage, "id", "browser page");
 
-    const clientTarget = await raceWithSignalAndTimeout(
-      invokeValidated(
-        () => createClientImpl(pageWebSocketDebuggerUrl),
-        "createClient implementation",
-      ),
-      {
-        signal: controller.signal,
-        milliseconds: CDP_COMMAND_TIMEOUT_MS,
-        label: "createClient implementation",
-      },
-    );
-    const clientOn = safeCallableProperty(clientTarget, "on", "CDP client");
-    const clientSend = safeCallableProperty(clientTarget, "send", "CDP client");
-    const clientWaitForEvent = safeOptionalCallableProperty(
-      clientTarget,
-      "waitForEvent",
-      "CDP client",
-    );
-    const clientClose = safeCallableProperty(clientTarget, "close", "CDP client");
-    const clientEmit = safeOptionalCallableProperty(clientTarget, "emit", "CDP client");
-    const client = {
-      on(...parameters) {
-        return Reflect.apply(clientOn, clientTarget, parameters);
-      },
-      send(...parameters) {
-        return invokeValidated(
-          () => Reflect.apply(clientSend, clientTarget, parameters),
-          `CDP ${parameters[0] || "client"}`,
+    let clientTarget;
+    let clientSend;
+    const captureClientTarget = (target) => {
+      validateRaceValue(target, "createClient implementation");
+      const clientClose = safeCallableProperty(target, "close", "CDP client");
+      clientTarget = target;
+      state.client = target;
+      state.clientClose = () => Reflect.apply(clientClose, target, []);
+
+      if (controller.signal.aborted) {
+        triggerOwnedCleanup(
+          "client",
+          () => Reflect.apply(state.clientClose, state.client, []),
+          "CDP client cleanup",
+          CDP_COMMAND_TIMEOUT_MS,
+          (error) => reportLateClientCreationFailure("cleanup failure", error),
         );
-      },
-      close(...parameters) {
-        return Reflect.apply(clientClose, clientTarget, parameters);
-      },
+        return target;
+      }
+
+      const clientOn = safeCallableProperty(target, "on", "CDP client");
+      clientSend = safeCallableProperty(target, "send", "CDP client");
+      const clientWaitForEvent = safeOptionalCallableProperty(
+        target,
+        "waitForEvent",
+        "CDP client",
+      );
+      const clientEmit = safeOptionalCallableProperty(target, "emit", "CDP client");
+      const client = {
+        on(...parameters) {
+          return Reflect.apply(clientOn, target, parameters);
+        },
+        send(...parameters) {
+          return invokeValidated(
+            () => Reflect.apply(clientSend, target, parameters),
+            `CDP ${parameters[0] || "client"}`,
+          );
+        },
+        close(...parameters) {
+          return Reflect.apply(clientClose, target, parameters);
+        },
+      };
+      if (clientWaitForEvent) {
+        client.waitForEvent = (...parameters) =>
+          invokeValidated(
+            () => Reflect.apply(clientWaitForEvent, target, parameters),
+            `CDP ${parameters[0] || "event"}`,
+          );
+      }
+      if (clientEmit) {
+        client.emit = (...parameters) => Reflect.apply(clientEmit, target, parameters);
+      }
+      state.client = client;
+      return target;
     };
-    if (clientWaitForEvent) {
-      client.waitForEvent = (...parameters) =>
-        invokeValidated(
-          () => Reflect.apply(clientWaitForEvent, clientTarget, parameters),
-          `CDP ${parameters[0] || "event"}`,
-        );
-    }
-    if (clientEmit) {
-      client.emit = (...parameters) => Reflect.apply(clientEmit, clientTarget, parameters);
-    }
-    state.client = client;
-    state.clientClose = () => Reflect.apply(clientClose, clientTarget, []);
+    const clientCreation = invokeValidated(
+      () => createClientImpl(pageWebSocketDebuggerUrl),
+      "createClient implementation",
+    );
+    const clientCreationAuthority = allowedNativePromise(clientCreation)
+      ? Promise.prototype.then.call(clientCreation, captureClientTarget, (error) => {
+          throw error;
+        })
+      : new Promise((resolveCreation, rejectCreation) => {
+          queueMicrotask(() => {
+            try {
+              resolveCreation(captureClientTarget(clientCreation));
+            } catch (error) {
+              rejectCreation(error);
+            }
+          });
+        });
+    clientCreationAuthority.catch((error) => {
+      if (controller.signal.aborted && !state.client) {
+        reportLateClientCreationFailure("creation rejection", error);
+      }
+    });
+    await raceWithSignalAndTimeout(clientCreationAuthority, {
+      signal: controller.signal,
+      milliseconds: clientCreationTimeout,
+      label: "createClient implementation",
+      onTimeout: (error) => controller.abort(error),
+    });
     const sendCommand = (method, parameters) =>
       raceWithSignalAndTimeout(
         invokeValidated(
