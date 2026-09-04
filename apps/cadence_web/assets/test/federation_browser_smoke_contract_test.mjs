@@ -23,6 +23,7 @@ import {
   redactText,
   releaseArtifactPrefix,
   resolveChromeBinary,
+  runBrowserGate,
   runScenario,
   waitForPageNavigation,
   waitForResponse,
@@ -62,6 +63,10 @@ function makeDiagnosticClient() {
         });
       });
     },
+    async send() {
+      return {};
+    },
+    close() {},
   };
 }
 
@@ -115,6 +120,70 @@ function assertDirty(diagnostics, label) {
     },
   );
   return failure.message;
+}
+
+function expectedFailureFixture({
+  requestId = "confirmation-403",
+  url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`,
+  status = 403,
+  includeResponse = true,
+  includeCanonical = true,
+  finish = true,
+  generation = true,
+} = {}) {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const requestGeneration = generation ? diagnostics.beginRequestGeneration("confirmation fixture") : undefined;
+  const cleanup = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+  emitExpectedActionRequest(client, requestId, url);
+  if (includeResponse) emitActionResponse(client, requestId, url, status);
+  if (includeCanonical) emitCanonicalNetworkResourceError(client, url, requestId, status);
+  if (finish) client.emit("Network.loadingFinished", { requestId });
+  return {
+    client,
+    diagnostics,
+    cleanup,
+    generation: requestGeneration,
+    requestId,
+    url,
+    status,
+  };
+}
+
+function confirmationEvidence(fixture, overrides = {}) {
+  return {
+    requestId: fixture.requestId,
+    method: "POST",
+    url: fixture.url,
+    generation: fixture.generation,
+    status: fixture.status,
+    ...overrides,
+  };
+}
+
+function syntheticGateDependencies() {
+  const client = makeDiagnosticClient();
+  const runtime = {
+    endpoint: "http://127.0.0.1:43721",
+    close: async () => {},
+  };
+  return {
+    client,
+    launchChromeImpl: async () => runtime,
+    createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+    createClientImpl: () => client,
+  };
+}
+
+function syntheticGateArgs(timeout) {
+  return [
+    "--comms-url",
+    `${origin}/missions/mission-1/applications/comms_overview/federated`,
+    ...(timeout ? ["--scenario-timeout-ms", String(timeout)] : []),
+  ];
 }
 
 function record({
@@ -528,6 +597,338 @@ test("one canonical delayed Chrome network resource error is attributed to one e
   assert.doesNotThrow(() => diagnostics.assertClean("expected CSRF rejection"));
   removeAllowance();
   diagnostics.dispose();
+});
+
+test("confirmation finalizes one exact terminal 403 without replay or later suppression", () => {
+  const fixture = expectedFailureFixture();
+  assert.doesNotThrow(() => fixture.diagnostics.assertClean("confirmation baseline"));
+  assert.equal(
+    fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    true,
+  );
+
+  fixture.cleanup();
+  fixture.cleanup();
+  assert.equal(fixture.diagnostics.logErrors.length, 0);
+  assert.equal(fixture.diagnostics.requestFailures.length, 0);
+
+  fixture.client.emit("Network.loadingFailed", {
+    requestId: fixture.requestId,
+    errorText: "net::ERR_AFTER_CONFIRMATION",
+  });
+  assert.equal(fixture.diagnostics.requestFailures.length, 1);
+  emitCanonicalNetworkResourceError(fixture.client, fixture.url, "unrelated-after-confirmation");
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assertDirty(fixture.diagnostics, "unrelated event after confirmation");
+  fixture.diagnostics.dispose();
+  fixture.diagnostics.dispose();
+  fixture.cleanup();
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+});
+
+test("the browser gate confirms before returning and exposes only ordinary result data", async () => {
+  const dependencies = syntheticGateDependencies();
+  let diagnostics;
+  let cleanupCalls = 0;
+  const result = await runBrowserGate(syntheticGateArgs(), {
+    ...dependencies,
+    runScenarioImpl: async (client, installedDiagnostics) => {
+      diagnostics = installedDiagnostics;
+      const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+      const generation = diagnostics.beginRequestGeneration("synthetic browser gate");
+      const cleanup = diagnostics.allowExpectedFailure(
+        (record) => record.method === "POST" && record.url === fixtureUrl,
+        { status: 403 },
+      );
+      client.emit("Network.requestWillBeSent", {
+        requestId: "gate-confirmed-403",
+        request: { url: fixtureUrl, method: "POST", headers: {} },
+        type: "XHR",
+      });
+      client.emit("Network.responseReceived", {
+        requestId: "gate-confirmed-403",
+        response: { url: fixtureUrl, status: 403 },
+        type: "XHR",
+      });
+      emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-confirmed-403");
+      client.emit("Network.loadingFinished", { requestId: "gate-confirmed-403" });
+      diagnostics.confirmExpectedFailure(cleanup, {
+        requestId: "gate-confirmed-403",
+        method: "POST",
+        url: fixtureUrl,
+        generation,
+        status: 403,
+      });
+      const publicResult = { status: "confirmed" };
+      Object.defineProperty(publicResult, "cleanupExpectedFailures", {
+        value: () => cleanupCalls++,
+      });
+      publicResult[Symbol("authority")] = cleanup;
+      return publicResult;
+    },
+  });
+
+  assert.deepEqual(result, { status: "confirmed" });
+  assert.deepEqual(Object.getOwnPropertyNames(result), ["status"]);
+  assert.deepEqual(Object.getOwnPropertySymbols(result), []);
+  assert.equal(Object.values(result).some((value) => typeof value === "function"), false);
+  assert.equal(cleanupCalls, 0);
+  assert.equal(diagnostics.logErrors.length, 0);
+  assert.equal(diagnostics.requestFailures.length, 0);
+});
+
+test("the browser gate rejects an unconfirmed allowance after fail-closed cleanup replay", async () => {
+  const dependencies = syntheticGateDependencies();
+  let diagnostics;
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(), {
+      ...dependencies,
+      runScenarioImpl: async (client, installedDiagnostics) => {
+        diagnostics = installedDiagnostics;
+        const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+        const cleanup = diagnostics.allowExpectedFailure(
+          (record) => record.method === "POST" && record.url === fixtureUrl,
+          { status: 403 },
+        );
+        client.emit("Network.requestWillBeSent", {
+          requestId: "gate-unconfirmed-403",
+          request: { url: fixtureUrl, method: "POST", headers: {} },
+          type: "XHR",
+        });
+        client.emit("Network.responseReceived", {
+          requestId: "gate-unconfirmed-403",
+          response: { url: fixtureUrl, status: 403 },
+          type: "XHR",
+        });
+        emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-unconfirmed-403");
+        client.emit("Network.loadingFinished", { requestId: "gate-unconfirmed-403" });
+        return { status: "unconfirmed" };
+      },
+    }),
+    /browser diagnostics failed.*Failed to load resource/s,
+  );
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(diagnostics.requestFailures.length, 0);
+  assertDirty(diagnostics, "unconfirmed gate final diagnostics");
+});
+
+test("scenario exceptions revoke an allowance and replay canonical evidence exactly once", async () => {
+  const dependencies = syntheticGateDependencies();
+  let diagnostics;
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(), {
+      ...dependencies,
+      runScenarioImpl: async (client, installedDiagnostics) => {
+        diagnostics = installedDiagnostics;
+        const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+        diagnostics.allowExpectedFailure(
+          (record) => record.method === "POST" && record.url === fixtureUrl,
+          { status: 403 },
+        );
+        client.emit("Network.requestWillBeSent", {
+          requestId: "gate-exception-403",
+          request: { url: fixtureUrl, method: "POST", headers: {} },
+          type: "XHR",
+        });
+        client.emit("Network.responseReceived", {
+          requestId: "gate-exception-403",
+          response: { url: fixtureUrl, status: 403 },
+          type: "XHR",
+        });
+        emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-exception-403");
+        client.emit("Network.loadingFinished", { requestId: "gate-exception-403" });
+        throw new Error("synthetic scenario exception");
+      },
+    }),
+    /synthetic scenario exception/,
+  );
+  assert.equal(diagnostics.logErrors.length, 1);
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+});
+
+test("scenario timeout aborts and replays an allowance exactly once", async () => {
+  const dependencies = syntheticGateDependencies();
+  let diagnostics;
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(10), {
+      ...dependencies,
+      runScenarioImpl: async (client, installedDiagnostics, _args, { signal }) => {
+        diagnostics = installedDiagnostics;
+        const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+        diagnostics.allowExpectedFailure(
+          (record) => record.method === "POST" && record.url === fixtureUrl,
+          { status: 403 },
+        );
+        client.emit("Network.requestWillBeSent", {
+          requestId: "gate-timeout-403",
+          request: { url: fixtureUrl, method: "POST", headers: {} },
+          type: "XHR",
+        });
+        client.emit("Network.responseReceived", {
+          requestId: "gate-timeout-403",
+          response: { url: fixtureUrl, status: 403 },
+          type: "XHR",
+        });
+        emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-timeout-403");
+        client.emit("Network.loadingFinished", { requestId: "gate-timeout-403" });
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    }),
+    /timed out after 10ms/,
+  );
+  assert.equal(diagnostics.logErrors.length, 1);
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+});
+
+test("shutdown abort revokes an allowance and replays canonical evidence exactly once", async () => {
+  const dependencies = syntheticGateDependencies();
+  let diagnostics;
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(), {
+      ...dependencies,
+      runScenarioImpl: async (client, installedDiagnostics, _args, { signal }) => {
+        diagnostics = installedDiagnostics;
+        const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+        diagnostics.allowExpectedFailure(
+          (record) => record.method === "POST" && record.url === fixtureUrl,
+          { status: 403 },
+        );
+        client.emit("Network.requestWillBeSent", {
+          requestId: "gate-abort-403",
+          request: { url: fixtureUrl, method: "POST", headers: {} },
+          type: "XHR",
+        });
+        client.emit("Network.responseReceived", {
+          requestId: "gate-abort-403",
+          response: { url: fixtureUrl, status: 403 },
+          type: "XHR",
+        });
+        emitCanonicalNetworkResourceError(client, fixtureUrl, "gate-abort-403");
+        client.emit("Network.loadingFinished", { requestId: "gate-abort-403" });
+        setImmediate(() => process.emit("SIGTERM"));
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    }),
+    /browser gate received SIGTERM/,
+  );
+  assert.equal(diagnostics.logErrors.length, 1);
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+});
+
+test("confirmation before terminal response replays consumed canonical evidence once", () => {
+  const fixture = expectedFailureFixture({ finish: false });
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)),
+    /expected failure confirmation rejected/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.cleanup();
+  fixture.diagnostics.dispose();
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assertDirty(fixture.diagnostics, "confirmation before terminal response");
+});
+
+test("confirmation rejects wrong request, generation, or status and replays exactly once", () => {
+  const cases = [
+    ["wrong request", { requestId: "not-bound" }],
+    ["wrong generation", { generation: { id: 99_999 } }],
+    ["wrong status", { status: 500 }],
+  ];
+
+  for (const [label, overrides] of cases) {
+    const fixture = expectedFailureFixture({ requestId: `confirmation-${label.replaceAll(" ", "-")}` });
+    assert.throws(
+      () => fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture, overrides)),
+      /expected failure confirmation rejected/,
+      label,
+    );
+    assert.equal(fixture.diagnostics.logErrors.length, 1, `${label} replay count`);
+    fixture.cleanup();
+    fixture.diagnostics.dispose();
+    assert.equal(fixture.diagnostics.logErrors.length, 1, `${label} repeated replay count`);
+  }
+});
+
+test("confirmation rejects missing, pending, and noncanonical evidence without hiding it", () => {
+  const missingLog = expectedFailureFixture({ includeCanonical: false });
+  assert.throws(
+    () => missingLog.diagnostics.confirmExpectedFailure(missingLog.cleanup, confirmationEvidence(missingLog)),
+    /expected failure confirmation rejected/,
+  );
+  emitCanonicalNetworkResourceError(missingLog.client, missingLog.url, missingLog.requestId);
+  assert.equal(missingLog.diagnostics.logErrors.length, 1);
+  missingLog.cleanup();
+  missingLog.diagnostics.dispose();
+
+  const pending = expectedFailureFixture({ includeResponse: false, finish: false });
+  assert.throws(
+    () => pending.diagnostics.confirmExpectedFailure(pending.cleanup, confirmationEvidence(pending)),
+    /expected failure confirmation rejected/,
+  );
+  assert.equal(pending.diagnostics.logErrors.length, 1);
+  pending.cleanup();
+  pending.diagnostics.dispose();
+  assert.equal(pending.diagnostics.logErrors.length, 1);
+
+  const noncanonical = expectedFailureFixture({ includeCanonical: false });
+  noncanonical.client.emit("Log.entryAdded", {
+    entry: {
+      source: "network",
+      level: "error",
+      text: "not a canonical HTTP status diagnostic",
+      url: noncanonical.url,
+      networkRequestId: noncanonical.requestId,
+    },
+  });
+  assert.throws(
+    () => noncanonical.diagnostics.confirmExpectedFailure(noncanonical.cleanup, confirmationEvidence(noncanonical)),
+    /expected failure confirmation rejected/,
+  );
+  assert.equal(noncanonical.diagnostics.logErrors.length, 1);
+  noncanonical.cleanup();
+  noncanonical.diagnostics.dispose();
+});
+
+test("confirmation rejects missing required loadingFailed evidence and replays both channels once", () => {
+  const fixture = expectedFailureFixture();
+  emitActionLoadingFailed(fixture.client, fixture.requestId, "net::ERR_REQUIRED_FAILURE");
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture, { failureEvidence: [] }),
+    ),
+    /expected failure confirmation rejected/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assert.equal(fixture.diagnostics.requestFailures.length, 1);
+  fixture.cleanup();
+  fixture.diagnostics.dispose();
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assert.equal(fixture.diagnostics.requestFailures.length, 1);
+});
+
+test("status contradiction fails confirmation and cannot replay the canonical error twice", () => {
+  const fixture = expectedFailureFixture();
+  emitActionExtraInfo(fixture.client, fixture.requestId, 500);
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)),
+    /expected failure confirmation rejected/,
+  );
+  fixture.cleanup();
+  fixture.diagnostics.dispose();
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  assertDirty(fixture.diagnostics, "confirmation status contradiction");
 });
 
 test("cleanup replays one consumed canonical log exactly once after a finished expected request", () => {

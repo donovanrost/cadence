@@ -782,6 +782,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   let activeGeneration;
   let disposed = false;
   const generations = new Map();
+  const expectedFailureCleanups = new WeakMap();
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
   const logError = (entry) => {
     logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
@@ -804,23 +805,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     for (const entry of allowance.consumedEntries || []) logError(entry);
     for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
   };
-  const invalidateExpectedFailure = (target, reason, boundAllowance) => {
-    const allowance = boundAllowance || target?.expectedFailureAllowance;
-    if (allowance) {
-      if (allowance.revoked) return;
-      allowance.revoked = true;
-      allowance.invalidatedBy = reason;
-      replayInvalidatedAllowance(allowance);
-      return;
-    }
-
-    const registration = target;
-    if (!registration || registration.invalidated) return;
-    for (const registrationAllowance of registration.allowances || []) {
-      invalidateExpectedFailure(registration, reason, registrationAllowance);
-    }
-    registration.invalidated = true;
+  const detachExpectedFailureRegistration = (registration, reason, { finalized = false } = {}) => {
+    if (!registration || registration.invalidated || registration.finalized) return;
+    registration.invalidated = !finalized;
+    registration.finalized = finalized;
     registration.active = false;
+    registration.invalidatedBy = reason;
     delete registration.pendingRequestId;
     for (const record of requests.values()) {
       if (record.expectedFailureRegistration === registration) delete record.expectedFailureRegistration;
@@ -828,6 +818,23 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const index = expectedFailureRegistrations.indexOf(registration);
     if (index >= 0) expectedFailureRegistrations.splice(index, 1);
     reconcilePendingNetworkLogs();
+  };
+  const invalidateExpectedFailure = (target, reason, boundAllowance) => {
+    const allowance = boundAllowance || target?.expectedFailureAllowance;
+    if (allowance) {
+      if (allowance.revoked || allowance.finalized) return;
+      allowance.revoked = true;
+      allowance.invalidatedBy = reason;
+      replayInvalidatedAllowance(allowance);
+      return;
+    }
+
+    const registration = target;
+    if (!registration || registration.invalidated || registration.finalized) return;
+    for (const registrationAllowance of registration.allowances || []) {
+      invalidateExpectedFailure(registration, reason, registrationAllowance);
+    }
+    detachExpectedFailureRegistration(registration, reason);
   };
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
@@ -898,7 +905,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const validExpectedFailureAllowance = (record) => {
     const allowance = record?.expectedFailureAllowance;
-    if (!allowance || allowance.revoked || !allowance.registration.active) return undefined;
+    if (!allowance || allowance.revoked || allowance.finalized || !allowance.registration.active) return undefined;
     if (allowance.requestId !== record.requestId || allowance.url !== record.url) {
       invalidateExpectedFailure(record, "expected failure request identity changed");
       return undefined;
@@ -921,8 +928,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     record.expectedFailureRegistration = registration;
     record.expectedFailureAllowance = {
       registration,
+      record,
       requestId: record.requestId,
       url: record.url,
+      method: record.method,
+      generation: record.generation,
       status,
       consumed: false,
       consumedEntries: [],
@@ -944,6 +954,41 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const hasNonemptyNetworkRequestId = (entry) =>
     typeof entry?.networkRequestId === "string" && entry.networkRequestId.trim().length > 0;
+  const expectedFailureConfirmationFailure = (registration, allowance, reason) => {
+    if (allowance && !allowance.revoked && !allowance.finalized) {
+      invalidateExpectedFailure(allowance.record, reason, allowance);
+      detachExpectedFailureRegistration(registration, reason);
+    } else if (registration && !registration.invalidated && !registration.finalized) {
+      invalidateExpectedFailure(registration, reason);
+    }
+    throw new Error(`expected failure confirmation rejected: ${reason}`);
+  };
+  const canonicalEvidenceMatches = (entry, allowance) =>
+    entry?.source === "network" &&
+    entry?.level === "error" &&
+    hasNonemptyNetworkRequestId(entry) &&
+    entry.networkRequestId === allowance.requestId &&
+    entry.url === allowance.url &&
+    canonicalNetworkResourceStatus(entry) === allowance.status;
+  const canonicalEvidenceIsSame = (left, right) =>
+    left?.source === right?.source &&
+    left?.level === right?.level &&
+    left?.networkRequestId === right?.networkRequestId &&
+    left?.url === right?.url &&
+    left?.text === right?.text;
+  const finalizeExpectedFailure = (allowance) => {
+    if (allowance.revoked || allowance.finalized) return false;
+    allowance.finalized = true;
+    detachExpectedFailureRegistration(
+      allowance.registration,
+      "expected failure confirmed",
+      { finalized: true },
+    );
+    for (const record of requests.values()) {
+      if (record.expectedFailureAllowance === allowance) delete record.expectedFailureAllowance;
+    }
+    return true;
+  };
   const consumeExpectedFailureLog = (entry, status, registrations) => {
     if (!hasNonemptyNetworkRequestId(entry)) return false;
     const record = requests.get(entry.networkRequestId);
@@ -1412,9 +1457,84 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         allowances: new Set(),
       };
       expectedFailureRegistrations.push(registration);
-      return () => {
+      const cleanup = () => {
         invalidateExpectedFailure(registration, "expected failure registration removed");
       };
+      expectedFailureCleanups.set(cleanup, registration);
+      return cleanup;
+    },
+    confirmExpectedFailure(cleanup, evidence = {}) {
+      const registration = expectedFailureCleanups.get(cleanup);
+      if (!registration) {
+        return expectedFailureConfirmationFailure(undefined, undefined, "allowance cleanup is not owned by these diagnostics");
+      }
+
+      const allowance = [...registration.allowances].find(
+        (candidate) => !candidate.revoked && !candidate.finalized,
+      );
+      if (!allowance) {
+        return expectedFailureConfirmationFailure(registration, undefined, "expected failure allowance is not bound");
+      }
+
+      const requestId = evidence?.requestId;
+      const record = requests.get(requestId);
+      const expectedGeneration =
+        typeof evidence?.generation === "object" ? evidence.generation?.id : evidence?.generation;
+      const canonicalEntries = allowance.consumedEntries || [];
+      const canonicalEvidence =
+        evidence?.canonicalEvidence ?? evidence?.canonicalEntry ?? evidence?.canonical ?? evidence?.log;
+      const suppliedFailures = evidence?.failureEvidence ?? evidence?.loadingFailed;
+      const expectedFailures = Array.isArray(suppliedFailures)
+        ? suppliedFailures
+        : suppliedFailures === undefined
+          ? undefined
+          : [suppliedFailures];
+
+      const mismatches = [];
+      const requireEvidence = (condition, reason) => {
+        if (!condition) mismatches.push(reason);
+      };
+      requireEvidence(Boolean(requestId), "request id missing");
+      requireEvidence(Boolean(record), "request record missing");
+      if (record) {
+        requireEvidence(record.expectedFailureAllowance === allowance, "allowance binding changed");
+        requireEvidence(allowance.requestId === requestId, "request id changed");
+        requireEvidence(record.finished, "request is not terminal");
+        requireEvidence(!record.pendingExpectedFailureLog, "canonical evidence is pending");
+        requireEvidence(record.method === evidence?.method, "request method changed");
+        requireEvidence(record.url === evidence?.url, "request URL changed");
+        requireEvidence(record.generation === expectedGeneration, "request generation changed");
+        requireEvidence(allowance.method === evidence?.method, "allowance method changed");
+        requireEvidence(allowance.url === evidence?.url, "allowance URL changed");
+        requireEvidence(allowance.generation === expectedGeneration, "allowance generation changed");
+        requireEvidence(allowance.status === evidence?.status, "allowance status changed");
+        requireEvidence(record.response?.status === evidence?.status, "response status changed");
+        requireEvidence(observedResponseStatus(record) === evidence?.status, "status evidence changed");
+        requireEvidence(!record.statusDisagreement, "status evidence contradicts");
+      }
+      requireEvidence(canonicalEntries.length === 1, "canonical evidence count changed");
+      requireEvidence(canonicalEvidenceMatches(canonicalEntries[0], allowance), "canonical evidence changed");
+      if (canonicalEvidence) {
+        requireEvidence(canonicalEvidenceMatches(canonicalEvidence, allowance), "provided canonical evidence changed");
+        requireEvidence(canonicalEvidenceIsSame(canonicalEvidence, canonicalEntries[0]), "provided canonical evidence differs");
+      }
+      if (expectedFailures) {
+        requireEvidence(
+          expectedFailures.length === allowance.suppressedFailures.length &&
+            expectedFailures.every((failure, index) => failure === allowance.suppressedFailures[index]),
+          "loadingFailed evidence changed",
+        );
+      }
+      if (mismatches.length) {
+        return expectedFailureConfirmationFailure(
+          registration,
+          allowance,
+          `terminal request, identity, status, and canonical evidence were not consistent: ${mismatches.join(", ")}`,
+        );
+      }
+
+      finalizeExpectedFailure(allowance);
+      return true;
     },
     async waitForRequest(generation, predicate, label, { timeout = CDP_EVENT_TIMEOUT_MS, signal } = {}) {
       const existing = requestForGeneration(generation, predicate);
@@ -2836,15 +2956,17 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const csrfFailureCleanup = diagnostics.allowExpectedFailure(
     (record) => pathMatches(record, "POST", actionPath, origin),
   );
-  const csrfActionStartedAtMs = Date.now();
-  reportProgress("submitting Telemetry action with a rejected CSRF token");
-  const csrfClicked = await evaluate(
-    client,
-    "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
-    "Telemetry CSRF rejection submit",
-    { signal },
-  );
-  assert.equal(csrfClicked, true);
+  let csrfFailureConfirmed = false;
+  try {
+    const csrfActionStartedAtMs = Date.now();
+    reportProgress("submitting Telemetry action with a rejected CSRF token");
+    const csrfClicked = await evaluate(
+      client,
+      "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
+      "Telemetry CSRF rejection submit",
+      { signal },
+    );
+    assert.equal(csrfClicked, true);
 
   const csrfRecord = await waitForResponse(
     diagnostics,
@@ -2926,7 +3048,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     1,
     "CSRF rejection produced a duplicate action after rebootstrap",
   );
-  reportProgress("CSRF rejection produced one stopped action and one bounded rebootstrap");
+    reportProgress("CSRF rejection produced one stopped action and one bounded rebootstrap");
+    diagnostics.confirmExpectedFailure(csrfFailureCleanup, {
+      requestId: csrfRecord.requestId,
+      method: "POST",
+      url: csrfRecord.url,
+      generation: telemetry.generation,
+      status: 403,
+    });
+    csrfFailureConfirmed = true;
+    reportProgress("CSRF rejection authority confirmed and finalized");
 
   const queryRecordsBeforeAction = diagnostics.completed(
     (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
@@ -3165,11 +3296,10 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     actionReceipt: receipt.receiptId,
     retainedPacketId: packetId,
   };
-  Object.defineProperty(result, "cleanupExpectedFailures", {
-    value: csrfFailureCleanup,
-    enumerable: false,
-  });
-  return result;
+    return result;
+  } finally {
+    if (!csrfFailureConfirmed) csrfFailureCleanup();
+  }
 }
 
 export async function readStructuredLoginSecret({ stream = process.stdin, signal, timeout = 5_000 } = {}) {
@@ -3281,6 +3411,39 @@ export function installShutdownGuards({ onAbort }) {
   };
 }
 
+function toOrdinarySerializableResult(value, path = "result") {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value === undefined) throw new Error(`${path} was not serializable`);
+  if (typeof value !== "object") throw new Error(`${path} contained a non-serializable capability`);
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      item === undefined ? null : toOrdinarySerializableResult(item, `${path}[${index}]`),
+    );
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error(`${path} was not an ordinary object`);
+  }
+
+  const ordinaryResult = {};
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) {
+      throw new Error(`${path}.${key} was not an ordinary value`);
+    }
+    if (descriptor.value === undefined) continue;
+    Object.defineProperty(ordinaryResult, key, {
+      value: toOrdinarySerializableResult(descriptor.value, `${path}.${key}`),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return ordinaryResult;
+}
+
 export async function runBrowserGate(
   args = process.argv.slice(2),
   {
@@ -3356,10 +3519,11 @@ export async function runBrowserGate(
       },
     });
     reportProgress("federation browser scenario settled successfully");
+    diagnostics.dispose();
     diagnostics.assertClean("federation browser gate final");
-    result?.cleanupExpectedFailures?.();
+    const publicResult = toOrdinarySerializableResult(result);
     reportProgress("browser gate returning successfully");
-    return result;
+    return publicResult;
   } catch (error) {
     const safe = new Error(redactError(error, secrets));
     safe.exitCode = guards.exitCode;
