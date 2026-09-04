@@ -51,6 +51,20 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     assert publication.provenance["buildId"] == "http-success"
   end
 
+  test "fails closed when the request-boundary clock authority is malformed", %{conn: conn} do
+    {document, _release, bytes_by_path} = release_document("http-malformed-clock")
+
+    response =
+      conn
+      |> authenticated()
+      |> put_private(:frontend_release_authority_now, "not-a-canonical-timestamp")
+      |> post(@path, request_body(document, bytes_by_path))
+
+    assert %{"error" => %{"code" => "admission_rejected"}} = json_response(response, 422)
+
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_publications", []).rows == [[0]]
+  end
+
   test "returns a deterministic exact replay response", %{conn: conn} do
     {document, _release, bytes_by_path} = release_document("http-replay")
     body = request_body(document, bytes_by_path)

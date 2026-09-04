@@ -59,7 +59,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       when is_list(opts) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- validate_session_options(opts),
-         {:ok, release_snapshot} <- ApplicationReleaseRegistry.snapshot(),
+         {:ok, release_snapshot} <- release_snapshot(opts),
          {:ok, applications} <-
            applications(current_scope, route_context, opts, release_snapshot),
          {:ok, catalog} <-
@@ -87,20 +87,27 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   def build(%Scope{}, %{}, _opts), do: {:error, :application_catalog_unavailable}
 
   @doc "Resolves one installed application surface without constructing a catalog."
-  @spec admit_application(Scope.t(), route_context(), binary(), binary() | nil) ::
+  @spec admit_application(Scope.t(), route_context(), binary(), binary() | nil, keyword()) ::
           {:ok, map()} | {:error, build_error()}
-  def admit_application(current_scope, route_context, application_key, surface_id \\ nil)
+  def admit_application(
+        current_scope,
+        route_context,
+        application_key,
+        surface_id \\ nil,
+        opts \\ []
+      )
 
   def admit_application(
         %Scope{} = current_scope,
         %{host_context: %HostContext{}} = route_context,
         application_key,
-        surface_id
+        surface_id,
+        opts
       )
-      when is_binary(application_key) do
+      when is_binary(application_key) and is_list(opts) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- CatalogRegistry.validate(),
-         {:ok, release_snapshot} <- ApplicationReleaseRegistry.snapshot() do
+         {:ok, release_snapshot} <- release_snapshot(opts) do
       admit_application_from_snapshot(
         current_scope,
         route_context,
@@ -111,7 +118,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     end
   end
 
-  def admit_application(%Scope{}, %{}, _application_key, _surface_id),
+  def admit_application(%Scope{}, %{}, _application_key, _surface_id, _opts),
     do: {:error, :application_catalog_unavailable}
 
   defp admit_application_from_snapshot(
@@ -383,6 +390,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       _invalid ->
         {:error, :invalid_application_request}
     end
+  end
+
+  defp release_snapshot(opts) do
+    ApplicationReleaseRegistry.snapshot(now: Keyword.get(opts, :now, DateTime.utc_now()))
   end
 
   defp all_applications(

@@ -7,7 +7,32 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias Cadence.Missions.Mission
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
+  @now "2026-09-03T12:00:00Z"
   @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
+
+  test "passes explicit validated time to release lookup boundaries", %{conn: _conn} do
+    {scope, route_context} = installed_telemetry_context()
+
+    assert {:ok, admission} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom",
+               "packet_bindings",
+               now: @now
+             )
+
+    assert admission.release.release_id == "telemetry-decom-v1"
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom",
+               "packet_bindings",
+               now: "not-a-canonical-timestamp"
+             )
+  end
 
   test "admits the registered telemetry packet_bindings surface after release lookup", %{
     conn: _conn

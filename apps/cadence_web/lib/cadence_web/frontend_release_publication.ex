@@ -10,7 +10,6 @@ defmodule CadenceWeb.FrontendReleasePublication do
 
   import Ecto.Query
 
-  alias Cadence.Ids
   alias Cadence.Repo
 
   alias CadenceWeb.FrontendReleaseCatalog
@@ -212,8 +211,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
     package = release["package"]
     surface = release["surface"]
 
+    signed_document_digest = digest(document_bytes)
+
     %{
-      publication_id: Ids.new("frontend_release_publication"),
+      publication_id: deterministic_id("frontend_release_publication", document_bytes),
       release_id: release["releaseId"],
       application_id: application["id"],
       application_version: application["version"],
@@ -229,7 +230,7 @@ defmodule CadenceWeb.FrontendReleasePublication do
       manifest_size: release["manifest"]["size"],
       manifest_media_type: release["manifest"]["mediaType"],
       payload_digest: verified.digest,
-      signed_document_digest: digest(document_bytes),
+      signed_document_digest: signed_document_digest,
       signed_document_bytes: document_bytes,
       payload_bytes: verified.payload_bytes,
       signing_key_id: verified.key_id,
@@ -244,8 +245,22 @@ defmodule CadenceWeb.FrontendReleasePublication do
   end
 
   defp release_artifact_attrs(artifact, publication_id, release_id) do
+    artifact_identity = %{
+      "mediaType" => artifact.media_type,
+      "objectKey" => artifact.object_key,
+      "path" => artifact.path,
+      "releaseId" => release_id,
+      "releasePublicationId" => publication_id,
+      "sha256" => artifact.sha256,
+      "size" => artifact.size
+    }
+
     %{
-      artifact_id: Ids.new("frontend_release_artifact"),
+      artifact_id:
+        deterministic_id(
+          "frontend_release_artifact",
+          FrontendReleaseCatalog.canonical_json(artifact_identity)
+        ),
       release_publication_id: publication_id,
       release_id: release_id,
       path: artifact.path,
@@ -699,6 +714,10 @@ defmodule CadenceWeb.FrontendReleasePublication do
     {:ok, datetime, 0} = DateTime.from_iso8601(value)
     DateTime.truncate(datetime, :microsecond)
   end
+
+  defp deterministic_id(prefix, canonical_bytes)
+       when is_binary(prefix) and is_binary(canonical_bytes),
+       do: prefix <> "_" <> digest_hex(canonical_bytes)
 
   defp digest(bytes),
     do: "sha256:" <> Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)

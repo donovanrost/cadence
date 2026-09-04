@@ -8,8 +8,22 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
   alias CadenceWeb.ApplicationReleaseRegistry
   alias CadenceWeb.Assets.FederationReleaseFixture
 
+  @now "2026-09-01T19:00:00Z"
+
+  test "requires an explicit snapshot clock" do
+    assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+             ApplicationReleaseRegistry.snapshot()
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+             ApplicationReleaseRegistry.all()
+
+    assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
+             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
+  end
+
   test "keys the checked-in Comms release by application and surface versions" do
-    assert {:ok, release} = ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
+    assert {:ok, release} =
+             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1, now: @now)
 
     assert release == %{
              federation: :module_federation,
@@ -26,18 +40,21 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     Enum.each(surfaces, fn surface_id ->
       assert {:error, :unknown_application_release} =
-               ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1)
+               ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1, now: @now)
     end)
 
-    refute Enum.any?(ApplicationReleaseRegistry.all(), fn {{application_key, _version, _surface,
-                                                            _surface_version}, _release} ->
+    refute Enum.any?(ApplicationReleaseRegistry.all(now: @now), fn {{application_key, _version,
+                                                                     _surface, _surface_version},
+                                                                    _release} ->
              application_key == "comms"
            end)
   end
 
   test "advertises the checked-in telemetry packet bindings release coordinate" do
     assert {:ok, release} =
-             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
+               now: @now
+             )
 
     assert release == %{
              federation: :module_federation,
@@ -47,7 +64,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              exposed_module: "./Application"
            }
 
-    assert Enum.all?(ApplicationReleaseRegistry.all(), fn {_key, release} ->
+    assert Enum.all?(ApplicationReleaseRegistry.all(now: @now), fn {_key, release} ->
              String.starts_with?(release.manifest_path, "/assets/") and
                not String.contains?(release.manifest_path, "/releases/current")
            end)
@@ -70,7 +87,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              """).rows
 
     assert {:error, {:integrity_failure, :active_generation_missing}} =
-             ApplicationReleaseRegistry.snapshot()
+             ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
   test "fails closed for an expired active catalog without changing accepted state" do
@@ -98,20 +115,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     on_exit(fn -> FederationReleaseFixture.cleanup!(fixture) end)
 
-    previous_snapshot_clock =
-      Process.get(ApplicationReleaseRegistry.snapshot_clock_key(), :not_configured)
-
-    Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), "2026-09-02T00:00:00Z")
-
-    on_exit(fn ->
-      if previous_snapshot_clock == :not_configured do
-        Process.delete(ApplicationReleaseRegistry.snapshot_clock_key())
-      else
-        Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), previous_snapshot_clock)
-      end
-    end)
-
-    accepted = ApplicationReleaseRegistry.snapshot()
+    accepted = ApplicationReleaseRegistry.snapshot(now: "2026-09-02T00:00:00Z")
     assert {:ok, %{source: :database, entries: entries}} = accepted
     assert length(entries) == 2
 

@@ -1269,7 +1269,7 @@ function strictHttpsUrl(value: unknown, path: string): VerificationResult<Strict
 }
 
 function parseNow(value: string | Date | undefined): VerificationResult<number> {
-  if (value === undefined) return { ok: true, value: Date.now() };
+  if (value === undefined) return fail("invalid_timestamp", "$.now");
   if (value instanceof Date)
     return Number.isFinite(value.getTime())
       ? { ok: true, value: value.getTime() }

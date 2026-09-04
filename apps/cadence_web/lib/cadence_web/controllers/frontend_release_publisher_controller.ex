@@ -13,6 +13,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
   @promotion_route "/api/cadence/frontend-release/v1/promotions"
   @max_publisher_identity_bytes 128
   @publication_config_key :frontend_release_publication_config
+  @authority_now_key :frontend_release_authority_now
 
   @spec create(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def create(conn, _params) do
@@ -160,6 +161,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       []
       |> maybe_put(:publisher_identity, publisher_identity)
       |> maybe_put(:publication_config, Map.get(conn.private, @publication_config_key))
+      |> Keyword.put(:now, authority_now(conn))
 
     case FrontendReleaseActivation.activate_catalog(document, idempotency_key, opts) do
       {:ok, response} -> {:ok, response}
@@ -343,6 +345,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
   defp publish(%{document: document, artifacts: artifacts}, publisher_identity, conn) do
     opts = if publisher_identity, do: [publisher_identity: publisher_identity], else: []
+    opts = Keyword.put(opts, :now, authority_now(conn))
 
     opts =
       case Map.get(conn.private, @publication_config_key) do
@@ -360,6 +363,9 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
         reraise(error, __STACKTRACE__)
       end
   end
+
+  defp authority_now(conn),
+    do: Map.get(conn.private, @authority_now_key, DateTime.utc_now())
 
   defp classify_publish_result({:ok, publication, outcome}),
     do: {:ok, outcome, publication}

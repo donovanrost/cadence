@@ -6,7 +6,6 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   alias CadenceWeb.FrontendReleaseCatalog
 
   @publication_config_key {CadenceWeb.FrontendReleasePublication, :publication_config}
-  @snapshot_clock_key {__MODULE__, :snapshot_clock}
 
   @type federation :: :module_federation | :native_federation
 
@@ -34,7 +33,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   def snapshot(opts \\ [])
 
   def snapshot(opts) when is_list(opts) do
-    with {:ok, now_ms} <- snapshot_now(Keyword.get_lazy(opts, :now, &snapshot_clock/0)),
+    with {:ok, now_ms} <- snapshot_now(Keyword.get(opts, :now)),
          {:ok, rows} <- read_catalog_rows() do
       build_snapshot(rows, now_ms)
     end
@@ -48,24 +47,22 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   def snapshot(_opts), do: {:error, {:integrity_failure, :invalid_snapshot_options}}
 
-  @doc "Returns the process-scoped key used to override the registry snapshot clock in tests."
-  @spec snapshot_clock_key() :: {module(), atom()}
-  def snapshot_clock_key, do: @snapshot_clock_key
-
-  @spec all() :: [{key(), release()}] | {:error, error_reason()}
-  def all do
-    case snapshot() do
+  @spec all(keyword()) :: [{key(), release()}] | {:error, error_reason()}
+  def all(opts \\ []) when is_list(opts) do
+    case snapshot(opts) do
       {:ok, %{entries: entries}} -> entries
       {:error, reason} -> {:error, reason}
     end
   end
 
-  @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
+  @spec fetch(binary(), pos_integer(), binary(), pos_integer(), keyword()) ::
           {:ok, release()} | {:error, :unknown_application_release | error_reason()}
-  def fetch(application_key, application_version, surface_id, surface_version)
+  def fetch(application_key, application_version, surface_id, surface_version, opts \\ [])
+
+  def fetch(application_key, application_version, surface_id, surface_version, opts)
       when is_binary(application_key) and is_integer(application_version) and
-             is_binary(surface_id) and is_integer(surface_version) do
-    case snapshot() do
+             is_binary(surface_id) and is_integer(surface_version) and is_list(opts) do
+    case snapshot(opts) do
       {:ok, snapshot} ->
         fetch_from_snapshot(
           snapshot,
@@ -80,7 +77,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  def fetch(_application_key, _application_version, _surface_id, _surface_version),
+  def fetch(_application_key, _application_version, _surface_id, _surface_version, _opts),
     do: {:error, :unknown_application_release}
 
   @spec fetch_from_snapshot(snapshot(), binary(), pos_integer(), binary(), pos_integer()) ::
@@ -777,10 +774,6 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   end
 
   defp snapshot_now(_value), do: {:error, {:integrity_failure, :invalid_snapshot_clock}}
-
-  defp snapshot_clock do
-    Process.get(@snapshot_clock_key, System.system_time(:millisecond))
-  end
 
   defp timestamp_milliseconds(value) when is_binary(value) do
     case parse_utc_timestamp(value) do

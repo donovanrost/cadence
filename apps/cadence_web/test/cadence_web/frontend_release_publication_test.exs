@@ -42,6 +42,10 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
 
     assert publication.release_id == release["releaseId"]
+
+    assert publication.publication_id ==
+             "frontend_release_publication_" <> digest_hex(canonical(envelope))
+
     assert publication.payload_bytes == payload
     assert publication.payload_digest == sha256(payload)
     assert publication.signed_document_bytes == canonical(envelope)
@@ -50,6 +54,22 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     Enum.each(publication.artifacts, fn artifact ->
       assert artifact.release_id == publication.release_id
       assert artifact.object_key == "sha256:" <> artifact.sha256
+
+      expected_artifact_id =
+        "frontend_release_artifact_" <>
+          digest_hex(
+            canonical(%{
+              "mediaType" => artifact.media_type,
+              "objectKey" => artifact.object_key,
+              "path" => artifact.path,
+              "releaseId" => artifact.release_id,
+              "releasePublicationId" => artifact.release_publication_id,
+              "sha256" => artifact.sha256,
+              "size" => artifact.size
+            })
+          )
+
+      assert artifact.artifact_id == expected_artifact_id
 
       object = Repo.get!(ReleaseObject, artifact.sha256)
       assert object.size == artifact.size
@@ -601,7 +621,11 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
              FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
 
     assert {:ok, second} =
-             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+             FrontendReleasePublication.admit_release(
+               envelope,
+               @artifact_bytes,
+               now: "2026-08-30T18:31:00Z"
+             )
 
     assert second.publication_id == first.publication_id
     assert second.release_id == release["releaseId"]
