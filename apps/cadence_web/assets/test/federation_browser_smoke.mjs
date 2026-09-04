@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import { types as nodeTypes } from "node:util";
 
 export const CDP_COMMAND_TIMEOUT_MS = 15_000;
 export const CDP_EVENT_TIMEOUT_MS = 30_000;
@@ -77,9 +78,12 @@ function rejectedPromise(error) {
 
 function allowedNativePromise(value) {
   if (value === null || typeof value !== "object") return false;
+  if (nodeTypes.isProxy(value)) return false;
 
   try {
     if (Object.getPrototypeOf(value) !== Promise.prototype) return false;
+    const brandCheck = Promise.prototype.then.call(value, () => undefined, () => undefined);
+    Promise.prototype.then.call(brandCheck, undefined, () => {});
     for (const key of Reflect.ownKeys(value)) {
       if (typeof key === "string") return false;
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -95,6 +99,7 @@ function allowedNativePromise(value) {
 
 function unsafeThenDescriptor(value) {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) return undefined;
+  if (nodeTypes.isProxy(value)) return "value was a proxy";
 
   const visited = new Set();
   let prototype = value;
@@ -120,13 +125,167 @@ function validateRaceValue(value, label) {
     throw new TypeError(`${label} returned a callable value`);
   }
   if (value === null || typeof value !== "object") return;
+  if (nodeTypes.isProxy(value)) {
+    throw new TypeError(`${label} returned a proxy object`);
+  }
   if (allowedNativePromise(value)) return;
 
   const unsafeThen = unsafeThenDescriptor(value);
   if (unsafeThen) throw new TypeError(`${label} returned an arbitrary thenable: ${unsafeThen}`);
 }
 
+function invokeValidated(operation, label) {
+  if (typeof operation !== "function" || nodeTypes.isProxy(operation)) {
+    return rejectedPromise(new TypeError(`${label} was not a safe callable`));
+  }
+
+  try {
+    const value = operation();
+    validateRaceValue(value, label);
+    return value;
+  } catch (error) {
+    return rejectedPromise(error);
+  }
+}
+
+function safeDataDescriptors(value) {
+  if (value === null || typeof value !== "object") return { error: "was not an object" };
+  if (nodeTypes.isProxy(value)) return { error: "was a proxy" };
+
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    return { error: "prototype inspection failed" };
+  }
+  if (prototype !== Object.prototype && prototype !== null) return { error: "was not an ordinary object" };
+
+  let keys;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    return { error: "own-key inspection failed" };
+  }
+  const descriptors = new Map();
+  for (const key of keys) {
+    if (typeof key !== "string") return { error: "contained an own symbol" };
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      return { error: `could not inspect ${key}` };
+    }
+    if (!descriptor) return { error: `lost own descriptor for ${key}` };
+    if (!Object.hasOwn(descriptor, "value")) return { error: `${key} was an accessor` };
+    descriptors.set(key, descriptor);
+  }
+  return { keys, descriptors };
+}
+
+function safeOrdinaryArrayEntries(value) {
+  if (value === null || typeof value !== "object") return { error: "was not an array" };
+  if (nodeTypes.isProxy(value) || !Array.isArray(value)) return { error: "was not an ordinary array" };
+
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    return { error: "prototype inspection failed" };
+  }
+  if (prototype !== Array.prototype) return { error: "was not an ordinary array" };
+
+  let keys;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    return { error: "own-key inspection failed" };
+  }
+  const descriptors = new Map();
+  for (const key of keys) {
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      return { error: "array descriptor inspection failed" };
+    }
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) return { error: "array contained an accessor" };
+    descriptors.set(key, descriptor);
+  }
+
+  const lengthDescriptor = descriptors.get("length");
+  if (!lengthDescriptor || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+    return { error: "array had an invalid length" };
+  }
+  const length = lengthDescriptor.value;
+  for (const key of keys) {
+    if (typeof key === "symbol") return { error: "array contained an own symbol" };
+    if (key !== "length" && (!arrayIndexKey(key) || Number(key) >= length)) {
+      return { error: `array contained an extra own key ${key}` };
+    }
+  }
+  const entries = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = descriptors.get(String(index));
+    if (!descriptor) return { error: `array index ${index} was a hole` };
+    entries.push(descriptor.value);
+  }
+  return { entries };
+}
+
+function safeDataProperty(value, key, label) {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+    throw new TypeError(`${label} was not an object`);
+  }
+  if (nodeTypes.isProxy(value)) throw new TypeError(`${label} was a proxy`);
+
+  const visited = new Set();
+  let current = value;
+  while (current !== null) {
+    if (nodeTypes.isProxy(current)) throw new TypeError(`${label} prototype was a proxy`);
+    if (visited.has(current)) throw new TypeError(`${label} prototype chain was cyclic`);
+    visited.add(current);
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor) {
+      if (!Object.hasOwn(descriptor, "value")) throw new TypeError(`${label} ${key} was an accessor`);
+      return descriptor.value;
+    }
+    current = Object.getPrototypeOf(current);
+  }
+  throw new TypeError(`${label} did not expose ${key}`);
+}
+
+function safeCallableProperty(value, key, label) {
+  const member = safeDataProperty(value, key, label);
+  if (typeof member !== "function" || nodeTypes.isProxy(member)) {
+    throw new TypeError(`${label} ${key} was not a safe callable`);
+  }
+  return member;
+}
+
+function safeOptionalDataProperty(value, key, label) {
+  try {
+    return safeDataProperty(value, key, label);
+  } catch (error) {
+    if (error instanceof TypeError && error.message === `${label} did not expose ${key}`) return undefined;
+    throw error;
+  }
+}
+
+function safeOptionalCallableProperty(value, key, label) {
+  try {
+    return safeCallableProperty(value, key, label);
+  } catch (error) {
+    if (error instanceof TypeError && error.message === `${label} did not expose ${key}`) return undefined;
+    throw error;
+  }
+}
+
 export function withTimeout(promise, milliseconds, label, onTimeout) {
+  try {
+    validateRaceValue(promise, label || "operation");
+  } catch (error) {
+    return rejectedPromise(error);
+  }
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
@@ -844,6 +1003,8 @@ function matchesRequestGeneration(record, generation) {
 
 export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}) {
   const requests = new Map();
+  const exposedRequests = new Map();
+  const requestStateBindings = new WeakMap();
   const consoleErrors = [];
   const logErrors = [];
   const runtimeExceptions = [];
@@ -858,15 +1019,108 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   let activeGeneration;
   let disposed = false;
   const generations = new Map();
+  const generationBindings = new WeakMap();
   const expectedFailureCleanups = new WeakMap();
   const expectedFailureRecordBindings = new WeakMap();
   const expectedFailureCanonicalBindings = new WeakMap();
+  const allowanceStateBindings = new WeakMap();
+  const canonicalEntryBindings = new WeakMap();
+
+  const writeObservation = (target, key, value) => {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key);
+      if (descriptor && (!Object.hasOwn(descriptor, "value") || !descriptor.writable)) return;
+      Object.defineProperty(target, key, {
+        value,
+        enumerable: descriptor?.enumerable ?? true,
+        configurable: descriptor?.configurable ?? true,
+        writable: true,
+      });
+    } catch {
+      // Exposed observations are untrusted and never affect private state.
+    }
+  };
+  const snapshotCanonicalEntry = (entry) => {
+    const snapshot = {
+      source: entry.source,
+      level: entry.level,
+      networkRequestId: entry.networkRequestId,
+      url: entry.url,
+      text: entry.text,
+    };
+    canonicalEntryBindings.set(snapshot, entry);
+    return snapshot;
+  };
+  const syncAllowanceView = (allowance) => {
+    const view = allowance.view;
+    writeObservation(view, "requestId", allowance.requestId);
+    writeObservation(view, "url", allowance.url);
+    writeObservation(view, "method", allowance.method);
+    writeObservation(view, "generation", allowance.generation);
+    writeObservation(view, "status", allowance.status);
+    writeObservation(view, "consumed", allowance.consumed);
+    const consumedEntries = allowance.consumedEntries.map(snapshotCanonicalEntry);
+    allowance.consumedEntriesView = consumedEntries;
+    writeObservation(view, "consumedEntries", consumedEntries);
+    allowance.suppressedFailuresView = [...allowance.suppressedFailures];
+    writeObservation(view, "suppressedFailures", allowance.suppressedFailuresView);
+    writeObservation(view, "revoked", allowance.revoked);
+    writeObservation(view, "finalized", allowance.finalized);
+    writeObservation(view, "replayed", allowance.replayed);
+    writeObservation(view, "record", allowance.record.view);
+  };
+  const syncRecordView = (record) => {
+    const view = record.view;
+    writeObservation(view, "requestId", record.requestId);
+    writeObservation(view, "sequence", record.sequence);
+    writeObservation(view, "startedAtMs", record.startedAtMs);
+    writeObservation(view, "generation", record.generation);
+    writeObservation(view, "method", record.method);
+    writeObservation(view, "url", record.url);
+    writeObservation(view, "request", record.request);
+    writeObservation(view, "postData", record.postData);
+    writeObservation(view, "frameId", record.frameId);
+    writeObservation(view, "loaderId", record.loaderId);
+    writeObservation(view, "response", record.response);
+    writeObservation(view, "responseExtra", record.responseExtra);
+    writeObservation(view, "requestExtra", record.requestExtra);
+    record.statusEvidenceView = record.statusEvidence.map((evidence) => ({ ...evidence }));
+    writeObservation(view, "statusEvidence", record.statusEvidenceView);
+    writeObservation(view, "statusDisagreement", record.statusDisagreement);
+    writeObservation(view, "statusDisagreementReported", record.statusDisagreementReported);
+    writeObservation(view, "servedFromCache", record.servedFromCache);
+    writeObservation(view, "resourceType", record.resourceType);
+    writeObservation(view, "redirects", record.redirects.map((redirect) => ({ ...redirect })));
+    writeObservation(view, "webSocket", record.webSocket);
+    writeObservation(view, "finished", record.finished);
+    writeObservation(view, "failed", record.failed);
+    writeObservation(view, "dataUrl", record.dataUrl);
+    record.pendingExpectedFailureLogView = record.pendingExpectedFailureLog
+      ? {
+          entry: snapshotCanonicalEntry(record.pendingExpectedFailureLog.entry),
+          status: record.pendingExpectedFailureLog.status,
+        }
+      : undefined;
+    writeObservation(view, "pendingExpectedFailureLog", record.pendingExpectedFailureLogView);
+    writeObservation(view, "expectedFailureRegistration", record.expectedFailureRegistration?.view);
+    writeObservation(view, "expectedFailureAllowance", record.expectedFailureAllowance?.view);
+    writeObservation(view, "finalizedExpectedFailure", record.finalizedExpectedFailure?.view);
+  };
+  const publishRecord = (record) => {
+    if (!record.view) {
+      record.view = {};
+    }
+    requestStateBindings.set(record.view, record);
+    syncRecordView(record);
+    if (!exposedRequests.has(record.requestId)) exposedRequests.set(record.requestId, record.view);
+  };
+  const stateForExposedRecord = (record) => requestStateBindings.get(record);
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
   const logError = (entry) => {
     logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
   };
   const observedResponseStatus = (record) => {
-    const statuses = [record?.response?.status, record?.responseExtra?.statusCode].filter(
+    const statuses = [record?.responseStatus, record?.responseExtraStatus].filter(
       (status) => Number.isInteger(status),
     );
     if (!statuses.length || new Set(statuses).size !== 1) return undefined;
@@ -924,6 +1178,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (!Number.isInteger(status)) return;
     record.statusEvidence ||= [];
     record.statusEvidence.push({ source, status });
+    syncRecordView(record);
     const finalizedAllowance = record.finalizedExpectedFailure;
     if (
       finalizedAllowance?.record === record &&
@@ -967,7 +1222,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       (registration.pendingRequestId && registration.pendingRequestId !== record.requestId)
     ) return false;
     try {
-      return registration.predicate(record);
+      return registration.predicate(record.view);
     } catch {
       return false;
     }
@@ -1039,10 +1294,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       consumedEntries: [],
       suppressedFailures: [],
       replayed: false,
+      view: {},
     };
+    allowanceStateBindings.set(allowance.view, allowance);
     expectedFailureRecordBindings.set(allowance, record);
     record.expectedFailureAllowance = allowance;
+    syncAllowanceView(allowance);
     registration.allowances.add(allowance);
+    syncRecordView(record);
     return true;
   };
   const canonicalNetworkResourceStatus = (entry) => {
@@ -1074,15 +1333,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     entry.url === allowance.url &&
     canonicalNetworkResourceStatus(entry) === allowance.status;
   const canonicalEvidenceIsSame = (left, right) =>
-    left?.source === right?.source &&
-    left?.level === right?.level &&
-    left?.networkRequestId === right?.networkRequestId &&
-    left?.url === right?.url &&
-    left?.text === right?.text;
+    canonicalEntryBindings.get(left) === right || left === right;
   const finalizeExpectedFailure = (allowance) => {
     if (allowance.revoked || allowance.finalized) return false;
     allowance.finalized = true;
     expectedFailureRecordBindings.get(allowance).finalizedExpectedFailure = allowance;
+    syncAllowanceView(allowance);
+    syncRecordView(allowance.record);
     detachExpectedFailureRegistration(
       allowance.registration,
       "expected failure confirmed",
@@ -1112,6 +1369,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     allowance.consumed = true;
     expectedFailureCanonicalBindings.set(allowance, entry);
     allowance.consumedEntries.push(entry);
+    syncAllowanceView(allowance);
     return true;
   };
   const pendingExpectedFailureRegistrationFor = (record, status) => {
@@ -1142,6 +1400,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (!registration || record.url !== entry.url) return false;
     registration.pendingRequestId = record.requestId;
     record.pendingExpectedFailureLog = { entry, status, registration };
+    syncRecordView(record);
     return true;
   };
   const reconcilePendingNetworkLogs = () => {
@@ -1151,6 +1410,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
       if (consumeExpectedFailureLog(pending.entry, pending.status, registrations)) {
         delete record.pendingExpectedFailureLog;
+        syncRecordView(record);
         continue;
       }
       const observedStatus = observedResponseStatus(record);
@@ -1169,6 +1429,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       if (!canRemainPending) {
         logError(pending.entry);
         delete record.pendingExpectedFailureLog;
+        syncRecordView(record);
       }
     }
   };
@@ -1178,6 +1439,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       if (!pending) continue;
       logError(pending.entry);
       delete record.pendingExpectedFailureLog;
+      syncRecordView(record);
     }
   };
   const beginRequestGeneration = (label = "request generation") => {
@@ -1190,32 +1452,48 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       causalRequestId: undefined,
       causalRequestSequence: undefined,
     };
-    generations.set(generation.id, generation);
+    const generationState = {
+      id: generation.id,
+      label,
+      requestSequence: generation.requestSequence,
+      requestIds: new Set(generation.requestIds),
+      startedAtMs: generation.startedAtMs,
+      causalRequestId: undefined,
+      causalRequestSequence: undefined,
+      public: generation,
+    };
+    generations.set(generation.id, generationState);
+    generationBindings.set(generation, generationState);
     activeGeneration = generation.id;
     return generation;
   };
 
   const bindRequestGeneration = (generation, request, { admitObservedSockets = false } = {}) => {
-    const generationId = typeof generation === "object" ? generation.id : generation;
-    const current = generations.get(generationId);
+    const current =
+      typeof generation === "object"
+        ? generationBindings.get(generation)
+        : generations.get(generation);
     assert.ok(current, "request generation is not owned by these diagnostics");
-    assert.equal(request?.generation, generationId, "causal request belongs to another generation");
-    assert.ok(request?.requestId, "causal request has no request id");
-    current.causalRequestId = request.requestId;
-    current.causalRequestSequence = request.sequence;
+    const requestState = stateForExposedRecord(request);
+    assert.equal(requestState?.generation, current.id, "causal request belongs to another generation");
+    assert.ok(requestState?.requestId, "causal request has no request id");
+    current.causalRequestId = requestState.requestId;
+    current.causalRequestSequence = requestState.sequence;
+    writeObservation(current.public, "causalRequestId", current.causalRequestId);
+    writeObservation(current.public, "causalRequestSequence", current.causalRequestSequence);
     for (const socket of webSockets.values()) {
       const observedAfterBoundary =
         admitObservedSockets &&
         socket.generation === undefined &&
-        socket.observedGeneration === generationId &&
-        socket.observedSequence >= request.sequence;
-      if (socket.generation === generationId && (socket.boundToRequest === true || observedAfterBoundary)) {
-        socket.generation = generationId;
+        socket.observedGeneration === current.id &&
+        socket.observedSequence >= requestState.sequence;
+      if (socket.generation === current.id && (socket.boundToRequest === true || observedAfterBoundary)) {
+        socket.generation = current.id;
         socket.boundToRequest = true;
-        socket.causalRequestId = request.requestId;
+        socket.causalRequestId = requestState.requestId;
       }
     }
-    return current;
+    return current.public;
   };
 
   on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse, frameId, loaderId }) => {
@@ -1235,7 +1513,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       frameId: frameId || prior?.frameId,
       loaderId: loaderId || prior?.loaderId,
       response: responseOnly ? prior.response : undefined,
+      responseStatus: responseOnly ? prior.responseStatus : undefined,
       responseExtra: prior?.responseExtra,
+      responseExtraStatus: prior?.responseExtraStatus,
       requestExtra: prior?.requestExtra,
       statusEvidence: responseOnly ? prior?.statusEvidence || [] : [],
       statusDisagreement: responseOnly ? prior?.statusDisagreement : undefined,
@@ -1246,8 +1526,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(request.url),
+      view: prior?.view,
     };
     requests.set(requestId, record);
+    publishRecord(record);
     reserveExpectedFailureRegistration(record);
     markExpectedFailure(record);
     reportStatusDisagreement(record);
@@ -1286,12 +1568,17 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       failed: undefined,
       dataUrl: isDataUrl(response.url),
       statusEvidence: [],
+      responseStatus: undefined,
+      responseExtraStatus: undefined,
+      view: undefined,
     };
     record.response = response;
+    record.responseStatus = response.status;
     record.frameId ||= frameId;
     record.loaderId ||= loaderId;
     record.resourceType = type || record.resourceType;
     if (type === "WebSocket") record.webSocket = true;
+    publishRecord(record);
     observeStatusEvidence(record, "response", response.status);
     requests.set(requestId, record);
     const expected = markExpectedFailure(record);
@@ -1310,6 +1597,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const record = requests.get(requestId);
     if (record) {
       record.requestExtra = { headers, associatedCookies };
+      publishRecord(record);
       reconcilePendingNetworkLogs();
       return;
     }
@@ -1329,13 +1617,19 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: false,
+      responseStatus: undefined,
+      responseExtraStatus: undefined,
+      view: undefined,
     });
+    publishRecord(requests.get(requestId));
   });
 
   on("Network.responseReceivedExtraInfo", ({ requestId, statusCode, headers, blockedCookies }) => {
     const record = requests.get(requestId);
     if (record) {
       record.responseExtra = { statusCode, headers, blockedCookies };
+      record.responseExtraStatus = statusCode;
+      publishRecord(record);
       observeStatusEvidence(record, "ExtraInfo", statusCode);
       markExpectedFailure(record);
       reconcilePendingNetworkLogs();
@@ -1357,7 +1651,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: false,
+      responseStatus: undefined,
+      responseExtraStatus: statusCode,
+      view: undefined,
     });
+    publishRecord(requests.get(requestId));
     observeStatusEvidence(requests.get(requestId), "ExtraInfo", statusCode);
     markExpectedFailure(requests.get(requestId));
     reconcilePendingNetworkLogs();
@@ -1366,13 +1664,17 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   on("Network.requestServedFromCache", ({ requestId }) => {
     servedFromCacheRequestIds.add(requestId);
     const record = requests.get(requestId);
-    if (record) record.servedFromCache = true;
+    if (record) {
+      record.servedFromCache = true;
+      publishRecord(record);
+    }
   });
 
   on("Network.loadingFinished", ({ requestId }) => {
     const record = requests.get(requestId);
     if (record) {
       record.finished = true;
+      publishRecord(record);
       reconcilePendingNetworkLogs();
     }
   });
@@ -1397,9 +1699,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       requestFailures.push(failure);
     } else if (expected) {
       allowance.suppressedFailures.push(failure);
+      syncAllowanceView(allowance);
     }
     if (record) {
       record.failed = detail;
+      publishRecord(record);
       reconcilePendingNetworkLogs();
     }
   });
@@ -1534,12 +1838,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 
   const requestForGeneration = (generation, predicate = () => true) =>
     [...requests.values()]
-      .filter((record) => matchesRequestGeneration(record, generation) && predicate(record))
+      .filter((record) => matchesRequestGeneration(record.view, generation) && predicate(record.view))
       .sort((left, right) => left.sequence - right.sequence)
-      .at(-1);
+      .at(-1)?.view;
 
   return {
-    requests,
+    requests: exposedRequests,
     consoleErrors,
     logErrors,
     runtimeExceptions,
@@ -1561,6 +1865,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         requestId: undefined,
         active: true,
         allowances: new Set(),
+        view: {},
       };
       expectedFailureRegistrations.push(registration);
       const cleanup = () => {
@@ -1582,59 +1887,149 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         return expectedFailureConfirmationFailure(registration, undefined, "expected failure allowance is not bound");
       }
 
-      const requestId = evidence?.requestId;
-      const record = requests.get(requestId);
-      const expectedGeneration =
-        typeof evidence?.generation === "object" ? evidence.generation?.id : evidence?.generation;
-      const canonicalEntries = allowance.consumedEntries || [];
       const canonicalEntry = expectedFailureCanonicalBindings.get(allowance);
-      const canonicalEvidence =
-        evidence?.canonicalEvidence ?? evidence?.canonicalEntry ?? evidence?.canonical ?? evidence?.log;
-      const suppliedFailures = evidence?.failureEvidence ?? evidence?.loadingFailed;
-      const expectedFailures = Array.isArray(suppliedFailures)
-        ? suppliedFailures
-        : suppliedFailures === undefined
-          ? undefined
-          : [suppliedFailures];
+      const evidenceShape = safeDataDescriptors(evidence);
+      if (evidenceShape.error) {
+        return expectedFailureConfirmationFailure(
+          registration,
+          allowance,
+          `confirmation evidence ${evidenceShape.error}`,
+        );
+      }
+      const allowedEvidenceKeys = new Set([
+        "requestId",
+        "method",
+        "url",
+        "generation",
+        "status",
+        "canonicalEvidence",
+        "canonicalEntry",
+        "canonical",
+        "log",
+        "failureEvidence",
+        "loadingFailed",
+      ]);
+      for (const key of evidenceShape.keys) {
+        if (!allowedEvidenceKeys.has(key)) {
+          return expectedFailureConfirmationFailure(
+            registration,
+            allowance,
+            `confirmation evidence contained an unexpected field ${key}`,
+          );
+        }
+      }
+      const evidenceValue = (key) => evidenceShape.descriptors.get(key)?.value;
+      const hasEvidenceValue = (key) => evidenceShape.descriptors.has(key);
+      const requestId = evidenceValue("requestId");
+      const expectedGeneration = evidenceValue("generation");
+      const record = typeof requestId === "string" ? requests.get(requestId) : undefined;
+      const exposedRecord = typeof requestId === "string" ? exposedRequests.get(requestId) : undefined;
+      const exposedRecordShape =
+        record && exposedRecord === record.view
+          ? safeDataDescriptors(exposedRecord)
+          : { error: "was not the current request snapshot" };
+      const canonicalKeys = ["canonicalEvidence", "canonicalEntry", "canonical", "log"]
+        .filter((key) => hasEvidenceValue(key));
+      const canonicalEvidence = canonicalKeys.length === 1 ? evidenceValue(canonicalKeys[0]) : undefined;
+      const failureKeys = ["failureEvidence", "loadingFailed"].filter((key) => hasEvidenceValue(key));
+      const suppliedFailures = failureKeys.length === 1 ? evidenceValue(failureKeys[0]) : undefined;
 
       const mismatches = [];
       const requireEvidence = (condition, reason) => {
         if (!condition) mismatches.push(reason);
       };
-      requireEvidence(Boolean(requestId), "request id missing");
+      requireEvidence(canonicalKeys.length <= 1, "canonical evidence was supplied more than once");
+      requireEvidence(failureKeys.length <= 1, "loadingFailed evidence was supplied more than once");
+      requireEvidence(typeof requestId === "string" && requestId.length > 0, "request id missing");
       requireEvidence(Boolean(record), "request record missing");
       if (record) {
-        const exactRecord = expectedFailureRecordBindings.get(allowance) === record && allowance.record === record;
+        const exactRecord =
+          expectedFailureRecordBindings.get(allowance) === record &&
+          allowance.record === record &&
+          exposedRecord === record.view &&
+          !exposedRecordShape.error;
         requireEvidence(exactRecord, "request record identity changed");
         if (exactRecord) {
+          const exposedRecordValue = (key) => exposedRecordShape.descriptors.get(key)?.value;
+          const exposedAllowance = exposedRecordValue("expectedFailureAllowance");
+          const exposedAllowanceShape =
+            exposedAllowance === allowance.view
+              ? safeDataDescriptors(exposedAllowance)
+              : { error: "was not the current allowance snapshot" };
+          const exposedAllowanceValue = (key) => exposedAllowanceShape.descriptors?.get(key)?.value;
+          requireEvidence(
+            exposedRecordValue("requestId") === record.requestId &&
+              exposedRecordValue("method") === record.method &&
+              exposedRecordValue("url") === record.url &&
+              exposedRecordValue("generation") === record.generation &&
+              exposedRecordValue("finished") === record.finished &&
+              exposedRecordValue("statusEvidence") === record.statusEvidenceView &&
+              exposedRecordValue("pendingExpectedFailureLog") === record.pendingExpectedFailureLogView &&
+              exposedRecordValue("expectedFailureRegistration") === record.expectedFailureRegistration?.view &&
+              exposedRecordValue("expectedFailureAllowance") === record.expectedFailureAllowance?.view &&
+              exposedRecordValue("finalizedExpectedFailure") === record.finalizedExpectedFailure?.view,
+            "request observation changed",
+          );
+          requireEvidence(!exposedAllowanceShape.error, "allowance observation changed");
+          requireEvidence(
+            exposedAllowanceValue("requestId") === allowance.requestId &&
+              exposedAllowanceValue("url") === allowance.url &&
+              exposedAllowanceValue("method") === allowance.method &&
+              exposedAllowanceValue("generation") === allowance.generation &&
+              exposedAllowanceValue("status") === allowance.status &&
+              exposedAllowanceValue("consumed") === allowance.consumed &&
+              exposedAllowanceValue("consumedEntries") === allowance.consumedEntriesView &&
+              exposedAllowanceValue("suppressedFailures") === allowance.suppressedFailuresView &&
+              exposedAllowanceValue("revoked") === allowance.revoked &&
+              exposedAllowanceValue("finalized") === allowance.finalized &&
+              exposedAllowanceValue("replayed") === allowance.replayed &&
+              exposedAllowanceValue("record") === allowance.record.view,
+            "allowance observation changed",
+          );
           requireEvidence(record.expectedFailureAllowance === allowance, "allowance binding changed");
           requireEvidence(allowance.requestId === requestId, "request id changed");
           requireEvidence(record.finished, "request is not terminal");
           requireEvidence(!record.pendingExpectedFailureLog, "canonical evidence is pending");
-          requireEvidence(record.method === evidence?.method, "request method changed");
-          requireEvidence(record.url === evidence?.url, "request URL changed");
-          requireEvidence(record.generation === expectedGeneration, "request generation changed");
-          requireEvidence(allowance.method === evidence?.method, "allowance method changed");
-          requireEvidence(allowance.url === evidence?.url, "allowance URL changed");
-          requireEvidence(allowance.generation === expectedGeneration, "allowance generation changed");
-          requireEvidence(allowance.status === evidence?.status, "allowance status changed");
-          requireEvidence(record.response?.status === evidence?.status, "response status changed");
-          requireEvidence(observedResponseStatus(record) === evidence?.status, "status evidence changed");
+          requireEvidence(record.method === evidenceValue("method"), "request method changed");
+          requireEvidence(record.url === evidenceValue("url"), "request URL changed");
+          const generationState =
+            expectedGeneration && typeof expectedGeneration === "object"
+              ? generationBindings.get(expectedGeneration)
+              : undefined;
+          const generationMatches =
+            record.generation === undefined
+              ? expectedGeneration === undefined
+              : generationState?.id === record.generation;
+          requireEvidence(generationMatches, "request generation changed");
+          requireEvidence(allowance.method === evidenceValue("method"), "allowance method changed");
+          requireEvidence(allowance.url === evidenceValue("url"), "allowance URL changed");
+          requireEvidence(
+            allowance.generation === record.generation && generationMatches,
+            "allowance generation changed",
+          );
+          requireEvidence(allowance.status === evidenceValue("status"), "allowance status changed");
+          requireEvidence(record.responseStatus === evidenceValue("status"), "response status changed");
+          requireEvidence(observedResponseStatus(record) === evidenceValue("status"), "status evidence changed");
           requireEvidence(!record.statusDisagreement, "status evidence contradicts");
         }
       }
-      requireEvidence(canonicalEntries.length === 1, "canonical evidence count changed");
-      requireEvidence(canonicalEntries[0] === canonicalEntry, "canonical evidence binding changed");
+      requireEvidence(allowance.consumedEntries.length === 1, "canonical evidence count changed");
+      requireEvidence(allowance.consumedEntries[0] === canonicalEntry, "canonical evidence binding changed");
       requireEvidence(canonicalEvidenceMatches(canonicalEntry, allowance), "canonical evidence changed");
-      if (canonicalEvidence) {
-        const exactCanonicalEvidence = canonicalEvidence === canonicalEntry;
-        requireEvidence(exactCanonicalEvidence, "provided canonical evidence identity changed");
-        if (exactCanonicalEvidence) {
-          requireEvidence(canonicalEvidenceMatches(canonicalEvidence, allowance), "provided canonical evidence changed");
-          requireEvidence(canonicalEvidenceIsSame(canonicalEvidence, canonicalEntry), "provided canonical evidence differs");
-        }
+      if (canonicalKeys.length === 1) {
+        const boundCanonicalEvidence = canonicalEntryBindings.get(canonicalEvidence);
+        requireEvidence(
+          boundCanonicalEvidence === canonicalEntry || canonicalEvidence === canonicalEntry,
+          "provided canonical evidence identity changed",
+        );
+        requireEvidence(canonicalEvidenceIsSame(canonicalEvidence, canonicalEntry), "provided canonical evidence differs");
       }
-      if (expectedFailures) {
+      if (failureKeys.length === 1 && suppliedFailures !== undefined) {
+        const failureValues = Array.isArray(suppliedFailures)
+          ? safeOrdinaryArrayEntries(suppliedFailures)
+          : { entries: [suppliedFailures] };
+        requireEvidence(!failureValues.error, `loadingFailed evidence ${failureValues.error || "changed"}`);
+        const expectedFailures = failureValues.entries || [];
         requireEvidence(
           expectedFailures.length === allowance.suppressedFailures.length &&
             expectedFailures.every((failure, index) => failure === allowance.suppressedFailures[index]),
@@ -1660,14 +2055,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         "Network.requestWillBeSent",
         ({ requestId }) => {
           const record = requests.get(requestId);
-          return Boolean(record && matchesRequestGeneration(record, generation) && predicate(record));
+          return Boolean(
+            record &&
+            matchesRequestGeneration(record.view, generation) &&
+            predicate(record.view),
+          );
         },
         timeout,
         signal,
       );
       const record = requests.get(event.requestId);
       if (!record) throw new Error(`${label} request was not recorded`);
-      return record;
+      return record.view;
     },
     completed(predicate, { generation } = {}) {
       return [...requests.values()]
@@ -1675,10 +2074,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           record.response &&
           record.finished &&
           !record.failed &&
-          matchesRequestGeneration(record, generation) &&
-          predicate(record),
+          matchesRequestGeneration(record.view, generation) &&
+          predicate(record.view),
         )
-        .sort((left, right) => left.sequence - right.sequence);
+        .sort((left, right) => left.sequence - right.sequence)
+        .map((record) => record.view);
     },
     async drainLateEvents(milliseconds = 250, signal) {
       await sleep(milliseconds, signal);
@@ -2300,7 +2700,7 @@ export async function waitForPageNavigation(
   const lifecycleOff = client.on("Page.lifecycleEvent", onLifecycleEvent);
 
   try {
-    const operationPromise = Promise.resolve().then(operation);
+    const operationPromise = invokeValidated(operation, `${label} command`);
     operationPromise.catch(() => {});
     result = await raceWithSignalAndTimeout(operationPromise, {
       signal,
@@ -3567,6 +3967,7 @@ export function toOrdinarySerializableResult(value, path = "result") {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (value === undefined) conversionFailure(path, "was not serializable");
   if (typeof value !== "object") conversionFailure(path, "contained a non-serializable capability");
+  if (nodeTypes.isProxy(value)) conversionFailure(path, "was a proxy");
 
   if (Array.isArray(value)) {
     let prototype;
@@ -3649,14 +4050,31 @@ export async function runBrowserGate(
 ) {
   assertNoPasswordArgument(args);
   const controller = new AbortController();
-  const state = { runtime: null, client: null, page: null };
+  const state = {
+    runtime: null,
+    runtimeClose: null,
+    runtimeEndpoint: undefined,
+    client: null,
+    clientClose: null,
+    page: null,
+    pageId: undefined,
+  };
   const secrets = [];
   let diagnostics;
+  let diagnosticsDispose;
   const guards = installShutdownGuards({
     onAbort: (reason) => {
       controller.abort(reason);
-      state.client?.close();
-      void state.runtime?.close();
+      try {
+        state.clientClose?.();
+      } catch {
+        // Cleanup continues through the owning finally path.
+      }
+      try {
+        void state.runtimeClose?.();
+      } catch {
+        // Cleanup continues through the owning finally path.
+      }
     },
   });
   let runError;
@@ -3668,38 +4086,134 @@ export async function runBrowserGate(
     if (secret) secrets.push(secret.password);
 
     reportProgress("launching bounded Chrome process");
-    state.runtime = await launchChromeImpl({
-      env,
-      signal: controller.signal,
-      onRuntime: (runtime) => {
-        state.runtime = runtime;
+    const captureRuntime = (runtime) => {
+      state.runtime = runtime;
+      state.runtimeClose = safeCallableProperty(runtime, "close", "Chrome runtime");
+      state.runtimeEndpoint = safeDataProperty(runtime, "endpoint", "Chrome runtime");
+    };
+    const launchedRuntime = await raceWithSignalAndTimeout(
+      invokeValidated(
+        () => launchChromeImpl({
+          env,
+          signal: controller.signal,
+          onRuntime: captureRuntime,
+        }),
+        "launchChrome implementation",
+      ),
+      {
+        signal: controller.signal,
+        milliseconds: CDP_COMMAND_TIMEOUT_MS,
+        label: "launchChrome implementation",
       },
-    });
-    reportProgress("creating browser target");
-    state.page = await createPageImpl(state.runtime.endpoint, "about:blank", { signal: controller.signal });
-    state.client = createClientImpl(state.page.webSocketDebuggerUrl);
-    await state.client.send("Page.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
-    await state.client.send(
-      "Page.setLifecycleEventsEnabled",
-      { enabled: true },
-      CDP_COMMAND_TIMEOUT_MS,
-      controller.signal,
     );
-    await state.client.send("Runtime.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
-    await state.client.send("Network.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
-    await state.client.send("Log.enable", {}, CDP_COMMAND_TIMEOUT_MS, controller.signal);
-    await state.client.send("Emulation.setDeviceMetricsOverride", {
+    captureRuntime(launchedRuntime);
+    reportProgress("creating browser target");
+    const createdPage = await raceWithSignalAndTimeout(
+      invokeValidated(
+        () => createPageImpl(state.runtimeEndpoint, "about:blank", { signal: controller.signal }),
+        "createPage implementation",
+      ),
+      {
+        signal: controller.signal,
+        milliseconds: CDP_COMMAND_TIMEOUT_MS,
+        label: "createPage implementation",
+      },
+    );
+    state.page = createdPage;
+    const pageWebSocketDebuggerUrl = safeDataProperty(
+      createdPage,
+      "webSocketDebuggerUrl",
+      "browser page",
+    );
+    state.pageId = safeOptionalDataProperty(createdPage, "id", "browser page");
+
+    const clientTarget = await raceWithSignalAndTimeout(
+      invokeValidated(
+        () => createClientImpl(pageWebSocketDebuggerUrl),
+        "createClient implementation",
+      ),
+      {
+        signal: controller.signal,
+        milliseconds: CDP_COMMAND_TIMEOUT_MS,
+        label: "createClient implementation",
+      },
+    );
+    const clientOn = safeCallableProperty(clientTarget, "on", "CDP client");
+    const clientSend = safeCallableProperty(clientTarget, "send", "CDP client");
+    const clientWaitForEvent = safeOptionalCallableProperty(
+      clientTarget,
+      "waitForEvent",
+      "CDP client",
+    );
+    const clientClose = safeCallableProperty(clientTarget, "close", "CDP client");
+    const clientEmit = safeOptionalCallableProperty(clientTarget, "emit", "CDP client");
+    const client = {
+      on(...parameters) {
+        return Reflect.apply(clientOn, clientTarget, parameters);
+      },
+      send(...parameters) {
+        return invokeValidated(
+          () => Reflect.apply(clientSend, clientTarget, parameters),
+          `CDP ${parameters[0] || "client"}`,
+        );
+      },
+      close(...parameters) {
+        return Reflect.apply(clientClose, clientTarget, parameters);
+      },
+    };
+    if (clientWaitForEvent) {
+      client.waitForEvent = (...parameters) =>
+        invokeValidated(
+          () => Reflect.apply(clientWaitForEvent, clientTarget, parameters),
+          `CDP ${parameters[0] || "event"}`,
+        );
+    }
+    if (clientEmit) {
+      client.emit = (...parameters) => Reflect.apply(clientEmit, clientTarget, parameters);
+    }
+    state.client = client;
+    state.clientClose = () => Reflect.apply(clientClose, clientTarget, []);
+    const sendCommand = (method, parameters) =>
+      raceWithSignalAndTimeout(
+        invokeValidated(
+          () => Reflect.apply(clientSend, clientTarget, [
+            method,
+            parameters,
+            CDP_COMMAND_TIMEOUT_MS,
+            controller.signal,
+          ]),
+          `CDP ${method}`,
+        ),
+        {
+          signal: controller.signal,
+          milliseconds: CDP_COMMAND_TIMEOUT_MS,
+          label: `CDP ${method}`,
+        },
+      );
+    await sendCommand("Page.enable", {});
+    await sendCommand("Page.setLifecycleEventsEnabled", { enabled: true });
+    await sendCommand("Runtime.enable", {});
+    await sendCommand("Network.enable", {});
+    await sendCommand("Log.enable", {});
+    await sendCommand("Emulation.setDeviceMetricsOverride", {
       width: 1440,
       height: 1000,
       deviceScaleFactor: 1,
       mobile: false,
-    }, CDP_COMMAND_TIMEOUT_MS, controller.signal);
+    });
 
     const commsUrl = requiredArg(args, "--comms-url");
     diagnostics = installDiagnostics(state.client, { expectedOrigin: new URL(commsUrl).origin, secrets });
+    const diagnosticsRevoke = diagnostics.revokeUnconfirmedExpectedFailures;
+    const diagnosticsDrain = diagnostics.drainLateEvents;
+    const diagnosticsAssertClean = diagnostics.assertClean;
+    diagnosticsDispose = diagnostics.dispose;
     const timeout = Number(argValue(args, "--scenario-timeout-ms") || SCENARIO_TIMEOUT_MS);
     assert.ok(Number.isFinite(timeout) && timeout > 0, "--scenario-timeout-ms must be positive");
-    const scenario = runScenarioImpl(state.client, diagnostics, args, { secret, signal: controller.signal });
+    const scenario = invokeValidated(
+      () => runScenarioImpl(state.client, diagnostics, args, { secret, signal: controller.signal }),
+      "runScenario implementation",
+    );
     const result = await raceWithSignalAndTimeout(scenario, {
       signal: controller.signal,
       milliseconds: timeout,
@@ -3707,46 +4221,113 @@ export async function runBrowserGate(
       onTimeout: (error) => {
         reportProgress(`federation browser scenario timeout after ${timeout}ms`);
         controller.abort(error);
-        state.client?.close();
-        void state.runtime?.close();
+        try {
+          state.clientClose?.();
+        } catch {
+          // Cleanup continues through the owning finally path.
+        }
+        try {
+          void state.runtimeClose?.();
+        } catch {
+          // Cleanup continues through the owning finally path.
+        }
       },
     });
     reportProgress("federation browser scenario settled successfully");
-    diagnostics.revokeUnconfirmedExpectedFailures("browser gate final assertion");
-    await diagnostics.drainLateEvents(250, controller.signal);
-    diagnostics.assertClean("federation browser gate final");
+    Reflect.apply(diagnosticsRevoke, diagnostics, ["browser gate final assertion"]);
+    await raceWithSignalAndTimeout(
+      invokeValidated(
+        () => Reflect.apply(diagnosticsDrain, diagnostics, [250, controller.signal]),
+        "diagnostics late-event drain",
+      ),
+      {
+        signal: controller.signal,
+        milliseconds: CDP_COMMAND_TIMEOUT_MS,
+        label: "diagnostics late-event drain",
+      },
+    );
+    Reflect.apply(diagnosticsAssertClean, diagnostics, ["federation browser gate final"]);
     const publicResult = toOrdinarySerializableResult(result);
     reportProgress("browser gate returning successfully");
     return publicResult;
   } catch (error) {
-    const safe = new Error(redactError(error, secrets));
+    let safeMessage;
+    try {
+      safeMessage = redactError(error, secrets);
+    } catch {
+      safeMessage = "browser gate failed and its error could not be formatted";
+    }
+    const safe = new Error(safeMessage);
     safe.exitCode = guards.exitCode;
     runError = safe;
     reportProgress("browser gate throwing after run failure");
     throw safe;
   } finally {
-    guards.dispose();
-    diagnostics?.dispose();
     reportProgress("cleaning up browser process and profile");
     const cleanupErrors = [];
+
     try {
-      await closePage(state.runtime?.endpoint, state.page?.id, {
+      guards.dispose();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      if (diagnosticsDispose) Reflect.apply(diagnosticsDispose, diagnostics, []);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      await closePage(state.runtimeEndpoint, state.pageId, {
         timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
       });
       reportProgress("browser target close complete");
     } catch (error) {
       cleanupErrors.push(error);
     }
-    state.client?.close();
     try {
-      await state.runtime?.close();
+      state.clientClose?.();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      if (state.runtimeClose) {
+        await raceWithSignalAndTimeout(
+          invokeValidated(
+            () => Reflect.apply(state.runtimeClose, state.runtime, []),
+            "Chrome runtime cleanup",
+          ),
+          {
+            milliseconds: CDP_COMMAND_TIMEOUT_MS,
+            label: "Chrome runtime cleanup",
+          },
+        );
+      }
       reportProgress("Chrome process and profile cleanup complete");
     } catch (error) {
       cleanupErrors.push(error);
     }
     if (cleanupErrors.length) {
-      const message = redactText(cleanupErrors.map(redactError).join("\n"), secrets);
-      const combined = new Error(runError ? `${redactError(runError, secrets)}\n${message}` : message);
+      const message = redactText(
+        cleanupErrors
+          .map((error) => {
+            try {
+              return redactError(error, secrets);
+            } catch {
+              return "cleanup failure could not be formatted";
+            }
+          })
+          .join("\n"),
+        secrets,
+      );
+      let primaryMessage = "";
+      if (runError) {
+        try {
+          primaryMessage = redactError(runError, secrets);
+        } catch {
+          primaryMessage = "browser gate failed and its error could not be formatted";
+        }
+      }
+      const combined = new Error(primaryMessage ? `${primaryMessage}\n${message}` : message);
       combined.exitCode = runError?.exitCode;
       reportProgress(`browser gate cleanup finished with errors; active resources: ${JSON.stringify(activeResourceNames())}`);
       throw combined;

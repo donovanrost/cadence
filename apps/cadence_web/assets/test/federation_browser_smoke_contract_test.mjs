@@ -682,6 +682,105 @@ test("finalized expected failures retain exact authority for contradictory late 
   }
 });
 
+test("expected failure confirmation fails closed on exposed consumed-entry replacements", () => {
+  const fixture = expectedFailureFixture({ requestId: "private-consumed-membership" });
+  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  const exposedAllowance = exposedRecord.expectedFailureAllowance;
+  const canonicalEntry = exposedAllowance.consumedEntries[0];
+  let iteratorCalls = 0;
+  const arrayLikeReplacement = { 0: canonicalEntry, length: 1 };
+  Object.defineProperty(arrayLikeReplacement, Symbol.iterator, {
+    get: () => {
+      iteratorCalls += 1;
+      return function* hostileIterator() {};
+    },
+  });
+
+  exposedAllowance.consumedEntries = [canonicalEntry];
+  exposedAllowance.consumedEntries = arrayLikeReplacement;
+  exposedAllowance.record = {};
+  exposedRecord.expectedFailureAllowance = { consumedEntries: [canonicalEntry] };
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    /expected failure confirmation rejected.*observation changed/,
+  );
+  assert.equal(iteratorCalls, 0, "confirmation touched the replaced exposed iterator");
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("expected failure confirmation ignores exposed POST-to-GET mutations", () => {
+  const fixture = expectedFailureFixture({ requestId: "private-method-lineage" });
+  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  exposedRecord.method = "GET";
+  exposedRecord.expectedFailureAllowance.method = "GET";
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture, { method: "GET" }),
+    ),
+    /expected failure confirmation rejected.*request method changed/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("late contradictory status remains authoritative after exposed finalization evidence is erased", () => {
+  const fixture = expectedFailureFixture({ requestId: "private-finalization-authority" });
+  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  assert.equal(fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)), true);
+
+  delete exposedRecord.finalizedExpectedFailure;
+  exposedRecord.statusEvidence = [];
+  emitActionResponse(fixture.client, fixture.requestId, fixture.url, 200);
+  assertDirty(fixture.diagnostics, "private finalized status authority");
+  fixture.diagnostics.dispose();
+});
+
+test("confirmation rejects hostile evidence accessors without reading them", () => {
+  const fixture = expectedFailureFixture({ requestId: "hostile-confirmation-evidence" });
+  let getterCalls = 0;
+  const hostileEvidence = {};
+  Object.defineProperty(hostileEvidence, "requestId", {
+    get: () => {
+      getterCalls += 1;
+      return fixture.requestId;
+    },
+    enumerable: true,
+  });
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, hostileEvidence),
+    /expected failure confirmation rejected.*requestId was an accessor/,
+  );
+  assert.equal(getterCalls, 0);
+  fixture.diagnostics.dispose();
+});
+
+test("confirmation rejects proxy evidence without invoking any proxy traps", () => {
+  const fixture = expectedFailureFixture({ requestId: "proxy-confirmation-evidence" });
+  let trapCalls = 0;
+  const hostileEvidence = new Proxy(confirmationEvidence(fixture), {
+    getPrototypeOf: () => { trapCalls += 1; return Object.prototype; },
+    ownKeys: () => { trapCalls += 1; return []; },
+    getOwnPropertyDescriptor: () => { trapCalls += 1; return undefined; },
+    get: () => { trapCalls += 1; return undefined; },
+    has: () => { trapCalls += 1; return false; },
+  });
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, hostileEvidence),
+    /expected failure confirmation rejected.*proxy/,
+  );
+  assert.equal(trapCalls, 0);
+  fixture.diagnostics.dispose();
+});
+
 test("the browser gate confirms before returning and exposes only ordinary result data", async () => {
   const dependencies = syntheticGateDependencies();
   let diagnostics;
@@ -772,6 +871,93 @@ test("the browser gate drains late finalized status events before disposing diag
   }
 });
 
+test("browser cleanup remains closure-owned when exposed diagnostics contain a hostile iterator", async () => {
+  const { server, port } = await reserveLoopbackPort();
+  let pageClosed = false;
+  let runtimeClosed = false;
+  let iteratorCalls = 0;
+  server.on("connection", (socket) => {
+    socket.once("data", () => {
+      pageClosed = true;
+      socket.end("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    });
+  });
+
+  let diagnostics;
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: async () => ({
+          endpoint: `ws://127.0.0.1:${port}/devtools/browser/synthetic`,
+          close: async () => { runtimeClosed = true; },
+        }),
+        createPageImpl: async () => ({
+          id: "synthetic-page",
+          webSocketDebuggerUrl: "ws://synthetic",
+        }),
+        createClientImpl: () => makeDiagnosticClient(),
+        runScenarioImpl: (client, installedDiagnostics) => {
+          diagnostics = installedDiagnostics;
+          const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+          const cleanup = diagnostics.allowExpectedFailure(
+            (record) => record.method === "POST" && record.url === fixtureUrl,
+            { status: 403 },
+          );
+          emitExpectedActionRequest(client, "hostile-exposed-iterator", fixtureUrl);
+          emitActionResponse(client, "hostile-exposed-iterator", fixtureUrl, 403);
+          emitCanonicalNetworkResourceError(client, fixtureUrl, "hostile-exposed-iterator");
+          client.emit("Network.loadingFinished", { requestId: "hostile-exposed-iterator" });
+          const exposedRecord = diagnostics.requests.get("hostile-exposed-iterator");
+          const hostileIterator = {
+            [Symbol.iterator]: () => {
+              iteratorCalls += 1;
+              throw new Error("hostile exposed iterator executed");
+            },
+          };
+          exposedRecord.expectedFailureAllowance.suppressedFailures = hostileIterator;
+          exposedRecord.statusEvidence = hostileIterator;
+          return { status: "unconfirmed" };
+        },
+      }),
+      /browser diagnostics failed/,
+    );
+  } finally {
+    await new Promise((resolveClose) => server.close(resolveClose));
+  }
+
+  assert.equal(iteratorCalls, 0);
+  assert.equal(pageClosed, true, "page cleanup did not run after hostile diagnostics exposure");
+  assert.equal(runtimeClosed, true, "runtime cleanup did not run after hostile diagnostics exposure");
+  assert.ok(diagnostics);
+});
+
+test("browser gate validates an injected thenable before assimilation and still closes the runtime", async () => {
+  const dependencies = syntheticGateDependencies();
+  let runtimeClosed = false;
+  let getterCalls = 0;
+  const hostileResult = Object.create(null);
+  Object.defineProperty(hostileResult, "then", {
+    get: () => {
+      getterCalls += 1;
+      return () => {};
+    },
+  });
+
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(), {
+      ...dependencies,
+      launchChromeImpl: async () => ({
+        endpoint: "ws://synthetic",
+        close: async () => { runtimeClosed = true; },
+      }),
+      runScenarioImpl: () => hostileResult,
+    }),
+    /arbitrary thenable/,
+  );
+  assert.equal(getterCalls, 0);
+  assert.equal(runtimeClosed, true);
+});
+
 test("ordinary result conversion rejects hostile arrays before reading or iterating them", () => {
   let mapCalls = 0;
   const ownMap = ["safe"];
@@ -832,6 +1018,20 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
   assert.equal(functionCalls, 0);
 });
 
+test("ordinary result conversion rejects proxy arrays before invoking proxy traps", () => {
+  let trapCalls = 0;
+  const hostileArray = new Proxy(["safe"], {
+    getPrototypeOf: () => { trapCalls += 1; return Array.prototype; },
+    ownKeys: () => { trapCalls += 1; return ["0", "length"]; },
+    getOwnPropertyDescriptor: () => { trapCalls += 1; return undefined; },
+    get: () => { trapCalls += 1; return "secret"; },
+    has: () => { trapCalls += 1; return true; },
+  });
+
+  assert.throws(() => toOrdinarySerializableResult(hostileArray), /result was a proxy/);
+  assert.equal(trapCalls, 0);
+});
+
 test("race rejects synchronous thenables without invoking hooks and guards native Promise results", async () => {
   let thenCalls = 0;
   const synchronousThenable = Object.create(null);
@@ -851,6 +1051,11 @@ test("race rejects synchronous thenables without invoking hooks and guards nativ
   assert.deepEqual(
     await raceWithSignalAndTimeout(Promise.resolve(nativeResult), { milliseconds: 50, label: "native promise" }),
     nativeResult,
+  );
+
+  await assert.rejects(
+    raceWithSignalAndTimeout(Object.create(Promise.prototype), { milliseconds: 50, label: "forged promise" }),
+    /arbitrary thenable/,
   );
 
   let overriddenThenCalls = 0;
@@ -885,6 +1090,32 @@ test("race rejects synchronous thenables without invoking hooks and guards nativ
     /cleanup was an accessor/,
   );
   assert.equal(resultAccessorCalls, 0);
+});
+
+test("page navigation rejects a returned thenable before reading its then getter", async () => {
+  const listeners = new Map();
+  const client = {
+    on(method, listener) {
+      const methodListeners = listeners.get(method) || new Set();
+      methodListeners.add(listener);
+      listeners.set(method, methodListeners);
+      return () => methodListeners.delete(listener);
+    },
+  };
+  let getterCalls = 0;
+  const hostileResult = Object.create(null);
+  Object.defineProperty(hostileResult, "then", {
+    get: () => {
+      getterCalls += 1;
+      return () => {};
+    },
+  });
+
+  await assert.rejects(
+    waitForPageNavigation(client, () => hostileResult, { timeout: 50 }),
+    /arbitrary thenable/,
+  );
+  assert.equal(getterCalls, 0);
 });
 
 test("the browser gate rejects an unconfirmed allowance after fail-closed cleanup replay", async () => {
