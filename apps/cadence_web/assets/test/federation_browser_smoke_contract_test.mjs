@@ -601,6 +601,242 @@ test("one canonical delayed Chrome network resource error is attributed to one e
   diagnostics.dispose();
 });
 
+test("public request failure observations cannot clear private diagnostic failures", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/failure`;
+  client.emit("Network.requestWillBeSent", {
+    requestId: "real-500",
+    request: { url, method: "GET", headers: {} },
+    type: "Fetch",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "real-500",
+    response: { url, status: 500 },
+    type: "Fetch",
+  });
+  client.emit("Network.loadingFinished", { requestId: "real-500" });
+  assert.equal(diagnostics.requestFailures.length, 1);
+  diagnostics.requestFailures.splice(0);
+  assertDirty(diagnostics, "cleared public request failure");
+  diagnostics.dispose();
+});
+
+test("public log error observations cannot clear private diagnostic failures", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  client.emit("Log.entryAdded", {
+    entry: { level: "error", text: "real browser error", url: `${origin}/failure` },
+  });
+  assert.equal(diagnostics.logErrors.length, 1);
+  diagnostics.logErrors.splice(0);
+  assertDirty(diagnostics, "cleared public log error");
+  diagnostics.dispose();
+});
+
+test("replaced public observation methods cannot alter private verdicts", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const requests = diagnostics.requests;
+  const requestFailures = diagnostics.requestFailures;
+  const logErrors = diagnostics.logErrors;
+  requests.get = () => {
+    throw new Error("forged request lookup");
+  };
+  requests.has = () => false;
+  requests.set = () => {
+    throw new Error("forged request publication");
+  };
+  requestFailures.push = () => {
+    throw new Error("forged request failure publication");
+  };
+  logErrors.push = () => {
+    throw new Error("forged log publication");
+  };
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "private-methods-500",
+    request: { url: `${origin}/private-methods`, method: "GET", headers: {} },
+    type: "Fetch",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "private-methods-500",
+    response: { url: `${origin}/private-methods`, status: 500 },
+    type: "Fetch",
+  });
+  client.emit("Network.loadingFinished", { requestId: "private-methods-500" });
+  client.emit("Log.entryAdded", {
+    entry: { level: "error", text: "private method log", url: `${origin}/private-methods` },
+  });
+
+  assert.equal(diagnostics.requestForGeneration(undefined, () => true).requestId, "private-methods-500");
+  assertDirty(diagnostics, "replaced public observation methods");
+  diagnostics.dispose();
+});
+
+test("generation queries ignore tampered public ids, request sets, and boundaries", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const oldGeneration = diagnostics.beginRequestGeneration("old generation");
+  emitExpectedActionRequest(client, "old-generation-request", `${origin}/old`);
+  const nextGeneration = diagnostics.beginRequestGeneration("next generation");
+  emitExpectedActionRequest(client, "next-generation-request", `${origin}/new`);
+
+  diagnostics.requests.get("old-generation-request").generation = nextGeneration.id;
+  diagnostics.requests.get("next-generation-request").generation = oldGeneration.id;
+  nextGeneration.requestIds.delete("old-generation-request");
+  nextGeneration.requestSequence = 0;
+
+  assert.equal(
+    diagnostics.requestForGeneration(nextGeneration, () => true).requestId,
+    "next-generation-request",
+  );
+  diagnostics.dispose();
+});
+
+test("confirmation detects in-place mutation of a consumed canonical snapshot member", () => {
+  const fixture = expectedFailureFixture({ requestId: "mutated-canonical-member" });
+  const canonicalEntry = fixture.diagnostics.requests
+    .get(fixture.requestId).expectedFailureAllowance.consumedEntries[0];
+  canonicalEntry.text = "forged canonical failure";
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    /expected failure confirmation rejected.*observation.*changed/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("confirmation detects a consumed canonical snapshot being popped", () => {
+  const fixture = expectedFailureFixture({ requestId: "popped-canonical-entry" });
+  const exposedAllowance = fixture.diagnostics.requests
+    .get(fixture.requestId).expectedFailureAllowance;
+  exposedAllowance.consumedEntries.pop();
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    /expected failure confirmation rejected.*observation.*changed/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("confirmation detects canonical snapshot accessors without invoking them", () => {
+  const fixture = expectedFailureFixture({ requestId: "accessor-canonical-member" });
+  const canonicalEntry = fixture.diagnostics.requests
+    .get(fixture.requestId).expectedFailureAllowance.consumedEntries[0];
+  let getterCalls = 0;
+  Object.defineProperty(canonicalEntry, "text", {
+    get: () => {
+      getterCalls += 1;
+      return "forged canonical failure";
+    },
+    enumerable: true,
+    configurable: true,
+  });
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    /expected failure confirmation rejected.*observation.*accessor/,
+  );
+  assert.equal(getterCalls, 0);
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("confirmation rejects a mutated detached canonical snapshot", () => {
+  const fixture = expectedFailureFixture({ requestId: "detached-canonical-member" });
+  const detached = fixture.diagnostics.requestForGeneration(
+    fixture.generation,
+    () => true,
+  );
+  const canonicalEntry = detached.expectedFailureAllowance.consumedEntries[0];
+  canonicalEntry.text = "forged detached canonical failure";
+
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture, { canonicalEvidence: canonicalEntry }),
+    ),
+    /expected failure confirmation rejected.*provided canonical evidence differs/,
+  );
+  assert.equal(fixture.diagnostics.logErrors.length, 1);
+  fixture.diagnostics.dispose();
+});
+
+test("LiveView websocket assertion ignores forged entries in exposed websocket evidence", () => {
+  const diagnostics = installDiagnostics(makeDiagnosticClient(), { expectedOrigin: origin });
+  diagnostics.webSockets.set("forged-live-ws", {
+    requestId: "forged-live-ws",
+    generation: undefined,
+    boundToRequest: true,
+    observedSequence: 1,
+    url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
+    handshakeRequest: { headers: { Origin: origin } },
+    handshake: { status: 101 },
+  });
+
+  assert.throws(
+    () => assertLiveViewWebSocket(diagnostics, origin),
+    /did not create a websocket transport/,
+  );
+  diagnostics.dispose();
+
+  const client = makeDiagnosticClient();
+  const liveDiagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const requestId = "private-live-ws";
+  const socketUrl = `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`;
+  client.emit("Network.requestWillBeSent", {
+    requestId,
+    request: { url: socketUrl, method: "GET", headers: {} },
+    type: "WebSocket",
+  });
+  client.emit("Network.webSocketCreated", { requestId, url: socketUrl });
+  client.emit("Network.webSocketWillSendHandshakeRequest", {
+    requestId,
+    request: { url: socketUrl, headers: { Origin: origin } },
+  });
+  client.emit("Network.webSocketHandshakeResponseReceived", {
+    requestId,
+    response: { url: socketUrl, status: 101 },
+  });
+  const exposedSocket = liveDiagnostics.webSockets.get(requestId);
+  exposedSocket.url = "wss://evil.example/live/websocket";
+  exposedSocket.boundToRequest = false;
+  exposedSocket.handshake.status = 403;
+  assert.equal(assertLiveViewWebSocket(liveDiagnostics, origin).requestId, requestId);
+  liveDiagnostics.dispose();
+});
+
+test("exposed response mutations cannot change private diagnostic status truth", () => {
+  const fixture = expectedFailureFixture({ requestId: "private-response-status" });
+  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  exposedRecord.response.status = 500;
+  exposedRecord.response.headers = { "x-forged": "true" };
+
+  assert.doesNotThrow(() => fixture.diagnostics.assertClean("detached response mutation"));
+  assert.match(fixture.diagnostics.describe(), /"status": 403/);
+  assert.doesNotMatch(fixture.diagnostics.describe(), /"status": 500/);
+  assert.throws(
+    () => fixture.diagnostics.confirmExpectedFailure(
+      fixture.cleanup,
+      confirmationEvidence(fixture),
+    ),
+    /expected failure confirmation rejected.*observation.*changed/,
+  );
+  fixture.diagnostics.dispose();
+});
+
 test("confirmation finalizes one exact terminal 403 without replay or later suppression", () => {
   const fixture = expectedFailureFixture();
   assert.doesNotThrow(() => fixture.diagnostics.assertClean("confirmation baseline"));
@@ -956,6 +1192,70 @@ test("browser gate validates an injected thenable before assimilation and still 
   );
   assert.equal(getterCalls, 0);
   assert.equal(runtimeClosed, true);
+});
+
+test("timeout and signal cleanup invoke each captured close handle exactly once", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => {
+    clientCloseCalls += 1;
+  };
+  let runtimeCloseCalls = 0;
+  await assert.rejects(
+    runBrowserGate(syntheticGateArgs(10), {
+      launchChromeImpl: async () => ({
+        endpoint: "ws://synthetic",
+        close: async () => {
+          runtimeCloseCalls += 1;
+        },
+      }),
+      createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+      createClientImpl: () => client,
+      runScenarioImpl: () => new Promise(() => {}),
+    }),
+    /federation browser scenario timed out/,
+  );
+  assert.equal(clientCloseCalls, 1);
+  assert.equal(runtimeCloseCalls, 1);
+});
+
+test("diagnostic disposal continues after one unsubscribe throws", async () => {
+  const unsubscribeOrder = [];
+  const client = {
+    on(method) {
+      return () => {
+        unsubscribeOrder.push(method);
+        if (unsubscribeOrder.length === 1) throw new Error("first unsubscribe failed");
+      };
+    },
+  };
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  await assert.rejects(diagnostics.dispose(), /diagnostic unsubscribe cleanup failed/);
+  assert.equal(unsubscribeOrder.length, 15);
+  assert.equal(new Set(unsubscribeOrder).size, 15);
+});
+
+test("rejected client close is awaited, reported, and does not leak an unhandled rejection", async () => {
+  const client = makeDiagnosticClient();
+  client.close = () => Promise.reject(new Error("client close rejected"));
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: async () => ({ endpoint: "ws://synthetic", close: async () => {} }),
+        createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://synthetic" }),
+        createClientImpl: () => client,
+        runScenarioImpl: async () => ({ status: "ok" }),
+      }),
+      /client close rejected/,
+    );
+    await new Promise((resolveNext) => setImmediate(resolveNext));
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, []);
 });
 
 test("ordinary result conversion rejects hostile arrays before reading or iterating them", () => {

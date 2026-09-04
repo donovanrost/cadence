@@ -232,6 +232,134 @@ function safeOrdinaryArrayEntries(value) {
   return { entries };
 }
 
+function copyDiagnosticValue(value, { freeze = false } = {}, path = "diagnostic value", seen = new WeakMap()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value === undefined) return undefined;
+  if (typeof value !== "object") throw new TypeError(`${path} contained a non-data value`);
+  if (nodeTypes.isProxy(value)) throw new TypeError(`${path} was a proxy`);
+  if (seen.has(value)) throw new TypeError(`${path} was cyclic`);
+
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    throw new TypeError(`${path} prototype inspection failed`);
+  }
+
+  const array = Array.isArray(value);
+  if (array && prototype !== Array.prototype) throw new TypeError(`${path} was not an ordinary array`);
+  if (!array && prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${path} was not an ordinary object`);
+  }
+
+  let keys;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    throw new TypeError(`${path} own-key inspection failed`);
+  }
+  const output = array ? [] : prototype === null ? Object.create(null) : {};
+  seen.set(value, output);
+
+  for (const key of keys) {
+    if (typeof key === "symbol") throw new TypeError(`${path} contained an own symbol`);
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      throw new TypeError(`${path}.${key} descriptor inspection failed`);
+    }
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) {
+      throw new TypeError(`${path}.${key} was an accessor`);
+    }
+    if (array && key === "length") continue;
+    if (array && (!arrayIndexKey(key) || Number(key) >= value.length)) {
+      throw new TypeError(`${path} contained an extra own key ${key}`);
+    }
+    if (!array && !descriptor.enumerable) continue;
+    Object.defineProperty(output, key, {
+      value: copyDiagnosticValue(descriptor.value, { freeze }, `${path}.${key}`, seen),
+      enumerable: descriptor.enumerable,
+      configurable: true,
+      writable: true,
+    });
+  }
+  if (array) {
+    if (!Object.hasOwn(Object.getOwnPropertyDescriptors(value), "length")) {
+      throw new TypeError(`${path} had no length`);
+    }
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.hasOwn(output, String(index))) throw new TypeError(`${path}[${index}] was a hole`);
+    }
+  }
+  seen.delete(value);
+  return freeze ? Object.freeze(output) : output;
+}
+
+function observationFingerprint(value, path = "observation", seen = new WeakMap(), nextId = { value: 0 }) {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string") return `string:${JSON.stringify(value)}`;
+  if (typeof value === "boolean") return `boolean:${value}`;
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return "number:NaN";
+    if (Object.is(value, -0)) return "number:-0";
+    return `number:${value}`;
+  }
+  if (typeof value === "bigint") return `bigint:${value.toString()}`;
+  if (typeof value === "symbol" || typeof value === "function") {
+    return { error: `${path} contained a non-data value` };
+  }
+  if (nodeTypes.isProxy(value)) return { error: `${path} was a proxy` };
+  if (seen.has(value)) return `cycle:${seen.get(value)}`;
+
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    return { error: `${path} prototype inspection failed` };
+  }
+  const array = Array.isArray(value);
+  if (array && prototype !== Array.prototype) return { error: `${path} was not an ordinary array` };
+  if (!array && prototype !== Object.prototype && prototype !== null) {
+    return { error: `${path} was not an ordinary object` };
+  }
+
+  let keys;
+  try {
+    keys = Reflect.ownKeys(value);
+  } catch {
+    return { error: `${path} own-key inspection failed` };
+  }
+  seen.set(value, nextId.value++);
+  const parts = [array ? "array" : prototype === null ? "null-object" : "object"];
+  for (const key of keys.sort((left, right) => String(left).localeCompare(String(right)))) {
+    if (typeof key === "symbol") return { error: `${path} contained an own symbol` };
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      return { error: `${path}.${key} descriptor inspection failed` };
+    }
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) return { error: `${path}.${key} was an accessor` };
+    if (array && key !== "length" && (!arrayIndexKey(key) || Number(key) >= value.length)) {
+      return { error: `${path} contained an extra own key ${key}` };
+    }
+    const nested = observationFingerprint(descriptor.value, `${path}.${key}`, seen, nextId);
+    if (typeof nested !== "string") return nested;
+    parts.push(`${key}[${descriptor.enumerable ? "e" : "n"}${descriptor.configurable ? "c" : "s"}${descriptor.writable ? "w" : "r"}]=${nested}`);
+  }
+  seen.delete(value);
+  return parts.join("|");
+}
+
+function checkObservationIntegrity(value, expectedDigest, label) {
+  const digest = observationFingerprint(value, label);
+  if (typeof digest !== "string") return digest.error;
+  return digest === expectedDigest ? undefined : `${label} values changed`;
+}
+
 function safeDataProperty(value, key, label) {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     throw new TypeError(`${label} was not an object`);
@@ -369,8 +497,14 @@ export function raceWithSignalAndTimeout(
 }
 
 export function redactText(value, secrets = []) {
-  let text = String(value ?? "");
-  for (const secret of secrets) {
+  let text;
+  if (value === null || value === undefined) text = "";
+  else if (typeof value === "string") text = value;
+  else if (["boolean", "number", "bigint"].includes(typeof value)) text = String(value);
+  else text = "[unformattable value]";
+
+  const secretEntries = Array.isArray(secrets) ? safeOrdinaryArrayEntries(secrets).entries || [] : [];
+  for (const secret of secretEntries) {
     if (typeof secret === "string" && secret.length > 0) {
       text = text.split(secret).join("[REDACTED]");
     }
@@ -379,7 +513,16 @@ export function redactText(value, secrets = []) {
 }
 
 export function redactError(error, secrets = []) {
-  return redactText(error?.stack || error?.message || error, secrets);
+  let candidate;
+  for (const key of ["stack", "message"]) {
+    try {
+      candidate = safeDataProperty(error, key, "error");
+    } catch {
+      candidate = undefined;
+    }
+    if (typeof candidate === "string" && candidate.length > 0) break;
+  }
+  return redactText(candidate === undefined ? error : candidate, secrets);
 }
 
 function defaultChromeCandidates(platform = process.platform) {
@@ -955,13 +1098,19 @@ export class CdpClient {
 }
 
 export function exceptionMessage(exception) {
-  const details = exception?.exceptionDetails || exception;
-  return (
-    details?.exception?.description ||
-    details?.text ||
-    details?.exception?.value ||
-    JSON.stringify(details)
-  );
+  const read = (value, key) => {
+    try {
+      return safeDataProperty(value, key, "runtime exception");
+    } catch {
+      return undefined;
+    }
+  };
+  const details = read(exception, "exceptionDetails") || exception;
+  const nested = read(details, "exception");
+  for (const candidate of [read(nested, "description"), read(details, "text"), read(nested, "value")]) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return "runtime exception details unavailable";
 }
 
 export function isDataUrl(url) {
@@ -969,6 +1118,7 @@ export function isDataUrl(url) {
 }
 
 export function assertHttpUrl(url, expectedOrigin, label = "URL") {
+  assert.equal(typeof url, "string", `${label} must be a string`);
   const parsed = new URL(url);
   assert.ok(["http:", "https:"].includes(parsed.protocol), `${label} must use HTTP(S), got ${parsed.protocol}`);
   if (expectedOrigin) assert.equal(parsed.origin, expectedOrigin, `${label} escaped the expected origin`);
@@ -1002,7 +1152,7 @@ function matchesRequestGeneration(record, generation) {
 }
 
 export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}) {
-  const requests = new Map();
+  const records = new Map();
   const exposedRequests = new Map();
   const requestStateBindings = new WeakMap();
   const consoleErrors = [];
@@ -1012,19 +1162,47 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const webSockets = new Map();
   const webSocketFailures = [];
   const servedFromCacheRequestIds = new Set();
+  const exposedConsoleErrors = [];
+  const exposedLogErrors = [];
+  const exposedRuntimeExceptions = [];
+  const exposedRequestFailures = [];
+  const exposedWebSockets = new Map();
+  const exposedWebSocketFailures = [];
+  const exposedServedFromCacheRequestIds = new Set();
   const expectedFailureRegistrations = [];
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
   let activeGeneration;
   let disposed = false;
+  let disposePromise;
   const generations = new Map();
   const generationBindings = new WeakMap();
   const expectedFailureCleanups = new WeakMap();
   const expectedFailureRecordBindings = new WeakMap();
   const expectedFailureCanonicalBindings = new WeakMap();
-  const allowanceStateBindings = new WeakMap();
   const canonicalEntryBindings = new WeakMap();
+  const canonicalEntryDigests = new WeakMap();
+  const observationDigests = new WeakMap();
+
+  const appendDiagnostic = (privateValues, exposedValues, value) => {
+    Array.prototype.push.call(privateValues, value);
+    Array.prototype.push.call(exposedValues, value);
+  };
+
+  const refreshObservationDigest = (record) => {
+    const digest = observationFingerprint(record.view, "request observation");
+    record.viewDigest = typeof digest === "string" ? digest : undefined;
+    if (record.viewDigest) observationDigests.set(record.view, record.viewDigest);
+  };
+
+  const immutableCopy = (value, label, fallback) => {
+    try {
+      return copyDiagnosticValue(value, { freeze: true }, label);
+    } catch {
+      return fallback;
+    }
+  };
 
   const writeObservation = (target, key, value) => {
     try {
@@ -1049,9 +1227,33 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       text: entry.text,
     };
     canonicalEntryBindings.set(snapshot, entry);
+    const digest = observationFingerprint(snapshot, "canonical evidence");
+    if (typeof digest === "string") canonicalEntryDigests.set(snapshot, digest);
     return snapshot;
   };
+  const snapshotAllowanceView = (allowance, recordView) => ({
+    requestId: allowance.requestId,
+    url: allowance.url,
+    method: allowance.method,
+    generation: allowance.generation,
+    status: allowance.status,
+    consumed: allowance.consumed,
+    consumedEntries: allowance.consumedEntries.map(snapshotCanonicalEntry),
+    suppressedFailures: [...allowance.suppressedFailures],
+    revoked: allowance.revoked,
+    finalized: allowance.finalized,
+    replayed: allowance.replayed,
+    record: recordView,
+  });
   const syncAllowanceView = (allowance) => {
+    if (allowance.record?.viewDigest) {
+      const drift = checkObservationIntegrity(
+        allowance.record.view,
+        allowance.record.viewDigest,
+        "request observation",
+      );
+      if (drift) allowance.record.observationTampered ||= drift;
+    }
     const view = allowance.view;
     writeObservation(view, "requestId", allowance.requestId);
     writeObservation(view, "url", allowance.url);
@@ -1068,43 +1270,82 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     writeObservation(view, "finalized", allowance.finalized);
     writeObservation(view, "replayed", allowance.replayed);
     writeObservation(view, "record", allowance.record.view);
+    if (allowance.record?.view) refreshObservationDigest(allowance.record);
   };
-  const syncRecordView = (record) => {
-    const view = record.view;
+  const writeRecordView = (record, view) => {
     writeObservation(view, "requestId", record.requestId);
     writeObservation(view, "sequence", record.sequence);
     writeObservation(view, "startedAtMs", record.startedAtMs);
     writeObservation(view, "generation", record.generation);
     writeObservation(view, "method", record.method);
     writeObservation(view, "url", record.url);
-    writeObservation(view, "request", record.request);
+    writeObservation(view, "request", copyDiagnosticValue(record.request));
     writeObservation(view, "postData", record.postData);
     writeObservation(view, "frameId", record.frameId);
     writeObservation(view, "loaderId", record.loaderId);
-    writeObservation(view, "response", record.response);
-    writeObservation(view, "responseExtra", record.responseExtra);
-    writeObservation(view, "requestExtra", record.requestExtra);
-    record.statusEvidenceView = record.statusEvidence.map((evidence) => ({ ...evidence }));
-    writeObservation(view, "statusEvidence", record.statusEvidenceView);
+    writeObservation(view, "response", record.response === undefined ? undefined : copyDiagnosticValue(record.response));
+    writeObservation(view, "responseExtra", record.responseExtra === undefined ? undefined : copyDiagnosticValue(record.responseExtra));
+    writeObservation(view, "requestExtra", record.requestExtra === undefined ? undefined : copyDiagnosticValue(record.requestExtra));
+    const statusEvidenceView = copyDiagnosticValue(record.statusEvidence);
+    if (view === record.view) record.statusEvidenceView = statusEvidenceView;
+    writeObservation(view, "statusEvidence", statusEvidenceView);
     writeObservation(view, "statusDisagreement", record.statusDisagreement);
     writeObservation(view, "statusDisagreementReported", record.statusDisagreementReported);
     writeObservation(view, "servedFromCache", record.servedFromCache);
     writeObservation(view, "resourceType", record.resourceType);
-    writeObservation(view, "redirects", record.redirects.map((redirect) => ({ ...redirect })));
+    writeObservation(view, "redirects", copyDiagnosticValue(record.redirects));
     writeObservation(view, "webSocket", record.webSocket);
     writeObservation(view, "finished", record.finished);
     writeObservation(view, "failed", record.failed);
     writeObservation(view, "dataUrl", record.dataUrl);
-    record.pendingExpectedFailureLogView = record.pendingExpectedFailureLog
+    const pendingExpectedFailureLogView = record.pendingExpectedFailureLog
       ? {
           entry: snapshotCanonicalEntry(record.pendingExpectedFailureLog.entry),
           status: record.pendingExpectedFailureLog.status,
         }
       : undefined;
-    writeObservation(view, "pendingExpectedFailureLog", record.pendingExpectedFailureLogView);
-    writeObservation(view, "expectedFailureRegistration", record.expectedFailureRegistration?.view);
-    writeObservation(view, "expectedFailureAllowance", record.expectedFailureAllowance?.view);
-    writeObservation(view, "finalizedExpectedFailure", record.finalizedExpectedFailure?.view);
+    if (view === record.view) record.pendingExpectedFailureLogView = pendingExpectedFailureLogView;
+    writeObservation(view, "pendingExpectedFailureLog", pendingExpectedFailureLogView);
+    const allowanceView = record.expectedFailureAllowance
+      ? view === record.view
+        ? record.expectedFailureAllowance.view
+        : snapshotAllowanceView(record.expectedFailureAllowance, view)
+      : undefined;
+    writeObservation(
+      view,
+      "expectedFailureRegistration",
+      record.expectedFailureRegistration
+        ? view === record.view
+          ? record.expectedFailureRegistration.view
+          : {}
+        : undefined,
+    );
+    writeObservation(view, "expectedFailureAllowance", allowanceView);
+    writeObservation(
+      view,
+      "finalizedExpectedFailure",
+      record.finalizedExpectedFailure
+        ? view === record.view
+          ? record.finalizedExpectedFailure.view
+          : snapshotAllowanceView(record.finalizedExpectedFailure, view)
+        : undefined,
+    );
+  };
+  const syncRecordView = (record) => {
+    if (record.viewDigest) {
+      const drift = checkObservationIntegrity(record.view, record.viewDigest, "request observation");
+      if (drift) record.observationTampered ||= drift;
+    }
+    writeRecordView(record, record.view);
+    refreshObservationDigest(record);
+  };
+  const snapshotRecord = (record) => {
+    const view = {};
+    writeRecordView(record, view);
+    requestStateBindings.set(view, record);
+    const digest = observationFingerprint(view, "request observation");
+    if (typeof digest === "string") observationDigests.set(view, digest);
+    return view;
   };
   const publishRecord = (record) => {
     if (!record.view) {
@@ -1112,12 +1353,36 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     requestStateBindings.set(record.view, record);
     syncRecordView(record);
-    if (!exposedRequests.has(record.requestId)) exposedRequests.set(record.requestId, record.view);
+    if (!Map.prototype.has.call(exposedRequests, record.requestId)) {
+      Map.prototype.set.call(exposedRequests, record.requestId, record.view);
+    }
+  };
+  const socketSnapshot = (socket) => ({
+      requestId: socket.requestId,
+      url: socket.url,
+      generation: socket.generation,
+      sequence: socket.sequence,
+      boundToRequest: socket.boundToRequest,
+      boundByHandshake: socket.boundByHandshake,
+      observedGeneration: socket.observedGeneration,
+      observedSequence: socket.observedSequence,
+      causalRequestId: socket.causalRequestId,
+      handshakeRequest: socket.handshakeRequest === undefined
+        ? undefined
+        : copyDiagnosticValue(socket.handshakeRequest),
+      handshake: socket.handshake === undefined ? undefined : copyDiagnosticValue(socket.handshake),
+      closed: socket.closed,
+      error: socket.error,
+    });
+  const publishSocket = (socket) => {
+    Map.prototype.set.call(exposedWebSockets, socket.requestId, socketSnapshot(socket));
   };
   const stateForExposedRecord = (record) => requestStateBindings.get(record);
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
   const logError = (entry) => {
-    logErrors.push(`${entry.text || "browser log error"}${entry.url ? ` (${entry.url})` : ""}`);
+    const text = typeof entry?.text === "string" && entry.text ? entry.text : "browser log error";
+    const url = typeof entry?.url === "string" && entry.url ? entry.url : undefined;
+    appendDiagnostic(logErrors, exposedLogErrors, `${text}${url ? ` (${url})` : ""}`);
   };
   const observedResponseStatus = (record) => {
     const statuses = [record?.responseStatus, record?.responseExtraStatus].filter(
@@ -1129,14 +1394,20 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const reportStatusDisagreement = (record) => {
     if (!record.statusDisagreement || record.statusDisagreementReported || record.method === "?") return;
     record.statusDisagreementReported = true;
-    requestFailures.push(`${record.method} ${record.url || record.requestId}: ${record.statusDisagreement}`);
+    appendDiagnostic(
+      requestFailures,
+      exposedRequestFailures,
+      `${record.method} ${record.url || record.requestId}: ${record.statusDisagreement}`,
+    );
   };
   const replayInvalidatedAllowance = (allowance) => {
     if (allowance.replayed) return;
     allowance.replayed = true;
     const canonicalEvidence = expectedFailureCanonicalBindings.get(allowance);
     if (canonicalEvidence) logError(canonicalEvidence);
-    for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
+    for (const failure of allowance.suppressedFailures || []) {
+      appendDiagnostic(requestFailures, exposedRequestFailures, failure);
+    }
   };
   const detachExpectedFailureRegistration = (registration, reason, { finalized = false } = {}) => {
     if (!registration || registration.invalidated || registration.finalized) return;
@@ -1145,7 +1416,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     registration.active = false;
     registration.invalidatedBy = reason;
     delete registration.pendingRequestId;
-    for (const record of requests.values()) {
+    for (const record of records.values()) {
       if (record.expectedFailureRegistration === registration) delete record.expectedFailureRegistration;
     }
     const index = expectedFailureRegistrations.indexOf(registration);
@@ -1176,8 +1447,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
-    record.statusEvidence ||= [];
-    record.statusEvidence.push({ source, status });
+    record.statusEvidence = Object.freeze([
+      ...(record.statusEvidence || []),
+      Object.freeze({ source, status }),
+    ]);
     syncRecordView(record);
     const finalizedAllowance = record.finalizedExpectedFailure;
     if (
@@ -1222,7 +1495,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       (registration.pendingRequestId && registration.pendingRequestId !== record.requestId)
     ) return false;
     try {
-      return registration.predicate(record.view);
+      return registration.predicate(snapshotRecord(record));
     } catch {
       return false;
     }
@@ -1291,12 +1564,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       generation: record.generation,
       status,
       consumed: false,
-      consumedEntries: [],
-      suppressedFailures: [],
+      consumedEntries: Object.freeze([]),
+      suppressedFailures: Object.freeze([]),
       replayed: false,
       view: {},
     };
-    allowanceStateBindings.set(allowance.view, allowance);
     expectedFailureRecordBindings.set(allowance, record);
     record.expectedFailureAllowance = allowance;
     syncAllowanceView(allowance);
@@ -1332,8 +1604,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     entry.networkRequestId === allowance.requestId &&
     entry.url === allowance.url &&
     canonicalNetworkResourceStatus(entry) === allowance.status;
-  const canonicalEvidenceIsSame = (left, right) =>
-    canonicalEntryBindings.get(left) === right || left === right;
+  const canonicalEvidenceIsSame = (left, right) => {
+    if (left === right) return true;
+    if (canonicalEntryBindings.get(left) !== right) return false;
+    const digest = canonicalEntryDigests.get(left);
+    return typeof digest === "string" && !checkObservationIntegrity(left, digest, "canonical evidence");
+  };
   const finalizeExpectedFailure = (allowance) => {
     if (allowance.revoked || allowance.finalized) return false;
     allowance.finalized = true;
@@ -1352,7 +1628,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const consumeExpectedFailureLog = (entry, status, registrations) => {
     if (!hasNonemptyNetworkRequestId(entry)) return false;
-    const record = requests.get(entry.networkRequestId);
+    const record = records.get(entry.networkRequestId);
     const allowance = validExpectedFailureAllowance(record);
     if (
       !allowance ||
@@ -1368,7 +1644,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     ) return false;
     allowance.consumed = true;
     expectedFailureCanonicalBindings.set(allowance, entry);
-    allowance.consumedEntries.push(entry);
+    allowance.consumedEntries = Object.freeze([...(allowance.consumedEntries || []), entry]);
     syncAllowanceView(allowance);
     return true;
   };
@@ -1394,7 +1670,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
   const holdPendingExpectedFailureLog = (entry, status) => {
     if (!hasNonemptyNetworkRequestId(entry)) return false;
-    const record = requests.get(entry.networkRequestId);
+    const record = records.get(entry.networkRequestId);
     if (!record || record.pendingExpectedFailureLog) return false;
     const registration = pendingExpectedFailureRegistrationFor(record, status);
     if (!registration || record.url !== entry.url) return false;
@@ -1404,7 +1680,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return true;
   };
   const reconcilePendingNetworkLogs = () => {
-    for (const record of requests.values()) {
+    for (const record of records.values()) {
       const pending = record.pendingExpectedFailureLog;
       if (!pending) continue;
       const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
@@ -1434,7 +1710,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
   };
   const flushPendingNetworkLogs = () => {
-    for (const record of requests.values()) {
+    for (const record of records.values()) {
       const pending = record.pendingExpectedFailureLog;
       if (!pending) continue;
       logError(pending.entry);
@@ -1442,12 +1718,30 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       syncRecordView(record);
     }
   };
+  const generationStateFor = (generation) => {
+    if (generation === undefined || generation === null) return undefined;
+    return typeof generation === "object"
+      ? generationBindings.get(generation)
+      : generations.get(generation);
+  };
+  const matchesPrivateRequestGeneration = (record, generation) => {
+    if (generation === undefined || generation === null) return true;
+    const current = generationStateFor(generation);
+    if (!current || record?.generation !== current.id) return false;
+    if (typeof generation !== "object") return true;
+    if (current.requestIds.has(record.requestId)) return false;
+    return !(
+      Number.isFinite(record.sequence) &&
+      Number.isFinite(current.requestSequence) &&
+      record.sequence <= current.requestSequence
+    );
+  };
   const beginRequestGeneration = (label = "request generation") => {
     const generation = {
       id: ++nextGeneration,
       label,
       requestSequence: sequence,
-      requestIds: new Set(requests.keys()),
+      requestIds: new Set(records.keys()),
       startedAtMs: Date.now(),
       causalRequestId: undefined,
       causalRequestSequence: undefined,
@@ -1469,12 +1763,16 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
 
   const bindRequestGeneration = (generation, request, { admitObservedSockets = false } = {}) => {
-    const current =
-      typeof generation === "object"
-        ? generationBindings.get(generation)
-        : generations.get(generation);
+    const current = generationStateFor(generation);
     assert.ok(current, "request generation is not owned by these diagnostics");
     const requestState = stateForExposedRecord(request);
+    const requestDigest = observationDigests.get(request);
+    assert.equal(requestState?.observationTampered, undefined, "causal request observation was mutated");
+    assert.equal(
+      requestDigest && checkObservationIntegrity(request, requestDigest, "causal request observation"),
+      undefined,
+      "causal request observation was mutated",
+    );
     assert.equal(requestState?.generation, current.id, "causal request belongs to another generation");
     assert.ok(requestState?.requestId, "causal request has no request id");
     current.causalRequestId = requestState.requestId;
@@ -1491,16 +1789,19 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         socket.generation = current.id;
         socket.boundToRequest = true;
         socket.causalRequestId = requestState.requestId;
+        publishSocket(socket);
       }
     }
     return current.public;
   };
 
   on("Network.requestWillBeSent", ({ requestId, request, type, redirectResponse, frameId, loaderId }) => {
-    const prior = requests.get(requestId);
+    const prior = records.get(requestId);
     const responseOnly = prior?.method === "?";
-    const redirects = prior?.redirects || [];
-    if (redirectResponse) redirects.push({ status: redirectResponse.status, url: redirectResponse.url });
+    const redirects = [
+      ...(prior?.redirects || []),
+      ...(redirectResponse ? [{ status: redirectResponse.status, url: redirectResponse.url }] : []),
+    ];
     const record = {
       requestId,
       sequence: responseOnly ? prior.sequence : ++sequence,
@@ -1508,8 +1809,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       generation: prior?.generation ?? activeGeneration,
       method: request.method,
       url: request.url,
-      request,
-      postData: request.postData,
+      request: immutableCopy(request, "Network.requestWillBeSent request", Object.freeze({})),
+      postData: typeof request.postData === "string" ? request.postData : undefined,
       frameId: frameId || prior?.frameId,
       loaderId: loaderId || prior?.loaderId,
       response: responseOnly ? prior.response : undefined,
@@ -1517,18 +1818,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       responseExtra: prior?.responseExtra,
       responseExtraStatus: prior?.responseExtraStatus,
       requestExtra: prior?.requestExtra,
-      statusEvidence: responseOnly ? prior?.statusEvidence || [] : [],
+      statusEvidence: responseOnly ? prior?.statusEvidence || Object.freeze([]) : Object.freeze([]),
       statusDisagreement: responseOnly ? prior?.statusDisagreement : undefined,
       servedFromCache: prior?.servedFromCache || servedFromCacheRequestIds.has(requestId),
       resourceType: type,
-      redirects,
+      redirects: Object.freeze(redirects.map((redirect) => Object.freeze({ ...redirect }))),
       webSocket: type === "WebSocket",
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(request.url),
       view: prior?.view,
     };
-    requests.set(requestId, record);
+    records.set(requestId, record);
     publishRecord(record);
     reserveExpectedFailureRegistration(record);
     markExpectedFailure(record);
@@ -1545,21 +1846,22 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       socket.sequence = record.sequence;
       socket.boundToRequest = true;
       socket.causalRequestId = generations.get(record.generation)?.causalRequestId;
+      publishSocket(socket);
     }
   });
 
   on("Network.responseReceived", ({ requestId, response, type, frameId, loaderId }) => {
-    const requestRecord = requests.get(requestId);
+    const requestRecord = records.get(requestId);
     const record = requestRecord || {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
       method: "?",
       url: response.url,
-      request: {},
+      request: Object.freeze({}),
       frameId,
       loaderId,
-      redirects: [],
+      redirects: Object.freeze([]),
       // A response without its request is not causally attributable to the
       // active generation.  A later requestWillBeSent event may bind it.
       generation: undefined,
@@ -1567,12 +1869,16 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finished: false,
       failed: undefined,
       dataUrl: isDataUrl(response.url),
-      statusEvidence: [],
+      statusEvidence: Object.freeze([]),
       responseStatus: undefined,
       responseExtraStatus: undefined,
       view: undefined,
     };
-    record.response = response;
+    record.response = immutableCopy(
+      response,
+      "Network.responseReceived response",
+      Object.freeze({}),
+    );
     record.responseStatus = response.status;
     record.frameId ||= frameId;
     record.loaderId ||= loaderId;
@@ -1580,7 +1886,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (type === "WebSocket") record.webSocket = true;
     publishRecord(record);
     observeStatusEvidence(record, "response", response.status);
-    requests.set(requestId, record);
+    records.set(requestId, record);
     const expected = markExpectedFailure(record);
     if (
       response.status >= 400 &&
@@ -1588,31 +1894,43 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       !isIgnoredFavicon(record, expectedOrigin) &&
       !expected
     ) {
-      requestFailures.push(`${response.status} ${record.method} ${response.url}`);
+      appendDiagnostic(
+        requestFailures,
+        exposedRequestFailures,
+        `${response.status} ${record.method} ${response.url}`,
+      );
     }
     reconcilePendingNetworkLogs();
   });
 
   on("Network.requestWillBeSentExtraInfo", ({ requestId, headers, associatedCookies }) => {
-    const record = requests.get(requestId);
+    const record = records.get(requestId);
     if (record) {
-      record.requestExtra = { headers, associatedCookies };
+      record.requestExtra = immutableCopy(
+        { headers, associatedCookies },
+        "Network.requestWillBeSentExtraInfo",
+        Object.freeze({}),
+      );
       publishRecord(record);
       reconcilePendingNetworkLogs();
       return;
     }
 
-    requests.set(requestId, {
+    records.set(requestId, {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
       generation: undefined,
       method: "?",
       url: "",
-      request: {},
-      requestExtra: { headers, associatedCookies },
-      statusEvidence: [],
-      redirects: [],
+      request: Object.freeze({}),
+      requestExtra: immutableCopy(
+        { headers, associatedCookies },
+        "Network.requestWillBeSentExtraInfo",
+        Object.freeze({}),
+      ),
+      statusEvidence: Object.freeze([]),
+      redirects: Object.freeze([]),
       webSocket: false,
       finished: false,
       failed: undefined,
@@ -1621,13 +1939,17 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       responseExtraStatus: undefined,
       view: undefined,
     });
-    publishRecord(requests.get(requestId));
+    publishRecord(records.get(requestId));
   });
 
   on("Network.responseReceivedExtraInfo", ({ requestId, statusCode, headers, blockedCookies }) => {
-    const record = requests.get(requestId);
+    const record = records.get(requestId);
     if (record) {
-      record.responseExtra = { statusCode, headers, blockedCookies };
+      record.responseExtra = immutableCopy(
+        { statusCode, headers, blockedCookies },
+        "Network.responseReceivedExtraInfo",
+        Object.freeze({}),
+      );
       record.responseExtraStatus = statusCode;
       publishRecord(record);
       observeStatusEvidence(record, "ExtraInfo", statusCode);
@@ -1636,17 +1958,21 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       return;
     }
 
-    requests.set(requestId, {
+    records.set(requestId, {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
       generation: undefined,
       method: "?",
       url: "",
-      request: {},
-      responseExtra: { statusCode, headers, blockedCookies },
-      statusEvidence: [],
-      redirects: [],
+      request: Object.freeze({}),
+      responseExtra: immutableCopy(
+        { statusCode, headers, blockedCookies },
+        "Network.responseReceivedExtraInfo",
+        Object.freeze({}),
+      ),
+      statusEvidence: Object.freeze([]),
+      redirects: Object.freeze([]),
       webSocket: false,
       finished: false,
       failed: undefined,
@@ -1655,15 +1981,16 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       responseExtraStatus: statusCode,
       view: undefined,
     });
-    publishRecord(requests.get(requestId));
-    observeStatusEvidence(requests.get(requestId), "ExtraInfo", statusCode);
-    markExpectedFailure(requests.get(requestId));
+    publishRecord(records.get(requestId));
+    observeStatusEvidence(records.get(requestId), "ExtraInfo", statusCode);
+    markExpectedFailure(records.get(requestId));
     reconcilePendingNetworkLogs();
   });
 
   on("Network.requestServedFromCache", ({ requestId }) => {
     servedFromCacheRequestIds.add(requestId);
-    const record = requests.get(requestId);
+    Set.prototype.add.call(exposedServedFromCacheRequestIds, requestId);
+    const record = records.get(requestId);
     if (record) {
       record.servedFromCache = true;
       publishRecord(record);
@@ -1671,7 +1998,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   });
 
   on("Network.loadingFinished", ({ requestId }) => {
-    const record = requests.get(requestId);
+    const record = records.get(requestId);
     if (record) {
       record.finished = true;
       publishRecord(record);
@@ -1680,7 +2007,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   });
 
   on("Network.loadingFailed", ({ requestId, errorText, canceled, blockedReason }) => {
-    const record = requests.get(requestId);
+    const record = records.get(requestId);
     const detail = `${errorText || "request failed"}${canceled ? " (canceled)" : ""}${blockedReason ? ` (${blockedReason})` : ""}`;
     const expectedConditional304Cancellation =
       canceled === true &&
@@ -1696,9 +2023,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       !isIgnoredFavicon(record, expectedOrigin) &&
       !expected
     ) {
-      requestFailures.push(failure);
+      appendDiagnostic(requestFailures, exposedRequestFailures, failure);
     } else if (expected) {
-      allowance.suppressedFailures.push(failure);
+      allowance.suppressedFailures = Object.freeze([...(allowance.suppressedFailures || []), failure]);
       syncAllowanceView(allowance);
     }
     if (record) {
@@ -1709,7 +2036,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   });
 
   on("Network.webSocketCreated", ({ requestId, url }) => {
-    const requestRecord = requests.get(requestId);
+    const requestRecord = records.get(requestId);
     const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
     const generation = generations.get(observedGeneration);
@@ -1725,10 +2052,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       handshake: undefined,
       error: undefined,
     });
+    publishSocket(webSockets.get(requestId));
   });
 
   on("Network.webSocketWillSendHandshakeRequest", ({ requestId, request }) => {
-    const requestRecord = requests.get(requestId);
+    const requestRecord = records.get(requestId);
     const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
     const generation = generations.get(observedGeneration);
@@ -1742,7 +2070,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       observedSequence: boundRequest?.sequence ?? sequence,
       causalRequestId: generation?.causalRequestId,
     };
-    socket.handshakeRequest = request;
+    socket.handshakeRequest = immutableCopy(request, "Network.webSocketWillSendHandshakeRequest", Object.freeze({}));
     if (
       socket.boundToRequest !== true &&
       socket.observedGeneration !== undefined &&
@@ -1760,10 +2088,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       socket.causalRequestId = generation?.causalRequestId;
     }
     webSockets.set(requestId, socket);
+    publishSocket(socket);
   });
 
   on("Network.webSocketHandshakeResponseReceived", ({ requestId, response }) => {
-    const requestRecord = requests.get(requestId);
+    const requestRecord = records.get(requestId);
     const boundRequest = requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
     const generation = generations.get(observedGeneration);
@@ -1777,50 +2106,62 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       observedSequence: boundRequest?.sequence ?? sequence,
       causalRequestId: generation?.causalRequestId,
     };
-    socket.handshake = response;
+    socket.handshake = immutableCopy(response, "Network.webSocketHandshakeResponseReceived", Object.freeze({}));
     webSockets.set(requestId, socket);
+    publishSocket(socket);
   });
 
   on("Network.webSocketFrameError", ({ requestId, errorMessage }) => {
     const socket = webSockets.get(requestId);
     const detail = errorMessage || "websocket frame error";
     if (socket) socket.error = detail;
-    webSocketFailures.push(`${socket?.url || requestId}: ${detail}`);
+    appendDiagnostic(
+      webSocketFailures,
+      exposedWebSocketFailures,
+      `${socket?.url || requestId}: ${detail}`,
+    );
+    if (socket) publishSocket(socket);
   });
 
   on("Network.webSocketClosed", ({ requestId }) => {
     const socket = webSockets.get(requestId);
     if (socket) socket.closed = true;
+    if (socket) publishSocket(socket);
   });
 
   on("Runtime.consoleAPICalled", ({ type, args, stackTrace }) => {
     if (!["error", "assert"].includes(type)) return;
     const values = (args || []).map((arg) => arg.value ?? arg.description ?? arg.type).join(" ");
-    consoleErrors.push(`${values}${stackTrace?.description ? `\n${stackTrace.description}` : ""}`);
+    appendDiagnostic(
+      consoleErrors,
+      exposedConsoleErrors,
+      `${values}${stackTrace?.description ? `\n${stackTrace.description}` : ""}`,
+    );
   });
 
   on("Log.entryAdded", ({ entry }) => {
-    if (["error", "assert"].includes(entry?.level)) {
-      const matchingFavicon = entry.url && [...requests.values()].some(
-        (record) => record.url === entry.url && isIgnoredFavicon(record, expectedOrigin),
+    const diagnosticEntry = immutableCopy(entry, "Log.entryAdded entry", Object.freeze({}));
+    if (["error", "assert"].includes(diagnosticEntry?.level)) {
+      const matchingFavicon = diagnosticEntry.url && [...records.values()].some(
+        (record) => record.url === diagnosticEntry.url && isIgnoredFavicon(record, expectedOrigin),
       );
       if (matchingFavicon) return;
-      const status = canonicalNetworkResourceStatus(entry);
-      if (status === undefined || entry.level !== "error") {
-        logError(entry);
+      const status = canonicalNetworkResourceStatus(diagnosticEntry);
+      if (status === undefined || diagnosticEntry.level !== "error") {
+        logError(diagnosticEntry);
         return;
       }
       const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
       if (
         registrations.size &&
-        (consumeExpectedFailureLog(entry, status, registrations) || holdPendingExpectedFailureLog(entry, status))
+        (consumeExpectedFailureLog(diagnosticEntry, status, registrations) || holdPendingExpectedFailureLog(diagnosticEntry, status))
       ) return;
-      logError(entry);
+      logError(diagnosticEntry);
     }
   });
 
   on("Runtime.exceptionThrown", (exception) => {
-    runtimeExceptions.push(exceptionMessage(exception));
+    appendDiagnostic(runtimeExceptions, exposedRuntimeExceptions, exceptionMessage(exception));
   });
 
   const describeFailures = (stage) => {
@@ -1829,28 +2170,130 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       ...logErrors.map((value) => `log.error: ${value}`),
       ...consoleErrors.map((value) => `console.error/assert: ${value}`),
       ...runtimeExceptions.map((value) => `runtime exception: ${value}`),
-      ...[...requests.values()]
+      ...[...records.values()]
         .filter((record) => !record.webSocket && !record.finished && !record.failed && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin))
         .map((record) => `outstanding request: ${record.method} ${record.url}`),
     ];
     return failures.length ? `${stage} browser diagnostics failed:\n${failures.join("\n")}` : null;
   };
 
-  const requestForGeneration = (generation, predicate = () => true) =>
-    [...requests.values()]
-      .filter((record) => matchesRequestGeneration(record.view, generation) && predicate(record.view))
-      .sort((left, right) => left.sequence - right.sequence)
-      .at(-1)?.view;
+  const requestForGeneration = (generation, predicate = () => true) => {
+    const candidates = [...records.values()]
+      .filter((record) => matchesPrivateRequestGeneration(record, generation) && predicate(snapshotRecord(record)))
+      .sort((left, right) => left.sequence - right.sequence);
+    const match = candidates.at(-1);
+    return match ? snapshotRecord(match) : undefined;
+  };
 
-  return {
+  const assertPrivateLiveViewWebSocket = (
+    expectedOriginValue,
+    { beforeRequestIds = new Set(), generation } = {},
+  ) => {
+    const normalizedExpectedOrigin = new URL(expectedOriginValue);
+    assert.ok(
+      ["http:", "https:"].includes(normalizedExpectedOrigin.protocol),
+      `LiveView expected origin must use HTTP(S), got ${normalizedExpectedOrigin.protocol}`,
+    );
+    const requiresCausalGeneration = generation && typeof generation === "object";
+    const currentGeneration = generationStateFor(generation);
+    const causalRequestId = requiresCausalGeneration ? currentGeneration?.causalRequestId : undefined;
+    const causalRequestSequence = requiresCausalGeneration ? currentGeneration?.causalRequestSequence : undefined;
+    const liveViewSockets = [...webSockets.values()].filter((socket) => {
+      try {
+        if (typeof socket.url !== "string") return false;
+        const url = new URL(socket.url);
+        return (
+          ["ws:", "wss:"].includes(url.protocol) &&
+          url.pathname === "/live/websocket" &&
+          socket.boundToRequest === true &&
+          !beforeRequestIds.has(socket.requestId) &&
+          matchesPrivateRequestGeneration(
+            { requestId: socket.requestId, generation: socket.generation, sequence: socket.sequence },
+            generation,
+          ) &&
+          (!requiresCausalGeneration ||
+            (currentGeneration &&
+              causalRequestId !== undefined &&
+              socket.causalRequestId === causalRequestId &&
+              socket.observedSequence >= causalRequestSequence))
+        );
+      } catch {
+        return false;
+      }
+    });
+    assert.ok(
+      liveViewSockets.length > 0,
+      `LiveView did not create a websocket transport for the current generation: ${JSON.stringify(
+        [...webSockets.values()].map((socket) => ({
+          requestId: socket.requestId,
+          generation: socket.generation,
+          observedGeneration: socket.observedGeneration,
+          sequence: socket.sequence,
+          boundToRequest: socket.boundToRequest,
+          observedSequence: socket.observedSequence,
+          causalRequestId: socket.causalRequestId,
+          url: socket.url,
+          closed: socket.closed,
+        })),
+      )}`,
+    );
+
+    const connected = liveViewSockets.find((socket) => {
+      const url = new URL(socket.url);
+      const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
+      const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
+      return (
+        socketOrigin === normalizedExpectedOrigin.origin &&
+        originHeader === normalizedExpectedOrigin.origin &&
+        socket.handshake?.status === 101 &&
+        socket.closed !== true &&
+        !socket.error
+      );
+    });
+    assert.ok(
+      connected,
+      `LiveView websocket did not complete a same-origin HTTP 101 handshake: ${JSON.stringify(
+        liveViewSockets.map((socket) => ({
+          url: socket.url,
+          origin: requestHeader({ request: socket.handshakeRequest }, "origin"),
+          status: socket.handshake?.status,
+          error: socket.error,
+        })),
+      )}`,
+    );
+
+    const fallback = [...records.values()].find((record) => {
+      try {
+        if (typeof record.url !== "string") return false;
+        return (
+          new URL(record.url).pathname === "/live/longpoll" &&
+          !beforeRequestIds.has(record.requestId) &&
+          matchesPrivateRequestGeneration(record, generation)
+        );
+      } catch {
+        return false;
+      }
+    });
+    assert.equal(
+      fallback,
+      undefined,
+      `LiveView fell back to longpoll transport: ${fallback?.url || "unknown request"}`,
+    );
+    assert.deepEqual(webSocketFailures, [], `LiveView websocket transport failed: ${webSocketFailures.join("; ")}`);
+    const originDiagnostic = [...consoleErrors, ...logErrors].find((message) => /origin|longpoll/i.test(message));
+    assert.equal(originDiagnostic, undefined, `LiveView emitted an origin or transport diagnostic: ${originDiagnostic}`);
+    return socketSnapshot(connected);
+  };
+
+  const diagnostics = {
     requests: exposedRequests,
-    consoleErrors,
-    logErrors,
-    runtimeExceptions,
-    requestFailures,
-    webSockets,
-    webSocketFailures,
-    servedFromCacheRequestIds,
+    consoleErrors: exposedConsoleErrors,
+    logErrors: exposedLogErrors,
+    runtimeExceptions: exposedRuntimeExceptions,
+    requestFailures: exposedRequestFailures,
+    webSockets: exposedWebSockets,
+    webSocketFailures: exposedWebSocketFailures,
+    servedFromCacheRequestIds: exposedServedFromCacheRequestIds,
     beginRequestGeneration,
     bindRequestGeneration,
     requestForGeneration,
@@ -1922,8 +2365,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const hasEvidenceValue = (key) => evidenceShape.descriptors.has(key);
       const requestId = evidenceValue("requestId");
       const expectedGeneration = evidenceValue("generation");
-      const record = typeof requestId === "string" ? requests.get(requestId) : undefined;
-      const exposedRecord = typeof requestId === "string" ? exposedRequests.get(requestId) : undefined;
+      const record = typeof requestId === "string" ? records.get(requestId) : undefined;
+      const exposedRecord =
+        typeof requestId === "string" ? Map.prototype.get.call(exposedRequests, requestId) : undefined;
       const exposedRecordShape =
         record && exposedRecord === record.view
           ? safeDataDescriptors(exposedRecord)
@@ -1950,6 +2394,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           !exposedRecordShape.error;
         requireEvidence(exactRecord, "request record identity changed");
         if (exactRecord) {
+          const observationDrift =
+            record.observationTampered ||
+            checkObservationIntegrity(exposedRecord, observationDigests.get(exposedRecord), "request observation");
+          requireEvidence(!observationDrift, observationDrift || "request observation changed");
           const exposedRecordValue = (key) => exposedRecordShape.descriptors.get(key)?.value;
           const exposedAllowance = exposedRecordValue("expectedFailureAllowance");
           const exposedAllowanceShape =
@@ -1992,10 +2440,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           requireEvidence(!record.pendingExpectedFailureLog, "canonical evidence is pending");
           requireEvidence(record.method === evidenceValue("method"), "request method changed");
           requireEvidence(record.url === evidenceValue("url"), "request URL changed");
-          const generationState =
-            expectedGeneration && typeof expectedGeneration === "object"
-              ? generationBindings.get(expectedGeneration)
-              : undefined;
+          const generationState = generationStateFor(expectedGeneration);
           const generationMatches =
             record.generation === undefined
               ? expectedGeneration === undefined
@@ -2054,43 +2499,78 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const event = await client.waitForEvent(
         "Network.requestWillBeSent",
         ({ requestId }) => {
-          const record = requests.get(requestId);
+          const record = records.get(requestId);
           return Boolean(
             record &&
-            matchesRequestGeneration(record.view, generation) &&
-            predicate(record.view),
+            matchesPrivateRequestGeneration(record, generation) &&
+            predicate(snapshotRecord(record)),
           );
         },
         timeout,
         signal,
       );
-      const record = requests.get(event.requestId);
+      const record = records.get(event.requestId);
       if (!record) throw new Error(`${label} request was not recorded`);
-      return record.view;
+      return snapshotRecord(record);
     },
     completed(predicate, { generation } = {}) {
-      return [...requests.values()]
+      return [...records.values()]
         .filter((record) =>
           record.response &&
           record.finished &&
           !record.failed &&
-          matchesRequestGeneration(record.view, generation) &&
-          predicate(record.view),
+          matchesPrivateRequestGeneration(record, generation) &&
+          predicate(snapshotRecord(record)),
         )
         .sort((left, right) => left.sequence - right.sequence)
-        .map((record) => record.view);
+        .map((record) => snapshotRecord(record));
+    },
+    observed(predicate = () => true, { generation } = {}) {
+      return [...records.values()]
+        .filter((record) => matchesPrivateRequestGeneration(record, generation) && predicate(snapshotRecord(record)))
+        .sort((left, right) => left.sequence - right.sequence)
+        .map((record) => snapshotRecord(record));
     },
     async drainLateEvents(milliseconds = 250, signal) {
       await sleep(milliseconds, signal);
       reconcilePendingNetworkLogs();
     },
     dispose() {
-      if (disposed) return;
-      revokeUnconfirmedExpectedFailures("diagnostics disposed");
+      if (disposed) return disposePromise;
       disposed = true;
+      revokeUnconfirmedExpectedFailures("diagnostics disposed");
       reconcilePendingNetworkLogs();
       flushPendingNetworkLogs();
-      while (subscriptions.length) subscriptions.pop()?.();
+      const cleanupErrors = [];
+      const pending = [];
+      while (subscriptions.length) {
+        const unsubscribe = subscriptions.pop();
+        try {
+          if (typeof unsubscribe !== "function" || nodeTypes.isProxy(unsubscribe)) {
+            throw new TypeError("diagnostic unsubscribe was not a safe callable");
+          }
+          const result = Reflect.apply(unsubscribe, undefined, []);
+          validateRaceValue(result, "diagnostic unsubscribe");
+          if (allowedNativePromise(result)) pending.push(result);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      const finish = async () => {
+        for (const result of pending) {
+          try {
+            await Promise.prototype.then.call(result, () => undefined, (error) => { throw error; });
+          } catch (error) {
+            cleanupErrors.push(error);
+          }
+        }
+        if (cleanupErrors.length) {
+          throw new AggregateError(cleanupErrors, "diagnostic unsubscribe cleanup failed");
+        }
+      };
+      disposePromise = finish();
+      disposePromise.catch(() => {});
+      return disposePromise;
     },
     assertClean(stage) {
       reconcilePendingNetworkLogs();
@@ -2119,7 +2599,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
               closed: socket.closed,
               error: socket.error,
             })),
-            requests: [...requests.values()].map((record) => ({
+            requests: [...records.values()].map((record) => ({
               requestId: record.requestId,
               generation: record.generation,
               method: record.method,
@@ -2147,9 +2627,16 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       );
     },
   };
+  Object.defineProperty(diagnostics, "assertLiveViewWebSocket", {
+    value: assertPrivateLiveViewWebSocket,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return diagnostics;
 }
 
-export function assertLiveViewWebSocket(
+function assertDetachedLiveViewWebSocket(
   { webSockets, webSocketFailures, requests, consoleErrors = [], logErrors = [] },
   expectedOrigin,
   { beforeRequestIds = new Set(), generation } = {},
@@ -2164,6 +2651,7 @@ export function assertLiveViewWebSocket(
   const causalRequestSequence = requiresCausalGeneration ? generation.causalRequestSequence : undefined;
   const liveViewSockets = [...webSockets.values()].filter((socket) => {
     try {
+      if (typeof socket.url !== "string") return false;
       const url = new URL(socket.url);
       return (
         ["ws:", "wss:"].includes(url.protocol) &&
@@ -2223,6 +2711,7 @@ export function assertLiveViewWebSocket(
 
   const fallback = [...requests.values()].find((record) => {
     try {
+      if (typeof record.url !== "string") return false;
       return (
         new URL(record.url).pathname === "/live/longpoll" &&
         !beforeRequestIds.has(record.requestId) &&
@@ -2242,6 +2731,17 @@ export function assertLiveViewWebSocket(
   const originDiagnostic = [...consoleErrors, ...logErrors].find((message) => /origin|longpoll/i.test(message));
   assert.equal(originDiagnostic, undefined, `LiveView emitted an origin or transport diagnostic: ${originDiagnostic}`);
   return connected;
+}
+
+export function assertLiveViewWebSocket(diagnostics, expectedOrigin, options = {}) {
+  const privateAssertion = Object.getOwnPropertyDescriptor(
+    diagnostics,
+    "assertLiveViewWebSocket",
+  )?.value;
+  if (typeof privateAssertion === "function" && !nodeTypes.isProxy(privateAssertion)) {
+    return Reflect.apply(privateAssertion, diagnostics, [expectedOrigin, options]);
+  }
+  return assertDetachedLiveViewWebSocket(diagnostics, expectedOrigin, options);
 }
 
 export async function evaluate(client, expression, label, { signal } = {}) {
@@ -2341,16 +2841,13 @@ export async function assertConditionalEtagRevalidation(
   const deadline = Date.now() + CDP_EVENT_TIMEOUT_MS;
   let record;
   while (Date.now() < deadline) {
-    record = [...diagnostics.requests.values()]
-      .filter(
-        (candidate) =>
-          matchesRequestGeneration(candidate, generation) &&
-          pathMatches(candidate, "GET", parsed.pathname, expectedOrigin) &&
-          candidate.url === parsed.href &&
-          candidate.responseExtra?.statusCode === 304,
-      )
-      .sort((left, right) => left.sequence - right.sequence)
-      .at(-1);
+    record = diagnostics.observed(
+      (candidate) =>
+        pathMatches(candidate, "GET", parsed.pathname, expectedOrigin) &&
+        candidate.url === parsed.href &&
+        candidate.responseExtra?.statusCode === 304,
+      { generation },
+    ).at(-1);
     if (record) break;
     await sleep(POLL_INTERVAL_MS, signal);
   }
@@ -2390,8 +2887,10 @@ export function parseRequestBody(record, label) {
 function requestHeader(record, name) {
   const expected = name.toLowerCase();
   for (const headers of [record?.requestExtra?.headers, record?.request?.headers]) {
-    const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === expected);
-    if (key) return headers[key];
+    const shape = safeDataDescriptors(headers);
+    if (shape.error) continue;
+    const key = shape.keys.find((candidate) => candidate.toLowerCase() === expected);
+    if (key) return shape.descriptors.get(key)?.value;
   }
   return undefined;
 }
@@ -2399,8 +2898,10 @@ function requestHeader(record, name) {
 function responseHeader(record, name) {
   const expected = name.toLowerCase();
   for (const headers of [record?.responseExtra?.headers, record?.response?.headers]) {
-    const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === expected);
-    if (key) return headers[key];
+    const shape = safeDataDescriptors(headers);
+    if (shape.error) continue;
+    const key = shape.keys.find((candidate) => candidate.toLowerCase() === expected);
+    if (key) return shape.descriptors.get(key)?.value;
   }
   return undefined;
 }
@@ -3374,7 +3875,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   reportProgress("authenticated browser session ready");
   diagnostics.assertClean("authenticated sign-in");
   reportProgress("authenticated LiveView websocket asserted");
-  assertLiveViewWebSocket(diagnostics, origin, { generation: authenticatedGeneration });
+  diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
 
   const comms = await assertRemoteSurface({
     client,
@@ -4059,21 +4560,40 @@ export async function runBrowserGate(
     page: null,
     pageId: undefined,
   };
+  const cleanupPromises = new Map();
+  const runOwnedCleanup = (key, operation, label, timeout = CDP_COMMAND_TIMEOUT_MS) => {
+    if (cleanupPromises.has(key)) return cleanupPromises.get(key);
+    if (typeof operation !== "function") return undefined;
+    const promise = raceWithSignalAndTimeout(
+      invokeValidated(operation, label),
+      { milliseconds: timeout, label },
+    );
+    cleanupPromises.set(key, promise);
+    promise.catch(() => {});
+    return promise;
+  };
+  const triggerOwnedCleanup = (key, operation, label, timeout = CDP_COMMAND_TIMEOUT_MS) => {
+    runOwnedCleanup(key, operation, label, timeout)?.catch(() => {});
+  };
   const secrets = [];
   let diagnostics;
   let diagnosticsDispose;
   const guards = installShutdownGuards({
     onAbort: (reason) => {
       controller.abort(reason);
-      try {
-        state.clientClose?.();
-      } catch {
-        // Cleanup continues through the owning finally path.
+      if (state.clientClose) {
+        triggerOwnedCleanup(
+          "client",
+          () => Reflect.apply(state.clientClose, state.client, []),
+          "CDP client cleanup",
+        );
       }
-      try {
-        void state.runtimeClose?.();
-      } catch {
-        // Cleanup continues through the owning finally path.
+      if (state.runtimeClose) {
+        triggerOwnedCleanup(
+          "runtime",
+          () => Reflect.apply(state.runtimeClose, state.runtime, []),
+          "Chrome runtime cleanup",
+        );
       }
     },
   });
@@ -4217,21 +4737,11 @@ export async function runBrowserGate(
     const result = await raceWithSignalAndTimeout(scenario, {
       signal: controller.signal,
       milliseconds: timeout,
-      label: "federation browser scenario",
-      onTimeout: (error) => {
-        reportProgress(`federation browser scenario timeout after ${timeout}ms`);
-        controller.abort(error);
-        try {
-          state.clientClose?.();
-        } catch {
-          // Cleanup continues through the owning finally path.
-        }
-        try {
-          void state.runtimeClose?.();
-        } catch {
-          // Cleanup continues through the owning finally path.
-        }
-      },
+        label: "federation browser scenario",
+        onTimeout: (error) => {
+          reportProgress(`federation browser scenario timeout after ${timeout}ms`);
+          controller.abort(error);
+        },
     });
     reportProgress("federation browser scenario settled successfully");
     Reflect.apply(diagnosticsRevoke, diagnostics, ["browser gate final assertion"]);
@@ -4272,34 +4782,44 @@ export async function runBrowserGate(
       cleanupErrors.push(error);
     }
     try {
-      if (diagnosticsDispose) Reflect.apply(diagnosticsDispose, diagnostics, []);
+      if (diagnosticsDispose) {
+        await runOwnedCleanup(
+          "diagnostics",
+          () => Reflect.apply(diagnosticsDispose, diagnostics, []),
+          "diagnostics cleanup",
+        );
+      }
     } catch (error) {
       cleanupErrors.push(error);
     }
     try {
-      await closePage(state.runtimeEndpoint, state.pageId, {
-        timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
-      });
+      await runOwnedCleanup(
+        "page",
+        () => closePage(state.runtimeEndpoint, state.pageId, { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS }),
+        "CDP page close",
+        PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
+      );
       reportProgress("browser target close complete");
     } catch (error) {
       cleanupErrors.push(error);
     }
     try {
-      state.clientClose?.();
+      if (state.clientClose) {
+        await runOwnedCleanup(
+          "client",
+          () => Reflect.apply(state.clientClose, state.client, []),
+          "CDP client cleanup",
+        );
+      }
     } catch (error) {
       cleanupErrors.push(error);
     }
     try {
       if (state.runtimeClose) {
-        await raceWithSignalAndTimeout(
-          invokeValidated(
-            () => Reflect.apply(state.runtimeClose, state.runtime, []),
-            "Chrome runtime cleanup",
-          ),
-          {
-            milliseconds: CDP_COMMAND_TIMEOUT_MS,
-            label: "Chrome runtime cleanup",
-          },
+        await runOwnedCleanup(
+          "runtime",
+          () => Reflect.apply(state.runtimeClose, state.runtime, []),
+          "Chrome runtime cleanup",
         );
       }
       reportProgress("Chrome process and profile cleanup complete");
