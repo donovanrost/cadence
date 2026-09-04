@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
@@ -164,23 +165,63 @@ type ReleaseBundleItem = {
 };
 
 const exactHostInitializationPath = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+const exactHostInitializationFacadeId =
+  "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
+const exactHostInitializationFacadeIds = new Set([
+  exactHostInitializationFacadeId,
+  exactHostInitializationFacadeId.slice(1),
+]);
+const generatedHostInitializationSourceDigests = new Set([
+  "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068",
+]);
 
-function isGeneratedHostInitializationChunk(
-  fileName: string,
-  item: ReleaseBundleItem,
-): item is ReleaseBundleItem & { code: string } {
+function canonicalHostInitializationSource(source: string) {
+  if (typeof source !== "string" || /(?:^|[^\\])\/(?:\/|\*)/.test(source)) return null;
+  const expectedRemoteName = federationConfig.name;
+  const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expectedSharedImport = new RegExp(
+    `_virtual_mf-localSharedImportMap___mfe_internal__${escapedRemoteName}__mf_owner__1-[A-Za-z0-9_-]{8}\\.js`,
+  );
+  if (!expectedSharedImport.test(source)) return null;
+  return source
+    .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
+    .replace(
+      /_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-[A-Za-z0-9_-]{8}\.js/g,
+      "_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
+    )
+    .replaceAll(expectedRemoteName, "<remote>")
+    .replace(/\s+/g, "");
+}
+
+function hasHostInitializationShape(fileName: string, item: ReleaseBundleItem) {
   return (
     exactHostInitializationPath.test(fileName) &&
     item.type === "chunk" &&
     item.isEntry === false &&
     (item.name === "hostInit" || item.name === basename(fileName, ".js")) &&
-    (item.facadeModuleId === undefined ||
-      /hostAutoInit|hostInit|module-federation/i.test(item.facadeModuleId)) &&
     typeof item.code === "string" &&
     item.code.includes("__mf_module_cache__") &&
     item.code.includes("loadShare") &&
     /export\s*\{(?=[^}]*\bhostInitPromise\b)(?=[^}]*\binitHost\b)[^}]*\}/s.test(
       item.code,
+    )
+  );
+}
+
+function isAuthoritativeHostInitializationChunk(
+  fileName: string,
+  item: ReleaseBundleItem,
+): item is ReleaseBundleItem & { code: string } {
+  if (!hasHostInitializationShape(fileName, item)) return false;
+  if (typeof item.code !== "string") return false;
+  if (item.name !== "hostInit" || !exactHostInitializationFacadeIds.has(item.facadeModuleId ?? "")) {
+    return false;
+  }
+  const canonical = canonicalHostInitializationSource(item.code);
+  return (
+    canonical !== null &&
+    generatedHostInitializationSourceDigests.has(
+      createHash("sha256").update(canonical, "utf8").digest("hex"),
     )
   );
 }
@@ -229,17 +270,33 @@ function releaseOutputPlugin() {
       config.build.manifest = false;
     },
     generateBundle(_options: unknown, bundle: Record<string, ReleaseBundleItem>) {
-      const generatedHostInitialization = Object.entries(bundle).filter(([fileName, item]) =>
-        isGeneratedHostInitializationChunk(fileName, item),
+      const structuralHostInitializationLookalikes = Object.entries(bundle).filter(
+        ([fileName, item]) => hasHostInitializationShape(fileName, item),
       );
-      const unreferencedHostInitialization = generatedHostInitialization.filter(
-        ([fileName]) =>
-          !Object.entries(bundle).some(
-            ([owner, item]) =>
-              owner !== fileName && bundleItemReferencesTarget(owner, item, fileName),
-          ),
+      const authoritativeHostInitialization = Object.entries(bundle).filter(
+        ([fileName, item]) => isAuthoritativeHostInitializationChunk(fileName, item),
       );
-      if (unreferencedHostInitialization.length === 0) return;
+      if (authoritativeHostInitialization.length === 0) {
+        throw new Error("release cleanup requires one authoritative host initialization chunk");
+      }
+      if (authoritativeHostInitialization.length > 1) {
+        throw new Error("release cleanup found multiple authoritative host initialization chunks");
+      }
+      if (structuralHostInitializationLookalikes.length !== 1) {
+        throw new Error(
+          "release cleanup found conflicting structural host initialization lookalikes",
+        );
+      }
+
+      const [[fileName, item]] = authoritativeHostInitialization;
+      if (
+        Object.entries(bundle).some(
+          ([owner, ownerItem]) =>
+            owner !== fileName && bundleItemReferencesTarget(owner, ownerItem, fileName),
+        )
+      ) {
+        return;
+      }
 
       const statsAsset = bundle["mf-stats.json"];
       if (statsAsset?.type !== "asset" || statsAsset.source === undefined) {
@@ -277,25 +334,21 @@ function releaseOutputPlugin() {
         throw new Error("release cleanup requires federation buildOutput records");
       }
 
-      const removed = new Set<string>();
-      for (const [fileName, item] of unreferencedHostInitialization) {
-        const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
-        if (matching.length !== 1) {
-          throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
-        }
-        const [record] = matching;
-        if (
-          record.type !== "chunk" ||
-          record.isEntry !== false ||
-          record.size !== new TextEncoder().encode(item.code).byteLength
-        ) {
-          throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
-        }
-        delete bundle[fileName];
-        removed.add(fileName);
+      const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
+      if (matching.length !== 1) {
+        throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
       }
+      const [record] = matching;
+      if (
+        record.type !== "chunk" ||
+        record.isEntry !== false ||
+        record.size !== new TextEncoder().encode(item.code).byteLength
+      ) {
+        throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
+      }
+      delete bundle[fileName];
       stats.buildOutput = stats.buildOutput.filter(
-        (output) => !removed.has(output.fileName ?? ""),
+        (output) => output.fileName !== fileName,
       );
       statsAsset.source = JSON.stringify(stats);
     },
