@@ -131,9 +131,9 @@ async function withFixture(callback, baseDirectory = tmpdir()) {
   }
 }
 
-async function expectCheckFailure(root, expectedRemoteName, pattern) {
+async function expectCheckFailure(root, expectedRemoteName, pattern, options = {}) {
   await assert.rejects(
-    () => validateReleaseOutput(root, expectedRemoteName, repositoryRoot),
+    () => validateReleaseOutput(root, expectedRemoteName, repositoryRoot, options),
     pattern,
   );
 }
@@ -183,7 +183,7 @@ void test("resolves the actual Cadence repository root from the shared tools pat
 void test("scans quoted and unquoted JavaScript and CSS references", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "remoteEntry.js"), 'import "../outside.js";\n');
-    await expectCheckFailure(root, "fixture_remote", /escapes the output/);
+    await expectCheckFailure(root, "fixture_remote", /escapes the output|traversal/);
   });
 
   await withFixture(async (root) => {
@@ -206,7 +206,56 @@ void test("fails closed for unresolved dynamic local imports and asset URLs", as
       join(root, "remoteEntry.js"),
       'const name = "image";\nnew URL(`./assets/${name}.svg`, import.meta.url);\n',
     );
+    await expectCheckFailure(
+      root,
+      "fixture_remote",
+      /unresolved dynamic local asset URL|dynamic template/,
+    );
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const target = "./assets/dynamic.js";\nnew URL("../" + target, import.meta.url);\n',
+    );
     await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local asset URL/);
+  });
+
+  for (const source of [
+    'const target = "./assets/dynamic.js";\nnew Worker(target);\n',
+    'const target = "dynamic";\nnew SharedWorker("./assets/" + target);\n',
+    'const target = "dynamic";\nnavigator.serviceWorker.register(`./assets/${target}.js`);\n',
+  ]) {
+    await withFixture(async (root) => {
+      await writeFile(join(root, "remoteEntry.js"), source);
+      await expectCheckFailure(
+        root,
+        "fixture_remote",
+        /unresolved dynamic worker URL|dynamic template/,
+      );
+    });
+  }
+});
+
+void test("does not confuse division followed by a regex literal containing import text", async () => {
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const matches = 4 / /import\\("outside.js"\\)/.test("import");\nvoid matches;\n',
+    );
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+});
+
+void test("accepts statically bounded worker references", async () => {
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'new Worker("./assets/dynamic.js");\nnew SharedWorker(new URL("./assets/dynamic.js", import.meta.url));\nnavigator.serviceWorker.register("./assets/dynamic.js");\n',
+    );
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
   });
 });
 
@@ -305,7 +354,141 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /invalid percent encoding/);
   });
+
+  await withFixture(async (root) => {
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    const hostInitPath = "assets/hostInit-ABCDEFGH.js";
+    const hostInitSource =
+      "globalThis.hostInitPromise = true; export const initHost = true;\n";
+    await writeFile(
+      join(root, hostInitPath),
+      hostInitSource,
+    );
+    stats.id = "fixture_remote";
+    stats.name = "fixture_remote";
+    stats.metaData = {
+      name: "fixture_remote",
+      remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
+    };
+    stats.buildOutput.push({
+      fileName: hostInitPath,
+      type: "chunk",
+      isEntry: false,
+      size: Buffer.byteLength(hostInitSource),
+    });
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /missing from manifest closure/);
+  });
 });
+
+void test("rejects extra empty or nested output directories", async () => {
+  await withFixture(async (root) => {
+    await mkdir(join(root, "empty-directory"));
+    await expectCheckFailure(root, "fixture_remote", /unexpected or nested directory/);
+  });
+
+  await withFixture(async (root) => {
+    await mkdir(join(root, "assets", "nested"));
+    await writeFile(
+      join(root, "assets", "nested", "asset.js"),
+      "export const nested = true;\n",
+    );
+    await expectCheckFailure(root, "fixture_remote", /unexpected or nested directory/);
+  });
+});
+
+void test("rejects near-miss generated host-init structural spoofs", async () => {
+  const hostInitPath = "assets/hostInit-ABCDEFGH.js";
+  const sources = [
+    'import{t as e}from"./vite-preload-helper-ABCDEFGH.js";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}};globalThis.attacker=true;export{t as hostInitPromise,t as initHost};\n',
+    '/* FEDERATION_ALLOW_NEW_FUNCTION */ globalThis.hostInitPromise=true;export const initHost=true;\n',
+    'import{t as e}from"./vite-preload-helper-ABCDEFGH.js";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}};export{t as hostInitPromise};\n',
+  ];
+
+  for (const source of sources) {
+    await withFixture(async (root) => {
+      const statsPath = join(root, "mf-stats.json");
+      const stats = JSON.parse(await readFile(statsPath, "utf8"));
+      await writeFile(join(root, hostInitPath), source);
+      stats.id = "fixture_remote";
+      stats.name = "fixture_remote";
+      stats.metaData = {
+        name: "fixture_remote",
+        remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
+      };
+      stats.buildOutput.push({
+        fileName: hostInitPath,
+        type: "chunk",
+        isEntry: false,
+        size: Buffer.byteLength(source),
+      });
+      await writeFile(statsPath, JSON.stringify(stats));
+      await expectCheckFailure(root, "fixture_remote", /missing from manifest closure/);
+    });
+  }
+});
+
+void test("canonicalizes deployment paths and rejects cross-publication escapes", async () => {
+  for (const deploymentPath of [
+    "comms-overview/../telemetry-decom/remoteEntry.js",
+    "comms-overview\\..\\telemetry-decom\\remoteEntry.js",
+    "comms-overview/%2e%2e/telemetry-decom/remoteEntry.js",
+    "comms-overview//remoteEntry.js",
+  ]) {
+    await withFixture(async (root) => {
+      await writeFile(
+        join(root, "assets", "quoted.js"),
+        `const publication = "/assets/application-host/${deploymentPath}";\n`,
+      );
+      await expectCheckFailure(
+        root,
+        "fixture_remote",
+        /deployment path|unexpected deployment path|percent/,
+        { allowedDeploymentPath: "comms-overview" },
+      );
+    });
+  }
+});
+
+void test(
+  "requires generated dynamic-import exceptions to have stats provenance and graph authority",
+  async () => {
+    const attackerShape =
+      'const FEDERATION_ALLOW_NEW_FUNCTION = true;\nconst loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n';
+    await withFixture(async (root) => {
+      await writeFile(join(root, "remoteEntry.js"), attackerShape);
+      await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+    });
+
+    await withFixture(async (root) => {
+      const generatedPath = "assets/dist-ABCDEFGH.js";
+      const generatedSource =
+        "const loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n";
+      await writeFile(join(root, generatedPath), generatedSource);
+      const manifestPath = join(root, "mf-manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.exposes[0].assets.js.async.push(generatedPath);
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      const statsPath = join(root, "mf-stats.json");
+      const stats = JSON.parse(await readFile(statsPath, "utf8"));
+      stats.id = "fixture_remote";
+      stats.name = "fixture_remote";
+      stats.metaData = {
+        name: "fixture_remote",
+        remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
+      };
+      stats.buildOutput.push({
+        fileName: generatedPath,
+        type: "chunk",
+        isEntry: false,
+        size: Buffer.byteLength(generatedSource),
+      });
+      await writeFile(statsPath, JSON.stringify(stats));
+      await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+    });
+  },
+);
 
 void test("rejects forbidden names, renamed forbidden chunks, source maps, and stale output", async () => {
   await withFixture(async (root) => {

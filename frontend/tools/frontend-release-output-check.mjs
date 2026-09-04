@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import {
@@ -31,6 +32,8 @@ const forbiddenArtifactNameSequences = [
 ];
 const statsPathKeyPattern =
   /^(?:asset|assets|chunk|chunks|entry|entries|file|filename|fileName|output|outputs|paths|source|sources)$/i;
+const generatedModuleFederationPathPattern =
+  /^assets\/(?:dist|mf-entry-bootstrap|virtualExposes|virtual_mf|_virtual_mf|vite-preload-helper)-[A-Za-z0-9_.-]+\.js$/;
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
@@ -295,6 +298,10 @@ async function outputFiles(directory, outputRoot) {
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
+      const directoryName = relativePath(outputRoot, path);
+      if (directoryName !== "assets") {
+        fail(`output contains an unexpected or nested directory ${directoryName}`);
+      }
       paths.push(...(await outputFiles(path, outputRoot)));
     } else if (entry.isFile()) {
       paths.push(path);
@@ -312,7 +319,7 @@ export function assertLocalReference(
   files,
   label,
   outputRoot,
-  { allowGeneratedHostInitializationParent = false } = {},
+  options = {},
 ) {
   const value = reference.trim();
   if (value === "" || /^\$\{[^}]+\}$/.test(value)) return;
@@ -326,19 +333,17 @@ export function assertLocalReference(
   if (isAbsoluteLocalPath(pathPart)) {
     fail(`${label} contains an absolute local reference ${JSON.stringify(value)}`);
   }
-  assertPathSyntax(pathPart, label, { allowTraversal: true });
+  const authoritativeHostInitializationParent =
+    options.authoritativeHostInitialization === true &&
+    /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/.test(origin) &&
+    pathPart === "../remoteEntry.js";
+  if (!authoritativeHostInitializationParent) assertPathSyntax(pathPart, label);
   assertNoForbiddenPathName(pathPart, label);
 
   const target = resolve(outputRoot, dirname(origin), pathPart);
   const targetRelative = relativePath(outputRoot, target);
   if (targetRelative === "" || targetRelative.startsWith("../") || targetRelative === "..") {
     fail(`${label} escapes the output with ${JSON.stringify(value)}`);
-  }
-  if (
-    pathPart.split("/").some((part) => part === "..") &&
-    !(allowGeneratedHostInitializationParent && pathPart === "../remoteEntry.js")
-  ) {
-    fail(`${label} contains a normalization collision with ${JSON.stringify(value)}`);
   }
   if (!files.has(targetRelative)) {
     fail(`${label} points to missing ${JSON.stringify(targetRelative)}`);
@@ -489,11 +494,134 @@ function assertStatsMetadata(
   seen.delete(value);
 }
 
-function assertStats(stats, files, outputRoot) {
+function hasFederationStatsProvenance(stats, expectedRemoteName) {
+  const metadata = stats.metaData;
+  return (
+    stats.id === expectedRemoteName &&
+    stats.name === expectedRemoteName &&
+    metadata &&
+    typeof metadata === "object" &&
+    metadata.name === expectedRemoteName &&
+    metadata.remoteEntry &&
+    metadata.remoteEntry.path === "" &&
+    metadata.remoteEntry.name === "remoteEntry.js" &&
+    metadata.remoteEntry.type === "module"
+  );
+}
+
+const generatedHostInitializationPathPattern =
+  /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+const generatedHostInitializationFacadeDigests = new Set([
+  "aa85d145c52d8de884e72e39705ac35f4141769062ba1ca6454cbadbfad153da",
+  "add6febb13abf6c1923f431bbcf9aea1e282de287c64a4b7a0e8ee56768d61bc",
+]);
+const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
+const generatedFederationRuntimeSourceDigests = new Set([
+  "a38d94f4152a69a3b1b63c8afc9ebfa941681f1c32cda88ed07dc574dbd43a1e",
+  "d6ce1afd105de3fda34eb27703b530dfb32d963a887a5f5297e0e154a4fc22f2",
+]);
+
+function canonicalHostInitializationSource(source, expectedRemoteName) {
+  if (typeof source !== "string" || /(?:^|[^\\])\/(?:\/|\*)/.test(source)) return null;
+  const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expectedSharedImport = new RegExp(
+    `_virtual_mf-localSharedImportMap___mfe_internal__${escapedRemoteName}__mf_owner__1-[A-Za-z0-9_-]{8}\\.js`,
+  );
+  if (!expectedSharedImport.test(source)) return null;
+  return source
+    .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
+    .replace(
+      /_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-[A-Za-z0-9_-]{8}\.js/g,
+      "_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
+    )
+    .replaceAll(expectedRemoteName, "<remote>")
+    .replace(/\s+/g, "");
+}
+
+function isAuthoritativeGeneratedHostInitializationArtifact(
+  name,
+  source,
+  stats,
+  expectedRemoteName,
+) {
+  if (
+    !generatedHostInitializationPathPattern.test(name) ||
+    !hasFederationStatsProvenance(stats, expectedRemoteName)
+  ) {
+    return false;
+  }
+  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (matchingRecords.length !== 1) return false;
+  const [record] = matchingRecords;
+  if (
+    record.type !== "chunk" ||
+    record.isEntry !== false ||
+    !Number.isSafeInteger(record.size) ||
+    record.size < 0
+  ) {
+    return false;
+  }
+  if (
+    record.facadeModuleId !== undefined &&
+    (typeof record.facadeModuleId !== "string" || !/hostAutoInit|hostInit/i.test(record.facadeModuleId))
+  ) {
+    return false;
+  }
+  const canonical = canonicalHostInitializationSource(source, expectedRemoteName);
+  return (
+    canonical !== null &&
+    generatedHostInitializationFacadeDigests.has(
+      createHash("sha256").update(canonical, "utf8").digest("hex"),
+    )
+  );
+}
+
+function isGeneratedModuleFederationArtifactPath(path) {
+  return generatedModuleFederationPathPattern.test(path);
+}
+
+function isAuthoritativeGeneratedFederationRuntimeArtifact(
+  name,
+  source,
+  stats,
+  expectedRemoteName,
+) {
+  if (
+    !generatedFederationRuntimePathPattern.test(name) ||
+    !hasFederationStatsProvenance(stats, expectedRemoteName)
+  ) {
+    return false;
+  }
+  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (matchingRecords.length !== 1) return false;
+  const [record] = matchingRecords;
+  return (
+    record.type === "chunk" &&
+    record.isEntry === false &&
+    Number.isSafeInteger(record.size) &&
+    record.size >= 0 &&
+    typeof source === "string" &&
+    generatedFederationRuntimeSourceDigests.has(
+      createHash("sha256")
+        .update(source.replace(/-[A-Za-z0-9_-]{8}\.js/g, "-<hash>.js"), "utf8")
+        .digest("hex"),
+    )
+  );
+}
+
+function assertStats(stats, expectedRemoteName, files, outputRoot) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
+  if (
+    (stats.id !== undefined && stats.id !== expectedRemoteName) ||
+    (stats.name !== undefined && stats.name !== expectedRemoteName) ||
+    (stats.metaData?.name !== undefined && stats.metaData.name !== expectedRemoteName)
+  ) {
+    fail("federation stats identity is not the expected remote");
+  }
   const referencedFiles = new Set();
+  const buildOutputByPath = new Map();
   for (const output of stats.buildOutput) {
     if (!output || typeof output !== "object" || Array.isArray(output)) {
       fail("federation buildOutput entry is not an object");
@@ -508,6 +636,7 @@ function assertStats(stats, files, outputRoot) {
       fail(`federation stats contains duplicate artifact ${JSON.stringify(target)}`);
     }
     referencedFiles.add(target);
+    buildOutputByPath.set(target, output);
   }
   assertStatsMetadata(
     stats,
@@ -518,7 +647,24 @@ function assertStats(stats, files, outputRoot) {
     new Set(),
     referencedFiles,
   );
-  return referencedFiles;
+  const generatedModuleFederationFiles = new Set();
+  if (hasFederationStatsProvenance(stats, expectedRemoteName)) {
+    for (const [path, output] of buildOutputByPath) {
+      if (
+        isGeneratedModuleFederationArtifactPath(path) &&
+        output.type === "chunk" &&
+        output.isEntry === false &&
+        Number.isSafeInteger(output.size) &&
+        output.size >= 0
+      ) {
+        generatedModuleFederationFiles.add(path);
+      }
+    }
+  }
+  return {
+    references: referencedFiles,
+    generatedModuleFederationFiles,
+  };
 }
 
 export function assertViteManifest(manifest, files, outputRoot) {
@@ -631,7 +777,13 @@ function javascriptTokens(source, origin = "JavaScript") {
         index += 1;
       }
       if (!closed) fail(`${origin} contains an unterminated string or template`);
-      tokens.push({ kind: template ? "template" : "string", value, dynamic });
+      tokens.push({
+        kind: template ? "template" : "string",
+        value,
+        dynamic,
+        dangerousDynamic:
+          dynamic && /\b(?:import|new\s+URL|Worker|SharedWorker|ServiceWorker)\b/i.test(value),
+      });
       continue;
     }
     if (/[A-Za-z_$]/.test(character)) {
@@ -674,6 +826,7 @@ function canStartRegex(tokens) {
     previous.value === "+" ||
     previous.value === "-" ||
     previous.value === "*" ||
+    previous.value === "/" ||
     previous.value === "%" ||
     previous.value === "~" ||
     previous.value === "<" ||
@@ -777,6 +930,31 @@ function isGeneratedVitePreloadUrl(tokens, index) {
   });
 }
 
+function isGeneratedVitePreloadHelperUrl(tokens, index) {
+  return (
+    tokens[index - 11]?.value === "var" &&
+    tokens[index - 10]?.kind === "word" &&
+    tokens[index - 9]?.value === "=" &&
+    tokens[index - 8]?.value === "function" &&
+    tokens[index - 7]?.value === "(" &&
+    tokens[index - 6]?.kind === "word" &&
+    tokens[index - 5]?.value === "," &&
+    tokens[index - 4]?.kind === "word" &&
+    tokens[index - 3]?.value === ")" &&
+    tokens[index - 2]?.value === "{" &&
+    tokens[index - 1]?.value === "return" &&
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 5]?.kind === "word" &&
+    tokens[index - 10]?.value === tokens[index + 3]?.value &&
+    tokens[index - 4]?.value === tokens[index + 5]?.value &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 6]?.value === ")" &&
+    tokens[index + 7]?.value === "." &&
+    tokens[index + 8]?.value === "href" &&
+    tokens[index + 9]?.value === "}"
+  );
+}
+
 function isGeneratedFederationRemoteImport(tokens, index) {
   const argument = tokens[index + 2];
   const expected = [
@@ -801,6 +979,38 @@ function isGeneratedFederationRemoteImport(tokens, index) {
     [index + 15, "meta"],
     [index + 16, "."],
     [index + 17, "url"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ">"],
+    [index - 2, "="],
+    [index - 3, ")"],
+    [index - 4, "("],
+    [index - 5, "("],
+    [index - 6, "word"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, ","],
+    [index + 10, "["],
+    [index + 11, "]"],
+    [index + 12, ")"],
+    [index + 13, "."],
+    [index + 14, "catch"],
+    [index + 15, "("],
+    [index + 16, "word"],
+    [index + 17, ")"],
   ];
   if (argument?.kind !== "word") return false;
   return expected.every(([tokenIndex, value]) => {
@@ -834,48 +1044,124 @@ function isGeneratedFederationExternalImport(tokens, index) {
   ) {
     return false;
   }
-  return tokens
-    .slice(Math.max(0, index - 100), index)
-    .some((token) => token.value === "FEDERATION_ALLOW_NEW_FUNCTION");
+  return true;
 }
 
-function isGeneratedFederationRuntimeImport(tokens, index) {
-  const argument = tokens[index + 2];
-  const expected = [
-    [index - 1, ">"],
-    [index - 2, "="],
-    [index - 3, ")"],
-    [index - 4, "("],
-    [index - 5, "("],
-    [index - 6, "word"],
-    [index + 3, ")"],
-    [index + 4, "."],
-    [index + 5, "then"],
-    [index + 6, "("],
-    [index + 7, "word"],
-    [index + 8, ")"],
-    [index + 9, ","],
-    [index + 10, "["],
-    [index + 11, "]"],
-    [index + 12, ")"],
-    [index + 13, "."],
-    [index + 14, "catch"],
-    [index + 15, "("],
-    [index + 16, "word"],
-    [index + 17, ")"],
-  ];
-  if (argument?.kind !== "word") return false;
+const workerConstructorNames = new Set(["Worker", "SharedWorker", "ServiceWorker"]);
+
+function workerCallAt(tokens, index) {
+  const token = tokens[index];
+  const next = tokens[index + 1];
+  const globalWorkerOwners = new Set(["globalThis", "self", "window"]);
   if (
-    !expected.every(([tokenIndex, value]) => {
-      const token = tokens[tokenIndex];
-      return value === "word" ? token?.kind === "word" : token?.value === value;
-    })
+    token?.kind === "word" &&
+    token.value === "new" &&
+    workerConstructorNames.has(next?.value) &&
+    tokens[index + 2]?.value === "("
   ) {
-    return false;
+    return { argument: index + 3 };
   }
-  return tokens
-    .slice(Math.max(0, index - 100), index)
-    .some((token) => token.value === "FEDERATION_ALLOW_NEW_FUNCTION");
+  if (
+    token?.kind === "word" &&
+    token.value === "new" &&
+    globalWorkerOwners.has(next?.value) &&
+    tokens[index + 2]?.value === "." &&
+    workerConstructorNames.has(tokens[index + 3]?.value) &&
+    tokens[index + 4]?.value === "("
+  ) {
+    return { argument: index + 5 };
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "new" &&
+    tokens[index + 1]?.value === "(" &&
+    workerConstructorNames.has(tokens[index + 2]?.value) &&
+    tokens[index + 3]?.value === ")" &&
+    tokens[index + 4]?.value === "("
+  ) {
+    return { argument: index + 5 };
+  }
+  if (
+    token?.kind === "word" &&
+    workerConstructorNames.has(token.value) &&
+    next?.value === "(" &&
+    (tokens[index - 1]?.value !== "." ||
+      globalWorkerOwners.has(tokens[index - 2]?.value))
+  ) {
+    return { argument: index + 2 };
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "register" &&
+    tokens[index - 1]?.value === "." &&
+    tokens[index - 2]?.value === "serviceWorker" &&
+    next?.value === "("
+  ) {
+    return { argument: index + 2 };
+  }
+  return null;
+}
+
+function isStaticImportMetaUrlCall(tokens, index) {
+  return (
+    staticReferenceToken(tokens[index + 3]) &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 5]?.value === "import" &&
+    tokens[index + 6]?.value === "." &&
+    tokens[index + 7]?.value === "meta" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "url" &&
+    tokens[index + 10]?.value === ")"
+  );
+}
+
+function isGeneratedViteDynamicAssetUrl(tokens, index) {
+  return (
+    tokens[index + 3]?.kind === "string" &&
+    tokens[index + 4]?.value === "+" &&
+    tokens[index + 5]?.kind === "word" &&
+    tokens[index + 6]?.value === "," &&
+    tokens[index + 7]?.value === "import" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "meta" &&
+    tokens[index + 10]?.value === "." &&
+    tokens[index + 11]?.value === "url" &&
+    tokens[index + 12]?.value === ")"
+  );
+}
+
+function isGeneratedRuntimeUrl(tokens, index) {
+  const directEntry =
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 5]?.value === "window" &&
+    tokens[index + 6]?.value === "." &&
+    tokens[index + 7]?.value === "location" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "origin" &&
+    tokens[index + 10]?.value === ")";
+  const memberEntry =
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 4]?.value === "." &&
+    tokens[index + 5]?.value === "entry" &&
+    tokens[index + 6]?.value === "," &&
+    tokens[index + 7]?.value === "window" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "location" &&
+    tokens[index + 10]?.value === "." &&
+    tokens[index + 11]?.value === "origin" &&
+    tokens[index + 12]?.value === ")";
+  return directEntry || memberEntry;
+}
+
+function isGeneratedFederationDynamicTemplate(token) {
+  return (
+    token?.kind === "template" &&
+    token.dynamic === true &&
+    /^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
+      token.value,
+    )
+  );
 }
 
 export function assertImportReferences(
@@ -887,6 +1173,19 @@ export function assertImportReferences(
   options = {},
 ) {
   const tokens = javascriptTokens(source, origin);
+  const generatedModuleFederation = options.generatedModuleFederation === true;
+  const authoritativeDynamicImport =
+    options.authoritativeGeneratedDynamicImport === true ||
+    options.authoritativeHostPublication === true;
+  if (
+    tokens.some(
+      (token) =>
+        token.dangerousDynamic &&
+        (!authoritativeDynamicImport || !isGeneratedFederationDynamicTemplate(token)),
+    )
+  ) {
+    fail(`${origin} contains an unresolved dynamic template expression`);
+  }
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     const next = tokens[index + 1];
@@ -937,9 +1236,11 @@ export function assertImportReferences(
           );
           if (target) referencedFiles.add(target);
         } else if (
-          isGeneratedFederationRemoteImport(tokens, index) ||
-          isGeneratedFederationExternalImport(tokens, index) ||
-          isGeneratedFederationRuntimeImport(tokens, index)
+          authoritativeDynamicImport &&
+          (isGeneratedFederationRemoteImport(tokens, index) ||
+            isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) ||
+            (options.authoritativeHostPublication === true &&
+              isGeneratedFederationExternalImport(tokens, index)))
         ) {
           continue;
         } else {
@@ -949,19 +1250,49 @@ export function assertImportReferences(
       continue;
     }
 
+    const workerCall = workerCallAt(tokens, index);
+    if (workerCall) {
+      const argument = tokens[workerCall.argument];
+      if (
+        staticReferenceToken(argument) &&
+        [")", ","].includes(tokens[workerCall.argument + 1]?.value)
+      ) {
+        const target = assertLocalReference(
+          argument.value,
+          origin,
+          files,
+          `${origin} worker URL`,
+          outputRoot,
+          options,
+        );
+        if (target) referencedFiles.add(target);
+      } else if (
+        argument?.value === "new" &&
+        tokens[workerCall.argument + 1]?.value === "URL" &&
+        tokens[workerCall.argument + 2]?.value === "(" &&
+        isStaticImportMetaUrlCall(tokens, workerCall.argument)
+      ) {
+        const target = assertLocalReference(
+          tokens[workerCall.argument + 3].value,
+          origin,
+          files,
+          `${origin} worker URL`,
+          outputRoot,
+          options,
+        );
+        if (target) referencedFiles.add(target);
+      } else {
+        fail(`${origin} contains an unresolved dynamic worker URL`);
+      }
+      continue;
+    }
+
     if (
       token.kind === "word" &&
       token.value === "new" &&
       tokens[index + 1]?.value === "URL" &&
       tokens[index + 2]?.value === "(" &&
-      staticReferenceToken(tokens[index + 3]) &&
-      tokens[index + 4]?.value === "," &&
-      tokens[index + 5]?.value === "import" &&
-      tokens[index + 6]?.value === "." &&
-      tokens[index + 7]?.value === "meta" &&
-      tokens[index + 8]?.value === "." &&
-      tokens[index + 9]?.value === "url" &&
-      tokens[index + 10]?.value === ")"
+      isStaticImportMetaUrlCall(tokens, index)
     ) {
       const target = assertLocalReference(
         tokens[index + 3].value,
@@ -979,17 +1310,22 @@ export function assertImportReferences(
       token.kind === "word" &&
       token.value === "new" &&
       tokens[index + 1]?.value === "URL" &&
-      tokens[index + 2]?.value === "(" &&
-      tokens[index + 4]?.value === "," &&
-      tokens[index + 5]?.value === "import" &&
-      tokens[index + 6]?.value === "." &&
-      tokens[index + 7]?.value === "meta" &&
-      tokens[index + 8]?.value === "." &&
-      tokens[index + 9]?.value === "url"
+      tokens[index + 2]?.value === "("
     ) {
       if (
-        isGeneratedEmptyFederationCssUrl(tokens, index) ||
-        isGeneratedVitePreloadUrl(tokens, index)
+        options.authoritativeHostPublication === true ||
+        (generatedModuleFederation &&
+          (isGeneratedEmptyFederationCssUrl(tokens, index) ||
+            isGeneratedVitePreloadUrl(tokens, index) ||
+            isGeneratedVitePreloadHelperUrl(tokens, index) ||
+            isGeneratedViteDynamicAssetUrl(tokens, index) ||
+            isGeneratedRuntimeUrl(tokens, index)))
+      ) {
+        continue;
+      }
+      if (
+        staticReferenceToken(tokens[index + 3]) &&
+        isExternalReference(tokens[index + 3].value)
       ) {
         continue;
       }
@@ -1262,28 +1598,26 @@ function snapshotOutputFiles(snapshot, outputRoot) {
 }
 
 function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
-  const references = [...source.matchAll(/\/assets\/application-host\/[A-Za-z0-9._/-]+/g)].map(
-    ([reference]) => reference,
-  );
+  const deploymentMarker = "/assets/application-host";
+  const references = [
+    ...source.matchAll(/\/assets\/application-host[^\s"'`),;?}]*/g),
+  ].map(([reference]) => reference);
   if (references.length === 0) return;
   if (!allowedDeploymentPath) {
     fail(`${origin} contains a deployment-specific publication path`);
   }
 
-  const expectedPrefix = `/assets/application-host/${allowedDeploymentPath}/`;
+  assertPathSyntax(allowedDeploymentPath, "allowed deployment path");
   for (const reference of references) {
-    if (!reference.startsWith(expectedPrefix)) {
+    const deploymentPath = reference.slice(deploymentMarker.length + 1);
+    if (!deploymentPath || deploymentPath.split("/")[0] !== allowedDeploymentPath) {
       fail(`${origin} contains an unexpected deployment path ${JSON.stringify(reference)}`);
     }
+    assertPathSyntax(deploymentPath, `${origin} deployment path`);
+    if (deploymentPath.split("/").length < 2) {
+      fail(`${origin} contains an incomplete deployment path ${JSON.stringify(reference)}`);
+    }
   }
-}
-
-function isGeneratedHostInitializationArtifact(name, source) {
-  return (
-    /^assets\/hostInit-[A-Za-z0-9_-]+\.js$/.test(name) &&
-    source.includes("hostInitPromise") &&
-    source.includes("initHost")
-  );
 }
 
 export async function validateFederationOutput(
@@ -1336,7 +1670,9 @@ export async function validateFederationOutput(
   );
 
   const stats = JSON.parse(await snapshot.readText("mf-stats.json"));
-  const statsReferences = assertStats(stats, files, outputRoot);
+  const statsResult = assertStats(stats, expectedRemoteName, files, outputRoot);
+  const statsReferences = statsResult.references;
+  const generatedModuleFederationFiles = statsResult.generatedModuleFederationFiles;
 
   const manifestClosure = new Set(manifestReferences);
   const pending = [...manifestClosure];
@@ -1348,8 +1684,21 @@ export async function validateFederationOutput(
     const source = await snapshot.readText(name);
     if (source === null) fail(`manifest closure cannot read ${JSON.stringify(name)}`);
     const discovered = new Set();
+    const generatedModuleFederation =
+      generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
+    const authoritativeGeneratedDynamicImport =
+      generatedModuleFederation &&
+      isAuthoritativeGeneratedFederationRuntimeArtifact(
+        name,
+        source,
+        stats,
+        expectedRemoteName,
+      );
     if (/\.(?:js|mjs|cjs)$/i.test(name)) {
-      assertImportReferences(source, name, files, outputRoot, discovered);
+      assertImportReferences(source, name, files, outputRoot, discovered, {
+        generatedModuleFederation,
+        authoritativeGeneratedDynamicImport,
+      });
     }
     if (extname(name).toLowerCase() === ".css") {
       assertCssReferences(source, name, files, outputRoot, discovered);
@@ -1370,8 +1719,31 @@ export async function validateFederationOutput(
   for (const reference of statsReferences) {
     if (!manifestClosure.has(reference)) {
       const source = await snapshot.readText(reference);
-      if (!isGeneratedHostInitializationArtifact(reference, source ?? "")) {
+      if (
+        !isAuthoritativeGeneratedHostInitializationArtifact(
+          reference,
+          source,
+          stats,
+          expectedRemoteName,
+        )
+      ) {
         fail(`federation stats references ${JSON.stringify(reference)} missing from manifest closure`);
+      }
+      const discovered = new Set();
+      assertImportReferences(
+        source,
+        reference,
+        files,
+        outputRoot,
+        discovered,
+        { authoritativeHostInitialization: true },
+      );
+      for (const target of discovered) {
+        if (!manifestClosure.has(target)) {
+          fail(
+            `generated host initialization ${JSON.stringify(reference)} references ${JSON.stringify(target)} outside manifest closure`,
+          );
+        }
       }
       manifestClosure.add(reference);
     }
@@ -1392,16 +1764,27 @@ export async function validateFederationOutput(
     assertDeploymentReferences(source, name, allowedDeploymentPath);
 
     if (/\.(?:js|mjs|cjs)$/i.test(name)) {
-      assertImportReferences(
-        source,
-        name,
-        files,
-        outputRoot,
-        new Set(),
-        isGeneratedHostInitializationArtifact(name, source)
-          ? { allowGeneratedHostInitializationParent: true }
-          : undefined,
-      );
+      const generatedModuleFederation =
+        generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
+      assertImportReferences(source, name, files, outputRoot, new Set(), {
+        generatedModuleFederation,
+        authoritativeGeneratedDynamicImport:
+          generatedModuleFederation &&
+          isAuthoritativeGeneratedFederationRuntimeArtifact(
+            name,
+            source,
+            stats,
+            expectedRemoteName,
+          ),
+        authoritativeHostInitialization:
+          generatedHostInitializationPathPattern.test(name) &&
+          isAuthoritativeGeneratedHostInitializationArtifact(
+            name,
+            source,
+            stats,
+            expectedRemoteName,
+          ),
+      });
     }
     if (extname(name).toLowerCase() === ".css")
       assertCssReferences(source, name, files, outputRoot);

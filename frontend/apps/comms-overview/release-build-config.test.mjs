@@ -158,3 +158,14 @@ void test("requires release builds to use the build command and an absolute conf
     );
   });
 });
+
+void test("keeps release host-init cleanup exact and provenance-bound", async () => {
+  const source = await readFile(resolve(appRoot, "vite.config.ts"), "utf8");
+  assert.match(source, /exactHostInitializationPath/);
+  assert.match(source, /bundleItemReferencesTarget/);
+  assert.match(source, /one matching stats record/);
+  assert.match(source, /record\.size/);
+  assert.match(source, /authoritative federation stats provenance/);
+  assert.doesNotMatch(source, /startsWith\(["']hostInit-/);
+  assert.doesNotMatch(source, /basename\(output\.fileName/);
+});

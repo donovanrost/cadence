@@ -68,10 +68,27 @@ void test("requires an exact host and allowed-remote publication root inventory"
     assert.equal(result.host.fileCount, 2);
     assert.equal(result.remotes.length, 2);
 
+    await writeFile(
+      join(root, "host", "host.js"),
+      'const loaded = ready ? fallback : import(target).then(done).catch(fail);\n',
+    );
+    await assert.rejects(
+      () => validateProductionPublication(root),
+      /unresolved dynamic local import/,
+    );
+
+    await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
     await writeFile(join(root, "index.html"), "<!doctype html>\n");
     await assert.rejects(
       () => validateProductionPublication(root),
       /publication root inventory is not exactly/,
+    );
+
+    await rm(join(root, "index.html"));
+    await mkdir(join(root, "host", "empty-directory"));
+    await assert.rejects(
+      () => validateProductionPublication(root),
+      /empty or nested publication directory/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

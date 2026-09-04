@@ -22,6 +22,7 @@ import {
   canonicalJson,
   enumerateArtifacts,
   packageRelease,
+  readPrivateKeySource,
   validateRelativeArtifactPath,
 } from "./frontend-release-package.mjs";
 
@@ -357,7 +358,7 @@ void describe("frontend release packager", () => {
     await writeFile(join(directoryManifest, "remoteEntry.js"), "remote");
     await assert.rejects(
       enumerateArtifacts(directoryManifest),
-      /missing required mf-manifest\.json/,
+      /missing required mf-manifest\.json|unexpected or nested directory/,
     );
 
     const symlinkFile = await builtRemoteTree();
@@ -411,6 +412,22 @@ void describe("frontend release packager", () => {
     );
     await assert.rejects(readFile(output), /ENOENT/);
     await assert.rejects(readFile(join(input, "package", "release.json")), /ENOENT/);
+  });
+
+  void it("rejects a symlinked private-key path before opening it", async () => {
+    const directory = await temporaryDirectory("cadence-release-key-race-");
+    const keyPath = join(directory, "key.der");
+    const linkPath = join(directory, "key-link.der");
+    const keys = keyPair();
+    await writeFile(keyPath, keys.privateKey.export({ format: "der", type: "pkcs8" }), {
+      mode: 0o600,
+    });
+    await symlink(keyPath, linkPath);
+
+    await assert.rejects(
+      readPrivateKeySource({ privateKeyFile: linkPath }),
+      /regular non-symlink file/,
+    );
   });
 
   void it("rejects absolute, traversal, backslash, drive, and unnormalized paths", () => {
@@ -503,6 +520,7 @@ void describe("frontend release packager", () => {
     const outputParent = await temporaryDirectory("cadence-release-snapshot-output-");
     const output = join(outputParent, "package");
     const appPath = join(input, "assets", "app.js");
+    const laterPath = join(input, "assets", "later-added.js");
     const originalBytes = await readFile(appPath);
     const swappedBytes = Buffer.from("export const release = 'swapped';\n", "utf8");
     assert.equal(swappedBytes.byteLength, originalBytes.byteLength);
@@ -516,15 +534,43 @@ void describe("frontend release packager", () => {
       privateKey: keyPair().privateKey,
       afterSnapshot: async () => {
         await writeFile(appPath, swappedBytes);
+        await writeFile(laterPath, "export const later = true;\n");
       },
     });
 
-    assert.deepEqual(await readFile(join(output, "artifacts", "assets", "app.js")), originalBytes);
+    assert.deepEqual(
+      await readFile(join(output, "artifacts", "assets", "app.js")),
+      originalBytes,
+    );
     assert.deepEqual(
       result.artifacts.find(({ path }) => path === "assets/app.js").bytes,
       originalBytes,
     );
     assert.deepEqual(await readFile(appPath), swappedBytes);
+    await assert.rejects(
+      readFile(join(output, "artifacts", "assets", "later-added.js")),
+      /ENOENT/,
+    );
+  });
+
+  void it("rejects empty and nested input directories as exact-tree violations", async () => {
+    const empty = await builtRemoteTree();
+    await mkdir(join(empty, "empty-directory"));
+    await assert.rejects(
+      enumerateArtifacts(empty),
+      /unexpected or nested directory empty-directory/,
+    );
+
+    const nested = await builtRemoteTree();
+    await mkdir(join(nested, "assets", "nested"));
+    await writeFile(
+      join(nested, "assets", "nested", "asset.js"),
+      "export const nested = true;\n",
+    );
+    await assert.rejects(
+      enumerateArtifacts(nested),
+      /unexpected or nested directory assets\/nested/,
+    );
   });
 
   void it("keeps the package output outside the repository and requires explicit metadata", async () => {

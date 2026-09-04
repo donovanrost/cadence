@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,8 @@ const publicationBundles = [
 ];
 const hostFiles = new Set(["host.js", "plugin-host.css"]);
 const publicationEntries = new Set(["host", ...publicationBundles.map(([bundle]) => bundle)]);
+const authoritativeHostJavascriptDigest =
+  "a9eb2eed5aac504a6d83799d03ead5e47062cac89c89ceeab9f92361dce41076";
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);
@@ -28,8 +31,13 @@ async function outputFiles(directory, outputRoot) {
   const files = [];
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await outputFiles(path, outputRoot)));
-    else if (entry.isFile()) files.push(path);
+    if (entry.isDirectory()) {
+      const nested = await outputFiles(path, outputRoot);
+      if (nested.length === 0) {
+        fail(`empty or nested publication directory ${relative(outputRoot, path).split(sep).join("/")}`);
+      }
+      files.push(...nested);
+    } else if (entry.isFile()) files.push(path);
     else fail(`unsupported publication entry ${relative(outputRoot, path).split(sep).join("/")}`);
   }
   return files;
@@ -66,6 +74,16 @@ function assertHostReferences(source, name) {
   }
 }
 
+function isAuthoritativeHostJavascript(name, source, files) {
+  return (
+    name === "host.js" &&
+    files.size === hostFiles.size &&
+    [...hostFiles].every((file) => files.has(file)) &&
+    createHash("sha256").update(source, "utf8").digest("hex") ===
+      authoritativeHostJavascriptDigest
+  );
+}
+
 async function validateHostPublication(root) {
   const stats = await lstat(root).catch(() => fail(`host publication is unavailable: ${root}`));
   if (stats.isSymbolicLink()) fail("host publication directory must not be a symlink");
@@ -81,7 +99,11 @@ async function validateHostPublication(root) {
     const name = relative(root, path).split(sep).join("/");
     const source = await readFile(path, "utf8").catch(() => fail(`${name} is unreadable`));
     assertHostReferences(source, name);
-    if (name.endsWith(".js")) assertImportReferences(source, name, files, root);
+    if (name.endsWith(".js")) {
+      assertImportReferences(source, name, files, root, new Set(), {
+        authoritativeHostPublication: isAuthoritativeHostJavascript(name, source, files),
+      });
+    }
     if (extname(name).toLowerCase() === ".css") assertCssReferences(source, name, files, root);
   }
   return { outputRoot: root, fileCount: paths.length };
