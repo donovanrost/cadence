@@ -89,24 +89,48 @@ async function temporaryDirectory(prefix = "cadence-release-package-") {
 async function builtRemoteTree() {
   const directory = await temporaryDirectory();
   await mkdir(join(directory, "assets"), { recursive: true });
-  await mkdir(join(directory, "nested"), { recursive: true });
-  await writeFile(
-    join(directory, "mf-manifest.json"),
-    Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8"),
-  );
-  await writeFile(
-    join(directory, "remoteEntry.js"),
-    Buffer.from("export { default } from './assets/app.js';\n", "utf8"),
-  );
-  await writeFile(
-    join(directory, "assets", "app.js"),
-    Buffer.from("export const release = 'phase-c';\n", "utf8"),
-  );
-  await writeFile(
-    join(directory, "nested", "theme.css"),
-    Buffer.from(":root { --phase: c; }\n", "utf8"),
-  );
+  for (const [path, bytes] of Object.entries(packageFixtureFiles())) {
+    await writeFile(join(directory, path), bytes);
+  }
   return directory;
+}
+
+function packageFixtureFiles() {
+  const files = {
+    "assets/app.js": "export const release = 'phase-c';\n",
+    "assets/theme.css": ":root { --phase: c; }\n",
+    "mf-manifest.json": JSON.stringify({
+      id: "cadence_telemetry_decom",
+      name: "cadence_telemetry_decom",
+      metaData: { publicPath: "auto", remoteEntry: { path: "", name: "remoteEntry.js" } },
+      shared: [
+        {
+          name: "vue",
+          assets: { js: { async: [], sync: ["remoteEntry.js"] }, css: { async: [], sync: [] } },
+        },
+      ],
+      exposes: [
+        {
+          name: "./Application",
+          assets: {
+            js: { async: [], sync: ["assets/app.js"] },
+            css: { async: [], sync: ["assets/theme.css"] },
+          },
+        },
+      ],
+    }),
+    "mf-stats.json": JSON.stringify({
+      buildOutput: [
+        { fileName: "assets/app.js" },
+        { fileName: "assets/theme.css" },
+        { fileName: "remoteEntry.js" },
+      ],
+    }),
+    "remoteEntry.js": "export { default } from './assets/app.js';\n",
+  };
+  return Object.fromEntries(
+    Object.entries(files).map(([path, contents]) => [path, Buffer.from(contents, "utf8")]),
+  );
 }
 
 async function runCli(argumentsList, environment = {}) {
@@ -159,6 +183,7 @@ void describe("frontend release packager", () => {
     assert.equal(first.outputDirectory, join(await realpath(outputParent), "first"));
     assert.deepEqual(first.release, second.release);
     assert.deepEqual(first.documentBytes, second.documentBytes);
+    const fixtureFiles = packageFixtureFiles();
     assert.deepEqual(
       first.artifacts.map(({ path, sha256: digest, size, mediaType }) => ({
         path,
@@ -166,38 +191,18 @@ void describe("frontend release packager", () => {
         size,
         mediaType,
       })),
-      [
-        {
-          path: "assets/app.js",
-          sha256: sha256(Buffer.from("export const release = 'phase-c';\n", "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 34,
-          mediaType: "application/javascript",
-        },
-        {
-          path: "mf-manifest.json",
-          sha256: sha256(Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 32,
-          mediaType: "application/json",
-        },
-        {
-          path: "nested/theme.css",
-          sha256: sha256(Buffer.from(":root { --phase: c; }\n", "utf8")).slice("sha256:".length),
-          size: 22,
-          mediaType: "text/css",
-        },
-        {
-          path: "remoteEntry.js",
-          sha256: sha256(Buffer.from("export { default } from './assets/app.js';\n", "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 43,
-          mediaType: "application/javascript",
-        },
-      ],
+      Object.entries(fixtureFiles)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([path, bytes]) => ({
+          path,
+          sha256: sha256(bytes).slice("sha256:".length),
+          size: bytes.byteLength,
+          mediaType: path.endsWith(".js")
+            ? "application/javascript"
+            : path.endsWith(".css")
+              ? "text/css"
+              : "application/json",
+        })),
     );
 
     const logical = { ...first.release };

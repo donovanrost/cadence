@@ -8,7 +8,7 @@
     "build": "vue-tsc -b && vp build",
     "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
     "preview": "vp preview --host 127.0.0.1 --port 5173 --strictPort",
-    "test": "vp test --run"
+    "test": "node --test phoenix-build-config.test.mjs && vp test --run --exclude phoenix-build-config.test.mjs"
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",

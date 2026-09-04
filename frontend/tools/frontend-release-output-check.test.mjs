@@ -25,11 +25,11 @@ async function makeFixture(baseDirectory = tmpdir()) {
 
   const files = {
     "remoteEntry.js": `
-      import "./quoted.js";
-      import \`./backtick.js\`;
-      import "./side-effect.js";
-      export { value } from "./exported.js";
-      const loaded = import("./dynamic.js");
+      import "./assets/quoted.js";
+      import \`./assets/backtick.js\`;
+      import "./assets/side-effect.js";
+      export { value } from "./assets/exported.js";
+      const loaded = import("./assets/dynamic.js");
       const icon = new URL("./assets/image.svg", import.meta.url);
       import "https://cdn.example.test/remote.js";
       import "//cdn.example.test/remote.js";
@@ -39,11 +39,11 @@ async function makeFixture(baseDirectory = tmpdir()) {
       const member = object.import("./missing-member-call.js");
       void loaded; void icon; void member;
     `,
-    "quoted.js": "export const quoted = true;\n",
-    "backtick.js": "export const backtick = true;\n",
-    "side-effect.js": "globalThis.sideEffect = true;\n",
-    "exported.js": "export const value = true;\n",
-    "dynamic.js": "export const dynamic = true;\n",
+    "assets/quoted.js": "export const quoted = true;\n",
+    "assets/backtick.js": "export const backtick = true;\n",
+    "assets/side-effect.js": "globalThis.sideEffect = true;\n",
+    "assets/exported.js": "export const value = true;\n",
+    "assets/dynamic.js": "export const dynamic = true;\n",
     "assets/image.svg": '<svg xmlns="http://www.w3.org/2000/svg"/>\n',
     "assets/font.woff2": "font fixture\n",
     "assets/imported.css": ".imported { color: red; }\n",
@@ -56,15 +56,6 @@ async function makeFixture(baseDirectory = tmpdir()) {
       .icon { background: URL(./image.svg); src: url(./font.woff2); }
       .external { background: url(https://cdn.example.test/image.svg); }
       .protocol-relative { background: url(//cdn.example.test/image.svg); }
-    `,
-    "index.html": `
-      <!-- <img src="./missing-comment.html"> -->
-      <div title="src='./missing-string.html'">literal text</div>
-      <img src=assets/image.svg>
-      <link href="./assets/style.css">
-      <script src="?cache=1">const text = '<img src="./missing-script.html">';</script>
-      <a href=#top>top</a>
-      <a href="https://example.test/docs">external</a>
     `,
     "mf-manifest.json": JSON.stringify({
       id: "fixture_remote",
@@ -80,35 +71,35 @@ async function makeFixture(baseDirectory = tmpdir()) {
         {
           name: "./App",
           assets: {
-            js: { async: ["dynamic.js"], sync: ["remoteEntry.js"] },
+            js: {
+              async: [
+                "assets/quoted.js",
+                "assets/backtick.js",
+                "assets/side-effect.js",
+                "assets/exported.js",
+                "assets/dynamic.js",
+              ],
+              sync: ["remoteEntry.js"],
+            },
             css: { async: [], sync: ["assets/style.css"] },
           },
         },
       ],
     }),
-    "mf-stats.json": JSON.stringify({ buildOutput: [{ fileName: "remoteEntry.js" }] }),
-    ".vite/manifest.json": JSON.stringify({
-      "src/main.js": {
-        file: "remoteEntry.js",
-        imports: ["chunks/chunk.js"],
-        dynamicImports: ["chunks/dynamic.js"],
-        css: ["assets/style.css"],
-        assets: ["assets/image.svg"],
-      },
-      "chunks/chunk.js": {
-        file: "quoted.js",
-        imports: [],
-        dynamicImports: [],
-        css: [],
-        assets: [],
-      },
-      "chunks/dynamic.js": {
-        file: "dynamic.js",
-        imports: [],
-        dynamicImports: [],
-        css: [],
-        assets: [],
-      },
+    "mf-stats.json": JSON.stringify({
+      buildOutput: [
+        { fileName: "remoteEntry.js" },
+        { fileName: "assets/quoted.js" },
+        { fileName: "assets/backtick.js" },
+        { fileName: "assets/side-effect.js" },
+        { fileName: "assets/exported.js" },
+        { fileName: "assets/dynamic.js" },
+        { fileName: "assets/image.svg" },
+        { fileName: "assets/imported.css" },
+        { fileName: "assets/imported-quoted.css" },
+        { fileName: "assets/style.css" },
+        { fileName: "assets/font.woff2" },
+      ],
     }),
   };
 
@@ -187,21 +178,19 @@ void test("resolves the actual Cadence repository root from the shared tools pat
   }, dirname(repositoryRoot));
 });
 
-void test("scans quoted and unquoted references while keeping query and fragment URLs on the current document", async () => {
+void test("scans quoted and unquoted JavaScript and CSS references", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "remoteEntry.js"), 'import "../outside.js";\n');
     await expectCheckFailure(root, "fixture_remote", /escapes the output/);
   });
 
   await withFixture(async (root) => {
-    const html = await readFile(join(root, "index.html"), "utf8");
-    assert.match(html, /src=assets\/image\.svg/);
     assert.doesNotThrow(() => parseOutputDirectoryArgument(["--outDir", root]));
     await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
   });
 });
 
-void test("rejects a real CSS or HTML reference that is absent", async () => {
+void test("rejects a real CSS reference that is absent and any standalone HTML", async () => {
   await withFixture(async (root) => {
     await writeFile(join(root, "assets/style.css"), '.real { background: url("./missing.png"); }');
     await expectCheckFailure(root, "fixture_remote", /CSS URL points to missing/);
@@ -209,25 +198,98 @@ void test("rejects a real CSS or HTML reference that is absent", async () => {
 
   await withFixture(async (root) => {
     await writeFile(join(root, "index.html"), "<img src=assets/missing.svg>");
-    await expectCheckFailure(root, "fixture_remote", /HTML reference points to missing/);
+    await expectCheckFailure(root, "fixture_remote", /standalone HTML artifact/);
   });
 });
 
-void test("requires manifest imports and dynamicImports to be manifest keys with existing transitive files", async () => {
+void test("requires federation manifest and stats references to existing files", async () => {
   await withFixture(async (root) => {
-    const manifestPath = join(root, ".vite/manifest.json");
+    const manifestPath = join(root, "mf-manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest["src/main.js"].dynamicImports = ["chunks/missing.js"];
+    manifest.exposes[0].assets.js.async = ["assets/missing.js"];
     await writeFile(manifestPath, JSON.stringify(manifest));
-    await expectCheckFailure(root, "fixture_remote", /references missing manifest key/);
+    await expectCheckFailure(root, "fixture_remote", /points to missing/);
   });
 
   await withFixture(async (root) => {
-    const manifestPath = join(root, ".vite/manifest.json");
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.buildOutput.push({ fileName: "assets/missing.js" });
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /points to missing/);
+  });
+});
+
+void test("rejects forbidden names, renamed forbidden chunks, source maps, and stale output", async () => {
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "main-renamed.js"), "export const stale = true;\n");
+    await expectCheckFailure(root, "fixture_remote", /standalone, test, or contract artifact/);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "failure-application.js"), "export const stale = true;\n");
+    await expectCheckFailure(root, "fixture_remote", /standalone, test, or contract artifact/);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "quoted.js"), 'const service = "demo-auth-service";\n');
+    await expectCheckFailure(root, "fixture_remote", /forbidden demo-auth service/);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "stale.js"), "export const stale = true;\n");
+    await expectCheckFailure(root, "fixture_remote", /unreferenced or stale artifact/);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "quoted.js.map"), "{}\n");
+    await expectCheckFailure(root, "fixture_remote", /source-map artifact/);
+  });
+});
+
+void test("rejects forbidden publication references in admitted file contents", async () => {
+  const forbiddenReferences = [
+    ['const probe = "contract-probe";\n', /forbidden contract probe/],
+    ['const origin = "http://localhost:4174";\n', /forbidden development URL/],
+    ['const origin = "http://127.0.0.1:4174";\n', /forbidden development URL/],
+    ["if (import.meta.hot) import.meta.hot.accept();\n", /forbidden Vite client or HMR reference/],
+    ["//# sourceMappingURL=quoted.js.map\n", /forbidden source-map reference/],
+    ['const fallbackUrl = "/fallback";\n', /forbidden mutable fallback URL/],
+    ['const entry = "phoenix-bootstrap";\n', /forbidden standalone bootstrap reference/],
+  ];
+
+  for (const [contents, message] of forbiddenReferences) {
+    await withFixture(async (root) => {
+      await writeFile(join(root, "assets", "quoted.js"), contents);
+      await expectCheckFailure(root, "fixture_remote", message);
+    });
+  }
+
+  await withFixture(async (root) => {
+    const manifestPath = join(root, "mf-manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest["chunks/chunk.js"].file = "chunks/missing.js";
+    manifest.exposes[0].path = "./Failure";
     await writeFile(manifestPath, JSON.stringify(manifest));
-    await expectCheckFailure(root, "fixture_remote", /\.file points to missing/);
+    await expectCheckFailure(root, "fixture_remote", /non-publication module/);
+  });
+});
+
+void test("rejects output-root and nested symlinks", async () => {
+  await withFixture(async (root) => {
+    const linkRoot = await mkdtemp(join(tmpdir(), "cadence-frontend-release-output-link-"));
+    const link = join(linkRoot, "release");
+    try {
+      await symlink(root, link, "dir");
+      await assert.rejects(
+        () => validateReleaseOutput(link, "fixture_remote", repositoryRoot),
+        /output directory must not be a symlink/,
+      );
+    } finally {
+      await rm(linkRoot, { recursive: true, force: true });
+    }
+
+    await symlink(join(root, "assets", "quoted.js"), join(root, "assets", "linked.js"));
+    await expectCheckFailure(root, "fixture_remote", /unsupported output entry/);
   });
 });
 
@@ -327,7 +389,7 @@ void test("direct CLI invocation binds the expected remote identity independent 
       [checkerPath, "--outDir", root, "--remoteName", "fixture_remote"],
       { cwd: root },
     );
-    assert.match(stdout, /Release output is relocatable: 15 files checked/);
+    assert.match(stdout, /Release output is relocatable: 13 files checked/);
 
     const invalidCliArguments = [
       ["--outDir", root],

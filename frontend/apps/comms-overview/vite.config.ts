@@ -2,10 +2,22 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
 const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vue");
+const federatedEntry = resolve(__dirname, "src/federated-application.ts");
+const releaseFederationConfig = {
+  ...federationConfig,
+  manifest: {
+    additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
+      if (!Object.hasOwn(stats, "assetAnalysis")) return stats;
+      const publicationStats = { ...stats };
+      delete publicationStats.assetAnalysis;
+      return publicationStats;
+    },
+  },
+};
 const publicationRoot = resolve(
   __dirname,
   "../../../apps/cadence_web/priv/static/assets/application-host/comms-overview",
@@ -131,6 +143,18 @@ function assertOutputOutsideRepository(outputRoot: string, canonicalRepositoryRo
   }
 }
 
+function releaseOutputPlugin() {
+  return {
+    name: "cadence-comms-overview-release-output",
+    enforce: "post",
+    apply: "build",
+    config(config: ViteUserConfig) {
+      config.build ??= {};
+      config.build.manifest = false;
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const releaseBuild = mode === "release";
   const outputDirectory = releaseBuild ? releaseOutputDirectory() : undefined;
@@ -168,10 +192,20 @@ export default defineConfig(({ mode }) => {
       target: "chrome89",
       outDir: outputDirectory ?? publicationRoot,
       emptyOutDir: true,
+      ...(releaseBuild
+        ? {
+            manifest: false,
+            rollupOptions: { input: federatedEntry },
+          }
+        : {}),
     },
     test: {
       environment: "happy-dom",
     },
-    plugins: lazyPlugins(() => [vue(), federation(federationConfig)]),
+    plugins: lazyPlugins(() => [
+      vue(),
+      federation(releaseBuild ? releaseFederationConfig : federationConfig),
+      ...(releaseBuild ? [releaseOutputPlugin()] : []),
+    ]),
   };
 });

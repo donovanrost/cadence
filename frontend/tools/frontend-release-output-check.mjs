@@ -1,13 +1,61 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
-import { readFile, readdir, realpath } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const remoteNamePattern = /^[a-z][a-z0-9._-]{0,127}$/;
+const releaseMetadataFiles = new Set(["mf-manifest.json", "mf-stats.json"]);
+const forbiddenArtifactNamePattern =
+  /(?:^|[-_.])(?:contract[-_.]?probe|demo[-_.]?auth(?:[-_.]?service)?|failure[-_.]?application|index|main|phoenix[-_.]?main|phoenix[-_.]?bootstrap|standalone|spec|test)(?:[-_.]|$)/i;
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
+}
+
+export function assertReleaseArtifactPath(path) {
+  const lowerPath = path.toLowerCase();
+  const name = basename(path);
+
+  if (lowerPath.endsWith(".map")) fail(`source-map artifact ${JSON.stringify(path)} is forbidden`);
+  if (lowerPath.endsWith(".html")) {
+    fail(`standalone HTML artifact ${JSON.stringify(path)} is forbidden`);
+  }
+  if (!releaseMetadataFiles.has(path) && path !== "remoteEntry.js" && !path.startsWith("assets/")) {
+    fail(`unexpected release artifact ${JSON.stringify(path)}`);
+  }
+  if (forbiddenArtifactNamePattern.test(name)) {
+    fail(`standalone, test, or contract artifact ${JSON.stringify(path)} is forbidden`);
+  }
+}
+
+export function assertNoForbiddenPublicationReferences(source, origin) {
+  const forbiddenReferences = [
+    ["demo-auth service", /\bdemo[-_]?auth(?:[-_]?service)?\b/i],
+    ["contract probe", /(?:\bcontract[-_]?probe\b|cadence[._-]contract[._-]probe)/i],
+    [
+      "development URL",
+      /\bhttps?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#"'`),;\s]|$)/i,
+    ],
+    [
+      "Vite client or HMR reference",
+      /(?:import\.meta\.hot|\/[@]vite\/client|vite\/client|hotUpdate|__vite__hot)/i,
+    ],
+    ["source-map reference", /(?:sourceMappingURL|\.map(?:["'`?#),]|$))/i],
+    ["standalone bootstrap reference", /(?:phoenix[-_.]?main|phoenix[-_.]?bootstrap|standalone)/i],
+    [
+      "mutable fallback URL",
+      /\b(?:fallback(?:Url|Href)?|artifactBaseUrl)\b\s*(?:[:=])\s*["'`](?:https?:\/\/|\/)/i,
+    ],
+    [
+      "deployment-specific release reference",
+      /(?:\/releases\/|MF_BUILD_VERSION|process\.env\.NODE_ENV)/i,
+    ],
+  ];
+
+  for (const [label, pattern] of forbiddenReferences) {
+    if (pattern.test(source)) fail(`${origin} contains a forbidden ${label}`);
+  }
 }
 
 export function parseOutputDirectoryArgument(argumentsList) {
@@ -189,7 +237,7 @@ function assertManifestPath(value, files, label, outputRoot) {
   assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
 }
 
-function assertAssetLists(value, files, label, outputRoot) {
+function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail(`${label} is not an asset map`);
   }
@@ -203,6 +251,7 @@ function assertAssetLists(value, files, label, outputRoot) {
       if (!Array.isArray(assets[phase])) fail(`${label}.${kind}.${phase} is not a list`);
       for (const asset of assets[phase]) {
         assertManifestPath(asset, files, `${label}.${kind}.${phase}`, outputRoot);
+        referencedFiles?.add(asset);
       }
     }
   }
@@ -223,29 +272,54 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
     fail("manifest remoteEntry is not the relocatable remoteEntry.js");
   }
   assertManifestPath(remoteEntry.name, files, "manifest remoteEntry.name", outputRoot);
+  const referencedFiles = new Set([remoteEntry.name]);
 
   if (!Array.isArray(manifest.shared) || manifest.shared.length === 0) {
     fail("manifest shared assets are missing");
   }
   for (const shared of manifest.shared) {
-    assertAssetLists(shared.assets, files, `manifest shared ${shared.name}`, outputRoot);
+    assertAssetLists(
+      shared.assets,
+      files,
+      `manifest shared ${shared.name}`,
+      outputRoot,
+      referencedFiles,
+    );
   }
 
   if (!Array.isArray(manifest.exposes) || manifest.exposes.length === 0) {
     fail("manifest exposes are missing");
   }
   for (const expose of manifest.exposes) {
-    assertAssetLists(expose.assets, files, `manifest expose ${expose.name}`, outputRoot);
+    const exposedModule = expose.path ?? expose.name;
+    if (
+      typeof exposedModule !== "string" ||
+      /(?:contract[-_.]?probe|demo[-_.]?auth|failure|spec|test)/i.test(exposedModule)
+    ) {
+      fail(`manifest exposes a non-publication module ${JSON.stringify(exposedModule)}`);
+    }
+    assertAssetLists(
+      expose.assets,
+      files,
+      `manifest expose ${expose.name}`,
+      outputRoot,
+      referencedFiles,
+    );
   }
+
+  return referencedFiles;
 }
 
 function assertStats(stats, files, outputRoot) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
+  const referencedFiles = new Set();
   for (const output of stats.buildOutput) {
     assertManifestPath(output.fileName, files, "federation buildOutput.fileName", outputRoot);
+    referencedFiles.add(output.fileName);
   }
+  return referencedFiles;
 }
 
 export function assertViteManifest(manifest, files, outputRoot) {
@@ -621,40 +695,72 @@ export function assertHtmlReferences(source, origin, files, outputRoot) {
   }
 }
 
-export async function validateReleaseOutput(
+async function assertOutputDirectory(outputArgument) {
+  const stats = await lstat(outputArgument).catch(() => fail("output directory is unavailable"));
+  if (stats.isSymbolicLink()) fail("output directory must not be a symlink");
+  if (!stats.isDirectory()) fail("output path must be a directory");
+}
+
+function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
+  const references = [...source.matchAll(/\/assets\/application-host\/[A-Za-z0-9._/-]+/g)].map(
+    ([reference]) => reference,
+  );
+  if (references.length === 0) return;
+  if (!allowedDeploymentPath) {
+    fail(`${origin} contains a deployment-specific publication path`);
+  }
+
+  const expectedPrefix = `/assets/application-host/${allowedDeploymentPath}/`;
+  for (const reference of references) {
+    if (!reference.startsWith(expectedPrefix)) {
+      fail(`${origin} contains an unexpected deployment path ${JSON.stringify(reference)}`);
+    }
+  }
+}
+
+export async function validateFederationOutput(
   outputArgument,
   expectedRemoteName,
-  repositoryRootInput = repositoryRoot,
+  { repositoryRootInput = repositoryRoot, requireExternal = true, allowedDeploymentPath } = {},
 ) {
   assertRemoteName(expectedRemoteName, "expected remote name");
   const canonicalRepositoryRoot = await realpath(repositoryRootInput).catch(() =>
     fail("repository root is unavailable"),
   );
+  await assertOutputDirectory(outputArgument);
   const outputRoot = canonicalPathWithMissingTail(outputArgument);
-  assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot);
+  if (requireExternal) assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot);
 
   const paths = await outputFiles(outputRoot, outputRoot);
   if (paths.length === 0) fail("output is empty");
 
   const files = new Set(paths.map((path) => relativePath(outputRoot, path)));
-  for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js", "index.html"]) {
+  for (const path of files) assertReleaseArtifactPath(path);
+  for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
     if (!files.has(required)) fail(`missing required ${required}`);
   }
   if (!paths.some((path) => extname(path) === ".css")) fail("no CSS asset was emitted");
-  if (!paths.some((path) => /\.(?:woff2?|ttf|otf)$/i.test(path))) {
-    fail("no font asset was emitted");
-  }
 
   const manifest = JSON.parse(await readFile(join(outputRoot, "mf-manifest.json"), "utf8"));
-  assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot);
+  const manifestReferences = assertGeneratedManifest(
+    manifest,
+    expectedRemoteName,
+    files,
+    outputRoot,
+  );
 
   const stats = JSON.parse(await readFile(join(outputRoot, "mf-stats.json"), "utf8"));
-  assertStats(stats, files, outputRoot);
-
-  const viteManifestPath = join(outputRoot, ".vite/manifest.json");
-  if (files.has(".vite/manifest.json")) {
-    const viteManifest = JSON.parse(await readFile(viteManifestPath, "utf8"));
-    assertViteManifest(viteManifest, files, outputRoot);
+  const statsReferences = assertStats(stats, files, outputRoot);
+  for (const reference of manifestReferences) {
+    if (!statsReferences.has(reference)) {
+      fail(`manifest references ${JSON.stringify(reference)} missing from federation stats`);
+    }
+  }
+  for (const path of files) {
+    if (releaseMetadataFiles.has(path)) continue;
+    if (!statsReferences.has(path)) {
+      fail(`output contains an unreferenced or stale artifact ${JSON.stringify(path)}`);
+    }
   }
 
   for (const path of paths) {
@@ -662,18 +768,28 @@ export async function validateReleaseOutput(
     const source = await readFile(path, "utf8").catch(() => null);
     if (source === null) continue;
 
+    assertNoForbiddenPublicationReferences(source, name);
+    assertDeploymentReferences(source, name, allowedDeploymentPath);
+
     if (/\.(?:js|mjs|cjs)$/i.test(name)) assertImportReferences(source, name, files, outputRoot);
     if (extname(name).toLowerCase() === ".css")
       assertCssReferences(source, name, files, outputRoot);
     if (extname(name).toLowerCase() === ".html")
       assertHtmlReferences(source, name, files, outputRoot);
-
-    if (/\/assets\/application-host\/|\/releases\/|artifactBaseUrl|MF_BUILD_VERSION/.test(source)) {
-      fail(`${name} contains a deployment-specific path or build-version marker`);
-    }
   }
 
   return { outputRoot, fileCount: paths.length };
+}
+
+export async function validateReleaseOutput(
+  outputArgument,
+  expectedRemoteName,
+  repositoryRootInput = repositoryRoot,
+) {
+  return validateFederationOutput(outputArgument, expectedRemoteName, {
+    repositoryRootInput,
+    requireExternal: true,
+  });
 }
 
 export async function main(argumentsList = process.argv.slice(2)) {

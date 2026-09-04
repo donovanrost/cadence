@@ -20,6 +20,10 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertReleaseArtifactPath,
+  validateReleaseOutput,
+} from "./frontend-release-output-check.mjs";
 
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(TOOL_DIRECTORY, "../..");
@@ -304,6 +308,7 @@ async function enumerateArtifacts(inputDirectory) {
         continue;
       }
       if (!stats.isFile()) fail(`artifact ${relativePath} is not a regular file`);
+      assertReleaseArtifactPath(relativePath);
 
       const resolvedPath = await realpath(absolutePath).catch(() =>
         fail(`artifact ${relativePath} is unreadable`),
@@ -791,6 +796,7 @@ export async function buildRelease({
   if (!inputDirectory) fail("input directory is required");
   const inventory = await enumerateArtifacts(inputDirectory);
   const release = buildReleasePayload({ inventory, metadata, artifactOrigin });
+  await validateReleaseOutput(inventory.root, release.metadata.remoteName);
   const signed = createSignedEnvelope({ payloadBytes: release.payloadBytes, keyId, privateKey });
   return {
     inputRoot: inventory.root,
