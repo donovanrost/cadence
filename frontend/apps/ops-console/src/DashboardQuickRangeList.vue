@@ -1,34 +1,34 @@
 <script setup lang="ts">
-type AttributeValue = string | boolean | null
-type Attributes = Record<string, AttributeValue>
+type AttributeValue = string | boolean | null;
+type Attributes = Record<string, AttributeValue>;
 
 type QuickRangeItem = {
-  key: string
-  attrs: Attributes
-  indicator_class: string | null
-  label: string
-}
+  key: string;
+  attrs: Attributes;
+  indicator_class: string | null;
+  label: string;
+};
 
 type DashboardQuickRangeListPresentation = {
   root: {
-    attrs: Attributes
-  }
+    attrs: Attributes;
+  };
   search: {
     form: {
-      attrs: Attributes
-    }
+      attrs: Attributes;
+    };
     field: {
-      wrapper_class: string
-      attrs: Attributes
-    }
-  }
+      wrapper_class: string;
+      attrs: Attributes;
+    };
+  };
   presets: {
-    attrs: Attributes
-    items: QuickRangeItem[]
-  }
-}
+    attrs: Attributes;
+    items: QuickRangeItem[];
+  };
+};
 
-defineProps<{presentation: DashboardQuickRangeListPresentation}>()
+defineProps<{ presentation: DashboardQuickRangeListPresentation }>();
 </script>
 
 <template>

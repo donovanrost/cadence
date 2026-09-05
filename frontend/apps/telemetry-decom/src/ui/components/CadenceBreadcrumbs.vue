@@ -1,35 +1,35 @@
 <script setup lang="ts">
-import {Fragment, defineComponent, h, isVNode, type VNodeChild} from "vue"
-import type {BreadcrumbsPresentation} from "./page_shell"
+import { Fragment, defineComponent, h, isVNode, type VNodeChild } from "vue";
+import type { BreadcrumbsPresentation } from "@cadence/ui";
 
-const props = defineProps<{breadcrumbs?: BreadcrumbsPresentation}>()
+const props = defineProps<{ breadcrumbs?: BreadcrumbsPresentation }>();
 
 const slotNavClass =
-  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60";
 
 const flattenFragments = (children: VNodeChild[]): VNodeChild[] =>
   children.flatMap((child) => {
-    if (Array.isArray(child)) return flattenFragments(child)
+    if (Array.isArray(child)) return flattenFragments(child);
 
     if (isVNode(child) && child.type === Fragment && Array.isArray(child.children)) {
-      return flattenFragments(child.children)
+      return flattenFragments(child.children);
     }
 
-    return [child]
-  })
+    return [child];
+  });
 
 const TransparentBreadcrumbNav = defineComponent({
   name: "TransparentBreadcrumbNav",
   inheritAttrs: false,
-  setup(_, {slots}) {
+  setup(_, { slots }) {
     return () =>
       h(
         "nav",
-        {"aria-label": "Breadcrumb", class: slotNavClass},
+        { "aria-label": "Breadcrumb", class: slotNavClass },
         flattenFragments(slots.default?.() ?? []),
-      )
+      );
   },
-})
+});
 </script>
 
 <template>

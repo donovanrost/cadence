@@ -1,35 +1,34 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
 
-type Status = "info" | "ready" | "blocked"
+type Status = "info" | "ready" | "blocked";
 
 type Revision = {
-  label: string
-  href: string
-}
+  label: string;
+  href: string;
+};
 
 type ImportRun = {
-  status: Status
-  status_label: string
-  href: string
-}
+  status: Status;
+  status_label: string;
+  href: string;
+};
 
 type DatabaseRow = {
-  id: string
-  actions_id: string
-  name: string
-  slug: string
-  href: string
-  latest_revision: Revision | null
-  latest_import: ImportRun | null
-}
+  id: string;
+  actions_id: string;
+  name: string;
+  slug: string;
+  href: string;
+  latest_revision: Revision | null;
+  latest_import: ImportRun | null;
+};
 
-defineProps<{rows: DatabaseRow[]}>()
-
+defineProps<{ rows: DatabaseRow[] }>();
 </script>
 
 <template>
@@ -44,18 +43,15 @@ defineProps<{rows: DatabaseRow[]}>()
       </tr>
     </thead>
     <tbody>
-      <CadenceHoverTableRow
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-      >
+      <CadenceHoverTableRow v-for="row in rows" :id="row.id" :key="row.id">
         <td>
           <a
             :href="row.href"
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="font-medium hover:underline"
-          >{{ row.name }}</a>
+            >{{ row.name }}</a
+          >
           <p class="font-mono text-xs text-base-content/60">{{ row.slug }}</p>
         </td>
         <td>
@@ -65,7 +61,8 @@ defineProps<{rows: DatabaseRow[]}>()
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="font-mono text-sm hover:underline"
-          >{{ row.latest_revision.label }}</a>
+            >{{ row.latest_revision.label }}</a
+          >
           <span v-else class="text-xs text-base-content/50">No revisions</span>
         </td>
         <td>
@@ -100,7 +97,7 @@ defineProps<{rows: DatabaseRow[]}>()
                 <span class="hero-ellipsis-vertical h-4 w-4"></span>
               </button>
             </template>
-            <template #content="{open}">
+            <template #content="{ open }">
               <div
                 :aria-labelledby="row.actions_id"
                 class="z-50 min-w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
@@ -111,7 +108,8 @@ defineProps<{rows: DatabaseRow[]}>()
                     data-phx-link="redirect"
                     data-phx-link-state="push"
                     class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
-                  >View database</a>
+                    >View database</a
+                  >
                 </CadenceMenuItem>
               </div>
             </template>

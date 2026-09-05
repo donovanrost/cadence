@@ -37,13 +37,9 @@ type Props = {
 
 const props = defineProps<Props>();
 
-const lastPage = computed(() =>
-  Math.max(Math.ceil(props.total_count / props.page_size), 1)
-);
+const lastPage = computed(() => Math.max(Math.ceil(props.total_count / props.page_size), 1));
 const firstVisible = computed(() => (props.page - 1) * props.page_size + 1);
-const lastVisible = computed(() =>
-  Math.min(props.page * props.page_size, props.total_count)
-);
+const lastVisible = computed(() => Math.min(props.page * props.page_size, props.total_count));
 </script>
 
 <template>
@@ -76,9 +72,7 @@ const lastVisible = computed(() =>
         <tr>
           <th
             class="hud-label"
-            :aria-sort="
-              sort === 'display_name' ? `${sort_dir}ending` : undefined
-            "
+            :aria-sort="sort === 'display_name' ? `${sort_dir}ending` : undefined"
           >
             <button
               type="button"
@@ -89,10 +83,7 @@ const lastVisible = computed(() =>
               Name
               <span
                 v-if="sort === 'display_name'"
-                :class="[
-                  'h-3 w-3',
-                  sort_dir === 'asc' ? 'hero-chevron-up' : 'hero-chevron-down',
-                ]"
+                :class="['h-3 w-3', sort_dir === 'asc' ? 'hero-chevron-up' : 'hero-chevron-down']"
               ></span>
             </button>
           </th>
@@ -104,11 +95,7 @@ const lastVisible = computed(() =>
         </tr>
       </thead>
       <tbody id="transports">
-        <CadenceHoverTableRow
-          v-for="row in rows"
-          :id="row.id"
-          :key="row.id"
-        >
+        <CadenceHoverTableRow v-for="row in rows" :id="row.id" :key="row.id">
           <td class="font-medium">
             <a
               :href="row.href"
@@ -146,17 +133,11 @@ const lastVisible = computed(() =>
       </tbody>
     </CadenceTableFrame>
 
-    <p
-      v-if="total_count === 0"
-      class="py-6 text-center text-sm text-base-content/70"
-    >
+    <p v-if="total_count === 0" class="py-6 text-center text-sm text-base-content/70">
       No transports match the current search.
     </p>
 
-    <CadencePaginationFrame
-      v-if="total_count > page_size"
-      id="transports-pagination"
-    >
+    <CadencePaginationFrame v-if="total_count > page_size" id="transports-pagination">
       <span class="font-mono text-xs text-base-content/70">
         {{ firstVisible }}–{{ lastVisible }} of {{ total_count }}
       </span>

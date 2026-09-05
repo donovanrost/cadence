@@ -160,9 +160,7 @@ describe("the generic federated application loader", () => {
     };
 
     const pending = loadFederatedApplication(application, runtime, { timeoutMs: 10 });
-    await expect(pending).rejects.toThrow(
-      "Approved release 2026.08.22.1 could not be loaded.",
-    );
+    await expect(pending).rejects.toThrow("Approved release 2026.08.22.1 could not be loaded.");
 
     resolveLoad?.({ manifest, default: { name: "LateRemote" } });
     await Promise.resolve();

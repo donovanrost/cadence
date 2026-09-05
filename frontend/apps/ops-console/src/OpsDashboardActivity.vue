@@ -1,102 +1,102 @@
 <script setup lang="ts">
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import {computed} from "vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import { computed } from "vue";
 
 type Page = {
-  id: string
+  id: string;
   header: {
-    eyebrow: string
-    heading: string
-    copy: string
-  }
+    eyebrow: string;
+    heading: string;
+    copy: string;
+  };
   actions: {
     editor: {
-      id: string
-      label: string
-      href: string
-      visible: boolean
-    }
+      id: string;
+      label: string;
+      href: string;
+      visible: boolean;
+    };
     viewer: {
-      id: string
-      label: string
-      href: string
-    }
-  }
+      id: string;
+      label: string;
+      href: string;
+    };
+  };
   versions: {
-    label: string
-    count_id: string
-    count: number
-    container_id: string
-    empty_id: string
-    empty: string
-  }
+    label: string;
+    count_id: string;
+    count: number;
+    container_id: string;
+    empty_id: string;
+    empty: string;
+  };
   activity: {
-    label: string
-    count_id: string
-    count: number
-    container_id: string
-    empty_id: string
-    empty: string
-  }
-}
+    label: string;
+    count_id: string;
+    count: number;
+    container_id: string;
+    empty_id: string;
+    empty: string;
+  };
+};
 
 type DashboardVersion = {
-  id: string
-  __dom_id: string
-  version: number
-  href: string
-  snapshot_kind: string
-  change_summary: string
-  saved: string
-}
+  id: string;
+  __dom_id: string;
+  version: number;
+  href: string;
+  snapshot_kind: string;
+  change_summary: string;
+  saved: string;
+};
 
 type VersionAction = {
-  id: string
-  label: string
-  disabled: boolean
-  payload: {version: string}
-}
+  id: string;
+  label: string;
+  disabled: boolean;
+  payload: { version: string };
+};
 
 type SelectedVersion = {
-  version: number
-  change_summary: string
+  version: number;
+  change_summary: string;
   actions: {
-    visible: boolean
-    restore: VersionAction
-    publish: VersionAction
-  }
+    visible: boolean;
+    restore: VersionAction;
+    publish: VersionAction;
+  };
   details: Array<{
-    label: string
-    value: number | string
-  }>
-}
+    label: string;
+    value: number | string;
+  }>;
+};
 
 type DashboardActivity = {
-  id: string
-  __dom_id: string
-  dashboard_lifecycle_event_id: string
-  event_type: string
-  label: string
-  occurred: string
-  dashboard_version: number | null
-}
+  id: string;
+  __dom_id: string;
+  dashboard_lifecycle_event_id: string;
+  event_type: string;
+  label: string;
+  occurred: string;
+  dashboard_version: number | null;
+};
 
 const props = defineProps<{
-  surface: "header" | "versions" | "detail" | "activity"
-  page: Page
-  selected_version_number?: number | null
-  selected_version_detail?: SelectedVersion | null
-  dashboard_versions?: DashboardVersion[]
-  dashboard_activity?: DashboardActivity[]
-}>()
+  surface: "header" | "versions" | "detail" | "activity";
+  page: Page;
+  selected_version_number?: number | null;
+  selected_version_detail?: SelectedVersion | null;
+  dashboard_versions?: DashboardVersion[];
+  dashboard_activity?: DashboardActivity[];
+}>();
 
 const emit = defineEmits<{
-  publish_version: [payload: {version: string}]
-  restore_version: [payload: {version: string}]
-}>()
+  publish_version: [payload: { version: string }];
+  restore_version: [payload: { version: string }];
+}>();
 
-const versions = computed(() => props.dashboard_versions ?? [])
-const activity = computed(() => props.dashboard_activity ?? [])
+const versions = computed(() => props.dashboard_versions ?? []);
+const activity = computed(() => props.dashboard_activity ?? []);
 </script>
 
 <template>
@@ -138,10 +138,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
   <nav v-if="surface === 'versions'" class="space-y-3" aria-label="Dashboard versions">
     <div class="flex items-center justify-between">
       <p class="hud-label">{{ page.versions.label }}</p>
-      <span
-        :id="page.versions.count_id"
-        class="font-mono text-xs text-base-content/45"
-      >
+      <span :id="page.versions.count_id" class="font-mono text-xs text-base-content/45">
         {{ page.versions.count }}
       </span>
     </div>
@@ -165,7 +162,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
           'block border p-3 transition-colors',
           selected_version_number === version.version
             ? 'border-primary bg-primary/5'
-            : 'border-base-300 hover:border-primary/40'
+            : 'border-base-300 hover:border-primary/40',
         ]"
       >
         <div class="flex items-center justify-between gap-2">
@@ -187,9 +184,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p class="hud-label">Selected version</p>
-          <h2 class="mt-1 text-xl font-semibold">
-            Version {{ selected_version_detail.version }}
-          </h2>
+          <h2 class="mt-1 text-xl font-semibold">Version {{ selected_version_detail.version }}</h2>
           <p class="mt-1 text-sm text-base-content/60">
             {{ selected_version_detail.change_summary }}
           </p>
@@ -222,21 +217,13 @@ const activity = computed(() => props.dashboard_activity ?? [])
         </div>
       </dl>
     </template>
-    <p v-else class="text-sm text-base-content/55">
-      Select a version to inspect its saved state.
-    </p>
+    <p v-else class="text-sm text-base-content/55">Select a version to inspect its saved state.</p>
   </template>
 
-  <section
-    v-if="surface === 'activity'"
-    class="border border-base-300 bg-base-200/20 p-5"
-  >
+  <section v-if="surface === 'activity'" class="border border-base-300 bg-base-200/20 p-5">
     <div class="flex items-center justify-between">
       <p class="hud-label">{{ page.activity.label }}</p>
-      <span
-        :id="page.activity.count_id"
-        class="font-mono text-xs text-base-content/45"
-      >
+      <span :id="page.activity.count_id" class="font-mono text-xs text-base-content/45">
         {{ page.activity.count }}
       </span>
     </div>
@@ -262,10 +249,7 @@ const activity = computed(() => props.dashboard_activity ?? [])
             {{ event.occurred }}
           </p>
         </div>
-        <span
-          v-if="event.dashboard_version"
-          class="font-mono text-xs text-base-content/50"
-        >
+        <span v-if="event.dashboard_version" class="font-mono text-xs text-base-content/50">
           v{{ event.dashboard_version }}
         </span>
       </article>

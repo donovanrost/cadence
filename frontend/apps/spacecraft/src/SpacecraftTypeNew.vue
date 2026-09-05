@@ -1,128 +1,128 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type ProfilePage = {
-  id: string
-  title: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  title: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type FormSection = {
-  id: string
-  number: string
-  title: string
-  description: string | null
-}
+  id: string;
+  number: string;
+  title: string;
+  description: string | null;
+};
 
 type FormField = {
-  id: string
-  name: string
-  type: "text" | "number" | "select"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "text" | "number" | "select";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type ApplicationField = {
-  id: string
-  name: string
-  value: Record<string, string>
-}
+  id: string;
+  name: string;
+  value: Record<string, string>;
+};
 
 type ProfileForm = {
-  id: string
+  id: string;
   sections: {
-    identity: FormSection
-    protocols: FormSection
-    frame_parameters: FormSection
-    applications: FormSection
-  }
+    identity: FormSection;
+    protocols: FormSection;
+    frame_parameters: FormSection;
+    applications: FormSection;
+  };
   fields: {
-    display_name: FormField
-    downlink_protocol: FormField
-    uplink_protocol: FormField
-    frame_size: FormField
-    secondary_header_length: FormField
-    insert_zone_length: FormField
-    truncated_primary_header: FormField
-    ocf_length: FormField
-    applications: ApplicationField
-  }
+    display_name: FormField;
+    downlink_protocol: FormField;
+    uplink_protocol: FormField;
+    frame_size: FormField;
+    secondary_header_length: FormField;
+    insert_zone_length: FormField;
+    truncated_primary_header: FormField;
+    ocf_length: FormField;
+    applications: ApplicationField;
+  };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
 type SelectOption = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type ProfileOptions = {
-  downlink_protocols: SelectOption[]
-  uplink_protocols: SelectOption[]
-  truncated_primary_headers: SelectOption[]
-  operational_control_fields: SelectOption[]
+  downlink_protocols: SelectOption[];
+  uplink_protocols: SelectOption[];
+  truncated_primary_headers: SelectOption[];
+  operational_control_fields: SelectOption[];
   frame_fields: {
-    secondary_header_length: string[]
-    insert_zone_length: string[]
-    truncated_primary_header: string[]
-  }
-}
+    secondary_header_length: string[];
+    insert_zone_length: string[];
+    truncated_primary_header: string[];
+  };
+};
 
 type ApplicationOption = {
-  id: string
-  key: string
-  name: string
-  value: string
-  label: string
-  description: string
-  available: boolean
-  availability_label: string | null
-}
+  id: string;
+  key: string;
+  name: string;
+  value: string;
+  label: string;
+  description: string;
+  available: boolean;
+  availability_label: string | null;
+};
 
 type ProfileValues = {
-  display_name: string
-  downlink_protocol: string
-  uplink_protocol: string
-  frame_size: string
-  secondary_header_length: string
-  insert_zone_length: string
-  truncated_primary_header: string
-  ocf_length: string
-  applications: Record<string, string>
-}
+  display_name: string;
+  downlink_protocol: string;
+  uplink_protocol: string;
+  frame_size: string;
+  secondary_header_length: string;
+  insert_zone_length: string;
+  truncated_primary_header: string;
+  ocf_length: string;
+  applications: Record<string, string>;
+};
 
 type ProfilePayload = {
-  spacecraft_type: ProfileValues
-}
+  spacecraft_type: ProfileValues;
+};
 
 const props = defineProps<{
-  page: ProfilePage
-  form: ProfileForm
-  options: ProfileOptions
-  applications: ApplicationOption[]
-}>()
+  page: ProfilePage;
+  form: ProfileForm;
+  options: ProfileOptions;
+  applications: ApplicationOption[];
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: ProfilePayload]
-  save: [payload: ProfilePayload]
-}>()
+  validate: [payload: ProfilePayload];
+  save: [payload: ProfilePayload];
+}>();
 
 const formValues = (form: ProfileForm): ProfileValues => ({
   display_name: form.fields.display_name.value,
@@ -133,16 +133,16 @@ const formValues = (form: ProfileForm): ProfileValues => ({
   insert_zone_length: form.fields.insert_zone_length.value,
   truncated_primary_header: form.fields.truncated_primary_header.value,
   ocf_length: form.fields.ocf_length.value,
-  applications: {...form.fields.applications.value}
-})
+  applications: { ...form.fields.applications.value },
+});
 
-const values = reactive<ProfileValues>(formValues(props.form))
-const pendingValidations: ProfileValues[] = []
-const supersededValidations: ProfileValues[] = []
-let acceptedServerValues = formValues(props.form)
+const values = reactive<ProfileValues>(formValues(props.form));
+const pendingValidations: ProfileValues[] = [];
+const supersededValidations: ProfileValues[] = [];
+let acceptedServerValues = formValues(props.form);
 
 const applicationEntries = (applications: Record<string, string>) =>
-  Object.entries(applications).sort(([left], [right]) => left.localeCompare(right))
+  Object.entries(applications).sort(([left], [right]) => left.localeCompare(right));
 
 const sameValues = (left: ProfileValues, right: ProfileValues) =>
   left.display_name === right.display_name &&
@@ -154,57 +154,57 @@ const sameValues = (left: ProfileValues, right: ProfileValues) =>
   left.truncated_primary_header === right.truncated_primary_header &&
   left.ocf_length === right.ocf_length &&
   JSON.stringify(applicationEntries(left.applications)) ===
-    JSON.stringify(applicationEntries(right.applications))
+    JSON.stringify(applicationEntries(right.applications));
 
 const assignValues = (nextValues: ProfileValues) => {
-  Object.assign(values, nextValues, {applications: {...nextValues.applications}})
-}
+  Object.assign(values, nextValues, { applications: { ...nextValues.applications } });
+};
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm)
+    const serverValues = formValues(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
 
     if (acknowledgedIndex >= 0) {
-      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex))
+      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex));
 
-      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1
-      pendingValidations.splice(0, acknowledgedIndex + 1)
-      acceptedServerValues = serverValues
+      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1;
+      pendingValidations.splice(0, acknowledgedIndex + 1);
+      acceptedServerValues = serverValues;
 
       if (!hasNewerTyping && sameValues(profileValues(), serverValues)) {
-        assignValues(serverValues)
+        assignValues(serverValues);
       }
 
-      return
+      return;
     }
 
     const supersededIndex = supersededValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
 
     if (supersededIndex >= 0) {
-      supersededValidations.splice(supersededIndex, 1)
-      return
+      supersededValidations.splice(supersededIndex, 1);
+      return;
     }
 
-    if (sameValues(serverValues, acceptedServerValues)) return
+    if (sameValues(serverValues, acceptedServerValues)) return;
 
     if (pendingValidations.length === 0 && sameValues(profileValues(), acceptedServerValues)) {
-      assignValues(serverValues)
-      acceptedServerValues = serverValues
-      return
+      assignValues(serverValues);
+      acceptedServerValues = serverValues;
+      return;
     }
 
     if (pendingValidations.length === 0 && sameValues(profileValues(), serverValues)) {
-      acceptedServerValues = serverValues
+      acceptedServerValues = serverValues;
     }
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 function profileValues(): ProfileValues {
   return {
@@ -216,34 +216,34 @@ function profileValues(): ProfileValues {
     insert_zone_length: values.insert_zone_length,
     truncated_primary_header: values.truncated_primary_header,
     ocf_length: values.ocf_length,
-    applications: {...values.applications}
-  }
+    applications: { ...values.applications },
+  };
 }
 
 const validate = () => {
-  const profile = profileValues()
-  pendingValidations.push(profile)
-  emit("validate", {spacecraft_type: profile})
-}
+  const profile = profileValues();
+  pendingValidations.push(profile);
+  emit("validate", { spacecraft_type: profile });
+};
 
-const applicationSelected = (applicationKey: string) => applicationKey in values.applications
+const applicationSelected = (applicationKey: string) => applicationKey in values.applications;
 
 const frameFieldVisible = (field: keyof ProfileOptions["frame_fields"]) =>
-  props.options.frame_fields[field].includes(values.downlink_protocol)
+  props.options.frame_fields[field].includes(values.downlink_protocol);
 
 const toggleApplication = (applicationKey: string, event: Event) => {
-  const input = event.target as HTMLInputElement
+  const input = event.target as HTMLInputElement;
 
   if (input.checked) {
-    values.applications[applicationKey] = "1"
+    values.applications[applicationKey] = "1";
   } else {
-    delete values.applications[applicationKey]
+    delete values.applications[applicationKey];
   }
 
-  validate()
-}
+  validate();
+};
 
-const save = () => emit("save", {spacecraft_type: profileValues()})
+const save = () => emit("save", { spacecraft_type: profileValues() });
 </script>
 
 <template>
@@ -266,7 +266,8 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -302,7 +303,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             :required="form.fields.display_name.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -334,7 +335,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               v-for="option in options.downlink_protocols"
               :key="option.value"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
 
@@ -356,7 +359,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               v-for="option in options.uplink_protocols"
               :key="option.value"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
       </CadenceFormSectionFrame>
@@ -389,7 +394,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             :required="form.fields.frame_size.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -407,7 +412,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             :required="form.fields.secondary_header_length.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -425,7 +430,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
             :required="form.fields.insert_zone_length.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -447,7 +452,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               v-for="option in options.truncated_primary_headers"
               :key="option.value"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
 
@@ -469,7 +476,9 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               v-for="option in options.operational_control_fields"
               :key="option.value"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
       </CadenceFormSectionFrame>
@@ -496,7 +505,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               'flex items-start gap-3 rounded border p-3 transition-colors',
               application.available
                 ? 'border-base-300 bg-base-100/40 border-l-2 border-l-primary/40 hover:border-l-primary cursor-pointer'
-                : 'border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed'
+                : 'border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed',
             ]"
           >
             <input
@@ -508,7 +517,7 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
               :disabled="!application.available"
               class="checkbox checkbox-primary mt-0.5"
               @change="toggleApplication(application.key, $event)"
-            >
+            />
             <div>
               <div class="font-medium text-base-content">
                 {{ application.label }}
@@ -532,7 +541,8 @@ const save = () => emit("save", {spacecraft_type: profileValues()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceFormPageFrame>

@@ -1,28 +1,28 @@
 <script setup>
-import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"
-import {createNavRailController} from "./hooks/nav_rail_controller.js"
+import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
+import { createNavRailController } from "./hooks/nav_rail_controller.js";
 
 const props = defineProps({
-  groups: {type: Array, required: true},
-  dashboard_groups: {type: Array, required: true},
-  empty_state: {type: String, default: null},
-  new_dashboard: {type: Object, default: null}
-})
+  groups: { type: Array, required: true },
+  dashboard_groups: { type: Array, required: true },
+  empty_state: { type: String, default: null },
+  new_dashboard: { type: Object, default: null },
+});
 
-const rail = ref(null)
-let controller
+const rail = ref(null);
+let controller;
 
 onMounted(() => {
-  controller = createNavRailController({el: rail.value})
-  controller.mount()
-})
+  controller = createNavRailController({ el: rail.value });
+  controller.mount();
+});
 
-onUpdated(() => controller?.update())
+onUpdated(() => controller?.update());
 
 onBeforeUnmount(() => {
-  controller?.destroy()
-  controller = undefined
-})
+  controller?.destroy();
+  controller = undefined;
+});
 </script>
 
 <template>
@@ -63,7 +63,7 @@ onBeforeUnmount(() => {
           'flex items-center gap-2 px-2 py-1.5 text-xs',
           item.active
             ? 'bg-primary/10 text-primary border-l-2 border-primary'
-            : 'text-base-content/70 hover:text-base-content'
+            : 'text-base-content/70 hover:text-base-content',
         ]"
       >
         <span :class="[item.icon, 'h-4 w-4 shrink-0']"></span>
@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
             'flex items-center gap-2 px-2 py-1.5 text-xs truncate',
             dashboard.active
               ? 'bg-primary/10 text-primary border-l-2 border-primary'
-              : 'text-base-content/70 hover:text-base-content'
+              : 'text-base-content/70 hover:text-base-content',
           ]"
         >
           <span :class="[group.icon, 'h-3.5 w-3.5 shrink-0']"></span>

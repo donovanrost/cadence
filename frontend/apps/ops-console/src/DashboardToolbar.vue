@@ -1,44 +1,44 @@
 <script setup lang="ts">
-import {computed} from "vue"
+import { computed } from "vue";
 
-import DashboardComparisonToggle from "./DashboardComparisonToggle.vue"
-import DashboardEditorActions from "./DashboardEditorActions.vue"
-import DashboardRuntimeContextSelector from "./DashboardRuntimeContextSelector.vue"
-import DashboardRuntimeControls from "./DashboardRuntimeControls.vue"
-import DashboardTimePicker from "./DashboardTimePicker.vue"
-import DashboardToolbarMenu from "./DashboardToolbarMenu.vue"
-import WidgetWarning from "./WidgetWarning.vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import DashboardComparisonToggle from "./DashboardComparisonToggle.vue";
+import DashboardEditorActions from "./DashboardEditorActions.vue";
+import DashboardRuntimeContextSelector from "./DashboardRuntimeContextSelector.vue";
+import DashboardRuntimeControls from "./DashboardRuntimeControls.vue";
+import DashboardTimePicker from "./DashboardTimePicker.vue";
+import DashboardToolbarMenu from "./DashboardToolbarMenu.vue";
+import WidgetWarning from "./WidgetWarning.vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type ToolbarPresentation = Record<string, any>
+type ToolbarPresentation = Record<string, any>;
 
-const props = defineProps<{presentation: ToolbarPresentation}>()
-const emit = defineEmits(["recents-loaded", "select-range"])
+const props = defineProps<{ presentation: ToolbarPresentation }>();
+const emit = defineEmits(["recents-loaded", "select-range"]);
 
-const forwardRecentsLoaded = (payload: unknown) => emit("recents-loaded", payload)
-const forwardSelectRange = (payload: unknown) => emit("select-range", payload)
+const forwardRecentsLoaded = (payload: unknown) => emit("recents-loaded", payload);
+const forwardSelectRange = (payload: unknown) => emit("select-range", payload);
 
 const operationalScopeIdentity = computed(() => {
-  const identity = props.presentation.viewer?.operational_scope.root.attrs.id
-  return typeof identity === "string" ? identity : null
-})
+  const identity = props.presentation.viewer?.operational_scope.root.attrs.id;
+  return typeof identity === "string" ? identity : null;
+});
 
 const operationalScopePanelAttrs = computed(() => {
-  const attrs = {...(props.presentation.viewer?.operational_scope.panel.attrs || {})}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.viewer?.operational_scope.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 
 const dataHealthIdentity = computed(() => {
-  const identity = props.presentation.data_health?.root.attrs.id
-  return typeof identity === "string" ? identity : null
-})
+  const identity = props.presentation.data_health?.root.attrs.id;
+  return typeof identity === "string" ? identity : null;
+});
 
 const dataHealthPanelAttrs = computed(() => {
-  const attrs = {...(props.presentation.data_health?.panel.attrs || {})}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.data_health?.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -55,7 +55,7 @@ const dataHealthPanelAttrs = computed(() => {
         :collision-padding="16"
         v-bind="props.presentation.viewer.operational_scope.root.attrs"
       >
-        <template #trigger="{open}">
+        <template #trigger="{ open }">
           <button
             v-bind="props.presentation.viewer.operational_scope.trigger.attrs"
             :aria-expanded="String(open)"
@@ -69,23 +69,27 @@ const dataHealthPanelAttrs = computed(() => {
             <span
               v-if="props.presentation.viewer.operational_scope.trigger.override"
               v-bind="props.presentation.viewer.operational_scope.trigger.override.attrs"
-            >{{ props.presentation.viewer.operational_scope.trigger.override.text }}</span>
+              >{{ props.presentation.viewer.operational_scope.trigger.override.text }}</span
+            >
             <span :class="props.presentation.viewer.operational_scope.trigger.icon_class"></span>
           </button>
         </template>
 
-        <template #content="{open}">
-          <section
-            v-bind="operationalScopePanelAttrs"
-            :hidden="!open"
-          >
+        <template #content="{ open }">
+          <section v-bind="operationalScopePanelAttrs" :hidden="!open">
             <div :class="props.presentation.viewer.operational_scope.panel.header.class">
-              <span :class="props.presentation.viewer.operational_scope.panel.header.icon_class"></span>
+              <span
+                :class="props.presentation.viewer.operational_scope.panel.header.icon_class"
+              ></span>
               <div>
                 <p :class="props.presentation.viewer.operational_scope.panel.header.title.class">
                   {{ props.presentation.viewer.operational_scope.panel.header.title.text }}
                 </p>
-                <p :class="props.presentation.viewer.operational_scope.panel.header.description.class">
+                <p
+                  :class="
+                    props.presentation.viewer.operational_scope.panel.header.description.class
+                  "
+                >
                   {{ props.presentation.viewer.operational_scope.panel.header.description.text }}
                 </p>
               </div>
@@ -104,37 +108,74 @@ const dataHealthPanelAttrs = computed(() => {
                 v-bind="props.presentation.viewer.operational_scope.panel.body.query_options.attrs"
               >
                 <summary
-                  v-bind="props.presentation.viewer.operational_scope.panel.body.query_options.summary.attrs"
+                  v-bind="
+                    props.presentation.viewer.operational_scope.panel.body.query_options.summary
+                      .attrs
+                  "
                 >
                   <span
-                    :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.leading_class"
+                    :class="
+                      props.presentation.viewer.operational_scope.panel.body.query_options.summary
+                        .leading_class
+                    "
                   >
                     <span
-                      :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.icon_class"
+                      :class="
+                        props.presentation.viewer.operational_scope.panel.body.query_options.summary
+                          .icon_class
+                      "
                     ></span>
                     <span
-                      :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.copy_class"
+                      :class="
+                        props.presentation.viewer.operational_scope.panel.body.query_options.summary
+                          .copy_class
+                      "
                     >
                       <span
-                        :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.title.class"
-                      >{{ props.presentation.viewer.operational_scope.panel.body.query_options.summary.title.text }}</span>
+                        :class="
+                          props.presentation.viewer.operational_scope.panel.body.query_options
+                            .summary.title.class
+                        "
+                        >{{
+                          props.presentation.viewer.operational_scope.panel.body.query_options
+                            .summary.title.text
+                        }}</span
+                      >
                       <span
-                        :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.description.class"
-                      >{{ props.presentation.viewer.operational_scope.panel.body.query_options.summary.description.text }}</span>
+                        :class="
+                          props.presentation.viewer.operational_scope.panel.body.query_options
+                            .summary.description.class
+                        "
+                        >{{
+                          props.presentation.viewer.operational_scope.panel.body.query_options
+                            .summary.description.text
+                        }}</span
+                      >
                     </span>
                   </span>
                   <span
-                    :class="props.presentation.viewer.operational_scope.panel.body.query_options.summary.chevron_class"
+                    :class="
+                      props.presentation.viewer.operational_scope.panel.body.query_options.summary
+                        .chevron_class
+                    "
                   ></span>
                 </summary>
                 <div
-                  v-bind="props.presentation.viewer.operational_scope.panel.body.query_options.panel.attrs"
+                  v-bind="
+                    props.presentation.viewer.operational_scope.panel.body.query_options.panel.attrs
+                  "
                 >
                   <div
-                    v-bind="props.presentation.viewer.operational_scope.panel.body.query_options.panel.runtime_controls_host.attrs"
+                    v-bind="
+                      props.presentation.viewer.operational_scope.panel.body.query_options.panel
+                        .runtime_controls_host.attrs
+                    "
                   >
                     <DashboardRuntimeControls
-                      :runtime_controls="props.presentation.viewer.operational_scope.panel.body.query_options.panel.runtime_controls"
+                      :runtime_controls="
+                        props.presentation.viewer.operational_scope.panel.body.query_options.panel
+                          .runtime_controls
+                      "
                     />
                   </div>
                 </div>
@@ -169,24 +210,20 @@ const dataHealthPanelAttrs = computed(() => {
       :collision-padding="16"
       v-bind="props.presentation.data_health.root.attrs"
     >
-      <template #trigger="{open}">
-        <button
-          v-bind="props.presentation.data_health.trigger.attrs"
-          :aria-expanded="String(open)"
-        >
+      <template #trigger="{ open }">
+        <button v-bind="props.presentation.data_health.trigger.attrs" :aria-expanded="String(open)">
           <span v-bind="props.presentation.data_health.trigger.badge.attrs">
             <span :class="props.presentation.data_health.trigger.badge.icon_class"></span>
             <span>{{ props.presentation.data_health.trigger.badge.count }}</span>
-            <span class="hidden sm:inline">{{ props.presentation.data_health.trigger.badge.label }}</span>
+            <span class="hidden sm:inline">{{
+              props.presentation.data_health.trigger.badge.label
+            }}</span>
           </span>
         </button>
       </template>
 
-      <template #content="{open}">
-        <section
-          v-bind="dataHealthPanelAttrs"
-          :hidden="!open"
-        >
+      <template #content="{ open }">
+        <section v-bind="dataHealthPanelAttrs" :hidden="!open">
           <div :class="props.presentation.data_health.panel.body.class">
             <div :class="props.presentation.data_health.panel.body.header.class">
               <span :class="props.presentation.data_health.panel.body.header.icon_class"></span>
@@ -215,7 +252,9 @@ const dataHealthPanelAttrs = computed(() => {
             <p
               v-if="props.presentation.data_health.panel.body.degraded_message"
               :class="props.presentation.data_health.panel.body.degraded_message.class"
-            >{{ props.presentation.data_health.panel.body.degraded_message.text }}</p>
+            >
+              {{ props.presentation.data_health.panel.body.degraded_message.text }}
+            </p>
             <a v-bind="props.presentation.data_health.panel.body.action.attrs">
               <span :class="props.presentation.data_health.panel.body.action.icon_class"></span>
               {{ props.presentation.data_health.panel.body.action.text }}
@@ -224,7 +263,9 @@ const dataHealthPanelAttrs = computed(() => {
               v-if="props.presentation.data_health.panel.body.diagnostics_action"
               v-bind="props.presentation.data_health.panel.body.diagnostics_action.attrs"
             >
-              <span :class="props.presentation.data_health.panel.body.diagnostics_action.icon_class"></span>
+              <span
+                :class="props.presentation.data_health.panel.body.diagnostics_action.icon_class"
+              ></span>
               {{ props.presentation.data_health.panel.body.diagnostics_action.text }}
             </a>
           </div>

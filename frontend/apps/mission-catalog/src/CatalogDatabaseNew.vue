@@ -1,41 +1,41 @@
 <script setup lang="ts">
-import CatalogUploadForm from "./CatalogUploadForm.vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
+import CatalogUploadForm from "./CatalogUploadForm.vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Page = {
-  id: string
-  heading: string
-  breadcrumbs: Breadcrumb[]
+  id: string;
+  heading: string;
+  breadcrumbs: Breadcrumb[];
   cancel: {
-    id: string
-    label: string
-    href: string
-  }
-}
+    id: string;
+    label: string;
+    href: string;
+  };
+};
 
-type CatalogUploadFormProps = InstanceType<typeof CatalogUploadForm>["$props"]
+type CatalogUploadFormProps = InstanceType<typeof CatalogUploadForm>["$props"];
 
 defineProps<{
-  page: Page
-  form: CatalogUploadFormProps["form"]
-  upload: CatalogUploadFormProps["upload"]
-  detected_importer: CatalogUploadFormProps["detected_importer"]
-  submit_disabled: boolean
-}>()
+  page: Page;
+  form: CatalogUploadFormProps["form"];
+  upload: CatalogUploadFormProps["upload"];
+  detected_importer: CatalogUploadFormProps["detected_importer"];
+  submit_disabled: boolean;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: Record<string, Record<string, string>>]
-  save: []
-  "cancel-upload": [payload: {ref: string}]
-}>()
+  validate: [payload: Record<string, Record<string, string>>];
+  save: [];
+  "cancel-upload": [payload: { ref: string }];
+}>();
 </script>
 
 <template>
@@ -58,7 +58,8 @@ const emit = defineEmits<{
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -85,7 +86,8 @@ const emit = defineEmits<{
         data-phx-link="redirect"
         data-phx-link-state="push"
         class="btn btn-ghost"
-      >{{ page.cancel.label }}</a>
+        >{{ page.cancel.label }}</a
+      >
     </div>
   </CadenceFormPageFrame>
 </template>

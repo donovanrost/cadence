@@ -1,7 +1,7 @@
 <script lang="ts">
-import {Fragment, cloneVNode, defineComponent, h, isVNode, type VNodeChild} from "vue"
+import { Fragment, cloneVNode, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
-const frameClass = "space-y-4"
+const frameClass = "space-y-4";
 
 const flattenSlotChildren = (
   children: VNodeChild[],
@@ -10,16 +10,16 @@ const flattenSlotChildren = (
 ): VNodeChild[] =>
   children.flatMap((child, index) => {
     if (Array.isArray(child)) {
-      return flattenSlotChildren(child, inheritedKey, [...keyPath, index])
+      return flattenSlotChildren(child, inheritedKey, [...keyPath, index]);
     }
 
     if (isVNode(child) && child.type === Fragment && Array.isArray(child.children)) {
-      const fragmentKey = child.key ?? inheritedKey
+      const fragmentKey = child.key ?? inheritedKey;
       return flattenSlotChildren(
         child.children,
         fragmentKey,
         child.key === null ? [...keyPath, index] : [],
-      )
+      );
     }
 
     if (inheritedKey !== null && isVNode(child) && child.key === null) {
@@ -27,22 +27,22 @@ const flattenSlotChildren = (
         cloneVNode(child, {
           key: `${String(inheritedKey)}:${[...keyPath, index].join(".")}`,
         }),
-      ]
+      ];
     }
 
-    return [child]
-  })
+    return [child];
+  });
 
 export default defineComponent({
   name: "CadenceFormSectionFrame",
   inheritAttrs: false,
-  setup(_, {attrs, slots}) {
+  setup(_, { attrs, slots }) {
     return () =>
       h(
         "section",
-        {...attrs, class: [frameClass, attrs.class]},
+        { ...attrs, class: [frameClass, attrs.class] },
         flattenSlotChildren(slots.default?.() ?? []),
-      )
+      );
   },
-})
+});
 </script>

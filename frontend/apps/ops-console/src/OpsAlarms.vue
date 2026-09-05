@@ -1,179 +1,181 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import {onBeforeUnmount, reactive, watch} from "vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue"
-import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import { onBeforeUnmount, reactive, watch } from "vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue";
+import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue";
 
-type Severity = "critical" | "warning" | "info" | "nominal"
+type Severity = "critical" | "warning" | "info" | "nominal";
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type SelectField = {
-  id: string
-  name: string
-  type: "select"
-  label: string
-  options: Option[]
-}
+  id: string;
+  name: string;
+  type: "select";
+  label: string;
+  options: Option[];
+};
 
 type SearchField = {
-  id: string
-  name: string
-  type: "search"
-  label: string
-  placeholder: string
-  debounce_ms: number
-}
+  id: string;
+  name: string;
+  type: "search";
+  label: string;
+  placeholder: string;
+  debounce_ms: number;
+};
 
 type FilterValues = {
-  severity: string
-  state: string
-  spacecraft_id: string
-  query: string
-}
+  severity: string;
+  state: string;
+  spacecraft_id: string;
+  query: string;
+};
 
 type Alarm = {
-  id: string
-  __dom_id: string
-  limit_event_id: string
-  severity: Severity
-  limit_state: string
-  state_label: string
-  point_name: string
-  context: string
+  id: string;
+  __dom_id: string;
+  limit_event_id: string;
+  severity: Severity;
+  limit_state: string;
+  state_label: string;
+  point_name: string;
+  context: string;
   value: {
-    label: string
-    display: string
-  }
+    label: string;
+    display: string;
+  };
   observed: {
-    label: string
-    display: string
-  }
+    label: string;
+    display: string;
+  };
   evidence: {
-    id: string
-    href: string
-    title: string
-    icon: string
-    label: string
-  }
+    id: string;
+    href: string;
+    title: string;
+    icon: string;
+    label: string;
+  };
   definition: {
-    id: string
-    href: string
-    title: string
-    icon: string
-    label: string
-  }
-}
+    id: string;
+    href: string;
+    title: string;
+    icon: string;
+    label: string;
+  };
+};
 
 const props = defineProps<{
   page: {
-    id: string
+    id: string;
     header: {
-      eyebrow: string
-      heading: string
-      copy: string
-    }
-    conditions_id: string
-  }
+      eyebrow: string;
+      heading: string;
+      copy: string;
+    };
+    conditions_id: string;
+  };
   summary: {
-    id: string
-    active_count: number
-    observed: string
+    id: string;
+    active_count: number;
+    observed: string;
     badges: Array<{
-      severity: Exclude<Severity, "nominal">
-      count: number
-      label: string
-    }>
-  }
+      severity: Exclude<Severity, "nominal">;
+      count: number;
+      label: string;
+    }>;
+  };
   filters: {
-    id: string
-    values: FilterValues
+    id: string;
+    values: FilterValues;
     fields: {
-      severity: SelectField
-      state: SelectField
-      spacecraft_id: SelectField
-      query: SearchField
-    }
-  }
+      severity: SelectField;
+      state: SelectField;
+      spacecraft_id: SelectField;
+      query: SearchField;
+    };
+  };
   reset: {
-    id: string
-    label: string
-  }
+    id: string;
+    label: string;
+  };
   empty: {
-    id: string
-    icon: string
-    heading: string
-    copy: string
-  }
-  alarms: Alarm[]
-}>()
+    id: string;
+    icon: string;
+    heading: string;
+    copy: string;
+  };
+  alarms: Alarm[];
+}>();
 
 const emit = defineEmits<{
-  filter: [payload: {filters: FilterValues}]
-  reset_filters: [payload: Record<string, never>]
-}>()
+  filter: [payload: { filters: FilterValues }];
+  reset_filters: [payload: Record<string, never>];
+}>();
 
 const severityClasses: Record<Severity, string> = {
   critical: "bg-error/20 text-error",
   warning: "bg-warning/20 text-warning",
   info: "bg-info/20 text-info",
-  nominal: "bg-success/20 text-success"
-}
+  nominal: "bg-success/20 text-success",
+};
 
-const filterValues = reactive<FilterValues>({...props.filters.values})
-let queryTimer: ReturnType<typeof setTimeout> | undefined
+const filterValues = reactive<FilterValues>({ ...props.filters.values });
+let queryTimer: ReturnType<typeof setTimeout> | undefined;
 
 watch(
   () => props.filters.values,
-  values => {
-    if (queryTimer !== undefined) clearTimeout(queryTimer)
-    queryTimer = undefined
-    Object.assign(filterValues, values)
+  (values) => {
+    if (queryTimer !== undefined) clearTimeout(queryTimer);
+    queryTimer = undefined;
+    Object.assign(filterValues, values);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 onBeforeUnmount(() => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
-})
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
+});
 
 const emitFilters = () => {
-  emit("filter", {filters: {...filterValues}})
-}
+  emit("filter", { filters: { ...filterValues } });
+};
 
 const updateSelect = (key: "severity" | "state" | "spacecraft_id", event: Event) => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
-  queryTimer = undefined
-  filterValues[key] = (event.target as HTMLSelectElement).value
-  emitFilters()
-}
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
+  queryTimer = undefined;
+  filterValues[key] = (event.target as HTMLSelectElement).value;
+  emitFilters();
+};
 
 const updateQuery = (event: Event) => {
-  filterValues.query = (event.target as HTMLInputElement).value
+  filterValues.query = (event.target as HTMLInputElement).value;
 
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
   queryTimer = setTimeout(() => {
-    queryTimer = undefined
-    emitFilters()
-  }, props.filters.fields.query.debounce_ms)
-}
+    queryTimer = undefined;
+    emitFilters();
+  }, props.filters.fields.query.debounce_ms);
+};
 
 const resetFilters = () => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
-  queryTimer = undefined
-  emit("reset_filters", {})
-}
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
+  queryTimer = undefined;
+  emit("reset_filters", {});
+};
 </script>
 
 <template>
   <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div
+        class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"
+      >
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
             {{ page.header.eyebrow }}
@@ -208,96 +210,91 @@ const resetFilters = () => {
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
         @submit.prevent
       >
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.severity.label"
-            label-class="hud-label block mb-1.5"
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.severity.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.severity.id"
+            :name="filters.fields.severity.name"
+            :value="filterValues.severity"
+            class="w-full select"
+            @change="updateSelect('severity', $event)"
           >
-            <select
-              :id="filters.fields.severity.id"
-              :name="filters.fields.severity.name"
-              :value="filterValues.severity"
-              class="w-full select"
-              @change="updateSelect('severity', $event)"
+            <option
+              v-for="option in filters.fields.severity.options"
+              :key="option.value"
+              :value="option.value"
             >
-              <option
-                v-for="option in filters.fields.severity.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.state.label"
-            label-class="hud-label block mb-1.5"
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.state.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.state.id"
+            :name="filters.fields.state.name"
+            :value="filterValues.state"
+            class="w-full select"
+            @change="updateSelect('state', $event)"
           >
-            <select
-              :id="filters.fields.state.id"
-              :name="filters.fields.state.name"
-              :value="filterValues.state"
-              class="w-full select"
-              @change="updateSelect('state', $event)"
+            <option
+              v-for="option in filters.fields.state.options"
+              :key="option.value"
+              :value="option.value"
             >
-              <option
-                v-for="option in filters.fields.state.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.spacecraft_id.label"
-            label-class="hud-label block mb-1.5"
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.spacecraft_id.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.spacecraft_id.id"
+            :name="filters.fields.spacecraft_id.name"
+            :value="filterValues.spacecraft_id"
+            class="w-full select"
+            @change="updateSelect('spacecraft_id', $event)"
           >
-            <select
-              :id="filters.fields.spacecraft_id.id"
-              :name="filters.fields.spacecraft_id.name"
-              :value="filterValues.spacecraft_id"
-              class="w-full select"
-              @change="updateSelect('spacecraft_id', $event)"
+            <option
+              v-for="option in filters.fields.spacecraft_id.options"
+              :key="option.value"
+              :value="option.value"
             >
-              <option
-                v-for="option in filters.fields.spacecraft_id.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.query.label"
-            label-class="hud-label block mb-1.5"
-          >
-            <input
-              :id="filters.fields.query.id"
-              :name="filters.fields.query.name"
-              :type="filters.fields.query.type"
-              :value="filterValues.query"
-              :placeholder="filters.fields.query.placeholder"
-              class="w-full input"
-              @input="updateQuery"
-            >
-          </CadenceField>
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.query.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="filters.fields.query.id"
+            :name="filters.fields.query.name"
+            :type="filters.fields.query.type"
+            :value="filterValues.query"
+            :placeholder="filters.fields.query.placeholder"
+            class="w-full input"
+            @input="updateQuery"
+          />
+        </CadenceField>
       </form>
 
       <div class="flex items-center justify-between gap-3">
         <p class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45">
           {{ summary.observed }}
         </p>
-        <button
-          :id="reset.id"
-          type="button"
-          class="btn btn-ghost btn-xs"
-          @click="resetFilters"
-        >
+        <button :id="reset.id" type="button" class="btn btn-ghost btn-xs" @click="resetFilters">
           {{ reset.label }}
         </button>
       </div>

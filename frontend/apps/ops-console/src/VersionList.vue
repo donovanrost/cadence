@@ -1,17 +1,13 @@
 <script setup>
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>
   <div v-bind="presentation.root.attrs">
     <div v-bind="presentation.pointers.attrs">
-      <div
-        v-for="pointer in presentation.pointers.items"
-        :key="pointer.key"
-        v-bind="pointer.attrs"
-      >
+      <div v-for="pointer in presentation.pointers.items" :key="pointer.key" v-bind="pointer.attrs">
         <div v-bind="pointer.label.attrs">{{ pointer.label.text }}</div>
         <div v-bind="pointer.value.attrs">{{ pointer.value.text }}</div>
       </div>

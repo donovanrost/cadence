@@ -1,227 +1,227 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import {ref, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import { ref, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
-type EmptyPayload = Record<string, never>
+type EmptyPayload = Record<string, never>;
 
 type ExecuteAction = {
-  id: string
-  event: "execute-plan"
-  payload: EmptyPayload
-  label: string
-  disabled: boolean
-}
+  id: string;
+  event: "execute-plan";
+  payload: EmptyPayload;
+  label: string;
+  disabled: boolean;
+};
 
 type ReasonField = {
-  id: string
-  name: string
-  type: "textarea"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "textarea";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type ReasonForm = {
-  id: string
-  field: ReasonField
+  id: string;
+  field: ReasonField;
   action: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type AdminControls = {
-  approve_form: ReasonForm
+  approve_form: ReasonForm;
   rejection: {
-    id: string
-    summary: string
-    form: ReasonForm
-  }
-}
+    id: string;
+    summary: string;
+    form: ReasonForm;
+  };
+};
 
 type Page = {
-  id: string
+  id: string;
   back_action: {
-    label: string
-    href: string
-  }
+    label: string;
+    href: string;
+  };
   header: {
     state: {
-      label: string
-      class: string
-    }
-    version_label: string
-    heading: string
-    description: string
-    execute_action: ExecuteAction | null
-  }
+      label: string;
+      class: string;
+    };
+    version_label: string;
+    heading: string;
+    description: string;
+    execute_action: ExecuteAction | null;
+  };
   summary: {
-    id: string
+    id: string;
     coverage: {
-      label: string
-      class: string
-    }
-    selected_count: number
-    approval_identity: string
+      label: string;
+      class: string;
+    };
+    selected_count: number;
+    approval_identity: string;
     content_hash: {
-      id: string
-      value: string
-    }
-  }
+      id: string;
+      value: string;
+    };
+  };
   selections: {
-    id: string
+    id: string;
     empty: {
-      id: string
-      message: string
-    }
-  }
+      id: string;
+      message: string;
+    };
+  };
   unsatisfied: {
-    id: string
-    heading: string
+    id: string;
+    heading: string;
     requirements: Array<{
-      requirement_label: string
-      hard_failures: string[]
-    }>
-  } | null
+      requirement_label: string;
+      hard_failures: string[];
+    }>;
+  } | null;
   policy: {
-    id: string
-    summary: string
+    id: string;
+    summary: string;
     selections: Array<{
-      contact_opportunity_snapshot_id: string
-      route_display_name: string
-      policy_summary: string
-    }>
-  }
+      contact_opportunity_snapshot_id: string;
+      route_display_name: string;
+      policy_summary: string;
+    }>;
+  };
   execution: {
-    id: string
-    heading: string
-    description: string
+    id: string;
+    heading: string;
+    description: string;
     empty: {
-      id: string
-      message: string
-    }
-  }
+      id: string;
+      message: string;
+    };
+  };
   submission: {
-    heading: string
-    description: string
-  } | null
+    heading: string;
+    description: string;
+  } | null;
   decision: {
-    heading: string
-    description: string
+    heading: string;
+    description: string;
     admin_required: {
-      id: string
-      message: string
-    } | null
-  } | null
+      id: string;
+      message: string;
+    } | null;
+  } | null;
   approval_evidence: {
-    id: string
-    heading: string
+    id: string;
+    heading: string;
     empty: {
-      id: string
-      message: string
-    }
-  }
+      id: string;
+      message: string;
+    };
+  };
   rationale: {
-    heading: string
-    value: string
-    plan_id: string
-  }
-}
+    heading: string;
+    value: string;
+    plan_id: string;
+  };
+};
 
 type SelectedOpportunity = {
-  __dom_id: string
-  contact_opportunity_snapshot_id: string
-  provider_display_name: string
-  ground_station_ref: string
-  starts_at: string
-  duration: string
+  __dom_id: string;
+  contact_opportunity_snapshot_id: string;
+  provider_display_name: string;
+  ground_station_ref: string;
+  starts_at: string;
+  duration: string;
   expiry: {
-    value: string
-    class: string
-  }
-}
+    value: string;
+    class: string;
+  };
+};
 
 type ExecutionItem = {
-  __dom_id: string
-  contact_plan_execution_item_id: string
-  contact_opportunity_snapshot_id: string
-  attempt_count: number
+  __dom_id: string;
+  contact_plan_execution_item_id: string;
+  contact_opportunity_snapshot_id: string;
+  attempt_count: number;
   state: {
-    label: string
-    class: string
-  }
+    label: string;
+    class: string;
+  };
   contact_link: {
-    label: string
-    href: string
-  } | null
-}
+    label: string;
+    href: string;
+  } | null;
+};
 
 type Approval = {
-  __dom_id: string
-  contact_plan_approval_id: string
+  __dom_id: string;
+  contact_plan_approval_id: string;
   decision: {
-    label: string
-    class: string
-  }
-  version_label: string
-  reason: string
-  actor_summary: string
-}
+    label: string;
+    class: string;
+  };
+  version_label: string;
+  reason: string;
+  actor_summary: string;
+};
 
 const props = defineProps<{
-  page: Page
-  submission_form: ReasonForm | null
-  admin_controls: AdminControls | null
-  selected_opportunities: SelectedOpportunity[]
-  execution_items: ExecutionItem[]
-  approvals: Approval[]
-}>()
+  page: Page;
+  submission_form: ReasonForm | null;
+  admin_controls: AdminControls | null;
+  selected_opportunities: SelectedOpportunity[];
+  execution_items: ExecutionItem[];
+  approvals: Approval[];
+}>();
 
 const emit = defineEmits<{
-  "submit-plan": [payload: {submission: {reason: string}}]
-  "approve-plan": [payload: {decision: {reason: string}}]
-  "reject-plan": [payload: {decision: {reason: string}}]
-  "execute-plan": [payload: EmptyPayload]
-}>()
+  "submit-plan": [payload: { submission: { reason: string } }];
+  "approve-plan": [payload: { decision: { reason: string } }];
+  "reject-plan": [payload: { decision: { reason: string } }];
+  "execute-plan": [payload: EmptyPayload];
+}>();
 
-const normalizeString = (value: unknown): string => (value == null ? "" : String(value))
+const normalizeString = (value: unknown): string => (value == null ? "" : String(value));
 
-const submissionReason = ref(normalizeString(props.submission_form?.field.value))
-const approvalReason = ref(normalizeString(props.admin_controls?.approve_form.field.value))
-const rejectionReason = ref(normalizeString(props.admin_controls?.rejection.form.field.value))
+const submissionReason = ref(normalizeString(props.submission_form?.field.value));
+const approvalReason = ref(normalizeString(props.admin_controls?.approve_form.field.value));
+const rejectionReason = ref(normalizeString(props.admin_controls?.rejection.form.field.value));
 
 watch(
   () => props.submission_form,
   (serverForm) => {
-    submissionReason.value = normalizeString(serverForm?.field.value)
+    submissionReason.value = normalizeString(serverForm?.field.value);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 watch(
   () => props.admin_controls,
   (serverControls) => {
-    approvalReason.value = normalizeString(serverControls?.approve_form.field.value)
-    rejectionReason.value = normalizeString(serverControls?.rejection.form.field.value)
+    approvalReason.value = normalizeString(serverControls?.approve_form.field.value);
+    rejectionReason.value = normalizeString(serverControls?.rejection.form.field.value);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const submitPlan = () =>
-  emit("submit-plan", {submission: {reason: normalizeString(submissionReason.value)}})
+  emit("submit-plan", { submission: { reason: normalizeString(submissionReason.value) } });
 
 const approvePlan = () =>
-  emit("approve-plan", {decision: {reason: normalizeString(approvalReason.value)}})
+  emit("approve-plan", { decision: { reason: normalizeString(approvalReason.value) } });
 
 const rejectPlan = () =>
-  emit("reject-plan", {decision: {reason: normalizeString(rejectionReason.value)}})
+  emit("reject-plan", { decision: { reason: normalizeString(rejectionReason.value) } });
 
-const executePlan = () => emit("execute-plan", {})
+const executePlan = () => emit("execute-plan", {});
 </script>
 
 <template>
@@ -268,7 +268,11 @@ const executePlan = () => emit("execute-plan", {})
       class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.7fr)] lg:p-7"
     >
       <div class="min-w-0 space-y-5">
-        <CadencePanel :id="page.summary.id" class="border border-base-300 bg-base-200/20" header-class="grid gap-4 p-4 sm:grid-cols-3">
+        <CadencePanel
+          :id="page.summary.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="grid gap-4 p-4 sm:grid-cols-3"
+        >
           <template #header>
             <div>
               <p class="hud-label">Requirement coverage</p>
@@ -288,11 +292,16 @@ const executePlan = () => emit("execute-plan", {})
             <p
               :id="page.summary.content_hash.id"
               class="mt-1 break-all font-mono text-[0.68rem] text-base-content/55"
-            >{{ page.summary.content_hash.value }}</p>
+            >
+              {{ page.summary.content_hash.value }}
+            </p>
           </div>
         </CadencePanel>
 
-        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">Selected provider windows</p>
             <p class="mt-1 text-sm text-base-content/55">
@@ -303,7 +312,9 @@ const executePlan = () => emit("execute-plan", {})
             <div
               :id="page.selections.empty.id"
               class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50"
-            >{{ page.selections.empty.message }}</div>
+            >
+              {{ page.selections.empty.message }}
+            </div>
             <div
               v-for="snapshot in selected_opportunities"
               :id="snapshot.__dom_id"
@@ -352,7 +363,9 @@ const executePlan = () => emit("execute-plan", {})
                 v-for="failure in requirement.hard_failures"
                 :key="failure"
                 class="mt-1 text-base-content/65"
-              >{{ failure }}</p>
+              >
+                {{ failure }}
+              </p>
             </div>
           </div>
         </CadencePanel>
@@ -376,7 +389,10 @@ const executePlan = () => emit("execute-plan", {})
           </div>
         </CadenceDetailsFrame>
 
-        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.execution.heading }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ page.execution.description }}</p>
@@ -385,7 +401,9 @@ const executePlan = () => emit("execute-plan", {})
             <div
               :id="page.execution.empty.id"
               class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50"
-            >{{ page.execution.empty.message }}</div>
+            >
+              {{ page.execution.empty.message }}
+            </div>
             <div
               v-for="item in execution_items"
               :id="item.__dom_id"
@@ -408,7 +426,8 @@ const executePlan = () => emit("execute-plan", {})
                   data-phx-link="redirect"
                   data-phx-link-state="push"
                   class="text-xs text-primary hover:underline"
-                >{{ item.contact_link.label }}</a>
+                  >{{ item.contact_link.label }}</a
+                >
               </div>
             </div>
           </div>
@@ -441,7 +460,9 @@ const executePlan = () => emit("execute-plan", {})
               :id="submission_form.action.id"
               type="submit"
               class="btn btn-primary btn-sm w-full font-mono text-xs uppercase tracking-wider"
-            >{{ submission_form.action.label }}</button>
+            >
+              {{ submission_form.action.label }}
+            </button>
           </form>
         </section>
 
@@ -452,11 +473,7 @@ const executePlan = () => emit("execute-plan", {})
           <p class="hud-label">{{ page.decision.heading }}</p>
           <p class="mt-2 text-sm text-base-content/55">{{ page.decision.description }}</p>
           <template v-if="admin_controls !== null">
-            <form
-              :id="admin_controls.approve_form.id"
-              class="mt-4"
-              @submit.prevent="approvePlan"
-            >
+            <form :id="admin_controls.approve_form.id" class="mt-4" @submit.prevent="approvePlan">
               <CadenceField
                 :control-id="admin_controls.approve_form.field.id"
                 wrapper-class="fieldset mb-3"
@@ -475,7 +492,9 @@ const executePlan = () => emit("execute-plan", {})
                 :id="admin_controls.approve_form.action.id"
                 type="submit"
                 class="btn btn-primary btn-sm w-full"
-              >{{ admin_controls.approve_form.action.label }}</button>
+              >
+                {{ admin_controls.approve_form.action.label }}
+              </button>
             </form>
             <CadenceDetailsFrame
               :id="admin_controls.rejection.id"
@@ -507,7 +526,9 @@ const executePlan = () => emit("execute-plan", {})
                   :id="admin_controls.rejection.form.action.id"
                   type="submit"
                   class="btn btn-ghost btn-sm w-full text-error"
-                >{{ admin_controls.rejection.form.action.label }}</button>
+                >
+                  {{ admin_controls.rejection.form.action.label }}
+                </button>
               </form>
             </CadenceDetailsFrame>
           </template>
@@ -515,10 +536,14 @@ const executePlan = () => emit("execute-plan", {})
             v-else-if="page.decision.admin_required !== null"
             :id="page.decision.admin_required.id"
             class="mt-4"
-          >{{ page.decision.admin_required.message }}</CadenceInlineWarning>
+            >{{ page.decision.admin_required.message }}</CadenceInlineWarning
+          >
         </section>
 
-        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.approval_evidence.heading }}</p>
           </template>
@@ -526,7 +551,9 @@ const executePlan = () => emit("execute-plan", {})
             <div
               :id="page.approval_evidence.empty.id"
               class="hidden only:block px-4 py-8 text-center text-sm text-base-content/50"
-            >{{ page.approval_evidence.empty.message }}</div>
+            >
+              {{ page.approval_evidence.empty.message }}
+            </div>
             <div
               v-for="approval in approvals"
               :id="approval.__dom_id"

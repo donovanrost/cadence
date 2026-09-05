@@ -1,25 +1,29 @@
 <script setup lang="ts">
-
-type Status = "info" | "ready" | "attention" | "blocked"
+type Status = "info" | "ready" | "attention" | "blocked";
 
 const props = withDefaults(
   defineProps<{
-    status: Status
-    label: string
+    status: Status;
+    label: string;
   }>(),
-  {status: "info"}
-)
+  { status: "info" },
+);
 
 const statusTones = {
   info: "info",
   ready: "success",
   attention: "warning",
-  blocked: "error"
-} as const satisfies Record<Status, "info" | "success" | "warning" | "error">
+  blocked: "error",
+} as const satisfies Record<Status, "info" | "success" | "warning" | "error">;
 </script>
 
 <template>
-  <span :class="['mission-catalog-status-badge', `mission-catalog-status-badge--${statusTones[props.status]}`]">
+  <span
+    :class="[
+      'mission-catalog-status-badge',
+      `mission-catalog-status-badge--${statusTones[props.status]}`,
+    ]"
+  >
     {{ props.label }}
   </span>
 </template>

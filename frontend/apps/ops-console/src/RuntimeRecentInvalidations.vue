@@ -1,71 +1,71 @@
 <script setup lang="ts">
-type DataAttrs = Record<string, string>
+type DataAttrs = Record<string, string>;
 
 type ElementPresentation = {
-  class: string
-  data_attrs: DataAttrs
-}
+  class: string;
+  data_attrs: DataAttrs;
+};
 
 type Action = {
-  href: string
-  class: string
-  text: string
-  data_attrs: DataAttrs
+  href: string;
+  class: string;
+  text: string;
+  data_attrs: DataAttrs;
   icon: {
-    name: string
-    class: string
-  }
-}
+    name: string;
+    class: string;
+  };
+};
 
 type Field = {
-  key: string
-  label: string
-  value: string
-  label_class: string
-  value_class: string
-  data_attrs: DataAttrs
-}
+  key: string;
+  label: string;
+  value: string;
+  label_class: string;
+  value_class: string;
+  data_attrs: DataAttrs;
+};
 
 type Event = {
-  id: string
-  class: string
-  data_attrs: DataAttrs
-  badges_class: string
+  id: string;
+  class: string;
+  data_attrs: DataAttrs;
+  badges_class: string;
   badges: Array<{
-    class: string
-    text: string
-  }>
-  actions: Action[]
-  fields_class: string
-  fields: Field[]
-}
+    class: string;
+    text: string;
+  }>;
+  actions: Action[];
+  fields_class: string;
+  fields: Field[];
+};
 
 type Presentation = {
-  section: ElementPresentation
+  section: ElementPresentation;
   header: {
-    class: string
+    class: string;
     heading: {
-      class: string
-      text: string
-    }
+      class: string;
+      text: string;
+    };
     count: {
-      class: string
-      value: number
-    }
-  }
+      class: string;
+      value: number;
+    };
+  };
   list: {
-    id: string
-    class: string
-  }
-  events: Event[]
+    id: string;
+    class: string;
+  };
+  events: Event[];
   empty: {
-    visible: boolean
-    class: string
-    text: string
-  }
-}
+    visible: boolean;
+    class: string;
+    text: string;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

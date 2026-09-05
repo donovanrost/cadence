@@ -1,27 +1,21 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
+import StatusBadge from "./StatusBadge.vue";
 
 type MissionRow = {
-  id: string
-  display_name: string
-  slug: string
-  status: "info" | "ready" | "attention"
-  status_label: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  slug: string;
+  status: "info" | "ready" | "attention";
+  status_label: string;
+  href: string;
+};
 
-defineProps<{rows: MissionRow[]}>()
-
+defineProps<{ rows: MissionRow[] }>();
 </script>
 
 <template>
   <ul id="organization-recent-missions-list" class="mt-5 divide-y divide-base-300">
-    <li
-      v-for="row in rows"
-      :id="row.id"
-      :key="row.id"
-      class="py-3"
-    >
+    <li v-for="row in rows" :id="row.id" :key="row.id" class="py-3">
       <a
         :href="row.href"
         data-phx-link="redirect"

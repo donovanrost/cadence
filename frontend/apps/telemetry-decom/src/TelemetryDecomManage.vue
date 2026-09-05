@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import {useAttrs} from "vue"
-import SpacecraftTelemetryDecom from "./SpacecraftTelemetryDecom.vue"
+import { computed, useAttrs, type Component } from "vue";
+import SpacecraftTelemetryDecom from "./SpacecraftTelemetryDecom.vue";
+import type { TelemetryDecomManageProps } from "./telemetry_decom_props";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
-const attrs = useAttrs()
+const props = defineProps<TelemetryDecomManageProps>();
+const attrs = useAttrs();
+const spacecraftProps = computed(() => ({ ...props, ...attrs }));
+const SpacecraftTelemetryDecomBridge = SpacecraftTelemetryDecom as Component;
 </script>
 
 <template>
-  <SpacecraftTelemetryDecom v-bind="attrs" />
+  <SpacecraftTelemetryDecomBridge v-bind="spacecraftProps" />
 </template>

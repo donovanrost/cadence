@@ -1,76 +1,76 @@
 <script setup lang="ts">
-import CommsProviderTable from "./CommsProviderTable.vue"
+import CommsProviderTable from "./CommsProviderTable.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type ProviderRow = {
-  id: string
-  display_name: string
-  provider_type: string
-  server_url: string
-  status: "ready" | "attention" | "blocked"
-  status_label: string
-  account_binding: string
-  grant_binding: string
-  last_synced_at: string
-  version: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  provider_type: string;
+  server_url: string;
+  status: "ready" | "attention" | "blocked";
+  status_label: string;
+  account_binding: string;
+  grant_binding: string;
+  last_synced_at: string;
+  version: string;
+  href: string;
+};
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: Attrs
-      items: BreadcrumbItem[]
-    }
+      attrs: Attrs;
+      items: BreadcrumbItem[];
+    };
     title: TextPresentation & {
-      suffix: TextPresentation
-    }
-    subtitle: TextPresentation
+      suffix: TextPresentation;
+    };
+    subtitle: TextPresentation;
     actions: {
-      attrs: Attrs
+      attrs: Attrs;
       new_provider: TextPresentation & {
-        icon: ElementPresentation
-      }
-    }
-  }
+        icon: ElementPresentation;
+      };
+    };
+  };
   empty_state: {
-    attrs: Attrs
-    title: TextPresentation
-    description: TextPresentation
-    action_container: ElementPresentation
+    attrs: Attrs;
+    title: TextPresentation;
+    description: TextPresentation;
+    action_container: ElementPresentation;
     action: TextPresentation & {
-      icon: ElementPresentation
-    }
-  } | null
+      icon: ElementPresentation;
+    };
+  } | null;
   card: {
-    attrs: Attrs
-    body: ElementPresentation
-    table_component: ElementPresentation
-    rows: ProviderRow[]
-  } | null
-}
+    attrs: Attrs;
+    body: ElementPresentation;
+    table_component: ElementPresentation;
+    rows: ProviderRow[];
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

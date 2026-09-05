@@ -538,19 +538,13 @@ void describe("frontend release packager", () => {
       },
     });
 
-    assert.deepEqual(
-      await readFile(join(output, "artifacts", "assets", "app.js")),
-      originalBytes,
-    );
+    assert.deepEqual(await readFile(join(output, "artifacts", "assets", "app.js")), originalBytes);
     assert.deepEqual(
       result.artifacts.find(({ path }) => path === "assets/app.js").bytes,
       originalBytes,
     );
     assert.deepEqual(await readFile(appPath), swappedBytes);
-    await assert.rejects(
-      readFile(join(output, "artifacts", "assets", "later-added.js")),
-      /ENOENT/,
-    );
+    await assert.rejects(readFile(join(output, "artifacts", "assets", "later-added.js")), /ENOENT/);
   });
 
   void it("rejects empty and nested input directories as exact-tree violations", async () => {
@@ -563,10 +557,7 @@ void describe("frontend release packager", () => {
 
     const nested = await builtRemoteTree();
     await mkdir(join(nested, "assets", "nested"));
-    await writeFile(
-      join(nested, "assets", "nested", "asset.js"),
-      "export const nested = true;\n",
-    );
+    await writeFile(join(nested, "assets", "nested", "asset.js"), "export const nested = true;\n");
     await assert.rejects(
       enumerateArtifacts(nested),
       /unexpected or nested directory assets\/nested/,

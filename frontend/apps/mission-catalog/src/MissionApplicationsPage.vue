@@ -1,57 +1,57 @@
 <script setup lang="ts">
-import MissionApplications from "./MissionApplications.vue"
+import MissionApplications from "./MissionApplications.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
-type MissionApplicationsProps = InstanceType<typeof MissionApplications>["$props"]
+type MissionApplicationsProps = InstanceType<typeof MissionApplications>["$props"];
 
 type ApplicationEvent = {
-  key: string
-}
+  key: string;
+};
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: Attrs
-      items: BreadcrumbItem[]
-    }
-    title: TextPresentation
-    subtitle: TextPresentation
-  }
+      attrs: Attrs;
+      items: BreadcrumbItem[];
+    };
+    title: TextPresentation;
+    subtitle: TextPresentation;
+  };
   applications_component: {
-    attrs: Attrs
+    attrs: Attrs;
     props: {
-      applications: MissionApplicationsProps["applications"]
-    }
-  }
-}
+      applications: MissionApplicationsProps["applications"];
+    };
+  };
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 
 const emit = defineEmits<{
-  install: [payload: ApplicationEvent]
-  disable: [payload: ApplicationEvent]
-  uninstall: [payload: ApplicationEvent]
-}>()
+  install: [payload: ApplicationEvent];
+  disable: [payload: ApplicationEvent];
+  uninstall: [payload: ApplicationEvent];
+}>();
 </script>
 
 <template>

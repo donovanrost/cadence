@@ -1,92 +1,92 @@
 <script setup lang="ts">
-import {CButton} from "@cadence/ui"
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import { CButton } from "@cadence/ui";
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type MissionPage = {
-  id: string
-  heading: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  heading: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type FormField = {
-  id: string
-  name: string
-  type: "text"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "text";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type MissionForm = {
-  id: string
+  id: string;
   fields: {
-    display_name: FormField
-    slug: FormField
-  }
+    display_name: FormField;
+    slug: FormField;
+  };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
 type MissionValues = {
-  display_name: string
-  slug: string
-}
+  display_name: string;
+  slug: string;
+};
 
 type MissionPayload = {
-  mission: MissionValues
-}
+  mission: MissionValues;
+};
 
 const props = defineProps<{
-  page: MissionPage
-  form: MissionForm
-}>()
+  page: MissionPage;
+  form: MissionForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: MissionPayload]
-  save: [payload: MissionPayload]
-}>()
+  validate: [payload: MissionPayload];
+  save: [payload: MissionPayload];
+}>();
 
 const values = reactive<MissionValues>({
   display_name: props.form.fields.display_name.value,
-  slug: props.form.fields.slug.value
-})
+  slug: props.form.fields.slug.value,
+});
 
 watch(
   () => [props.form.fields.display_name.value, props.form.fields.slug.value] as const,
   ([displayName, slug], [previousDisplayName, previousSlug]) => {
     // Accept a server value only when no newer local edit has diverged from its prior prop.
     if (values.display_name === previousDisplayName) {
-      values.display_name = displayName
+      values.display_name = displayName;
     }
 
     if (values.slug === previousSlug) {
-      values.slug = slug
+      values.slug = slug;
     }
-  }
-)
+  },
+);
 
 const payload = (): MissionPayload => ({
   mission: {
     display_name: values.display_name,
-    slug: values.slug
-  }
-})
+    slug: values.slug,
+  },
+});
 
-const validate = () => emit("validate", payload())
-const save = () => emit("save", payload())
+const validate = () => emit("validate", payload());
+const save = () => emit("save", payload());
 </script>
 
 <template>
@@ -109,7 +109,8 @@ const save = () => emit("save", payload())
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -134,7 +135,7 @@ const save = () => emit("save", payload())
           :required="form.fields.display_name.required"
           class="w-full input"
           @input="validate"
-        >
+        />
       </CadenceField>
 
       <CadenceField
@@ -151,7 +152,7 @@ const save = () => emit("save", payload())
           :required="form.fields.slug.required"
           class="w-full input"
           @input="validate"
-        >
+        />
       </CadenceField>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
@@ -164,7 +165,8 @@ const save = () => emit("save", payload())
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceNarrowFormPageFrame>

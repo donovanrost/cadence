@@ -1,81 +1,81 @@
 <script setup lang="ts">
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type FieldPresentation = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation
-}
+  key: string;
+  label: TextPresentation;
+  value: TextPresentation;
+};
 
 type WidgetWarningPresentation = {
-  component_id: string
-  overlay: {id: string; class: string; attrs: Attrs}
+  component_id: string;
+  overlay: { id: string; class: string; attrs: Attrs };
   trigger: {
-    id: string
-    type: string
-    class: string
-    attrs: Attrs
-    badge: {class: string; attrs: Attrs; text: string}
-  }
-  panel: {id: string; class: string; hidden: boolean; attrs: Attrs}
+    id: string;
+    type: string;
+    class: string;
+    attrs: Attrs;
+    badge: { class: string; attrs: Attrs; text: string };
+  };
+  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
   body: {
-    class: string
-    heading: TextPresentation
-    message: TextPresentation
+    class: string;
+    heading: TextPresentation;
+    message: TextPresentation;
     evidence_button: {
-      type: string
-      class: string
-      attrs: Attrs
-      icon: {name: string; class: string}
-      text: string
-    }
+      type: string;
+      class: string;
+      attrs: Attrs;
+      icon: { name: string; class: string };
+      text: string;
+    };
     details: {
-      visible: boolean
-      class: string
+      visible: boolean;
+      class: string;
       rows: Array<{
-        key: string
-        label: TextPresentation
-        value: TextPresentation & {attrs: Attrs}
-      }>
-    }
+        key: string;
+        label: TextPresentation;
+        value: TextPresentation & { attrs: Attrs };
+      }>;
+    };
     evidence: {
-      visible: boolean
-      class: string
-      attrs: Attrs
-      heading: TextPresentation
-      rows: Array<{key: string; class: string; attrs: Attrs; fields: FieldPresentation[]}>
-    }
+      visible: boolean;
+      class: string;
+      attrs: Attrs;
+      heading: TextPresentation;
+      rows: Array<{ key: string; class: string; attrs: Attrs; fields: FieldPresentation[] }>;
+    };
     links: {
-      visible: boolean
-      class: string
-      attrs: Attrs
-      heading: TextPresentation
+      visible: boolean;
+      class: string;
+      attrs: Attrs;
+      heading: TextPresentation;
       rows: Array<{
-        key: string
-        type: string
-        class: string
-        attrs: Attrs
-        fields: FieldPresentation[]
-      }>
-    }
-  }
-}
+        key: string;
+        type: string;
+        class: string;
+        attrs: Attrs;
+        fields: FieldPresentation[];
+      }>;
+    };
+  };
+};
 
-const props = defineProps<{presentation: WidgetWarningPresentation}>()
+const props = defineProps<{ presentation: WidgetWarningPresentation }>();
 
 const panelAttrs = computed(() => {
-  const attrs = {...props.presentation.panel.attrs}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -89,7 +89,7 @@ const panelAttrs = computed(() => {
     :side-offset="8"
     :collision-padding="16"
   >
-    <template #trigger="{open}">
+    <template #trigger="{ open }">
       <button
         :id="props.presentation.trigger.id"
         :type="props.presentation.trigger.type"
@@ -100,11 +100,12 @@ const panelAttrs = computed(() => {
         <span
           :class="props.presentation.trigger.badge.class"
           v-bind="props.presentation.trigger.badge.attrs"
-        >{{ props.presentation.trigger.badge.text }}</span>
+          >{{ props.presentation.trigger.badge.text }}</span
+        >
       </button>
     </template>
 
-    <template #content="{open}">
+    <template #content="{ open }">
       <section
         :id="props.presentation.panel.id"
         :class="props.presentation.panel.class"

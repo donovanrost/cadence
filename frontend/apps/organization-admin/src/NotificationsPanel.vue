@@ -1,26 +1,26 @@
 <script setup lang="ts">
 type Notification = {
-  id: string
-  notification_id: string
-  kind: string
-  title: string
-  body: string | null
-  unread: boolean
-  action: "accept_invitation" | "mark_read" | null
-  action_label: string | null
-  state_label: string | null
-}
+  id: string;
+  notification_id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  unread: boolean;
+  action: "accept_invitation" | "mark_read" | null;
+  action_label: string | null;
+  state_label: string | null;
+};
 
-defineProps<{notifications: Notification[]}>()
+defineProps<{ notifications: Notification[] }>();
 
 const emit = defineEmits<{
-  "accept-invitation": [payload: {notification_id: string}]
-  "mark-read": [payload: {notification_id: string}]
-}>()
+  "accept-invitation": [payload: { notification_id: string }];
+  "mark-read": [payload: { notification_id: string }];
+}>();
 
 const payload = (notification: Notification) => ({
-  notification_id: notification.notification_id
-})
+  notification_id: notification.notification_id,
+});
 </script>
 
 <template>
@@ -40,15 +40,17 @@ const payload = (notification: Notification) => ({
             <p
               :id="`notification-title-${notification.notification_id}`"
               class="text-sm"
-              :class="notification.unread
-                ? 'font-bold text-base-content'
-                : 'text-base-content/70'"
-            >{{ notification.title }}</p>
+              :class="notification.unread ? 'font-bold text-base-content' : 'text-base-content/70'"
+            >
+              {{ notification.title }}
+            </p>
             <p
               v-if="notification.body"
               :id="`notification-body-${notification.notification_id}`"
               class="mt-1 text-xs text-base-content/70"
-            >{{ notification.body }}</p>
+            >
+              {{ notification.body }}
+            </p>
           </div>
 
           <div

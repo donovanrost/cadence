@@ -77,7 +77,7 @@ void test("requires an exact host and allowed-remote publication root inventory"
 
     await writeFile(
       join(root, "host", "host.js"),
-      'const loaded = ready ? fallback : import(target).then(done).catch(fail);\n',
+      "const loaded = ready ? fallback : import(target).then(done).catch(fail);\n",
     );
     await assert.rejects(
       () => validateProductionPublication(root),

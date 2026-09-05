@@ -1,210 +1,210 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Page = {
-  id: string
-  heading: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  heading: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type Option = {
-  label: string
-  value: string
-  disabled: boolean
-}
+  label: string;
+  value: string;
+  disabled: boolean;
+};
 
 type BackendPresentation = {
-  label: string
-  placeholder: string
-}
+  label: string;
+  placeholder: string;
+};
 
 type Visibility = {
-  field: string
-  equals: string
-} | null
+  field: string;
+  equals: string;
+} | null;
 
 type Reference = {
-  provider_id: string
-  version: number
-  mode: string
-  result_limit: number
-} | null
+  provider_id: string;
+  version: number;
+  mode: string;
+  result_limit: number;
+} | null;
 
 type Field = {
-  key: string
-  id: string
-  name: string
-  type: "hidden" | "text" | "textarea" | "number" | "url" | "select"
-  label: string | null
-  required: boolean
-  placeholder: string | null
-  min: number | null
-  max: number | null
-  step: string | null
-  options: Option[]
-  presentations?: Record<string, BackendPresentation>
-  value: string
-  wrapper_id?: string
-  help?: string | null
-  default?: string
-  reference?: Reference
-  visible_when?: Visibility
-}
+  key: string;
+  id: string;
+  name: string;
+  type: "hidden" | "text" | "textarea" | "number" | "url" | "select";
+  label: string | null;
+  required: boolean;
+  placeholder: string | null;
+  min: number | null;
+  max: number | null;
+  step: string | null;
+  options: Option[];
+  presentations?: Record<string, BackendPresentation>;
+  value: string;
+  wrapper_id?: string;
+  help?: string | null;
+  default?: string;
+  reference?: Reference;
+  visible_when?: Visibility;
+};
 
 type Section = {
-  id: string
-  number: string
-  title: string
-  field_keys: string[]
-}
+  id: string;
+  number: string;
+  title: string;
+  field_keys: string[];
+};
 
 type ConfigurationSection = {
-  id: string
-  fields_id: string
-  number: string
-  title: string
-  description: string | null
-  fields: Field[]
-}
+  id: string;
+  fields_id: string;
+  number: string;
+  title: string;
+  description: string | null;
+  fields: Field[];
+};
 
 type Connector = {
-  options: Option[]
+  options: Option[];
   selected: {
-    id: string
-    form_value: string
-    provider_type: string
-    client_key: string
-    label: string
-    description: string
-  }
+    id: string;
+    form_value: string;
+    provider_type: string;
+    client_key: string;
+    label: string;
+    description: string;
+  };
   configuration: {
-    id: string
-    kind: string
-    description: string | null
-    sections: ConfigurationSection[]
-  }
-  boundary: {id: string; text: string}
-}
+    id: string;
+    kind: string;
+    description: string | null;
+    sections: ConfigurationSection[];
+  };
+  boundary: { id: string; text: string };
+};
 
 type ProviderAccountForm = {
-  id: string
-  hidden_field_keys: string[]
+  id: string;
+  hidden_field_keys: string[];
   sections: {
-    network_identity: Section
-    credential_registry: Section
-    organization_guardrails: Section
-  }
-  fields: Record<string, Field>
-  connector: Connector
-  credential_note: {id: string; text: string}
+    network_identity: Section;
+    credential_registry: Section;
+    organization_guardrails: Section;
+  };
+  fields: Record<string, Field>;
+  connector: Connector;
+  credential_note: { id: string; text: string };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
-type ProviderAccountValues = Record<string, string>
-type ProviderAccountPayload = {provider_account: ProviderAccountValues}
+type ProviderAccountValues = Record<string, string>;
+type ProviderAccountPayload = { provider_account: ProviderAccountValues };
 
 const props = defineProps<{
-  page: Page
-  form: ProviderAccountForm
-}>()
+  page: Page;
+  form: ProviderAccountForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: ProviderAccountPayload]
-  save: [payload: ProviderAccountPayload]
-}>()
+  validate: [payload: ProviderAccountPayload];
+  save: [payload: ProviderAccountPayload];
+}>();
 
 const allFields = (form: ProviderAccountForm): Field[] => [
   ...Object.values(form.fields),
-  ...form.connector.configuration.sections.flatMap((section) => section.fields)
-]
+  ...form.connector.configuration.sections.flatMap((section) => section.fields),
+];
 
 const formValues = (form: ProviderAccountForm): ProviderAccountValues =>
-  Object.fromEntries(allFields(form).map((field) => [field.key, field.value]))
+  Object.fromEntries(allFields(form).map((field) => [field.key, field.value]));
 
-const providerAccount = reactive<ProviderAccountValues>(formValues(props.form))
-const pendingValidations: ProviderAccountValues[] = []
+const providerAccount = reactive<ProviderAccountValues>(formValues(props.form));
+const pendingValidations: ProviderAccountValues[] = [];
 
-const values = (): ProviderAccountValues => ({...providerAccount})
+const values = (): ProviderAccountValues => ({ ...providerAccount });
 
 const acknowledges = (sent: ProviderAccountValues, server: ProviderAccountValues) =>
-  Object.entries(sent).every(([key, value]) => !(key in server) || server[key] === value)
+  Object.entries(sent).every(([key, value]) => !(key in server) || server[key] === value);
 
 const replaceValues = (serverValues: ProviderAccountValues) => {
   for (const key of Object.keys(providerAccount)) {
-    if (!(key in serverValues)) delete providerAccount[key]
+    if (!(key in serverValues)) delete providerAccount[key];
   }
 
-  Object.assign(providerAccount, serverValues)
-}
+  Object.assign(providerAccount, serverValues);
+};
 
 const optionIncludes = (options: Option[], value: string | undefined) =>
-  options.some((option) => option.value === value && !option.disabled)
+  options.some((option) => option.value === value && !option.disabled);
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm)
+    const serverValues = formValues(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      acknowledges(sent, serverValues)
-    )
-    const latestPending = pendingValidations[pendingValidations.length - 1]
+      acknowledges(sent, serverValues),
+    );
+    const latestPending = pendingValidations[pendingValidations.length - 1];
     const hasNewerTyping =
       acknowledgedIndex >= 0
         ? acknowledgedIndex < pendingValidations.length - 1
-        : latestPending !== undefined && !acknowledges(latestPending, serverValues)
+        : latestPending !== undefined && !acknowledges(latestPending, serverValues);
     const serverCorrectedSelection =
       (latestPending !== undefined &&
         !optionIncludes(serverForm.connector.options, latestPending.provider_type)) ||
       (latestPending !== undefined &&
-        !optionIncludes(serverForm.fields.backend_type.options, latestPending.backend_type))
+        !optionIncludes(serverForm.fields.backend_type.options, latestPending.backend_type));
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
     if (!hasNewerTyping || serverCorrectedSelection) {
-      if (serverCorrectedSelection) pendingValidations.splice(0)
-      replaceValues(serverValues)
+      if (serverCorrectedSelection) pendingValidations.splice(0);
+      replaceValues(serverValues);
     }
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const fieldsFor = (section: Section) =>
-  section.field_keys.map((key) => props.form.fields[key]).filter((field) => field !== undefined)
+  section.field_keys.map((key) => props.form.fields[key]).filter((field) => field !== undefined);
 
 const visible = (field: Field) =>
   field.visible_when === undefined ||
   field.visible_when === null ||
-  (providerAccount[field.visible_when.field] ?? "") === field.visible_when.equals
+  (providerAccount[field.visible_when.field] ?? "") === field.visible_when.equals;
 
 const presentation = (field: Field): BackendPresentation | undefined =>
-  field.presentations?.[providerAccount.backend_type ?? ""]
+  field.presentations?.[providerAccount.backend_type ?? ""];
 
-const fieldLabel = (field: Field) => presentation(field)?.label ?? field.label
-const fieldPlaceholder = (field: Field) => presentation(field)?.placeholder ?? field.placeholder
+const fieldLabel = (field: Field) => presentation(field)?.label ?? field.label;
+const fieldPlaceholder = (field: Field) => presentation(field)?.placeholder ?? field.placeholder;
 
 const validate = () => {
-  const currentValues = values()
-  pendingValidations.push(currentValues)
-  emit("validate", {provider_account: currentValues})
-}
+  const currentValues = values();
+  pendingValidations.push(currentValues);
+  emit("validate", { provider_account: currentValues });
+};
 
-const save = () => emit("save", {provider_account: values()})
+const save = () => emit("save", { provider_account: values() });
 </script>
 
 <template>
@@ -226,7 +226,8 @@ const save = () => emit("save", {provider_account: values()})
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="transition-colors hover:text-primary"
-            >{{ breadcrumb.label }}</a>
+              >{{ breadcrumb.label }}</a
+            >
           </template>
         </CadenceBreadcrumbs>
         <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
@@ -244,7 +245,7 @@ const save = () => emit("save", {provider_account: values()})
         :name="form.fields[fieldKey].name"
         type="hidden"
         :value="providerAccount[fieldKey]"
-      >
+      />
 
       <CadenceFormSectionFrame :id="form.sections.network_identity.id">
         <CadenceFormSectionHeader
@@ -278,7 +279,9 @@ const save = () => emit("save", {provider_account: values()})
               :key="`${option.value}-${option.label}`"
               :value="option.value"
               :disabled="option.disabled"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
           <input
             v-else
@@ -293,7 +296,7 @@ const save = () => emit("save", {provider_account: values()})
             :step="field.step"
             class="input w-full"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <div
@@ -312,13 +315,11 @@ const save = () => emit("save", {provider_account: values()})
           </div>
           <span
             class="self-start font-mono text-[0.65rem] uppercase tracking-[0.12em] text-base-content/45"
-          >{{ form.connector.selected.client_key }}</span>
+            >{{ form.connector.selected.client_key }}</span
+          >
         </div>
 
-        <CadenceNoticeFrame
-          tone="info"
-          :id="form.connector.boundary.id"
-        >
+        <CadenceNoticeFrame tone="info" :id="form.connector.boundary.id">
           {{ form.connector.boundary.text }}
         </CadenceNoticeFrame>
       </CadenceFormSectionFrame>
@@ -328,10 +329,7 @@ const save = () => emit("save", {provider_account: values()})
         :data-extension-presentation="form.connector.configuration.kind"
         class="space-y-8"
       >
-        <p
-          v-if="form.connector.configuration.description"
-          class="text-sm text-base-content/65"
-        >
+        <p v-if="form.connector.configuration.description" class="text-sm text-base-content/65">
           {{ form.connector.configuration.description }}
         </p>
 
@@ -377,7 +375,9 @@ const save = () => emit("save", {provider_account: values()})
                     :key="`${option.value}-${option.label}`"
                     :value="option.value"
                     :disabled="option.disabled"
-                  >{{ option.label }}</option>
+                  >
+                    {{ option.label }}
+                  </option>
                 </select>
                 <textarea
                   v-else-if="field.type === 'textarea'"
@@ -402,7 +402,7 @@ const save = () => emit("save", {provider_account: values()})
                   :step="field.step"
                   class="input w-full"
                   @input="validate"
-                >
+                />
                 <template #help>
                   <p v-if="field.help" class="-mt-1 mb-3 text-xs text-base-content/55">
                     {{ field.help }}
@@ -446,7 +446,9 @@ const save = () => emit("save", {provider_account: values()})
               :key="`${option.value}-${option.label}`"
               :value="option.value"
               :disabled="option.disabled"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
           <input
             v-else
@@ -461,7 +463,7 @@ const save = () => emit("save", {provider_account: values()})
             :step="field.step"
             class="input w-full"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <p :id="form.credential_note.id" class="text-xs text-base-content/60">
@@ -499,7 +501,7 @@ const save = () => emit("save", {provider_account: values()})
             :step="field.step"
             class="input w-full"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -513,7 +515,8 @@ const save = () => emit("save", {provider_account: values()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </div>

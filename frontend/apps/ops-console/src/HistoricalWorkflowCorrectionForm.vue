@@ -1,87 +1,87 @@
 <script setup lang="ts">
-import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceField from "./ui/components/CadenceField.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type HiddenFieldPresentation = {
-  id: string
-  type: "hidden"
-  name: string
-  value: string | null
-}
+  id: string;
+  type: "hidden";
+  name: string;
+  value: string | null;
+};
 
 type TextFieldPresentation = {
-  id: string
-  name: string
-  type: "text"
-  value: string | null
-  required: boolean
-  wrapper_class: string
-  label: TextPresentation
-  input_class: string
-  errors: string[]
-  error_class: string
-}
+  id: string;
+  name: string;
+  type: "text";
+  value: string | null;
+  required: boolean;
+  wrapper_class: string;
+  label: TextPresentation;
+  input_class: string;
+  errors: string[];
+  error_class: string;
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
-  hidden_fields: HiddenFieldPresentation[]
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
+  hidden_fields: HiddenFieldPresentation[];
   header: {
-    class: string
-    heading: TextPresentation
-    badge: TextPresentation
-  }
+    class: string;
+    heading: TextPresentation;
+    badge: TextPresentation;
+  };
   group_context: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     rows: Array<{
-      key: string
-      label: TextPresentation
-      value: TextPresentation
-    }>
-  }
-  new_run: TextFieldPresentation
-  source_fields: TextFieldPresentation[]
-  source_fields_class: string
+      key: string;
+      label: TextPresentation;
+      value: TextPresentation;
+    }>;
+  };
+  new_run: TextFieldPresentation;
+  source_fields: TextFieldPresentation[];
+  source_fields_class: string;
   confirmation: {
     row: {
-      id: string
-      class: string
-    }
+      id: string;
+      class: string;
+    };
     input: {
-      id: string
-      type: "checkbox"
-      name: string
-      value: string
-      required: boolean
-      class: string
-    }
-    label: TextPresentation
-  }
+      id: string;
+      type: "checkbox";
+      name: string;
+      value: string;
+      required: boolean;
+      class: string;
+    };
+    label: TextPresentation;
+  };
   submit: {
-    id: string
-    type: "submit"
-    class: string
+    id: string;
+    type: "submit";
+    class: string;
     icon: {
-      name: string
-      class: string
-    }
-    text: string
-  }
-}
+      name: string;
+      class: string;
+    };
+    text: string;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -97,7 +97,7 @@ defineProps<{presentation: Presentation}>()
       :type="field.type"
       :name="field.name"
       :value="field.value"
-    >
+    />
 
     <div :class="presentation.header.class">
       <h4 :class="presentation.header.heading.class">
@@ -118,62 +118,59 @@ defineProps<{presentation: Presentation}>()
       </template>
     </dl>
 
+    <CadenceField
+      :wrapper-class="presentation.new_run.wrapper_class"
+      :label="presentation.new_run.label.text"
+      :label-class="presentation.new_run.label.class"
+    >
+      <input
+        :id="presentation.new_run.id"
+        :name="presentation.new_run.name"
+        :type="presentation.new_run.type"
+        :value="presentation.new_run.value"
+        :required="presentation.new_run.required"
+        :class="presentation.new_run.input_class"
+      />
+      <template #errors>
+        <p
+          v-for="(error, index) in presentation.new_run.errors"
+          :key="`${presentation.new_run.id}-error-${index}`"
+          :class="presentation.new_run.error_class"
+        >
+          {{ error }}
+        </p>
+      </template>
+    </CadenceField>
+
+    <div :class="presentation.source_fields_class">
       <CadenceField
-        :wrapper-class="presentation.new_run.wrapper_class"
-        :label="presentation.new_run.label.text"
-        :label-class="presentation.new_run.label.class"
+        v-for="field in presentation.source_fields"
+        :key="field.id"
+        :wrapper-class="field.wrapper_class"
+        :label="field.label.text"
+        :label-class="field.label.class"
       >
         <input
-          :id="presentation.new_run.id"
-          :name="presentation.new_run.name"
-          :type="presentation.new_run.type"
-          :value="presentation.new_run.value"
-          :required="presentation.new_run.required"
-          :class="presentation.new_run.input_class"
-        >
+          :id="field.id"
+          :name="field.name"
+          :type="field.type"
+          :value="field.value"
+          :required="field.required"
+          :class="field.input_class"
+        />
         <template #errors>
           <p
-            v-for="(error, index) in presentation.new_run.errors"
-            :key="`${presentation.new_run.id}-error-${index}`"
-            :class="presentation.new_run.error_class"
+            v-for="(error, index) in field.errors"
+            :key="`${field.id}-error-${index}`"
+            :class="field.error_class"
           >
             {{ error }}
           </p>
         </template>
       </CadenceField>
-
-    <div :class="presentation.source_fields_class">
-        <CadenceField
-          v-for="field in presentation.source_fields"
-          :key="field.id"
-          :wrapper-class="field.wrapper_class"
-          :label="field.label.text"
-          :label-class="field.label.class"
-        >
-          <input
-            :id="field.id"
-            :name="field.name"
-            :type="field.type"
-            :value="field.value"
-            :required="field.required"
-            :class="field.input_class"
-          >
-          <template #errors>
-            <p
-              v-for="(error, index) in field.errors"
-              :key="`${field.id}-error-${index}`"
-              :class="field.error_class"
-            >
-              {{ error }}
-            </p>
-          </template>
-        </CadenceField>
     </div>
 
-    <label
-      :id="presentation.confirmation.row.id"
-      :class="presentation.confirmation.row.class"
-    >
+    <label :id="presentation.confirmation.row.id" :class="presentation.confirmation.row.class">
       <input
         :id="presentation.confirmation.input.id"
         :type="presentation.confirmation.input.type"
@@ -181,7 +178,7 @@ defineProps<{presentation: Presentation}>()
         :value="presentation.confirmation.input.value"
         :required="presentation.confirmation.input.required"
         :class="presentation.confirmation.input.class"
-      >
+      />
       <span :class="presentation.confirmation.label.class">
         {{ presentation.confirmation.label.text }}
       </span>

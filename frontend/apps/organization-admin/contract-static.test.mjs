@@ -17,7 +17,7 @@ const entryComponents = [
   "AdminOrganizationListPage",
   "AdminOrganizationNew",
   "AdminOrganizationShow",
-  "AdminOrganizationInvite"
+  "AdminOrganizationInvite",
 ];
 const surfaceIds = [
   "organization_home",
@@ -31,7 +31,7 @@ const surfaceIds = [
   "admin_organizations",
   "admin_organization_new",
   "admin_organization_show",
-  "admin_organization_invite"
+  "admin_organization_invite",
 ];
 
 async function sourceFiles(directory) {
@@ -49,7 +49,7 @@ void test("owns the complete post-auth component closure", async () => {
     assert.equal(
       await fileExists(join(sourceRoot, `${component}.vue`)),
       true,
-      `${component} entry is missing`
+      `${component} entry is missing`,
     );
   }
 
@@ -58,7 +58,7 @@ void test("owns the complete post-auth component closure", async () => {
     assert.equal(
       contents.includes("apps/cadence_web/assets/vue"),
       false,
-      `${file} imports the legacy Vue tree`
+      `${file} imports the legacy Vue tree`,
     );
   }
 });
@@ -66,10 +66,7 @@ void test("owns the complete post-auth component closure", async () => {
 void test("declares one exposed renderer for every contributed surface", async () => {
   const federationConfig = await readFile(join(appRoot, "module-federation.config.ts"), "utf8");
   const manifest = await readFile(join(sourceRoot, "federated-application.ts"), "utf8");
-  const contribution = await readFile(
-    join(sourceRoot, "organization-admin-contract.ts"),
-    "utf8"
-  );
+  const contribution = await readFile(join(sourceRoot, "organization-admin-contract.ts"), "utf8");
 
   for (const component of entryComponents) {
     assert.match(federationConfig, new RegExp(`"\\./${component}"`));

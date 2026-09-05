@@ -1,26 +1,26 @@
 <script setup>
-import {onBeforeUnmount, onMounted, onUpdated, ref} from "vue"
-import {createNavRailController} from "./hooks/nav_rail_controller.js"
+import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
+import { createNavRailController } from "./hooks/nav_rail_controller.js";
 
 const props = defineProps({
-  rail: {type: Object, required: true},
-  sections: {type: Array, required: true}
-})
+  rail: { type: Object, required: true },
+  sections: { type: Array, required: true },
+});
 
-const rail = ref(null)
-let controller
+const rail = ref(null);
+let controller;
 
 onMounted(() => {
-  controller = createNavRailController({el: rail.value})
-  controller.mount()
-})
+  controller = createNavRailController({ el: rail.value });
+  controller.mount();
+});
 
-onUpdated(() => controller?.update())
+onUpdated(() => controller?.update());
 
 onBeforeUnmount(() => {
-  controller?.destroy()
-  controller = undefined
-})
+  controller?.destroy();
+  controller = undefined;
+});
 </script>
 
 <template>
@@ -71,10 +71,7 @@ onBeforeUnmount(() => {
       >
         <span :class="[section.icon, 'h-4 w-4 pointer-events-none']"></span>
         <span
-          :class="[
-            'h-1.5 w-1.5 rounded-full pointer-events-none',
-            section.status_dot_class
-          ]"
+          :class="['h-1.5 w-1.5 rounded-full pointer-events-none', section.status_dot_class]"
         ></span>
         <span
           v-if="section.count !== null"
@@ -100,10 +97,7 @@ onBeforeUnmount(() => {
           <span :class="['ml-auto h-2 w-2 rounded-full', section.status_dot_class]"></span>
         </header>
 
-        <div
-          :data-ops-context-module-freshness="section.freshness"
-          class="px-2 py-2"
-        >
+        <div :data-ops-context-module-freshness="section.freshness" class="px-2 py-2">
           <div v-if="section.content.kind === 'alarms'" class="space-y-2 text-xs">
             <div v-if="section.content.active" class="flex flex-wrap gap-1.5">
               <span
@@ -111,7 +105,7 @@ onBeforeUnmount(() => {
                 :key="badge.label"
                 :class="[
                   'inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium',
-                  badge.class
+                  badge.class,
                 ]"
               >
                 <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -146,7 +140,9 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="section.content.followed_command"
-              :data-ops-context-followed-command="section.content.followed_command.command_request_id"
+              :data-ops-context-followed-command="
+                section.content.followed_command.command_request_id
+              "
               class="border-l-2 border-info bg-info/10 px-2 py-1.5"
             >
               <p class="hud-label text-info">Following</p>
@@ -160,16 +156,13 @@ onBeforeUnmount(() => {
           </div>
 
           <template v-else-if="section.content.kind === 'fleet_health'">
-            <div
-              v-if="section.content.available"
-              class="flex flex-wrap items-center gap-2 text-xs"
-            >
+            <div v-if="section.content.available" class="flex flex-wrap items-center gap-2 text-xs">
               <span
                 v-for="badge in section.content.badges"
                 :key="badge.label"
                 :class="[
                   'inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium',
-                  badge.class
+                  badge.class,
                 ]"
               >
                 <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -180,10 +173,14 @@ onBeforeUnmount(() => {
                 {{ section.content.violating_points_label }}
               </span>
             </div>
-            <p v-else class="text-xs text-base-content/60">{{ section.content.unavailable_label }}</p>
+            <p v-else class="text-xs text-base-content/60">
+              {{ section.content.unavailable_label }}
+            </p>
           </template>
 
-          <div class="mt-1 flex items-center justify-between gap-2 border-t border-base-300/50 pt-1.5">
+          <div
+            class="mt-1 flex items-center justify-between gap-2 border-t border-base-300/50 pt-1.5"
+          >
             <span class="font-mono text-[0.625rem] uppercase tracking-wide text-base-content/45">
               {{ section.freshness_label }} · {{ section.observed_at_label }}
             </span>

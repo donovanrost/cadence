@@ -1,137 +1,139 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import ClipboardButton from "./ClipboardButton.vue"
+import { reactive, watch } from "vue";
+import ClipboardButton from "./ClipboardButton.vue";
 
-type RawAttrs = Record<string, string>
+type RawAttrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: RawAttrs
-}
+  attrs: RawAttrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type FilterValues = {
-  category: string
-  kind: string
-  severity: string
-  spacecraft_id: string
-  from: string
-  to: string
-}
+  category: string;
+  kind: string;
+  severity: string;
+  spacecraft_id: string;
+  from: string;
+  to: string;
+};
 
 type FilterField = {
-  key: keyof FilterValues
-  type: "select" | "text"
-  wrapper: ElementPresentation
-  label: ElementPresentation
-  label_text: TextPresentation
-  control: ElementPresentation
-  options: Array<{label: string; value: string}>
-}
+  key: keyof FilterValues;
+  type: "select" | "text";
+  wrapper: ElementPresentation;
+  label: ElementPresentation;
+  label_text: TextPresentation;
+  control: ElementPresentation;
+  options: Array<{ label: string; value: string }>;
+};
 
 type NavigationLink = TextPresentation & {
-  icon: ElementPresentation
-}
+  icon: ElementPresentation;
+};
 
 type SelectedEvent = ElementPresentation & {
   header: ElementPresentation & {
-    content: ElementPresentation
-    kind: TextPresentation
-    title: TextPresentation
-    clear: ElementPresentation & {icon: ElementPresentation}
-  }
+    content: ElementPresentation;
+    kind: TextPresentation;
+    title: TextPresentation;
+    clear: ElementPresentation & { icon: ElementPresentation };
+  };
   copy: {
-    host_attrs: RawAttrs
-    button_id: string
-    clipboard_text: string
-    button_class: string
-    icon: string
-    icon_class: string
-    label: string
-  }
+    host_attrs: RawAttrs;
+    button_id: string;
+    clipboard_text: string;
+    button_class: string;
+    icon: string;
+    icon_class: string;
+    label: string;
+  };
   rows: ElementPresentation & {
     items: Array<{
-      label: TextPresentation
-      value: TextPresentation
-    }>
-  }
+      label: TextPresentation;
+      value: TextPresentation;
+    }>;
+  };
   investigation: ElementPresentation & {
-    title: TextPresentation
+    title: TextPresentation;
     links: ElementPresentation & {
-      owner: NavigationLink | null
-      explore: NavigationLink | null
-    }
-  }
-}
+      owner: NavigationLink | null;
+      explore: NavigationLink | null;
+    };
+  };
+};
 
 type Presentation = {
-  root: ElementPresentation
-  container: ElementPresentation
+  root: ElementPresentation;
+  container: ElementPresentation;
   header: ElementPresentation & {
-    content: ElementPresentation
-    eyebrow: TextPresentation
-    title: TextPresentation
-    description: TextPresentation
-    return_link: NavigationLink | null
-  }
+    content: ElementPresentation;
+    eyebrow: TextPresentation;
+    title: TextPresentation;
+    description: TextPresentation;
+    return_link: NavigationLink | null;
+  };
   filters: ElementPresentation & {
-    values: FilterValues
-    fields: FilterField[]
-    submit: TextPresentation & {icon: ElementPresentation}
-  }
+    values: FilterValues;
+    fields: FilterField[];
+    submit: TextPresentation & { icon: ElementPresentation };
+  };
   body: ElementPresentation & {
     timeline: {
-      section: ElementPresentation
-      header: ElementPresentation & {columns: string[]}
-      stream: ElementPresentation & {empty: TextPresentation}
-    }
+      section: ElementPresentation;
+      header: ElementPresentation & { columns: string[] };
+      stream: ElementPresentation & { empty: TextPresentation };
+    };
     detail: ElementPresentation & {
-      empty: (ElementPresentation & {
-        content: ElementPresentation
-        icon: ElementPresentation
-        copy: TextPresentation
-      }) | null
-      selected: SelectedEvent | null
-    }
-  }
-}
+      empty:
+        | (ElementPresentation & {
+            content: ElementPresentation;
+            icon: ElementPresentation;
+            copy: TextPresentation;
+          })
+        | null;
+      selected: SelectedEvent | null;
+    };
+  };
+};
 
 type TimelineEvent = {
-  __dom_id: string
-  mission_event_id: string
-  attrs: RawAttrs
-  occurred: TextPresentation
-  category: TextPresentation
+  __dom_id: string;
+  mission_event_id: string;
+  attrs: RawAttrs;
+  occurred: TextPresentation;
+  category: TextPresentation;
   event: ElementPresentation & {
-    title: TextPresentation
-    summary: TextPresentation
-  }
-  subject: TextPresentation
-}
+    title: TextPresentation;
+    summary: TextPresentation;
+  };
+  subject: TextPresentation;
+};
 
 const props = defineProps<{
-  presentation: Presentation
-  timeline_events: TimelineEvent[]
-}>()
+  presentation: Presentation;
+  timeline_events: TimelineEvent[];
+}>();
 
 const emit = defineEmits<{
-  apply_timeline_filters: [payload: {timeline: FilterValues}]
-  clear_timeline_selection: [payload: Record<string, never>]
-}>()
+  apply_timeline_filters: [payload: { timeline: FilterValues }];
+  clear_timeline_selection: [payload: Record<string, never>];
+}>();
 
-const filterValues = reactive<FilterValues>({...props.presentation.filters.values})
+const filterValues = reactive<FilterValues>({ ...props.presentation.filters.values });
 
 watch(
   () => props.presentation.filters.values,
-  values => Object.assign(filterValues, values),
-  {deep: true},
-)
+  (values) => Object.assign(filterValues, values),
+  { deep: true },
+);
 
 const updateFilter = (key: keyof FilterValues, event: Event) => {
-  filterValues[key] = (event.target as HTMLInputElement | HTMLSelectElement).value
-}
+  filterValues[key] = (event.target as HTMLInputElement | HTMLSelectElement).value;
+};
 
 const applyFilters = () => {
   emit("apply_timeline_filters", {
@@ -143,10 +145,10 @@ const applyFilters = () => {
       from: filterValues.from,
       to: filterValues.to,
     },
-  })
-}
+  });
+};
 
-const clearSelection = () => emit("clear_timeline_selection", {})
+const clearSelection = () => emit("clear_timeline_selection", {});
 </script>
 
 <template>
@@ -196,7 +198,7 @@ const clearSelection = () => emit("clear_timeline_selection", {})
               v-bind="field.control.attrs"
               :value="filterValues[field.key]"
               @input="updateFilter(field.key, $event)"
-            >
+            />
           </label>
         </div>
         <button v-bind="props.presentation.filters.submit.attrs">
@@ -208,10 +210,9 @@ const clearSelection = () => emit("clear_timeline_selection", {})
       <div v-bind="props.presentation.body.attrs">
         <section v-bind="props.presentation.body.timeline.section.attrs">
           <div v-bind="props.presentation.body.timeline.header.attrs">
-            <span
-              v-for="column in props.presentation.body.timeline.header.columns"
-              :key="column"
-            >{{ column }}</span>
+            <span v-for="column in props.presentation.body.timeline.header.columns" :key="column">{{
+              column
+            }}</span>
           </div>
           <div v-bind="props.presentation.body.timeline.stream.attrs">
             <div v-bind="props.presentation.body.timeline.stream.empty.attrs">
@@ -226,7 +227,9 @@ const clearSelection = () => emit("clear_timeline_selection", {})
               <time v-bind="timelineEvent.occurred.attrs">{{ timelineEvent.occurred.text }}</time>
               <span v-bind="timelineEvent.category.attrs">{{ timelineEvent.category.text }}</span>
               <span v-bind="timelineEvent.event.attrs">
-                <span v-bind="timelineEvent.event.title.attrs">{{ timelineEvent.event.title.text }}</span>
+                <span v-bind="timelineEvent.event.title.attrs">{{
+                  timelineEvent.event.title.text
+                }}</span>
                 <span v-bind="timelineEvent.event.summary.attrs">
                   {{ timelineEvent.event.summary.text }}
                 </span>
@@ -303,7 +306,9 @@ const clearSelection = () => emit("clear_timeline_selection", {})
                   v-bind="props.presentation.body.detail.selected.investigation.links.owner.attrs"
                 >
                   <span
-                    v-bind="props.presentation.body.detail.selected.investigation.links.owner.icon.attrs"
+                    v-bind="
+                      props.presentation.body.detail.selected.investigation.links.owner.icon.attrs
+                    "
                   ></span>
                   {{ props.presentation.body.detail.selected.investigation.links.owner.text }}
                 </a>
@@ -312,7 +317,9 @@ const clearSelection = () => emit("clear_timeline_selection", {})
                   v-bind="props.presentation.body.detail.selected.investigation.links.explore.attrs"
                 >
                   <span
-                    v-bind="props.presentation.body.detail.selected.investigation.links.explore.icon.attrs"
+                    v-bind="
+                      props.presentation.body.detail.selected.investigation.links.explore.icon.attrs
+                    "
                   ></span>
                   {{ props.presentation.body.detail.selected.investigation.links.explore.text }}
                 </a>

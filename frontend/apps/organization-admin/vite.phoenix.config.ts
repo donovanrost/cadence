@@ -7,7 +7,7 @@ import federationConfig from "./module-federation.config";
 const federatedEntry = resolve(__dirname, "src/federated-application.ts");
 const publicationRoot = resolve(
   __dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/organization-admin"
+  "../../../apps/cadence_web/priv/static/assets/application-host/organization-admin",
 );
 
 export default defineConfig({
@@ -18,13 +18,13 @@ export default defineConfig({
     outDir: publicationRoot,
     emptyOutDir: true,
     manifest: false,
-    rollupOptions: { input: federatedEntry }
+    rollupOptions: { input: federatedEntry },
   },
   plugins: lazyPlugins(() => [
     vue(),
     federation({
       ...federationConfig,
-      publicPath: "auto"
-    })
-  ])
+      publicPath: "auto",
+    }),
+  ]),
 });

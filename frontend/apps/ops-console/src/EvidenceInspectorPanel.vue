@@ -1,9 +1,9 @@
 <script setup>
-import ClipboardButton from "./ClipboardButton.vue"
+import ClipboardButton from "./ClipboardButton.vue";
 
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>
@@ -28,20 +28,13 @@ defineProps({
         <ClipboardButton v-bind="presentation.actions.copy.props" />
       </div>
 
-      <a
-        v-for="action in presentation.actions.dashboard"
-        :key="action.key"
-        v-bind="action.attrs"
-      >
+      <a v-for="action in presentation.actions.dashboard" :key="action.key" v-bind="action.attrs">
         <span :class="[action.icon.name, action.icon.class]"></span> {{ action.text }}
       </a>
 
       <a v-if="presentation.actions.health" v-bind="presentation.actions.health.attrs">
         <span
-          :class="[
-            presentation.actions.health.icon.name,
-            presentation.actions.health.icon.class
-          ]"
+          :class="[presentation.actions.health.icon.name, presentation.actions.health.icon.class]"
         ></span>
         {{ presentation.actions.health.text }}
       </a>
@@ -93,16 +86,15 @@ defineProps({
       {{ presentation.evidence.empty.text }}
     </p>
 
-    <section v-if="presentation.data_links.items.length" v-bind="presentation.data_links.root.attrs">
+    <section
+      v-if="presentation.data_links.items.length"
+      v-bind="presentation.data_links.root.attrs"
+    >
       <h3 v-bind="presentation.data_links.heading.attrs">
         {{ presentation.data_links.heading.text }}
       </h3>
       <div v-bind="presentation.data_links.list.attrs">
-        <button
-          v-for="link in presentation.data_links.items"
-          :key="link.key"
-          v-bind="link.attrs"
-        >
+        <button v-for="link in presentation.data_links.items" :key="link.key" v-bind="link.attrs">
           <template v-for="row in link.rows" :key="row.key">
             <span v-bind="row.label.attrs">{{ row.label.text }}</span>
             <span v-bind="row.value.attrs">{{ row.value.text }}</span>

@@ -128,11 +128,10 @@ describe("signed first-party frontend release contracts", () => {
       corpus.keys,
       options,
     );
-    const second = await verifyFirstPartyFrontendRelease(
-      corpus.release.envelope,
-      corpus.keys,
-      { ...options, now: "2026-08-30T18:31:00Z" },
-    );
+    const second = await verifyFirstPartyFrontendRelease(corpus.release.envelope, corpus.keys, {
+      ...options,
+      now: "2026-08-30T18:31:00Z",
+    });
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
@@ -155,11 +154,10 @@ describe("signed first-party frontend release contracts", () => {
       error: { code: "invalid_timestamp", path: "$.now" },
     });
 
-    const validDate = await verifyFirstPartyFrontendRelease(
-      corpus.release.envelope,
-      corpus.keys,
-      { ...options, now: new Date(Date.parse(corpus.now)) },
-    );
+    const validDate = await verifyFirstPartyFrontendRelease(corpus.release.envelope, corpus.keys, {
+      ...options,
+      now: new Date(Date.parse(corpus.now)),
+    });
     expect(validDate.ok).toBe(true);
   });
 

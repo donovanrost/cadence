@@ -7,18 +7,22 @@ import type {
   HostQueryRequest,
 } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { onMounted, ref, useAttrs } from "vue";
+import { computed, onMounted, ref, useAttrs } from "vue";
 import ApplicationHost from "./ApplicationHost.vue";
 import TelemetryDecomManage from "./TelemetryDecomManage.vue";
+import type { TelemetryDecomManageProps } from "./telemetry_decom_props";
 
-type ApplicationHostDto = {
-  host: Record<string, unknown>;
-  navigation: Record<string, unknown> | null;
-  declarative_surface: Record<string, unknown> | null;
-  application_surface_rows: Record<string, unknown>[];
-  application_surface_activity: Record<string, unknown>[];
-  application_surface_packet_groups: Record<string, unknown>[];
-};
+type ApplicationHostDto = Required<
+  Pick<
+    InstanceType<typeof ApplicationHost>["$props"],
+    | "host"
+    | "navigation"
+    | "declarative_surface"
+    | "application_surface_rows"
+    | "application_surface_activity"
+    | "application_surface_packet_groups"
+  >
+>;
 
 type ApplicationAction = {
   "action-id": string;
@@ -42,7 +46,7 @@ type TelemetryHost = {
 type TelemetryApplicationProps = {
   context: FederatedApplicationProps["context"];
   surface?: "manage" | "packet_bindings";
-  pageProps?: Record<string, unknown>;
+  pageProps?: TelemetryDecomManageProps;
   host?: TelemetryHost;
   bridge?: HostBridge;
 };
@@ -52,6 +56,9 @@ const props = defineProps<TelemetryApplicationProps>();
 const attrs = useAttrs();
 const host = props.host ?? (props.bridge ? legacyHost(props.bridge) : undefined);
 const managedSurface = props.surface === "manage";
+const managedProps = computed(
+  () => ({ ...(props.pageProps ?? {}), ...attrs }) as TelemetryDecomManageProps,
+);
 
 const presentation = ref<ApplicationHostDto>();
 const loading = ref(true);
@@ -196,11 +203,7 @@ function messageFor(reason: unknown, fallback: string): string {
 
 <template>
   <div id="telemetry-decom-application">
-    <TelemetryDecomManage
-      v-if="managedSurface"
-      v-bind="props.pageProps ?? {}"
-      v-bind="attrs"
-    />
+    <TelemetryDecomManage v-if="managedSurface" v-bind="managedProps" />
     <CStatePanel
       v-else-if="loading"
       id="telemetry-decom-loading"

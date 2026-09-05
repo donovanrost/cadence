@@ -1,137 +1,137 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Page = {
-  id: string
-  heading: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  heading: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type Section = {
-  id: string
-  number: string
-  title: string
-}
+  id: string;
+  number: string;
+  title: string;
+};
 
 type Field = {
-  id: string
-  name: string
-  type: "text" | "textarea"
-  label: string
-  required: boolean
-  disabled: boolean
-  placeholder: string | null
-  value: string
-}
+  id: string;
+  name: string;
+  type: "text" | "textarea";
+  label: string;
+  required: boolean;
+  disabled: boolean;
+  placeholder: string | null;
+  value: string;
+};
 
 type GroundStationForm = {
-  id: string
+  id: string;
   sections: {
-    identity: Section
-    network: Section
-    metadata: Section
-  }
+    identity: Section;
+    network: Section;
+    metadata: Section;
+  };
   fields: {
-    ground_station_id: Field
-    display_name: Field
-    provider: Field
-    region: Field
-    metadata_json: Field
-  }
+    ground_station_id: Field;
+    display_name: Field;
+    provider: Field;
+    region: Field;
+    metadata_json: Field;
+  };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
 type GroundStationValues = {
-  ground_station_id: string
-  display_name: string
-  provider: string
-  region: string
-  metadata_json: string
-}
+  ground_station_id: string;
+  display_name: string;
+  provider: string;
+  region: string;
+  metadata_json: string;
+};
 
 type GroundStationPayload = {
-  ground_station: GroundStationValues
-}
+  ground_station: GroundStationValues;
+};
 
 const props = defineProps<{
-  page: Page
-  mode: "new" | "edit"
-  form: GroundStationForm
-}>()
+  page: Page;
+  mode: "new" | "edit";
+  form: GroundStationForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: GroundStationPayload]
-  save: [payload: GroundStationPayload]
-}>()
+  validate: [payload: GroundStationPayload];
+  save: [payload: GroundStationPayload];
+}>();
 
 const formValues = (form: GroundStationForm): GroundStationValues => ({
   ground_station_id: form.fields.ground_station_id.value,
   display_name: form.fields.display_name.value,
   provider: form.fields.provider.value,
   region: form.fields.region.value,
-  metadata_json: form.fields.metadata_json.value
-})
+  metadata_json: form.fields.metadata_json.value,
+});
 
-const groundStation = reactive<GroundStationValues>(formValues(props.form))
-const pendingValidations: GroundStationValues[] = []
+const groundStation = reactive<GroundStationValues>(formValues(props.form));
+const pendingValidations: GroundStationValues[] = [];
 
 const values = (): GroundStationValues => ({
   ground_station_id: groundStation.ground_station_id,
   display_name: groundStation.display_name,
   provider: groundStation.provider,
   region: groundStation.region,
-  metadata_json: groundStation.metadata_json
-})
+  metadata_json: groundStation.metadata_json,
+});
 
 const sameValues = (left: GroundStationValues, right: GroundStationValues) =>
   left.ground_station_id === right.ground_station_id &&
   left.display_name === right.display_name &&
   left.provider === right.provider &&
   left.region === right.region &&
-  left.metadata_json === right.metadata_json
+  left.metadata_json === right.metadata_json;
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm)
+    const serverValues = formValues(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
     const hasNewerTyping =
       pendingValidations.length > 0 &&
-      (acknowledgedIndex < 0 || acknowledgedIndex < pendingValidations.length - 1)
+      (acknowledgedIndex < 0 || acknowledgedIndex < pendingValidations.length - 1);
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(groundStation, serverValues)
+    if (!hasNewerTyping) Object.assign(groundStation, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validate = () => {
-  const currentValues = values()
-  pendingValidations.push(currentValues)
-  emit("validate", {ground_station: currentValues})
-}
+  const currentValues = values();
+  pendingValidations.push(currentValues);
+  emit("validate", { ground_station: currentValues });
+};
 
-const save = () => emit("save", {ground_station: values()})
+const save = () => emit("save", { ground_station: values() });
 </script>
 
 <template>
@@ -154,7 +154,8 @@ const save = () => emit("save", {ground_station: values()})
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -192,7 +193,7 @@ const save = () => emit("save", {ground_station: values()})
             :disabled="form.fields.ground_station_id.disabled"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -211,7 +212,7 @@ const save = () => emit("save", {ground_station: values()})
             :disabled="form.fields.display_name.disabled"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -241,7 +242,7 @@ const save = () => emit("save", {ground_station: values()})
             :disabled="form.fields.provider.disabled"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -260,7 +261,7 @@ const save = () => emit("save", {ground_station: values()})
             :disabled="form.fields.region.disabled"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -303,7 +304,8 @@ const save = () => emit("save", {ground_station: values()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceFormPageFrame>

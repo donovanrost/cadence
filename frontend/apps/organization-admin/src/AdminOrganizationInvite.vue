@@ -1,111 +1,111 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type RoleOption = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type Page = {
-  title: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-  role_options: RoleOption[]
-  submit_label: string
-  cancel_label: string
-  cancel_href: string
-}
+  title: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+  role_options: RoleOption[];
+  submit_label: string;
+  cancel_label: string;
+  cancel_href: string;
+};
 
 type InviteForm = {
-  email: string
-  display_name: string
-  membership_role: string
-  grant_platform_admin: boolean
-}
+  email: string;
+  display_name: string;
+  membership_role: string;
+  grant_platform_admin: boolean;
+};
 
 type SerializedInviteForm = {
-  email: string
-  display_name: string
-  membership_role: string
-  grant_platform_admin: "true" | "false"
-}
+  email: string;
+  display_name: string;
+  membership_role: string;
+  grant_platform_admin: "true" | "false";
+};
 
 type InvitePayload = {
-  invite: SerializedInviteForm
-}
+  invite: SerializedInviteForm;
+};
 
 const props = defineProps<{
-  page: Page
-  form: InviteForm
-}>()
+  page: Page;
+  form: InviteForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: InvitePayload]
-  save: [payload: InvitePayload]
-}>()
+  validate: [payload: InvitePayload];
+  save: [payload: InvitePayload];
+}>();
 
-const invite = reactive<InviteForm>({...props.form})
-const pendingValidations: InviteForm[] = []
+const invite = reactive<InviteForm>({ ...props.form });
+const pendingValidations: InviteForm[] = [];
 
 const values = (): InviteForm => ({
   email: invite.email,
   display_name: invite.display_name,
   membership_role: invite.membership_role,
-  grant_platform_admin: invite.grant_platform_admin
-})
+  grant_platform_admin: invite.grant_platform_admin,
+});
 
 const serializedValues = (formValues: InviteForm): SerializedInviteForm => ({
   email: formValues.email,
   display_name: formValues.display_name,
   membership_role: formValues.membership_role,
-  grant_platform_admin: formValues.grant_platform_admin ? "true" : "false"
-})
+  grant_platform_admin: formValues.grant_platform_admin ? "true" : "false",
+});
 
 const sameValues = (left: InviteForm, right: InviteForm) =>
   left.email === right.email &&
   left.display_name === right.display_name &&
   left.membership_role === right.membership_role &&
-  left.grant_platform_admin === right.grant_platform_admin
+  left.grant_platform_admin === right.grant_platform_admin;
 
 watch(
   () => props.form,
   (serverValues) => {
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
-    const latestPending = pendingValidations[pendingValidations.length - 1]
+      sameValues(sent, serverValues),
+    );
+    const latestPending = pendingValidations[pendingValidations.length - 1];
     const hasNewerTyping =
       acknowledgedIndex >= 0
         ? acknowledgedIndex < pendingValidations.length - 1
-        : latestPending !== undefined && !sameValues(latestPending, serverValues)
+        : latestPending !== undefined && !sameValues(latestPending, serverValues);
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(invite, serverValues)
+    if (!hasNewerTyping) Object.assign(invite, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validate = () => {
-  const formValues = values()
-  pendingValidations.push(formValues)
-  emit("validate", {invite: serializedValues(formValues)})
-}
+  const formValues = values();
+  pendingValidations.push(formValues);
+  emit("validate", { invite: serializedValues(formValues) });
+};
 
 const save = () => {
-  const formValues = values()
-  emit("save", {invite: serializedValues(formValues)})
-}
+  const formValues = values();
+  emit("save", { invite: serializedValues(formValues) });
+};
 </script>
 
 <template>
@@ -127,7 +127,8 @@ const save = () => {
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="transition-colors hover:text-primary"
-            >{{ breadcrumb.label }}</a>
+              >{{ breadcrumb.label }}</a
+            >
           </template>
         </CadenceBreadcrumbs>
         <CadencePageTitle>
@@ -149,7 +150,7 @@ const save = () => {
           required
           class="w-full input"
           @input="validate"
-        >
+        />
       </div>
 
       <div class="fieldset mb-3">
@@ -162,7 +163,7 @@ const save = () => {
           placeholder="Flight Operator"
           class="w-full input"
           @input="validate"
-        >
+        />
       </div>
 
       <div class="fieldset mb-3">
@@ -182,7 +183,7 @@ const save = () => {
 
       <div class="fieldset mb-3">
         <label class="flex cursor-pointer items-start gap-3" for="invite_grant_platform_admin">
-          <input name="invite[grant_platform_admin]" type="hidden" value="false">
+          <input name="invite[grant_platform_admin]" type="hidden" value="false" />
           <input
             id="invite_grant_platform_admin"
             v-model="invite.grant_platform_admin"
@@ -192,13 +193,14 @@ const save = () => {
             aria-describedby="invite_grant_platform_admin-description"
             class="checkbox checkbox-sm mt-0.5"
             @change="validate"
-          >
+          />
           <span>
             <span class="block text-sm font-medium">Grant platform admin</span>
             <span
               id="invite_grant_platform_admin-description"
               class="mt-0.5 block text-xs text-base-content/70"
-            >Platform admins can manage all organizations and system settings.</span>
+              >Platform admins can manage all organizations and system settings.</span
+            >
           </span>
         </label>
       </div>
@@ -213,7 +215,8 @@ const save = () => {
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ page.cancel_label }}</a>
+          >{{ page.cancel_label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceNarrowFormPageFrame>

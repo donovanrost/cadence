@@ -86,9 +86,9 @@ describe("approved first-party host composition", () => {
     }
 
     expect(bootstrap.registry.list()).toHaveLength(APPROVED_FIRST_PARTY_APPLICATIONS.length);
-    expect(bootstrap.registry.list().map(({ manifest }) => manifest.application.applicationKey)).toEqual(
-      APPROVED_FIRST_PARTY_APPLICATIONS.map(({ applicationKey }) => applicationKey),
-    );
+    expect(
+      bootstrap.registry.list().map(({ manifest }) => manifest.application.applicationKey),
+    ).toEqual(APPROVED_FIRST_PARTY_APPLICATIONS.map(({ applicationKey }) => applicationKey));
   });
 
   it("rejects a known application with a catalog-swapped remote identity", () => {

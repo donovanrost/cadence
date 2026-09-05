@@ -1,12 +1,12 @@
 <script setup lang="ts">
 defineProps<{
-  wrapperClass: string
-  number: string
-  numberClass: string
-  title: string
-  titleClass: string
-  dividerClass: string
-}>()
+  wrapperClass: string;
+  number: string;
+  numberClass: string;
+  title: string;
+  titleClass: string;
+  dividerClass: string;
+}>();
 </script>
 
 <template>

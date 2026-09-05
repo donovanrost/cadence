@@ -351,11 +351,7 @@ async function enumerateArtifacts(inputDirectory) {
         fail(`artifact ${relativePath} disappeared`),
       );
       assertStableFileMetadata(stats, resolvedStats, `artifact ${relativePath}`);
-      const bytes = await readRegularFile(
-        absolutePath,
-        `artifact ${relativePath}`,
-        resolvedStats,
-      );
+      const bytes = await readRegularFile(absolutePath, `artifact ${relativePath}`, resolvedStats);
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (paths.has(relativePath)) fail(`duplicate normalized artifact path ${relativePath}`);
       if (artifacts.length >= MAX_ARTIFACTS) fail("artifact inventory exceeds the count limit");
@@ -701,8 +697,11 @@ async function readPrivateKeySource({
 }
 
 async function readJsonFile(filePath, label) {
-  const stats = await lstat(filePath, { bigint: true }).catch(() => fail(`${label} is unavailable`));
-  if (stats.isSymbolicLink() || !stats.isFile()) fail(`${label} must be a regular non-symlink file`);
+  const stats = await lstat(filePath, { bigint: true }).catch(() =>
+    fail(`${label} is unavailable`),
+  );
+  if (stats.isSymbolicLink() || !stats.isFile())
+    fail(`${label} must be a regular non-symlink file`);
   const resolvedPath = await realpath(filePath).catch(() => fail(`${label} is unavailable`));
   const resolvedStats = await lstat(resolvedPath, { bigint: true }).catch(() =>
     fail(`${label} is unavailable`),

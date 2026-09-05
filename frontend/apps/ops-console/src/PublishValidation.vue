@@ -1,111 +1,111 @@
 <script setup lang="ts">
-type DataAttrs = Record<string, string | null>
+type DataAttrs = Record<string, string | null>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type LinkPresentation = {
-  href: string
-  navigation_kind: "navigate" | "patch"
-  class: string
-  text: string
-  icon?: IconPresentation
-  attrs: DataAttrs
-}
+  href: string;
+  navigation_kind: "navigate" | "patch";
+  class: string;
+  text: string;
+  icon?: IconPresentation;
+  attrs: DataAttrs;
+};
 
 type ValueRow = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation & {attrs: DataAttrs}
-}
+  key: string;
+  label: TextPresentation;
+  value: TextPresentation & { attrs: DataAttrs };
+};
 
 type IssuePresentation = {
-  key: string
-  id: string
-  class: string
-  attrs: DataAttrs
+  key: string;
+  id: string;
+  class: string;
+  attrs: DataAttrs;
   header: {
-    class: string
-    severity: TextPresentation
-    code: TextPresentation
-    focus: LinkPresentation
-  }
-  message: TextPresentation & {attrs: DataAttrs}
+    class: string;
+    severity: TextPresentation;
+    code: TextPresentation;
+    focus: LinkPresentation;
+  };
+  message: TextPresentation & { attrs: DataAttrs };
   summary: null | {
-    class: string
-    attrs: DataAttrs
-    rows: ValueRow[]
-  }
+    class: string;
+    attrs: DataAttrs;
+    rows: ValueRow[];
+  };
   action: null | {
-    class: string
-    attrs: DataAttrs
-    label: TextPresentation
-    message: TextPresentation
-    link: LinkPresentation | null
-  }
+    class: string;
+    attrs: DataAttrs;
+    label: TextPresentation;
+    message: TextPresentation;
+    link: LinkPresentation | null;
+  };
   details: null | {
-    class: string
-    rows: ValueRow[]
-  }
-}
+    class: string;
+    rows: ValueRow[];
+  };
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: DataAttrs
-  }
+    id: string;
+    class: string;
+    attrs: DataAttrs;
+  };
   header: {
-    class: string
-    heading: TextPresentation
-    controls: {class: string}
+    class: string;
+    heading: TextPresentation;
+    controls: { class: string };
     refresh: {
-      id: string
-      type: "button"
-      class: string
-      text: string
-      icon: IconPresentation
-      attrs: DataAttrs
-    }
-    badge: TextPresentation
-  }
-  message: TextPresentation
+      id: string;
+      type: "button";
+      class: string;
+      text: string;
+      icon: IconPresentation;
+      attrs: DataAttrs;
+    };
+    badge: TextPresentation;
+  };
+  message: TextPresentation;
   result: {
-    id: string
-    class: string
-    attrs: DataAttrs
-    label: TextPresentation
-    message: TextPresentation
-  }
+    id: string;
+    class: string;
+    attrs: DataAttrs;
+    label: TextPresentation;
+    message: TextPresentation;
+  };
   freshness: null | {
-    id: string
-    class: string
-    attrs: DataAttrs
-    evaluated: {label: TextPresentation; value: TextPresentation}
-    draft_state: {label: TextPresentation; value: TextPresentation}
+    id: string;
+    class: string;
+    attrs: DataAttrs;
+    evaluated: { label: TextPresentation; value: TextPresentation };
+    draft_state: { label: TextPresentation; value: TextPresentation };
     reason: {
-      visible: boolean
-      label: TextPresentation
-      value: TextPresentation
-    }
-    message: TextPresentation & {visible: boolean; attrs: DataAttrs}
-  }
-  resolved_notice: TextPresentation & {visible: boolean; attrs: DataAttrs}
+      visible: boolean;
+      label: TextPresentation;
+      value: TextPresentation;
+    };
+    message: TextPresentation & { visible: boolean; attrs: DataAttrs };
+  };
+  resolved_notice: TextPresentation & { visible: boolean; attrs: DataAttrs };
   issues: {
-    visible: boolean
-    class: string
-    rows: IssuePresentation[]
-  }
-}
+    visible: boolean;
+    class: string;
+    rows: IssuePresentation[];
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -124,10 +124,7 @@ defineProps<{presentation: Presentation}>()
           v-bind="presentation.header.refresh.attrs"
         >
           <span
-            :class="[
-              presentation.header.refresh.icon.name,
-              presentation.header.refresh.icon.class,
-            ]"
+            :class="[presentation.header.refresh.icon.name, presentation.header.refresh.icon.class]"
           ></span>
           {{ presentation.header.refresh.text }}
         </button>

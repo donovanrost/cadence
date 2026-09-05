@@ -1,83 +1,83 @@
 <script setup>
-import {computed, onUnmounted, ref} from "vue"
+import { computed, onUnmounted, ref } from "vue";
 
 const props = defineProps({
-  button_id: {type: String, required: true},
-  clipboard_text: {type: String, default: ""},
-  button_class: {type: String, default: ""},
-  icon: {type: String, required: true},
-  icon_class: {type: String, default: ""},
-  label: {type: String, default: ""},
-  title: {type: String, default: ""},
-  aria_label: {type: String, default: ""},
-  data_attrs: {type: Object, default: () => ({})}
-})
+  button_id: { type: String, required: true },
+  clipboard_text: { type: String, default: "" },
+  button_class: { type: String, default: "" },
+  icon: { type: String, required: true },
+  icon_class: { type: String, default: "" },
+  label: { type: String, default: "" },
+  title: { type: String, default: "" },
+  aria_label: { type: String, default: "" },
+  data_attrs: { type: Object, default: () => ({}) },
+});
 
-const feedback = ref("")
-let clearFeedbackTimer
+const feedback = ref("");
+let clearFeedbackTimer;
 
 const feedbackMessage = computed(() => {
-  if (feedback.value === "copied") return "Copied to clipboard"
-  if (feedback.value === "failed") return "Copy failed"
-  return ""
-})
+  if (feedback.value === "copied") return "Copied to clipboard";
+  if (feedback.value === "failed") return "Copy failed";
+  return "";
+});
 
 const absoluteText = () => {
-  const value = props.clipboard_text || window.location.pathname + window.location.search
-  return new URL(value, window.location.origin).toString()
-}
+  const value = props.clipboard_text || window.location.pathname + window.location.search;
+  return new URL(value, window.location.origin).toString();
+};
 
 const copyWithFallback = (text) => {
-  const textarea = document.createElement("textarea")
-  textarea.value = text
-  textarea.setAttribute("readonly", "readonly")
-  textarea.style.position = "fixed"
-  textarea.style.opacity = "0"
-  document.body.appendChild(textarea)
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "readonly");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
 
   try {
-    textarea.select()
-    return document.execCommand("copy")
+    textarea.select();
+    return document.execCommand("copy");
   } finally {
-    textarea.remove()
+    textarea.remove();
   }
-}
+};
 
 const markFeedback = (state) => {
-  feedback.value = state
-  if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer)
+  feedback.value = state;
+  if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer);
 
   clearFeedbackTimer = setTimeout(() => {
-    feedback.value = ""
-    clearFeedbackTimer = undefined
-  }, 1500)
-}
+    feedback.value = "";
+    clearFeedbackTimer = undefined;
+  }, 1500);
+};
 
 const copy = async () => {
-  let text
+  let text;
 
   try {
-    text = absoluteText()
+    text = absoluteText();
   } catch (_error) {
-    markFeedback("failed")
-    return
+    markFeedback("failed");
+    return;
   }
 
   try {
-    await navigator.clipboard.writeText(text)
-    markFeedback("copied")
+    await navigator.clipboard.writeText(text);
+    markFeedback("copied");
   } catch (_error) {
     try {
-      markFeedback(copyWithFallback(text) === false ? "failed" : "copied")
+      markFeedback(copyWithFallback(text) === false ? "failed" : "copied");
     } catch (_fallbackError) {
-      markFeedback("failed")
+      markFeedback("failed");
     }
   }
-}
+};
 
 onUnmounted(() => {
-  if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer)
-})
+  if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer);
+});
 </script>
 
 <template>

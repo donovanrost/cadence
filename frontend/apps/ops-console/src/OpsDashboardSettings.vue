@@ -1,302 +1,302 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceDashboardSettingsSectionFrame from "./ui/components/CadenceDashboardSettingsSectionFrame.vue"
-import {reactive, watch} from "vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceDashboardSettingsSectionFrame from "./ui/components/CadenceDashboardSettingsSectionFrame.vue";
+import { reactive, watch } from "vue";
 
 type EmptyState = {
-  id: string
-  copy: string
-}
+  id: string;
+  copy: string;
+};
 
 type Page = {
-  id: string
+  id: string;
   header: {
-    eyebrow: string
-    heading: string
-    copy: string
+    eyebrow: string;
+    heading: string;
+    copy: string;
     viewer: {
-      id: string
-      label: string
-      href: string
-    }
-  }
+      id: string;
+      label: string;
+      href: string;
+    };
+  };
   sharing: {
-    id: string
-    eyebrow: string
-    heading: string
-    copy: string
+    id: string;
+    eyebrow: string;
+    heading: string;
+    copy: string;
     list: {
-      id: string
-      empty: EmptyState
-    }
-  }
+      id: string;
+      empty: EmptyState;
+    };
+  };
   snapshots: {
-    id: string
-    eyebrow: string
-    heading: string
+    id: string;
+    eyebrow: string;
+    heading: string;
     list: {
-      id: string
-      empty: EmptyState
-    }
-  }
+      id: string;
+      empty: EmptyState;
+    };
+  };
   portability: {
-    eyebrow: string
-    copy: string
+    eyebrow: string;
+    copy: string;
     export: {
-      id: string
-      label: string
-      icon: string
-      href: string
-    }
+      id: string;
+      label: string;
+      icon: string;
+      href: string;
+    };
     deployments: {
-      id: string
-      empty: EmptyState
-    }
-  }
+      id: string;
+      empty: EmptyState;
+    };
+  };
   access: {
-    eyebrow: string
-    heading: string
-    copy: string
-  }
+    eyebrow: string;
+    heading: string;
+    copy: string;
+  };
   lifecycle: {
-    eyebrow: string
-    copy: string
+    eyebrow: string;
+    copy: string;
     archive: {
-      id: string
-      label: string
-      icon: string
-      confirm: string
-    }
-  }
-}
+      id: string;
+      label: string;
+      icon: string;
+      confirm: string;
+    };
+  };
+};
 
 type TextField = {
-  id: string
-  name: string
-  type: "text" | "textarea"
-  label: string
-  value: string
-  required: boolean
-  placeholder?: string
-}
+  id: string;
+  name: string;
+  type: "text" | "textarea";
+  label: string;
+  value: string;
+  required: boolean;
+  placeholder?: string;
+};
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type SelectField = {
-  id: string
-  name: string
-  type: "select"
-  label: string
-  value: string
-  required: boolean
-  options: Option[]
-}
+  id: string;
+  name: string;
+  type: "select";
+  label: string;
+  value: string;
+  required: boolean;
+  options: Option[];
+};
 
 type NumberField = {
-  id: string
-  name: string
-  type: "number"
-  label: string
-  value: string
-  required: boolean
-  min: number
-  placeholder: string
-}
+  id: string;
+  name: string;
+  type: "number";
+  label: string;
+  value: string;
+  required: boolean;
+  min: number;
+  placeholder: string;
+};
 
 type SubmitAction = {
-  id: string
-  label: string
-}
+  id: string;
+  label: string;
+};
 
 type SettingsForm = {
-  id: string
+  id: string;
   fields: {
-    name: TextField
-    description: TextField
-    tags: TextField
-    defaults_json: TextField
-  }
-  submit: SubmitAction
-}
+    name: TextField;
+    description: TextField;
+    tags: TextField;
+    defaults_json: TextField;
+  };
+  submit: SubmitAction;
+};
 
 type ShareForm = {
-  id: string
+  id: string;
   fields: {
-    data_visibility: SelectField
-    expires_in_hours: NumberField
-  }
-  submit: SubmitAction
-}
+    data_visibility: SelectField;
+    expires_in_hours: NumberField;
+  };
+  submit: SubmitAction;
+};
 
 type SnapshotForm = {
-  id: string
+  id: string;
   fields: {
-    data_visibility: SelectField
-  }
-  submit: SubmitAction
-}
+    data_visibility: SelectField;
+  };
+  submit: SubmitAction;
+};
 
 type DashboardShare = {
-  __dom_id: string
-  dashboard_share_id: string
-  access_policy: string
-  data_visibility: string
-  status: "active" | "revoked"
+  __dom_id: string;
+  dashboard_share_id: string;
+  access_policy: string;
+  data_visibility: string;
+  status: "active" | "revoked";
   open: {
-    id: string
-    href: string
-  }
+    id: string;
+    href: string;
+  };
   revoke: {
-    id: string
+    id: string;
     payload: {
-      "share-id": string
-    }
-  } | null
-}
+      "share-id": string;
+    };
+  } | null;
+};
 
 type DashboardSnapshot = {
-  __dom_id: string
-  dashboard_snapshot_id: string
-  dashboard_version: number
-  data_semantics: string
-  data_visibility: string
+  __dom_id: string;
+  dashboard_snapshot_id: string;
+  dashboard_version: number;
+  data_semantics: string;
+  data_visibility: string;
   open: {
-    id: string
-    href: string
-  }
-}
+    id: string;
+    href: string;
+  };
+};
 
 type DashboardDeployment = {
-  __dom_id: string
-  dashboard_deployment_id: string
-  environment: string
-  dashboard_version: number
-  artifact_digest_prefix: string
-}
+  __dom_id: string;
+  dashboard_deployment_id: string;
+  environment: string;
+  dashboard_version: number;
+  artifact_digest_prefix: string;
+};
 
 type SettingsValues = {
-  name: string
-  description: string
-  tags: string
-  defaults_json: string
-}
+  name: string;
+  description: string;
+  tags: string;
+  defaults_json: string;
+};
 
 type ShareValues = {
-  data_visibility: string
-  expires_in_hours: string
-}
+  data_visibility: string;
+  expires_in_hours: string;
+};
 
 type SnapshotValues = {
-  data_visibility: string
-}
+  data_visibility: string;
+};
 
 const props = defineProps<{
-  page: Page
-  settings_form: SettingsForm
-  share_form: ShareForm
-  snapshot_form: SnapshotForm
-  dashboard_shares: DashboardShare[]
-  dashboard_snapshots: DashboardSnapshot[]
-  dashboard_deployments: DashboardDeployment[]
-}>()
+  page: Page;
+  settings_form: SettingsForm;
+  share_form: ShareForm;
+  snapshot_form: SnapshotForm;
+  dashboard_shares: DashboardShare[];
+  dashboard_snapshots: DashboardSnapshot[];
+  dashboard_deployments: DashboardDeployment[];
+}>();
 
 const emit = defineEmits<{
-  "validate-settings": [payload: {settings: SettingsValues}]
-  "save-settings": [payload: {settings: SettingsValues}]
-  "create-share": [payload: {share: ShareValues}]
-  "revoke-share": [payload: {"share-id": string}]
-  "create-snapshot": [payload: {snapshot: SnapshotValues}]
-  "archive-dashboard": [payload: Record<string, never>]
-}>()
+  "validate-settings": [payload: { settings: SettingsValues }];
+  "save-settings": [payload: { settings: SettingsValues }];
+  "create-share": [payload: { share: ShareValues }];
+  "revoke-share": [payload: { "share-id": string }];
+  "create-snapshot": [payload: { snapshot: SnapshotValues }];
+  "archive-dashboard": [payload: Record<string, never>];
+}>();
 
 const settingsValuesFromForm = (form: SettingsForm): SettingsValues => ({
   name: form.fields.name.value,
   description: form.fields.description.value,
   tags: form.fields.tags.value,
-  defaults_json: form.fields.defaults_json.value
-})
+  defaults_json: form.fields.defaults_json.value,
+});
 
-const settings = reactive<SettingsValues>(settingsValuesFromForm(props.settings_form))
-const pendingSettingsValidations: SettingsValues[] = []
+const settings = reactive<SettingsValues>(settingsValuesFromForm(props.settings_form));
+const pendingSettingsValidations: SettingsValues[] = [];
 
 const currentSettings = (): SettingsValues => ({
   name: settings.name,
   description: settings.description,
   tags: settings.tags,
-  defaults_json: settings.defaults_json
-})
+  defaults_json: settings.defaults_json,
+});
 
 const sameSettings = (left: SettingsValues, right: SettingsValues) =>
   left.name === right.name &&
   left.description === right.description &&
   left.tags === right.tags &&
-  left.defaults_json === right.defaults_json
+  left.defaults_json === right.defaults_json;
 
 watch(
   () => props.settings_form,
   (serverForm) => {
-    const serverValues = settingsValuesFromForm(serverForm)
+    const serverValues = settingsValuesFromForm(serverForm);
     const acknowledgedIndex = pendingSettingsValidations.findIndex((sent) =>
-      sameSettings(sent, serverValues)
-    )
-    const latestPending = pendingSettingsValidations[pendingSettingsValidations.length - 1]
+      sameSettings(sent, serverValues),
+    );
+    const latestPending = pendingSettingsValidations[pendingSettingsValidations.length - 1];
     const hasNewerTyping =
       acknowledgedIndex >= 0
         ? acknowledgedIndex < pendingSettingsValidations.length - 1
-        : latestPending !== undefined && !sameSettings(latestPending, serverValues)
+        : latestPending !== undefined && !sameSettings(latestPending, serverValues);
 
-    if (acknowledgedIndex >= 0) pendingSettingsValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingSettingsValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(settings, serverValues)
+    if (!hasNewerTyping) Object.assign(settings, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const share = reactive<ShareValues>({
   data_visibility: props.share_form.fields.data_visibility.value,
-  expires_in_hours: props.share_form.fields.expires_in_hours.value
-})
+  expires_in_hours: props.share_form.fields.expires_in_hours.value,
+});
 
 const snapshot = reactive<SnapshotValues>({
-  data_visibility: props.snapshot_form.fields.data_visibility.value
-})
+  data_visibility: props.snapshot_form.fields.data_visibility.value,
+});
 
-const settingsPayload = () => ({settings: currentSettings()})
+const settingsPayload = () => ({ settings: currentSettings() });
 
 const validateSettings = () => {
-  pendingSettingsValidations.push(currentSettings())
-  emit("validate-settings", settingsPayload())
-}
+  pendingSettingsValidations.push(currentSettings());
+  emit("validate-settings", settingsPayload());
+};
 
-const saveSettings = () => emit("save-settings", settingsPayload())
+const saveSettings = () => emit("save-settings", settingsPayload());
 
 const createShare = () =>
   emit("create-share", {
     share: {
       data_visibility: share.data_visibility,
-      expires_in_hours: share.expires_in_hours
-    }
-  })
+      expires_in_hours: share.expires_in_hours,
+    },
+  });
 
 const revokeShare = (dashboardShare: DashboardShare) => {
-  if (dashboardShare.revoke !== null) emit("revoke-share", dashboardShare.revoke.payload)
-}
+  if (dashboardShare.revoke !== null) emit("revoke-share", dashboardShare.revoke.payload);
+};
 
 const createSnapshot = () =>
   emit("create-snapshot", {
     snapshot: {
-      data_visibility: snapshot.data_visibility
-    }
-  })
+      data_visibility: snapshot.data_visibility,
+    },
+  });
 
 const archiveDashboard = () => {
-  if (window.confirm(props.page.lifecycle.archive.confirm)) emit("archive-dashboard", {})
-}
+  if (window.confirm(props.page.lifecycle.archive.confirm)) emit("archive-dashboard", {});
+};
 </script>
 
 <template>
@@ -318,13 +318,12 @@ const archiveDashboard = () => {
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost btn-sm"
-        >{{ page.header.viewer.label }}</a>
+          >{{ page.header.viewer.label }}</a
+        >
       </div>
     </CadencePageHeaderFrame>
 
-    <div
-      class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:p-7"
-    >
+    <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:p-7">
       <div class="space-y-5">
         <form
           :id="settings_form.id"
@@ -345,7 +344,7 @@ const archiveDashboard = () => {
               :required="settings_form.fields.name.required"
               class="w-full input"
               @input="validateSettings"
-            >
+            />
           </CadenceField>
 
           <CadenceField
@@ -379,7 +378,7 @@ const archiveDashboard = () => {
               :placeholder="settings_form.fields.tags.placeholder"
               class="w-full input"
               @input="validateSettings"
-            >
+            />
           </CadenceField>
 
           <CadenceField
@@ -399,11 +398,9 @@ const archiveDashboard = () => {
           </CadenceField>
 
           <div class="flex justify-end">
-            <button
-              :id="settings_form.submit.id"
-              type="submit"
-              class="btn btn-primary btn-sm"
-            >{{ settings_form.submit.label }}</button>
+            <button :id="settings_form.submit.id" type="submit" class="btn btn-primary btn-sm">
+              {{ settings_form.submit.label }}
+            </button>
           </div>
         </form>
 
@@ -435,7 +432,9 @@ const archiveDashboard = () => {
                   v-for="option in share_form.fields.data_visibility.options"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
             <CadenceField
@@ -453,19 +452,23 @@ const archiveDashboard = () => {
                 :min="share_form.fields.expires_in_hours.min"
                 :placeholder="share_form.fields.expires_in_hours.placeholder"
                 class="w-full input"
-              >
+              />
             </CadenceField>
             <button
               :id="share_form.submit.id"
               type="submit"
               class="btn btn-primary btn-sm sm:col-span-2"
-            >{{ share_form.submit.label }}</button>
+            >
+              {{ share_form.submit.label }}
+            </button>
           </form>
           <div :id="page.sharing.list.id" class="mt-4 space-y-2">
             <p
               :id="page.sharing.list.empty.id"
               class="hidden only:block text-xs text-base-content/45"
-            >{{ page.sharing.list.empty.copy }}</p>
+            >
+              {{ page.sharing.list.empty.copy }}
+            </p>
             <article
               v-for="dashboardShare in dashboard_shares"
               :id="dashboardShare.__dom_id"
@@ -479,7 +482,8 @@ const archiveDashboard = () => {
                   data-phx-link="redirect"
                   data-phx-link-state="push"
                   class="font-mono text-primary hover:underline"
-                >{{ dashboardShare.dashboard_share_id }}</a>
+                  >{{ dashboardShare.dashboard_share_id }}</a
+                >
                 <p class="mt-1 text-base-content/50">
                   {{ dashboardShare.access_policy }} · {{ dashboardShare.data_visibility }} ·
                   {{ dashboardShare.status }}
@@ -491,14 +495,14 @@ const archiveDashboard = () => {
                 type="button"
                 class="btn btn-ghost btn-xs"
                 @click="revokeShare(dashboardShare)"
-              >Revoke</button>
+              >
+                Revoke
+              </button>
             </article>
           </div>
         </CadenceDashboardSettingsSectionFrame>
 
-        <CadenceDashboardSettingsSectionFrame
-          :id="page.snapshots.id"
-        >
+        <CadenceDashboardSettingsSectionFrame :id="page.snapshots.id">
           <p class="hud-label">{{ page.snapshots.eyebrow }}</p>
           <h2 class="mt-1 text-lg font-semibold">{{ page.snapshots.heading }}</h2>
           <form
@@ -523,20 +527,22 @@ const archiveDashboard = () => {
                   v-for="option in snapshot_form.fields.data_visibility.options"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
-            <button
-              :id="snapshot_form.submit.id"
-              type="submit"
-              class="btn btn-primary btn-sm"
-            >{{ snapshot_form.submit.label }}</button>
+            <button :id="snapshot_form.submit.id" type="submit" class="btn btn-primary btn-sm">
+              {{ snapshot_form.submit.label }}
+            </button>
           </form>
           <div :id="page.snapshots.list.id" class="mt-4 space-y-2">
             <p
               :id="page.snapshots.list.empty.id"
               class="hidden only:block text-xs text-base-content/45"
-            >{{ page.snapshots.list.empty.copy }}</p>
+            >
+              {{ page.snapshots.list.empty.copy }}
+            </p>
             <article
               v-for="dashboardSnapshot in dashboard_snapshots"
               :id="dashboardSnapshot.__dom_id"
@@ -549,7 +555,8 @@ const archiveDashboard = () => {
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="font-mono text-primary hover:underline"
-              >{{ dashboardSnapshot.dashboard_snapshot_id }}</a>
+                >{{ dashboardSnapshot.dashboard_snapshot_id }}</a
+              >
               <p class="mt-1 text-base-content/50">
                 Version {{ dashboardSnapshot.dashboard_version }} ·
                 {{ dashboardSnapshot.data_semantics }} · {{ dashboardSnapshot.data_visibility }}
@@ -577,7 +584,9 @@ const archiveDashboard = () => {
             <p
               :id="page.portability.deployments.empty.id"
               class="hidden only:block text-[0.7rem] text-base-content/45"
-            >{{ page.portability.deployments.empty.copy }}</p>
+            >
+              {{ page.portability.deployments.empty.copy }}
+            </p>
             <p
               v-for="deployment in dashboard_deployments"
               :id="deployment.__dom_id"

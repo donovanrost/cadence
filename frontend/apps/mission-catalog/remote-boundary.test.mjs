@@ -38,9 +38,9 @@ test("mission and catalog pages are self-contained first-party remote code", asy
     await readFile(new URL(page, root), "utf8");
   }
 
-  const source = (await Promise.all((await filesUnder(root)).map((path) => readFile(path, "utf8")))).join(
-    "\n",
-  );
+  const source = (
+    await Promise.all((await filesUnder(root)).map((path) => readFile(path, "utf8")))
+  ).join("\n");
 
   const legacyVueImport = ["apps", "cadence_web", "assets", "vue"].join("/");
   const phoenixUploadPackage = ["live", "vue"].join("_");

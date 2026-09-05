@@ -181,10 +181,7 @@ describe("Phoenix host application", () => {
 
   it("performs one bounded authenticated recovery and sanitizes a repeated 401", async () => {
     const fetcher = vi.fn(async () =>
-      Response.json(
-        { message: "SECRET-RAW-CATALOG-DETAIL" },
-        { status: 401 },
-      ),
+      Response.json({ message: "SECRET-RAW-CATALOG-DETAIL" }, { status: 401 }),
     );
     const wrapper = mount(PhoenixHostApp, {
       props: {

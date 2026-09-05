@@ -26,8 +26,7 @@ body {
   place-items: center;
   background:
     linear-gradient(rgba(27, 52, 52, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 52, 52, 0.18) 1px, transparent 1px),
-    #0d1214;
+    linear-gradient(90deg, rgba(27, 52, 52, 0.18) 1px, transparent 1px), #0d1214;
   background-size: 32px 32px;
 }
 

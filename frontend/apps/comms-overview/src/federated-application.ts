@@ -70,9 +70,27 @@ export const canonicalManifest = defineApplicationManifest({
     canonicalSurface("transports", "Transports", "configuration", "cadence.comms.transports", 30),
     canonicalSurface("transport", "Transport", "configuration", "cadence.comms.transport", 40),
     canonicalSurface("routing", "Routing", "configuration", "cadence.comms.routing", 50),
-    canonicalSurface("routing_detail", "Routing Rule", "configuration", "cadence.comms.routing_detail", 60),
-    canonicalSurface("ground_stations", "Ground Stations", "configuration", "cadence.comms.ground_stations", 70),
-    canonicalSurface("ground_station", "Ground Station", "configuration", "cadence.comms.ground_station", 80),
+    canonicalSurface(
+      "routing_detail",
+      "Routing Rule",
+      "configuration",
+      "cadence.comms.routing_detail",
+      60,
+    ),
+    canonicalSurface(
+      "ground_stations",
+      "Ground Stations",
+      "configuration",
+      "cadence.comms.ground_stations",
+      70,
+    ),
+    canonicalSurface(
+      "ground_station",
+      "Ground Station",
+      "configuration",
+      "cadence.comms.ground_station",
+      80,
+    ),
   ],
 });
 

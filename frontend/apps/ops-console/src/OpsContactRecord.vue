@@ -1,101 +1,103 @@
 <script setup lang="ts">
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
 type Action = {
-  id: string
-  label: string
-  icon: string
-  class: string
-  href: string
-}
+  id: string;
+  label: string;
+  icon: string;
+  class: string;
+  href: string;
+};
 
 type Fact = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type LineageField = Fact & {
-  class: string
-}
+  class: string;
+};
 
 type ContactPath = {
-  id: string
-  path_id: string
-  source_endpoint_ref: string
-  direction: Fact
-  selection: Fact
-}
+  id: string;
+  path_id: string;
+  source_endpoint_ref: string;
+  direction: Fact;
+  selection: Fact;
+};
 
 type ContactRecord = {
-  id: string
+  id: string;
   header: {
-    title: string
-    canonical_id: string
+    title: string;
+    canonical_id: string;
     lifecycle: {
-      label: string
-      class: string
-    }
+      label: string;
+      class: string;
+    };
     back: {
-      id: string
-      label: string
-      icon: string
-      href: string
-    }
-    actions: Action[]
-  }
+      id: string;
+      label: string;
+      icon: string;
+      href: string;
+    };
+    actions: Action[];
+  };
   window: {
-    id: string
-    eyebrow: string
-    title: string
-    facts: Fact[]
-  }
+    id: string;
+    eyebrow: string;
+    title: string;
+    facts: Fact[];
+  };
   paths: {
-    id: string
-    list_id: string
-    eyebrow: string
-    title: string
-    empty: boolean
+    id: string;
+    list_id: string;
+    eyebrow: string;
+    title: string;
+    empty: boolean;
     empty_state: {
-      id: string
-      message: string
-    }
-    rows: ContactPath[]
-  }
+      id: string;
+      message: string;
+    };
+    rows: ContactPath[];
+  };
   lineage: {
-    id: string
-    eyebrow: string
-    title: string
-    fields: LineageField[]
-  }
+    id: string;
+    eyebrow: string;
+    title: string;
+    fields: LineageField[];
+  };
   context: {
-    id: string
-    eyebrow: string
-    title: string
+    id: string;
+    eyebrow: string;
+    title: string;
     intents: {
-      label: string
-      empty: boolean
-      empty_state: string
-      values: string[]
-    }
+      label: string;
+      empty: boolean;
+      empty_state: string;
+      values: string[];
+    };
     sources: {
-      label: string
-      empty: boolean
-      empty_state: string
-      values: string[]
-    }
-  }
-}
+      label: string;
+      empty: boolean;
+      empty_state: string;
+      values: string[];
+    };
+  };
+};
 
 defineProps<{
-  record: ContactRecord
-}>()
+  record: ContactRecord;
+}>();
 </script>
 
 <template>
   <main :id="record.id" class="min-h-0 flex-1 overflow-y-auto bg-base-100">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[90rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div
+        class="mx-auto flex max-w-[90rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
+      >
         <div class="min-w-0">
           <a
             :id="record.header.back.id"
@@ -112,16 +114,13 @@ defineProps<{
             <span
               :class="[
                 'border px-2 py-1 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em]',
-                record.header.lifecycle.class
+                record.header.lifecycle.class,
               ]"
             >
               {{ record.header.lifecycle.label }}
             </span>
           </div>
-          <p
-            id="contact-record-id"
-            class="mt-2 break-all font-mono text-xs text-base-content/50"
-          >
+          <p id="contact-record-id" class="mt-2 break-all font-mono text-xs text-base-content/50">
             {{ record.header.canonical_id }}
           </p>
         </div>
@@ -143,9 +142,15 @@ defineProps<{
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7">
+    <div
+      class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7"
+    >
       <div class="min-w-0 space-y-5">
-        <CadencePanel :id="record.window.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="record.window.id"
+          class="border border-base-300 bg-base-200/25"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ record.window.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.window.title }}</h2>
@@ -162,7 +167,11 @@ defineProps<{
           </div>
         </CadencePanel>
 
-        <CadencePanel :id="record.paths.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="record.paths.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ record.paths.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.paths.title }}</h2>
@@ -207,7 +216,11 @@ defineProps<{
       </div>
 
       <aside class="min-w-0 space-y-5">
-        <CadencePanel :id="record.lineage.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="record.lineage.id"
+          class="border border-base-300 bg-base-200/25"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ record.lineage.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.lineage.title }}</h2>
@@ -220,7 +233,11 @@ defineProps<{
           </dl>
         </CadencePanel>
 
-        <CadencePanel :id="record.context.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="record.context.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ record.context.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ record.context.title }}</h2>
@@ -245,10 +262,7 @@ defineProps<{
               <p class="hud-label">{{ record.context.sources.label }}</p>
               <ul class="mt-2 space-y-1.5 font-mono text-[0.68rem] text-base-content/65">
                 <li v-for="source in record.context.sources.values" :key="source">{{ source }}</li>
-                <li
-                  v-if="record.context.sources.empty"
-                  class="font-sans text-base-content/45"
-                >
+                <li v-if="record.context.sources.empty" class="font-sans text-base-content/45">
                   {{ record.context.sources.empty_state }}
                 </li>
               </ul>

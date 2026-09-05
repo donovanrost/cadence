@@ -1,47 +1,47 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type NewRule = {
-  id: string
-  label: string
-  href: string
-}
+  id: string;
+  label: string;
+  href: string;
+};
 
 type EmptyState = {
-  title: string
-  description: string
-}
+  title: string;
+  description: string;
+};
 
 type RoutingRuleRow = {
-  id: string
-  purpose_label: string
-  display_name: string
-  direction: string
-  transport_name: string
-  role: string
-  state: "ENABLED" | "DISABLED"
-  href: string
-}
+  id: string;
+  purpose_label: string;
+  display_name: string;
+  direction: string;
+  transport_name: string;
+  role: string;
+  state: "ENABLED" | "DISABLED";
+  href: string;
+};
 
 type Page = {
-  title: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-  new_rule: NewRule
-  empty_state: EmptyState
-  rules_id: string
-  rows: RoutingRuleRow[]
-}
+  title: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+  new_rule: NewRule;
+  empty_state: EmptyState;
+  rules_id: string;
+  rows: RoutingRuleRow[];
+};
 
-defineProps<{page: Page}>()
+defineProps<{ page: Page }>();
 </script>
 
 <template>
@@ -64,7 +64,8 @@ defineProps<{page: Page}>()
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
 

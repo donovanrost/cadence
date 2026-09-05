@@ -1,49 +1,49 @@
 <script setup lang="ts">
-import CatalogArtifactShow from "./CatalogArtifactShow.vue"
+import CatalogArtifactShow from "./CatalogArtifactShow.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
-type CatalogArtifactShowProps = InstanceType<typeof CatalogArtifactShow>["$props"]
+type CatalogArtifactShowProps = InstanceType<typeof CatalogArtifactShow>["$props"];
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: Attrs
-      items: BreadcrumbItem[]
-    }
-    title: TextPresentation
-  }
-  child_wrapper: ElementPresentation
+      attrs: Attrs;
+      items: BreadcrumbItem[];
+    };
+    title: TextPresentation;
+  };
+  child_wrapper: ElementPresentation;
   artifact_show: {
-    artifact: CatalogArtifactShowProps["artifact"]
-    runs: CatalogArtifactShowProps["runs"]
-  }
-}
+    artifact: CatalogArtifactShowProps["artifact"];
+    runs: CatalogArtifactShowProps["runs"];
+  };
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 
 const emit = defineEmits<{
-  reimport: []
-}>()
+  reimport: [];
+}>();
 </script>
 
 <template>

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type {PropType} from "vue"
-import type {RowSectionPresentation} from "./presentation_types"
+import type { PropType } from "vue";
+import type { RowSectionPresentation } from "./presentation_types";
 
 defineProps({
-  presentation: {type: Object as PropType<RowSectionPresentation>, required: true},
-})
+  presentation: { type: Object as PropType<RowSectionPresentation>, required: true },
+});
 </script>
 
 <template>

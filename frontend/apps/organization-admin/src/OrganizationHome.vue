@@ -1,68 +1,68 @@
 <script setup lang="ts">
-import OrganizationStats from "./OrganizationStats.vue"
-import RecentMissions from "./RecentMissions.vue"
+import OrganizationStats from "./OrganizationStats.vue";
+import RecentMissions from "./RecentMissions.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type MissionRow = {
-  id: string
-  display_name: string
-  slug: string
-  status: "info" | "ready" | "attention"
-  status_label: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  slug: string;
+  status: "info" | "ready" | "attention";
+  status_label: string;
+  href: string;
+};
 
 type EmptyStatePresentation = {
-  container: ElementPresentation
-  root: ElementPresentation
-  icon: ElementPresentation
-  title: TextPresentation
-  description: TextPresentation
-  action_container: ElementPresentation
-  action: TextPresentation
-  action_icon: ElementPresentation
-}
+  container: ElementPresentation;
+  root: ElementPresentation;
+  icon: ElementPresentation;
+  title: TextPresentation;
+  description: TextPresentation;
+  action_container: ElementPresentation;
+  action: TextPresentation;
+  action_icon: ElementPresentation;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
-    title: TextPresentation
-    subtitle: TextPresentation
-  }
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
+    title: TextPresentation;
+    subtitle: TextPresentation;
+  };
   stats: {
-    mission_count: number
-    spacecraft_count: number
-    member_count: number
-  }
+    mission_count: number;
+    spacecraft_count: number;
+    member_count: number;
+  };
   recent_missions: {
-    card: ElementPresentation
-    body: ElementPresentation
+    card: ElementPresentation;
+    body: ElementPresentation;
     header: {
-      attrs: Attrs
-      content: ElementPresentation
-      eyebrow: TextPresentation
-      title: TextPresentation
-      actions: ElementPresentation
-      all_missions: TextPresentation
-    }
-    empty_state: EmptyStatePresentation | null
-    rows: MissionRow[]
-  }
-}
+      attrs: Attrs;
+      content: ElementPresentation;
+      eyebrow: TextPresentation;
+      title: TextPresentation;
+      actions: ElementPresentation;
+      all_missions: TextPresentation;
+    };
+    empty_state: EmptyStatePresentation | null;
+    rows: MissionRow[];
+  };
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

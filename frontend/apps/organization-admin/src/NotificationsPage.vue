@@ -1,50 +1,50 @@
 <script setup lang="ts">
-import NotificationsPanel from "./NotificationsPanel.vue"
+import NotificationsPanel from "./NotificationsPanel.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
-type NotificationsPanelProps = InstanceType<typeof NotificationsPanel>["$props"]
+type NotificationsPanelProps = InstanceType<typeof NotificationsPanel>["$props"];
 
 type NotificationPayload = {
-  notification_id: string
-}
+  notification_id: string;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
-    title: TextPresentation
-    subtitle: TextPresentation
-  }
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
+    title: TextPresentation;
+    subtitle: TextPresentation;
+  };
   empty_state: {
-    wrapper: ElementPresentation
-    body: ElementPresentation
-    icon: ElementPresentation
-    title: TextPresentation
-    description: TextPresentation
-  } | null
+    wrapper: ElementPresentation;
+    body: ElementPresentation;
+    icon: ElementPresentation;
+    title: TextPresentation;
+    description: TextPresentation;
+  } | null;
   panel: {
-    attrs: Attrs
-    notifications: NotificationsPanelProps["notifications"]
-  } | null
-}
+    attrs: Attrs;
+    notifications: NotificationsPanelProps["notifications"];
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 
 const emit = defineEmits<{
-  "accept-invitation": [payload: NotificationPayload]
-  "mark-read": [payload: NotificationPayload]
-}>()
+  "accept-invitation": [payload: NotificationPayload];
+  "mark-read": [payload: NotificationPayload];
+}>();
 </script>
 
 <template>

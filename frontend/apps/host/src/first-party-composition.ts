@@ -71,7 +71,10 @@ export function createHostContributionBootstrap(): HostContributionBootstrap {
 
       const existing = registry.get(application.applicationKey, application.applicationVersion);
       if (existing) {
-        assertReleaseMatchesModule(application, { manifest: existing.manifest, default: module.default });
+        assertReleaseMatchesModule(application, {
+          manifest: existing.manifest,
+          default: module.default,
+        });
         // The runtime result remains authoritative for the exact catalog
         // release being mounted; the registry never replaces its first entry.
         return module;

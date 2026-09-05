@@ -1,205 +1,205 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceField from "./ui/components/CadenceField.vue"
+import { reactive, watch } from "vue";
+import CadenceField from "./ui/components/CadenceField.vue";
 
 type NavigationAction = {
-  id: string
-  label: string
-  href: string
-}
+  id: string;
+  label: string;
+  href: string;
+};
 
 type Page = {
-  id: string
-  selected_group_id: string | null
-  groups_empty: boolean
+  id: string;
+  selected_group_id: string | null;
+  groups_empty: boolean;
   navigation: {
-    manage?: NavigationAction
-    reader?: NavigationAction
-  }
-}
+    manage?: NavigationAction;
+    reader?: NavigationAction;
+  };
+};
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type RequestField = {
-  id: string
-  name: string
-  type: "text" | "select" | "checkbox"
-  label: string
-  placeholder: string | null
-  options: Option[]
-}
+  id: string;
+  name: string;
+  type: "text" | "select" | "checkbox";
+  label: string;
+  placeholder: string | null;
+  options: Option[];
+};
 
-type RequestValues = Record<string, string>
+type RequestValues = Record<string, string>;
 
 type RequestForm = {
-  id: string
-  values: RequestValues
+  id: string;
+  values: RequestValues;
   fields: {
-    workflow: RequestField
-    run_id: RequestField
-    realm: RequestField
-    data_source_id: RequestField
-    source_binding_id: RequestField
-    point_ids: RequestField
-    source_from: RequestField
-    source_to: RequestField
-    reason: RequestField
-    confirmed: RequestField
-  }
+    workflow: RequestField;
+    run_id: RequestField;
+    realm: RequestField;
+    data_source_id: RequestField;
+    source_binding_id: RequestField;
+    point_ids: RequestField;
+    source_from: RequestField;
+    source_to: RequestField;
+    reason: RequestField;
+    confirmed: RequestField;
+  };
   hidden_fields: Array<{
-    name: string
-    value_key: string
-  }>
+    name: string;
+    value_key: string;
+  }>;
   error: {
-    id: string
-    message: string
-  } | null
+    id: string;
+    message: string;
+  } | null;
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type DataOperationGroup = {
-  __dom_id: string
-  id: string
-  href: string
-  state: string
-  workflow: string
-  size: number
-  progress: string
-}
+  __dom_id: string;
+  id: string;
+  href: string;
+  state: string;
+  workflow: string;
+  size: number;
+  progress: string;
+};
 
 type Action = {
-  id: string
-  label: string
-  confirm: string
-  payload: Record<string, string>
-}
+  id: string;
+  label: string;
+  confirm: string;
+  payload: Record<string, string>;
+};
 
 type Failure = {
-  label: string | null
-  recovery_action: string
-  correction?: Action
-}
+  label: string | null;
+  recovery_action: string;
+  correction?: Action;
+};
 
 type SelectedGroup = {
-  id: string
-  workflow: string
-  state: string
+  id: string;
+  workflow: string;
+  state: string;
   context: {
-    realm: string
-    data_source_id: string
-    binding_id: string
-  }
+    realm: string;
+    data_source_id: string;
+    binding_id: string;
+  };
   progress: Array<{
-    label: string
-    value: number
-  }>
+    label: string;
+    value: number;
+  }>;
   affected_dashboards: Array<{
-    id: string
-    label: string
-    href: string
-  }>
+    id: string;
+    label: string;
+    href: string;
+  }>;
   comparison_reviews: Array<{
-    id: string
-    request_event_id: string
-    request_kind: string
-    open_count: string
-    open_placement_ids: string
-  }>
+    id: string;
+    request_event_id: string;
+    request_kind: string;
+    open_count: string;
+    open_placement_ids: string;
+  }>;
   audit_events: Array<{
-    id: string
-    event_type: string
-    reason: string
-    occurred_at: string
-  }>
+    id: string;
+    event_type: string;
+    reason: string;
+    occurred_at: string;
+  }>;
   recovery?: {
-    transitions: Action[]
-    retry: Action | null
-    failures: Failure[]
-  }
-}
+    transitions: Action[];
+    retry: Action | null;
+    failures: Failure[];
+  };
+};
 
 const props = defineProps<{
-  page: Page
-  request_form: RequestForm
-  selected_group: SelectedGroup | null
-  data_operation_groups: DataOperationGroup[]
-}>()
+  page: Page;
+  request_form: RequestForm;
+  selected_group: SelectedGroup | null;
+  data_operation_groups: DataOperationGroup[];
+}>();
 
 const emit = defineEmits<{
-  "validate-request": [payload: {historical_workflow_request: RequestValues}]
-  "record-historical-workflow-request": [payload: {historical_workflow_request: RequestValues}]
-  "transition-group": [payload: {"group-id": string; stage: string}]
-  "retry-group": [payload: {"group-id": string}]
-  "request-correction": [payload: {"group-id": string; "event-id": string}]
-}>()
+  "validate-request": [payload: { historical_workflow_request: RequestValues }];
+  "record-historical-workflow-request": [payload: { historical_workflow_request: RequestValues }];
+  "transition-group": [payload: { "group-id": string; stage: string }];
+  "retry-group": [payload: { "group-id": string }];
+  "request-correction": [payload: { "group-id": string; "event-id": string }];
+}>();
 
 const primaryRequestFieldKeys = [
   "run_id",
   "realm",
   "data_source_id",
   "source_binding_id",
-  "point_ids"
-] as const
+  "point_ids",
+] as const;
 
-const sourceRangeFieldKeys = ["source_from", "source_to"] as const
+const sourceRangeFieldKeys = ["source_from", "source_to"] as const;
 
-const requestValues = reactive<RequestValues>({...props.request_form.values})
-const pendingValidations: RequestValues[] = []
+const requestValues = reactive<RequestValues>({ ...props.request_form.values });
+const pendingValidations: RequestValues[] = [];
 
-const checked = (value: string) => ["true", "on", "confirmed"].includes(value)
+const checked = (value: string) => ["true", "on", "confirmed"].includes(value);
 
 const normalizedValues = (values: RequestValues): RequestValues => {
-  const normalized: RequestValues = {}
+  const normalized: RequestValues = {};
 
   for (const key of Object.keys(props.request_form.values)) {
-    normalized[key] = String(values[key] ?? "")
+    normalized[key] = String(values[key] ?? "");
   }
 
-  normalized.confirmed = checked(normalized.confirmed) ? "true" : "false"
-  return normalized
-}
+  normalized.confirmed = checked(normalized.confirmed) ? "true" : "false";
+  return normalized;
+};
 
 const sameValues = (left: RequestValues, right: RequestValues) =>
-  JSON.stringify(left) === JSON.stringify(right)
+  JSON.stringify(left) === JSON.stringify(right);
 
 watch(
   () => props.request_form.values,
-  serverValues => {
-    const normalizedServerValues = normalizedValues(serverValues)
-    const acknowledgedIndex = pendingValidations.findIndex(values =>
-      sameValues(values, normalizedServerValues)
-    )
+  (serverValues) => {
+    const normalizedServerValues = normalizedValues(serverValues);
+    const acknowledgedIndex = pendingValidations.findIndex((values) =>
+      sameValues(values, normalizedServerValues),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(requestValues, normalizedServerValues)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(requestValues, normalizedServerValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validateRequest = () => {
-  const values = normalizedValues(requestValues)
-  pendingValidations.push(values)
-  emit("validate-request", {historical_workflow_request: values})
-}
+  const values = normalizedValues(requestValues);
+  pendingValidations.push(values);
+  emit("validate-request", { historical_workflow_request: values });
+};
 
 const updateConfirmed = (event: Event) => {
-  requestValues.confirmed = (event.target as HTMLInputElement).checked ? "true" : "false"
-  validateRequest()
-}
+  requestValues.confirmed = (event.target as HTMLInputElement).checked ? "true" : "false";
+  validateRequest();
+};
 
 const recordRequest = () => {
   emit("record-historical-workflow-request", {
-    historical_workflow_request: normalizedValues(requestValues)
-  })
-}
+    historical_workflow_request: normalizedValues(requestValues),
+  });
+};
 
 const statusBadgeClass = (state: string) => [
   "badge badge-xs font-mono",
@@ -209,29 +209,26 @@ const statusBadgeClass = (state: string) => [
       ? "badge-error"
       : ["started", "in_progress"].includes(state)
         ? "badge-info"
-        : "badge-warning"
-]
+        : "badge-warning",
+];
 
 const transitionGroup = (action: Action) => {
   if (window.confirm(action.confirm)) {
-    emit("transition-group", action.payload as {"group-id": string; stage: string})
+    emit("transition-group", action.payload as { "group-id": string; stage: string });
   }
-}
+};
 
 const retryGroup = (action: Action) => {
   if (window.confirm(action.confirm)) {
-    emit("retry-group", action.payload as {"group-id": string})
+    emit("retry-group", action.payload as { "group-id": string });
   }
-}
+};
 
 const requestCorrection = (action: Action) => {
   if (window.confirm(action.confirm)) {
-    emit(
-      "request-correction",
-      action.payload as {"group-id": string; "event-id": string}
-    )
+    emit("request-correction", action.payload as { "group-id": string; "event-id": string });
   }
-}
+};
 </script>
 
 <template>
@@ -244,7 +241,8 @@ const requestCorrection = (action: Action) => {
           <p class="hud-label">System / Historical data plane</p>
           <h1 class="mt-1 text-xl font-semibold tracking-tight">Data Operations</h1>
           <p class="mt-1 max-w-3xl text-sm text-base-content/60">
-            Request, follow, correct, and close historical telemetry repair without returning to the dashboard that exposed the gap.
+            Request, follow, correct, and close historical telemetry repair without returning to the
+            dashboard that exposed the gap.
           </p>
         </div>
         <nav aria-label="Data Operations view" class="flex flex-wrap gap-2">
@@ -295,7 +293,7 @@ const requestCorrection = (action: Action) => {
               :aria-current="page.selected_group_id === group.id ? 'page' : undefined"
               :class="[
                 'block space-y-2 px-3 py-3 hover:bg-primary/5',
-                page.selected_group_id === group.id && 'border-l-2 border-primary bg-primary/10'
+                page.selected_group_id === group.id && 'border-l-2 border-primary bg-primary/10',
               ]"
               :data-operation-state="group.state"
               :data-operation-workflow="group.workflow"
@@ -321,7 +319,8 @@ const requestCorrection = (action: Action) => {
               <span class="hero-circle-stack mx-auto h-8 w-8 text-base-content/30"></span>
               <h2 class="mt-3 text-sm font-semibold">Select an operation</h2>
               <p class="mt-1 text-sm text-base-content/55">
-                Choose a request group to follow progress, affected dashboards, recovery, and audit evidence.
+                Choose a request group to follow progress, affected dashboards, recovery, and audit
+                evidence.
               </p>
             </div>
           </div>
@@ -339,10 +338,13 @@ const requestCorrection = (action: Action) => {
                   {{ selected_group.id }}
                 </h2>
                 <p class="mt-2 text-xs text-base-content/55">
-                  {{ selected_group.context.realm }} · {{ selected_group.context.data_source_id }} · {{ selected_group.context.binding_id }}
+                  {{ selected_group.context.realm }} · {{ selected_group.context.data_source_id }} ·
+                  {{ selected_group.context.binding_id }}
                 </p>
               </div>
-              <span :class="statusBadgeClass(selected_group.state)">{{ selected_group.state }}</span>
+              <span :class="statusBadgeClass(selected_group.state)">{{
+                selected_group.state
+              }}</span>
             </div>
 
             <dl
@@ -416,7 +418,9 @@ const requestCorrection = (action: Action) => {
                 >
                   <span class="font-mono font-semibold">{{ event.event_type }}</span>
                   <span class="truncate text-base-content/60">{{ event.reason }}</span>
-                  <time class="font-mono text-base-content/45 sm:text-right">{{ event.occurred_at }}</time>
+                  <time class="font-mono text-base-content/45 sm:text-right">{{
+                    event.occurred_at
+                  }}</time>
                 </div>
               </div>
             </section>
@@ -432,11 +436,7 @@ const requestCorrection = (action: Action) => {
             <p class="mt-1 text-xs text-base-content/55">
               Dashboard and Explore links prefill this same durable request.
             </p>
-            <form
-              :id="request_form.id"
-              class="mt-4 space-y-3"
-              @submit.prevent="recordRequest"
-            >
+            <form :id="request_form.id" class="mt-4 space-y-3" @submit.prevent="recordRequest">
               <CadenceField
                 :control-id="request_form.fields.workflow.id"
                 wrapper-class="fieldset mb-3"
@@ -454,7 +454,9 @@ const requestCorrection = (action: Action) => {
                     v-for="option in request_form.fields.workflow.options"
                     :key="option.value"
                     :value="option.value"
-                  >{{ option.label }}</option>
+                  >
+                    {{ option.label }}
+                  </option>
                 </select>
               </CadenceField>
 
@@ -474,7 +476,7 @@ const requestCorrection = (action: Action) => {
                   :placeholder="request_form.fields[fieldKey].placeholder ?? undefined"
                   class="w-full input"
                   @input="validateRequest"
-                >
+                />
               </CadenceField>
 
               <div class="grid grid-cols-2 gap-2">
@@ -493,7 +495,7 @@ const requestCorrection = (action: Action) => {
                     type="text"
                     class="w-full input"
                     @input="validateRequest"
-                  >
+                  />
                 </CadenceField>
               </div>
 
@@ -510,16 +512,12 @@ const requestCorrection = (action: Action) => {
                   type="text"
                   class="w-full input"
                   @input="validateRequest"
-                >
+                />
               </CadenceField>
 
               <div class="fieldset mb-3">
                 <label class="flex cursor-pointer items-start gap-3">
-                  <input
-                    type="hidden"
-                    :name="request_form.fields.confirmed.name"
-                    value="false"
-                  >
+                  <input type="hidden" :name="request_form.fields.confirmed.name" value="false" />
                   <input
                     :id="request_form.fields.confirmed.id"
                     :name="request_form.fields.confirmed.name"
@@ -528,9 +526,11 @@ const requestCorrection = (action: Action) => {
                     :checked="checked(requestValues.confirmed)"
                     class="checkbox checkbox-sm mt-0.5"
                     @change="updateConfirmed"
-                  >
+                  />
                   <span>
-                    <span class="block text-sm font-medium">{{ request_form.fields.confirmed.label }}</span>
+                    <span class="block text-sm font-medium">{{
+                      request_form.fields.confirmed.label
+                    }}</span>
                   </span>
                 </label>
               </div>
@@ -541,12 +541,8 @@ const requestCorrection = (action: Action) => {
                 type="hidden"
                 :name="field.name"
                 :value="requestValues[field.value_key]"
-              >
-              <p
-                v-if="request_form.error"
-                :id="request_form.error.id"
-                class="text-xs text-error"
-              >
+              />
+              <p v-if="request_form.error" :id="request_form.error.id" class="text-xs text-error">
                 {{ request_form.error.message }}
               </p>
               <button
@@ -567,7 +563,8 @@ const requestCorrection = (action: Action) => {
           >
             <h2 class="hud-label">Privileged workflow controls</h2>
             <p class="mt-1 text-xs text-base-content/55">
-              Transitions and recovery write audit events and may change canonical historical telemetry.
+              Transitions and recovery write audit events and may change canonical historical
+              telemetry.
             </p>
             <div class="mt-3 grid grid-cols-2 gap-2">
               <button

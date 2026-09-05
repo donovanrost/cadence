@@ -1,77 +1,77 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type Field = {
-  key: string
-  label: string
-  label_class: string
-  value: string
-  value_class: string
-  attributes: Attributes
-}
+  key: string;
+  label: string;
+  label_class: string;
+  value: string;
+  value_class: string;
+  attributes: Attributes;
+};
 
 type EvidenceField = Field & {
-  visible: boolean
-}
+  visible: boolean;
+};
 
 type EvidenceItem = {
-  key: number
-  attributes: Attributes
+  key: number;
+  attributes: Attributes;
   button: {
-    type: "button"
-    class: string
-    attributes: Attributes
-  }
-  fields: EvidenceField[]
-}
+    type: "button";
+    class: string;
+    attributes: Attributes;
+  };
+  fields: EvidenceField[];
+};
 
 type HiddenEvidence = {
-  visible: false
-}
+  visible: false;
+};
 
 type VisibleEvidence = {
-  visible: true
+  visible: true;
   section: {
-    id: string
-    class: string
-    attributes: Attributes
-  }
+    id: string;
+    class: string;
+    attributes: Attributes;
+  };
   heading: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   states: {
-    class: string
-    rows: Field[]
-  }
+    class: string;
+    rows: Field[];
+  };
   list: {
-    class: string
-    items: EvidenceItem[]
-  }
-}
+    class: string;
+    items: EvidenceItem[];
+  };
+};
 
 type Presentation = {
   section: {
-    id: string
-    class: string
-    attributes: Attributes
-  }
+    id: string;
+    class: string;
+    attributes: Attributes;
+  };
   heading: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   headline: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   fields: {
-    class: string
-    rows: Field[]
-  }
-  evidence: HiddenEvidence | VisibleEvidence
-}
+    class: string;
+    rows: Field[];
+  };
+  evidence: HiddenEvidence | VisibleEvidence;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

@@ -1,121 +1,121 @@
 <script setup lang="ts">
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
-import WidgetDataLinks from "./WidgetDataLinks.vue"
-import WidgetQueryDiagnostics from "./WidgetQueryDiagnostics.vue"
-import WidgetWarning from "./WidgetWarning.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
+import WidgetDataLinks from "./WidgetDataLinks.vue";
+import WidgetQueryDiagnostics from "./WidgetQueryDiagnostics.vue";
+import WidgetWarning from "./WidgetWarning.vue";
 
-type Attrs = Record<string, string>
-type Classes = string | string[]
+type Attrs = Record<string, string>;
+type Classes = string | string[];
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type BadgePresentation = {
-  class: Classes
-  text: string
-}
+  class: Classes;
+  text: string;
+};
 
 type ButtonPresentation = {
-  key?: string
-  type: string
-  class: string
-  attrs: Attrs
-  icon: IconPresentation
-}
+  key?: string;
+  type: string;
+  class: string;
+  attrs: Attrs;
+  icon: IconPresentation;
+};
 
 type ChildPresentation = {
-  component_id: string
-  [key: string]: unknown
-}
+  component_id: string;
+  [key: string]: unknown;
+};
 
 type SourceBadgePresentation = {
-  wrapper: {tag: string; class: string} | null
+  wrapper: { tag: string; class: string } | null;
   badge: {
-    tag: string
-    class: string
-    attrs: Attrs
-    icon: IconPresentation
-    text: string
-  }
+    tag: string;
+    class: string;
+    attrs: Attrs;
+    icon: IconPresentation;
+    text: string;
+  };
   inventory_link: {
-    tag: string
-    class: string
-    attrs: Attrs
-    icon: IconPresentation
-  } | null
-}
+    tag: string;
+    class: string;
+    attrs: Attrs;
+    icon: IconPresentation;
+  } | null;
+};
 
 type DashboardWidgetHeaderPresentation = {
-  component_id: string
-  root: {class: Classes; attrs: Attrs}
-  title: {class: Classes; text: string}
+  component_id: string;
+  root: { class: Classes; attrs: Attrs };
+  title: { class: Classes; text: string };
   status_indicators: {
-    class: string
-    attrs: Attrs
+    class: string;
+    attrs: Attrs;
     limit: {
-      class: Classes
-      dot_class: string
-      label_class: string
-      text: string
-    } | null
-    comparison: ({attrs: Attrs} & BadgePresentation) | null
-    quality: BadgePresentation | null
+      class: Classes;
+      dot_class: string;
+      label_class: string;
+      text: string;
+    } | null;
+    comparison: ({ attrs: Attrs } & BadgePresentation) | null;
+    quality: BadgePresentation | null;
     lifecycle: {
-      class: Classes
-      attrs: Attrs
-      icon: IconPresentation
-    } | null
-  }
+      class: Classes;
+      attrs: Attrs;
+      icon: IconPresentation;
+    } | null;
+  };
   actions: {
-    class: Classes
+    class: Classes;
     details: {
-      overlay: {id: string; class: string; attrs: Attrs}
+      overlay: { id: string; class: string; attrs: Attrs };
       trigger: {
-        id: string
-        type: string
-        class: string
-        attrs: Attrs
-        content: {class: string; attrs: Attrs; icon: IconPresentation}
-      }
-      panel: {id: string; class: string; hidden: boolean; attrs: Attrs}
+        id: string;
+        type: string;
+        class: string;
+        attrs: Attrs;
+        content: { class: string; attrs: Attrs; icon: IconPresentation };
+      };
+      panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
       body: {
-        class: string
+        class: string;
         heading: {
-          class: string
-          title: {class: string; text: string}
-          binding: {class: string; text: string}
-        }
+          class: string;
+          title: { class: string; text: string };
+          binding: { class: string; text: string };
+        };
         indicators: {
-          class: string
-          attrs: Attrs
-          lifecycle: BadgePresentation | null
-          source: SourceBadgePresentation | null
-          data_management: Array<{tag: string; class: string; attrs: Attrs; text: string}>
-          warnings: ChildPresentation[]
-        }
+          class: string;
+          attrs: Attrs;
+          lifecycle: BadgePresentation | null;
+          source: SourceBadgePresentation | null;
+          data_management: Array<{ tag: string; class: string; attrs: Attrs; text: string }>;
+          warnings: ChildPresentation[];
+        };
         actions: {
-          class: string
-          attrs: Attrs
-          query: ChildPresentation | null
-          frame_evidence: ButtonPresentation | null
-          data_links: ChildPresentation | null
-          inspector: ButtonPresentation | null
-        }
-      }
-    }
-    edit: ButtonPresentation[]
-  }
-}
+          class: string;
+          attrs: Attrs;
+          query: ChildPresentation | null;
+          frame_evidence: ButtonPresentation | null;
+          data_links: ChildPresentation | null;
+          inspector: ButtonPresentation | null;
+        };
+      };
+    };
+    edit: ButtonPresentation[];
+  };
+};
 
-const props = defineProps<{presentation: DashboardWidgetHeaderPresentation}>()
+const props = defineProps<{ presentation: DashboardWidgetHeaderPresentation }>();
 const detailsPanelAttrs = computed(() => {
-  const attrs = {...props.presentation.actions.details.panel.attrs}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.actions.details.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -171,7 +171,7 @@ const detailsPanelAttrs = computed(() => {
         :side-offset="8"
         :collision-padding="16"
       >
-        <template #trigger="{open}">
+        <template #trigger="{ open }">
           <button
             :id="props.presentation.actions.details.trigger.id"
             :type="props.presentation.actions.details.trigger.type"
@@ -193,7 +193,7 @@ const detailsPanelAttrs = computed(() => {
           </button>
         </template>
 
-        <template #content="{open}">
+        <template #content="{ open }">
           <section
             :id="props.presentation.actions.details.panel.id"
             :class="props.presentation.actions.details.panel.class"
@@ -235,17 +235,25 @@ const detailsPanelAttrs = computed(() => {
                         props.presentation.actions.details.body.indicators.source.badge.icon.class,
                       ]"
                     ></span>
-                    <span>{{ props.presentation.actions.details.body.indicators.source.badge.text }}</span>
+                    <span>{{
+                      props.presentation.actions.details.body.indicators.source.badge.text
+                    }}</span>
                   </component>
                   <a
                     v-if="props.presentation.actions.details.body.indicators.source.inventory_link"
-                    :class="props.presentation.actions.details.body.indicators.source.inventory_link.class"
-                    v-bind="props.presentation.actions.details.body.indicators.source.inventory_link.attrs"
+                    :class="
+                      props.presentation.actions.details.body.indicators.source.inventory_link.class
+                    "
+                    v-bind="
+                      props.presentation.actions.details.body.indicators.source.inventory_link.attrs
+                    "
                   >
                     <span
                       :class="[
-                        props.presentation.actions.details.body.indicators.source.inventory_link.icon.name,
-                        props.presentation.actions.details.body.indicators.source.inventory_link.icon.class,
+                        props.presentation.actions.details.body.indicators.source.inventory_link
+                          .icon.name,
+                        props.presentation.actions.details.body.indicators.source.inventory_link
+                          .icon.class,
                       ]"
                     ></span>
                   </a>
@@ -262,11 +270,14 @@ const detailsPanelAttrs = computed(() => {
                       props.presentation.actions.details.body.indicators.source.badge.icon.class,
                     ]"
                   ></span>
-                  <span>{{ props.presentation.actions.details.body.indicators.source.badge.text }}</span>
+                  <span>{{
+                    props.presentation.actions.details.body.indicators.source.badge.text
+                  }}</span>
                 </component>
                 <component
                   :is="badge.tag"
-                  v-for="(badge, index) in props.presentation.actions.details.body.indicators.data_management"
+                  v-for="(badge, index) in props.presentation.actions.details.body.indicators
+                    .data_management"
                   :key="`data-management-${index}`"
                   :class="badge.class"
                   v-bind="badge.attrs"

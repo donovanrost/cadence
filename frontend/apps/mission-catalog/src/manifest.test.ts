@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { manifest, pageSurfaces } from "./federated-application";
 
 describe("mission and catalog remote manifest", () => {

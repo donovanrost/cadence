@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import CommsRoutingList from "./CommsRoutingList.vue"
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue"
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue"
+import CommsRoutingList from "./CommsRoutingList.vue";
+import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
+import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
 import type {
   Attrs,
   ElementPresentation,
   EmptyStatePresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./ui/components/page_shell"
+} from "./ui/components/page_shell";
 
-type CommsRoutingListProps = InstanceType<typeof CommsRoutingList>["$props"]
+type CommsRoutingListProps = InstanceType<typeof CommsRoutingList>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: PageHeaderPresentation & {
     actions: ElementPresentation & {
-      new_rule: PageHeaderAction
-    }
-  }
-  empty_state: EmptyStatePresentation | null
+      new_rule: PageHeaderAction;
+    };
+  };
+  empty_state: EmptyStatePresentation | null;
   card: {
-    attrs: Attrs
-    body: ElementPresentation
-    list_component: ElementPresentation
-    rows: CommsRoutingListProps["rows"]
-  } | null
-}
+    attrs: Attrs;
+    body: ElementPresentation;
+    list_component: ElementPresentation;
+    rows: CommsRoutingListProps["rows"];
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

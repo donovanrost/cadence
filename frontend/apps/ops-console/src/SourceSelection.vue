@@ -1,102 +1,98 @@
 <script setup lang="ts">
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type DataAttrs = Record<string, string | null>
+type DataAttrs = Record<string, string | null>;
 
 type TextPresentation = {
-  text: string
-  class: string
-}
+  text: string;
+  class: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type SelectionFact = {
-  label: string
-  label_class: string
-  value: string
-  value_class: string
-}
+  label: string;
+  label_class: string;
+  value: string;
+  value_class: string;
+};
 
 type CandidateAction = {
-  href: string
-  class: string
-  title: string
-  label: string
-  icon: IconPresentation
-  attrs: DataAttrs
-}
+  href: string;
+  class: string;
+  title: string;
+  label: string;
+  icon: IconPresentation;
+  attrs: DataAttrs;
+};
 
 type ProductSummary = TextPresentation & {
-  attrs: DataAttrs
-}
+  attrs: DataAttrs;
+};
 
 type CandidatePresentation = {
-  key: string
-  class: string
-  attrs: DataAttrs
-  binding: TextPresentation
-  data_source: TextPresentation
-  decision: TextPresentation
-  reason: TextPresentation
-  window: TextPresentation
-  action: CandidateAction | null
-  product_summary: ProductSummary | null
-}
+  key: string;
+  class: string;
+  attrs: DataAttrs;
+  binding: TextPresentation;
+  data_source: TextPresentation;
+  decision: TextPresentation;
+  reason: TextPresentation;
+  window: TextPresentation;
+  action: CandidateAction | null;
+  product_summary: ProductSummary | null;
+};
 
 type SelectionPresentation = {
   overlay: {
-    id: string
-    class: string
-    trigger_id: string
-    trigger_class: string
-    panel_id: string
-    panel_class: string
-    placement: string
-    width: string
-    label: string
-    attrs: DataAttrs
-  }
+    id: string;
+    class: string;
+    trigger_id: string;
+    trigger_class: string;
+    panel_id: string;
+    panel_class: string;
+    placement: string;
+    width: string;
+    label: string;
+    attrs: DataAttrs;
+  };
   badge: {
-    class: string
-    title: string
-    label: string
-    icon: IconPresentation
-    attrs: DataAttrs
-  }
+    class: string;
+    title: string;
+    label: string;
+    icon: IconPresentation;
+    attrs: DataAttrs;
+  };
   details: {
-    class: string
-    header_class: string
-    identity_class: string
-    heading: TextPresentation
-    request_id: TextPresentation
-    state: TextPresentation
-    facts_class: string
-    facts: SelectionFact[]
-    candidates_class: string
-  }
-  candidates: CandidatePresentation[]
-}
+    class: string;
+    header_class: string;
+    identity_class: string;
+    heading: TextPresentation;
+    request_id: TextPresentation;
+    state: TextPresentation;
+    facts_class: string;
+    facts: SelectionFact[];
+    candidates_class: string;
+  };
+  candidates: CandidatePresentation[];
+};
 
 type SourceSelectionPresentation = {
-  id: string
-  class: string
-  label: TextPresentation
-  attrs: DataAttrs
-  selections: SelectionPresentation[]
-}
+  id: string;
+  class: string;
+  label: TextPresentation;
+  attrs: DataAttrs;
+  selections: SelectionPresentation[];
+};
 
-defineProps<{presentation: SourceSelectionPresentation}>()
+defineProps<{ presentation: SourceSelectionPresentation }>();
 </script>
 
 <template>
-  <div
-    :id="presentation.id"
-    :class="presentation.class"
-    v-bind="presentation.attrs"
-  >
+  <div :id="presentation.id" :class="presentation.class" v-bind="presentation.attrs">
     <span :class="presentation.label.class">{{ presentation.label.text }}</span>
     <CadencePopover
       v-for="selection in presentation.selections"
@@ -112,7 +108,7 @@ defineProps<{presentation: SourceSelectionPresentation}>()
       :side-offset="8"
       :collision-padding="16"
     >
-      <template #trigger="{open}">
+      <template #trigger="{ open }">
         <button
           :id="selection.overlay.trigger_id"
           type="button"
@@ -134,7 +130,7 @@ defineProps<{presentation: SourceSelectionPresentation}>()
         </button>
       </template>
 
-      <template #content="{open}">
+      <template #content="{ open }">
         <section
           :id="selection.overlay.panel_id"
           data-overlay-panel
@@ -163,10 +159,7 @@ defineProps<{presentation: SourceSelectionPresentation}>()
                 <dd :class="fact.value_class">{{ fact.value }}</dd>
               </template>
             </dl>
-            <div
-              v-if="selection.candidates.length > 0"
-              :class="selection.details.candidates_class"
-            >
+            <div v-if="selection.candidates.length > 0" :class="selection.details.candidates_class">
               <div
                 v-for="candidate in selection.candidates"
                 :key="candidate.key"

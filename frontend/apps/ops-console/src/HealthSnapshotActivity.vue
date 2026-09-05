@@ -1,9 +1,9 @@
 <script setup>
-import ClipboardButton from "./ClipboardButton.vue"
+import ClipboardButton from "./ClipboardButton.vue";
 
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>

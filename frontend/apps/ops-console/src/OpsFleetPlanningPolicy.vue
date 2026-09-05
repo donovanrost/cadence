@@ -1,241 +1,241 @@
 <script setup lang="ts">
-import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue"
-import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue"
-import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
-import {reactive, ref, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue";
+import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue";
+import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import { reactive, ref, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type FormField = {
-  id: string
-  name: string
-  type: "text" | "number" | "select" | "textarea"
-  label: string
-  required: boolean
-  min: number | null
-  options: Option[]
-  value: string
-  errors: string[]
-}
+  id: string;
+  name: string;
+  type: "text" | "number" | "select" | "textarea";
+  label: string;
+  required: boolean;
+  min: number | null;
+  options: Option[];
+  value: string;
+  errors: string[];
+};
 
 type CheckboxField = {
-  id: string
-  name: string
-  type: "checkbox"
-  label: string
-  value: boolean
-  errors: string[]
-}
+  id: string;
+  name: string;
+  type: "checkbox";
+  label: string;
+  value: boolean;
+  errors: string[];
+};
 
 type PolicyForm = {
-  panel_id: string
-  id: string
-  open: boolean
-  summary: string
+  panel_id: string;
+  id: string;
+  open: boolean;
+  summary: string;
   fields: {
-    max_horizon_hours: FormField
-    requirement_concurrency: FormField
-    provider_search_concurrency: FormField
-    reuse_freshness_seconds: FormField
-    max_contacts: FormField
-    max_estimated_cost_micros: FormField
-    currency: FormField
-    critical_contact_reserve: FormField
-    automation_mode: FormField
-    execution_concurrency: FormField
-    max_repair_attempts: FormField
-    repair_horizon_hours: FormField
-    automatic_submission: CheckboxField
-    distinct_provider_required: CheckboxField
-    distinct_station_required: CheckboxField
-    distinct_service_pool_required: CheckboxField
-  }
+    max_horizon_hours: FormField;
+    requirement_concurrency: FormField;
+    provider_search_concurrency: FormField;
+    reuse_freshness_seconds: FormField;
+    max_contacts: FormField;
+    max_estimated_cost_micros: FormField;
+    currency: FormField;
+    critical_contact_reserve: FormField;
+    automation_mode: FormField;
+    execution_concurrency: FormField;
+    max_repair_attempts: FormField;
+    repair_horizon_hours: FormField;
+    automatic_submission: CheckboxField;
+    distinct_provider_required: CheckboxField;
+    distinct_station_required: CheckboxField;
+    distinct_service_pool_required: CheckboxField;
+  };
   redundancy: {
-    id: string
-    summary: string
-  }
+    id: string;
+    summary: string;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type ApprovalForm = {
-  panel_id: string
-  id: string
-  reason: FormField
+  panel_id: string;
+  id: string;
+  reason: FormField;
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type GrantForm = {
-  panel_id: string
-  id: string
+  panel_id: string;
+  id: string;
   fields: {
-    service_identity_id: FormField
-    maximum_horizon_hours: FormField
-    maximum_contacts: FormField
-    maximum_execution_concurrency: FormField
-    valid_days: FormField
-    approval_reason: FormField
-  }
+    service_identity_id: FormField;
+    maximum_horizon_hours: FormField;
+    maximum_contacts: FormField;
+    maximum_execution_concurrency: FormField;
+    valid_days: FormField;
+    approval_reason: FormField;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type RevocationForm = {
-  panel_id: string
-  id: string
+  panel_id: string;
+  id: string;
   fields: {
-    automation_grant_id: FormField
-    reason: FormField
-  }
+    automation_grant_id: FormField;
+    reason: FormField;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type AutomationGrant = {
-  __dom_id: string
-  automation_grant_id: string
-  service_identity_id: string
-  lifecycle_state: string
-  lifecycle_state_class: string
-  policy_evidence: string
-  boundary: string
-  expiry: string
-}
+  __dom_id: string;
+  automation_grant_id: string;
+  service_identity_id: string;
+  lifecycle_state: string;
+  lifecycle_state_class: string;
+  policy_evidence: string;
+  boundary: string;
+  expiry: string;
+};
 
 type PolicyValues = {
-  max_horizon_hours: string | number
-  requirement_concurrency: string | number
-  provider_search_concurrency: string | number
-  reuse_freshness_seconds: string | number
-  max_contacts: string | number
-  max_estimated_cost_micros: string | number
-  currency: string
-  critical_contact_reserve: string | number
-  automation_mode: string
-  execution_concurrency: string | number
-  max_repair_attempts: string | number
-  repair_horizon_hours: string | number
-  automatic_submission: boolean
-  distinct_provider_required: boolean
-  distinct_station_required: boolean
-  distinct_service_pool_required: boolean
-}
+  max_horizon_hours: string | number;
+  requirement_concurrency: string | number;
+  provider_search_concurrency: string | number;
+  reuse_freshness_seconds: string | number;
+  max_contacts: string | number;
+  max_estimated_cost_micros: string | number;
+  currency: string;
+  critical_contact_reserve: string | number;
+  automation_mode: string;
+  execution_concurrency: string | number;
+  max_repair_attempts: string | number;
+  repair_horizon_hours: string | number;
+  automatic_submission: boolean;
+  distinct_provider_required: boolean;
+  distinct_station_required: boolean;
+  distinct_service_pool_required: boolean;
+};
 
 type GrantValues = {
-  service_identity_id: string
-  maximum_horizon_hours: string | number
-  maximum_contacts: string | number
-  maximum_execution_concurrency: string | number
-  valid_days: string | number
-  approval_reason: string
-}
+  service_identity_id: string;
+  maximum_horizon_hours: string | number;
+  maximum_contacts: string | number;
+  maximum_execution_concurrency: string | number;
+  valid_days: string | number;
+  approval_reason: string;
+};
 
-type StringPayload = Record<string, string>
+type StringPayload = Record<string, string>;
 
 const props = defineProps<{
   page: {
     back: {
-      href: string
-      icon: string
-      label: string
-    }
+      href: string;
+      icon: string;
+      label: string;
+    };
     header: {
-      eyebrow: string
-      title: string
-      copy: string
-    }
+      eyebrow: string;
+      title: string;
+      copy: string;
+    };
     state: {
-      id: string
-      label: string
-      class: string
-    }
+      id: string;
+      label: string;
+      class: string;
+    };
     manifest: {
-      id: string
-      version_label: string
-      content_sha256: string | null
+      id: string;
+      version_label: string;
+      content_sha256: string | null;
       sections: Array<{
-        title: string
+        title: string;
         facts: Array<{
-          term: string
-          value: string
-        }>
-      }>
+          term: string;
+          value: string;
+        }>;
+      }>;
       empty: {
-        id: string
-        icon: string
-        title: string
-        copy: string
-      } | null
-    }
-  }
-  policy_form: PolicyForm | null
-  approval_form: ApprovalForm | null
+        id: string;
+        icon: string;
+        title: string;
+        copy: string;
+      } | null;
+    };
+  };
+  policy_form: PolicyForm | null;
+  approval_form: ApprovalForm | null;
   authorization: {
-    organization_admin: boolean
+    organization_admin: boolean;
     admin_required: {
-      copy: string
-    } | null
-  }
+      copy: string;
+    } | null;
+  };
   grant_ledger: {
-    id: string
-    list_id: string
+    id: string;
+    list_id: string;
     empty: {
-      id: string
-      copy: string
-    }
-    active_count: number
-    active_label: string
-  }
-  grant_form: GrantForm | null
-  revocation_form: RevocationForm | null
-  automation_grants: AutomationGrant[]
-}>()
+      id: string;
+      copy: string;
+    };
+    active_count: number;
+    active_label: string;
+  };
+  grant_form: GrantForm | null;
+  revocation_form: RevocationForm | null;
+  automation_grants: AutomationGrant[];
+}>();
 
 const emit = defineEmits<{
-  "validate-policy": [payload: {policy: StringPayload}]
-  "save-policy": [payload: {policy: StringPayload}]
-  "approve-policy": [payload: {decision: {reason: string}}]
-  "validate-grant": [payload: {grant: StringPayload}]
-  "issue-grant": [payload: {grant: StringPayload}]
-  "revoke-grant": [payload: {revocation: {automation_grant_id: string; reason: string}}]
-}>()
+  "validate-policy": [payload: { policy: StringPayload }];
+  "save-policy": [payload: { policy: StringPayload }];
+  "approve-policy": [payload: { decision: { reason: string } }];
+  "validate-grant": [payload: { grant: StringPayload }];
+  "issue-grant": [payload: { grant: StringPayload }];
+  "revoke-grant": [payload: { revocation: { automation_grant_id: string; reason: string } }];
+}>();
 
 const searchPolicyFieldKeys = [
   "max_horizon_hours",
   "requirement_concurrency",
   "provider_search_concurrency",
-  "reuse_freshness_seconds"
-] as const
+  "reuse_freshness_seconds",
+] as const;
 
 const automationPolicyFieldKeys = [
   "execution_concurrency",
   "max_repair_attempts",
-  "repair_horizon_hours"
-] as const
+  "repair_horizon_hours",
+] as const;
 
 const redundancyPolicyFieldKeys = [
   "distinct_provider_required",
   "distinct_station_required",
-  "distinct_service_pool_required"
-] as const
+  "distinct_service_pool_required",
+] as const;
 
 const emptyPolicyValues = (): PolicyValues => ({
   max_horizon_hours: "",
@@ -253,11 +253,11 @@ const emptyPolicyValues = (): PolicyValues => ({
   automatic_submission: false,
   distinct_provider_required: false,
   distinct_station_required: false,
-  distinct_service_pool_required: false
-})
+  distinct_service_pool_required: false,
+});
 
 const policyValuesFromForm = (form: PolicyForm | null): PolicyValues => {
-  if (!form) return emptyPolicyValues()
+  if (!form) return emptyPolicyValues();
 
   return {
     max_horizon_hours: form.fields.max_horizon_hours.value,
@@ -275,12 +275,12 @@ const policyValuesFromForm = (form: PolicyForm | null): PolicyValues => {
     automatic_submission: form.fields.automatic_submission.value,
     distinct_provider_required: form.fields.distinct_provider_required.value,
     distinct_station_required: form.fields.distinct_station_required.value,
-    distinct_service_pool_required: form.fields.distinct_service_pool_required.value
-  }
-}
+    distinct_service_pool_required: form.fields.distinct_service_pool_required.value,
+  };
+};
 
-const stringValue = (value: string | number) => String(value ?? "")
-const checkboxValue = (value: boolean) => value ? "true" : "false"
+const stringValue = (value: string | number) => String(value ?? "");
+const checkboxValue = (value: boolean) => (value ? "true" : "false");
 
 const normalizedPolicy = (values: PolicyValues): StringPayload => {
   const normalized: StringPayload = {
@@ -298,60 +298,60 @@ const normalizedPolicy = (values: PolicyValues): StringPayload => {
     repair_horizon_hours: stringValue(values.repair_horizon_hours),
     distinct_provider_required: checkboxValue(values.distinct_provider_required),
     distinct_station_required: checkboxValue(values.distinct_station_required),
-    distinct_service_pool_required: checkboxValue(values.distinct_service_pool_required)
-  }
+    distinct_service_pool_required: checkboxValue(values.distinct_service_pool_required),
+  };
 
   if (values.automation_mode !== "advisory") {
-    normalized.automatic_submission = checkboxValue(values.automatic_submission)
+    normalized.automatic_submission = checkboxValue(values.automatic_submission);
   }
 
-  return normalized
-}
+  return normalized;
+};
 
-const policy = reactive<PolicyValues>(policyValuesFromForm(props.policy_form))
-const pendingPolicyValidations: StringPayload[] = []
+const policy = reactive<PolicyValues>(policyValuesFromForm(props.policy_form));
+const pendingPolicyValidations: StringPayload[] = [];
 const samePayload = (left: StringPayload, right: StringPayload) =>
-  JSON.stringify(left) === JSON.stringify(right)
+  JSON.stringify(left) === JSON.stringify(right);
 
 watch(
   () => props.policy_form,
   (serverForm) => {
-    if (!serverForm) return
+    if (!serverForm) return;
 
-    const serverValues = policyValuesFromForm(serverForm)
-    const serverPayload = normalizedPolicy(serverValues)
+    const serverValues = policyValuesFromForm(serverForm);
+    const serverPayload = normalizedPolicy(serverValues);
     const acknowledgedIndex = pendingPolicyValidations.findIndex((sent) =>
-      samePayload(sent, serverPayload)
-    )
+      samePayload(sent, serverPayload),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingPolicyValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingPolicyValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingPolicyValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(policy, serverValues)
+    if (acknowledgedIndex >= 0) pendingPolicyValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(policy, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validatePolicy = () => {
-  const values = normalizedPolicy(policy)
-  pendingPolicyValidations.push(values)
-  emit("validate-policy", {policy: values})
-}
+  const values = normalizedPolicy(policy);
+  pendingPolicyValidations.push(values);
+  emit("validate-policy", { policy: values });
+};
 
-const savePolicy = () => emit("save-policy", {policy: normalizedPolicy(policy)})
+const savePolicy = () => emit("save-policy", { policy: normalizedPolicy(policy) });
 
-const approvalReason = ref(props.approval_form?.reason.value ?? "")
+const approvalReason = ref(props.approval_form?.reason.value ?? "");
 
 watch(
   () => props.approval_form?.reason.value ?? "",
   (reason) => {
-    approvalReason.value = reason
-  }
-)
+    approvalReason.value = reason;
+  },
+);
 
 const approvePolicy = () => {
-  emit("approve-policy", {decision: {reason: approvalReason.value}})
-}
+  emit("approve-policy", { decision: { reason: approvalReason.value } });
+};
 
 const emptyGrantValues = (): GrantValues => ({
   service_identity_id: "",
@@ -359,11 +359,11 @@ const emptyGrantValues = (): GrantValues => ({
   maximum_contacts: "",
   maximum_execution_concurrency: "",
   valid_days: "",
-  approval_reason: ""
-})
+  approval_reason: "",
+});
 
 const grantValuesFromForm = (form: GrantForm | null): GrantValues => {
-  if (!form) return emptyGrantValues()
+  if (!form) return emptyGrantValues();
 
   return {
     service_identity_id: form.fields.service_identity_id.value,
@@ -371,9 +371,9 @@ const grantValuesFromForm = (form: GrantForm | null): GrantValues => {
     maximum_contacts: form.fields.maximum_contacts.value,
     maximum_execution_concurrency: form.fields.maximum_execution_concurrency.value,
     valid_days: form.fields.valid_days.value,
-    approval_reason: form.fields.approval_reason.value
-  }
-}
+    approval_reason: form.fields.approval_reason.value,
+  };
+};
 
 const normalizedGrant = (values: GrantValues): StringPayload => ({
   service_identity_id: values.service_identity_id,
@@ -381,47 +381,47 @@ const normalizedGrant = (values: GrantValues): StringPayload => ({
   maximum_contacts: stringValue(values.maximum_contacts),
   maximum_execution_concurrency: stringValue(values.maximum_execution_concurrency),
   valid_days: stringValue(values.valid_days),
-  approval_reason: values.approval_reason
-})
+  approval_reason: values.approval_reason,
+});
 
-const grant = reactive<GrantValues>(grantValuesFromForm(props.grant_form))
-const pendingGrantValidations: StringPayload[] = []
+const grant = reactive<GrantValues>(grantValuesFromForm(props.grant_form));
+const pendingGrantValidations: StringPayload[] = [];
 
 watch(
   () => props.grant_form,
   (serverForm) => {
-    if (!serverForm) return
+    if (!serverForm) return;
 
-    const serverValues = grantValuesFromForm(serverForm)
-    const serverPayload = normalizedGrant(serverValues)
+    const serverValues = grantValuesFromForm(serverForm);
+    const serverPayload = normalizedGrant(serverValues);
     const acknowledgedIndex = pendingGrantValidations.findIndex((sent) =>
-      samePayload(sent, serverPayload)
-    )
+      samePayload(sent, serverPayload),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingGrantValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingGrantValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingGrantValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(grant, serverValues)
+    if (acknowledgedIndex >= 0) pendingGrantValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(grant, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validateGrant = () => {
-  const values = normalizedGrant(grant)
-  pendingGrantValidations.push(values)
-  emit("validate-grant", {grant: values})
-}
+  const values = normalizedGrant(grant);
+  pendingGrantValidations.push(values);
+  emit("validate-grant", { grant: values });
+};
 
-const issueGrant = () => emit("issue-grant", {grant: normalizedGrant(grant)})
+const issueGrant = () => emit("issue-grant", { grant: normalizedGrant(grant) });
 
-const revocation = reactive({automation_grant_id: "", reason: ""})
+const revocation = reactive({ automation_grant_id: "", reason: "" });
 
 watch(
   () => props.revocation_form,
   (serverForm) => {
     if (!serverForm) {
-      Object.assign(revocation, {automation_grant_id: "", reason: ""})
-      return
+      Object.assign(revocation, { automation_grant_id: "", reason: "" });
+      return;
     }
 
     Object.assign(revocation, {
@@ -429,20 +429,20 @@ watch(
         serverForm.fields.automation_grant_id.value ||
         serverForm.fields.automation_grant_id.options[0]?.value ||
         "",
-      reason: serverForm.fields.reason.value
-    })
+      reason: serverForm.fields.reason.value,
+    });
   },
-  {deep: true, immediate: true}
-)
+  { deep: true, immediate: true },
+);
 
 const revokeGrant = () => {
   emit("revoke-grant", {
     revocation: {
       automation_grant_id: revocation.automation_grant_id,
-      reason: revocation.reason
-    }
-  })
-}
+      reason: revocation.reason,
+    },
+  });
+};
 </script>
 
 <template>
@@ -474,7 +474,9 @@ const revokeGrant = () => {
     </div>
   </CadencePageHeaderFrame>
 
-  <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)] lg:p-7">
+  <div
+    class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)] lg:p-7"
+  >
     <div class="min-w-0 space-y-5">
       <CadencePanel
         :id="page.manifest.id"
@@ -546,231 +548,297 @@ const revokeGrant = () => {
               </button>
             </CadenceCollapsibleTrigger>
             <CadenceCollapsibleContent>
-          <form
-            :id="policy_form.id"
-            class="space-y-5 border-t border-base-300 p-4"
-            @submit.prevent="savePolicy"
-          >
-            <div>
-              <p class="hud-label">Search boundary</p>
-              <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CadenceField
-                  v-for="fieldKey in searchPolicyFieldKeys"
-                  :key="policy_form.fields[fieldKey].id"
-                  :control-id="policy_form.fields[fieldKey].id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields[fieldKey].label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields[fieldKey].id"
-                    v-model.number="policy[fieldKey]"
-                    :name="policy_form.fields[fieldKey].name"
-                    :type="policy_form.fields[fieldKey].type"
-                    :min="policy_form.fields[fieldKey].min ?? undefined"
-                    :required="policy_form.fields[fieldKey].required"
-                    :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage
-                      v-for="error in policy_form.fields[fieldKey].errors"
-                      :key="error"
-                    >{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-              </div>
-            </div>
-
-            <div>
-              <p class="hud-label">Capacity & budget</p>
-              <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CadenceField
-                  :control-id="policy_form.fields.max_contacts.id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields.max_contacts.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields.max_contacts.id"
-                    v-model.number="policy.max_contacts"
-                    :name="policy_form.fields.max_contacts.name"
-                    type="number"
-                    :min="policy_form.fields.max_contacts.min ?? undefined"
-                    :required="policy_form.fields.max_contacts.required"
-                    :class="['w-full input', policy_form.fields.max_contacts.errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields.max_contacts.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-
-                <CadenceField
-                  :control-id="policy_form.fields.max_estimated_cost_micros.id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields.max_estimated_cost_micros.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields.max_estimated_cost_micros.id"
-                    v-model.number="policy.max_estimated_cost_micros"
-                    :name="policy_form.fields.max_estimated_cost_micros.name"
-                    type="number"
-                    :min="policy_form.fields.max_estimated_cost_micros.min ?? undefined"
-                    :class="['w-full input', policy_form.fields.max_estimated_cost_micros.errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields.max_estimated_cost_micros.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-
-                <CadenceField
-                  :control-id="policy_form.fields.currency.id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields.currency.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields.currency.id"
-                    v-model="policy.currency"
-                    :name="policy_form.fields.currency.name"
-                    type="text"
-                    :class="['w-full input', policy_form.fields.currency.errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields.currency.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-
-                <CadenceField
-                  :control-id="policy_form.fields.critical_contact_reserve.id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields.critical_contact_reserve.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields.critical_contact_reserve.id"
-                    v-model.number="policy.critical_contact_reserve"
-                    :name="policy_form.fields.critical_contact_reserve.name"
-                    type="number"
-                    :min="policy_form.fields.critical_contact_reserve.min ?? undefined"
-                    :required="policy_form.fields.critical_contact_reserve.required"
-                    :class="['w-full input', policy_form.fields.critical_contact_reserve.errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields.critical_contact_reserve.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-              </div>
-            </div>
-
-            <div>
-              <p class="hud-label">Automation & repair</p>
-              <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CadenceField
-                  :control-id="policy_form.fields.automation_mode.id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields.automation_mode.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <select
-                    :id="policy_form.fields.automation_mode.id"
-                    v-model="policy.automation_mode"
-                    :name="policy_form.fields.automation_mode.name"
-                    :class="['w-full select', policy_form.fields.automation_mode.errors.length > 0 && 'select-error']"
-                    @change="validatePolicy"
-                  >
-                    <option
-                      v-for="option in policy_form.fields.automation_mode.options"
-                      :key="option.value"
-                      :value="option.value"
-                    >{{ option.label }}</option>
-                  </select>
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields.automation_mode.errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-
-                <CadenceField
-                  v-for="fieldKey in automationPolicyFieldKeys"
-                  :key="policy_form.fields[fieldKey].id"
-                  :control-id="policy_form.fields[fieldKey].id"
-                  wrapper-class="fieldset mb-3"
-                  :label="policy_form.fields[fieldKey].label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="policy_form.fields[fieldKey].id"
-                    v-model.number="policy[fieldKey]"
-                    :name="policy_form.fields[fieldKey].name"
-                    type="number"
-                    :min="policy_form.fields[fieldKey].min ?? undefined"
-                    :required="policy_form.fields[fieldKey].required"
-                    :class="['w-full input', policy_form.fields[fieldKey].errors.length > 0 && 'input-error']"
-                    @input="validatePolicy"
-                  >
-                  <template #errors>
-                    <CadenceValidationMessage v-for="error in policy_form.fields[fieldKey].errors" :key="error">{{ error }}</CadenceValidationMessage>
-                  </template>
-                </CadenceField>
-              </div>
-
-              <div v-if="policy.automation_mode !== 'advisory'" class="fieldset mb-3">
-                <label class="flex cursor-pointer items-start gap-3">
-                  <input type="hidden" :name="policy_form.fields.automatic_submission.name" value="false">
-                  <input
-                    :id="policy_form.fields.automatic_submission.id"
-                    v-model="policy.automatic_submission"
-                    :name="policy_form.fields.automatic_submission.name"
-                    value="true"
-                    type="checkbox"
-                    class="checkbox checkbox-sm mt-0.5"
-                    @change="validatePolicy"
-                  >
-                  <span>
-                    <span class="block text-sm font-medium">{{ policy_form.fields.automatic_submission.label }}</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <CadenceDetailsFrame :id="policy_form.redundancy.id" class="border border-base-300">
-              <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
-                {{ policy_form.redundancy.summary }}
-              </summary>
-              <div class="grid gap-3 border-t border-base-300 p-3 sm:grid-cols-3">
-                <div
-                  v-for="fieldKey in redundancyPolicyFieldKeys"
-                  :key="policy_form.fields[fieldKey].id"
-                  class="fieldset mb-3"
-                >
-                  <label class="flex cursor-pointer items-start gap-3">
-                    <input type="hidden" :name="policy_form.fields[fieldKey].name" value="false">
-                    <input
-                      :id="policy_form.fields[fieldKey].id"
-                      v-model="policy[fieldKey]"
-                      :name="policy_form.fields[fieldKey].name"
-                      value="true"
-                      type="checkbox"
-                      class="checkbox checkbox-sm mt-0.5"
-                      @change="validatePolicy"
+              <form
+                :id="policy_form.id"
+                class="space-y-5 border-t border-base-300 p-4"
+                @submit.prevent="savePolicy"
+              >
+                <div>
+                  <p class="hud-label">Search boundary</p>
+                  <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <CadenceField
+                      v-for="fieldKey in searchPolicyFieldKeys"
+                      :key="policy_form.fields[fieldKey].id"
+                      :control-id="policy_form.fields[fieldKey].id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields[fieldKey].label"
+                      label-class="hud-label block mb-1.5"
                     >
-                    <span>
-                      <span class="block text-sm font-medium">{{ policy_form.fields[fieldKey].label }}</span>
-                    </span>
-                  </label>
+                      <input
+                        :id="policy_form.fields[fieldKey].id"
+                        v-model.number="policy[fieldKey]"
+                        :name="policy_form.fields[fieldKey].name"
+                        :type="policy_form.fields[fieldKey].type"
+                        :min="policy_form.fields[fieldKey].min ?? undefined"
+                        :required="policy_form.fields[fieldKey].required"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields[fieldKey].errors.length > 0 && 'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields[fieldKey].errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+                  </div>
                 </div>
-              </div>
-            </CadenceDetailsFrame>
 
-            <button :id="policy_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
-              {{ policy_form.submit.label }}
-            </button>
-          </form>
+                <div>
+                  <p class="hud-label">Capacity & budget</p>
+                  <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <CadenceField
+                      :control-id="policy_form.fields.max_contacts.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields.max_contacts.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <input
+                        :id="policy_form.fields.max_contacts.id"
+                        v-model.number="policy.max_contacts"
+                        :name="policy_form.fields.max_contacts.name"
+                        type="number"
+                        :min="policy_form.fields.max_contacts.min ?? undefined"
+                        :required="policy_form.fields.max_contacts.required"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields.max_contacts.errors.length > 0 && 'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields.max_contacts.errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+
+                    <CadenceField
+                      :control-id="policy_form.fields.max_estimated_cost_micros.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields.max_estimated_cost_micros.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <input
+                        :id="policy_form.fields.max_estimated_cost_micros.id"
+                        v-model.number="policy.max_estimated_cost_micros"
+                        :name="policy_form.fields.max_estimated_cost_micros.name"
+                        type="number"
+                        :min="policy_form.fields.max_estimated_cost_micros.min ?? undefined"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields.max_estimated_cost_micros.errors.length > 0 &&
+                            'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields.max_estimated_cost_micros.errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+
+                    <CadenceField
+                      :control-id="policy_form.fields.currency.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields.currency.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <input
+                        :id="policy_form.fields.currency.id"
+                        v-model="policy.currency"
+                        :name="policy_form.fields.currency.name"
+                        type="text"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields.currency.errors.length > 0 && 'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields.currency.errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+
+                    <CadenceField
+                      :control-id="policy_form.fields.critical_contact_reserve.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields.critical_contact_reserve.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <input
+                        :id="policy_form.fields.critical_contact_reserve.id"
+                        v-model.number="policy.critical_contact_reserve"
+                        :name="policy_form.fields.critical_contact_reserve.name"
+                        type="number"
+                        :min="policy_form.fields.critical_contact_reserve.min ?? undefined"
+                        :required="policy_form.fields.critical_contact_reserve.required"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields.critical_contact_reserve.errors.length > 0 &&
+                            'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields.critical_contact_reserve.errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+                  </div>
+                </div>
+
+                <div>
+                  <p class="hud-label">Automation & repair</p>
+                  <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <CadenceField
+                      :control-id="policy_form.fields.automation_mode.id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields.automation_mode.label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <select
+                        :id="policy_form.fields.automation_mode.id"
+                        v-model="policy.automation_mode"
+                        :name="policy_form.fields.automation_mode.name"
+                        :class="[
+                          'w-full select',
+                          policy_form.fields.automation_mode.errors.length > 0 && 'select-error',
+                        ]"
+                        @change="validatePolicy"
+                      >
+                        <option
+                          v-for="option in policy_form.fields.automation_mode.options"
+                          :key="option.value"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </option>
+                      </select>
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields.automation_mode.errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+
+                    <CadenceField
+                      v-for="fieldKey in automationPolicyFieldKeys"
+                      :key="policy_form.fields[fieldKey].id"
+                      :control-id="policy_form.fields[fieldKey].id"
+                      wrapper-class="fieldset mb-3"
+                      :label="policy_form.fields[fieldKey].label"
+                      label-class="hud-label block mb-1.5"
+                    >
+                      <input
+                        :id="policy_form.fields[fieldKey].id"
+                        v-model.number="policy[fieldKey]"
+                        :name="policy_form.fields[fieldKey].name"
+                        type="number"
+                        :min="policy_form.fields[fieldKey].min ?? undefined"
+                        :required="policy_form.fields[fieldKey].required"
+                        :class="[
+                          'w-full input',
+                          policy_form.fields[fieldKey].errors.length > 0 && 'input-error',
+                        ]"
+                        @input="validatePolicy"
+                      />
+                      <template #errors>
+                        <CadenceValidationMessage
+                          v-for="error in policy_form.fields[fieldKey].errors"
+                          :key="error"
+                          >{{ error }}</CadenceValidationMessage
+                        >
+                      </template>
+                    </CadenceField>
+                  </div>
+
+                  <div v-if="policy.automation_mode !== 'advisory'" class="fieldset mb-3">
+                    <label class="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="hidden"
+                        :name="policy_form.fields.automatic_submission.name"
+                        value="false"
+                      />
+                      <input
+                        :id="policy_form.fields.automatic_submission.id"
+                        v-model="policy.automatic_submission"
+                        :name="policy_form.fields.automatic_submission.name"
+                        value="true"
+                        type="checkbox"
+                        class="checkbox checkbox-sm mt-0.5"
+                        @change="validatePolicy"
+                      />
+                      <span>
+                        <span class="block text-sm font-medium">{{
+                          policy_form.fields.automatic_submission.label
+                        }}</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <CadenceDetailsFrame :id="policy_form.redundancy.id" class="border border-base-300">
+                  <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
+                    {{ policy_form.redundancy.summary }}
+                  </summary>
+                  <div class="grid gap-3 border-t border-base-300 p-3 sm:grid-cols-3">
+                    <div
+                      v-for="fieldKey in redundancyPolicyFieldKeys"
+                      :key="policy_form.fields[fieldKey].id"
+                      class="fieldset mb-3"
+                    >
+                      <label class="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="hidden"
+                          :name="policy_form.fields[fieldKey].name"
+                          value="false"
+                        />
+                        <input
+                          :id="policy_form.fields[fieldKey].id"
+                          v-model="policy[fieldKey]"
+                          :name="policy_form.fields[fieldKey].name"
+                          value="true"
+                          type="checkbox"
+                          class="checkbox checkbox-sm mt-0.5"
+                          @change="validatePolicy"
+                        />
+                        <span>
+                          <span class="block text-sm font-medium">{{
+                            policy_form.fields[fieldKey].label
+                          }}</span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </CadenceDetailsFrame>
+
+                <button
+                  :id="policy_form.submit.id"
+                  type="submit"
+                  class="btn btn-primary btn-sm w-full"
+                >
+                  {{ policy_form.submit.label }}
+                </button>
+              </form>
             </CadenceCollapsibleContent>
           </div>
         </CadenceCollapsible>
@@ -783,7 +851,8 @@ const revokeGrant = () => {
       >
         <p class="hud-label">Activate exact version</p>
         <p class="mt-2 text-sm text-base-content/60">
-          Approval invalidates grants tied to an older policy version and changes the boundary for future runs.
+          Approval invalidates grants tied to an older policy version and changes the boundary for
+          future runs.
         </p>
         <form :id="approval_form.id" class="mt-4" @submit.prevent="approvePolicy">
           <CadenceField
@@ -797,10 +866,15 @@ const revokeGrant = () => {
               v-model="approvalReason"
               :name="approval_form.reason.name"
               :required="approval_form.reason.required"
-              :class="['w-full textarea', approval_form.reason.errors.length > 0 && 'textarea-error']"
+              :class="[
+                'w-full textarea',
+                approval_form.reason.errors.length > 0 && 'textarea-error',
+              ]"
             ></textarea>
             <template #errors>
-              <CadenceValidationMessage v-for="error in approval_form.reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
+              <CadenceValidationMessage v-for="error in approval_form.reason.errors" :key="error">{{
+                error
+              }}</CadenceValidationMessage>
             </template>
           </CadenceField>
           <button :id="approval_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
@@ -821,10 +895,15 @@ const revokeGrant = () => {
             <p class="hud-label">Automation grants</p>
             <p class="mt-1 text-xs text-base-content/50">Exact service + policy authority</p>
           </div>
-          <span class="font-mono text-xs text-base-content/45">{{ grant_ledger.active_label }}</span>
+          <span class="font-mono text-xs text-base-content/45">{{
+            grant_ledger.active_label
+          }}</span>
         </template>
         <div :id="grant_ledger.list_id">
-          <div :id="grant_ledger.empty.id" class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50">
+          <div
+            :id="grant_ledger.empty.id"
+            class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50"
+          >
             {{ grant_ledger.empty.copy }}
           </div>
           <div
@@ -834,7 +913,9 @@ const revokeGrant = () => {
             class="border-b border-base-300 p-4 last:border-b-0"
           >
             <div class="flex items-center justify-between gap-3">
-              <p class="truncate text-xs font-semibold">{{ automationGrant.service_identity_id }}</p>
+              <p class="truncate text-xs font-semibold">
+                {{ automationGrant.service_identity_id }}
+              </p>
               <span :class="automationGrant.lifecycle_state_class">
                 {{ automationGrant.lifecycle_state }}
               </span>
@@ -875,17 +956,26 @@ const revokeGrant = () => {
                 v-model="grant.service_identity_id"
                 :name="grant_form.fields.service_identity_id.name"
                 :required="grant_form.fields.service_identity_id.required"
-                :class="['w-full select', grant_form.fields.service_identity_id.errors.length > 0 && 'select-error']"
+                :class="[
+                  'w-full select',
+                  grant_form.fields.service_identity_id.errors.length > 0 && 'select-error',
+                ]"
                 @change="validateGrant"
               >
                 <option
                   v-for="option in grant_form.fields.service_identity_id.options"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
               <template #errors>
-                <CadenceValidationMessage v-for="error in grant_form.fields.service_identity_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in grant_form.fields.service_identity_id.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
@@ -903,11 +993,18 @@ const revokeGrant = () => {
                   type="number"
                   :min="grant_form.fields.maximum_horizon_hours.min ?? undefined"
                   :required="grant_form.fields.maximum_horizon_hours.required"
-                  :class="['w-full input', grant_form.fields.maximum_horizon_hours.errors.length > 0 && 'input-error']"
+                  :class="[
+                    'w-full input',
+                    grant_form.fields.maximum_horizon_hours.errors.length > 0 && 'input-error',
+                  ]"
                   @input="validateGrant"
-                >
+                />
                 <template #errors>
-                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_horizon_hours.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  <CadenceValidationMessage
+                    v-for="error in grant_form.fields.maximum_horizon_hours.errors"
+                    :key="error"
+                    >{{ error }}</CadenceValidationMessage
+                  >
                 </template>
               </CadenceField>
 
@@ -924,11 +1021,18 @@ const revokeGrant = () => {
                   type="number"
                   :min="grant_form.fields.maximum_contacts.min ?? undefined"
                   :required="grant_form.fields.maximum_contacts.required"
-                  :class="['w-full input', grant_form.fields.maximum_contacts.errors.length > 0 && 'input-error']"
+                  :class="[
+                    'w-full input',
+                    grant_form.fields.maximum_contacts.errors.length > 0 && 'input-error',
+                  ]"
                   @input="validateGrant"
-                >
+                />
                 <template #errors>
-                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_contacts.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  <CadenceValidationMessage
+                    v-for="error in grant_form.fields.maximum_contacts.errors"
+                    :key="error"
+                    >{{ error }}</CadenceValidationMessage
+                  >
                 </template>
               </CadenceField>
 
@@ -945,11 +1049,19 @@ const revokeGrant = () => {
                   type="number"
                   :min="grant_form.fields.maximum_execution_concurrency.min ?? undefined"
                   :required="grant_form.fields.maximum_execution_concurrency.required"
-                  :class="['w-full input', grant_form.fields.maximum_execution_concurrency.errors.length > 0 && 'input-error']"
+                  :class="[
+                    'w-full input',
+                    grant_form.fields.maximum_execution_concurrency.errors.length > 0 &&
+                      'input-error',
+                  ]"
                   @input="validateGrant"
-                >
+                />
                 <template #errors>
-                  <CadenceValidationMessage v-for="error in grant_form.fields.maximum_execution_concurrency.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  <CadenceValidationMessage
+                    v-for="error in grant_form.fields.maximum_execution_concurrency.errors"
+                    :key="error"
+                    >{{ error }}</CadenceValidationMessage
+                  >
                 </template>
               </CadenceField>
 
@@ -966,11 +1078,18 @@ const revokeGrant = () => {
                   type="number"
                   :min="grant_form.fields.valid_days.min ?? undefined"
                   :required="grant_form.fields.valid_days.required"
-                  :class="['w-full input', grant_form.fields.valid_days.errors.length > 0 && 'input-error']"
+                  :class="[
+                    'w-full input',
+                    grant_form.fields.valid_days.errors.length > 0 && 'input-error',
+                  ]"
                   @input="validateGrant"
-                >
+                />
                 <template #errors>
-                  <CadenceValidationMessage v-for="error in grant_form.fields.valid_days.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                  <CadenceValidationMessage
+                    v-for="error in grant_form.fields.valid_days.errors"
+                    :key="error"
+                    >{{ error }}</CadenceValidationMessage
+                  >
                 </template>
               </CadenceField>
             </div>
@@ -986,11 +1105,18 @@ const revokeGrant = () => {
                 v-model="grant.approval_reason"
                 :name="grant_form.fields.approval_reason.name"
                 :required="grant_form.fields.approval_reason.required"
-                :class="['w-full textarea', grant_form.fields.approval_reason.errors.length > 0 && 'textarea-error']"
+                :class="[
+                  'w-full textarea',
+                  grant_form.fields.approval_reason.errors.length > 0 && 'textarea-error',
+                ]"
                 @input="validateGrant"
               ></textarea>
               <template #errors>
-                <CadenceValidationMessage v-for="error in grant_form.fields.approval_reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in grant_form.fields.approval_reason.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
@@ -1026,16 +1152,25 @@ const revokeGrant = () => {
                 v-model="revocation.automation_grant_id"
                 :name="revocation_form.fields.automation_grant_id.name"
                 :required="revocation_form.fields.automation_grant_id.required"
-                :class="['w-full select', revocation_form.fields.automation_grant_id.errors.length > 0 && 'select-error']"
+                :class="[
+                  'w-full select',
+                  revocation_form.fields.automation_grant_id.errors.length > 0 && 'select-error',
+                ]"
               >
                 <option
                   v-for="option in revocation_form.fields.automation_grant_id.options"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
               <template #errors>
-                <CadenceValidationMessage v-for="error in revocation_form.fields.automation_grant_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in revocation_form.fields.automation_grant_id.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
@@ -1050,23 +1185,32 @@ const revokeGrant = () => {
                 v-model="revocation.reason"
                 :name="revocation_form.fields.reason.name"
                 :required="revocation_form.fields.reason.required"
-                :class="['w-full textarea', revocation_form.fields.reason.errors.length > 0 && 'textarea-error']"
+                :class="[
+                  'w-full textarea',
+                  revocation_form.fields.reason.errors.length > 0 && 'textarea-error',
+                ]"
               ></textarea>
               <template #errors>
-                <CadenceValidationMessage v-for="error in revocation_form.fields.reason.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in revocation_form.fields.reason.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
-            <button :id="revocation_form.submit.id" type="submit" class="btn btn-error btn-sm w-full">
+            <button
+              :id="revocation_form.submit.id"
+              type="submit"
+              class="btn btn-error btn-sm w-full"
+            >
               {{ revocation_form.submit.label }}
             </button>
           </form>
         </CadenceDetailsFrame>
       </section>
 
-      <CadenceInlineWarning
-        v-if="authorization.admin_required"
-      >
+      <CadenceInlineWarning v-if="authorization.admin_required">
         {{ authorization.admin_required.copy }}
       </CadenceInlineWarning>
     </aside>

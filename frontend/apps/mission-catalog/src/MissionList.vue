@@ -1,58 +1,58 @@
 <script setup lang="ts">
-import MissionTable from "./MissionTable.vue"
+import MissionTable from "./MissionTable.vue";
 
-type RawAttrs = Record<string, string>
+type RawAttrs = Record<string, string>;
 
 type Link = {
-  attrs: RawAttrs
-  class: string
-  icon_class: string
-  label: string
-}
+  attrs: RawAttrs;
+  class: string;
+  icon_class: string;
+  label: string;
+};
 
 type MissionRow = {
-  id: string
-  display_name: string
-  slug: string
-  spacecraft_count: number
-  status: "info" | "ready" | "attention"
-  status_label: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  slug: string;
+  spacecraft_count: number;
+  status: "info" | "ready" | "attention";
+  status_label: string;
+  href: string;
+};
 
 type MissionListPresentation = {
-  root_class: string
+  root_class: string;
   header: {
-    class: string
-    content_class: string
-    eyebrow: {class: string; text: string}
+    class: string;
+    content_class: string;
+    eyebrow: { class: string; text: string };
     title: {
-      class: string
-      text: string
-      suffix: {class: string; text: string}
-    }
-    actions_class: string
-    action: Link
-  }
+      class: string;
+      text: string;
+      suffix: { class: string; text: string };
+    };
+    actions_class: string;
+    action: Link;
+  };
   empty_state: {
-    visible: boolean
-    id: string
-    class: string
-    icon_class: string
-    title: {class: string; text: string}
-    description: {class: string; text: string}
-    action_container_class: string
-    action: Link
-  }
+    visible: boolean;
+    id: string;
+    class: string;
+    icon_class: string;
+    title: { class: string; text: string };
+    description: { class: string; text: string };
+    action_container_class: string;
+    action: Link;
+  };
   card: {
-    visible: boolean
-    class: string
-    body_class: string
-    rows: MissionRow[]
-  }
-}
+    visible: boolean;
+    class: string;
+    body_class: string;
+    rows: MissionRow[];
+  };
+};
 
-defineProps<{presentation: MissionListPresentation}>()
+defineProps<{ presentation: MissionListPresentation }>();
 </script>
 
 <template>

@@ -9,7 +9,9 @@ const props = defineProps<{
   payload?: Record<string, unknown>;
 }>();
 
-const component = computed<Component | null>(() => exposedComponents[componentName(props.surface)] ?? null);
+const component = computed<Component | null>(
+  () => exposedComponents[componentName(props.surface)] ?? null,
+);
 
 function componentName(surface: OrganizationAdminSurface): keyof typeof exposedComponents {
   const contract = {
@@ -24,7 +26,7 @@ function componentName(surface: OrganizationAdminSurface): keyof typeof exposedC
     admin_organizations: "AdminOrganizationListPage",
     admin_organization_new: "AdminOrganizationNew",
     admin_organization_show: "AdminOrganizationShow",
-    admin_organization_invite: "AdminOrganizationInvite"
+    admin_organization_invite: "AdminOrganizationInvite",
   } satisfies Record<OrganizationAdminSurface, keyof typeof exposedComponents>;
 
   return contract[surface];

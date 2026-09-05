@@ -23,5 +23,5 @@ export const exposedComponents = {
   AdminOrganizationListPage,
   AdminOrganizationNew,
   AdminOrganizationShow,
-  AdminOrganizationInvite
+  AdminOrganizationInvite,
 };

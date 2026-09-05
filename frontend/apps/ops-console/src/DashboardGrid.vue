@@ -1,12 +1,12 @@
 <script setup>
-import {onBeforeUnmount, onMounted, onUpdated, ref, watch} from "vue"
+import { onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 // gridstack-all.js is a UMD bundle whose export value is the GridStack class
 // itself (module.exports = GridStack), so it imports as a default, not a named
 // export — `import { GridStack }` resolves to undefined.
-import GridStack from "./vendor/gridstack/gridstack-all.js"
-import DashboardWidget from "./DashboardWidget.vue"
+import GridStack from "./vendor/gridstack/gridstack-all.js";
+import DashboardWidget from "./DashboardWidget.vue";
 
-const LAYOUT_PUSH_DEBOUNCE_MS = 400
+const LAYOUT_PUSH_DEBOUNCE_MS = 400;
 
 // GridStack + LiveVue coexistence:
 // - View mode runs staticGrid, so GridStack never mutates the DOM after init
@@ -49,75 +49,73 @@ const DashboardGridController = {
         alwaysShowResizeHandle: true,
         // Widen the grab targets: the bottom-right corner plus the right and
         // bottom edges, rather than the single hard-to-hit corner handle.
-        resizable: {handles: "e, se, s"},
+        resizable: { handles: "e, se, s" },
       },
-      this.el
-    )
-    this.pushTimer = null
-    this.sectionResizeFrame = null
+      this.el,
+    );
+    this.pushTimer = null;
+    this.sectionResizeFrame = null;
 
-    this.grid.on("change", () => this.scheduleLayoutPush())
-    this.grid.on("dragstop resizestop", () => this.updated())
-    this.syncEditMode()
+    this.grid.on("change", () => this.scheduleLayoutPush());
+    this.grid.on("dragstop resizestop", () => this.updated());
+    this.syncEditMode();
   },
 
   updated() {
-    if (this.gestureActive()) return
+    if (this.gestureActive()) return;
 
-    this.reconcileItems()
-    this.syncEditMode()
+    this.reconcileItems();
+    this.syncEditMode();
   },
 
   destroyed() {
-    clearTimeout(this.pushTimer)
-    this.cancelSectionResize()
+    clearTimeout(this.pushTimer);
+    this.cancelSectionResize();
     if (this.grid) {
-      this.grid.destroy(false)
-      this.grid = null
+      this.grid.destroy(false);
+      this.grid = null;
     }
   },
 
   editMode() {
-    return this.editModeValue()
+    return this.editModeValue();
   },
 
   gestureActive() {
-    return Boolean(
-      this.el.querySelector(".ui-draggable-dragging, .ui-resizable-resizing")
-    )
+    return Boolean(this.el.querySelector(".ui-draggable-dragging, .ui-resizable-resizing"));
   },
 
   syncEditMode() {
-    const editing = this.editMode()
+    const editing = this.editMode();
     // Read GridStack's own state, not the client-owned grid-stack-static class.
-    const isStatic = this.grid.opts.staticGrid === true
+    const isStatic = this.grid.opts.staticGrid === true;
 
     if (editing && isStatic) {
-      this.grid.setStatic(false)
+      this.grid.setStatic(false);
       // Classic GridStack reflow while editing: dragging into an occupied
       // space pushes neighbors and everything compacts upward. The initial
       // compaction fires "change", so it autosaves like any other move.
-      this.grid.float(false)
+      this.grid.float(false);
     } else if (!editing && !isStatic) {
-      this.flushLayout()
-      this.grid.float(true)
-      this.grid.setStatic(true)
+      this.flushLayout();
+      this.grid.float(true);
+      this.grid.setStatic(true);
     }
 
-    this.el.classList.toggle("grid-stack-static", !editing)
+    this.el.classList.toggle("grid-stack-static", !editing);
   },
 
   reconcileItems() {
-    const items = Array.from(this.el.querySelectorAll(":scope > .grid-stack-item"))
+    const items = Array.from(this.el.querySelectorAll(":scope > .grid-stack-item"));
 
     items.forEach((el) => {
       if (!el.gridstackNode) {
-        this.grid.makeWidget(el)
+        this.grid.makeWidget(el);
       } else if (this.editMode() && !el.classList.contains("ui-draggable")) {
-        this.grid.movable(el, true)
-        this.grid.resizable(el, true)
+        this.grid.movable(el, true);
+        this.grid.resizable(el, true);
       }
-    })
+    });
 
     this.grid.engine.nodes
       .filter(
@@ -125,39 +123,39 @@ const DashboardGridController = {
           node.el &&
           !node.el.isConnected &&
           // node.el is the placeholder mid-gesture; never treat it as a removal
-          !node.el.classList.contains("grid-stack-placeholder")
+          !node.el.classList.contains("grid-stack-placeholder"),
       )
-      .forEach((node) => this.grid.removeWidget(node.el, false, false))
+      .forEach((node) => this.grid.removeWidget(node.el, false, false));
   },
 
   scheduleLayoutPush() {
-    clearTimeout(this.pushTimer)
-    this.pushTimer = setTimeout(() => this.flushLayout(), LAYOUT_PUSH_DEBOUNCE_MS)
+    clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => this.flushLayout(), LAYOUT_PUSH_DEBOUNCE_MS);
   },
 
   cancelSectionResize() {
     if (this.sectionResizeFrame !== null) {
-      cancelAnimationFrame(this.sectionResizeFrame)
-      this.sectionResizeFrame = null
+      cancelAnimationFrame(this.sectionResizeFrame);
+      this.sectionResizeFrame = null;
     }
   },
 
   scheduleSectionResize() {
-    this.cancelSectionResize()
+    this.cancelSectionResize();
 
     this.sectionResizeFrame = requestAnimationFrame(() => {
-      this.sectionResizeFrame = null
-      this.grid.prevWidth = undefined
-      this.grid.onResize()
-    })
+      this.sectionResizeFrame = null;
+      this.grid.prevWidth = undefined;
+      this.grid.onResize();
+    });
   },
 
   flushLayout() {
     if (this.pushTimer) {
-      clearTimeout(this.pushTimer)
-      this.pushTimer = null
+      clearTimeout(this.pushTimer);
+      this.pushTimer = null;
     }
-    if (!this.editMode()) return
+    if (!this.editMode()) return;
 
     const layouts = this.grid.engine.nodes
       .filter((node) => node.el && node.el.isConnected)
@@ -167,61 +165,57 @@ const DashboardGridController = {
         y: node.y,
         w: node.w,
         h: node.h,
-      }))
+      }));
 
     if (layouts.length > 0) {
-      this.emit("layout_changed", {layouts})
+      this.emit("layout_changed", { layouts });
     }
   },
-}
+};
 
 const props = defineProps({
-  presentation: {type: Object, required: true},
-  sectionOpen: {type: Boolean, default: true},
-})
+  presentation: { type: Object, required: true },
+  sectionOpen: { type: Boolean, default: true },
+});
 
-const emit = defineEmits(["layout_changed"])
-const gridElement = ref(null)
-let controller = null
+const emit = defineEmits(["layout_changed"]);
+const gridElement = ref(null);
+let controller = null;
 
 onMounted(() => {
-  if (!gridElement.value) return
+  if (!gridElement.value) return;
 
-  controller = Object.create(DashboardGridController)
-  controller.el = gridElement.value
-  controller.editModeValue = () => props.presentation.controller.props.edit_mode
-  controller.emit = emit
-  controller.mounted()
-})
+  controller = Object.create(DashboardGridController);
+  controller.el = gridElement.value;
+  controller.editModeValue = () => props.presentation.controller.props.edit_mode;
+  controller.emit = emit;
+  controller.mounted();
+});
 
-onUpdated(() => controller?.updated())
+onUpdated(() => controller?.updated());
 
 watch(
   () => props.sectionOpen,
   (open, previousOpen) => {
-    if (!controller || open === previousOpen) return
+    if (!controller || open === previousOpen) return;
     if (open && previousOpen === false) {
-      controller.scheduleSectionResize()
+      controller.scheduleSectionResize();
     } else if (!open) {
-      controller.cancelSectionResize()
+      controller.cancelSectionResize();
     }
   },
-  {flush: "post"},
-)
+  { flush: "post" },
+);
 
 onBeforeUnmount(() => {
-  controller?.destroyed()
-  controller = null
-})
+  controller?.destroyed();
+  controller = null;
+});
 </script>
 
 <template>
   <div ref="gridElement" v-bind="props.presentation.root.attrs">
-    <div
-      v-for="widget in props.presentation.widgets"
-      :key="widget.key"
-      v-bind="widget.shell.attrs"
-    >
+    <div v-for="widget in props.presentation.widgets" :key="widget.key" v-bind="widget.shell.attrs">
       <div v-bind="widget.content.attrs">
         <div v-bind="widget.host.attrs">
           <DashboardWidget :presentation="widget.presentation" />

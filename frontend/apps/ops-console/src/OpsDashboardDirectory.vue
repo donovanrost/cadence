@@ -1,196 +1,198 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceToggle from "./ui/reka/CadenceToggle.vue"
-import {onBeforeUnmount, reactive, watch} from "vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import { onBeforeUnmount, reactive, watch } from "vue";
 
 type LinkAction = {
-  id: string
-  label: string
-  icon: string
-  href: string
-}
+  id: string;
+  label: string;
+  icon: string;
+  href: string;
+};
 
 type HeaderAction = LinkAction & {
-  icon_class: string
-  class: string
-}
+  icon_class: string;
+  class: string;
+};
 
 type Page = {
-  id: string
+  id: string;
   header: {
-    eyebrow: string
-    heading: string
-    copy: string
+    eyebrow: string;
+    heading: string;
+    copy: string;
     count: {
-      id: string
-      value: number
-      suffix: string
-    }
-    author_actions: HeaderAction[]
-  }
+      id: string;
+      value: number;
+      suffix: string;
+    };
+    author_actions: HeaderAction[];
+  };
   list: {
-    id: string
+    id: string;
     empty: {
-      id: string
-      icon: string
-      heading: string
-      copy: string
-    }
-  }
-}
+      id: string;
+      icon: string;
+      heading: string;
+      copy: string;
+    };
+  };
+};
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type SelectField = {
-  id: string
-  name: string
-  type: "select"
-  label: string
-  options: Option[]
-}
+  id: string;
+  name: string;
+  type: "select";
+  label: string;
+  options: Option[];
+};
 
 type FilterValues = {
-  query: string
-  lifecycle: string
-  tag: string
-  sort: string
-}
+  query: string;
+  lifecycle: string;
+  tag: string;
+  sort: string;
+};
 
 type Filters = {
-  id: string
-  values: FilterValues
+  id: string;
+  values: FilterValues;
   fields: {
     query: {
-      id: string
-      name: string
-      type: "search"
-      label: string
-      placeholder: string
-      debounce_ms: number
-    }
-    lifecycle: SelectField
-    tag: SelectField
-    sort: SelectField
-  }
-}
+      id: string;
+      name: string;
+      type: "search";
+      label: string;
+      placeholder: string;
+      debounce_ms: number;
+    };
+    lifecycle: SelectField;
+    tag: SelectField;
+    sort: SelectField;
+  };
+};
 
 type StarPayload = {
-  "dashboard-id": string
-  starred: string
-}
+  "dashboard-id": string;
+  starred: string;
+};
 
 type RestorePayload = {
-  "dashboard-id": string
-  "expected-version": string
-}
+  "dashboard-id": string;
+  "expected-version": string;
+};
 
 type DirectoryRow = {
-  id: string
-  __dom_id: string
-  dashboard_id: string
-  name: string
-  description: string | null
-  tags: string[]
+  id: string;
+  __dom_id: string;
+  dashboard_id: string;
+  name: string;
+  description: string | null;
+  tags: string[];
   lifecycle: {
-    state: "active" | "archived"
-    class: string
-  }
-  starred: boolean
+    state: "active" | "archived";
+    class: string;
+  };
+  starred: boolean;
   open: {
-    id: string
-    href: string
-  } | null
+    id: string;
+    href: string;
+  } | null;
   star: {
-    id: string
-    payload: StarPayload
-    aria_label: string
-    aria_pressed: string
-    disabled: boolean
-    title: string | null
-    icon: string
-  }
-  widget_version_label: string
-  clone?: LinkAction
+    id: string;
+    payload: StarPayload;
+    aria_label: string;
+    aria_pressed: string;
+    disabled: boolean;
+    title: string | null;
+    icon: string;
+  };
+  widget_version_label: string;
+  clone?: LinkAction;
   restore: {
-    id: string
-    label: string
-    icon: string
-    payload: RestorePayload
-    disabled: boolean
-    lifecycle_action: string
-    action_available: string
-  } | null
-}
+    id: string;
+    label: string;
+    icon: string;
+    payload: RestorePayload;
+    disabled: boolean;
+    lifecycle_action: string;
+    action_available: string;
+  } | null;
+};
 
 const props = defineProps<{
-  page: Page
-  filters: Filters
-  dashboard_directory: DirectoryRow[]
-}>()
+  page: Page;
+  filters: Filters;
+  dashboard_directory: DirectoryRow[];
+}>();
 
 const emit = defineEmits<{
-  filter_dashboards: [payload: {directory: FilterValues}]
-  toggle_dashboard_star: [payload: StarPayload]
-  restore_dashboard: [payload: RestorePayload]
-}>()
+  filter_dashboards: [payload: { directory: FilterValues }];
+  toggle_dashboard_star: [payload: StarPayload];
+  restore_dashboard: [payload: RestorePayload];
+}>();
 
-const filterValues = reactive<FilterValues>({...props.filters.values})
-let queryTimer: ReturnType<typeof setTimeout> | undefined
+const filterValues = reactive<FilterValues>({ ...props.filters.values });
+let queryTimer: ReturnType<typeof setTimeout> | undefined;
 
 watch(
   () => props.filters.values,
-  values => {
-    if (queryTimer !== undefined) clearTimeout(queryTimer)
-    queryTimer = undefined
-    Object.assign(filterValues, values)
+  (values) => {
+    if (queryTimer !== undefined) clearTimeout(queryTimer);
+    queryTimer = undefined;
+    Object.assign(filterValues, values);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 onBeforeUnmount(() => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
-})
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
+});
 
 const emitFilters = () => {
-  emit("filter_dashboards", {directory: {...filterValues}})
-}
+  emit("filter_dashboards", { directory: { ...filterValues } });
+};
 
 const updateSelect = (key: "lifecycle" | "tag" | "sort", event: Event) => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
-  queryTimer = undefined
-  filterValues[key] = (event.target as HTMLSelectElement).value
-  emitFilters()
-}
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
+  queryTimer = undefined;
+  filterValues[key] = (event.target as HTMLSelectElement).value;
+  emitFilters();
+};
 
 const updateQuery = (event: Event) => {
-  filterValues.query = (event.target as HTMLInputElement).value
+  filterValues.query = (event.target as HTMLInputElement).value;
 
-  if (queryTimer !== undefined) clearTimeout(queryTimer)
+  if (queryTimer !== undefined) clearTimeout(queryTimer);
   queryTimer = setTimeout(() => {
-    queryTimer = undefined
-    emitFilters()
-  }, props.filters.fields.query.debounce_ms)
-}
+    queryTimer = undefined;
+    emitFilters();
+  }, props.filters.fields.query.debounce_ms);
+};
 
 const toggleDashboardStar = (row: DirectoryRow) => {
-  emit("toggle_dashboard_star", row.star.payload)
-}
+  emit("toggle_dashboard_star", row.star.payload);
+};
 
 const restoreDashboard = (row: DirectoryRow) => {
-  if (row.restore) emit("restore_dashboard", row.restore.payload)
-}
+  if (row.restore) emit("restore_dashboard", row.restore.payload);
+};
 </script>
 
 <template>
   <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[100rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div
+        class="mx-auto flex max-w-[100rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
+      >
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
             {{ page.header.eyebrow }}
@@ -229,85 +231,85 @@ const restoreDashboard = (row: DirectoryRow) => {
         class="grid gap-3 border border-base-300 bg-base-200/25 p-3 md:grid-cols-4"
         @submit.prevent
       >
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.query.label"
-            label-class="hud-label block mb-1.5"
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.query.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <input
+            :id="filters.fields.query.id"
+            :name="filters.fields.query.name"
+            :type="filters.fields.query.type"
+            :value="filterValues.query"
+            :placeholder="filters.fields.query.placeholder"
+            class="w-full input"
+            phx-debounce="250"
+            @input="updateQuery"
+          />
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.lifecycle.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.lifecycle.id"
+            :name="filters.fields.lifecycle.name"
+            :value="filterValues.lifecycle"
+            class="w-full select"
+            @change="updateSelect('lifecycle', $event)"
           >
-            <input
-              :id="filters.fields.query.id"
-              :name="filters.fields.query.name"
-              :type="filters.fields.query.type"
-              :value="filterValues.query"
-              :placeholder="filters.fields.query.placeholder"
-              class="w-full input"
-              phx-debounce="250"
-              @input="updateQuery"
+            <option
+              v-for="option in filters.fields.lifecycle.options"
+              :key="option.value"
+              :value="option.value"
             >
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.lifecycle.label"
-            label-class="hud-label block mb-1.5"
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.tag.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.tag.id"
+            :name="filters.fields.tag.name"
+            :value="filterValues.tag"
+            class="w-full select"
+            @change="updateSelect('tag', $event)"
           >
-            <select
-              :id="filters.fields.lifecycle.id"
-              :name="filters.fields.lifecycle.name"
-              :value="filterValues.lifecycle"
-              class="w-full select"
-              @change="updateSelect('lifecycle', $event)"
+            <option
+              v-for="option in filters.fields.tag.options"
+              :key="option.value"
+              :value="option.value"
             >
-              <option
-                v-for="option in filters.fields.lifecycle.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.tag.label"
-            label-class="hud-label block mb-1.5"
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          :label="filters.fields.sort.label"
+          label-class="hud-label block mb-1.5"
+        >
+          <select
+            :id="filters.fields.sort.id"
+            :name="filters.fields.sort.name"
+            :value="filterValues.sort"
+            class="w-full select"
+            @change="updateSelect('sort', $event)"
           >
-            <select
-              :id="filters.fields.tag.id"
-              :name="filters.fields.tag.name"
-              :value="filterValues.tag"
-              class="w-full select"
-              @change="updateSelect('tag', $event)"
+            <option
+              v-for="option in filters.fields.sort.options"
+              :key="option.value"
+              :value="option.value"
             >
-              <option
-                v-for="option in filters.fields.tag.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            :label="filters.fields.sort.label"
-            label-class="hud-label block mb-1.5"
-          >
-            <select
-              :id="filters.fields.sort.id"
-              :name="filters.fields.sort.name"
-              :value="filterValues.sort"
-              class="w-full select"
-              @change="updateSelect('sort', $event)"
-            >
-              <option
-                v-for="option in filters.fields.sort.options"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
       </form>
 
       <div :id="page.list.id" class="grid gap-3 xl:grid-cols-2">
@@ -352,10 +354,7 @@ const restoreDashboard = (row: DirectoryRow) => {
                 </span>
                 <span :class="row.lifecycle.class">{{ row.lifecycle.state }}</span>
               </div>
-              <p
-                v-if="row.description"
-                class="mt-1 line-clamp-2 text-sm text-base-content/60"
-              >
+              <p v-if="row.description" class="mt-1 line-clamp-2 text-sm text-base-content/60">
                 {{ row.description }}
               </p>
               <div class="mt-3 flex flex-wrap items-center gap-1.5">
@@ -395,7 +394,9 @@ const restoreDashboard = (row: DirectoryRow) => {
             </CadenceToggle>
           </div>
 
-          <div class="mt-4 flex items-center justify-between gap-3 border-t border-base-300/60 pt-3">
+          <div
+            class="mt-4 flex items-center justify-between gap-3 border-t border-base-300/60 pt-3"
+          >
             <p class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45">
               {{ row.widget_version_label }}
             </p>

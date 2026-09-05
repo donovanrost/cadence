@@ -15,7 +15,7 @@ const releaseIdentityEnvironmentNames = [
   "BUILD_ID",
   "BUILD_VERSION",
   "RELEASE_ID",
-  "RELEASE_VERSION"
+  "RELEASE_VERSION",
 ];
 
 const releaseFederationConfig = {
@@ -28,21 +28,21 @@ const releaseFederationConfig = {
       const publicationStats = { ...stats };
       delete publicationStats.assetAnalysis;
       return publicationStats;
-    }
-  }
+    },
+  },
 };
 
 function releaseOutputDirectory() {
   const configuredOutput = process.env[releaseOutputEnvironmentName];
   if (!configuredOutput || !isAbsolute(configuredOutput)) {
     throw new Error(
-      `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`
+      `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`,
     );
   }
 
   const outputDirectory = canonicalPathWithMissingTail(configuredOutput);
   const argumentOutputDirectory = canonicalPathWithMissingTail(
-    parseReleaseOutputArgument(process.argv.slice(2))
+    parseReleaseOutputArgument(process.argv.slice(2)),
   );
   if (outputDirectory !== argumentOutputDirectory) {
     throw new Error(`${releaseOutputEnvironmentName} must match --outDir.`);
@@ -111,7 +111,14 @@ function canonicalPathWithMissingTail(path: string) {
       try {
         existingEntry = lstatSync(current);
       } catch (missingError) {
-        if (!(missingError && typeof missingError === "object" && "code" in missingError && missingError.code === "ENOENT")) {
+        if (
+          !(
+            missingError &&
+            typeof missingError === "object" &&
+            "code" in missingError &&
+            missingError.code === "ENOENT"
+          )
+        ) {
           throw missingError;
         }
       }
@@ -132,7 +139,7 @@ function releaseOutputPlugin() {
     config(config: ViteUserConfig) {
       config.build ??= {};
       config.build.manifest = false;
-    }
+    },
   };
 }
 
@@ -150,34 +157,33 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
-    base:
-      releaseBuild
-        ? "./"
-        : command === "serve"
-          ? "http://127.0.0.1:4178/"
-          : "http://127.0.0.1:4178/releases/current/",
+    base: releaseBuild
+      ? "./"
+      : command === "serve"
+        ? "http://127.0.0.1:4178/"
+        : "http://127.0.0.1:4178/releases/current/",
     define: {
-      __CADENCE_REMOTE_RELEASE__: JSON.stringify(releaseBuild ? "release" : "development")
+      __CADENCE_REMOTE_RELEASE__: JSON.stringify(releaseBuild ? "release" : "development"),
     },
     server: {
       host: "127.0.0.1",
       port: 4178,
       strictPort: true,
       cors: true,
-      origin: "http://127.0.0.1:4178"
+      origin: "http://127.0.0.1:4178",
     },
     build: {
       target: "chrome89",
       outDir: outputDirectory ?? "dist/current",
       ...(releaseBuild
         ? { emptyOutDir: true, manifest: false, rollupOptions: { input: federatedEntry } }
-        : {})
+        : {}),
     },
     test: { environment: "happy-dom" },
     plugins: lazyPlugins(() => [
       vue(),
       federation(releaseBuild ? releaseFederationConfig : federationConfig),
-      ...(releaseBuild ? [releaseOutputPlugin()] : [])
-    ])
+      ...(releaseBuild ? [releaseOutputPlugin()] : []),
+    ]),
   };
 });

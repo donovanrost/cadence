@@ -1,50 +1,50 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCard from "./ui/components/CadenceCard.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
 
 type Status = {
-  tone: "info"
-  label: string
-}
+  tone: "info";
+  label: string;
+};
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type CommandingPage = {
-  id: string
-  title: string
-  subtitle: string
-  eyebrow: string
-  breadcrumbs: Breadcrumb[]
-  status: Status
-}
+  id: string;
+  title: string;
+  subtitle: string;
+  eyebrow: string;
+  breadcrumbs: Breadcrumb[];
+  status: Status;
+};
 
 type CommandPanel = {
-  id: string
-  title: string
-  value: string
-  status: Status
-  description: string
-}
+  id: string;
+  title: string;
+  value: string;
+  status: Status;
+  description: string;
+};
 
 type ReadinessImpact = {
-  eyebrow: string
-  title: string
-  description: string
-  status: Status
-}
+  eyebrow: string;
+  title: string;
+  description: string;
+  status: Status;
+};
 
 defineProps<{
-  page: CommandingPage
-  panels: CommandPanel[]
-  readiness: ReadinessImpact
-}>()
+  page: CommandingPage;
+  panels: CommandPanel[];
+  readiness: ReadinessImpact;
+}>();
 </script>
 
 <template>
@@ -67,7 +67,8 @@ defineProps<{
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <p class="hud-label">{{ page.eyebrow }}</p>
@@ -90,30 +91,30 @@ defineProps<{
         class="card bg-base-200 border border-base-300"
         body-class="card-body p-6"
       >
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="hud-label mb-2">{{ panel.title }}</p>
-              <h2 class="text-base font-semibold">{{ panel.value }}</h2>
-            </div>
-            <StatusBadge :status="panel.status.tone" :label="panel.status.label" />
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="hud-label mb-2">{{ panel.title }}</p>
+            <h2 class="text-base font-semibold">{{ panel.value }}</h2>
           </div>
-          <p class="mt-3 text-sm text-base-content/70">{{ panel.description }}</p>
+          <StatusBadge :status="panel.status.tone" :label="panel.status.label" />
+        </div>
+        <p class="mt-3 text-sm text-base-content/70">{{ panel.description }}</p>
       </CadenceCard>
     </section>
 
     <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label mb-2">{{ readiness.eyebrow }}</p>
-            <h2 class="text-lg font-semibold">{{ readiness.title }}</h2>
-            <p class="mt-1 max-w-2xl text-sm text-base-content/70">
-              {{ readiness.description }}
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <StatusBadge :status="readiness.status.tone" :label="readiness.status.label" />
-          </div>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label mb-2">{{ readiness.eyebrow }}</p>
+          <h2 class="text-lg font-semibold">{{ readiness.title }}</h2>
+          <p class="mt-1 max-w-2xl text-sm text-base-content/70">
+            {{ readiness.description }}
+          </p>
         </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <StatusBadge :status="readiness.status.tone" :label="readiness.status.label" />
+        </div>
+      </div>
     </CadenceCard>
   </div>
 </template>

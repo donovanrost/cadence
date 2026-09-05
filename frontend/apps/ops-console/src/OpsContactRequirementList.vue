@@ -1,68 +1,70 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
 type JourneyStep = {
-  number: string
-  label: string
-  detail: string
-  active: boolean
-}
+  number: string;
+  label: string;
+  detail: string;
+  active: boolean;
+};
 
 type Page = {
-  id: string
+  id: string;
   header: {
-    eyebrow: string
-    title: string
-    description: string
+    eyebrow: string;
+    title: string;
+    description: string;
     create_action: {
-      id: string
-      label: string
-      href: string
-    }
-  }
-  journey_steps: JourneyStep[]
+      id: string;
+      label: string;
+      href: string;
+    };
+  };
+  journey_steps: JourneyStep[];
   empty_state: {
-    id: string
-    title: string
-    description: string
-  }
-  list_id: string
-}
+    id: string;
+    title: string;
+    description: string;
+  };
+  list_id: string;
+};
 
-type PriorityTone = "error" | "warning" | "neutral"
+type PriorityTone = "error" | "warning" | "neutral";
 
 type ContactRequirementRow = {
-  id: string
-  __dom_id: string
+  id: string;
+  __dom_id: string;
   priority: {
-    label: string
-    tone: PriorityTone
-    class: string
-  }
-  version_direction: string
-  intent_label: string
-  outcome_detail: string
+    label: string;
+    tone: PriorityTone;
+    class: string;
+  };
+  version_direction: string;
+  intent_label: string;
+  outcome_detail: string;
   window: {
-    label: string
-    detail: string
-  }
+    label: string;
+    detail: string;
+  };
   journey: {
-    label: string
-    detail: string
-  }
-  detail_href: string
-}
+    label: string;
+    detail: string;
+  };
+  detail_href: string;
+};
 
 defineProps<{
-  page: Page
-  requirements: ContactRequirementRow[]
-}>()
+  page: Page;
+  requirements: ContactRequirementRow[];
+}>();
 </script>
 
 <template>
   <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[96rem] flex-col gap-5 md:flex-row md:items-end md:justify-between">
+      <div
+        class="mx-auto flex max-w-[96rem] flex-col gap-5 md:flex-row md:items-end md:justify-between"
+      >
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
             {{ page.header.eyebrow }}
@@ -92,7 +94,7 @@ defineProps<{
           :key="step.number"
           :class="[
             'border-b border-base-300 px-4 py-3 sm:border-b-0 sm:border-r last:border-r-0',
-            step.active && 'bg-primary/[0.06]'
+            step.active && 'bg-primary/[0.06]',
           ]"
         >
           <p class="font-mono text-[0.6rem] tracking-[0.2em] text-primary/60">
@@ -128,13 +130,17 @@ defineProps<{
           data-phx-link-state="push"
           class="group block border border-base-300 bg-base-200/20 transition-colors hover:border-primary/50 hover:bg-primary/[0.03]"
         >
-          <div class="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1.4fr)_minmax(15rem,0.8fr)_auto] md:items-center">
+          <div
+            class="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1.4fr)_minmax(15rem,0.8fr)_auto] md:items-center"
+          >
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <span :class="row.priority.class" :data-tone="row.priority.tone">
                   {{ row.priority.label }}
                 </span>
-                <span class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45">
+                <span
+                  class="font-mono text-[0.65rem] uppercase tracking-wider text-base-content/45"
+                >
                   {{ row.version_direction }}
                 </span>
               </div>

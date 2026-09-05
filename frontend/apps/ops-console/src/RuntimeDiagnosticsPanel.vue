@@ -1,47 +1,45 @@
 <script setup lang="ts">
-import RuntimeCacheSummary from "./RuntimeCacheSummary.vue"
-import RuntimeDegradedSource from "./RuntimeDegradedSource.vue"
-import RuntimeDiagnosticsSection from "./RuntimeDiagnosticsSection.vue"
-import RuntimeNoRefreshSummary from "./RuntimeNoRefreshSummary.vue"
-import RuntimeRecentInvalidations from "./RuntimeRecentInvalidations.vue"
+import RuntimeCacheSummary from "./RuntimeCacheSummary.vue";
+import RuntimeDegradedSource from "./RuntimeDegradedSource.vue";
+import RuntimeDiagnosticsSection from "./RuntimeDiagnosticsSection.vue";
+import RuntimeNoRefreshSummary from "./RuntimeNoRefreshSummary.vue";
+import RuntimeRecentInvalidations from "./RuntimeRecentInvalidations.vue";
 
-type Attributes = Record<string, string>
-type CacheSummaryPresentation = InstanceType<
-  typeof RuntimeCacheSummary
->["$props"]["presentation"]
+type Attributes = Record<string, string>;
+type CacheSummaryPresentation = InstanceType<typeof RuntimeCacheSummary>["$props"]["presentation"];
 type DegradedSourcePresentation = InstanceType<
   typeof RuntimeDegradedSource
->["$props"]["presentation"]
+>["$props"]["presentation"];
 type DiagnosticsSectionPresentation = InstanceType<
   typeof RuntimeDiagnosticsSection
->["$props"]["presentation"]
+>["$props"]["presentation"];
 type NoRefreshSummaryPresentation = InstanceType<
   typeof RuntimeNoRefreshSummary
->["$props"]["summary"]
+>["$props"]["summary"];
 type RecentInvalidationsPresentation = InstanceType<
   typeof RuntimeRecentInvalidations
->["$props"]["presentation"]
+>["$props"]["presentation"];
 
 type ChildPresentation<T> = {
-  root: {attrs: Attributes}
-  presentation: T
-}
+  root: { attrs: Attributes };
+  presentation: T;
+};
 
 type Presentation = {
-  root: {attrs: Attributes}
-  engine_section: ChildPresentation<DiagnosticsSectionPresentation>
-  cache_summary: ChildPresentation<CacheSummaryPresentation> | null
-  runtime_section: ChildPresentation<DiagnosticsSectionPresentation>
-  degraded_source_summary: ChildPresentation<DegradedSourcePresentation> | null
-  degraded_source_drilldowns: ChildPresentation<DegradedSourcePresentation> | null
-  source_capability_postures: ChildPresentation<DegradedSourcePresentation> | null
-  source_dependency_causes: ChildPresentation<DegradedSourcePresentation> | null
-  no_refresh_summary: ChildPresentation<NoRefreshSummaryPresentation> | null
-  invalidation_section: ChildPresentation<DiagnosticsSectionPresentation>
-  recent_invalidations: ChildPresentation<RecentInvalidationsPresentation>
-}
+  root: { attrs: Attributes };
+  engine_section: ChildPresentation<DiagnosticsSectionPresentation>;
+  cache_summary: ChildPresentation<CacheSummaryPresentation> | null;
+  runtime_section: ChildPresentation<DiagnosticsSectionPresentation>;
+  degraded_source_summary: ChildPresentation<DegradedSourcePresentation> | null;
+  degraded_source_drilldowns: ChildPresentation<DegradedSourcePresentation> | null;
+  source_capability_postures: ChildPresentation<DegradedSourcePresentation> | null;
+  source_dependency_causes: ChildPresentation<DegradedSourcePresentation> | null;
+  no_refresh_summary: ChildPresentation<NoRefreshSummaryPresentation> | null;
+  invalidation_section: ChildPresentation<DiagnosticsSectionPresentation>;
+  recent_invalidations: ChildPresentation<RecentInvalidationsPresentation>;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -68,9 +66,7 @@ defineProps<{presentation: Presentation}>()
     v-if="presentation.degraded_source_drilldowns"
     v-bind="presentation.degraded_source_drilldowns.root.attrs"
   >
-    <RuntimeDegradedSource
-      :presentation="presentation.degraded_source_drilldowns.presentation"
-    />
+    <RuntimeDegradedSource :presentation="presentation.degraded_source_drilldowns.presentation" />
   </div>
 
   <div
@@ -87,10 +83,7 @@ defineProps<{presentation: Presentation}>()
     <RuntimeDegradedSource :presentation="presentation.source_dependency_causes.presentation" />
   </div>
 
-  <div
-    v-if="presentation.no_refresh_summary"
-    v-bind="presentation.no_refresh_summary.root.attrs"
-  >
+  <div v-if="presentation.no_refresh_summary" v-bind="presentation.no_refresh_summary.root.attrs">
     <RuntimeNoRefreshSummary :summary="presentation.no_refresh_summary.presentation" />
   </div>
 

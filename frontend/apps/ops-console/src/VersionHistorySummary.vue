@@ -1,55 +1,55 @@
 <script setup lang="ts">
-import PublishValidation from "./PublishValidation.vue"
-import VersionList from "./VersionList.vue"
+import PublishValidation from "./PublishValidation.vue";
+import VersionList from "./VersionList.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  attrs: Attributes
-  text: string
-}
+  attrs: Attributes;
+  text: string;
+};
 
 type RuntimeDefaultRow = {
-  key: string
-  order: number
-  label: TextPresentation
-  value: TextPresentation
-}
+  key: string;
+  order: number;
+  label: TextPresentation;
+  value: TextPresentation;
+};
 
 type RuntimeDefaultContext = {
-  key: string
-  order: number
-  attrs: Attributes
-  rows: RuntimeDefaultRow[]
-}
+  key: string;
+  order: number;
+  attrs: Attributes;
+  rows: RuntimeDefaultRow[];
+};
 
 type PanelPresentation = {
-  version_list: Record<string, unknown>
-  publish_validation: Record<string, unknown> | null
+  version_list: Record<string, unknown>;
+  publish_validation: Record<string, unknown> | null;
   publish_impact: null | {
-    root: {attrs: Attributes}
+    root: { attrs: Attributes };
     header: {
-      attrs: Attributes
-      heading: TextPresentation
-      badge: TextPresentation
-    }
-    message: TextPresentation
-  }
+      attrs: Attributes;
+      heading: TextPresentation;
+      badge: TextPresentation;
+    };
+    message: TextPresentation;
+  };
   runtime_defaults: null | {
-    root: {attrs: Attributes}
+    root: { attrs: Attributes };
     header: {
-      attrs: Attributes
-      heading: TextPresentation
-      badge: TextPresentation
-    }
+      attrs: Attributes;
+      heading: TextPresentation;
+      badge: TextPresentation;
+    };
     contexts: {
-      attrs: Attributes
-      items: RuntimeDefaultContext[]
-    }
-  }
-}
+      attrs: Attributes;
+      items: RuntimeDefaultContext[];
+    };
+  };
+};
 
-defineProps<{presentation: PanelPresentation}>()
+defineProps<{ presentation: PanelPresentation }>();
 </script>
 
 <template>

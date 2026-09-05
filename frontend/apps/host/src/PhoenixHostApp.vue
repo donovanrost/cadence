@@ -60,7 +60,9 @@ onBeforeUnmount(() => {
 
 async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
   const generation = ++loadGeneration;
-  catalogAbortController?.abort(new Error("A newer Phoenix host catalog load superseded this load."));
+  catalogAbortController?.abort(
+    new Error("A newer Phoenix host catalog load superseded this load."),
+  );
   invalidateActiveContext();
   const controller = new AbortController();
   catalogAbortController = controller;
@@ -128,10 +130,7 @@ function recordManifest(value: FirstPartyApplicationManifest): void {
   manifest.value = value;
 }
 
-function handleBridgeSessionFailure(
-  operation: "query" | "action",
-  error: HostBridgeError,
-): void {
+function handleBridgeSessionFailure(operation: "query" | "action", error: HostBridgeError): void {
   if (operation === "action") {
     actionFailure.value = {
       message: "The action was stopped. No automatic retry was attempted.",
@@ -214,11 +213,8 @@ function boundedCatalogFetch(
 
     controller.signal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve()
-      .then(() => fetcher(input, { ...(init ?? {}), signal: controller.signal }))
-      .then(
-        finishResponse,
-        finishError,
-      );
+      .then(() => fetcher(input, { ...init, signal: controller.signal }))
+      .then(finishResponse, finishError);
   });
 }
 </script>

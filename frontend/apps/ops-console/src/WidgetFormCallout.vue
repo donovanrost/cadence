@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type {CalloutPresentation} from "./widget_form_callout"
+import type { CalloutPresentation } from "./widget_form_callout";
 
-defineProps<{callout: CalloutPresentation}>()
+defineProps<{ callout: CalloutPresentation }>();
 </script>
 
 <template>

@@ -17,14 +17,14 @@ export default createModuleFederationConfig({
     "./AdminOrganizationListPage": "./src/AdminOrganizationListPage.vue",
     "./AdminOrganizationNew": "./src/AdminOrganizationNew.vue",
     "./AdminOrganizationShow": "./src/AdminOrganizationShow.vue",
-    "./AdminOrganizationInvite": "./src/AdminOrganizationInvite.vue"
+    "./AdminOrganizationInvite": "./src/AdminOrganizationInvite.vue",
   },
   shared: {
     vue: {
       singleton: true,
       requiredVersion: "^3.5.40",
-      allowNodeModulesSuffixMatch: true
-    }
+      allowNodeModulesSuffixMatch: true,
+    },
   },
-  dts: false
+  dts: false,
 });

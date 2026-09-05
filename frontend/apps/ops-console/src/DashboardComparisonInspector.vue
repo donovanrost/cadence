@@ -1,11 +1,11 @@
 <script setup>
-import ClipboardButton from "./ClipboardButton.vue"
-import DashboardComparisonInspectorHeader from "./DashboardComparisonInspectorHeader.vue"
-import DashboardComparisonRollup from "./DashboardComparisonRollup.vue"
+import ClipboardButton from "./ClipboardButton.vue";
+import DashboardComparisonInspectorHeader from "./DashboardComparisonInspectorHeader.vue";
+import DashboardComparisonRollup from "./DashboardComparisonRollup.vue";
 
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>

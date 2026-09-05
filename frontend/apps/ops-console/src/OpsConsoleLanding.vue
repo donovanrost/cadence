@@ -11,7 +11,8 @@ defineProps<{
     <p class="ops-console-eyebrow">MISSION OPERATIONS</p>
     <h1>{{ missionName }}</h1>
     <p class="ops-console-copy">
-      Phoenix selected this Ops Console surface for mission <code>{{ missionId }}</code>.
+      Phoenix selected this Ops Console surface for mission <code>{{ missionId }}</code
+      >.
     </p>
     <div class="ops-console-status" role="status">
       <span class="ops-console-status-dot" aria-hidden="true"></span>

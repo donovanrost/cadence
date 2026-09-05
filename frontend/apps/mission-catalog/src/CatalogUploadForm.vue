@@ -1,145 +1,145 @@
 <script setup lang="ts">
-import {computed, reactive, ref} from "vue"
-import CadenceField from "./ui/components/CadenceField.vue"
+import { computed, reactive, ref } from "vue";
+import CadenceField from "./ui/components/CadenceField.vue";
 
 type UploadError = {
-  ref: string
-  error: string
-  code: string
-  message: string
-}
+  ref: string;
+  error: string;
+  code: string;
+  message: string;
+};
 
 type UploadEntry = {
-  ref: string
-  client_name: string
-  client_size: number
-  client_type: string
-  progress: number
-  done: boolean
-  valid: boolean
-  preflighted: boolean
-  errors: string[]
-}
+  ref: string;
+  client_name: string;
+  client_size: number;
+  client_type: string;
+  progress: number;
+  done: boolean;
+  valid: boolean;
+  preflighted: boolean;
+  errors: string[];
+};
 
 type UploadConfig = {
-  ref: string
-  name: string
-  accept: string | false
-  max_entries: number
-  max_file_size: number
-  auto_upload: boolean
-  entries: UploadEntry[]
-  errors: UploadError[]
-}
+  ref: string;
+  name: string;
+  accept: string | false;
+  max_entries: number;
+  max_file_size: number;
+  auto_upload: boolean;
+  entries: UploadEntry[];
+  errors: UploadError[];
+};
 
 type UploadField = {
-  key: string
-  id: string
-  name: string
-  type: "text" | "textarea"
-  label: string
-  value: string
-  errors: string[]
-  wrapper_class: string
-  label_class: string
-  input_class: string
-  error_class: string
-}
+  key: string;
+  id: string;
+  name: string;
+  type: "text" | "textarea";
+  label: string;
+  value: string;
+  errors: string[];
+  wrapper_class: string;
+  label_class: string;
+  input_class: string;
+  error_class: string;
+};
 
 type UploadForm = {
-  id: string
-  name: string
-  class: string
+  id: string;
+  name: string;
+  class: string;
   card: {
-    id: string | null
-    class: string
-    body_class: string
-    title: string
-    title_class: string
-  }
-  content_class: string | null
+    id: string | null;
+    class: string;
+    body_class: string;
+    title: string;
+    title_class: string;
+  };
+  content_class: string | null;
   description: null | {
-    text: string
-    class: string
-  }
-  primary_fields_class: string
-  primary_fields: UploadField[]
-  secondary_fields: UploadField[]
+    text: string;
+    class: string;
+  };
+  primary_fields_class: string;
+  primary_fields: UploadField[];
+  secondary_fields: UploadField[];
   file_input: {
-    id: string
-    name: string
-    class: string
-    wrapper_class: string | null
-  }
+    id: string;
+    name: string;
+    class: string;
+    wrapper_class: string | null;
+  };
   entries: {
-    list_class: string
-    item_class: string
-    name_class: string
-    progress_class: string
-    remove_class: string
-    remove_label: string
-  }
-  error_class: string
+    list_class: string;
+    item_class: string;
+    name_class: string;
+    progress_class: string;
+    remove_class: string;
+    remove_label: string;
+  };
+  error_class: string;
   importer: {
-    detected_class: string
-    icon_class: string
-    name_class: string
-    empty_class: string
-  }
-  actions_class: string | null
+    detected_class: string;
+    icon_class: string;
+    name_class: string;
+    empty_class: string;
+  };
+  actions_class: string | null;
   submit: {
-    id: string | null
-    label: string
-    class: string
-  }
-}
+    id: string | null;
+    label: string;
+    class: string;
+  };
+};
 
 type DetectedImporter = {
-  status: "empty" | "unsupported" | "detected"
-  display_name: string | null
-}
+  status: "empty" | "unsupported" | "detected";
+  display_name: string | null;
+};
 
 const props = defineProps<{
-  form: UploadForm
-  upload: UploadConfig
-  detected_importer: DetectedImporter
-  submit_disabled: boolean
-}>()
+  form: UploadForm;
+  upload: UploadConfig;
+  detected_importer: DetectedImporter;
+  submit_disabled: boolean;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: Record<string, Record<string, string>>]
-  save: []
-  "cancel-upload": [payload: {ref: string}]
-}>()
+  validate: [payload: Record<string, Record<string, string>>];
+  save: [];
+  "cancel-upload": [payload: { ref: string }];
+}>();
 
-const allFields = [...props.form.primary_fields, ...props.form.secondary_fields]
+const allFields = [...props.form.primary_fields, ...props.form.secondary_fields];
 
 const values = reactive<Record<string, string>>(
   Object.fromEntries(allFields.map((field) => [field.key, field.value])),
-)
+);
 
-const visibleInput = ref<HTMLInputElement | null>(null)
-const selectedEntries = ref<UploadEntry[]>([])
+const visibleInput = ref<HTMLInputElement | null>(null);
+const selectedEntries = ref<UploadEntry[]>([]);
 const entries = computed(() =>
   selectedEntries.value.length > 0 ? selectedEntries.value : props.upload.entries,
-)
-const progress = computed(() => entries.value[0]?.progress ?? 0)
+);
+const progress = computed(() => entries.value[0]?.progress ?? 0);
 const uploadValid = computed(
   () => props.upload.errors.length === 0 && entries.value.every((entry) => entry.valid),
-)
+);
 
-const validationErrors = computed(() => props.upload.errors)
+const validationErrors = computed(() => props.upload.errors);
 
 const formValues = () =>
-  Object.fromEntries(allFields.map((field) => [field.key, values[field.key] ?? ""]))
+  Object.fromEntries(allFields.map((field) => [field.key, values[field.key] ?? ""]));
 
 const validate = () => {
-  emit("validate", {[props.form.name]: formValues()})
-}
+  emit("validate", { [props.form.name]: formValues() });
+};
 
 const selectFiles = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const files = target.files
+  const target = event.target as HTMLInputElement;
+  const files = target.files;
 
   if (files && files.length > 0) {
     selectedEntries.value = Array.from(files).map((file) => ({
@@ -152,43 +152,41 @@ const selectFiles = (event: Event) => {
       valid: true,
       preflighted: false,
       errors: [],
-    }))
-    validate()
+    }));
+    validate();
   }
-}
+};
 
 const cancelUpload = (ref: string) => {
-  selectedEntries.value = selectedEntries.value.filter((entry) => entry.ref !== ref)
+  selectedEntries.value = selectedEntries.value.filter((entry) => entry.ref !== ref);
 
-  if (visibleInput.value) visibleInput.value.value = ""
+  if (visibleInput.value) visibleInput.value.value = "";
 
-  emit("cancel-upload", {ref})
-}
+  emit("cancel-upload", { ref });
+};
 
 const syncHiddenFormFields = () => {
-  const uploadForm = visibleInput.value?.form
-  if (!uploadForm) return false
+  const uploadForm = visibleInput.value?.form;
+  if (!uploadForm) return false;
 
-  uploadForm
-    .querySelectorAll("[data-catalog-upload-field]")
-    .forEach((field) => field.remove())
+  uploadForm.querySelectorAll("[data-catalog-upload-field]").forEach((field) => field.remove());
 
   for (const field of allFields) {
-    const hiddenField = document.createElement("input")
-    hiddenField.type = "hidden"
-    hiddenField.name = field.name
-    hiddenField.value = values[field.key] ?? ""
-    hiddenField.setAttribute("data-catalog-upload-field", field.key)
-    uploadForm.appendChild(hiddenField)
+    const hiddenField = document.createElement("input");
+    hiddenField.type = "hidden";
+    hiddenField.name = field.name;
+    hiddenField.value = values[field.key] ?? "";
+    hiddenField.setAttribute("data-catalog-upload-field", field.key);
+    uploadForm.appendChild(hiddenField);
   }
 
-  return true
-}
+  return true;
+};
 
 const submitUpload = () => {
-  if (props.submit_disabled || !syncHiddenFormFields()) return
-  emit("save")
-}
+  if (props.submit_disabled || !syncHiddenFormFields()) return;
+  emit("save");
+};
 </script>
 
 <template>
@@ -203,41 +201,8 @@ const submitUpload = () => {
 
         <form :id="form.id" :class="form.class" @submit.prevent="submitUpload">
           <div :class="form.primary_fields_class">
-              <CadenceField
-                v-for="field in form.primary_fields"
-                :key="field.key"
-                :control-id="field.id"
-                :wrapper-class="field.wrapper_class"
-                :label="field.label"
-                :label-class="field.label_class"
-              >
-                <textarea
-                  v-if="field.type === 'textarea'"
-                  :id="field.id"
-                  v-model="values[field.key]"
-                  :name="field.name"
-                  :class="field.input_class"
-                  @input="validate"
-                ></textarea>
-                <input
-                  v-else
-                  :id="field.id"
-                  v-model="values[field.key]"
-                  :name="field.name"
-                  :type="field.type"
-                  :class="field.input_class"
-                  @input="validate"
-                >
-                <template #errors>
-                  <p v-for="error in field.errors" :key="error" :class="field.error_class">
-                    {{ error }}
-                  </p>
-                </template>
-              </CadenceField>
-          </div>
-
             <CadenceField
-              v-for="field in form.secondary_fields"
+              v-for="field in form.primary_fields"
               :key="field.key"
               :control-id="field.id"
               :wrapper-class="field.wrapper_class"
@@ -260,13 +225,46 @@ const submitUpload = () => {
                 :type="field.type"
                 :class="field.input_class"
                 @input="validate"
-              >
+              />
               <template #errors>
                 <p v-for="error in field.errors" :key="error" :class="field.error_class">
                   {{ error }}
                 </p>
               </template>
             </CadenceField>
+          </div>
+
+          <CadenceField
+            v-for="field in form.secondary_fields"
+            :key="field.key"
+            :control-id="field.id"
+            :wrapper-class="field.wrapper_class"
+            :label="field.label"
+            :label-class="field.label_class"
+          >
+            <textarea
+              v-if="field.type === 'textarea'"
+              :id="field.id"
+              v-model="values[field.key]"
+              :name="field.name"
+              :class="field.input_class"
+              @input="validate"
+            ></textarea>
+            <input
+              v-else
+              :id="field.id"
+              v-model="values[field.key]"
+              :name="field.name"
+              :type="field.type"
+              :class="field.input_class"
+              @input="validate"
+            />
+            <template #errors>
+              <p v-for="error in field.errors" :key="error" :class="field.error_class">
+                {{ error }}
+              </p>
+            </template>
+          </CadenceField>
 
           <label v-if="form.file_input.wrapper_class" :class="form.file_input.wrapper_class">
             <input
@@ -279,7 +277,7 @@ const submitUpload = () => {
               :class="form.file_input.class"
               :aria-invalid="!uploadValid"
               @change="selectFiles"
-            >
+            />
           </label>
           <input
             v-else
@@ -292,7 +290,7 @@ const submitUpload = () => {
             :class="form.file_input.class"
             :aria-invalid="!uploadValid"
             @change="selectFiles"
-          >
+          />
 
           <ul v-if="entries.length > 0" :class="form.entries.list_class">
             <li v-for="entry in entries" :key="entry.ref" :class="form.entries.item_class">
@@ -324,10 +322,7 @@ const submitUpload = () => {
             {{ error.message }}
           </div>
 
-          <div
-            v-if="detected_importer.status === 'detected'"
-            :class="form.importer.detected_class"
-          >
+          <div v-if="detected_importer.status === 'detected'" :class="form.importer.detected_class">
             <span :class="form.importer.icon_class"></span>
             Detected importer:
             <span :class="form.importer.name_class">{{ detected_importer.display_name }}</span>

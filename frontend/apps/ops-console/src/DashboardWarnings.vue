@@ -1,9 +1,9 @@
 <script setup>
-import WidgetWarning from "./WidgetWarning.vue"
+import WidgetWarning from "./WidgetWarning.vue";
 
 const props = defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>
@@ -13,10 +13,9 @@ const props = defineProps({
     v-bind="props.presentation.root.attrs"
   >
     <span :class="props.presentation.label.class">{{ props.presentation.label.text }}</span>
-    <span
-      v-if="props.presentation.fallback.visible"
-      :class="props.presentation.fallback.class"
-    >{{ props.presentation.fallback.text }}</span>
+    <span v-if="props.presentation.fallback.visible" :class="props.presentation.fallback.class">{{
+      props.presentation.fallback.text
+    }}</span>
     <div
       v-for="warning in props.presentation.warnings"
       :id="warning.component_id"

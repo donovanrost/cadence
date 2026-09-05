@@ -1,25 +1,25 @@
 <script lang="ts">
-import {defineComponent, h, type PropType} from "vue"
-import type {PresentationNode} from "../presentation_types"
+import { defineComponent, h, type Component, type PropType, type VNode } from "vue";
+import type { PresentationNode } from "../presentation_types";
 
-const CadencePresentationNode = defineComponent({
+const CadencePresentationNode: Component = defineComponent({
   name: "CadencePresentationNode",
   props: {
-    node: {type: Object as PropType<PresentationNode>, required: true}
+    node: { type: Object as PropType<PresentationNode>, required: true },
   },
   setup(componentProps) {
-    return () =>
+    return (): VNode =>
       h(
         componentProps.node.tag,
-        {...componentProps.node.attrs, key: componentProps.node.key},
+        { ...componentProps.node.attrs, key: componentProps.node.key },
         componentProps.node.children.map((child) =>
           typeof child === "string"
             ? child
-            : h(CadencePresentationNode, {key: child.key, node: child})
-        )
-      )
-  }
-})
+            : h(CadencePresentationNode, { key: child.key, node: child }),
+        ),
+      );
+  },
+});
 
-export default CadencePresentationNode
+export default CadencePresentationNode;
 </script>

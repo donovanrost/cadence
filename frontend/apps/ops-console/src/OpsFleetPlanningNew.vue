@@ -1,165 +1,165 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
-import {reactive, watch} from "vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import { reactive, watch } from "vue";
 
 type Header = {
-  id: string
+  id: string;
   back: {
-    id: string
-    label: string
-    icon: string
-  }
-  title: string
-  copy: string
-}
+    id: string;
+    label: string;
+    icon: string;
+  };
+  title: string;
+  copy: string;
+};
 
 type PolicyRequired = {
-  id: string
-  icon: string
-  title: string
-  copy: string
-  action_id: string
-  action_label: string
-}
+  id: string;
+  icon: string;
+  title: string;
+  copy: string;
+  action_id: string;
+  action_label: string;
+};
 
 type PolicyState = {
-  active: boolean
-  required: PolicyRequired | null
-}
+  active: boolean;
+  required: PolicyRequired | null;
+};
 
 type DateTimeField = {
-  id: string
-  name: string
-  type: "datetime-local"
-  label: string
-  required: boolean
-  value: string
-  errors: string[]
-}
+  id: string;
+  name: string;
+  type: "datetime-local";
+  label: string;
+  required: boolean;
+  value: string;
+  errors: string[];
+};
 
 type CheckboxField = {
-  id: string
-  name: string
-  type: "checkbox"
-  label: string
-  value: boolean
-  errors: string[]
-}
+  id: string;
+  name: string;
+  type: "checkbox";
+  label: string;
+  value: boolean;
+  errors: string[];
+};
 
 type FleetRunForm = {
-  id: string
+  id: string;
   fields: {
-    horizon_start: DateTimeField
-    horizon_end: DateTimeField
-    include_recurring: CheckboxField
-  }
+    horizon_start: DateTimeField;
+    horizon_end: DateTimeField;
+    include_recurring: CheckboxField;
+  };
   snapshot: {
-    label: string
-    copy: string
-  }
+    label: string;
+    copy: string;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type PolicyPreview = {
-  id: string
-  eyebrow: string
-  version: string
+  id: string;
+  eyebrow: string;
+  version: string;
   facts: Array<{
-    term: string
-    value: string
-  }>
+    term: string;
+    value: string;
+  }>;
   details: {
-    id: string
-    summary: string
-    copy: string
-  }
-}
+    id: string;
+    summary: string;
+    copy: string;
+  };
+};
 
 type Paths = {
-  planning: string
-  policy: string
-}
+  planning: string;
+  policy: string;
+};
 
 type FleetRunValues = {
-  horizon_start: string
-  horizon_end: string
-  include_recurring: boolean
-}
+  horizon_start: string;
+  horizon_end: string;
+  include_recurring: boolean;
+};
 
 type FleetRunPayload = {
-  fleet_run: FleetRunValues
-}
+  fleet_run: FleetRunValues;
+};
 
 const props = defineProps<{
-  header: Header
-  policy_state: PolicyState
-  form: FleetRunForm | null
-  preview: PolicyPreview | null
-  paths: Paths
-}>()
+  header: Header;
+  policy_state: PolicyState;
+  form: FleetRunForm | null;
+  preview: PolicyPreview | null;
+  paths: Paths;
+}>();
 
 const emit = defineEmits<{
-  "validate-fleet-run": [payload: FleetRunPayload]
-  "create-fleet-run": [payload: FleetRunPayload]
-}>()
+  "validate-fleet-run": [payload: FleetRunPayload];
+  "create-fleet-run": [payload: FleetRunPayload];
+}>();
 
 const valuesFromForm = (form: FleetRunForm): FleetRunValues => ({
   horizon_start: form.fields.horizon_start.value,
   horizon_end: form.fields.horizon_end.value,
-  include_recurring: form.fields.include_recurring.value
-})
+  include_recurring: form.fields.include_recurring.value,
+});
 
 const fleetRun = reactive<FleetRunValues>(
   props.form
     ? valuesFromForm(props.form)
-    : {horizon_start: "", horizon_end: "", include_recurring: false}
-)
+    : { horizon_start: "", horizon_end: "", include_recurring: false },
+);
 
-const pendingValidations: FleetRunValues[] = []
+const pendingValidations: FleetRunValues[] = [];
 
 const values = (): FleetRunValues => ({
   horizon_start: fleetRun.horizon_start,
   horizon_end: fleetRun.horizon_end,
-  include_recurring: fleetRun.include_recurring
-})
+  include_recurring: fleetRun.include_recurring,
+});
 
 const sameValues = (left: FleetRunValues, right: FleetRunValues) =>
   left.horizon_start === right.horizon_start &&
   left.horizon_end === right.horizon_end &&
-  left.include_recurring === right.include_recurring
+  left.include_recurring === right.include_recurring;
 
 watch(
   () => props.form,
   (serverForm) => {
-    if (!serverForm) return
+    if (!serverForm) return;
 
-    const serverValues = valuesFromForm(serverForm)
+    const serverValues = valuesFromForm(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(fleetRun, serverValues)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(fleetRun, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validateFleetRun = () => {
-  const formValues = values()
-  pendingValidations.push(formValues)
-  emit("validate-fleet-run", {fleet_run: formValues})
-}
+  const formValues = values();
+  pendingValidations.push(formValues);
+  emit("validate-fleet-run", { fleet_run: formValues });
+};
 
-const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
+const createFleetRun = () => emit("create-fleet-run", { fleet_run: values() });
 </script>
 
 <template>
@@ -206,15 +206,16 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
                 :required="form.fields.horizon_start.required"
                 :class="[
                   'w-full input',
-                  form.fields.horizon_start.errors.length > 0 && 'input-error'
+                  form.fields.horizon_start.errors.length > 0 && 'input-error',
                 ]"
                 @input="validateFleetRun"
-              >
+              />
               <template #errors>
                 <CadenceValidationMessage
                   v-for="error in form.fields.horizon_start.errors"
                   :key="error"
-                >{{ error }}</CadenceValidationMessage>
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
@@ -232,22 +233,23 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
                 :required="form.fields.horizon_end.required"
                 :class="[
                   'w-full input',
-                  form.fields.horizon_end.errors.length > 0 && 'input-error'
+                  form.fields.horizon_end.errors.length > 0 && 'input-error',
                 ]"
                 @input="validateFleetRun"
-              >
+              />
               <template #errors>
                 <CadenceValidationMessage
                   v-for="error in form.fields.horizon_end.errors"
                   :key="error"
-                >{{ error }}</CadenceValidationMessage>
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
           </div>
 
           <div class="fieldset mb-3">
             <label class="flex cursor-pointer items-start gap-3">
-              <input type="hidden" :name="form.fields.include_recurring.name" value="false">
+              <input type="hidden" :name="form.fields.include_recurring.name" value="false" />
               <input
                 :id="form.fields.include_recurring.id"
                 v-model="fleetRun.include_recurring"
@@ -256,7 +258,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
                 type="checkbox"
                 class="checkbox checkbox-sm mt-0.5"
                 @change="validateFleetRun"
-              >
+              />
               <span>
                 <span class="block text-sm font-medium">
                   {{ form.fields.include_recurring.label }}
@@ -286,9 +288,7 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
           :id="policy_state.required.id"
           class="py-10 text-center"
         >
-          <span
-            :class="[policy_state.required.icon, 'mx-auto h-8 w-8 text-warning/60']"
-          ></span>
+          <span :class="[policy_state.required.icon, 'mx-auto h-8 w-8 text-warning/60']"></span>
           <h2 class="mt-4 text-base font-semibold">{{ policy_state.required.title }}</h2>
           <p class="mx-auto mt-2 max-w-lg text-sm text-base-content/55">
             {{ policy_state.required.copy }}
@@ -299,15 +299,12 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="btn btn-warning btn-sm mt-5"
-          >{{ policy_state.required.action_label }}</a>
+            >{{ policy_state.required.action_label }}</a
+          >
         </div>
       </section>
 
-      <aside
-        v-if="preview"
-        :id="preview.id"
-        class="border border-base-300 bg-base-200/15"
-      >
+      <aside v-if="preview" :id="preview.id" class="border border-base-300 bg-base-200/15">
         <div class="border-b border-base-300 px-4 py-3">
           <p class="hud-label">{{ preview.eyebrow }}</p>
           <p class="mt-1 font-mono text-sm">{{ preview.version }}</p>
@@ -326,7 +323,9 @@ const createFleetRun = () => emit("create-fleet-run", {fleet_run: values()})
           <summary class="cursor-pointer px-4 py-3 text-xs font-semibold">
             {{ preview.details.summary }}
           </summary>
-          <p class="border-t border-base-300 px-4 py-3 text-xs leading-relaxed text-base-content/55">
+          <p
+            class="border-t border-base-300 px-4 py-3 text-xs leading-relaxed text-base-content/55"
+          >
             {{ preview.details.copy }}
           </p>
         </CadenceDetailsFrame>

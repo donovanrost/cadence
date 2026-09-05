@@ -1,113 +1,113 @@
 <script setup lang="ts">
-import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceField from "./ui/components/CadenceField.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type DetailRowPresentation = {
-  label: TextPresentation
-  value: TextPresentation
-}
+  label: TextPresentation;
+  value: TextPresentation;
+};
 
 type EligibleActionPresentation = {
-  key: string
-  attrs: Attributes
+  key: string;
+  attrs: Attributes;
   header: {
-    class: string
-    label: TextPresentation
-    count: TextPresentation
-  }
-  preview: TextPresentation
-  state_summary: TextPresentation | null
-  available_when: TextPresentation | null
-}
+    class: string;
+    label: TextPresentation;
+    count: TextPresentation;
+  };
+  preview: TextPresentation;
+  state_summary: TextPresentation | null;
+  available_when: TextPresentation | null;
+};
 
 type ActionPresentation = {
-  key: string
-  attrs: Attributes
+  key: string;
+  attrs: Attributes;
   label: TextPresentation & {
     icon: {
-      name: string
-      class: string
-    }
-  }
-  count: TextPresentation
-}
+      name: string;
+      class: string;
+    };
+  };
+  count: TextPresentation;
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   hidden_fields: Array<{
-    key: string
-    attrs: Attributes
-  }>
+    key: string;
+    attrs: Attributes;
+  }>;
   header: {
-    class: string
-    title: TextPresentation
-    count: TextPresentation
-  }
+    class: string;
+    title: TextPresentation;
+    count: TextPresentation;
+  };
   eligible_items: {
-    id: string
-    class: string
-    attrs: Attributes
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      title: TextPresentation
-      count: TextPresentation
-    }
-    list_class: string
-    actions: EligibleActionPresentation[]
-  }
+      class: string;
+      title: TextPresentation;
+      count: TextPresentation;
+    };
+    list_class: string;
+    actions: EligibleActionPresentation[];
+  };
   start_orchestration: null | {
-    id: string
-    class: string
-    attrs: Attributes
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      title: TextPresentation
-      count: TextPresentation
-    }
-    guidance: TextPresentation
+      class: string;
+      title: TextPresentation;
+      count: TextPresentation;
+    };
+    guidance: TextPresentation;
     details: {
-      class: string
-      eligible: DetailRowPresentation
-      review: DetailRowPresentation | null
-      state: DetailRowPresentation | null
-    }
-    available_when: TextPresentation | null
-  }
+      class: string;
+      eligible: DetailRowPresentation;
+      review: DetailRowPresentation | null;
+      state: DetailRowPresentation | null;
+    };
+    available_when: TextPresentation | null;
+  };
   reason: {
-    wrapper_class: string
-    label: TextPresentation
+    wrapper_class: string;
+    label: TextPresentation;
     control: {
-      class: string
-      attrs: Attributes
-    }
-    errors: TextPresentation[]
-  }
+      class: string;
+      attrs: Attributes;
+    };
+    errors: TextPresentation[];
+  };
   confirmation: {
-    id: string
-    class: string
+    id: string;
+    class: string;
     field: {
-      class: string
-      attrs: Attributes
-    }
-    label: TextPresentation
-  }
+      class: string;
+      attrs: Attributes;
+    };
+    label: TextPresentation;
+  };
   actions: {
-    class: string
-    items: ActionPresentation[]
-  }
-}
+    class: string;
+    items: ActionPresentation[];
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -116,11 +116,7 @@ defineProps<{presentation: Presentation}>()
     :class="presentation.root.class"
     v-bind="presentation.root.attrs"
   >
-    <input
-      v-for="field in presentation.hidden_fields"
-      :key="field.key"
-      v-bind="field.attrs"
-    >
+    <input v-for="field in presentation.hidden_fields" :key="field.key" v-bind="field.attrs" />
 
     <div :class="presentation.header.class">
       <h4 :class="presentation.header.title.class">{{ presentation.header.title.text }}</h4>
@@ -210,35 +206,34 @@ defineProps<{presentation: Presentation}>()
       </p>
     </section>
 
-      <CadenceField
-        :wrapper-class="presentation.reason.wrapper_class"
-        :label="presentation.reason.label.text"
-        :label-class="presentation.reason.label.class"
-      >
-        <input :class="presentation.reason.control.class" v-bind="presentation.reason.control.attrs">
-        <template #errors>
-          <p v-for="error in presentation.reason.errors" :key="error.text" :class="error.class">
-            {{ error.text }}
-          </p>
-        </template>
-      </CadenceField>
+    <CadenceField
+      :wrapper-class="presentation.reason.wrapper_class"
+      :label="presentation.reason.label.text"
+      :label-class="presentation.reason.label.class"
+    >
+      <input
+        :class="presentation.reason.control.class"
+        v-bind="presentation.reason.control.attrs"
+      />
+      <template #errors>
+        <p v-for="error in presentation.reason.errors" :key="error.text" :class="error.class">
+          {{ error.text }}
+        </p>
+      </template>
+    </CadenceField>
 
     <label :id="presentation.confirmation.id" :class="presentation.confirmation.class">
       <input
         :class="presentation.confirmation.field.class"
         v-bind="presentation.confirmation.field.attrs"
-      >
+      />
       <span :class="presentation.confirmation.label.class">
         {{ presentation.confirmation.label.text }}
       </span>
     </label>
 
     <div :class="presentation.actions.class">
-      <button
-        v-for="action in presentation.actions.items"
-        :key="action.key"
-        v-bind="action.attrs"
-      >
+      <button v-for="action in presentation.actions.items" :key="action.key" v-bind="action.attrs">
         <span :class="action.label.class">
           <span :class="[action.label.icon.name, action.label.icon.class]"></span>
           {{ action.label.text }}

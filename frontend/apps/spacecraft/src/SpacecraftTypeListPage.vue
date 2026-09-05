@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import SpacecraftTypeList from "./SpacecraftTypeList.vue"
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue"
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue"
+import SpacecraftTypeList from "./SpacecraftTypeList.vue";
+import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
+import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
 import type {
   Attrs,
   ElementPresentation,
   EmptyStatePresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./ui/components/page_shell"
+} from "./ui/components/page_shell";
 
-type SpacecraftTypeListProps = InstanceType<typeof SpacecraftTypeList>["$props"]
+type SpacecraftTypeListProps = InstanceType<typeof SpacecraftTypeList>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: PageHeaderPresentation & {
     actions: ElementPresentation & {
-      new_profile: PageHeaderAction
-    }
-  }
-  empty_state: EmptyStatePresentation | null
+      new_profile: PageHeaderAction;
+    };
+  };
+  empty_state: EmptyStatePresentation | null;
   card: {
-    attrs: Attrs
-    body: ElementPresentation
-    list_component: ElementPresentation
-    rows: SpacecraftTypeListProps["rows"]
-  } | null
-}
+    attrs: Attrs;
+    body: ElementPresentation;
+    list_component: ElementPresentation;
+    rows: SpacecraftTypeListProps["rows"];
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

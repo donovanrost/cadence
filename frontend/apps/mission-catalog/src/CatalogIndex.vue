@@ -1,54 +1,54 @@
 <script setup lang="ts">
-import CatalogDatabaseTable from "./CatalogDatabaseTable.vue"
+import CatalogDatabaseTable from "./CatalogDatabaseTable.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
-type CatalogDatabaseTableProps = InstanceType<typeof CatalogDatabaseTable>["$props"]
+type CatalogDatabaseTableProps = InstanceType<typeof CatalogDatabaseTable>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: Attrs
-      mission: TextPresentation
-      separator: TextPresentation
-      current: TextPresentation
-    }
-    title: TextPresentation
-    subtitle: TextPresentation
-    actions: ElementPresentation
+      attrs: Attrs;
+      mission: TextPresentation;
+      separator: TextPresentation;
+      current: TextPresentation;
+    };
+    title: TextPresentation;
+    subtitle: TextPresentation;
+    actions: ElementPresentation;
     new_database: TextPresentation & {
-      icon: ElementPresentation
-    }
-  }
+      icon: ElementPresentation;
+    };
+  };
   empty_state: {
-    visible: boolean
-    list: ElementPresentation
-    root: ElementPresentation
-    title: TextPresentation
-    description: TextPresentation
-  }
+    visible: boolean;
+    list: ElementPresentation;
+    root: ElementPresentation;
+    title: TextPresentation;
+    description: TextPresentation;
+  };
   card: {
-    visible: boolean
-    root: ElementPresentation
-    body: ElementPresentation
-    child_wrapper: ElementPresentation
-    rows: CatalogDatabaseTableProps["rows"]
-  }
-}
+    visible: boolean;
+    root: ElementPresentation;
+    body: ElementPresentation;
+    child_wrapper: ElementPresentation;
+    rows: CatalogDatabaseTableProps["rows"];
+  };
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

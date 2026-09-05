@@ -1,268 +1,265 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import {reactive, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import { reactive, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
-type EmptyPayload = Record<string, never>
+type EmptyPayload = Record<string, never>;
 
 type ResultState = {
-  state: string
-  label: string
-  class: string
-}
+  state: string;
+  label: string;
+  class: string;
+};
 
 type RequirementRow = {
-  id: string
-  __dom_id: string
-  spacecraft_id: string
-  contact_requirement_id: string
-  contact_requirement_version: number
-  requirement_href: string
-  input: ResultState
-  coverage: ResultState
-  contact_planning_run_id: string
-}
+  id: string;
+  __dom_id: string;
+  spacecraft_id: string;
+  contact_requirement_id: string;
+  contact_requirement_version: number;
+  requirement_href: string;
+  input: ResultState;
+  coverage: ResultState;
+  contact_planning_run_id: string;
+};
 
 type ExceptionRow = {
-  id: string
-  __dom_id: string
-  contact_requirement_id: string
+  id: string;
+  __dom_id: string;
+  contact_requirement_id: string;
   result: {
-    state: string
-    label: string
-  }
-}
+    state: string;
+    label: string;
+  };
+};
 
 type DecisionRow = {
-  id: string
-  __dom_id: string
-  fleet_planning_decision_id: string
-  disposition: ResultState
-  title: string | null
-  contact_opportunity_snapshot_id: string
-  score: number
-  operational_rationale: string | null
-  hard_constraints: string
-}
+  id: string;
+  __dom_id: string;
+  fleet_planning_decision_id: string;
+  disposition: ResultState;
+  title: string | null;
+  contact_opportunity_snapshot_id: string;
+  score: number;
+  operational_rationale: string | null;
+  hard_constraints: string;
+};
 
 type HorizonCommitment = {
-  id: string
-  __dom_id: string
-  fleet_planning_decision_id: string
-  spacecraft_id: string
-  starts_at: string
-  duration_seconds: number
-  disposition: "locked" | "selected"
-}
+  id: string;
+  __dom_id: string;
+  fleet_planning_decision_id: string;
+  spacecraft_id: string;
+  starts_at: string;
+  duration_seconds: number;
+  disposition: "locked" | "selected";
+};
 
 type ResourcePressure = {
-  id: string
-  __dom_id: string
-  peak_parallel: number
-  capacity: number
-  over_capacity: boolean
-  pressure_percent: number
-}
+  id: string;
+  __dom_id: string;
+  peak_parallel: number;
+  capacity: number;
+  over_capacity: boolean;
+  pressure_percent: number;
+};
 
 type AutomationAction = {
-  id: string
-  __dom_id: string
-  fleet_automation_action_id: string
-  action: string
-  lifecycle: ResultState
-}
+  id: string;
+  __dom_id: string;
+  fleet_automation_action_id: string;
+  action: string;
+  lifecycle: ResultState;
+};
 
 type RepairField = {
-  id: string
-  name: string
-  type: "datetime-local"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "datetime-local";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type RepairForm = {
-  panel_id: string
-  id: string
-  sync_key: string
-  label: string
-  copy: string
+  panel_id: string;
+  id: string;
+  sync_key: string;
+  label: string;
+  copy: string;
   fields: {
-    horizon_start: RepairField
-    horizon_end: RepairField
-  }
+    horizon_start: RepairField;
+    horizon_end: RepairField;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type RepairValues = {
-  horizon_start: string
-  horizon_end: string
-}
+  horizon_start: string;
+  horizon_end: string;
+};
 
 const props = defineProps<{
   page: {
-    id: string
+    id: string;
     back: {
-      href: string
-      icon: string
-      label: string
-    }
+      href: string;
+      icon: string;
+      label: string;
+    };
     header: {
-      lifecycle: ResultState
-      algorithm: string
-      title: string
-      run_id: string
+      lifecycle: ResultState;
+      algorithm: string;
+      title: string;
+      run_id: string;
       refresh: {
-        id: string
-        icon: string
-        label: string
-        payload: EmptyPayload
-      }
+        id: string;
+        icon: string;
+        label: string;
+        payload: EmptyPayload;
+      };
       candidate_plan: {
-        id: string
-        href: string
-        label: string
-        icon: string
-      } | null
-    }
+        id: string;
+        href: string;
+        label: string;
+        icon: string;
+      } | null;
+    };
     phase_strip: {
-      id: string
+      id: string;
       phases: Array<{
-        index: string
-        state: string
-        label: string
-        complete: boolean
-        current: boolean
-      }>
-    }
+        index: string;
+        state: string;
+        label: string;
+        complete: boolean;
+        current: boolean;
+      }>;
+    };
     horizon: {
-      id: string
-      label: string
-      range: string
-      counts: string
-      list_id: string
+      id: string;
+      label: string;
+      range: string;
+      counts: string;
+      list_id: string;
       empty: {
-        id: string
-        copy: string
-      }
-    }
+        id: string;
+        copy: string;
+      };
+    };
     coverage: {
-      id: string
-      columns: string[]
-      list_id: string
+      id: string;
+      columns: string[];
+      list_id: string;
       empty: {
-        id: string
-        copy: string
-      }
-    }
+        id: string;
+        copy: string;
+      };
+    };
     decision_inspector: {
-      id: string
-      label: string
-      copy: string
-      count: number
-      list_id: string
+      id: string;
+      label: string;
+      copy: string;
+      count: number;
+      list_id: string;
       empty: {
-        id: string
-        copy: string
-      }
-    }
+        id: string;
+        copy: string;
+      };
+    };
     exception_queue: {
-      visible: boolean
-      id: string
-      label: string
-      list_id: string
-      empty_id: string
-    }
+      visible: boolean;
+      id: string;
+      label: string;
+      list_id: string;
+      empty_id: string;
+    };
     resource_pressure: {
-      id: string
-      label: string
-      list_id: string
+      id: string;
+      label: string;
+      list_id: string;
       empty: {
-        id: string
-        copy: string
-      }
-    }
+        id: string;
+        copy: string;
+      };
+    };
     automation: {
-      visible: boolean
-      label: string
-      list_id: string
-      empty_id: string
-    }
+      visible: boolean;
+      label: string;
+      list_id: string;
+      empty_id: string;
+    };
     failure: {
-      id: string
-      label: string
-      reason: string
-      phase: string | null
-    } | null
-  }
-  repair_form: RepairForm | null
-  planning: boolean
-  requirement_rows: RequirementRow[]
-  exceptions: ExceptionRow[]
-  decisions: DecisionRow[]
-  horizon_commitments: HorizonCommitment[]
-  resource_pressure: ResourcePressure[]
-  automation_actions: AutomationAction[]
-}>()
+      id: string;
+      label: string;
+      reason: string;
+      phase: string | null;
+    } | null;
+  };
+  repair_form: RepairForm | null;
+  planning: boolean;
+  requirement_rows: RequirementRow[];
+  exceptions: ExceptionRow[];
+  decisions: DecisionRow[];
+  horizon_commitments: HorizonCommitment[];
+  resource_pressure: ResourcePressure[];
+  automation_actions: AutomationAction[];
+}>();
 
 const emit = defineEmits<{
-  "refresh-fleet-run": [payload: EmptyPayload]
-  "repair-fleet-run": [payload: {repair: RepairValues}]
-}>()
+  "refresh-fleet-run": [payload: EmptyPayload];
+  "repair-fleet-run": [payload: { repair: RepairValues }];
+}>();
 
 const valuesFromRepairForm = (form: RepairForm | null): RepairValues => ({
   horizon_start: form?.fields.horizon_start.value ?? "",
-  horizon_end: form?.fields.horizon_end.value ?? ""
-})
+  horizon_end: form?.fields.horizon_end.value ?? "",
+});
 
-const repair = reactive<RepairValues>(valuesFromRepairForm(props.repair_form))
-let acceptedServerValues = valuesFromRepairForm(props.repair_form)
-let acceptedSyncKey = props.repair_form?.sync_key ?? null
+const repair = reactive<RepairValues>(valuesFromRepairForm(props.repair_form));
+let acceptedServerValues = valuesFromRepairForm(props.repair_form);
+let acceptedSyncKey = props.repair_form?.sync_key ?? null;
 
 const repairValues = (): RepairValues => ({
   horizon_start: repair.horizon_start,
-  horizon_end: repair.horizon_end
-})
+  horizon_end: repair.horizon_end,
+});
 
 const sameRepairValues = (left: RepairValues, right: RepairValues) =>
-  left.horizon_start === right.horizon_start && left.horizon_end === right.horizon_end
+  left.horizon_start === right.horizon_start && left.horizon_end === right.horizon_end;
 
 watch(
   () => props.repair_form,
   (serverForm) => {
-    if (!serverForm) return
+    if (!serverForm) return;
 
-    const serverValues = valuesFromRepairForm(serverForm)
-    const localValues = repairValues()
-    const localIsPristine = sameRepairValues(localValues, acceptedServerValues)
-    const runChanged = serverForm.sync_key !== acceptedSyncKey
+    const serverValues = valuesFromRepairForm(serverForm);
+    const localValues = repairValues();
+    const localIsPristine = sameRepairValues(localValues, acceptedServerValues);
+    const runChanged = serverForm.sync_key !== acceptedSyncKey;
 
-    acceptedServerValues = serverValues
-    acceptedSyncKey = serverForm.sync_key
+    acceptedServerValues = serverValues;
+    acceptedSyncKey = serverForm.sync_key;
 
-    if (localIsPristine || runChanged) Object.assign(repair, serverValues)
+    if (localIsPristine || runChanged) Object.assign(repair, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
-const refreshFleetRun = () => emit("refresh-fleet-run", props.page.header.refresh.payload)
+const refreshFleetRun = () => emit("refresh-fleet-run", props.page.header.refresh.payload);
 
 const repairFleetRun = () => {
-  emit("repair-fleet-run", {repair: repairValues()})
-}
+  emit("repair-fleet-run", { repair: repairValues() });
+};
 </script>
 
 <template>
-  <CadenceOpsViewport
-    :id="page.id"
-    :aria-busy="planning"
-  >
+  <CadenceOpsViewport :id="page.id" :aria-busy="planning">
     <CadencePageHeaderFrame variant="ops">
       <div class="mx-auto max-w-[110rem]">
         <a
@@ -329,7 +326,7 @@ const repairFleetRun = () => {
             'border-b border-base-300 px-3 py-3 last:border-b-0 sm:border-r xl:border-b-0 xl:last:border-r-0',
             phase.current && 'bg-primary/[0.07]',
             phase.complete && 'text-base-content/65',
-            !phase.current && !phase.complete && 'text-base-content/35'
+            !phase.current && !phase.complete && 'text-base-content/35',
           ]"
         >
           <p class="font-mono text-[0.56rem] tracking-[0.16em] text-primary/60">
@@ -339,7 +336,11 @@ const repairFleetRun = () => {
         </div>
       </section>
 
-      <CadencePanel :id="page.horizon.id" class="border border-base-300 bg-base-200/15" header-class="grid gap-3 border-b border-base-300 px-4 py-3 md:grid-cols-[1fr_auto] md:items-end">
+      <CadencePanel
+        :id="page.horizon.id"
+        class="border border-base-300 bg-base-200/15"
+        header-class="grid gap-3 border-b border-base-300 px-4 py-3 md:grid-cols-[1fr_auto] md:items-end"
+      >
         <template #header>
           <div>
             <p class="hud-label">{{ page.horizon.label }}</p>
@@ -353,10 +354,7 @@ const repairFleetRun = () => {
         </template>
         <div class="relative min-h-28 overflow-x-auto px-4 py-5">
           <div class="absolute left-4 right-4 top-1/2 h-px bg-base-300"></div>
-          <div
-            :id="page.horizon.list_id"
-            class="relative flex min-w-max items-center gap-2"
-          >
+          <div :id="page.horizon.list_id" class="relative flex min-w-max items-center gap-2">
             <div
               :id="page.horizon.empty.id"
               class="hidden only:block px-4 py-8 text-sm text-base-content/50"
@@ -370,7 +368,7 @@ const repairFleetRun = () => {
               :class="[
                 'relative min-w-52 border px-3 py-3',
                 commitment.disposition === 'locked' && 'border-info/40 bg-info/[0.07]',
-                commitment.disposition === 'selected' && 'border-primary/40 bg-primary/[0.06]'
+                commitment.disposition === 'selected' && 'border-primary/40 bg-primary/[0.06]',
               ]"
             >
               <p class="truncate text-xs font-semibold">
@@ -389,7 +387,11 @@ const repairFleetRun = () => {
 
       <div class="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(23rem,0.65fr)]">
         <div class="min-w-0 space-y-5">
-          <CadencePanel :id="page.coverage.id" class="border border-base-300 bg-base-200/15" header-class="grid grid-cols-[minmax(12rem,1fr)_7rem_7rem_8rem] border-b border-base-300 px-4 py-2 font-mono text-[0.58rem] uppercase tracking-wider text-base-content/45">
+          <CadencePanel
+            :id="page.coverage.id"
+            class="border border-base-300 bg-base-200/15"
+            header-class="grid grid-cols-[minmax(12rem,1fr)_7rem_7rem_8rem] border-b border-base-300 px-4 py-2 font-mono text-[0.58rem] uppercase tracking-wider text-base-content/45"
+          >
             <template #header>
               <span v-for="column in page.coverage.columns" :key="column">
                 {{ column }}
@@ -416,7 +418,9 @@ const repairFleetRun = () => {
                     data-phx-link-state="push"
                     class="mt-1 block truncate font-mono text-[0.6rem] text-primary/70 hover:underline"
                   >
-                    {{ requirement.contact_requirement_id }} v{{ requirement.contact_requirement_version }}
+                    {{ requirement.contact_requirement_id }} v{{
+                      requirement.contact_requirement_version
+                    }}
                   </a>
                 </div>
                 <span :class="requirement.input.class">{{ requirement.input.label }}</span>
@@ -459,7 +463,9 @@ const repairFleetRun = () => {
                 :key="decision.fleet_planning_decision_id"
                 class="border-b border-base-300 last:border-b-0"
               >
-                <summary class="grid cursor-pointer gap-3 px-4 py-3 md:grid-cols-[7rem_minmax(0,1fr)_6rem] md:items-center">
+                <summary
+                  class="grid cursor-pointer gap-3 px-4 py-3 md:grid-cols-[7rem_minmax(0,1fr)_6rem] md:items-center"
+                >
                   <span :class="decision.disposition.class">
                     {{ decision.disposition.label }}
                   </span>
@@ -467,7 +473,9 @@ const repairFleetRun = () => {
                     <span class="block truncate text-xs font-semibold">
                       {{ decision.title }}
                     </span>
-                    <span class="mt-0.5 block truncate font-mono text-[0.58rem] text-base-content/40">
+                    <span
+                      class="mt-0.5 block truncate font-mono text-[0.58rem] text-base-content/40"
+                    >
                       {{ decision.contact_opportunity_snapshot_id }}
                     </span>
                   </span>
@@ -475,7 +483,9 @@ const repairFleetRun = () => {
                     {{ decision.score }}
                   </span>
                 </summary>
-                <div class="grid gap-4 border-t border-base-300 bg-base-200/25 px-4 py-4 md:grid-cols-2">
+                <div
+                  class="grid gap-4 border-t border-base-300 bg-base-200/25 px-4 py-4 md:grid-cols-2"
+                >
                   <div>
                     <p class="hud-label">Operational rationale</p>
                     <p class="mt-2 text-sm text-base-content/65">
@@ -549,7 +559,7 @@ const repairFleetRun = () => {
                     :class="[
                       'font-mono text-xs',
                       resource.over_capacity && 'text-error',
-                      !resource.over_capacity && 'text-base-content/55'
+                      !resource.over_capacity && 'text-base-content/55',
                     ]"
                   >
                     {{ resource.peak_parallel }}/{{ resource.capacity }}
@@ -560,9 +570,9 @@ const repairFleetRun = () => {
                     :class="[
                       'h-full',
                       resource.over_capacity && 'bg-error',
-                      !resource.over_capacity && 'bg-primary/60'
+                      !resource.over_capacity && 'bg-primary/60',
                     ]"
-                    :style="{width: `${resource.pressure_percent}%`}"
+                    :style="{ width: `${resource.pressure_percent}%` }"
                   ></div>
                 </div>
               </div>
@@ -600,11 +610,7 @@ const repairFleetRun = () => {
             <p class="mt-2 text-sm text-base-content/60">
               {{ repair_form.copy }}
             </p>
-            <form
-              :id="repair_form.id"
-              class="mt-4 space-y-3"
-              @submit.prevent="repairFleetRun"
-            >
+            <form :id="repair_form.id" class="mt-4 space-y-3" @submit.prevent="repairFleetRun">
               <CadenceField
                 :control-id="repair_form.fields.horizon_start.id"
                 wrapper-class="fieldset mb-3"
@@ -618,7 +624,7 @@ const repairFleetRun = () => {
                   :type="repair_form.fields.horizon_start.type"
                   :required="repair_form.fields.horizon_start.required"
                   class="w-full input"
-                >
+                />
               </CadenceField>
               <CadenceField
                 :control-id="repair_form.fields.horizon_end.id"
@@ -633,13 +639,9 @@ const repairFleetRun = () => {
                   :type="repair_form.fields.horizon_end.type"
                   :required="repair_form.fields.horizon_end.required"
                   class="w-full input"
-                >
+                />
               </CadenceField>
-              <button
-                :id="repair_form.submit.id"
-                type="submit"
-                class="btn btn-info btn-sm w-full"
-              >
+              <button :id="repair_form.submit.id" type="submit" class="btn btn-info btn-sm w-full">
                 {{ repair_form.submit.label }}
               </button>
             </form>

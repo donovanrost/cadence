@@ -69,9 +69,7 @@ describe("RemoteApplicationBoundary", () => {
       "The approved application release could not be loaded.",
     );
     expect(wrapper.find("#remote-error").text()).not.toContain("internal");
-    expect(wrapper.find("#remote-error-reference").text()).toMatch(
-      /^Reference ID: [0-9a-f-]{36}$/,
-    );
+    expect(wrapper.find("#remote-error-reference").text()).toMatch(/^Reference ID: [0-9a-f-]{36}$/);
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
     expect(wrapper.find("#remote-loading").exists()).toBe(false);
     await wrapper.find("#retry-remote").trigger("click");

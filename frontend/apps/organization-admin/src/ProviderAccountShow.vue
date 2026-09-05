@@ -1,212 +1,212 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
 
-import CadenceCard from "./ui/components/CadenceCard.vue"
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
-import StatusBadge from "./StatusBadge.vue"
+import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import StatusBadge from "./StatusBadge.vue";
 
-type EmptyPayload = Record<string, never>
+type EmptyPayload = Record<string, never>;
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type EmptyState = {
-  id: string
-  text: string
-}
+  id: string;
+  text: string;
+};
 
 type Page = {
-  id: string
+  id: string;
   header: {
-    title: string
-    subtitle: string
-    config_label: string
-    breadcrumbs: Breadcrumb[]
-  }
+    title: string;
+    subtitle: string;
+    config_label: string;
+    breadcrumbs: Breadcrumb[];
+  };
   grants: {
-    card_id: string
-    heading: string
-    subtitle: string
-    stream_id: string
-    empty: EmptyState
-  }
+    card_id: string;
+    heading: string;
+    subtitle: string;
+    stream_id: string;
+    empty: EmptyState;
+  };
   grant_form_card: {
-    id: string
-    heading: string
-    subtitle: string
-  }
+    id: string;
+    heading: string;
+    subtitle: string;
+  };
   audit: {
-    card_id: string
-    heading: string
-    subtitle: string
-    stream_id: string
-    empty: EmptyState
-  }
-}
+    card_id: string;
+    heading: string;
+    subtitle: string;
+    stream_id: string;
+    empty: EmptyState;
+  };
+};
 
 type Action = {
-  id: string
-  label: string
-  disabled: boolean
-  payload: EmptyPayload
-}
+  id: string;
+  label: string;
+  disabled: boolean;
+  payload: EmptyPayload;
+};
 
 type Actions = {
-  validate: Action & {icon: string}
-  rotate: Action & {icon: string}
-  revoke: (Action & {confirm: string}) | null
-}
+  validate: Action & { icon: string };
+  rotate: Action & { icon: string };
+  revoke: (Action & { confirm: string }) | null;
+};
 
 type Stat = {
-  id: string
-  label: string
-  value: string | number
-}
+  id: string;
+  label: string;
+  value: string | number;
+};
 
 type Option = {
-  label: string
-  value: string
-  disabled: boolean
-}
+  label: string;
+  value: string;
+  disabled: boolean;
+};
 
 type GrantValues = {
-  mission_id: string
-  allowed_services: string
-  allowed_stations: string
-  max_quota: string
-  grant_reason: string
-}
+  mission_id: string;
+  allowed_services: string;
+  allowed_stations: string;
+  max_quota: string;
+  grant_reason: string;
+};
 
-type GrantInputValues = Record<keyof GrantValues, string | number>
+type GrantInputValues = Record<keyof GrantValues, string | number>;
 
 type GrantField = {
-  key: keyof GrantValues
-  id: string
-  name: string
-  type: "select" | "text" | "number"
-  label: string
-  value: string
-  required: boolean
-  min: number | null
-  placeholder: string | null
-  options: Option[]
-}
+  key: keyof GrantValues;
+  id: string;
+  name: string;
+  type: "select" | "text" | "number";
+  label: string;
+  value: string;
+  required: boolean;
+  min: number | null;
+  placeholder: string | null;
+  options: Option[];
+};
 
 type GrantForm = {
-  id: string
-  values: GrantValues
-  fields: Record<keyof GrantValues, GrantField>
+  id: string;
+  values: GrantValues;
+  fields: Record<keyof GrantValues, GrantField>;
   action: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type Grant = {
-  id: string
-  __dom_id: string
-  provider_account_grant_id: string
-  mission_name: string
-  version_label: string
-  restriction_summary: string | null
+  id: string;
+  __dom_id: string;
+  provider_account_grant_id: string;
+  mission_name: string;
+  version_label: string;
+  restriction_summary: string | null;
   lifecycle: {
-    status: "ready" | "blocked"
-    label: string
-  }
+    status: "ready" | "blocked";
+    label: string;
+  };
   revoke: {
-    id: string
-    label: string
-    confirm: string
-    payload: {"grant-id": string}
-  } | null
-}
+    id: string;
+    label: string;
+    confirm: string;
+    payload: { "grant-id": string };
+  } | null;
+};
 
 type AuditEntry = {
-  id: string
-  __dom_id: string
-  provider_audit_entry_id: string
-  recorded_at: string
-  action: string
+  id: string;
+  __dom_id: string;
+  provider_audit_entry_id: string;
+  recorded_at: string;
+  action: string;
   outcome: {
-    status: "ready" | "blocked"
-    label: string
-  }
-}
+    status: "ready" | "blocked";
+    label: string;
+  };
+};
 
 type Detail = {
-  label: string
-  value: string
-  mono: boolean
-  wrapper_id: string | null
-}
+  label: string;
+  value: string;
+  mono: boolean;
+  wrapper_id: string | null;
+};
 
 type DetailCard = {
-  id: string
-  title: string
-  rows: Detail[]
-}
+  id: string;
+  title: string;
+  rows: Detail[];
+};
 
 type Ingestion = DetailCard & {
-  description: string
-}
+  description: string;
+};
 
 type Guardrails = {
-  id: string
-  title: string
-  json: string
-}
+  id: string;
+  title: string;
+  json: string;
+};
 
 type Diagnostics = {
-  id: string
-  title: string
-  columns: Detail[][]
-}
+  id: string;
+  title: string;
+  columns: Detail[][];
+};
 
 const props = defineProps<{
-  page: Page
-  actions: Actions
-  stats: Stat[]
-  grant_form: GrantForm
-  configuration: DetailCard
-  ingestion: Ingestion
-  guardrails: Guardrails
-  diagnostics: Diagnostics
-  account_grants: Grant[]
-  account_audit: AuditEntry[]
-}>()
+  page: Page;
+  actions: Actions;
+  stats: Stat[];
+  grant_form: GrantForm;
+  configuration: DetailCard;
+  ingestion: Ingestion;
+  guardrails: Guardrails;
+  diagnostics: Diagnostics;
+  account_grants: Grant[];
+  account_audit: AuditEntry[];
+}>();
 
 const emit = defineEmits<{
-  "validate-account": [payload: EmptyPayload]
-  "rotate-credential": [payload: EmptyPayload]
-  "revoke-credential": [payload: EmptyPayload]
-  "grant-mission": [payload: {grant: GrantValues}]
-  "revoke-grant": [payload: {"grant-id": string}]
-}>()
+  "validate-account": [payload: EmptyPayload];
+  "rotate-credential": [payload: EmptyPayload];
+  "revoke-credential": [payload: EmptyPayload];
+  "grant-mission": [payload: { grant: GrantValues }];
+  "revoke-grant": [payload: { "grant-id": string }];
+}>();
 
-const grantValues = reactive<GrantInputValues>({...props.grant_form.values})
+const grantValues = reactive<GrantInputValues>({ ...props.grant_form.values });
 const grantFieldOrder: Array<keyof GrantValues> = [
   "mission_id",
   "allowed_services",
   "allowed_stations",
   "max_quota",
-  "grant_reason"
-]
+  "grant_reason",
+];
 
 watch(
   () => props.grant_form.values,
-  values => Object.assign(grantValues, values),
-  {deep: true}
-)
+  (values) => Object.assign(grantValues, values),
+  { deep: true },
+);
 
 const grantMission = () =>
   emit("grant-mission", {
@@ -215,21 +215,21 @@ const grantMission = () =>
       allowed_services: String(grantValues.allowed_services ?? ""),
       allowed_stations: String(grantValues.allowed_stations ?? ""),
       max_quota: String(grantValues.max_quota ?? ""),
-      grant_reason: String(grantValues.grant_reason ?? "")
-    }
-  })
+      grant_reason: String(grantValues.grant_reason ?? ""),
+    },
+  });
 
 const revokeCredential = () => {
   if (props.actions.revoke && window.confirm(props.actions.revoke.confirm)) {
-    emit("revoke-credential", props.actions.revoke.payload)
+    emit("revoke-credential", props.actions.revoke.payload);
   }
-}
+};
 
 const revokeGrant = (grant: Grant) => {
   if (grant.revoke && window.confirm(grant.revoke.confirm)) {
-    emit("revoke-grant", grant.revoke.payload)
+    emit("revoke-grant", grant.revoke.payload);
   }
-}
+};
 </script>
 
 <template>
@@ -252,7 +252,8 @@ const revokeGrant = (grant: Grant) => {
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -304,11 +305,7 @@ const revokeGrant = (grant: Grant) => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <CadenceStatTile
-        v-for="stat in stats"
-        :id="stat.id"
-        :key="stat.id"
-      >
+      <CadenceStatTile v-for="stat in stats" :id="stat.id" :key="stat.id">
         <template #label>{{ stat.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
       </CadenceStatTile>
@@ -346,18 +343,12 @@ const revokeGrant = (grant: Grant) => {
                   <p class="mt-1 font-mono text-xs text-base-content/50">
                     {{ grant.version_label }}
                   </p>
-                  <p
-                    v-if="grant.restriction_summary"
-                    class="mt-2 text-xs text-base-content/60"
-                  >
+                  <p v-if="grant.restriction_summary" class="mt-2 text-xs text-base-content/60">
                     {{ grant.restriction_summary }}
                   </p>
                 </div>
                 <div class="flex items-center gap-2">
-                  <StatusBadge
-                    :status="grant.lifecycle.status"
-                    :label="grant.lifecycle.label"
-                  />
+                  <StatusBadge :status="grant.lifecycle.status" :label="grant.lifecycle.label" />
                   <button
                     v-if="grant.revoke"
                     :id="grant.revoke.id"
@@ -391,48 +382,44 @@ const revokeGrant = (grant: Grant) => {
           </template>
           <div class="card-body p-6">
             <form :id="grant_form.id" class="space-y-4" @submit.prevent="grantMission">
-                <CadenceField
-                  v-for="fieldKey in grantFieldOrder"
-                  :key="fieldKey"
-                  wrapper-class="fieldset mb-3"
-                  :label="grant_form.fields[fieldKey].label"
-                  label-class="hud-label block mb-1.5"
+              <CadenceField
+                v-for="fieldKey in grantFieldOrder"
+                :key="fieldKey"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields[fieldKey].label"
+                label-class="hud-label block mb-1.5"
+              >
+                <select
+                  v-if="grant_form.fields[fieldKey].type === 'select'"
+                  :id="grant_form.fields[fieldKey].id"
+                  v-model="grantValues[fieldKey]"
+                  :name="grant_form.fields[fieldKey].name"
+                  :required="grant_form.fields[fieldKey].required"
+                  class="w-full select"
                 >
-                  <select
-                    v-if="grant_form.fields[fieldKey].type === 'select'"
-                    :id="grant_form.fields[fieldKey].id"
-                    v-model="grantValues[fieldKey]"
-                    :name="grant_form.fields[fieldKey].name"
-                    :required="grant_form.fields[fieldKey].required"
-                    class="w-full select"
+                  <option
+                    v-for="option in grant_form.fields[fieldKey].options"
+                    :key="option.value"
+                    :value="option.value"
+                    :disabled="option.disabled"
                   >
-                    <option
-                      v-for="option in grant_form.fields[fieldKey].options"
-                      :key="option.value"
-                      :value="option.value"
-                      :disabled="option.disabled"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                  <input
-                    v-else
-                    :id="grant_form.fields[fieldKey].id"
-                    v-model="grantValues[fieldKey]"
-                    :name="grant_form.fields[fieldKey].name"
-                    :type="grant_form.fields[fieldKey].type"
-                    :placeholder="grant_form.fields[fieldKey].placeholder || undefined"
-                    :required="grant_form.fields[fieldKey].required"
-                    :min="grant_form.fields[fieldKey].min ?? undefined"
-                    class="w-full input"
-                  >
-                </CadenceField>
+                    {{ option.label }}
+                  </option>
+                </select>
+                <input
+                  v-else
+                  :id="grant_form.fields[fieldKey].id"
+                  v-model="grantValues[fieldKey]"
+                  :name="grant_form.fields[fieldKey].name"
+                  :type="grant_form.fields[fieldKey].type"
+                  :placeholder="grant_form.fields[fieldKey].placeholder || undefined"
+                  :required="grant_form.fields[fieldKey].required"
+                  :min="grant_form.fields[fieldKey].min ?? undefined"
+                  class="w-full input"
+                />
+              </CadenceField>
               <div class="flex justify-end">
-                <button
-                  :id="grant_form.action.id"
-                  type="submit"
-                  class="btn btn-primary btn-sm"
-                >
+                <button :id="grant_form.action.id" type="submit" class="btn btn-primary btn-sm">
                   {{ grant_form.action.label }}
                 </button>
               </div>
@@ -475,40 +462,37 @@ const revokeGrant = (grant: Grant) => {
       </div>
 
       <aside class="space-y-4">
-        <CadenceCard :id="configuration.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-            <p class="hud-label">{{ configuration.title }}</p>
-            <div class="mt-3 divide-y divide-base-300">
-              <CadenceDataRow
-                v-for="row in configuration.rows"
-                :key="row.label"
-                row-class="hud-data-row"
-                label-class="hud-data-label"
-                :label="row.label"
-              >
-                <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
-                  {{ row.value }}
-                </span>
-              </CadenceDataRow>
-            </div>
+        <CadenceCard
+          :id="configuration.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ configuration.title }}</p>
+          <div class="mt-3 divide-y divide-base-300">
+            <CadenceDataRow
+              v-for="row in configuration.rows"
+              :key="row.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="row.label"
+            >
+              <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+                {{ row.value }}
+              </span>
+            </CadenceDataRow>
+          </div>
         </CadenceCard>
 
-        <CadenceCard :id="ingestion.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-            <p class="hud-label">{{ ingestion.title }}</p>
-            <div class="mt-3 divide-y divide-base-300">
-              <template v-for="row in ingestion.rows" :key="row.label">
-                <div v-if="row.wrapper_id" :id="row.wrapper_id">
-                  <CadenceDataRow
-                    row-class="hud-data-row"
-                    label-class="hud-data-label"
-                    :label="row.label"
-                  >
-                    <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
-                      {{ row.value }}
-                    </span>
-                  </CadenceDataRow>
-                </div>
+        <CadenceCard
+          :id="ingestion.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ ingestion.title }}</p>
+          <div class="mt-3 divide-y divide-base-300">
+            <template v-for="row in ingestion.rows" :key="row.label">
+              <div v-if="row.wrapper_id" :id="row.wrapper_id">
                 <CadenceDataRow
-                  v-else
                   row-class="hud-data-row"
                   label-class="hud-data-label"
                   :label="row.label"
@@ -517,19 +501,34 @@ const revokeGrant = (grant: Grant) => {
                     {{ row.value }}
                   </span>
                 </CadenceDataRow>
-              </template>
-            </div>
-            <p class="mt-3 text-xs text-base-content/50">
-              {{ ingestion.description }}
-            </p>
+              </div>
+              <CadenceDataRow
+                v-else
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="row.label"
+              >
+                <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+                  {{ row.value }}
+                </span>
+              </CadenceDataRow>
+            </template>
+          </div>
+          <p class="mt-3 text-xs text-base-content/50">
+            {{ ingestion.description }}
+          </p>
         </CadenceCard>
 
-        <CadenceCard :id="guardrails.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-            <p class="hud-label">{{ guardrails.title }}</p>
-            <pre
-              class="mt-3 max-h-72 overflow-auto bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
-              v-text="guardrails.json"
-            ></pre>
+        <CadenceCard
+          :id="guardrails.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ guardrails.title }}</p>
+          <pre
+            class="mt-3 max-h-72 overflow-auto bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
+            v-text="guardrails.json"
+          ></pre>
         </CadenceCard>
       </aside>
     </div>

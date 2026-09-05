@@ -1,247 +1,247 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import {reactive, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import { reactive, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
 type LabelValue = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type ValueRow = {
-  id: string
-  label: string
-  requested: string
-  confirmed: string
-  accepted: string
-  actual: string
-}
+  id: string;
+  label: string;
+  requested: string;
+  confirmed: string;
+  accepted: string;
+  actual: string;
+};
 
 type AdminDiagnostics = {
-  id: string
-  label: string
-  rows: LabelValue[]
+  id: string;
+  label: string;
+  rows: LabelValue[];
   link: {
-    id: string
-    label: string
-    href: string
-  } | null
-}
+    id: string;
+    label: string;
+    href: string;
+  } | null;
+};
 
 type Page = {
-  id: string
+  id: string;
   navigation: {
-    id: string
-    label: string
-    href: string
-  }
+    id: string;
+    label: string;
+    href: string;
+  };
   header: {
-    heading: string
-    reservation_id: string
+    heading: string;
+    reservation_id: string;
     state: {
-      label: string
-      class: string
-    }
-    facts: LabelValue[]
-  }
+      label: string;
+      class: string;
+    };
+    facts: LabelValue[];
+  };
   values: {
-    id: string
-    eyebrow: string
-    heading: string
-    copy: string
-    columns: string[]
-    rows: ValueRow[]
-  }
+    id: string;
+    eyebrow: string;
+    heading: string;
+    copy: string;
+    columns: string[];
+    rows: ValueRow[];
+  };
   changes: {
-    id: string
-    eyebrow: string
-    heading: string
-    timeline_id: string
+    id: string;
+    eyebrow: string;
+    heading: string;
+    timeline_id: string;
     empty: {
-      id: string
-      copy: string
-    }
-  }
+      id: string;
+      copy: string;
+    };
+  };
   audit: {
-    eyebrow: string
-    heading: string
-    timeline_id: string
+    eyebrow: string;
+    heading: string;
+    timeline_id: string;
     empty: {
-      id: string
-      copy: string
-    }
-  }
+      id: string;
+      copy: string;
+    };
+  };
   binding_chain: {
-    id: string
-    eyebrow: string
-    heading: string
-    rows: LabelValue[]
-  }
+    id: string;
+    eyebrow: string;
+    heading: string;
+    rows: LabelValue[];
+  };
   lifecycle: {
-    eyebrow: string
-    heading: string
-    rows: LabelValue[]
-  }
-  admin_diagnostics?: AdminDiagnostics
-}
+    eyebrow: string;
+    heading: string;
+    rows: LabelValue[];
+  };
+  admin_diagnostics?: AdminDiagnostics;
+};
 
-type DecisionKind = "approval" | "rejection" | "acknowledgment"
+type DecisionKind = "approval" | "rejection" | "acknowledgment";
 
 type DecisionForm = {
-  id: string
+  id: string;
   proposal_hash: {
-    id: string
-    name: string
-    value: string
-  }
+    id: string;
+    name: string;
+    value: string;
+  };
   reason: {
-    id: string
-    name: string
-    label: string
-    value: string
-    required: boolean
-  }
+    id: string;
+    name: string;
+    label: string;
+    value: string;
+    required: boolean;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type DecisionForms = {
-  approval: DecisionForm | null
-  rejection: DecisionForm | null
-  acknowledgment: DecisionForm | null
-}
+  approval: DecisionForm | null;
+  rejection: DecisionForm | null;
+  acknowledgment: DecisionForm | null;
+};
 
 type ProviderChange = {
-  __dom_id: string
-  provider_reservation_change_id: string
-  from_provider_revision: string
-  provider_revision: string
-  lifecycle_state: string
-  classification: string
-  policy_version: string
-  explanation: string
-  changed_fields: string[]
-  deadline: LabelValue | null
+  __dom_id: string;
+  provider_reservation_change_id: string;
+  from_provider_revision: string;
+  provider_revision: string;
+  lifecycle_state: string;
+  classification: string;
+  policy_version: string;
+  explanation: string;
+  changed_fields: string[];
+  deadline: LabelValue | null;
   remediation: {
-    id: string
-    heading: string
-    copy: string
-  } | null
-  decision_forms?: DecisionForms
-}
+    id: string;
+    heading: string;
+    copy: string;
+  } | null;
+  decision_forms?: DecisionForms;
+};
 
 type ProviderAuditEntry = {
-  __dom_id: string
-  provider_audit_entry_id: string
-  recorded_at: string
-  action: string
-  outcome: string
+  __dom_id: string;
+  provider_audit_entry_id: string;
+  recorded_at: string;
+  action: string;
+  outcome: string;
   evidence_references: Array<{
-    provider_evidence_id: string | null
-    content_sha256: string
-  }>
-}
+    provider_evidence_id: string | null;
+    content_sha256: string;
+  }>;
+};
 
 type DecisionValues = {
-  proposal_hash: string
-  reason: string
-}
+  proposal_hash: string;
+  reason: string;
+};
 
 const props = defineProps<{
-  page: Page
-  provider_changes: ProviderChange[]
-  provider_audit_entries: ProviderAuditEntry[]
-}>()
+  page: Page;
+  provider_changes: ProviderChange[];
+  provider_audit_entries: ProviderAuditEntry[];
+}>();
 
 const emit = defineEmits<{
-  "approve-provider-change": [payload: {approval: DecisionValues}]
-  "reject-provider-change": [payload: {rejection: DecisionValues}]
-  "acknowledge-provider-change": [payload: {acknowledgment: DecisionValues}]
-}>()
+  "approve-provider-change": [payload: { approval: DecisionValues }];
+  "reject-provider-change": [payload: { rejection: DecisionValues }];
+  "acknowledge-provider-change": [payload: { acknowledgment: DecisionValues }];
+}>();
 
-const decisionReasons = reactive<Record<string, string>>({})
-const syncedServerForms = new Map<string, string>()
+const decisionReasons = reactive<Record<string, string>>({});
+const syncedServerForms = new Map<string, string>();
 
 const reasonKey = (change: ProviderChange, kind: DecisionKind) =>
-  `${change.provider_reservation_change_id}:${kind}`
+  `${change.provider_reservation_change_id}:${kind}`;
 
 const eachDecisionForm = (
   change: ProviderChange,
-  callback: (kind: DecisionKind, form: DecisionForm) => void
+  callback: (kind: DecisionKind, form: DecisionForm) => void,
 ) => {
-  const forms = change.decision_forms
-  if (forms === undefined) return
+  const forms = change.decision_forms;
+  if (forms === undefined) return;
 
-  if (forms.approval !== null) callback("approval", forms.approval)
-  if (forms.rejection !== null) callback("rejection", forms.rejection)
-  if (forms.acknowledgment !== null) callback("acknowledgment", forms.acknowledgment)
-}
+  if (forms.approval !== null) callback("approval", forms.approval);
+  if (forms.rejection !== null) callback("rejection", forms.rejection);
+  if (forms.acknowledgment !== null) callback("acknowledgment", forms.acknowledgment);
+};
 
 watch(
   () => props.provider_changes,
   (changes) => {
-    const activeKeys = new Set<string>()
+    const activeKeys = new Set<string>();
 
     for (const change of changes) {
       eachDecisionForm(change, (kind, form) => {
-        const key = reasonKey(change, kind)
-        const serverVersion = `${form.proposal_hash.value}\u0000${form.reason.value}`
-        activeKeys.add(key)
+        const key = reasonKey(change, kind);
+        const serverVersion = `${form.proposal_hash.value}\u0000${form.reason.value}`;
+        activeKeys.add(key);
 
         if (syncedServerForms.get(key) !== serverVersion) {
-          decisionReasons[key] = form.reason.value
-          syncedServerForms.set(key, serverVersion)
+          decisionReasons[key] = form.reason.value;
+          syncedServerForms.set(key, serverVersion);
         }
-      })
+      });
     }
 
     for (const key of Object.keys(decisionReasons)) {
       if (!activeKeys.has(key)) {
-        delete decisionReasons[key]
-        syncedServerForms.delete(key)
+        delete decisionReasons[key];
+        syncedServerForms.delete(key);
       }
     }
   },
-  {deep: true, immediate: true}
-)
+  { deep: true, immediate: true },
+);
 
 const updateReason = (change: ProviderChange, kind: DecisionKind, event: Event) => {
-  decisionReasons[reasonKey(change, kind)] = (event.target as HTMLTextAreaElement).value
-}
+  decisionReasons[reasonKey(change, kind)] = (event.target as HTMLTextAreaElement).value;
+};
 
 const decisionValues = (
   change: ProviderChange,
   kind: DecisionKind,
-  form: DecisionForm
+  form: DecisionForm,
 ): DecisionValues => ({
   proposal_hash: form.proposal_hash.value,
-  reason: decisionReasons[reasonKey(change, kind)] ?? form.reason.value
-})
+  reason: decisionReasons[reasonKey(change, kind)] ?? form.reason.value,
+});
 
 const approve = (change: ProviderChange, form: DecisionForm | null | undefined) => {
   if (form !== null && form !== undefined) {
-    emit("approve-provider-change", {approval: decisionValues(change, "approval", form)})
+    emit("approve-provider-change", { approval: decisionValues(change, "approval", form) });
   }
-}
+};
 
 const reject = (change: ProviderChange, form: DecisionForm | null | undefined) => {
   if (form !== null && form !== undefined) {
-    emit("reject-provider-change", {rejection: decisionValues(change, "rejection", form)})
+    emit("reject-provider-change", { rejection: decisionValues(change, "rejection", form) });
   }
-}
+};
 
 const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefined) => {
   if (form !== null && form !== undefined) {
     emit("acknowledge-provider-change", {
-      acknowledgment: decisionValues(change, "acknowledgment", form)
-    })
+      acknowledgment: decisionValues(change, "acknowledgment", form),
+    });
   }
-}
+};
 </script>
 
 <template>
@@ -268,9 +268,10 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
             <span
               :class="[
                 'border px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-wider',
-                page.header.state.class
+                page.header.state.class,
               ]"
-            >{{ page.header.state.label }}</span>
+              >{{ page.header.state.label }}</span
+            >
           </div>
           <p class="mt-2 truncate font-mono text-xs text-base-content/50">
             {{ page.header.reservation_id }}
@@ -298,7 +299,11 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
       class="mx-auto grid max-w-[96rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,0.62fr)] lg:p-7"
     >
       <main class="min-w-0 space-y-5">
-        <CadencePanel :id="page.values.id" class="border border-base-300 bg-base-200/20" header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.values.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <div>
               <p class="hud-label">{{ page.values.eyebrow }}</p>
@@ -318,29 +323,35 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                     :class="[
                       'border-b border-base-300 px-3 py-2',
                       index === 0 && 'w-32',
-                      index < page.values.columns.length - 1 && 'border-r'
+                      index < page.values.columns.length - 1 && 'border-r',
                     ]"
-                  >{{ column }}</th>
+                  >
+                    {{ column }}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="row in page.values.rows"
-                  :id="`contact-value-${row.id}`"
-                  :key="row.id"
-                >
+                <tr v-for="row in page.values.rows" :id="`contact-value-${row.id}`" :key="row.id">
                   <th
                     class="border-r border-t border-base-300 bg-base-200/60 px-3 py-2 font-mono text-base-content/50"
-                  >{{ row.label }}</th>
+                  >
+                    {{ row.label }}
+                  </th>
                   <td
                     class="border-r border-t border-base-300 px-3 py-2 font-mono text-base-content/65 last:border-r-0"
-                  >{{ row.requested }}</td>
+                  >
+                    {{ row.requested }}
+                  </td>
                   <td
                     class="border-r border-t border-base-300 px-3 py-2 font-mono text-base-content/65 last:border-r-0"
-                  >{{ row.confirmed }}</td>
+                  >
+                    {{ row.confirmed }}
+                  </td>
                   <td
                     class="border-r border-t border-base-300 px-3 py-2 font-mono text-base-content/65 last:border-r-0"
-                  >{{ row.accepted }}</td>
+                  >
+                    {{ row.accepted }}
+                  </td>
                   <td class="border-t border-base-300 px-3 py-2 font-mono text-base-content/75">
                     {{ row.actual }}
                   </td>
@@ -350,7 +361,11 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
           </div>
         </CadencePanel>
 
-        <CadencePanel :id="page.changes.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.changes.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.changes.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ page.changes.heading }}</h2>
@@ -360,7 +375,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
             <div
               :id="page.changes.empty.id"
               class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50"
-            >{{ page.changes.empty.copy }}</div>
+            >
+              {{ page.changes.empty.copy }}
+            </div>
             <article
               v-for="change in provider_changes"
               :id="change.__dom_id"
@@ -370,13 +387,17 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               <div>
                 <p
                   class="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-base-content/40"
-                >Provider revision</p>
+                >
+                  Provider revision
+                </p>
                 <p class="mt-1 font-mono text-lg font-bold text-primary">
                   {{ change.from_provider_revision }} → {{ change.provider_revision }}
                 </p>
                 <p
                   class="mt-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-base-content/55"
-                >{{ change.lifecycle_state }}</p>
+                >
+                  {{ change.lifecycle_state }}
+                </p>
               </div>
 
               <div class="min-w-0">
@@ -394,13 +415,16 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                     v-for="field in change.changed_fields"
                     :key="field"
                     class="border border-base-300 bg-base-200 px-2 py-1 font-mono text-[0.62rem] text-base-content/55"
-                  >{{ field }}</span>
+                    >{{ field }}</span
+                  >
                 </div>
 
                 <div
                   v-if="change.deadline !== null"
                   class="mt-3 border-l-2 border-warning/60 pl-3 text-xs text-warning"
-                >{{ change.deadline.label }}: {{ change.deadline.value }}</div>
+                >
+                  {{ change.deadline.label }}: {{ change.deadline.value }}
+                </div>
 
                 <div
                   v-if="change.remediation !== null"
@@ -426,7 +450,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       :name="change.decision_forms.approval.proposal_hash.name"
                       type="hidden"
                       :value="change.decision_forms.approval.proposal_hash.value"
-                    >
+                    />
                     <CadenceField
                       :control-id="change.decision_forms.approval.reason.id"
                       wrapper-class="fieldset mb-3"
@@ -446,7 +470,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       :id="change.decision_forms.approval.submit.id"
                       type="submit"
                       class="btn btn-success btn-sm w-full font-mono text-xs uppercase tracking-wider"
-                    >{{ change.decision_forms.approval.submit.label }}</button>
+                    >
+                      {{ change.decision_forms.approval.submit.label }}
+                    </button>
                   </form>
 
                   <form
@@ -460,7 +486,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       :name="change.decision_forms.rejection.proposal_hash.name"
                       type="hidden"
                       :value="change.decision_forms.rejection.proposal_hash.value"
-                    >
+                    />
                     <CadenceField
                       :control-id="change.decision_forms.rejection.reason.id"
                       wrapper-class="fieldset mb-3"
@@ -480,7 +506,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                       :id="change.decision_forms.rejection.submit.id"
                       type="submit"
                       class="btn btn-error btn-outline btn-sm w-full font-mono text-xs uppercase tracking-wider"
-                    >{{ change.decision_forms.rejection.submit.label }}</button>
+                    >
+                      {{ change.decision_forms.rejection.submit.label }}
+                    </button>
                   </form>
                 </div>
 
@@ -490,7 +518,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                   class="mt-4 space-y-3 border border-warning/35 bg-warning/5 p-3"
                   @submit.prevent="acknowledge(change, change.decision_forms?.acknowledgment)"
                 >
-                  <p class="text-xs font-semibold text-warning">Provider fact is already effective</p>
+                  <p class="text-xs font-semibold text-warning">
+                    Provider fact is already effective
+                  </p>
                   <p class="text-xs text-base-content/60">
                     Acknowledge the fact and record the contingency response. Approval or fictional
                     rejection is unavailable.
@@ -500,7 +530,7 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                     :name="change.decision_forms.acknowledgment.proposal_hash.name"
                     type="hidden"
                     :value="change.decision_forms.acknowledgment.proposal_hash.value"
-                  >
+                  />
                   <CadenceField
                     :control-id="change.decision_forms.acknowledgment.reason.id"
                     wrapper-class="fieldset mb-3"
@@ -520,14 +550,19 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
                     :id="change.decision_forms.acknowledgment.submit.id"
                     type="submit"
                     class="btn btn-warning btn-sm font-mono text-xs uppercase tracking-wider"
-                  >{{ change.decision_forms.acknowledgment.submit.label }}</button>
+                  >
+                    {{ change.decision_forms.acknowledgment.submit.label }}
+                  </button>
                 </form>
               </div>
             </article>
           </div>
         </CadencePanel>
 
-        <CadencePanel class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.audit.eyebrow }}</p>
             <h2 class="mt-1 text-base font-semibold">{{ page.audit.heading }}</h2>
@@ -536,7 +571,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
             <li
               :id="page.audit.empty.id"
               class="hidden only:block px-4 py-10 text-center text-sm text-base-content/50"
-            >{{ page.audit.empty.copy }}</li>
+            >
+              {{ page.audit.empty.copy }}
+            </li>
             <li
               v-for="entry in provider_audit_entries"
               :id="entry.__dom_id"
@@ -568,7 +605,11 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
       </main>
 
       <aside class="min-w-0 space-y-5 xl:sticky xl:top-0 xl:self-start">
-        <CadencePanel :id="page.binding_chain.id" class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          :id="page.binding_chain.id"
+          class="border border-base-300 bg-base-200/25"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.binding_chain.eyebrow }}</p>
             <h2 class="mt-1 text-sm font-semibold">{{ page.binding_chain.heading }}</h2>
@@ -583,7 +624,10 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
           </dl>
         </CadencePanel>
 
-        <CadencePanel class="border border-base-300 bg-base-200/25" header-class="border-b border-base-300 px-4 py-3">
+        <CadencePanel
+          class="border border-base-300 bg-base-200/25"
+          header-class="border-b border-base-300 px-4 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ page.lifecycle.eyebrow }}</p>
             <h2 class="mt-1 text-sm font-semibold">{{ page.lifecycle.heading }}</h2>
@@ -595,9 +639,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
               class="bg-base-200/80 px-3 py-3"
             >
               <p class="hud-label">{{ row.label }}</p>
-              <p
-                class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70"
-              >{{ row.value }}</p>
+              <p class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70">
+                {{ row.value }}
+              </p>
             </div>
           </div>
         </CadencePanel>
@@ -609,7 +653,9 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
         >
           <summary
             class="cursor-pointer border-b border-base-300 px-4 py-3 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-base-content/55 hover:text-primary"
-          >{{ page.admin_diagnostics.label }}</summary>
+          >
+            {{ page.admin_diagnostics.label }}
+          </summary>
           <dl class="space-y-3 p-4 font-mono text-[0.65rem] text-base-content/60">
             <div v-for="row in page.admin_diagnostics.rows" :key="row.label">
               <dt class="text-base-content/35">{{ row.label }}</dt>

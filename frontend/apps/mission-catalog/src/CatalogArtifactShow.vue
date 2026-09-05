@@ -1,39 +1,39 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceCard from "./ui/components/CadenceCard.vue"
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
 
-type Status = "info" | "ready" | "blocked"
+type Status = "info" | "ready" | "blocked";
 
 type Artifact = {
-  format_key: string
-  media_type: string
-  content_sha256: string
-  uploaded_at: string
-  download_href: string
-}
+  format_key: string;
+  media_type: string;
+  content_sha256: string;
+  uploaded_at: string;
+  download_href: string;
+};
 
 type ImportRun = {
-  id: string
-  actions_id: string
-  status: Status
-  status_label: string
-  started_at: string
-  completed_at: string
-  href: string
-}
+  id: string;
+  actions_id: string;
+  status: Status;
+  status_label: string;
+  started_at: string;
+  completed_at: string;
+  href: string;
+};
 
 defineProps<{
-  artifact: Artifact
-  runs: ImportRun[]
-}>()
+  artifact: Artifact;
+  runs: ImportRun[];
+}>();
 
 const emit = defineEmits<{
-  reimport: []
-}>()
+  reimport: [];
+}>();
 </script>
 
 <template>
@@ -43,58 +43,46 @@ const emit = defineEmits<{
       class="card border border-base-300 bg-base-200"
       body-class="card-body p-6"
     >
-        <p class="hud-label">Artifact</p>
+      <p class="hud-label">Artifact</p>
 
-        <div class="divide-y divide-base-300">
-          <CadenceDataRow
-            row-class="hud-data-row"
-            label-class="hud-data-label"
-            label="Format"
-          >
-            <span class="hud-data-value font-mono text-sm">{{ artifact.format_key }}</span>
-          </CadenceDataRow>
-          <CadenceDataRow
-            row-class="hud-data-row"
-            label-class="hud-data-label"
-            label="Media type"
-          >
-            <span class="hud-data-value font-mono text-sm">{{ artifact.media_type }}</span>
-          </CadenceDataRow>
-          <CadenceDataRow
-            row-class="hud-data-row"
-            label-class="hud-data-label"
-            label="Content SHA-256"
-          >
-            <span class="hud-data-value">
-              <span class="break-all font-mono text-xs">{{ artifact.content_sha256 }}</span>
-            </span>
-          </CadenceDataRow>
-          <CadenceDataRow
-            row-class="hud-data-row"
-            label-class="hud-data-label"
-            label="Uploaded at"
-          >
-            <span class="hud-data-value">{{ artifact.uploaded_at }}</span>
-          </CadenceDataRow>
-        </div>
+      <div class="divide-y divide-base-300">
+        <CadenceDataRow row-class="hud-data-row" label-class="hud-data-label" label="Format">
+          <span class="hud-data-value font-mono text-sm">{{ artifact.format_key }}</span>
+        </CadenceDataRow>
+        <CadenceDataRow row-class="hud-data-row" label-class="hud-data-label" label="Media type">
+          <span class="hud-data-value font-mono text-sm">{{ artifact.media_type }}</span>
+        </CadenceDataRow>
+        <CadenceDataRow
+          row-class="hud-data-row"
+          label-class="hud-data-label"
+          label="Content SHA-256"
+        >
+          <span class="hud-data-value">
+            <span class="break-all font-mono text-xs">{{ artifact.content_sha256 }}</span>
+          </span>
+        </CadenceDataRow>
+        <CadenceDataRow row-class="hud-data-row" label-class="hud-data-label" label="Uploaded at">
+          <span class="hud-data-value">{{ artifact.uploaded_at }}</span>
+        </CadenceDataRow>
+      </div>
 
-        <div class="flex items-center gap-3 pt-2">
-          <a
-            id="catalog-artifact-download-link"
-            :href="artifact.download_href"
-            class="btn btn-ghost btn-sm"
-          >
-            <span class="hero-arrow-down-tray h-4 w-4"></span> Download original
-          </a>
-          <button
-            id="catalog-artifact-reimport-button"
-            type="button"
-            class="btn btn-primary btn-sm"
-            @click="emit('reimport')"
-          >
-            <span class="hero-arrow-path h-4 w-4"></span> Re-import
-          </button>
-        </div>
+      <div class="flex items-center gap-3 pt-2">
+        <a
+          id="catalog-artifact-download-link"
+          :href="artifact.download_href"
+          class="btn btn-ghost btn-sm"
+        >
+          <span class="hero-arrow-down-tray h-4 w-4"></span> Download original
+        </a>
+        <button
+          id="catalog-artifact-reimport-button"
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="emit('reimport')"
+        >
+          <span class="hero-arrow-path h-4 w-4"></span> Re-import
+        </button>
+      </div>
     </CadenceCard>
 
     <section id="catalog-artifact-runs-section">
@@ -106,7 +94,7 @@ const emit = defineEmits<{
         class="card border border-base-300 bg-base-200"
         body-class="card-body p-6"
       >
-          <p class="text-sm text-base-content/60">No runs yet.</p>
+        <p class="text-sm text-base-content/60">No runs yet.</p>
       </CadenceCard>
 
       <CadenceCard
@@ -134,7 +122,7 @@ const emit = defineEmits<{
               <td class="text-right">
                 <div :id="run.actions_id" class="cadence-overlay">
                   <CadenceModalMenu side="bottom" align="end" :side-offset="4">
-                    <template #trigger="{open}">
+                    <template #trigger="{ open }">
                       <button
                         :id="`${run.actions_id}-trigger`"
                         type="button"
@@ -145,7 +133,7 @@ const emit = defineEmits<{
                         <span class="hero-ellipsis-vertical h-5 w-5"></span>
                       </button>
                     </template>
-                    <template #content="{open}">
+                    <template #content="{ open }">
                       <div
                         :id="`${run.actions_id}-menu`"
                         :aria-labelledby="`${run.actions_id}-trigger`"
@@ -157,7 +145,8 @@ const emit = defineEmits<{
                             data-phx-link="redirect"
                             data-phx-link-state="push"
                             class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
-                          >View run</a>
+                            >View run</a
+                          >
                         </CadenceMenuItem>
                       </div>
                     </template>

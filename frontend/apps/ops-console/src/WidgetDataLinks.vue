@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type Attrs = Record<string, string | null>
+type Attrs = Record<string, string | null>;
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type ItemPresentation = {
-  key: string
-  kind: "data_link" | "evidence"
-  type: string
-  class: string
-  attrs: Attrs
-  label: {text: string; class: string | null}
-  secondary: {text: string; class: string} | null
-  icon: IconPresentation | null
-}
+  key: string;
+  kind: "data_link" | "evidence";
+  type: string;
+  class: string;
+  attrs: Attrs;
+  label: { text: string; class: string | null };
+  secondary: { text: string; class: string } | null;
+  icon: IconPresentation | null;
+};
 
 type WidgetDataLinksPresentation = {
   kind:
@@ -26,33 +26,33 @@ type WidgetDataLinksPresentation = {
     | "status_matrix_row"
     | "data_table_row"
     | "state_timeline_row"
-    | "event_timeline_row"
-  component_id: string
-  overlay: {id: string; class: string; attrs: Attrs}
+    | "event_timeline_row";
+  component_id: string;
+  overlay: { id: string; class: string; attrs: Attrs };
   trigger: {
-    id: string
-    type: string
-    class: string
-    attrs: Attrs
+    id: string;
+    type: string;
+    class: string;
+    attrs: Attrs;
     content: {
-      class: string
-      title: string
-      attrs: Attrs
-      icon: IconPresentation
-    }
-  }
-  panel: {id: string; class: string; hidden: boolean; attrs: Attrs}
-  body: {class: string}
-  items: ItemPresentation[]
-}
+      class: string;
+      title: string;
+      attrs: Attrs;
+      icon: IconPresentation;
+    };
+  };
+  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
+  body: { class: string };
+  items: ItemPresentation[];
+};
 
-const props = defineProps<{presentation: WidgetDataLinksPresentation}>()
+const props = defineProps<{ presentation: WidgetDataLinksPresentation }>();
 
 const panelAttrs = computed(() => {
-  const attrs = {...props.presentation.panel.attrs}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -66,7 +66,7 @@ const panelAttrs = computed(() => {
     :side-offset="8"
     :collision-padding="16"
   >
-    <template #trigger="{open}">
+    <template #trigger="{ open }">
       <button
         :id="props.presentation.trigger.id"
         :type="props.presentation.trigger.type"
@@ -89,7 +89,7 @@ const panelAttrs = computed(() => {
       </button>
     </template>
 
-    <template #content="{open}">
+    <template #content="{ open }">
       <section
         :id="props.presentation.panel.id"
         :class="props.presentation.panel.class"
@@ -108,10 +108,7 @@ const panelAttrs = computed(() => {
             <span v-if="item.secondary" :class="item.secondary.class">
               {{ item.secondary.text }}
             </span>
-            <span
-              v-if="item.icon"
-              :class="[item.icon.name, item.icon.class]"
-            ></span>
+            <span v-if="item.icon" :class="[item.icon.name, item.icon.class]"></span>
           </button>
         </div>
       </section>

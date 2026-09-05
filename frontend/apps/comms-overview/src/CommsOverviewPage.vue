@@ -1,32 +1,8 @@
 <script setup lang="ts">
-import CommsOverview from "./CommsOverview.vue"
+import CommsOverview from "./CommsOverview.vue";
+import type { CommsOverviewPresentation } from "./comms-overview";
 
-type Attrs = Record<string, string>
-
-type ElementPresentation = {
-  attrs: Attrs
-}
-
-type TextPresentation = ElementPresentation & {
-  text: string
-}
-
-type CommsOverviewProps = InstanceType<typeof CommsOverview>["$props"]
-
-type Presentation = {
-  root: ElementPresentation
-  header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
-    eyebrow: TextPresentation
-    title: TextPresentation
-    title_suffix: TextPresentation
-  }
-  overview: CommsOverviewProps["overview"]
-}
-
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: CommsOverviewPresentation }>();
 </script>
 
 <template>

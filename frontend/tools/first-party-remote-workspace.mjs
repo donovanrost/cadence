@@ -103,8 +103,7 @@ export async function discoverFirstPartyRemotes(
 export function assertApprovedFirstPartyRemoteCoverage({ remotes }) {
   const byBundle = new Map(remotes.map((remote) => [remote.bundle, remote]));
   const missing = APPROVED_FIRST_PARTY_REMOTES.filter(
-    ({ bundle, remoteName }) =>
-      byBundle.get(bundle)?.remoteName !== remoteName,
+    ({ bundle, remoteName }) => byBundle.get(bundle)?.remoteName !== remoteName,
   );
   if (missing.length > 0) {
     throw new Error(

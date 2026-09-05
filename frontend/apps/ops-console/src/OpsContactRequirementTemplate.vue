@@ -1,27 +1,27 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
-import {reactive, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import { reactive, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
-type Option = {label: string; value: string}
+type Option = { label: string; value: string };
 
 type FormField = {
-  id: string
-  name: string
-  type: "text" | "number" | "select" | "textarea" | "datetime-local" | "time"
-  label: string
-  required: boolean
-  min: number | null
-  step: string | null
-  options: Option[]
-  value: string
-  errors: string[]
-}
+  id: string;
+  name: string;
+  type: "text" | "number" | "select" | "textarea" | "datetime-local" | "time";
+  label: string;
+  required: boolean;
+  min: number | null;
+  step: string | null;
+  options: Option[];
+  value: string;
+  errors: string[];
+};
 
 const templateFields = [
   "spacecraft_id",
@@ -42,69 +42,69 @@ const templateFields = [
   "approval_mode",
   "maximum_occurrences_per_run",
   "maximum_lookback_hours",
-  "rationale"
-] as const
+  "rationale",
+] as const;
 
-type TemplateField = typeof templateFields[number]
-type TemplateValues = Record<TemplateField, string>
+type TemplateField = (typeof templateFields)[number];
+type TemplateValues = Record<TemplateField, string>;
 
 type TemplateForm = {
-  panel_id: string
-  id: string
-  header: {eyebrow: string; copy: string}
-  fields: Record<TemplateField, FormField>
-  outcome_details: {id: string; summary: string}
-  catchup_details: {id: string; summary: string}
-  submit: {id: string; label: string}
-}
+  panel_id: string;
+  id: string;
+  header: { eyebrow: string; copy: string };
+  fields: Record<TemplateField, FormField>;
+  outcome_details: { id: string; summary: string };
+  catchup_details: { id: string; summary: string };
+  submit: { id: string; label: string };
+};
 
-type LifecycleAction = {id: string; label: string; class: string}
+type LifecycleAction = { id: string; label: string; class: string };
 
 type RequirementTemplate = {
-  id: string
-  __dom_id: string
-  lifecycle: {state: string; class: string}
-  version_label: string
-  title: string
-  schedule: string
-  content_sha256: string
+  id: string;
+  __dom_id: string;
+  lifecycle: { state: string; class: string };
+  version_label: string;
+  title: string;
+  schedule: string;
+  content_sha256: string;
   actions?: {
-    pause: LifecycleAction | null
-    activate: LifecycleAction | null
-    close: LifecycleAction | null
-  }
-}
+    pause: LifecycleAction | null;
+    activate: LifecycleAction | null;
+    close: LifecycleAction | null;
+  };
+};
 
 const props = defineProps<{
   page: {
-    id: string
-    back: {href: string; icon: string; label: string}
-    header: {eyebrow: string; title: string; copy: string}
-  }
+    id: string;
+    back: { href: string; icon: string; label: string };
+    header: { eyebrow: string; title: string; copy: string };
+  };
   ledger: {
-    eyebrow: string
-    copy: string
-    count: number
-    count_label: string
-    list_id: string
-    stream_empty_id: string
-    empty: {id: string; icon: string; title: string; copy: string} | null
-  }
+    eyebrow: string;
+    copy: string;
+    count: number;
+    count_label: string;
+    list_id: string;
+    stream_empty_id: string;
+    empty: { id: string; icon: string; title: string; copy: string } | null;
+  };
   authorization: {
-    organization_admin: boolean
-    admin_required: {id: string; copy: string} | null
-  }
-  template_form: TemplateForm | null
-  templates: RequirementTemplate[]
-}>()
+    organization_admin: boolean;
+    admin_required: { id: string; copy: string } | null;
+  };
+  template_form: TemplateForm | null;
+  templates: RequirementTemplate[];
+}>();
 
 const emit = defineEmits<{
-  "validate-template": [payload: {template: TemplateValues}]
-  "create-template": [payload: {template: TemplateValues}]
-  "pause-template": [payload: {id: string}]
-  "activate-template": [payload: {id: string}]
-  "close-template": [payload: {id: string}]
-}>()
+  "validate-template": [payload: { template: TemplateValues }];
+  "create-template": [payload: { template: TemplateValues }];
+  "pause-template": [payload: { id: string }];
+  "activate-template": [payload: { id: string }];
+  "close-template": [payload: { id: string }];
+}>();
 
 const emptyTemplateValues = (): TemplateValues => ({
   spacecraft_id: "",
@@ -125,54 +125,54 @@ const emptyTemplateValues = (): TemplateValues => ({
   approval_mode: "manual",
   maximum_occurrences_per_run: "",
   maximum_lookback_hours: "",
-  rationale: ""
-})
+  rationale: "",
+});
 
 const templateValuesFromForm = (form: TemplateForm | null): TemplateValues => {
-  if (!form) return emptyTemplateValues()
+  if (!form) return emptyTemplateValues();
 
   return Object.fromEntries(
-    templateFields.map((field) => [field, String(form.fields[field].value ?? "")])
-  ) as TemplateValues
-}
+    templateFields.map((field) => [field, String(form.fields[field].value ?? "")]),
+  ) as TemplateValues;
+};
 
 const normalizedTemplate = (values: TemplateValues): TemplateValues =>
   Object.fromEntries(
-    templateFields.map((field) => [field, String(values[field] ?? "")])
-  ) as TemplateValues
+    templateFields.map((field) => [field, String(values[field] ?? "")]),
+  ) as TemplateValues;
 
-const template = reactive<TemplateValues>(templateValuesFromForm(props.template_form))
-const pendingValidations: TemplateValues[] = []
+const template = reactive<TemplateValues>(templateValuesFromForm(props.template_form));
+const pendingValidations: TemplateValues[] = [];
 const samePayload = (left: TemplateValues, right: TemplateValues) =>
-  JSON.stringify(left) === JSON.stringify(right)
+  JSON.stringify(left) === JSON.stringify(right);
 
 watch(
   () => props.template_form,
   (serverForm) => {
-    if (!serverForm) return
+    if (!serverForm) return;
 
-    const serverValues = templateValuesFromForm(serverForm)
+    const serverValues = templateValuesFromForm(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      samePayload(sent, serverValues)
-    )
+      samePayload(sent, serverValues),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(template, serverValues)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(template, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validateTemplate = () => {
-  const values = normalizedTemplate(template)
-  pendingValidations.push(values)
-  emit("validate-template", {template: values})
-}
+  const values = normalizedTemplate(template);
+  pendingValidations.push(values);
+  emit("validate-template", { template: values });
+};
 
 const createTemplate = () => {
-  emit("create-template", {template: normalizedTemplate(template)})
-}
+  emit("create-template", { template: normalizedTemplate(template) });
+};
 
 const fieldClass = (field: FormField) => [
   "w-full",
@@ -182,8 +182,8 @@ const fieldClass = (field: FormField) => [
       ? "select-error"
       : field.type === "textarea"
         ? "textarea-error"
-        : "input-error")
-]
+        : "input-error"),
+];
 </script>
 
 <template>
@@ -209,8 +209,13 @@ const fieldClass = (field: FormField) => [
       </div>
     </CadencePageHeaderFrame>
 
-    <div class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7">
-      <CadencePanel class="min-w-0 border border-base-300 bg-base-200/15" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+    <div
+      class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7"
+    >
+      <CadencePanel
+        class="min-w-0 border border-base-300 bg-base-200/15"
+        header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"
+      >
         <template #header>
           <div>
             <p class="hud-label">{{ ledger.eyebrow }}</p>
@@ -255,7 +260,7 @@ const fieldClass = (field: FormField) => [
                   :id="requirementTemplate.actions.pause.id"
                   type="button"
                   :class="requirementTemplate.actions.pause.class"
-                  @click="emit('pause-template', {id: requirementTemplate.id})"
+                  @click="emit('pause-template', { id: requirementTemplate.id })"
                 >
                   {{ requirementTemplate.actions.pause.label }}
                 </button>
@@ -264,7 +269,7 @@ const fieldClass = (field: FormField) => [
                   :id="requirementTemplate.actions.activate.id"
                   type="button"
                   :class="requirementTemplate.actions.activate.class"
-                  @click="emit('activate-template', {id: requirementTemplate.id})"
+                  @click="emit('activate-template', { id: requirementTemplate.id })"
                 >
                   {{ requirementTemplate.actions.activate.label }}
                 </button>
@@ -273,7 +278,7 @@ const fieldClass = (field: FormField) => [
                   :id="requirementTemplate.actions.close.id"
                   type="button"
                   :class="requirementTemplate.actions.close.class"
-                  @click="emit('close-template', {id: requirementTemplate.id})"
+                  @click="emit('close-template', { id: requirementTemplate.id })"
                 >
                   {{ requirementTemplate.actions.close.label }}
                 </button>
@@ -313,10 +318,16 @@ const fieldClass = (field: FormField) => [
                   v-for="option in template_form.fields.spacecraft_id.options"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
               <template #errors>
-                <CadenceValidationMessage v-for="error in template_form.fields.spacecraft_id.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in template_form.fields.spacecraft_id.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
@@ -340,10 +351,16 @@ const fieldClass = (field: FormField) => [
                       v-for="option in template_form.fields.schedule_type.options"
                       :key="option.value"
                       :value="option.value"
-                    >{{ option.label }}</option>
+                    >
+                      {{ option.label }}
+                    </option>
                   </select>
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.schedule_type.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.schedule_type.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -361,9 +378,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.anchor_at.required"
                     :class="fieldClass(template_form.fields.anchor_at)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.anchor_at.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.anchor_at.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -383,9 +404,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.interval_minutes.required"
                     :class="fieldClass(template_form.fields.interval_minutes)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.interval_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.interval_minutes.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -405,9 +430,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.time_utc.required"
                     :class="fieldClass(template_form.fields.time_utc)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.time_utc.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.time_utc.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -425,9 +454,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.window_offset_minutes.required"
                     :class="fieldClass(template_form.fields.window_offset_minutes)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.window_offset_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.window_offset_minutes.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -446,9 +479,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.window_duration_minutes.required"
                     :class="fieldClass(template_form.fields.window_duration_minutes)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.window_duration_minutes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.window_duration_minutes.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
               </div>
@@ -471,9 +508,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.contact_intent.required"
                     :class="fieldClass(template_form.fields.contact_intent)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.contact_intent.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.contact_intent.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -494,15 +535,23 @@ const fieldClass = (field: FormField) => [
                       v-for="option in template_form.fields.success_measure.options"
                       :key="option.value"
                       :value="option.value"
-                    >{{ option.label }}</option>
+                    >
+                      {{ option.label }}
+                    </option>
                   </select>
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.success_measure.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.success_measure.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
                 <CadenceField
-                  v-if="['minimum_duration', 'minimum_data_volume'].includes(template.success_measure)"
+                  v-if="
+                    ['minimum_duration', 'minimum_data_volume'].includes(template.success_measure)
+                  "
                   :control-id="template_form.fields.minimum_duration_seconds.id"
                   wrapper-class="fieldset mb-3"
                   :label="template_form.fields.minimum_duration_seconds.label"
@@ -516,9 +565,13 @@ const fieldClass = (field: FormField) => [
                     :min="template_form.fields.minimum_duration_seconds.min ?? undefined"
                     :class="fieldClass(template_form.fields.minimum_duration_seconds)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.minimum_duration_seconds.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -537,9 +590,13 @@ const fieldClass = (field: FormField) => [
                     :min="template_form.fields.minimum_data_volume_bytes.min ?? undefined"
                     :class="fieldClass(template_form.fields.minimum_data_volume_bytes)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_data_volume_bytes.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.minimum_data_volume_bytes.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -558,9 +615,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.contact_count.required"
                     :class="fieldClass(template_form.fields.contact_count)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.contact_count.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.contact_count.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -581,10 +642,16 @@ const fieldClass = (field: FormField) => [
                       v-for="option in template_form.fields.priority.options"
                       :key="option.value"
                       :value="option.value"
-                    >{{ option.label }}</option>
+                    >
+                      {{ option.label }}
+                    </option>
                   </select>
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.priority.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.priority.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
 
@@ -605,16 +672,25 @@ const fieldClass = (field: FormField) => [
                       v-for="option in template_form.fields.approval_mode.options"
                       :key="option.value"
                       :value="option.value"
-                    >{{ option.label }}</option>
+                    >
+                      {{ option.label }}
+                    </option>
                   </select>
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.approval_mode.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.approval_mode.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
               </div>
             </div>
 
-            <CadenceDetailsFrame :id="template_form.outcome_details.id" class="border border-base-300">
+            <CadenceDetailsFrame
+              :id="template_form.outcome_details.id"
+              class="border border-base-300"
+            >
               <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
                 {{ template_form.outcome_details.summary }}
               </summary>
@@ -633,9 +709,13 @@ const fieldClass = (field: FormField) => [
                     :min="template_form.fields.preferred_duration_seconds.min ?? undefined"
                     :class="fieldClass(template_form.fields.preferred_duration_seconds)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.preferred_duration_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.preferred_duration_seconds.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
                 <CadenceField
@@ -653,15 +733,22 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.minimum_separation_seconds.required"
                     :class="fieldClass(template_form.fields.minimum_separation_seconds)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.minimum_separation_seconds.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.minimum_separation_seconds.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
               </div>
             </CadenceDetailsFrame>
 
-            <CadenceDetailsFrame :id="template_form.catchup_details.id" class="border border-base-300">
+            <CadenceDetailsFrame
+              :id="template_form.catchup_details.id"
+              class="border border-base-300"
+            >
               <summary class="cursor-pointer px-3 py-2 text-xs font-semibold">
                 {{ template_form.catchup_details.summary }}
               </summary>
@@ -681,9 +768,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.maximum_occurrences_per_run.required"
                     :class="fieldClass(template_form.fields.maximum_occurrences_per_run)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.maximum_occurrences_per_run.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.maximum_occurrences_per_run.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
                 <CadenceField
@@ -701,9 +792,13 @@ const fieldClass = (field: FormField) => [
                     :required="template_form.fields.maximum_lookback_hours.required"
                     :class="fieldClass(template_form.fields.maximum_lookback_hours)"
                     @input="validateTemplate"
-                  >
+                  />
                   <template #errors>
-                    <CadenceValidationMessage v-for="error in template_form.fields.maximum_lookback_hours.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                    <CadenceValidationMessage
+                      v-for="error in template_form.fields.maximum_lookback_hours.errors"
+                      :key="error"
+                      >{{ error }}</CadenceValidationMessage
+                    >
                   </template>
                 </CadenceField>
               </div>
@@ -724,11 +819,19 @@ const fieldClass = (field: FormField) => [
                 @input="validateTemplate"
               ></textarea>
               <template #errors>
-                <CadenceValidationMessage v-for="error in template_form.fields.rationale.errors" :key="error">{{ error }}</CadenceValidationMessage>
+                <CadenceValidationMessage
+                  v-for="error in template_form.fields.rationale.errors"
+                  :key="error"
+                  >{{ error }}</CadenceValidationMessage
+                >
               </template>
             </CadenceField>
 
-            <button :id="template_form.submit.id" type="submit" class="btn btn-primary btn-sm w-full">
+            <button
+              :id="template_form.submit.id"
+              type="submit"
+              class="btn btn-primary btn-sm w-full"
+            >
               {{ template_form.submit.label }}
             </button>
           </form>

@@ -5,7 +5,12 @@ export const FEDERATED_APPLICATION_MANIFEST_SCHEMA =
 
 export const APPLICATION_HOST_CONTRACT = "cadence.application-host.v1" as const;
 
-export type SurfacePurpose = "overview" | "configuration" | "operations" | "activity";
+export type SurfacePurpose =
+  | "overview"
+  | "configuration"
+  | "operations"
+  | "activity"
+  | "subject_detail";
 export type SurfacePlacement = "application_workspace" | "ops_workspace" | "ops_dock";
 
 export interface ContractReference {
@@ -177,7 +182,8 @@ function surfacePurpose(value: unknown): value is SurfacePurpose {
     value === "overview" ||
     value === "configuration" ||
     value === "operations" ||
-    value === "activity"
+    value === "activity" ||
+    value === "subject_detail"
   );
 }
 

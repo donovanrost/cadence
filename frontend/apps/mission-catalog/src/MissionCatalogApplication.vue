@@ -53,7 +53,11 @@ function openSurface(surfaceId: string): void {
       tone="neutral"
     >
       <template #action>
-        <CButton id="mission-catalog-context-check" size="sm" @click="props.bridge.subscribe(() => undefined)">
+        <CButton
+          id="mission-catalog-context-check"
+          size="sm"
+          @click="props.bridge.subscribe(() => undefined)"
+        >
           Verify host bridge
         </CButton>
       </template>

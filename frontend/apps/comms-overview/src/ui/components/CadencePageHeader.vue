@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./CadenceBreadcrumbs.vue"
+import CadenceBreadcrumbs from "./CadenceBreadcrumbs.vue";
 import type {
   CompactPageHeaderPresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./page_shell"
+} from "./page_shell";
 
 const props = defineProps<{
-  header: PageHeaderPresentation | CompactPageHeaderPresentation
-  action: PageHeaderAction
-}>()
+  header: PageHeaderPresentation | CompactPageHeaderPresentation;
+  action: PageHeaderAction;
+}>();
 </script>
 
 <template>

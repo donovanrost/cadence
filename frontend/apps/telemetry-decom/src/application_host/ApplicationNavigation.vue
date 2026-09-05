@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type {Navigation} from "./presentation_types"
+import type { Navigation } from "./presentation_types";
 
-defineProps<{navigation: Navigation}>()
+defineProps<{ navigation: Navigation }>();
 </script>
 
 <template>
@@ -19,9 +19,12 @@ defineProps<{navigation: Navigation}>()
       data-phx-link-state="push"
       :aria-current="item.current ? 'page' : undefined"
       class="relative -mb-px border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors"
-      :class="item.current
-        ? 'border-primary text-primary'
-        : 'border-transparent text-base-content/55 hover:border-base-content/30 hover:text-base-content'"
-    >{{ item.label }}</a>
+      :class="
+        item.current
+          ? 'border-primary text-primary'
+          : 'border-transparent text-base-content/55 hover:border-base-content/30 hover:text-base-content'
+      "
+      >{{ item.label }}</a
+    >
   </nav>
 </template>

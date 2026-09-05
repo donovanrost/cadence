@@ -1,6 +1,12 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FederatedApplicationProps, HostBridge, MissionHostContext } from "@cadence/plugin-sdk";
+import type {
+  FederatedApplicationProps,
+  HostActionReceipt,
+  HostActionRequest,
+  HostQueryRequest,
+  MissionHostContext,
+} from "@cadence/plugin-sdk";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 import { manifest } from "./federated-application";
 import { OPS_COMPONENTS, OPS_COMPONENT_NAMES } from "./ops-components";
@@ -24,16 +30,24 @@ const response = {
   },
 };
 
-function propsFor(query: HostBridge["query"], execute: HostBridge["execute"] = vi.fn()) {
+type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
+type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
+
+function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
   return {
     context,
-    bridge: { query, execute, subscribe: vi.fn() },
+    bridge: {
+      query: async <TResult>(request: HostQueryRequest) => (await query(request)) as TResult,
+      execute: async <TInput, TResult>(request: HostActionRequest<TInput>) =>
+        (await execute(request as HostActionRequest<unknown>)) as HostActionReceipt<TResult>,
+      subscribe: vi.fn(),
+    },
   } satisfies FederatedApplicationProps;
 }
 
 describe("Ops Console federated application", () => {
   it("queries Phoenix and renders the server-selected app-local surface", async () => {
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue(response);
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const wrapper = mount(OpsConsoleApplication, { props: propsFor(query) });
 
     expect(wrapper.find("#ops-console-loading").exists()).toBe(true);
@@ -51,7 +65,7 @@ describe("Ops Console federated application", () => {
 
   it("contains query failures and retries the same Phoenix-owned contract", async () => {
     const query = vi
-      .fn<HostBridge["query"]>()
+      .fn<TestQuery>()
       .mockRejectedValueOnce(new Error("query unavailable"))
       .mockResolvedValueOnce(response);
     const wrapper = mount(OpsConsoleApplication, { props: propsFor(query) });
@@ -67,8 +81,8 @@ describe("Ops Console federated application", () => {
   });
 
   it("dispatches remote events through the Phoenix-owned action bridge", async () => {
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue(response);
-    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue({
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
+    const execute = vi.fn<TestExecute>().mockResolvedValue({
       receiptId: "receipt-1",
       completedAt: "2026-09-04T00:00:00.000Z",
       result: {},

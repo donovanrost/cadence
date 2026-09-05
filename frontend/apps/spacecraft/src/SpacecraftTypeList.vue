@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
 
 type SpacecraftProfileRow = {
-  id: string
-  display_name: string
-  version: string
-  downlink_protocol: string
-  uplink_protocol: string
-  applications: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  version: string;
+  downlink_protocol: string;
+  uplink_protocol: string;
+  applications: string;
+  href: string;
+};
 
-defineProps<{rows: SpacecraftProfileRow[]}>()
+defineProps<{ rows: SpacecraftProfileRow[] }>();
 </script>
 
 <template>
@@ -27,18 +27,15 @@ defineProps<{rows: SpacecraftProfileRow[]}>()
       </tr>
     </thead>
     <tbody id="spacecraft-profiles">
-      <CadenceHoverTableRow
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-      >
+      <CadenceHoverTableRow v-for="row in rows" :id="row.id" :key="row.id">
         <td class="font-medium">
           <a
             :href="row.href"
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="text-primary hover:underline"
-          >{{ row.display_name }}</a>
+            >{{ row.display_name }}</a
+          >
         </td>
         <td class="font-mono text-sm text-base-content/70">{{ row.version }}</td>
         <td class="font-mono text-sm uppercase text-primary/80">

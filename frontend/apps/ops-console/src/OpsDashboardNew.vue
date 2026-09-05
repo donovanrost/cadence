@@ -1,144 +1,144 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import {reactive, watch} from "vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import { reactive, watch } from "vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
 
 type CloneSource = {
-  id: string
-  dashboard_id: string
-  name: string
-  widget_count: number
-  latest_version: number
-}
+  id: string;
+  dashboard_id: string;
+  name: string;
+  widget_count: number;
+  latest_version: number;
+};
 
 type Page = {
-  id: string
-  mode: "new" | "clone" | "import"
-  eyebrow: string
-  heading: string
-  description: string
-  source: CloneSource | null
-  import_guidance: string | null
+  id: string;
+  mode: "new" | "clone" | "import";
+  eyebrow: string;
+  heading: string;
+  description: string;
+  source: CloneSource | null;
+  import_guidance: string | null;
   cancel: {
-    id: string
-    label: string
-    href: string
-  }
-}
+    id: string;
+    label: string;
+    href: string;
+  };
+};
 
 type TextField = {
-  id: string
-  name: string
-  type: "text"
-  label: string
-  value: string
-  required: boolean
-}
+  id: string;
+  name: string;
+  type: "text";
+  label: string;
+  value: string;
+  required: boolean;
+};
 
 type DocumentJsonField = {
-  id: string
-  name: string
-  type: "textarea"
-  label: string
-  value: string
-  required: boolean
-}
+  id: string;
+  name: string;
+  type: "textarea";
+  label: string;
+  value: string;
+  required: boolean;
+};
 
 type DashboardForm = {
-  id: string
-  name: TextField
-  description: TextField
-  document_json: DocumentJsonField | null
+  id: string;
+  name: TextField;
+  description: TextField;
+  document_json: DocumentJsonField | null;
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type DashboardValues = {
-  name: string
-  description: string
-  document_json: string
-}
+  name: string;
+  description: string;
+  document_json: string;
+};
 
 type DashboardPayload = {
   dashboard: {
-    name: string
-    description: string
-    document_json?: string
-  }
-}
+    name: string;
+    description: string;
+    document_json?: string;
+  };
+};
 
 const props = defineProps<{
-  page: Page
-  form: DashboardForm
-}>()
+  page: Page;
+  form: DashboardForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: DashboardPayload]
-  save: [payload: DashboardPayload]
-}>()
+  validate: [payload: DashboardPayload];
+  save: [payload: DashboardPayload];
+}>();
 
 const valuesFromForm = (form: DashboardForm): DashboardValues => ({
   name: form.name.value,
   description: form.description.value,
-  document_json: form.document_json?.value ?? ""
-})
+  document_json: form.document_json?.value ?? "",
+});
 
-const dashboard = reactive<DashboardValues>(valuesFromForm(props.form))
-const pendingValidations: DashboardValues[] = []
+const dashboard = reactive<DashboardValues>(valuesFromForm(props.form));
+const pendingValidations: DashboardValues[] = [];
 
 const values = (): DashboardValues => ({
   name: dashboard.name,
   description: dashboard.description,
-  document_json: dashboard.document_json
-})
+  document_json: dashboard.document_json,
+});
 
 const sameValues = (left: DashboardValues, right: DashboardValues) =>
   left.name === right.name &&
   left.description === right.description &&
-  left.document_json === right.document_json
+  left.document_json === right.document_json;
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = valuesFromForm(serverForm)
+    const serverValues = valuesFromForm(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
-    const latestPending = pendingValidations[pendingValidations.length - 1]
+      sameValues(sent, serverValues),
+    );
+    const latestPending = pendingValidations[pendingValidations.length - 1];
     const hasNewerTyping =
       acknowledgedIndex >= 0
         ? acknowledgedIndex < pendingValidations.length - 1
-        : latestPending !== undefined && !sameValues(latestPending, serverValues)
+        : latestPending !== undefined && !sameValues(latestPending, serverValues);
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(dashboard, serverValues)
+    if (!hasNewerTyping) Object.assign(dashboard, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const payload = (): DashboardPayload => {
   const dashboardValues: DashboardPayload["dashboard"] = {
     name: dashboard.name,
-    description: dashboard.description
-  }
+    description: dashboard.description,
+  };
 
   if (props.form.document_json !== null) {
-    dashboardValues.document_json = dashboard.document_json
+    dashboardValues.document_json = dashboard.document_json;
   }
 
-  return {dashboard: dashboardValues}
-}
+  return { dashboard: dashboardValues };
+};
 
 const validate = () => {
-  pendingValidations.push(values())
-  emit("validate", payload())
-}
+  pendingValidations.push(values());
+  emit("validate", payload());
+};
 
-const save = () => emit("save", payload())
+const save = () => emit("save", payload());
 </script>
 
 <template>
@@ -186,7 +186,7 @@ const save = () => emit("save", payload())
             :required="form.name.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -203,7 +203,7 @@ const save = () => emit("save", payload())
             :required="form.description.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -227,7 +227,9 @@ const save = () => emit("save", payload())
           {{ page.import_guidance }}
         </p>
 
-        <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+        <CadenceFormActions
+          wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5"
+        >
           <button :id="form.submit.id" type="submit" class="btn btn-primary">
             {{ form.submit.label }}
           </button>
@@ -237,7 +239,8 @@ const save = () => emit("save", payload())
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="btn btn-ghost"
-          >{{ page.cancel.label }}</a>
+            >{{ page.cancel.label }}</a
+          >
         </CadenceFormActions>
       </form>
     </div>

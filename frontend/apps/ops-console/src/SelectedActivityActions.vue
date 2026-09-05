@@ -1,95 +1,95 @@
 <script setup lang="ts">
-type DataAttrs = Record<string, string | null>
+type DataAttrs = Record<string, string | null>;
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type RootPresentation = {
-  id?: string
-  class: string
-  attrs?: DataAttrs
-}
+  id?: string;
+  class: string;
+  attrs?: DataAttrs;
+};
 
 type ReadinessReturnPresentation = {
-  kind: "readiness_return"
-  visible: boolean
-  root: RootPresentation
-  message: TextPresentation
+  kind: "readiness_return";
+  visible: boolean;
+  root: RootPresentation;
+  message: TextPresentation;
   action: {
-    type: "button"
-    class: string
-    text: string
-    icon: IconPresentation
-    attrs: DataAttrs
-  }
-}
+    type: "button";
+    class: string;
+    text: string;
+    icon: IconPresentation;
+    attrs: DataAttrs;
+  };
+};
 
 type SourceActionRow = {
-  key: string
-  class: string
-  attrs: DataAttrs
-  message: {text: string}
-  occurred_at: TextPresentation
-  source: TextPresentation & {visible: boolean}
-}
+  key: string;
+  class: string;
+  attrs: DataAttrs;
+  message: { text: string };
+  occurred_at: TextPresentation;
+  source: TextPresentation & { visible: boolean };
+};
 
 type SourceActionsPresentation = {
-  kind: "source_actions"
-  visible: boolean
-  root: RootPresentation
-  latest: TextPresentation
-  rows: SourceActionRow[]
-}
+  kind: "source_actions";
+  visible: boolean;
+  root: RootPresentation;
+  latest: TextPresentation;
+  rows: SourceActionRow[];
+};
 
 type LinkPresentation = {
-  id?: string
-  href: string
-  navigation_kind: "navigate" | "patch"
-  class: string
-  text: string
-  icon: IconPresentation
-  attrs: DataAttrs
-}
+  id?: string;
+  href: string;
+  navigation_kind: "navigate" | "patch";
+  class: string;
+  text: string;
+  icon: IconPresentation;
+  attrs: DataAttrs;
+};
 
 type RecoveryPresentation = {
-  kind: "recovery"
-  visible: boolean
-  root: RootPresentation
-  message: TextPresentation
-  action: LinkPresentation
-}
+  kind: "recovery";
+  visible: boolean;
+  root: RootPresentation;
+  message: TextPresentation;
+  action: LinkPresentation;
+};
 
 type RemediationRow = {
-  key: string
-  class: string
-  attrs: DataAttrs
-  label: TextPresentation
-  message: TextPresentation & {visible: boolean}
-  action: LinkPresentation | null
-}
+  key: string;
+  class: string;
+  attrs: DataAttrs;
+  label: TextPresentation;
+  message: TextPresentation & { visible: boolean };
+  action: LinkPresentation | null;
+};
 
 type RemediationPresentation = {
-  kind: "remediation"
-  visible: boolean
-  root: RootPresentation
-  heading: TextPresentation
-  rows: RemediationRow[]
-}
+  kind: "remediation";
+  visible: boolean;
+  root: RootPresentation;
+  heading: TextPresentation;
+  rows: RemediationRow[];
+};
 
 type Presentation =
   | ReadinessReturnPresentation
   | SourceActionsPresentation
   | RecoveryPresentation
-  | RemediationPresentation
+  | RemediationPresentation;
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -117,12 +117,7 @@ defineProps<{presentation: Presentation}>()
     v-bind="presentation.root.attrs"
   >
     <p :class="presentation.latest.class">{{ presentation.latest.text }}</p>
-    <div
-      v-for="row in presentation.rows"
-      :key="row.key"
-      :class="row.class"
-      v-bind="row.attrs"
-    >
+    <div v-for="row in presentation.rows" :key="row.key" :class="row.class" v-bind="row.attrs">
       <span>{{ row.message.text }}</span>
       <span :class="row.occurred_at.class">{{ row.occurred_at.text }}</span>
       <span v-if="row.source.visible" :class="row.source.class">{{ row.source.text }}</span>
@@ -152,12 +147,7 @@ defineProps<{presentation: Presentation}>()
     :class="presentation.root.class"
   >
     <div :class="presentation.heading.class">{{ presentation.heading.text }}</div>
-    <div
-      v-for="row in presentation.rows"
-      :key="row.key"
-      :class="row.class"
-      v-bind="row.attrs"
-    >
+    <div v-for="row in presentation.rows" :key="row.key" :class="row.class" v-bind="row.attrs">
       <div :class="row.label.class">{{ row.label.text }}</div>
       <p v-if="row.message.visible" :class="row.message.class">{{ row.message.text }}</p>
       <a

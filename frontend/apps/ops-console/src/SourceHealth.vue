@@ -1,108 +1,102 @@
 <script setup lang="ts">
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type DetailRowPresentation = {
-  key: string
-  order: number
-  label: TextPresentation
-  value: TextPresentation & {attrs: Attrs}
-}
+  key: string;
+  order: number;
+  label: TextPresentation;
+  value: TextPresentation & { attrs: Attrs };
+};
 
 type SourcePresentation = {
-  key: string
-  order: number
+  key: string;
+  order: number;
   overlay: {
-    id: string
-    label: string
-    class: string
-    placement: string
-    width: string
-    attrs: Attrs
-  }
+    id: string;
+    label: string;
+    class: string;
+    placement: string;
+    width: string;
+    attrs: Attrs;
+  };
   trigger: {
-    id: string
-    type: string
-    class: string
-    attrs: Attrs
-  }
-  badge: TextPresentation & {attrs: Attrs}
+    id: string;
+    type: string;
+    class: string;
+    attrs: Attrs;
+  };
+  badge: TextPresentation & { attrs: Attrs };
   panel: {
-    id: string
-    class: string
-    hidden: boolean
-    width: string
-    attrs: Attrs
-  }
+    id: string;
+    class: string;
+    hidden: boolean;
+    width: string;
+    attrs: Attrs;
+  };
   details: {
-    class: string
-    heading: TextPresentation
-    prose: TextPresentation
-    circuit: TextPresentation & {visible: boolean}
+    class: string;
+    heading: TextPresentation;
+    prose: TextPresentation;
+    circuit: TextPresentation & { visible: boolean };
     evidence: {
-      type: string
-      class: string
-      attrs: Attrs
-      icon: IconPresentation
-      label: string
-    }
-    rows_class: string
-    rows: DetailRowPresentation[]
-  }
-}
+      type: string;
+      class: string;
+      attrs: Attrs;
+      icon: IconPresentation;
+      label: string;
+    };
+    rows_class: string;
+    rows: DetailRowPresentation[];
+  };
+};
 
 type SourceHealthPresentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attrs
-  }
-  label: TextPresentation
-  sources: SourcePresentation[]
-}
+    id: string;
+    class: string;
+    attrs: Attrs;
+  };
+  label: TextPresentation;
+  sources: SourcePresentation[];
+};
 
-const props = defineProps<{presentation: SourceHealthPresentation}>()
+const props = defineProps<{ presentation: SourceHealthPresentation }>();
 
 // SOURCE_HEALTH_POPOVER_ENTRIES_START
 const sourceHealthPopoverEntries = (sources: SourcePresentation[]) => {
-  const occurrenceByOverlayId = new Map<string, number>()
+  const occurrenceByOverlayId = new Map<string, number>();
 
   return sources.map((source) => {
-    const occurrence = occurrenceByOverlayId.get(source.overlay.id) ?? 0
-    occurrenceByOverlayId.set(source.overlay.id, occurrence + 1)
+    const occurrence = occurrenceByOverlayId.get(source.overlay.id) ?? 0;
+    occurrenceByOverlayId.set(source.overlay.id, occurrence + 1);
 
     return {
       key: JSON.stringify([source.overlay.id, occurrence]),
       occurrence,
       source,
-    }
-  })
-}
+    };
+  });
+};
 // SOURCE_HEALTH_POPOVER_ENTRIES_END
 
-const popoverEntries = computed(() =>
-  sourceHealthPopoverEntries(props.presentation.sources),
-)
+const popoverEntries = computed(() => sourceHealthPopoverEntries(props.presentation.sources));
 </script>
 
 <template>
-  <div
-    :id="presentation.root.id"
-    :class="presentation.root.class"
-    v-bind="presentation.root.attrs"
-  >
+  <div :id="presentation.root.id" :class="presentation.root.class" v-bind="presentation.root.attrs">
     <span :class="presentation.label.class">{{ presentation.label.text }}</span>
     <CadencePopover
       v-for="entry in popoverEntries"
@@ -116,7 +110,7 @@ const popoverEntries = computed(() =>
       :side-offset="8"
       :collision-padding="16"
     >
-      <template #trigger="{open}">
+      <template #trigger="{ open }">
         <button
           :id="entry.source.trigger.id"
           :type="entry.source.trigger.type"
@@ -130,7 +124,7 @@ const popoverEntries = computed(() =>
         </button>
       </template>
 
-      <template #content="{open}">
+      <template #content="{ open }">
         <section
           :id="entry.source.panel.id"
           :class="entry.source.panel.class"
