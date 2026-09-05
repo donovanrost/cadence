@@ -5,15 +5,26 @@ defmodule Cadence.Applications.CatalogRegistry do
     ApplicationDefinition,
     CatalogContribution,
     JSONBoundary,
-    LegacyCommsOverview
+    LegacyCommsOverview,
+    MissionCatalog,
+    OpsConsole,
+    Spacecraft,
+    TelemetryDecomCatalogContribution
   }
 
   @max_contributions 64
-  @contributors [LegacyCommsOverview]
+  @contributors [
+    LegacyCommsOverview,
+    MissionCatalog,
+    Spacecraft,
+    TelemetryDecomCatalogContribution,
+    OpsConsole
+  ]
+  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
 
   @spec validate() :: :ok | {:error, :invalid_application_catalog_registry}
   def validate do
-    case collect(@contributors) do
+    case collect(contributors()) do
       {:ok, contributions} ->
         if valid_contributions?(contributions),
           do: :ok,
@@ -26,7 +37,7 @@ defmodule Cadence.Applications.CatalogRegistry do
 
   @spec all() :: [CatalogContribution.t()]
   def all do
-    case collect(@contributors) do
+    case collect(contributors()) do
       {:ok, contributions} ->
         if valid_contributions?(contributions), do: contributions, else: []
 
@@ -60,6 +71,10 @@ defmodule Cadence.Applications.CatalogRegistry do
   end
 
   def fetch_default(_scope), do: {:error, :unknown_catalog_contribution}
+
+  defp contributors do
+    @contributors ++ Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+  end
 
   defp collect(contributors), do: collect_contributors(contributors)
 

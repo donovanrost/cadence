@@ -150,8 +150,7 @@ defmodule Cadence.Applications.Spacecraft do
   def definition do
     %ApplicationDefinition{
       application_key: @identity.application_key,
-      package_id: @identity.package_id,
-      package_version: @identity.package_version,
+      version: 1,
       display_name: "Spacecraft",
       description: "Mission spacecraft configuration and operations surfaces.",
       trust: :first_party,
@@ -167,8 +166,7 @@ defmodule Cadence.Applications.Spacecraft do
     Enum.map(@surface_specs, fn spec ->
       %ReleaseContribution{
         application_key: @identity.application_key,
-        package_id: @identity.package_id,
-        package_version: @identity.package_version,
+        application_version: 1,
         release_id: "spacecraft-v1",
         federation: :module_federation,
         remote_name: @identity.remote_name,
