@@ -123,7 +123,11 @@ export async function validateProductionPublication(root = publicationRoot) {
     [...publicationEntries].some((name) => !entryNames.has(name)) ||
     entries.some((entry) => !entry.isDirectory())
   ) {
-    fail(`publication root inventory is not exactly ${[...publicationEntries].sort().join(", ")}`);
+    fail(
+      `publication root inventory is not exactly ${[...publicationEntries]
+        .sort((left, right) => left.localeCompare(right))
+        .join(", ")}`,
+    );
   }
 
   const host = await validateHostPublication(join(root, "host"));
