@@ -17,10 +17,23 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   alias Cadence.Management.DataSources
   alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
 
-  @surface_ids ["data_source_registration", "data_source_settings"]
+  @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
   @surface_version 1
 
   @registration_action_ids ["register-source"]
+  @legacy_action_ids [
+    "register-source",
+    "change-binding",
+    "disable-source",
+    "enable-source",
+    "reconcile-tsdb-backend",
+    "deprovision-tsdb-backend",
+    "provision-tsdb-backend",
+    "probe-source",
+    "rotate-source-credential",
+    "retry-deployment-run",
+    "requeue-deployment-run"
+  ]
   @settings_action_ids [
     "change-binding",
     "disable-source",
@@ -50,7 +63,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   @spec bindings() :: [{binary(), binary()}]
   def bindings,
     do:
-      [{"data_source_registration", "register-source"}] ++
+      Enum.map(@legacy_action_ids, &{"data_sources", &1}) ++
+        [{"data_source_registration", "register-source"}] ++
         Enum.map(@settings_action_ids, &{"data_source_settings", &1})
 
   @spec execute(Scope.t(), HostContext.t(), binary(), ActionRequest.t()) ::
@@ -180,6 +194,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp valid_binding?(surface_id, action_id) when surface_id in @surface_ids do
     case surface_id do
+      "data_sources" -> action_id in @legacy_action_ids
       "data_source_registration" -> action_id in @registration_action_ids
       "data_source_settings" -> action_id in @settings_action_ids
     end

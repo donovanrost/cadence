@@ -150,7 +150,6 @@ const primaryRequestFieldKeys = [
 const sourceRangeFieldKeys = ["source_from", "source_to"] as const;
 
 const requestValues = reactive<RequestValues>({ ...props.request_form.values });
-const pendingValidations: RequestValues[] = [];
 
 const checked = (value: string) => ["true", "on", "confirmed"].includes(value);
 
@@ -165,28 +164,16 @@ const normalizedValues = (values: RequestValues): RequestValues => {
   return normalized;
 };
 
-const sameValues = (left: RequestValues, right: RequestValues) =>
-  JSON.stringify(left) === JSON.stringify(right);
-
 watch(
   () => props.request_form.values,
   (serverValues) => {
-    const normalizedServerValues = normalizedValues(serverValues);
-    const acknowledgedIndex = pendingValidations.findIndex((values) =>
-      sameValues(values, normalizedServerValues),
-    );
-    const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
-
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
-    if (!hasNewerTyping) Object.assign(requestValues, normalizedServerValues);
+    Object.assign(requestValues, normalizedValues(serverValues));
   },
   { deep: true },
 );
 
 const validateRequest = () => {
   const values = normalizedValues(requestValues);
-  pendingValidations.push(values);
   emit("validate-request", { historical_workflow_request: values });
 };
 

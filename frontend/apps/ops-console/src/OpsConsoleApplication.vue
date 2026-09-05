@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
+import type { FullPageSurfaceProps, HostActionReceipt } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
 import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef } from "vue";
 import { OPS_COMPONENTS } from "./ops-components";
 import { OPS_EVENT_BRIDGE, type OpsEventPayload } from "./ops-events";
 import { unwrapOpsConsoleResponse, type OpsConsolePresentation } from "./ops-console";
+import { reconcileOpsActionResult } from "./ops-action-results";
 
 const props = defineProps<FullPageSurfaceProps>();
 const presentation = shallowRef<OpsConsolePresentation>();
@@ -13,6 +14,19 @@ const error = ref<string>();
 const actionPending = ref(false);
 const actionNotice = ref<string>();
 let loadGeneration = 0;
+
+const draftPreservingActions = new Set([
+  "validate",
+  "validate-template",
+  "validate-settings",
+  "validate-request",
+  "filter",
+  "reset_filters",
+  "filter_dashboards",
+  "search",
+  "apply_timeline_filters",
+  "clear_timeline_selection",
+]);
 
 const actionListeners = computed(() =>
   Object.fromEntries(
@@ -85,17 +99,32 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
       input: actionInput(input),
       context: props.context,
     });
-    const result = isRecord(receipt) && "result" in receipt ? receipt.result : undefined;
-    actionNotice.value = `Phoenix completed ${actionId}${resultStatus(result)}.`;
+    assertCompletedReceipt(receipt);
 
-    if (isRecord(result) && isRecord(result.presentation)) {
-      presentation.value = unwrapOpsConsoleResponse(
-        { queryVersion: 1, presentation: result.presentation },
-        OPS_COMPONENTS,
+    if (draftPreservingActions.has(actionId)) {
+      if (!presentation.value) throw new Error("The Ops Console presentation is unavailable.");
+      presentation.value = reconcileOpsActionResult(
+        presentation.value,
+        props.surface.surfaceId,
+        actionId,
+        receipt.result,
       );
-    } else {
-      await loadSurface();
     }
+
+    window.dispatchEvent(
+      new CustomEvent("cadence:ops-action-result", {
+        detail: { actionId, result: receipt.result },
+      }),
+    );
+
+    const navigation = navigationHref(receipt.result);
+    if (navigation) {
+      window.location.assign(navigation);
+      return;
+    }
+
+    actionNotice.value = `${actionId} completed.`;
+    if (!draftPreservingActions.has(actionId)) await loadSurface();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "The Ops Console action failed.";
   } finally {
@@ -103,18 +132,44 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
   }
 }
 
+function assertCompletedReceipt(receipt: HostActionReceipt<unknown>): asserts receipt is HostActionReceipt<unknown> {
+  if (!isRecord(receipt) || !nonEmptyString(receipt.receiptId) || !nonEmptyString(receipt.completedAt)) {
+    throw new Error("Phoenix did not return a completed action receipt.");
+  }
+}
+
+function navigationHref(result: unknown): string | undefined {
+  if (!isRecord(result)) return undefined;
+
+  const navigation = result.navigation ?? result.navigate;
+  const candidate = typeof navigation === "string"
+    ? navigation
+    : isRecord(navigation)
+      ? navigation.href ?? navigation.path
+      : undefined;
+
+  if (!nonEmptyString(candidate)) return undefined;
+
+  try {
+    const url = new URL(candidate, window.location.origin);
+    if (url.origin !== window.location.origin || !url.pathname.startsWith("/")) return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function actionInput(input: unknown): Record<string, unknown> {
   const next = isRecord(input) ? { ...input } : {};
-  const page = isRecord(presentation.value?.props.page) ? presentation.value?.props.page : undefined;
+  const page = isRecord(presentation.value?.props.page) ? presentation.value.props.page : undefined;
   const dashboardId = page && typeof page.dashboard_id === "string" ? page.dashboard_id : undefined;
 
   if (dashboardId && !next.dashboard_id) next.dashboard_id = dashboardId;
   return next;
-}
-
-function resultStatus(result: unknown): string {
-  if (!isRecord(result) || typeof result.status !== "string") return "";
-  return ` (${result.status})`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -418,89 +418,64 @@ defmodule Cadence.Applications.OpsConsole do
 
   @ops_actions @surface_specs |> Enum.flat_map(& &1.actions) |> Enum.uniq()
 
-  # Legacy listeners remain declared until their exact host action adapters
-  # exist. This ledger makes interactive parity explicit and fails closed.
+  # Exact complement of the composed provider bindings. Empty entries are
+  # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
-    "activation_requests" => ["review", "decide"],
-    "alarms" => ["filter", "reset_filters"],
-    "commands" => ["filter", "reset_filters", "follow_command", "clear_command_focus"],
-    "contact_detail" => [
-      "approve-provider-change",
-      "reject-provider-change",
-      "acknowledge-provider-change"
+    "workspace" => [],
+    "ops" => [
+      "validate",
+      "save",
+      "filter",
+      "refresh",
+      "select",
+      "open_data_link",
+      "open_evidence",
+      "set_chart_time_range"
     ],
-    "contact_plan_show" => ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
-    "contact_requirement_new" => ["validate", "save"],
-    "contact_requirement_show" => ["plan", "toggle-opportunity", "create-plan"],
-    "contact_requirement_template" => [
-      "validate-template",
-      "create-template",
-      "pause-template",
-      "activate-template",
-      "close-template"
-    ],
-    "contact_schedule" => ["validate", "search", "reserve", "cancel"],
-    "dashboard_directory" => ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"],
+    "contact_requirement_list" => [],
+    "contact_requirement_new" => [],
+    "contact_requirement_show" => ["toggle-opportunity"],
+    "contact_requirement_template" => [],
+    "contact_schedule" => [],
+    "contact_plan_show" => [],
+    "contact_detail" => [],
+    "contact_record" => [],
+    "dashboard_directory" => [],
     "dashboard_show" => [],
     "dashboard_editor" => [],
     "dashboard_activity" => [],
-    "dashboard_library" => ["stage-library-item", "create-library-item", "add-library-version"],
-    "dashboard_new" => ["validate", "save"],
-    "dashboard_playlist_present" => ["next-dashboard"],
-    "dashboard_playlists" => ["create-playlist"],
-    "dashboard_settings" => [
-      "validate-settings",
-      "save-settings",
-      "create-share",
-      "revoke-share",
-      "create-snapshot",
-      "archive-dashboard"
-    ],
-    "data_operations" => [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction"
-    ],
-    "data_operations_manage" => [],
-    "data_sources" => [
-      "open-register-source",
-      "cancel-register-source",
-      "register-source",
-      "open-change-binding",
-      "cancel-change-binding",
-      "change-binding",
-      "disable-source",
-      "enable-source",
-      "reconcile-tsdb-backend",
-      "deprovision-tsdb-backend",
-      "provision-tsdb-backend",
-      "probe-source",
-      "rotate-source-credential",
-      "retry-deployment-run",
-      "requeue-deployment-run"
-    ],
-    "data_source_registration" => [],
-    "data_source_settings" => [],
-    "fleet_planning" => ["refresh-planning"],
-    "fleet_planning_new" => ["validate-fleet-run", "create-fleet-run"],
-    "fleet_planning_policy" => [
-      "validate-policy",
-      "save-policy",
-      "approve-policy",
-      "validate-grant",
-      "issue-grant",
-      "revoke-grant"
-    ],
-    "fleet_planning_run" => ["refresh-fleet-run", "repair-fleet-run"],
+    "dashboard_new" => [],
+    "dashboard_library" => [],
+    "dashboard_playlists" => [],
+    "dashboard_playlist_present" => [],
+    "dashboard_settings" => [],
+    "dashboard_share" => [],
+    "dashboard_snapshot" => [],
+    "dashboard_diagnostics" => [],
+    "fleet_planning" => [],
+    "fleet_planning_new" => ["validate-fleet-run"],
+    "fleet_planning_policy" => ["validate-policy", "validate-grant"],
+    "fleet_planning_run" => [],
+    "activation_requests" => ["review"],
+    "commands" => ["filter", "reset_filters", "follow_command", "clear_command_focus"],
     "telemetry_explore" => [
       "apply_filters",
       "apply_question",
       "add_to_dashboard",
       "clear_selected_sample"
     ],
-    "timeline" => ["apply_timeline_filters", "clear_timeline_selection"]
+    "data_operations" => [],
+    "data_operations_manage" => [],
+    "data_sources" => [
+      "open-register-source",
+      "cancel-register-source",
+      "open-change-binding",
+      "cancel-change-binding"
+    ],
+    "data_source_registration" => [],
+    "data_source_settings" => [],
+    "alarms" => [],
+    "timeline" => []
   }
 
   @former_liveview_event_contracts %{

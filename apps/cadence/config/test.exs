@@ -1,5 +1,7 @@
 import Config
 
+config :cadence, :opportunity_capability_secret, "cadence-test-opportunity-capability-secret-2026"
+
 config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",

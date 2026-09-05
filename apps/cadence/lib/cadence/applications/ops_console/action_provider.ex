@@ -1,48 +1,71 @@
 defmodule Cadence.Applications.OpsConsole.ActionProvider do
-  @moduledoc "Fail-closed provider for the source-complete federated Ops action cohort."
+  @moduledoc "Strict surface/action admission for the composed Ops action cohorts."
 
   @behaviour Cadence.Applications.ActionProvider
 
-  alias Cadence.Applications.{ActionRequest, JSONBoundary, OpsConsole}
-  alias Cadence.Applications.OpsConsole.Actions
+  alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+  alias Cadence.Auth.Scope
+
+  alias Cadence.Applications.OpsConsole.Actions.{
+    ContactPlanning,
+    DashboardDeepActions,
+    DashboardWorkflows,
+    DataSources,
+    FleetPlanning,
+    MissionOperations,
+    UiInteractions
+  }
 
   @application_key "ops_console"
   @application_version 1
   @surface_version 1
-  @surface_ids ~w(
-    dashboard_editor dashboard_activity data_operations_manage
-    data_source_registration data_source_settings
-  )
 
-  @bindings OpsConsole.surface_action_pairs()
-            |> Enum.filter(fn {surface_id, _action_id} -> surface_id in @surface_ids end)
+  @cohort_adapters [
+    UiInteractions,
+    DashboardWorkflows,
+    DashboardDeepActions,
+    ContactPlanning,
+    FleetPlanning,
+    DataSources,
+    MissionOperations
+  ]
 
-  @spec bindings() :: [{binary(), binary()}]
-  def bindings, do: @bindings
+  @binding_list Enum.flat_map(
+                  @cohort_adapters,
+                  fn adapter -> Enum.map(adapter.bindings(), &{&1, adapter}) end
+                )
 
-  @spec validate_bindings() :: :ok | {:error, atom()}
-  def validate_bindings do
-    declared =
-      OpsConsole.surface_action_pairs()
-      |> Enum.filter(fn {surface_id, _action_id} -> surface_id in @surface_ids end)
-
-    cond do
-      length(@bindings) != length(Enum.uniq(@bindings)) -> {:error, :duplicate_binding}
-      @bindings != declared -> {:error, :omitted_or_extra_binding}
-      true -> :ok
-    end
-  end
+  @binding_keys Enum.map(@binding_list, &elem(&1, 0))
+  @duplicate_binding_keys @binding_keys -- Enum.uniq(@binding_keys)
+  @dispatch_valid? @duplicate_binding_keys == []
+  @dispatch if @dispatch_valid?, do: Map.new(@binding_list), else: %{}
 
   @impl true
   def application_key, do: @application_key
 
+  @spec bindings() :: [{binary(), binary()}]
+  def bindings, do: @binding_keys
+
+  @spec binding_keys() :: [{binary(), binary()}]
+  def binding_keys, do: @binding_keys
+
+  @spec duplicate_binding_keys() :: [{binary(), binary()}]
+  def duplicate_binding_keys, do: @duplicate_binding_keys
+
+  @spec execute(Scope.t(), HostContext.t(), ActionRequest.t()) ::
+          {:ok, term()} | {:error, term()}
   @impl true
-  def execute(scope, host_context, %ActionRequest{} = request) do
-    with :ok <- validate_bindings(),
-         :ok <- validate_request(request),
-         :ok <- validate_binding(request.surface_id, request.action_id),
-         {:ok, result} <- dispatch(scope, host_context, request) do
-      {:ok, result}
+  def execute(scope, host_context = %HostContext{}, request = %ActionRequest{}) do
+    if @dispatch_valid? do
+      with :ok <- validate_request(request),
+           {:ok, adapter} <- adapter_for(request.surface_id, request.action_id) do
+        case adapter.execute(scope, host_context, request.surface_id, request) do
+          {:ok, value} -> {:ok, adapter.result(value)}
+          {:error, _reason} = error -> error
+        end
+      end
+    else
+      {:error, :unsupported_application_action}
     end
   end
 
@@ -65,32 +88,16 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
          action_id: action_id,
          params: params
        })
-       when is_binary(surface_id) and is_binary(action_id) and is_map(params),
+       when is_binary(surface_id) and surface_id != "" and is_binary(action_id) and
+              action_id != "" and is_map(params),
        do: :ok
 
   defp validate_request(_request), do: {:error, :unsupported_application_action}
 
-  defp validate_binding(surface_id, action_id) do
-    if {surface_id, action_id} in @bindings,
-      do: :ok,
-      else: {:error, :unsupported_application_action}
-  end
-
-  defp dispatch(scope, host_context, %ActionRequest{surface_id: surface_id} = request) do
-    adapter = adapter_for(surface_id)
-
-    case adapter.execute(scope, host_context, request) do
-      {:ok, value} -> {:ok, adapter.result(value)}
-      {:error, _reason} = error -> error
+  defp adapter_for(surface_id, action_id) do
+    case Map.fetch(@dispatch, {surface_id, action_id}) do
+      {:ok, adapter} -> {:ok, adapter}
+      :error -> {:error, :unsupported_application_action}
     end
   end
-
-  defp adapter_for(surface_id) when surface_id in ["dashboard_editor", "dashboard_activity"],
-    do: Actions.DashboardDeepActions
-
-  defp adapter_for("data_operations_manage"), do: Actions.MissionOperations
-
-  defp adapter_for(surface_id)
-       when surface_id in ["data_source_registration", "data_source_settings"],
-       do: Actions.DataSources
 end

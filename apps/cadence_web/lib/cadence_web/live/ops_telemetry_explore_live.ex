@@ -59,6 +59,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
      |> assign(:data_sources, data_sources)
      |> assign(:data_bindings, data_bindings)
      |> assign(:data_realms, data_realms)
+     |> assign(:federated_query_params, %{})
      |> assign(:explore_context, explore_context(%{}))
      |> assign(:filter_form, to_form(%{}, as: :explore))
      |> assign(
@@ -105,6 +106,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
 
       {:noreply,
        socket
+       |> assign(:federated_query_params, incoming_query(params))
        |> assign(:explore_context, context)
        |> assign(:filter_form, to_form(filter_params(context), as: :explore))
        |> assign(:point, point)

@@ -210,10 +210,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "validate-policy": [payload: { policy: StringPayload }];
   "save-policy": [payload: { policy: StringPayload }];
   "approve-policy": [payload: { decision: { reason: string } }];
-  "validate-grant": [payload: { grant: StringPayload }];
   "issue-grant": [payload: { grant: StringPayload }];
   "revoke-grant": [payload: { revocation: { automation_grant_id: string; reason: string } }];
 }>();
@@ -309,9 +307,6 @@ const normalizedPolicy = (values: PolicyValues): StringPayload => {
 };
 
 const policy = reactive<PolicyValues>(policyValuesFromForm(props.policy_form));
-const pendingPolicyValidations: StringPayload[] = [];
-const samePayload = (left: StringPayload, right: StringPayload) =>
-  JSON.stringify(left) === JSON.stringify(right);
 
 watch(
   () => props.policy_form,
@@ -319,23 +314,13 @@ watch(
     if (!serverForm) return;
 
     const serverValues = policyValuesFromForm(serverForm);
-    const serverPayload = normalizedPolicy(serverValues);
-    const acknowledgedIndex = pendingPolicyValidations.findIndex((sent) =>
-      samePayload(sent, serverPayload),
-    );
-    const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingPolicyValidations.length - 1;
-
-    if (acknowledgedIndex >= 0) pendingPolicyValidations.splice(0, acknowledgedIndex + 1);
-    if (!hasNewerTyping) Object.assign(policy, serverValues);
+    Object.assign(policy, serverValues);
   },
   { deep: true },
 );
 
 const validatePolicy = () => {
-  const values = normalizedPolicy(policy);
-  pendingPolicyValidations.push(values);
-  emit("validate-policy", { policy: values });
+  return Object.values(normalizedPolicy(policy)).every((value) => value !== "");
 };
 
 const savePolicy = () => emit("save-policy", { policy: normalizedPolicy(policy) });
@@ -385,7 +370,6 @@ const normalizedGrant = (values: GrantValues): StringPayload => ({
 });
 
 const grant = reactive<GrantValues>(grantValuesFromForm(props.grant_form));
-const pendingGrantValidations: StringPayload[] = [];
 
 watch(
   () => props.grant_form,
@@ -393,23 +377,13 @@ watch(
     if (!serverForm) return;
 
     const serverValues = grantValuesFromForm(serverForm);
-    const serverPayload = normalizedGrant(serverValues);
-    const acknowledgedIndex = pendingGrantValidations.findIndex((sent) =>
-      samePayload(sent, serverPayload),
-    );
-    const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingGrantValidations.length - 1;
-
-    if (acknowledgedIndex >= 0) pendingGrantValidations.splice(0, acknowledgedIndex + 1);
-    if (!hasNewerTyping) Object.assign(grant, serverValues);
+    Object.assign(grant, serverValues);
   },
   { deep: true },
 );
 
 const validateGrant = () => {
-  const values = normalizedGrant(grant);
-  pendingGrantValidations.push(values);
-  emit("validate-grant", { grant: values });
+  return Object.values(normalizedGrant(grant)).every((value) => value !== "");
 };
 
 const issueGrant = () => emit("issue-grant", { grant: normalizedGrant(grant) });

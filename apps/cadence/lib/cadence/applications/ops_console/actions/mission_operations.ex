@@ -9,7 +9,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Control.TelemetryDataManagement
+  alias Cadence.Control.{Activations, TelemetryDataManagement}
+  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Telemetry.DataManagement.WorkflowEventEvidence
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.BackfillLifecycleGroup
@@ -18,7 +19,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   @application_version 1
   @surface_version 1
 
+  @data_operation_surfaces ["data_operations", "data_operations_manage"]
+
   @host_bindings [
+    {"activation_requests", "decide"},
+    {"data_operations", "validate-request"},
+    {"data_operations", "record-historical-workflow-request"},
+    {"data_operations", "transition-group"},
+    {"data_operations", "retry-group"},
+    {"data_operations", "request-correction"},
     {"data_operations_manage", "validate-request"},
     {"data_operations_manage", "record-historical-workflow-request"},
     {"data_operations_manage", "transition-group"},
@@ -27,7 +36,17 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   ]
 
   @workflow_keys ~w(
-    workflow run_id realm data_source_id source_binding_id point_ids source_from source_to reason confirmed
+    workflow run_id realm data_source_id source_binding_id observable_id point_id point_ids
+    source_from source_to dashboard_id dashboard_version dashboard_time_mode
+    dashboard_replay_run_id dashboard_data_view dashboard_limit_mode
+    comparison_review_request_event_id comparison_review_request_kind comparison_review_open_count
+    comparison_review_open_placement_ids comparison_review_workflow_kind
+    comparison_review_workflow_action comparison_review_workflow_selection_kind
+    comparison_review_workflow_selection_count comparison_review_primary_data_view
+    comparison_review_compare_data_view comparison_review_scope_kind comparison_review_scope_ids
+    comparison_review_contact_ids comparison_review_resource_ids comparison_review_transport_ids
+    comparison_review_source_endpoint_ids comparison_review_ground_station_ids
+    comparison_review_scope_link_ids reason confirmed
   )
 
   @spec bindings() :: [{binary(), binary()}]
@@ -117,17 +136,20 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     end
   end
 
-  defp validate_action_params("data_operations_manage", "validate-request", params),
-    do: validate_workflow_values(params)
-
-  defp validate_action_params(
-         "data_operations_manage",
-         "record-historical-workflow-request",
-         params
-       ),
+  defp validate_action_params(surface_id, "validate-request", params)
+       when surface_id in @data_operation_surfaces,
        do: validate_workflow_values(params)
 
-  defp validate_action_params("data_operations_manage", "transition-group", params) do
+  defp validate_action_params(
+         surface_id,
+         "record-historical-workflow-request",
+         params
+       )
+       when surface_id in @data_operation_surfaces,
+       do: validate_workflow_values(params)
+
+  defp validate_action_params(surface_id, "transition-group", params)
+       when surface_id in @data_operation_surfaces do
     with :ok <- exact_keys(params, ["group-id", "stage"]),
          :ok <- required_text(params, "group-id"),
          :ok <- member_text(params, "stage", ~w(approved rejected started completed failed)) do
@@ -135,17 +157,30 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     end
   end
 
-  defp validate_action_params("data_operations_manage", "retry-group", params) do
+  defp validate_action_params(surface_id, "retry-group", params)
+       when surface_id in @data_operation_surfaces do
     with :ok <- exact_keys(params, ["group-id"]),
          :ok <- required_text(params, "group-id") do
       :ok
     end
   end
 
-  defp validate_action_params("data_operations_manage", "request-correction", params) do
+  defp validate_action_params(surface_id, "request-correction", params)
+       when surface_id in @data_operation_surfaces do
     with :ok <- exact_keys(params, ["group-id", "event-id"]),
          :ok <- required_text(params, "group-id"),
          :ok <- required_text(params, "event-id") do
+      :ok
+    end
+  end
+
+  defp validate_action_params("activation_requests", "decide", params) do
+    with :ok <- exact_keys(params, ["activation_decision", "decision"]),
+         {:ok, decision_params} <-
+           nested_map(params, "activation_decision", ["request_id", "reason"]),
+         :ok <- required_text(decision_params, "request_id"),
+         :ok <- required_text(decision_params, "reason"),
+         :ok <- member_text(params, "decision", ["approved", "rejected"]) do
       :ok
     end
   end
@@ -201,14 +236,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     if Map.get(map, key) in allowed, do: :ok, else: {:error, :invalid_action_input}
   end
 
-  defp authorize(scope, %HostContext{mission_id: mission_id}, "data_operations_manage", action)
-       when action in [
-              "transition-group",
-              "retry-group",
-              "request-correction"
-            ] do
+  defp authorize(scope, %HostContext{mission_id: mission_id}, surface_id, action)
+       when surface_id in @data_operation_surfaces and
+              action in [
+                "transition-group",
+                "retry-group",
+                "request-correction"
+              ] do
     with :ok <- organization_admin(scope),
          :ok <- Policy.authorize(scope, :operate_mission, mission_context(scope, mission_id)) do
+      :ok
+    end
+  end
+
+  defp authorize(scope, %HostContext{mission_id: mission_id}, "activation_requests", "decide") do
+    with :ok <- organization_admin(scope),
+         :ok <- Policy.authorize(scope, :approve_activation, mission_context(scope, mission_id)) do
       :ok
     end
   end
@@ -224,14 +267,32 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     do: %{organization_id: scope.organization_id, mission_id: mission_id}
 
   defp dispatch(
+         scope,
+         %HostContext{mission_id: mission_id},
+         "activation_requests",
+         %ActionRequest{params: params}
+       ) do
+    decision_params = Map.fetch!(params, "activation_decision")
+    request_id = decision_params["request_id"]
+    reason = decision_params["reason"]
+
+    with {:ok, request} <- ManagementActivations.fetch(scope, request_id),
+         :ok <- bind_record(scope, mission_id, request.organization_id, request.mission_id),
+         result <- decide_activation(scope, request_id, reason, params["decision"]) do
+      result
+    end
+  end
+
+  defp dispatch(
          _scope,
          %HostContext{mission_id: _mission_id},
-         "data_operations_manage",
+         surface_id,
          %ActionRequest{
            action_id: "validate-request",
            params: params
          }
-       ) do
+       )
+       when surface_id in @data_operation_surfaces do
     values = Map.fetch!(params, "historical_workflow_request")
     {:ok, %{"valid" => true, "values" => values}}
   end
@@ -239,9 +300,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp dispatch(
          scope,
          %HostContext{mission_id: mission_id},
-         "data_operations_manage",
+         surface_id,
          %ActionRequest{action_id: "record-historical-workflow-request", params: params}
-       ) do
+       )
+       when surface_id in @data_operation_surfaces do
     values = Map.fetch!(params, "historical_workflow_request")
 
     with true <- values["confirmed"] in ["true", "on", "confirmed"],
@@ -256,9 +318,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp dispatch(
          scope,
          %HostContext{mission_id: mission_id},
-         "data_operations_manage",
+         surface_id,
          %ActionRequest{action_id: "transition-group", params: params}
-       ) do
+       )
+       when surface_id in @data_operation_surfaces do
     group_id = params["group-id"]
     stage = params["stage"]
 
@@ -283,9 +346,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp dispatch(
          scope,
          %HostContext{mission_id: mission_id},
-         "data_operations_manage",
+         surface_id,
          %ActionRequest{action_id: "retry-group", params: %{"group-id" => group_id}}
-       ) do
+       )
+       when surface_id in @data_operation_surfaces do
     with {:ok, summary} <-
            TelemetryDataManagement.retry_historical_data_workflow_group_failed_jobs(
              group_id,
@@ -299,9 +363,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp dispatch(
          scope,
          %HostContext{mission_id: mission_id},
-         "data_operations_manage",
+         surface_id,
          %ActionRequest{action_id: "request-correction", params: params}
-       ) do
+       )
+       when surface_id in @data_operation_surfaces do
     group_id = params["group-id"]
     event_id = params["event-id"]
 
@@ -325,6 +390,38 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
 
   defp dispatch(_scope, _host_context, _surface_id, _request),
     do: {:error, :unsupported_application_action}
+
+  defp decide_activation(scope, request_id, reason, "approved") do
+    case Activations.approve_and_execute(scope, request_id, reason) do
+      {:ok, execution} -> {:ok, activation_result(execution, "approved")}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp decide_activation(scope, request_id, reason, "rejected") do
+    case ManagementActivations.reject(scope, request_id, reason) do
+      {:ok, request, decision} ->
+        {:ok,
+         %{
+           "activationRequestId" => request.activation_request_id,
+           "decision" => Atom.to_string(decision.decision),
+           "state" => Atom.to_string(request.state)
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp activation_result(execution, decision) do
+    %{
+      "activationExecutionId" => execution.activation_execution_id,
+      "activationRequestId" => execution.activation_request_id,
+      "decision" => decision,
+      "missionId" => execution.mission_id,
+      "status" => Atom.to_string(execution.status)
+    }
+  end
 
   defp record_request(scope, mission_id, values) do
     workflow = text(values["workflow"]) || "backfill"
@@ -384,6 +481,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
       actor_kind: "operator"
     }
     |> compact()
+  end
+
+  defp bind_record(scope, mission_id, organization_id, record_mission_id) do
+    cond do
+      scope.organization_id != organization_id -> {:error, :scope_mismatch}
+      mission_id != record_mission_id -> {:error, :scope_mismatch}
+      true -> :ok
+    end
   end
 
   defp actor_id(%Scope{actor_kind: :user, user: %{user_id: user_id}}), do: user_id

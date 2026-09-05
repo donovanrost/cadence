@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
 
   alias Cadence.Telemetry.SelectionPolicy
   alias Phoenix.HTML.Form
-  alias Phoenix.LiveView.JS
 
   @filter_fields ~w(
     point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id
@@ -24,7 +23,8 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
         surface_id="telemetry_explore"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{}}
+        {@telemetry_explore_props}
+        query_params={@federated_query_params}
         v-ssr={false}
         class="contents"
       />

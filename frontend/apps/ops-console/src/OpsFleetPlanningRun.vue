@@ -212,8 +212,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "refresh-fleet-run": [payload: EmptyPayload];
-  "repair-fleet-run": [payload: { repair: RepairValues }];
+  "refresh-fleet-run": [payload: { fleet_planning_run_id: string }];
+  "repair-fleet-run": [payload: { fleet_planning_run_id: string; repair: RepairValues }];
 }>();
 
 const valuesFromRepairForm = (form: RepairForm | null): RepairValues => ({
@@ -251,10 +251,14 @@ watch(
   { deep: true },
 );
 
-const refreshFleetRun = () => emit("refresh-fleet-run", props.page.header.refresh.payload);
+const refreshFleetRun = () =>
+  emit("refresh-fleet-run", { fleet_planning_run_id: props.page.header.run_id });
 
 const repairFleetRun = () => {
-  emit("repair-fleet-run", { repair: repairValues() });
+  emit("repair-fleet-run", {
+    fleet_planning_run_id: props.page.header.run_id,
+    repair: repairValues(),
+  });
 };
 </script>
 
