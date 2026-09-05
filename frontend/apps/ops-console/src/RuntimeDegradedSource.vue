@@ -69,7 +69,7 @@ defineProps<{ presentation: SummaryPresentation | CollectionPresentation }>();
 <template>
   <section
     v-if="presentation.kind === 'summary'"
-    :id="presentation.root.id"
+    :id="presentation.root.id ?? undefined"
     :class="presentation.root.class"
     v-bind="presentation.root.attrs"
   >
@@ -85,12 +85,15 @@ defineProps<{ presentation: SummaryPresentation | CollectionPresentation }>();
 
   <section
     v-else
-    :id="presentation.root.id"
+    :id="presentation.root.id ?? undefined"
     :class="presentation.root.class"
     v-bind="presentation.root.attrs"
   >
     <h3 :class="presentation.heading.class">{{ presentation.heading.text }}</h3>
-    <div :id="presentation.items_container.id" :class="presentation.items_container.class">
+    <div
+      :id="presentation.items_container.id ?? undefined"
+      :class="presentation.items_container.class"
+    >
       <button
         v-for="item in presentation.items"
         :key="item.key"

@@ -47,7 +47,7 @@ type TimeSeriesPresentation = {
   chart: {
     component_id: string;
     class: string;
-    props: Record<string, unknown>;
+    props: InstanceType<typeof TelemetryChart>["$props"];
   };
 };
 

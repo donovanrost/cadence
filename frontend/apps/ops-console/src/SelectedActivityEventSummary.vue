@@ -86,12 +86,6 @@ type RemediationPresentation = {
   rows: RemediationRow[];
 };
 
-type ActionPresentation =
-  | ReadinessReturnPresentation
-  | SourceActionsPresentation
-  | RecoveryPresentation
-  | RemediationPresentation;
-
 type ConditionalBadgePresentation = {
   visible: boolean;
   class: ClassValue;

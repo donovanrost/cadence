@@ -2,6 +2,11 @@
 import PublishValidation from "./PublishValidation.vue";
 import VersionList from "./VersionList.vue";
 
+type VersionListPresentation = InstanceType<typeof VersionList>["$props"]["presentation"];
+type PublishValidationPresentation = InstanceType<
+  typeof PublishValidation
+>["$props"]["presentation"];
+
 type Attributes = Record<string, string>;
 
 type TextPresentation = {
@@ -24,8 +29,8 @@ type RuntimeDefaultContext = {
 };
 
 type PanelPresentation = {
-  version_list: Record<string, unknown>;
-  publish_validation: Record<string, unknown> | null;
+  version_list: VersionListPresentation;
+  publish_validation: PublishValidationPresentation | null;
   publish_impact: null | {
     root: { attrs: Attributes };
     header: {

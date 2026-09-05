@@ -7,7 +7,11 @@ import WidgetRows from "./WidgetRows.vue";
 
 type Classes = string | string[];
 type Attributes = Record<string, string>;
-type ChildPresentation = { component_id: string; [key: string]: unknown };
+type ButtonType = "button" | "submit" | "reset";
+
+type HeaderPresentation = InstanceType<typeof DashboardWidgetHeader>["$props"]["presentation"];
+type PointPresentation = InstanceType<typeof WidgetPoint>["$props"]["presentation"];
+type RowsPresentation = InstanceType<typeof WidgetRows>["$props"]["presentation"];
 
 type WidgetNoticePresentation = {
   kind: "notice" | "lifecycle";
@@ -16,7 +20,7 @@ type WidgetNoticePresentation = {
   text: string;
   actions: Array<{
     key: string;
-    type: string;
+    type: ButtonType;
     class: string;
     attrs: Attributes;
     icon: { name: string; class: string };
@@ -35,15 +39,15 @@ type WidgetBodyPresentation = {
     | "constellation_health";
   root: { class: Classes; attrs: Attributes };
   notice: WidgetNoticePresentation | null;
-  content: {
-    component: "WidgetPoint" | "WidgetRows";
-    presentation: ChildPresentation;
-  } | null;
+  content:
+    | { component: "WidgetPoint"; presentation: PointPresentation }
+    | { component: "WidgetRows"; presentation: RowsPresentation }
+    | null;
 };
 
 type DashboardWidgetPresentation = {
   component_id: string;
-  header: ChildPresentation;
+  header: HeaderPresentation;
   body: WidgetBodyPresentation;
 };
 

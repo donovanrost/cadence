@@ -3,6 +3,7 @@ import { computed } from "vue";
 import CadencePopover from "./ui/reka/CadencePopover.vue";
 
 type Attrs = Record<string, string>;
+type ButtonType = "button" | "submit" | "reset";
 
 type TextPresentation = {
   class: string;
@@ -34,7 +35,7 @@ type SourcePresentation = {
   };
   trigger: {
     id: string;
-    type: string;
+    type: ButtonType;
     class: string;
     attrs: Attrs;
   };
@@ -52,7 +53,7 @@ type SourcePresentation = {
     prose: TextPresentation;
     circuit: TextPresentation & { visible: boolean };
     evidence: {
-      type: string;
+      type: ButtonType;
       class: string;
       attrs: Attrs;
       icon: IconPresentation;
@@ -116,7 +117,7 @@ const popoverEntries = computed(() => sourceHealthPopoverEntries(props.presentat
           :type="entry.source.trigger.type"
           :class="entry.source.trigger.class"
           v-bind="entry.source.trigger.attrs"
-          :aria-expanded="String(open)"
+          :aria-expanded="open"
         >
           <span :class="entry.source.badge.class" v-bind="entry.source.badge.attrs">
             {{ entry.source.badge.text }}

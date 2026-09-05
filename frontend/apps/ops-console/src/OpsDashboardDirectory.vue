@@ -110,7 +110,7 @@ type DirectoryRow = {
     id: string;
     payload: StarPayload;
     aria_label: string;
-    aria_pressed: string;
+    aria_pressed: "true" | "false";
     disabled: boolean;
     title: string | null;
     icon: string;
@@ -386,7 +386,7 @@ const restoreDashboard = (row: DirectoryRow) => {
                 :aria-label="row.star.aria_label"
                 :aria-pressed="row.star.aria_pressed"
                 :disabled="row.star.disabled"
-                :title="row.star.title"
+                :title="row.star.title ?? undefined"
                 :class="['btn btn-ghost btn-xs shrink-0', row.starred && 'text-warning']"
               >
                 <span :class="[row.star.icon, 'h-4 w-4']" aria-hidden="true"></span>

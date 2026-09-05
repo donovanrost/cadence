@@ -8,7 +8,28 @@ import HistoricalWorkflowLatestAction from "./HistoricalWorkflowLatestAction.vue
 import HistoricalWorkflowStageForm from "./HistoricalWorkflowStageForm.vue";
 
 type Attributes = Record<string, string>;
-type ChildPresentation = Record<string, unknown>;
+
+type LatestActionPresentation = InstanceType<
+  typeof HistoricalWorkflowLatestAction
+>["$props"]["presentation"];
+type ActionExplanationsPresentation = InstanceType<
+  typeof HistoricalWorkflowActionExplanations
+>["$props"]["presentation"];
+type GroupStatusPresentation = InstanceType<
+  typeof HistoricalWorkflowGroupStatus
+>["$props"]["presentation"];
+type JobStatusPresentation = InstanceType<
+  typeof HistoricalWorkflowJobStatus
+>["$props"]["presentation"];
+type CorrectionFormPresentation = InstanceType<
+  typeof HistoricalWorkflowCorrectionForm
+>["$props"]["presentation"];
+type StageFormPresentation = InstanceType<
+  typeof HistoricalWorkflowStageForm
+>["$props"]["presentation"];
+type GroupFormPresentation = InstanceType<
+  typeof HistoricalWorkflowGroupForm
+>["$props"]["presentation"];
 
 type Presentation = {
   root: {
@@ -28,13 +49,13 @@ type Presentation = {
     };
     message: string | null;
   };
-  latest_action: ChildPresentation | null;
-  action_explanations: ChildPresentation | null;
-  group_status: ChildPresentation | null;
-  job_status: ChildPresentation | null;
-  correction_form: ChildPresentation | null;
-  stage_form: ChildPresentation;
-  group_form: ChildPresentation | null;
+  latest_action: LatestActionPresentation | null;
+  action_explanations: ActionExplanationsPresentation | null;
+  group_status: GroupStatusPresentation | null;
+  job_status: JobStatusPresentation | null;
+  correction_form: CorrectionFormPresentation | null;
+  stage_form: StageFormPresentation;
+  group_form: GroupFormPresentation | null;
 };
 
 defineProps<{ presentation: Presentation }>();

@@ -57,7 +57,7 @@ defineProps<{ presentation: Presentation }>();
       <button
         :class="presentation.trigger.class"
         v-bind="presentation.trigger.attrs"
-        :aria-expanded="String(open)"
+        :aria-expanded="open"
       >
         <span :class="presentation.trigger.icon_class"></span>
         <span v-if="presentation.trigger.badge" :class="presentation.trigger.badge.class">{{

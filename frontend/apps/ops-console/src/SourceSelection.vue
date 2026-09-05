@@ -114,7 +114,7 @@ defineProps<{ presentation: SourceSelectionPresentation }>();
           type="button"
           data-overlay-trigger
           aria-haspopup="dialog"
-          :aria-expanded="String(open)"
+          :aria-expanded="open"
           :aria-controls="selection.overlay.panel_id"
           :aria-label="selection.overlay.label"
           :class="selection.overlay.trigger_class"

@@ -5,6 +5,14 @@ import HealthSnapshotActivity from "./HealthSnapshotActivity.vue";
 
 type Attributes = Record<string, string>;
 
+type ClipboardButtonProps = InstanceType<typeof ClipboardButton>["$props"];
+type ComparisonReviewPresentation = InstanceType<
+  typeof ComparisonReviewActivityDetails
+>["$props"]["presentation"];
+type HealthSnapshotPresentation = InstanceType<
+  typeof HealthSnapshotActivity
+>["$props"]["presentation"];
+
 type TextPresentation = {
   class: string | string[];
   text: string;
@@ -15,11 +23,11 @@ type BadgePresentation = TextPresentation & {
   visible?: boolean;
 };
 
-type ChildPresentation = {
+type ChildPresentation<Presentation> = {
   id: string;
   class: string;
   attrs: Attributes;
-  presentation: Record<string, unknown>;
+  presentation: Presentation;
 };
 
 type Presentation = {
@@ -66,13 +74,13 @@ type Presentation = {
       class: string;
       attrs: Attributes;
     };
-    copy_props: Record<string, unknown>;
+    copy_props: ClipboardButtonProps;
   };
   comparison_review: {
-    request: ChildPresentation | null;
-    resolution: ChildPresentation | null;
+    request: ChildPresentation<ComparisonReviewPresentation> | null;
+    resolution: ChildPresentation<ComparisonReviewPresentation> | null;
   };
-  health_snapshot: ChildPresentation | null;
+  health_snapshot: ChildPresentation<HealthSnapshotPresentation> | null;
 };
 
 defineProps<{ presentation: Presentation }>();

@@ -22,12 +22,12 @@ let loadGeneration = 0;
 provide(OPS_EVENT_BRIDGE, props.bridge);
 
 onMounted(() => {
-  window.addEventListener("cadence:ops-event", onOpsEvent as EventListener);
+  window.addEventListener("cadence:ops-event", onOpsEvent);
   void loadConsole();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("cadence:ops-event", onOpsEvent as EventListener);
+  window.removeEventListener("cadence:ops-event", onOpsEvent);
 });
 
 async function loadConsole(): Promise<void> {
@@ -52,10 +52,11 @@ async function loadConsole(): Promise<void> {
   }
 }
 
-async function onOpsEvent(
-  event: CustomEvent<{ eventName: string; payload: OpsEventPayload }>,
-): Promise<void> {
-  const eventName = event.detail?.eventName;
+async function onOpsEvent(event: Event): Promise<void> {
+  if (!(event instanceof CustomEvent)) return;
+
+  const detail = event.detail as { eventName?: string; payload?: OpsEventPayload };
+  const eventName = detail.eventName;
   if (!eventName || actionPending.value) return;
 
   actionPending.value = true;
@@ -66,7 +67,7 @@ async function onOpsEvent(
       applicationKey: "ops_console",
       applicationVersion: 1,
       actionId: eventName,
-      input: event.detail.payload,
+      input: detail.payload,
       context: props.context,
     });
     actionNotice.value = `Phoenix accepted ${eventName}.`;
