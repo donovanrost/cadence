@@ -195,8 +195,9 @@ const visible = (field: Field) =>
 const presentation = (field: Field): BackendPresentation | undefined =>
   field.presentations?.[providerAccount.backend_type ?? ""];
 
-const fieldLabel = (field: Field) => presentation(field)?.label ?? field.label;
-const fieldPlaceholder = (field: Field) => presentation(field)?.placeholder ?? field.placeholder;
+const fieldLabel = (field: Field) => presentation(field)?.label ?? field.label ?? "";
+const fieldPlaceholder = (field: Field) =>
+  presentation(field)?.placeholder ?? field.placeholder ?? undefined;
 
 const validate = () => {
   const currentValues = values();
@@ -291,9 +292,9 @@ const save = () => emit("save", { provider_account: values() });
             :type="field.type"
             :placeholder="fieldPlaceholder(field)"
             :required="field.required"
-            :min="field.min"
-            :max="field.max"
-            :step="field.step"
+            :min="field.min ?? undefined"
+            :max="field.max ?? undefined"
+            :step="field.step ?? undefined"
             class="input w-full"
             @input="validate"
           />
@@ -397,9 +398,9 @@ const save = () => emit("save", { provider_account: values() });
                   :type="field.type"
                   :placeholder="fieldPlaceholder(field)"
                   :required="field.required"
-                  :min="field.min"
-                  :max="field.max"
-                  :step="field.step"
+                  :min="field.min ?? undefined"
+                  :max="field.max ?? undefined"
+                  :step="field.step ?? undefined"
                   class="input w-full"
                   @input="validate"
                 />
@@ -458,9 +459,9 @@ const save = () => emit("save", { provider_account: values() });
             :type="field.type"
             :placeholder="fieldPlaceholder(field)"
             :required="field.required"
-            :min="field.min"
-            :max="field.max"
-            :step="field.step"
+            :min="field.min ?? undefined"
+            :max="field.max ?? undefined"
+            :step="field.step ?? undefined"
             class="input w-full"
             @input="validate"
           />
@@ -496,9 +497,9 @@ const save = () => emit("save", { provider_account: values() });
             :type="field.type"
             :placeholder="fieldPlaceholder(field)"
             :required="field.required"
-            :min="field.min"
-            :max="field.max"
-            :step="field.step"
+            :min="field.min ?? undefined"
+            :max="field.max ?? undefined"
+            :step="field.step ?? undefined"
             class="input w-full"
             @input="validate"
           />
