@@ -61,7 +61,9 @@ void test("declares one app-level exposed renderer for every contributed surface
     assert.match(contribution, new RegExp(`surfaceId: "${surfaceId}"`));
     assert.match(manifest, new RegExp(`surfaceId: surface.surfaceId`));
   }
-  assert.match(manifest, /exposedModule: "\.\/Application"/);
+  assert.match(manifest, /exposedModule: surface\.exposedModule/);
+  assert.match(manifest, /defineApplicationManifest/);
+  assert.doesNotMatch(manifest, /as unknown as FirstPartyApplicationManifest/);
   assert.equal(new Set(surfaceIds).size, surfaceIds.length);
   assert.match(manifest, /applicationKey: "organization_admin"/);
   assert.match(manifest, /packageId: "cadence\.organization-admin"/);

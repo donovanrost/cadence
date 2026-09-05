@@ -90,6 +90,13 @@ defmodule CadenceWeb.NotificationsLive do
   end
 
   @doc false
+  def federated_presentation(%Cadence.Auth.Scope{user: %{user_id: user_id}}) do
+    Cadence.Notifications.list_notifications(user_id)
+    |> Enum.map(&notification_row/1)
+    |> page_presentation()
+  end
+
+  @doc false
   def presentation_attrs(attrs) when is_map(attrs) do
     Enum.reduce(attrs, %{}, fn
       {_name, value}, rendered when value in [nil, false] ->

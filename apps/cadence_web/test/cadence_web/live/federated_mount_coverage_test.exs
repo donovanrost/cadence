@@ -70,8 +70,7 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
       assert mount =~ ~r/\bsurface_id=/, path
       assert mount =~ ~r/\bhost_scope=/, path
       assert mount =~ "v-ssr={false}"
-      refute path =~ ~r{/(admin_home|admin_organization_list|admin_organization_new|admin_runtime|notifications)_live\.ex$} and
-               mount !~ ~r/\bquery_params=/
+
       refute mount =~ ~r/\bv-on:/, path
       refute mount =~ ~r/\b(presentation|page|form|navigation|overview|actions)=/, path
     end)

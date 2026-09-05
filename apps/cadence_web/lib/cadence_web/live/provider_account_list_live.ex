@@ -79,6 +79,51 @@ defmodule CadenceWeb.ProviderAccountListLive do
   end
 
   @doc false
+  def federated_props(%Cadence.Auth.Scope{} = scope) do
+    with {:ok, account_pairs} <- ProviderAccounts.list(scope) do
+      accounts = Enum.map(account_pairs, &elem(&1, 0))
+
+      versions =
+        Map.new(account_pairs, fn {account, version} ->
+          {account.provider_account_id, version}
+        end)
+
+      credentials =
+        Map.new(accounts, fn account ->
+          version = Map.fetch!(versions, account.provider_account_id)
+
+          credential =
+            case ProviderCredentials.fetch(
+                   scope.organization_id,
+                   account.provider_account_id,
+                   version.credential_ref
+                 ) do
+              {:ok, credential} -> credential
+              {:error, _reason} -> nil
+            end
+
+          {account.provider_account_id, credential}
+        end)
+
+      rows =
+        Enum.map(accounts, fn account ->
+          account
+          |> provider_account_card(
+            Map.fetch!(versions, account.provider_account_id),
+            credentials[account.provider_account_id]
+          )
+          |> Map.put(:__dom_id, "provider-account-#{account.provider_account_id}")
+        end)
+
+      {:ok,
+       %{
+         presentation: page_presentation(length(accounts), accounts == []),
+         provider_accounts: rows
+       }}
+    end
+  end
+
+  @doc false
   def presentation_attrs(attrs) when is_map(attrs) do
     Enum.reduce(attrs, %{}, fn
       {_name, value}, rendered when value in [nil, false] ->

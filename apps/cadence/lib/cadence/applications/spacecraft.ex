@@ -152,6 +152,9 @@ defmodule Cadence.Applications.Spacecraft do
   @doc "Returns the stable identity shared by the catalog, release, and frontend manifest."
   def identity, do: @identity
 
+  @doc false
+  def application_key, do: @identity.application_key
+
   @doc "Returns the Phoenix-owned application definition for Spacecraft surfaces."
   def definition do
     %ApplicationDefinition{

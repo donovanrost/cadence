@@ -35,6 +35,11 @@ defmodule CadenceWeb.OrganizationHomeLive do
   end
 
   @doc false
+  def federated_presentation(organization) when is_map(organization) do
+    presentation_dto(organization, load_summary(organization.organization_id))
+  end
+
+  @doc false
   def presentation_attrs(attrs) when is_map(attrs) do
     Enum.reduce(attrs, %{}, fn
       {_name, value}, rendered when value in [nil, false] ->

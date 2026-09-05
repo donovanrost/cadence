@@ -54,16 +54,28 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
              )
   end
 
-  test "does not exempt arbitrary organization applications from installation admission", %{
-    scope: scope
-  } do
-    refute ApplicationSurfaces.organization_installation_exempt?("third_party_organization_app")
+  test "keeps only the exact installation exemptions", %{scope: scope} do
+    assert ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
+    assert ApplicationSurfaces.organization_installation_exempt?("organization_admin")
+    assert ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
+    assert ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
+    assert ApplicationSurfaces.installation_exempt?("organization_admin", :user)
+    assert ApplicationSurfaces.installation_exempt?("organization_admin", :admin)
+
+    refute ApplicationSurfaces.installation_exempt?("mission_catalog", :user)
+    refute ApplicationSurfaces.installation_exempt?("mission_catalog", :admin)
+    refute ApplicationSurfaces.installation_exempt?("organization_admin", :mission)
+    refute ApplicationSurfaces.installation_exempt?("organization_admin", :spacecraft)
+
+    for placement <- [:organization, :user, :admin, :mission, :spacecraft] do
+      refute ApplicationSurfaces.installation_exempt?("third_party", placement)
+    end
 
     assert {:error, :application_installation_scope_required} =
              Cadence.Applications.ApplicationInstallations.fetch_installed(
                scope,
                HostContext.organization(@organization_id),
-               "third_party_organization_app"
+               "third_party"
              )
   end
 

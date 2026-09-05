@@ -92,7 +92,7 @@ defmodule Cadence.Reads.ApplicationSurfaces do
          :ok <- ensure_declared_surface(definition, surface, host_context),
          :ok <- authorize_surface(current_scope, host_context, surface),
          {:ok, installation} <-
-           fetch_surface_installation(current_scope, host_context, application_key),
+           maybe_fetch_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
          {:ok, provider} <- fetch_provider(application_key, query_id) do
@@ -199,31 +199,51 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     })
   end
 
+  defp authorize_surface(
+         %Scope{actor_kind: :user, user: %{user_id: user_id}},
+         %HostContext{placement: :user, user_id: user_id},
+         %SurfaceDefinition{scope: :user}
+       ),
+       do: :ok
+
+  defp authorize_surface(
+         %Scope{} = current_scope,
+         %HostContext{placement: :admin},
+         %SurfaceDefinition{scope: :admin}
+       ) do
+    if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+  end
+
   defp authorize_surface(_current_scope, _host_context, _surface),
     do: {:error, :unsupported_application_host_context}
 
-  defp fetch_surface_installation(
+  defp maybe_fetch_installation(
          current_scope,
-         %HostContext{placement: :organization} = host_context,
+         %HostContext{placement: placement} = host_context,
          application_key
        ) do
-    if organization_installation_exempt?(application_key) do
+    if installation_exempt?(application_key, placement) do
       {:ok, nil}
     else
       ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
     end
   end
 
-  defp fetch_surface_installation(current_scope, host_context, application_key) do
-    ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
-  end
-
   @doc false
   @spec organization_installation_exempt?(binary()) :: boolean()
   def organization_installation_exempt?("mission_catalog"), do: true
+  def organization_installation_exempt?("organization_admin"), do: true
   def organization_installation_exempt?(_application_key), do: false
 
-  defp ensure_installation_version(nil, _requested_version), do: :ok
+  @doc false
+  @spec installation_exempt?(binary(), HostContext.placement()) :: boolean()
+  def installation_exempt?("mission_catalog", :organization), do: true
+
+  def installation_exempt?("organization_admin", placement)
+      when placement in [:organization, :user, :admin],
+      do: true
+
+  def installation_exempt?(_application_key, _placement), do: false
 
   defp ensure_installation_version(
          %ApplicationInstallation{application_version: version},
@@ -233,6 +253,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   defp ensure_installation_version(%ApplicationInstallation{}, _requested_version),
     do: {:error, :application_installation_version_mismatch}
+
+  defp ensure_installation_version(nil, _requested_version), do: :ok
 
   defp query_contract(%SurfaceDefinition{data_contract: data_contract}) do
     case {Map.get(data_contract, :query_id), Map.get(data_contract, :version)} do

@@ -7,6 +7,135 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminTest do
     OrganizationAdminQuery
   }
 
+  @expected_surface_contracts [
+    %{
+      id: "organization_home",
+      purpose: :overview,
+      scope: :organization,
+      placement: :application_workspace,
+      navigation: %{label: "Overview", order: 10},
+      query: %{id: "cadence.organization.home", version: 1},
+      actions: [],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "provider_accounts",
+      purpose: :collection,
+      scope: :organization,
+      placement: :application_workspace,
+      navigation: %{label: "Provider Accounts", order: 20},
+      query: %{id: "cadence.organization.provider_accounts.list", version: 1},
+      actions: [],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "provider_account_new",
+      purpose: :configuration,
+      scope: :organization,
+      placement: :application_workspace,
+      navigation: %{label: "New Provider Account", order: 30},
+      query: %{id: "cadence.organization.provider_accounts.new", version: 1},
+      actions: ["validate_provider_account_form", "register_provider_account"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "provider_account_show",
+      purpose: :subject_detail,
+      scope: :organization,
+      placement: :application_workspace,
+      navigation: %{label: "Provider Account", order: 40},
+      query: %{id: "cadence.organization.provider_account.show", version: 1},
+      actions: [
+        "validate_provider_account",
+        "rotate_provider_credential",
+        "revoke_provider_credential",
+        "grant_provider_account_mission",
+        "revoke_provider_account_mission"
+      ],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "notifications",
+      purpose: :activity,
+      scope: :user,
+      placement: :application_workspace,
+      navigation: %{label: "Notifications", order: 50},
+      query: %{id: "cadence.organization.notifications", version: 1},
+      actions: ["accept_invitation", "mark_notification_read"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "notifications_bell",
+      purpose: :activity,
+      scope: :user,
+      placement: :application_workspace,
+      navigation: %{label: "Notifications Bell", order: 60},
+      query: %{id: "cadence.organization.notifications_bell", version: 1},
+      actions: ["mark_notification_read"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_home",
+      purpose: :overview,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "Overview", order: 70},
+      query: %{id: "cadence.platform_admin.home", version: 1},
+      actions: [],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_runtime",
+      purpose: :activity,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "Runtime", order: 80},
+      query: %{id: "cadence.platform_admin.runtime", version: 1},
+      actions: ["refresh_runtime", "filter_runtime_decisions"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_organizations",
+      purpose: :collection,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "Organizations", order: 90},
+      query: %{id: "cadence.platform_admin.organizations", version: 1},
+      actions: [],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_organization_new",
+      purpose: :configuration,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "New Organization", order: 100},
+      query: %{id: "cadence.platform_admin.organization.new", version: 1},
+      actions: ["validate_organization", "create_organization"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_organization_show",
+      purpose: :subject_detail,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "Organization", order: 110},
+      query: %{id: "cadence.platform_admin.organization.show", version: 1},
+      actions: ["issue_service_identity", "dismiss_service_token", "open_organization"],
+      exposed_module: "./Application"
+    },
+    %{
+      id: "admin_organization_invite",
+      purpose: :configuration,
+      scope: :admin,
+      placement: :application_workspace,
+      navigation: %{label: "Invite User", order: 120},
+      query: %{id: "cadence.platform_admin.organization.invite", version: 1},
+      actions: ["validate_invitation", "invite_organization_member"],
+      exposed_module: "./Application"
+    }
+  ]
+
   test "contributes every post-auth organization and platform-admin surface" do
     assert :ok = OrganizationAdmin.validate()
 
@@ -42,6 +171,36 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminTest do
 
     assert Enum.all?(OrganizationAdmin.release_contributions(), fn release ->
              release.exposed_module == "./Application"
+           end)
+  end
+
+  test "keeps the complete server surface contract internally consistent" do
+    assert Enum.map(OrganizationAdmin.surfaces(), &surface_contract/1) ==
+             @expected_surface_contracts
+
+    assert Enum.map(OrganizationAdmin.definition().surfaces, fn surface ->
+             %{
+               id: surface.surface_id,
+               purpose: surface.purpose,
+               scope: surface.scope,
+               placement: surface.placement,
+               navigation: surface.navigation,
+               query: %{
+                 id: surface.data_contract.query_id,
+                 version: surface.data_contract.version
+               },
+               actions: surface.actions
+             }
+           end) == Enum.map(@expected_surface_contracts, &Map.delete(&1, :exposed_module))
+
+    assert Enum.map(OrganizationAdmin.release_contributions(), fn release ->
+             {release.surface_id, release.surface_version, release.exposed_module}
+           end) ==
+             Enum.map(@expected_surface_contracts, &{&1.id, 1, &1.exposed_module})
+
+    assert Enum.all?(@expected_surface_contracts, fn surface ->
+             {:ok, query} = OrganizationAdminQuery.fetch(surface.query.id, surface.query.version)
+             query.surface_id == surface.id
            end)
   end
 
@@ -81,5 +240,18 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminTest do
     assert Enum.map(wrappers, & &1.surface_id) == Enum.map(OrganizationAdmin.surfaces(), & &1.id)
     assert Enum.all?(wrappers, fn wrapper -> wrapper.live_view =~ "CadenceWeb." end)
     assert Enum.all?(wrappers, fn wrapper -> wrapper.component =~ ~r/^[A-Z][A-Za-z]+$/ end)
+  end
+
+  defp surface_contract(surface) do
+    %{
+      id: surface.id,
+      purpose: surface.purpose,
+      scope: surface.scope,
+      placement: surface.placement,
+      navigation: %{label: surface.navigation_label, order: surface.navigation_order},
+      query: %{id: surface.query, version: surface.query_version},
+      actions: surface.actions,
+      exposed_module: surface.exposed_module
+    }
   end
 end

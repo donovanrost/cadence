@@ -87,6 +87,45 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
           {:ok, map()} | {:error, term()}
   def identity(
         %Scope{} = current_scope,
+        %HostContext{placement: placement} = host_context,
+        %{
+          definition: %ApplicationDefinition{} = definition,
+          surface: %SurfaceDefinition{} = surface,
+          release: %{release_id: release_id},
+          generation_id: generation_id
+        },
+        %ActionDefinition{} = action
+      )
+      when placement in [:organization, :user, :admin] do
+    with {:ok, actor_id} <- user_actor_id(current_scope),
+         {:ok, {organization_id, scope_id}} <- generic_scope_identity(current_scope, host_context),
+         :ok <- required_identity(generation_id),
+         :ok <- required_identity(release_id),
+         :ok <- required_identity(definition.application_key),
+         :ok <- required_identity(surface.surface_id),
+         :ok <- required_identity(action.action_id) do
+      {:ok,
+       %{
+         organization_id: organization_id,
+         actor_kind: "user",
+         actor_id: actor_id,
+         mission_id: "application-host:" <> Atom.to_string(placement) <> ":" <> scope_id,
+         scope_kind: Atom.to_string(placement),
+         scope_id: scope_id,
+         application_key: definition.application_key,
+         application_version: definition.version,
+         surface_id: surface.surface_id,
+         surface_version: surface.version,
+         operation: action.action_id,
+         operation_version: action.version,
+         generation_id: generation_id,
+         release_id: release_id
+       }}
+    end
+  end
+
+  def identity(
+        %Scope{} = current_scope,
         %HostContext{} = host_context,
         %{
           definition: %ApplicationDefinition{} = definition,
@@ -450,6 +489,55 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   end
 
   defp validate_identity_scope(
+         %Scope{actor_kind: :user, user: %{user_id: actor_id}} = scope,
+         %{
+           organization_id: organization_id,
+           actor_kind: "user",
+           actor_id: actor_id,
+           scope_kind: "organization",
+           scope_id: scope_id
+         }
+       )
+       when is_binary(actor_id) and is_binary(organization_id) and is_binary(scope_id),
+       do: generic_identity_scope(scope, organization_id, scope_id, "organization")
+
+  defp validate_identity_scope(
+         %Scope{actor_kind: :user, user: %{user_id: actor_id}},
+         %{
+           organization_id: organization_id,
+           actor_kind: "user",
+           actor_id: identity_actor_id,
+           scope_kind: "user",
+           scope_id: identity_scope_id
+         }
+       )
+       when is_binary(actor_id) and is_binary(organization_id) and
+              is_binary(identity_actor_id) and is_binary(identity_scope_id) do
+    if organization_id == "user:" <> actor_id and identity_actor_id == actor_id and
+         identity_scope_id == actor_id,
+       do: :ok,
+       else: {:error, :application_action_scope_required}
+  end
+
+  defp validate_identity_scope(
+         %Scope{actor_kind: :user, user: %{user_id: actor_id}},
+         %{
+           organization_id: organization_id,
+           actor_kind: "user",
+           actor_id: identity_actor_id,
+           scope_kind: "admin",
+           scope_id: identity_scope_id
+         }
+       )
+       when is_binary(actor_id) and is_binary(organization_id) and
+              is_binary(identity_actor_id) and is_binary(identity_scope_id) do
+    if organization_id == "admin:" <> actor_id and identity_actor_id == actor_id and
+         identity_scope_id == actor_id,
+       do: :ok,
+       else: {:error, :application_action_scope_required}
+  end
+
+  defp validate_identity_scope(
          %Scope{actor_kind: :user, organization_id: organization_id, user: %{user_id: actor_id}},
          %{organization_id: organization_id, actor_kind: "user", actor_id: actor_id}
        )
@@ -464,6 +552,36 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
        do: {:ok, actor_id}
 
   defp user_actor_id(%Scope{}), do: {:error, :application_action_scope_required}
+
+  defp generic_scope_identity(
+         %Scope{organization_id: organization_id},
+         %HostContext{placement: :organization, organization_id: organization_id}
+       )
+       when is_binary(organization_id),
+       do: {:ok, {organization_id, organization_id}}
+
+  defp generic_scope_identity(
+         %Scope{user: %{user_id: user_id}},
+         %HostContext{placement: :user, user_id: user_id}
+       )
+       when is_binary(user_id),
+       do: {:ok, {"user:" <> user_id, user_id}}
+
+  defp generic_scope_identity(
+         %Scope{user: %{user_id: user_id}},
+         %HostContext{placement: :admin}
+       )
+       when is_binary(user_id),
+       do: {:ok, {"admin:" <> user_id, user_id}}
+
+  defp generic_scope_identity(_scope, _host_context),
+    do: {:error, :application_action_scope_required}
+
+  defp generic_identity_scope(scope, organization_id, scope_id, "organization") do
+    if scope.organization_id == organization_id and scope.organization_id == scope_id,
+      do: :ok,
+      else: {:error, :application_action_scope_required}
+  end
 
   defp required_identity(value) when is_binary(value) and value != "", do: :ok
   defp required_identity(_value), do: {:error, :active_generation_unavailable}

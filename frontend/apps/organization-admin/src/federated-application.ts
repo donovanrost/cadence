@@ -1,18 +1,13 @@
 import {
   APPLICATION_HOST_CONTRACT,
+  defineApplicationManifest,
   FEDERATED_APPLICATION_MANIFEST_SCHEMA,
-  type FirstPartyApplicationManifest,
 } from "@cadence/plugin-sdk";
 import OrganizationAdminApplication from "./OrganizationAdminApplication.vue";
 import { SURFACE_CONTRACTS } from "./organization-admin-contract";
 import { exposedComponents } from "./surface-components";
 
-/*
- * The organization/admin/user scope literals are owned by the parallel host
- * foundation lane. Keep this publication forward-compatible with that ABI;
- * the current checkout's older SDK validator cannot admit those literals yet.
- */
-export const manifest = {
+export const manifest = defineApplicationManifest({
   schema: FEDERATED_APPLICATION_MANIFEST_SCHEMA,
   hostContract: APPLICATION_HOST_CONTRACT,
   package: {
@@ -32,20 +27,20 @@ export const manifest = {
     displayName: "Organization Administration",
     description:
       "Manage organization identity, provider access, notifications, and platform administration.",
-    installableScopes: ["organization", "user", "admin"],
+    installableScopes: ["organization", "user", "admin"] as const,
   },
-  surfaces: SURFACE_CONTRACTS.map((surface, index) => ({
+  surfaces: SURFACE_CONTRACTS.map((surface) => ({
     surfaceId: surface.surfaceId,
     version: 1,
     purpose: surface.purpose,
     scope: surface.scope,
-    placement: "application_workspace" as const,
-    navigation: { label: surface.surfaceId.replaceAll("_", " "), order: (index + 1) * 10 },
+    placement: surface.placement,
+    navigation: surface.navigation,
     dataContract: surface.query,
     actions: surface.actions,
-    renderer: { kind: "federated-vue" as const, exposedModule: "./Application" },
+    renderer: { kind: "federated-vue" as const, exposedModule: surface.exposedModule },
   })),
-} as unknown as FirstPartyApplicationManifest;
+});
 
 export { exposedComponents };
 

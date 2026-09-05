@@ -11,8 +11,10 @@ type TextPresentation = {
 
 type NotificationPresentation = {
   key: string;
+  notification_id: string;
   link: { class: string; attrs: Attributes };
   dot_class: string | null;
+  action: "mark_read" | null;
   content_class: string;
   title: TextPresentation;
   body: TextPresentation | null;
@@ -48,7 +50,18 @@ type Presentation = {
   };
 };
 
-defineProps<{ presentation: Presentation }>();
+const props = defineProps<{ presentation: Presentation }>();
+
+const emit = defineEmits<{
+  "mark-read": [payload: { notification_id: string }];
+}>();
+
+const markRead = (notification: NotificationPresentation, event: MouseEvent) => {
+  if (notification.action !== "mark_read") return;
+
+  event.preventDefault();
+  emit("mark-read", { notification_id: notification.notification_id });
+};
 </script>
 
 <template>
@@ -89,7 +102,11 @@ defineProps<{ presentation: Presentation }>();
         <template v-else>
           <li v-for="notification in presentation.menu.notifications" :key="notification.key">
             <CadenceMenuItem :active="open" @select="onItemSelect">
-              <a :class="notification.link.class" v-bind="notification.link.attrs">
+              <a
+                :class="notification.link.class"
+                v-bind="notification.link.attrs"
+                @click="markRead(notification, $event)"
+              >
                 <span v-if="notification.dot_class" :class="notification.dot_class"></span>
                 <span :class="notification.content_class">
                   <span :class="notification.title.class">{{ notification.title.text }}</span>

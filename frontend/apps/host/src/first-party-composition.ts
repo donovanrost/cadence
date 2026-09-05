@@ -12,7 +12,7 @@ import {
 export const APPROVED_FIRST_PARTY_APPLICATIONS = Object.freeze([
   {
     applicationKey: "organization_admin",
-    packageId: "cadence.organization_admin",
+    packageId: "cadence.organization-admin",
     remoteName: "cadence_organization_admin",
     publicationBundle: "organization-admin",
   },

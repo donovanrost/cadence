@@ -32,6 +32,16 @@ defmodule CadenceWeb.AdminHomeLive do
     """
   end
 
+  @doc false
+  def federated_props do
+    %{
+      organization_count: Cadence.Organizations.count_organizations(),
+      user_count: Cadence.Accounts.count_users(),
+      presentation: presentation_dto(),
+      navigation: navigation_dto()
+    }
+  end
+
   defp presentation_dto do
     %{
       title: "Platform Administration",

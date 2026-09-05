@@ -9,19 +9,26 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
   }
 
   @max_contributions 64
+  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
+
+  @compile {:no_warn_undefined,
+            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :surface_query_contributions,
+             0}}
 
   @type provider_key :: {binary(), binary()}
 
   @spec contributions() :: [SurfaceQueryContribution.t()]
   def contributions do
-    case collect_contributions([
-           Cadence.Applications.Comms,
-           Cadence.Applications.TelemetryDecom,
-           Cadence.Applications.DerivedTelemetry,
-           Cadence.Applications.Limits,
-           Cadence.Applications.MissionCatalog,
-           Cadence.Applications.Spacecraft
-         ]) do
+    case collect_contributions(
+           [
+             Cadence.Applications.Comms,
+             Cadence.Applications.Spacecraft,
+             Cadence.Applications.MissionCatalog,
+             Cadence.Applications.TelemetryDecom,
+             Cadence.Applications.DerivedTelemetry,
+             Cadence.Applications.Limits
+           ] ++ optional_contributors()
+         ) do
       {:ok, contributions} -> contributions
       {:error, _reason} -> []
     end
@@ -128,6 +135,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
         _invalid -> {:halt, {:error, :invalid_application_surface_provider_registry}}
       end
     end)
+  end
+
+  defp optional_contributors do
+    Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
   end
 
   defp valid_entries(contributions) do

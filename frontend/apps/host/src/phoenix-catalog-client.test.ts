@@ -22,14 +22,14 @@ const missionCommsApplication = {
     navigation: { label: "Overview", order: 10 },
     dataContract: { id: "cadence.comms.overview", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+    renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
   },
   release: {
     federation: "module_federation",
     releaseId: "comms-overview-v1",
-    remoteName: "cadence_comms_overview",
-    manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
-    exposedModule: "./Application",
+    remoteName: "cadence_comms",
+    manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+    exposedModule: "./LegacyApplication",
   },
 } satisfies CatalogApplication;
 

@@ -320,4 +320,12 @@ defmodule Cadence.Applications.ProviderRegistryTest do
              Enum.map(1..17, fn _index -> Cadence.TestActionContributors.Alpha end)
            ) == %{}
   end
+
+  test "registers Spacecraft through its stable application identity" do
+    assert Cadence.Applications.Spacecraft.application_key() == "spacecraft"
+
+    assert ActionProviderRegistry.providers([Cadence.Applications.Spacecraft]) == %{
+             "spacecraft" => Cadence.Applications.Spacecraft.ActionProvider
+           }
+  end
 end

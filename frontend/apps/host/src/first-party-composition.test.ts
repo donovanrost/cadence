@@ -78,6 +78,19 @@ function moduleFor(application: CatalogApplication): {
 }
 
 describe("approved first-party host composition", () => {
+  it("pins the Organization Admin catalog identity to the published package and remote", () => {
+    expect(
+      APPROVED_FIRST_PARTY_APPLICATIONS.find(
+        ({ applicationKey }) => applicationKey === "organization_admin",
+      ),
+    ).toEqual({
+      applicationKey: "organization_admin",
+      packageId: "cadence.organization-admin",
+      remoteName: "cadence_organization_admin",
+      publicationBundle: "organization-admin",
+    });
+  });
+
   it("registers every approved application through the catalog admission boundary", () => {
     const bootstrap = createHostContributionBootstrap();
 

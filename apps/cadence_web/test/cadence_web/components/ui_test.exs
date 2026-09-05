@@ -98,9 +98,11 @@ defmodule CadenceWeb.UITest do
       assert presentation["menu"]["title"]["unread_label"] == "(14 unread)"
       assert presentation["menu"]["empty_state"] == nil
       assert unread_prop["dot_class"] =~ "rounded-full bg-primary"
+      assert unread_prop["action"] == "mark_read"
       assert unread_prop["title"]["text"] == "Invitation ready"
       assert unread_prop["body"]["text"] == "As Operator"
       assert read_prop["dot_class"] == "mt-1.5 w-1.5 h-1.5 flex-shrink-0"
+      assert read_prop["action"] == nil
       assert read_prop["body"] == nil
 
       assert unread_prop["link"]["attrs"] == %{

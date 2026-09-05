@@ -83,6 +83,49 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     """
   end
 
+  @doc false
+  def federated_props do
+    account_id = Ids.new("provider_account")
+    connector = default_connector()
+    params = default_params(account_id, connector)
+
+    %{
+      page: provider_account_page_dto(),
+      form: provider_account_form_dto(params, connector)
+    }
+  end
+
+  @doc false
+  def federated_form(params) when is_map(params) do
+    connector = connector_for(params["provider_type"])
+
+    params =
+      params
+      |> Map.put("provider_type", connector.form_value)
+      |> Map.update("backend_type", "external", &supported_backend_type/1)
+      |> with_connector_defaults(connector)
+
+    provider_account_form_dto(params, connector)
+  end
+
+  @doc false
+  def federated_create(%Cadence.Auth.Scope{} = scope, params) when is_map(params) do
+    opts = provider_account_live_opts()
+
+    with {:ok, credential_attrs} <- credential_attrs(params),
+         {:ok, account_attrs} <- account_attrs(params),
+         {:ok, _credential} <-
+           ProviderCredentials.create(
+             scope,
+             params["provider_account_id"],
+             credential_attrs,
+             opts
+           ),
+         {:ok, account, _version} <- ProviderAccounts.create(scope, account_attrs, opts) do
+      {:ok, %{navigate: ~p"/provider-accounts/#{account.provider_account_id}"}}
+    end
+  end
+
   defp provider_account_page_dto do
     %{
       id: "provider-account-new-page",
