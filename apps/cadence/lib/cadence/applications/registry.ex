@@ -21,6 +21,9 @@ defmodule Cadence.Applications.Registry do
 
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
+  @compile {:no_warn_undefined,
+            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :definition, 0}}
+
   @type fetch_error ::
           :unknown_application
           | :unsupported_application_version
@@ -229,7 +232,7 @@ defmodule Cadence.Applications.Registry do
           purpose: :configuration,
           scope: :spacecraft,
           placement: :application_workspace,
-          navigation: %{label: "Manage", order: 10},
+          navigation: %{label: "Manage", order: 30},
           data_contract: %{
             query_id: "cadence.telemetry_decom.manage",
             version: 1
