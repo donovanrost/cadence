@@ -136,6 +136,37 @@ describe("the generic federated application loader", () => {
     ).rejects.toThrow("does not match the host-approved application contract");
   });
 
+  it("rejects a release with a drifted selected surface or empty renderer before mount", async () => {
+    const runtime: FederatedRuntime = {
+      load: vi.fn(async () => ({
+        manifest: {
+          ...manifest,
+          surfaces: [
+            {
+              ...application.surface,
+              actions: ["unexpected_action"],
+            },
+          ],
+        },
+        default: { name: "DriftedRemote" },
+      })),
+    };
+
+    await expect(loadFederatedApplication(application, runtime)).rejects.toThrow(
+      "does not match the host-approved application contract",
+    );
+  });
+
+  it("rejects a release without a mountable default export", async () => {
+    const runtime: FederatedRuntime = {
+      load: vi.fn(async () => ({ manifest, default: null })),
+    };
+
+    await expect(loadFederatedApplication(application, runtime)).rejects.toThrow(
+      "The federated release did not expose an application module.",
+    );
+  });
+
   it("contains federation transport details behind a stable host message", async () => {
     const runtime: FederatedRuntime = {
       load: vi.fn(async () => {

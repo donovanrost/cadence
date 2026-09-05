@@ -138,7 +138,7 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     assert prepared.request_document["surfaceVersion"] == 1
   end
 
-  test "keeps the deliberately supported omitted surface legacy path" do
+  test "requires the exact surface identity for every action" do
     {scope, route_context} = installed_telemetry_context()
 
     params = %{
@@ -148,7 +148,7 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
       "params" => %{"selected" => true}
     }
 
-    assert {:ok, prepared} =
+    assert {:error, :invalid_application_request} =
              ApplicationHostBridge.prepare_action(
                scope,
                route_context,
@@ -156,10 +156,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
                "bridge-legacy-surface",
                now: @now
              )
-
-    assert %ActionRequest{surface_id: nil, surface_version: nil} = prepared.dispatch_request
-    assert prepared.request_document["surfaceId"] == "packet_bindings"
-    assert prepared.request_document["surfaceVersion"] == 1
   end
 
   test "returns stable host ids for every application scope" do

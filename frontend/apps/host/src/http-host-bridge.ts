@@ -210,11 +210,14 @@ export function createHttpHostBridge(
               surfaceId: application.surface.surfaceId,
               surfaceVersion: application.surface.version,
               actionId: action.actionId,
-              input: action.input as TInput,
+              params: action.input as TInput,
               scope: scopeFrom(session.context),
             },
             idempotencyKey,
-          ),
+          ).then((receipt) => {
+            assertHostActionReceipt(receipt);
+            return receipt;
+          }),
         );
       } catch (error) {
         notifySessionFailure("action", error);
@@ -390,12 +393,34 @@ function assertSelectedAction<TInput>(
   if (
     action.applicationKey !== application.applicationKey ||
     action.applicationVersion !== application.applicationVersion ||
+    (action.surfaceId !== undefined && action.surfaceId !== application.surface.surfaceId) ||
+    (action.surfaceVersion !== undefined &&
+      action.surfaceVersion !== application.surface.version) ||
     !application.surface.actions.includes(action.actionId)
   ) {
     throw new HostBridgeError(
       400,
       "unsupported_action",
       "The requested action is not declared for the selected application surface.",
+    );
+  }
+}
+
+function assertHostActionReceipt(value: unknown): asserts value is HostActionReceipt<unknown> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof (value as Record<string, unknown>).receiptId !== "string" ||
+    (value as Record<string, unknown>).receiptId.trim() === "" ||
+    typeof (value as Record<string, unknown>).completedAt !== "string" ||
+    (value as Record<string, unknown>).completedAt.trim() === "" ||
+    !("result" in value)
+  ) {
+    throw new HostBridgeError(
+      200,
+      "invalid_response",
+      "The host action response was not a valid action receipt.",
     );
   }
 }
