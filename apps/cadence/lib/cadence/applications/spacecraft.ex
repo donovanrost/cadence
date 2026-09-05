@@ -8,10 +8,12 @@ defmodule Cadence.Applications.Spacecraft do
   """
 
   alias Cadence.Applications.{
+    ActionDefinition,
     ApplicationDefinition,
     CatalogContribution,
     ReleaseContribution,
-    SurfaceDefinition
+    SurfaceDefinition,
+    SurfaceQueryContribution
   }
 
   @identity %{
@@ -40,7 +42,8 @@ defmodule Cadence.Applications.Spacecraft do
       label: "New spacecraft",
       order: 20,
       fallback_path: "/missions/:mission_id/spacecraft/new",
-      query_id: "cadence.spacecraft.new"
+      query_id: "cadence.spacecraft.new",
+      actions: ["validate", "save"]
     },
     %{
       id: "profile_list",
@@ -58,7 +61,8 @@ defmodule Cadence.Applications.Spacecraft do
       label: "New spacecraft profile",
       order: 40,
       fallback_path: "/missions/:mission_id/spacecraft/profiles/new",
-      query_id: "cadence.spacecraft.profile.new"
+      query_id: "cadence.spacecraft.profile.new",
+      actions: ["validate", "save"]
     },
     %{
       id: "profile_show",
@@ -88,7 +92,8 @@ defmodule Cadence.Applications.Spacecraft do
       order: 20,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/identity",
       subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
-      query_id: "cadence.spacecraft.edit"
+      query_id: "cadence.spacecraft.edit",
+      actions: ["validate", "save"]
     },
     %{
       id: "readiness",
@@ -128,7 +133,8 @@ defmodule Cadence.Applications.Spacecraft do
       order: 60,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/applications",
       subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
-      query_id: "cadence.spacecraft.applications"
+      query_id: "cadence.spacecraft.applications",
+      actions: ["install", "disable", "uninstall"]
     },
     %{
       id: "telemetry_decom",
@@ -138,7 +144,8 @@ defmodule Cadence.Applications.Spacecraft do
       order: 70,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/applications/telemetry_decom",
       subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
-      query_id: "cadence.telemetry_decom.manage"
+      query_id: "cadence.telemetry_decom.manage",
+      actions: ["save_configuration", "request_activation", "disable"]
     }
   ]
 
@@ -155,10 +162,18 @@ defmodule Cadence.Applications.Spacecraft do
       trust: :first_party,
       availability: :available,
       installable_scopes: [:mission, :spacecraft],
-      actions: [],
+      actions: action_definitions(),
       surfaces: Enum.map(@surface_specs, &surface_definition/1)
     }
   end
+
+  @doc "Returns the query contributions owned by the Spacecraft application lane."
+  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
+  def surface_query_contributions,
+    do: Cadence.Reads.ApplicationSurfaces.Spacecraft.contributions()
+
+  @doc "Returns the action provider for Spacecraft-owned remote actions."
+  def action_provider, do: Cadence.Applications.Spacecraft.ActionProvider
 
   @doc "Returns one release contribution for every exposed federated surface."
   def release_contributions do
@@ -198,8 +213,120 @@ defmodule Cadence.Applications.Spacecraft do
       navigation: %{label: spec.label, order: spec.order, fallback_path: spec.fallback_path},
       subject_contract: Map.get(spec, :subject_contract),
       data_contract: %{query_id: spec.query_id, version: 1},
-      actions: [],
+      actions: Map.get(spec, :actions, []),
       renderer: {:trusted, "cadence.spacecraft.#{spec.id}"}
     }
+  end
+
+  defp action_definitions do
+    [
+      %ActionDefinition{
+        action_id: "validate",
+        version: 1,
+        intent: :diagnostic,
+        scope: :mission,
+        required_permission: "operate_mission",
+        effect: :none,
+        execution: :immediate,
+        input_contract: %{schema_id: "cadence.spacecraft.form", version: 1},
+        result_contract: %{schema_id: "cadence.spacecraft.validation", version: 1}
+      },
+      %ActionDefinition{
+        action_id: "save",
+        version: 1,
+        intent: :configuration,
+        scope: :mission,
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        input_contract: %{schema_id: "cadence.spacecraft.form", version: 1},
+        result_contract: %{schema_id: "cadence.spacecraft.saved", version: 1}
+      },
+      %ActionDefinition{
+        action_id: "install",
+        version: 1,
+        intent: :configuration,
+        scope: :spacecraft,
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        input_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action",
+          version: 1
+        },
+        result_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action_result",
+          version: 1
+        }
+      },
+      %ActionDefinition{
+        action_id: "disable",
+        version: 1,
+        intent: :configuration,
+        scope: :spacecraft,
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        input_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action",
+          version: 1
+        },
+        result_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action_result",
+          version: 1
+        }
+      },
+      %ActionDefinition{
+        action_id: "uninstall",
+        version: 1,
+        intent: :configuration,
+        scope: :spacecraft,
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        input_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action",
+          version: 1
+        },
+        result_contract: %{
+          schema_id: "cadence.spacecraft.child_application_action_result",
+          version: 1
+        }
+      },
+      %ActionDefinition{
+        action_id: "save_configuration",
+        version: 1,
+        intent: :configuration,
+        scope: :spacecraft,
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        input_contract: %{
+          schema_id: "cadence.telemetry_decom.configuration_input",
+          version: 1
+        },
+        result_contract: %{
+          schema_id: "cadence.telemetry_decom.configuration",
+          version: 1
+        }
+      },
+      %ActionDefinition{
+        action_id: "request_activation",
+        version: 1,
+        intent: :operation,
+        scope: :spacecraft,
+        required_permission: "request_activation",
+        effect: :durable,
+        execution: :approval_required,
+        input_contract: %{
+          schema_id: "cadence.telemetry_decom.activation_input",
+          version: 1
+        },
+        result_contract: %{
+          schema_id: "cadence.telemetry_decom.activation_request",
+          version: 1
+        }
+      }
+    ]
   end
 end
