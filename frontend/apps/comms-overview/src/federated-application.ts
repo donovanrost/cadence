@@ -91,13 +91,7 @@ export const canonicalManifest = defineApplicationManifest({
       "cadence.comms.ground_station",
       80,
     ),
-    canonicalSurface(
-      "provider_list",
-      "Providers",
-      "collection",
-      "cadence.comms.provider_list",
-      90,
-    ),
+    canonicalSurface("provider_list", "Providers", "collection", "cadence.comms.provider_list", 90),
     canonicalSurface(
       "provider_new",
       "New Provider",

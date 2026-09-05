@@ -116,9 +116,9 @@ const spacecraftConfig: PhoenixHostConfig = {
 
 describe("Phoenix application catalog bootstrap", () => {
   it("encodes every tagged host scope without a fake mission id", () => {
-    expect(
-      phoenixCatalogUrl("/catalog", { scope: "organization", organizationId: "org-1" }),
-    ).toBe("/catalog?scope=organization&organization_id=org-1");
+    expect(phoenixCatalogUrl("/catalog", { scope: "organization", organizationId: "org-1" })).toBe(
+      "/catalog?scope=organization&organization_id=org-1",
+    );
     expect(phoenixCatalogUrl("/catalog", { scope: "user", userId: "user-1" })).toBe(
       "/catalog?scope=user&user_id=user-1",
     );

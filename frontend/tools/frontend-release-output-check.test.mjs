@@ -268,7 +268,7 @@ void test("fails closed for unresolved dynamic local imports and asset URLs", as
   await withFixture(async (root) => {
     await writeFile(
       join(root, "remoteEntry.js"),
-      'const currentPage = new URL(window.location.href);\nvoid currentPage;\n',
+      "const currentPage = new URL(window.location.href);\nvoid currentPage;\n",
     );
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
@@ -277,7 +277,7 @@ void test("fails closed for unresolved dynamic local imports and asset URLs", as
   await withFixture(async (root) => {
     await writeFile(
       join(root, "remoteEntry.js"),
-      'const currentPage = new URL(target.value, window.location.origin);\nvoid currentPage;\n',
+      "const currentPage = new URL(target.value, window.location.origin);\nvoid currentPage;\n",
     );
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
@@ -324,22 +324,15 @@ void test("accepts statically bounded worker references", async () => {
   });
 });
 
-void test("bounds host runtime URL exceptions to exact generated call contexts", () => {
+void test("only an explicitly authoritative host publication may contain runtime URLs", () => {
   const files = new Set(["host.js"]);
   const options = { authoritativeHostPublication: true };
-  const assertHostSource = (source) =>
+  const assertAuthoritativeHostSource = (source) =>
     assert.doesNotThrow(() =>
       assertImportReferences(source, "host.js", files, repositoryRoot, new Set(), options),
     );
 
-  assertHostSource(
-    'var nf = typeof ENV_TARGET > "u" || ENV_TARGET !== "web" ? (e, t, n, r) => { return new URL(e); } : (e, t, n, r) => { return e; };\n',
-  );
-  assertHostSource("function mf(e, t) { return new URL(e, t).href; }\n");
-  assertHostSource("function eg(e, a, n) { return new URL(n), new URL(e, a); }\n");
-  assertHostSource(
-    'function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n',
-  );
+  assertAuthoritativeHostSource("function mutable(value) { return new URL(value); }\n");
 
   assert.throws(
     () =>
@@ -349,18 +342,65 @@ void test("bounds host runtime URL exceptions to exact generated call contexts",
         files,
         repositoryRoot,
         new Set(),
-        options,
       ),
     /unresolved dynamic local asset URL/,
   );
   assert.throws(
     () =>
       assertImportReferences(
-        'function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n',
+        "function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n",
         "host.js",
         files,
         repositoryRoot,
         new Set(),
+      ),
+    /unresolved dynamic local asset URL/,
+  );
+});
+
+void test("accepts generated federation navigation URLs based on browser location", () => {
+  const files = new Set(["federated-application.js"]);
+  assert.doesNotThrow(() =>
+    assertImportReferences(
+      "function navigate(value) { return new URL(value, globalThis.location.href); }\n",
+      "federated-application.js",
+      files,
+      repositoryRoot,
+      new Set(),
+      { generatedModuleFederation: true },
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertImportReferences(
+      "function current() { return new URL(globalThis.location.href); }\n",
+      "federated-application.js",
+      files,
+      repositoryRoot,
+      new Set(),
+      { generatedModuleFederation: true },
+    ),
+  );
+  assert.throws(
+    () =>
+      assertImportReferences(
+        "function navigate(value) { let base = globalThis.location; base = {}; return new URL(value, base.href); }\n",
+        "federated-application.js",
+        files,
+        repositoryRoot,
+        new Set(),
+        { generatedModuleFederation: true },
+      ),
+    /unresolved dynamic local asset URL/,
+  );
+  assert.throws(
+    () =>
+      assertImportReferences(
+        "function load(value) { return new URL(value); }\n",
+        "federated-application.js",
+        files,
+        repositoryRoot,
+        new Set(),
+        { generatedModuleFederation: true },
       ),
     /unresolved dynamic local asset URL/,
   );

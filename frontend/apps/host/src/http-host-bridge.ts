@@ -268,7 +268,9 @@ function snapshotQueryParams(value: HostQueryParams): HostQueryParams {
 
 function freezeQueryValue(value: HostJsonValue): HostJsonValue {
   if (Array.isArray(value)) {
-    return Object.freeze(value.map((item) => freezeQueryValue(item)));
+    const copy = value.map((item) => freezeQueryValue(item));
+    Object.freeze(copy);
+    return copy;
   }
 
   if (value !== null && typeof value === "object") {
@@ -407,15 +409,21 @@ function assertSelectedAction<TInput>(
 }
 
 function assertHostActionReceipt(value: unknown): asserts value is HostActionReceipt<unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new HostBridgeError(
+      200,
+      "invalid_response",
+      "The host action response was not a valid action receipt.",
+    );
+  }
+
+  const record = value as Record<string, unknown>;
   if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    typeof (value as Record<string, unknown>).receiptId !== "string" ||
-    (value as Record<string, unknown>).receiptId.trim() === "" ||
-    typeof (value as Record<string, unknown>).completedAt !== "string" ||
-    (value as Record<string, unknown>).completedAt.trim() === "" ||
-    !("result" in value)
+    typeof record.receiptId !== "string" ||
+    record.receiptId.trim() === "" ||
+    typeof record.completedAt !== "string" ||
+    record.completedAt.trim() === "" ||
+    !("result" in record)
   ) {
     throw new HostBridgeError(
       200,

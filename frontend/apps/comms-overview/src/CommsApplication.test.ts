@@ -148,7 +148,9 @@ describe("Comms canonical federated application", () => {
     const execute = vi.fn().mockResolvedValue({
       receiptId: "receipt-2",
       completedAt: "2026-09-04T00:00:00Z",
-      result: { navigation: { kind: "navigate", href: "/missions/mission-1/comms/ground-stations/gs-1" } },
+      result: {
+        navigation: { kind: "navigate", href: "/missions/mission-1/comms/ground-stations/gs-1" },
+      },
     });
     props.bridge.execute = execute as HostBridge["execute"];
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
@@ -173,9 +175,7 @@ describe("Comms canonical federated application", () => {
       },
       context,
     });
-    expect(assign).toHaveBeenCalledWith(
-      "/missions/mission-1/comms/ground-stations/gs-1",
-    );
+    expect(assign).toHaveBeenCalledWith("/missions/mission-1/comms/ground-stations/gs-1");
     expect(query).toHaveBeenCalledTimes(1);
     assign.mockRestore();
     wrapper.unmount();
@@ -237,7 +237,12 @@ function transportFormPayload() {
     provider_managed_id: null,
   });
   return {
-    page: { id: "comms-transport-new-page", title: "New Transport", subtitle: "Transport", breadcrumbs: [] },
+    page: {
+      id: "comms-transport-new-page",
+      title: "New Transport",
+      subtitle: "Transport",
+      breadcrumbs: [],
+    },
     form: {
       id: "transport-form",
       selected_origin: "direct",
@@ -258,30 +263,136 @@ function transportFormPayload() {
         delivery_profile_id: field("delivery_profile_id", "transport-delivery-profile", "select"),
       },
       origin_cards: [],
-      direct_configuration: { id: "transport-direct-configuration", kind: "transport_kind", description: null, active: true, sections: [] },
-      provider: { active: false, profile_fields_id: "profiles", ready_count: 0, selected: null, empty_state: { id: "empty", visible: true, message: "", action: { label: "", href: "/missions/mission-1/comms/providers" } }, operator_summary: null, derivation_error: null },
-      provider_derived: { active: false, id: "derived", number: "05", title: "Derived", description: "", configuration: { id: "configuration", rows: [], empty_text: "" } },
-      review: { configuration_summary_id: "summary", ownership: { label: "", value: "", source: "" }, readiness: { label: "", status: "attention", value: "", endpoint: "" }, error: null, error_id: "error", diagnostics: { id: "diagnostics", label: "", json_id: "json", json: "{}" } },
-      actions: { submit: { id: "create-transport-button", label: "Create" }, cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/transports" } },
+      direct_configuration: {
+        id: "transport-direct-configuration",
+        kind: "transport_kind",
+        description: null,
+        active: true,
+        sections: [],
+      },
+      provider: {
+        active: false,
+        profile_fields_id: "profiles",
+        ready_count: 0,
+        selected: null,
+        empty_state: {
+          id: "empty",
+          visible: true,
+          message: "",
+          action: { label: "", href: "/missions/mission-1/comms/providers" },
+        },
+        operator_summary: null,
+        derivation_error: null,
+      },
+      provider_derived: {
+        active: false,
+        id: "derived",
+        number: "05",
+        title: "Derived",
+        description: "",
+        configuration: { id: "configuration", rows: [], empty_text: "" },
+      },
+      review: {
+        configuration_summary_id: "summary",
+        ownership: { label: "", value: "", source: "" },
+        readiness: { label: "", status: "attention", value: "", endpoint: "" },
+        error: null,
+        error_id: "error",
+        diagnostics: { id: "diagnostics", label: "", json_id: "json", json: "{}" },
+      },
+      actions: {
+        submit: { id: "create-transport-button", label: "Create" },
+        cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/transports" },
+      },
     },
   };
 }
 
 function routingFormPayload() {
-  const field = (key: string, type = "text") => ({ id: `routing_rule_${key}`, name: `routing_rule[${key}]`, type, label: key, required: true, value: "" });
+  const field = (key: string, type = "text") => ({
+    id: `routing_rule_${key}`,
+    name: `routing_rule[${key}]`,
+    type,
+    label: key,
+    required: true,
+    value: "",
+  });
   return {
-    page: { id: "comms-routing-new-page", title: "New Routing Rule", subtitle: "Routing", breadcrumbs: [] },
-    form: { id: "routing-rule-form", sections: { intent: { number: "01", title: "Intent" }, transport: { number: "02", title: "Transport" }, policy: { number: "03", title: "Policy" } }, fields: { display_name: field("display_name"), purpose_label: field("purpose_label"), spacecraft_id: field("spacecraft_id", "select"), transport_ref: field("transport_ref", "select"), direction: field("direction", "select"), role: field("role", "select") }, actions: { submit: { id: "create-routing-rule-button", label: "Create" }, cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/routing" } } },
+    page: {
+      id: "comms-routing-new-page",
+      title: "New Routing Rule",
+      subtitle: "Routing",
+      breadcrumbs: [],
+    },
+    form: {
+      id: "routing-rule-form",
+      sections: {
+        intent: { number: "01", title: "Intent" },
+        transport: { number: "02", title: "Transport" },
+        policy: { number: "03", title: "Policy" },
+      },
+      fields: {
+        display_name: field("display_name"),
+        purpose_label: field("purpose_label"),
+        spacecraft_id: field("spacecraft_id", "select"),
+        transport_ref: field("transport_ref", "select"),
+        direction: field("direction", "select"),
+        role: field("role", "select"),
+      },
+      actions: {
+        submit: { id: "create-routing-rule-button", label: "Create" },
+        cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/routing" },
+      },
+    },
     options: { spacecraft: [], transports: [], directions: [], roles: [] },
   };
 }
 
 function groundStationFormPayload(mode: "new" | "edit") {
-  const field = (key: string, type = "text") => ({ id: `ground_station_${key}`, name: `ground_station[${key}]`, type, label: key, required: false, disabled: mode === "edit" && key === "ground_station_id", placeholder: null, value: key === "metadata_json" ? "{}" : "" });
+  const field = (key: string, type = "text") => ({
+    id: `ground_station_${key}`,
+    name: `ground_station[${key}]`,
+    type,
+    label: key,
+    required: false,
+    disabled: mode === "edit" && key === "ground_station_id",
+    placeholder: null,
+    value: key === "metadata_json" ? "{}" : "",
+  });
   return {
-    page: { id: "comms-ground-station-form-page", heading: mode === "new" ? "New Ground Station" : "Edit Ground Station", subtitle: "Ground station", breadcrumbs: [] },
+    page: {
+      id: "comms-ground-station-form-page",
+      heading: mode === "new" ? "New Ground Station" : "Edit Ground Station",
+      subtitle: "Ground station",
+      breadcrumbs: [],
+    },
     mode,
-    form: { id: "ground-station-form", sections: { identity: { id: "identity", number: "01", title: "Identity" }, network: { id: "network", number: "02", title: "Network" }, metadata: { id: "metadata", number: "03", title: "Metadata" } }, fields: { ground_station_id: field("ground_station_id"), display_name: field("display_name"), provider: field("provider"), region: field("region"), metadata_json: field("metadata_json", "textarea") }, actions: { submit: { id: mode === "new" ? "create-ground-station-button" : "save-ground-station-button", label: "Save" }, cancel: { id: "cancel", label: "Cancel", href: "/missions/mission-1/comms/ground-stations" } } },
+    form: {
+      id: "ground-station-form",
+      sections: {
+        identity: { id: "identity", number: "01", title: "Identity" },
+        network: { id: "network", number: "02", title: "Network" },
+        metadata: { id: "metadata", number: "03", title: "Metadata" },
+      },
+      fields: {
+        ground_station_id: field("ground_station_id"),
+        display_name: field("display_name"),
+        provider: field("provider"),
+        region: field("region"),
+        metadata_json: field("metadata_json", "textarea"),
+      },
+      actions: {
+        submit: {
+          id: mode === "new" ? "create-ground-station-button" : "save-ground-station-button",
+          label: "Save",
+        },
+        cancel: {
+          id: "cancel",
+          label: "Cancel",
+          href: "/missions/mission-1/comms/ground-stations",
+        },
+      },
+    },
   };
 }
 
@@ -336,10 +447,17 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
             id: "mission-provider-no-grants",
             heading: "No grants",
             message: "Grant an account.",
-            action: { id: "open-provider-accounts-link", label: "Open", href: "/provider-accounts" },
+            action: {
+              id: "open-provider-accounts-link",
+              label: "Open",
+              href: "/provider-accounts",
+            },
           },
         },
-        notes: { secret_boundary: { id: "secret", text: "Secret boundary." }, resource_boundary: { id: "resource", text: "Resource boundary." } },
+        notes: {
+          secret_boundary: { id: "secret", text: "Secret boundary." },
+          resource_boundary: { id: "resource", text: "Resource boundary." },
+        },
         form: providerFormPayload(),
       },
     };
@@ -361,19 +479,54 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
         actions: {
           validate: { id: "validate-provider-button", label: "Validate", disabled: false },
           sync: { id: "sync-provider-button", label: "Sync", disabled: false },
-          archive: { id: "archive-provider-button", label: "Archive", confirm: "Archive?", disabled: false },
+          archive: {
+            id: "archive-provider-button",
+            label: "Archive",
+            confirm: "Archive?",
+            disabled: false,
+          },
         },
         profiles: {
-          service: { id: "service", heading: "Service", subtitle: "", empty: true, empty_copy: "", table_id: "service-table", table_body_id: "service-body", columns: [] },
-          delivery: { id: "delivery", heading: "Delivery", subtitle: "", empty: true, empty_copy: "", table_id: "delivery-table", table_body_id: "delivery-body", columns: [] },
+          service: {
+            id: "service",
+            heading: "Service",
+            subtitle: "",
+            empty: true,
+            empty_copy: "",
+            table_id: "service-table",
+            table_body_id: "service-body",
+            columns: [],
+          },
+          delivery: {
+            id: "delivery",
+            heading: "Delivery",
+            subtitle: "",
+            empty: true,
+            empty_copy: "",
+            table_id: "delivery-table",
+            table_body_id: "delivery-body",
+            columns: [],
+          },
         },
         details: {
           configuration: { id: "configuration", title: "Configuration", rows: [] },
           delivery_policy: { id: "policy", title: "Policy", rows: [] },
-          capabilities: { id: "capabilities", title: "Capabilities", empty: true, empty_copy: "", items: [] },
+          capabilities: {
+            id: "capabilities",
+            title: "Capabilities",
+            empty: true,
+            empty_copy: "",
+            items: [],
+          },
           version_history: { id: "history", title: "History", stream_id: "history" },
         },
-        diagnostics: { id: "diagnostics", label: "Diagnostics", json_id: "diagnostics-json", rows: [], json: "{}" },
+        diagnostics: {
+          id: "diagnostics",
+          label: "Diagnostics",
+          json_id: "diagnostics-json",
+          rows: [],
+          json: "{}",
+        },
         service_profiles: [],
         delivery_profiles: [],
         provider_versions: [],
@@ -442,22 +595,61 @@ function providerFormPayload() {
   const fields = Object.fromEntries(
     keys.map((key) => [
       key,
-      { key, id: `provider_${key}`, name: `provider[${key}]`, type: "text", label: key, required: false, placeholder: null, min: null, options: [], value: "" },
+      {
+        key,
+        id: `provider_${key}`,
+        name: `provider[${key}]`,
+        type: "text",
+        label: key,
+        required: false,
+        placeholder: null,
+        min: null,
+        options: [],
+        value: "",
+      },
     ]),
   );
   return {
     id: "mission-provider-form",
     sections: {
-      binding: { id: "binding", number: "01", title: "Binding", field_keys: ["display_name", "provider_account_grant_id"] },
-      resource_scope: { id: "resource", number: "02", title: "Resource", field_keys: ["permitted_resource_refs"] },
-      delivery_policy: { id: "policy", number: "03", title: "Policy", field_keys: ["policy_mode", "deadline_behavior"] },
+      binding: {
+        id: "binding",
+        number: "01",
+        title: "Binding",
+        field_keys: ["display_name", "provider_account_grant_id"],
+      },
+      resource_scope: {
+        id: "resource",
+        number: "02",
+        title: "Resource",
+        field_keys: ["permitted_resource_refs"],
+      },
+      delivery_policy: {
+        id: "policy",
+        number: "03",
+        title: "Policy",
+        field_keys: ["policy_mode", "deadline_behavior"],
+      },
     },
     fields,
     conditional: {
-      approval_guidance: { id: "approval", active: false, visible_when: { field: "policy_mode", equals: "approval_required" }, text: "" },
-      bounded_policy: { id: "bounded", active: false, visible_when: { field: "policy_mode", equals: "bounded_automatic" }, field_keys: [] },
+      approval_guidance: {
+        id: "approval",
+        active: false,
+        visible_when: { field: "policy_mode", equals: "approval_required" },
+        text: "",
+      },
+      bounded_policy: {
+        id: "bounded",
+        active: false,
+        visible_when: { field: "policy_mode", equals: "bounded_automatic" },
+        field_keys: [],
+      },
     },
-    actions: { submit: { id: "submit", label: "Create" }, cancel: { id: "cancel", label: "Cancel", href: "/comms/providers" } },
+    actions: {
+      submit: { id: "submit", label: "Create" },
+      cancel: { id: "cancel", label: "Cancel", href: "/comms/providers" },
+    },
   };
 }
 
