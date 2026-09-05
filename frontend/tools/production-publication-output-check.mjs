@@ -16,7 +16,7 @@ const publicationRoot = resolve(
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js", "plugin-host.css"]);
 const authoritativeHostJavascriptDigest =
-  "a9eb2eed5aac504a6d83799d03ead5e47062cac89c89ceeab9f92361dce41076";
+  "6bf66fa8050d87524ea3c0f8e5744b79ad29928f78179970f95704aefc46c292";
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);
@@ -97,8 +97,10 @@ async function validateHostPublication(root) {
     const source = await readFile(path, "utf8").catch(() => fail(`${name} is unreadable`));
     assertHostReferences(source, name);
     if (name.endsWith(".js")) {
+      const authoritativeHostPublication = isAuthoritativeHostJavascript(name, source, files);
       assertImportReferences(source, name, files, root, new Set(), {
-        authoritativeHostPublication: isAuthoritativeHostJavascript(name, source, files),
+        authoritativeHostPublication,
+        generatedModuleFederation: authoritativeHostPublication,
       });
     }
     if (extname(name).toLowerCase() === ".css") assertCssReferences(source, name, files, root);

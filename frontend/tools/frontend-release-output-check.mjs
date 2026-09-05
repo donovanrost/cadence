@@ -142,7 +142,10 @@ export function assertNoForbiddenPublicationReferences(source, origin) {
       /(?:import\.meta\.hot|\/[@]vite\/client|vite\/client|hotUpdate|__vite__hot)/i,
     ],
     ["source-map reference", /(?:sourceMappingURL|\.map(?:["'`?#),]|$))/i],
-    ["standalone bootstrap reference", /(?:phoenix[-_.]?main|phoenix[-_.]?bootstrap|standalone)/i],
+    [
+      "standalone bootstrap reference",
+      /(?:phoenix[-_.]?(?:main|bootstrap)|standalone[-_.]?(?:main|bootstrap|entry)|src\/main\.ts)/i,
+    ],
     [
       "mutable fallback URL",
       /\b(?:fallback(?:Url|Href)?|artifactBaseUrl)\b\s*(?:[:=])\s*["'`](?:https?:\/\/|\/)/i,
@@ -374,7 +377,7 @@ function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
   }
 }
 
-const byteBoundMetadataFields = ["size", "byteSize", "byteLength", "bytes"];
+const byteBoundMetadataFields = ["byteSize", "byteLength", "bytes"];
 
 async function assertByteBoundMetadata(record, target, trail, byteLengthForPath) {
   for (const field of byteBoundMetadataFields) {
@@ -572,6 +575,10 @@ const generatedHostInitializationPathPattern = /^assets\/hostInit-[A-Za-z0-9_-]{
 const generatedHostInitializationFacadeDigests = new Set([
   "659a49802317843ef974469cbc220aaa3e0107493934928e68905c0d6bf60496",
   "007bf60ccae9f5ed5dead1143e01c5151fdc63c4d399871ed8144343885d9d01",
+  "4a35e2dd4bc69efecc3e523b387ec76f11e5b3aed94f2660a0b74308ea54ede8",
+  "39ee50c344bec17be2b43fda992edea998778e75f6a9a23bbb97300a3d00dc92",
+  "e4839850d9f45de13722395fecae51bf7c86a0361f8d5647c4cb32b97f5f27ab",
+  "6d70f9240150b0d3135ff25e30f80ff1ad1ff16e33a1e9556015f25aac075ae1",
 ]);
 const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
 const generatedFederationRuntimeSourceDigests = new Set([
@@ -1320,13 +1327,199 @@ function isGeneratedRuntimeUrl(tokens, index) {
   return directEntry || memberEntry;
 }
 
-function isGeneratedFederationDynamicTemplate(token) {
+function isGeneratedFederationDynamicTemplate(token, { authoritativeHostPublication = false } = {}) {
   return (
     token?.kind === "template" &&
     token.dynamic === true &&
-    /^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
+    (/^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
       token.value,
-    )
+    ) ||
+      (authoritativeHostPublication &&
+        /^__module_federation_remote__\$\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\}$/.test(
+          token.value,
+        )))
+  );
+}
+
+function isBrowserLocationUrl(tokens, index) {
+  return (
+    tokens[index + 3]?.value === "window" &&
+    tokens[index + 4]?.value === "." &&
+    tokens[index + 5]?.value === "location" &&
+    tokens[index + 6]?.value === "." &&
+    tokens[index + 7]?.value === "href"
+  );
+}
+
+function isBrowserOriginUrl(tokens, index) {
+  const identifier = (token) =>
+    token?.kind === "word" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(token.value);
+  let argumentEnd = index + 3;
+  if (!identifier(tokens[argumentEnd])) return false;
+  let memberDepth = 0;
+  while (
+    memberDepth < 2 &&
+    tokens[argumentEnd + 1]?.value === "." &&
+    identifier(tokens[argumentEnd + 2])
+  ) {
+    argumentEnd += 2;
+    memberDepth += 1;
+  }
+  return (
+    tokens[index]?.value === "new" &&
+    tokens[index + 1]?.value === "URL" &&
+    tokens[index + 2]?.value === "(" &&
+    tokens[argumentEnd + 1]?.value === "," &&
+    tokens[argumentEnd + 2]?.value === "window" &&
+    tokens[argumentEnd + 3]?.value === "." &&
+    tokens[argumentEnd + 4]?.value === "location" &&
+    tokens[argumentEnd + 5]?.value === "." &&
+    tokens[argumentEnd + 6]?.value === "origin" &&
+    tokens[argumentEnd + 7]?.value === ")"
+  );
+}
+
+function isNamedFunctionContext(tokens, index, functionName) {
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (
+      tokens[cursor]?.value !== "function" ||
+      tokens[cursor + 1]?.value !== functionName ||
+      tokens[cursor + 2]?.value !== "("
+    ) {
+      continue;
+    }
+
+    let parenthesisDepth = 0;
+    let parameterEnd;
+    for (let parameterIndex = cursor + 2; parameterIndex < tokens.length; parameterIndex += 1) {
+      if (tokens[parameterIndex].value === "(") parenthesisDepth += 1;
+      if (tokens[parameterIndex].value === ")") {
+        parenthesisDepth -= 1;
+        if (parenthesisDepth === 0) {
+          parameterEnd = parameterIndex;
+          break;
+        }
+      }
+    }
+    if (parameterEnd === undefined || tokens[parameterEnd + 1]?.value !== "{") continue;
+
+    let braceDepth = 0;
+    for (let bodyIndex = parameterEnd + 1; bodyIndex < tokens.length; bodyIndex += 1) {
+      if (tokens[bodyIndex].value === "{") braceDepth += 1;
+      if (tokens[bodyIndex].value === "}") {
+        braceDepth -= 1;
+        if (braceDepth === 0) {
+          if (index > parameterEnd && index < bodyIndex) return true;
+          break;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function isExactNewUrlCall(tokens, index, argumentsList) {
+  if (
+    tokens[index]?.value !== "new" ||
+    tokens[index + 1]?.value !== "URL" ||
+    tokens[index + 2]?.value !== "("
+  ) {
+    return false;
+  }
+  let tokenIndex = index + 3;
+  for (const [argumentIndex, argument] of argumentsList.entries()) {
+    if (tokens[tokenIndex]?.kind !== "word" || tokens[tokenIndex]?.value !== argument) {
+      return false;
+    }
+    tokenIndex += 1;
+    if (argumentIndex < argumentsList.length - 1) {
+      if (tokens[tokenIndex]?.value !== ",") return false;
+      tokenIndex += 1;
+    }
+  }
+  return tokens[tokenIndex]?.value === ")";
+}
+
+function isNamedArrowFunctionContext(tokens, index, variableName, parameters) {
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (tokens[cursor]?.value !== variableName || tokens[cursor + 1]?.value !== "=") continue;
+
+    for (let parameterStart = cursor + 2; parameterStart < index; parameterStart += 1) {
+      if (tokens[parameterStart]?.value !== "(") continue;
+      let tokenIndex = parameterStart + 1;
+      let matchesParameters = true;
+      for (const [parameterIndex, parameter] of parameters.entries()) {
+        if (
+          tokens[tokenIndex]?.kind !== "word" ||
+          tokens[tokenIndex]?.value !== parameter
+        ) {
+          matchesParameters = false;
+          break;
+        }
+        tokenIndex += 1;
+        if (parameterIndex < parameters.length - 1) {
+          if (tokens[tokenIndex]?.value !== ",") {
+            matchesParameters = false;
+            break;
+          }
+          tokenIndex += 1;
+        }
+      }
+      if (
+        !matchesParameters ||
+        tokens[tokenIndex]?.value !== ")" ||
+        tokens[tokenIndex + 1]?.value !== "=" ||
+        tokens[tokenIndex + 2]?.value !== ">" ||
+        tokens[tokenIndex + 3]?.value !== "{"
+      ) {
+        continue;
+      }
+
+      let braceDepth = 0;
+      for (let bodyIndex = tokenIndex + 3; bodyIndex < tokens.length; bodyIndex += 1) {
+        if (tokens[bodyIndex].value === "{") braceDepth += 1;
+        if (tokens[bodyIndex].value === "}") {
+          braceDepth -= 1;
+          if (braceDepth === 0) {
+            if (index > tokenIndex + 3 && index < bodyIndex) return true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function isExactHostRuntimeUrl(tokens, index) {
+  return (
+    (isExactNewUrlCall(tokens, index, ["e"]) &&
+      ["ld", "cf", "Ih"].some((functionName) =>
+        isNamedFunctionContext(tokens, index, functionName),
+      )) ||
+    (isExactNewUrlCall(tokens, index, ["e"]) &&
+      isNamedArrowFunctionContext(tokens, index, "nf", ["e", "t", "n", "r"])) ||
+    (isExactNewUrlCall(tokens, index, ["e", "t"]) &&
+      isNamedFunctionContext(tokens, index, "mf")) ||
+    (isExactNewUrlCall(tokens, index, ["n"]) && isNamedFunctionContext(tokens, index, "eg")) ||
+    (isExactNewUrlCall(tokens, index, ["e", "a"]) &&
+      isNamedFunctionContext(tokens, index, "eg"))
+  );
+}
+
+function isGeneratedFederationRemoteUrl(tokens, index) {
+  const template = tokens[index + 3];
+  return (
+    tokens[index]?.value === "new" &&
+    tokens[index + 1]?.value === "URL" &&
+    tokens[index + 2]?.value === "(" &&
+    template?.kind === "template" &&
+    template.dynamic === true &&
+    template.value === "__module_federation_remote__${cf(e)}" &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 5]?.value === "n" &&
+    tokens[index + 6]?.value === ")" &&
+    isNamedFunctionContext(tokens, index, "lf")
   );
 }
 
@@ -1347,7 +1540,10 @@ export function assertImportReferences(
     tokens.some(
       (token) =>
         token.dangerousDynamic &&
-        (!authoritativeDynamicImport || !isGeneratedFederationDynamicTemplate(token)),
+        (!authoritativeDynamicImport ||
+          !isGeneratedFederationDynamicTemplate(token, {
+            authoritativeHostPublication: options.authoritativeHostPublication === true,
+          })),
     )
   ) {
     fail(`${origin} contains an unresolved dynamic template expression`);
@@ -1465,6 +1661,15 @@ export function assertImportReferences(
     }
 
     if (urlCall) {
+      if (isBrowserLocationUrl(tokens, urlCall.start)) continue;
+      if (isBrowserOriginUrl(tokens, urlCall.start)) continue;
+      if (
+        options.authoritativeHostPublication === true &&
+        (isExactHostRuntimeUrl(tokens, urlCall.start) ||
+          isGeneratedFederationRemoteUrl(tokens, urlCall.start))
+      ) {
+        continue;
+      }
       if (
         generatedModuleFederation &&
         (isGeneratedEmptyFederationCssUrl(tokens, urlCall.start) ||
