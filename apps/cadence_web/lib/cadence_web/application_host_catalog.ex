@@ -30,10 +30,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   @application_host_contract "cadence.application-host.v1"
   @catalog_page_size 100
   @max_catalog_applications 100
-  @compatibility_only_application_keys ["comms_overview"]
+  @compatibility_only_application_keys ["comms_overview", "organization_admin"]
   @type route_context :: %{
           host_context: HostContext.t(),
-          mission: Mission.t(),
+          mission: Mission.t() | nil,
           spacecraft: Spacecraft.t() | nil
         }
 
@@ -185,6 +185,23 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @spec scope_document(Scope.t(), route_context()) :: map()
   def scope_document(
+        %Scope{},
+        %{host_context: %HostContext{placement: placement} = host_context}
+      )
+      when placement in [:organization, :user, :admin] do
+    case placement do
+      :organization ->
+        %{"scope" => "organization", "organizationId" => host_context.organization_id}
+
+      :user ->
+        %{"scope" => "user", "userId" => host_context.user_id}
+
+      :admin ->
+        %{"scope" => "admin"}
+    end
+  end
+
+  def scope_document(
         %Scope{organization_id: organization_id},
         %{host_context: %HostContext{} = host_context}
       ) do
@@ -196,6 +213,23 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   @spec context_document(Scope.t(), route_context()) :: map()
+  def context_document(
+        %Scope{} = current_scope,
+        %{host_context: %HostContext{placement: placement} = host_context}
+      )
+      when placement in [:organization, :user, :admin] do
+    %{
+      "organizationId" => host_context.organization_id,
+      "userId" => host_context.user_id,
+      "missionId" => nil,
+      "missionName" => nil,
+      "scope" => Atom.to_string(placement),
+      "spacecraftId" => nil,
+      "spacecraftName" => nil,
+      "actor" => actor_document(current_scope)
+    }
+  end
+
   def context_document(
         %Scope{} = current_scope,
         %{
@@ -216,6 +250,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   @spec bridge_base_path(route_context()) :: binary()
+  def bridge_base_path(%{host_context: %HostContext{placement: placement}})
+      when placement in [:organization, :user, :admin],
+      do: "/api/cadence/application-host/v1"
+
   def bridge_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}) do
     "/api/cadence/application-host/v1/missions/" <> safe_segment(mission_id)
   end
@@ -266,6 +304,20 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   @spec fallback_href(route_context(), binary(), binary() | nil, binary() | nil) ::
           {:ok, binary()} | {:error, :invalid_application_request}
+  def fallback_href(
+        %{host_context: %HostContext{placement: placement}} = route_context,
+        application_key,
+        surface_id,
+        subject_id
+      )
+      when placement in [:organization, :user, :admin] and is_binary(application_key) do
+    with :ok <- validate_route_identifiers(route_context, application_key),
+         :ok <- validate_optional_identifier(surface_id),
+         :ok <- validate_optional_identifier(subject_id) do
+      {:ok, generic_fallback_href(route_context, application_key, surface_id, subject_id)}
+    end
+  end
+
   def fallback_href(
         %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
         application_key,
@@ -438,6 +490,19 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp all_applications(
          %Scope{} = current_scope,
+         %{host_context: %HostContext{placement: placement}} = route_context,
+         manifest_url,
+         release_snapshot
+       )
+       when placement in [:organization, :user, :admin] do
+    with {:ok, contributed} <-
+           contributed_applications(current_scope, route_context, manifest_url, release_snapshot) do
+      finalize_catalog_applications(contributed)
+    end
+  end
+
+  defp all_applications(
+         %Scope{} = current_scope,
          %{host_context: %HostContext{} = host_context} = route_context,
          manifest_url,
          release_snapshot
@@ -567,6 +632,46 @@ defmodule CadenceWeb.ApplicationHostCatalog do
            release_snapshot
          ) do
       {:ok, application} -> {:ok, application_document(application, manifest_url)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp contributed_application_admission(
+         %Scope{} = current_scope,
+         application_key,
+         %{host_context: %HostContext{placement: placement}} = route_context,
+         surface_id,
+         release_snapshot
+       )
+       when placement in [:organization, :user, :admin] and is_binary(application_key) do
+    with :ok <- authorize_catalog_access(current_scope, route_context),
+         {:ok,
+          %CatalogContribution{
+            definition: definition,
+            package_id: package_id,
+            package_version: package_version
+          }} <- CatalogRegistry.fetch(application_key),
+         true <- placement in definition.installable_scopes,
+         {:ok, surface, release} <-
+           resolve_surface(
+             definition,
+             placement,
+             definition.application_key,
+             surface_id,
+             release_snapshot
+           ),
+         :ok <- ensure_release_package(release, package_id, package_version) do
+      {:ok,
+       %{
+         definition: definition,
+         installation: nil,
+         package: %{package_id: package_id, version: package_version},
+         release: release,
+         surface: surface
+       }}
+    else
+      false -> {:error, :application_unavailable}
+      {:error, :unknown_catalog_contribution} -> {:error, :application_unavailable}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -896,6 +1001,10 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   defp host_base_path(%{host_context: %HostContext{placement: :mission, mission_id: mission_id}}),
     do: "/missions/" <> safe_segment(mission_id)
 
+  defp host_base_path(%{host_context: %HostContext{placement: :organization}}), do: ""
+  defp host_base_path(%{host_context: %HostContext{placement: :user}}), do: "/account"
+  defp host_base_path(%{host_context: %HostContext{placement: :admin}}), do: "/admin"
+
   defp host_base_path(%{
          host_context: %HostContext{
            placement: :spacecraft,
@@ -912,6 +1021,26 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       {:error, :invalid_identifier} -> throw(:invalid_application_request)
     end
   end
+
+  defp validate_route_identifiers(
+         %{
+           host_context: %HostContext{placement: :organization, organization_id: organization_id}
+         },
+         application_key
+       ),
+       do: validate_identifiers([organization_id, application_key])
+
+  defp validate_route_identifiers(
+         %{host_context: %HostContext{placement: :user, user_id: user_id}},
+         application_key
+       ),
+       do: validate_identifiers([user_id, application_key])
+
+  defp validate_route_identifiers(
+         %{host_context: %HostContext{placement: :admin}},
+         application_key
+       ),
+       do: validate_identifiers([application_key])
 
   defp validate_route_identifiers(
          %{host_context: %HostContext{placement: :mission, mission_id: mission_id}},
@@ -949,6 +1078,25 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
   defp actor_document(%Scope{}) do
     %{"displayName" => "Authenticated actor", "permissions" => ["applications:view"]}
+  end
+
+  defp authorize_catalog_access(
+         %Scope{} = current_scope,
+         %{host_context: %HostContext{placement: placement}}
+       )
+       when placement in [:organization, :user, :admin] do
+    case placement do
+      :organization ->
+        if is_binary(current_scope.organization_id), do: :ok, else: {:error, :forbidden}
+
+      :user ->
+        if current_scope.actor_kind == :user and not is_nil(current_scope.user),
+          do: :ok,
+          else: {:error, :authenticated_user_required}
+
+      :admin ->
+        if Cadence.Auth.Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+    end
   end
 
   defp authorize_catalog_access(

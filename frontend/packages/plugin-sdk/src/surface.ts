@@ -45,8 +45,10 @@ export function fullPageSurfaceProps(
   bridge: HostBridge,
 ): FullPageSurfaceProps {
   const surface = application.surface;
-  if (surface.placement !== "application_workspace") {
-    throw new Error("A full-page surface must use application_workspace placement.");
+  if (surface.placement !== "application_workspace" && surface.placement !== "ops_workspace") {
+    throw new Error(
+      "A full-page surface must use application_workspace or ops_workspace placement.",
+    );
   }
   if (surface.scope !== context.scope) {
     throw new Error("A full-page surface must match the active host context.");

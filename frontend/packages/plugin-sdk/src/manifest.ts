@@ -174,7 +174,13 @@ function validRenderer(value: unknown): boolean {
 }
 
 function applicationScope(value: unknown): value is ApplicationScope {
-  return value === "organization" || value === "mission" || value === "spacecraft";
+  return (
+    value === "organization" ||
+    value === "user" ||
+    value === "admin" ||
+    value === "mission" ||
+    value === "spacecraft"
+  );
 }
 
 function surfacePurpose(value: unknown): value is SurfacePurpose {

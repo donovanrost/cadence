@@ -163,17 +163,34 @@ function contextLabel(): string {
 
 function contextName(): string {
   if (!context.value) return "RESOLVING";
-  return context.value.scope === "spacecraft"
-    ? context.value.spacecraftName
-    : context.value.missionName;
+  switch (context.value.scope) {
+    case "organization":
+      return context.value.organizationId;
+    case "user":
+      return context.value.actor.displayName;
+    case "admin":
+      return context.value.actor.displayName;
+    case "mission":
+      return context.value.missionName;
+    case "spacecraft":
+      return context.value.spacecraftName;
+  }
 }
 
 function contextDetails(): string {
   if (!context.value) return "RESOLVING";
-  if (context.value.scope === "spacecraft") {
-    return `${context.value.missionId} · ${context.value.spacecraftId}`;
+  switch (context.value.scope) {
+    case "organization":
+      return context.value.organizationId;
+    case "user":
+      return context.value.userId;
+    case "admin":
+      return "GLOBAL";
+    case "mission":
+      return context.value.missionId;
+    case "spacecraft":
+      return `${context.value.missionId} · ${context.value.spacecraftId}`;
   }
-  return context.value.missionId;
 }
 
 function boundedCatalogFetch(

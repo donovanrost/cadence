@@ -70,7 +70,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
     capability_contributions: []
   ]
 
-  @scopes [:organization, :mission, :spacecraft, :source_endpoint, :transport]
+  @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
   @max_dependencies 16
   @max_status_placements 8

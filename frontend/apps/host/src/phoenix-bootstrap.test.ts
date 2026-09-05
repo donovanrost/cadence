@@ -56,4 +56,34 @@ describe("Phoenix federation entry", () => {
 
     expect(() => readPhoenixHostConfig(root)).toThrow("non-empty data-spacecraft-id");
   });
+
+  it.each([
+    ["organization", { hostScope: "organization", organizationId: "org-1" }],
+    ["user/account", { hostScope: "user", userId: "user-1" }],
+    ["admin/global", { hostScope: "admin" }],
+  ] as const)("reads the %s root without a mission id", (_label, attributes) => {
+    const root = document.createElement("div");
+    root.dataset.applicationKey = "organization_admin";
+    root.dataset.surfaceId = "overview";
+    root.dataset.hostScope = attributes.hostScope;
+    if ("organizationId" in attributes) root.dataset.organizationId = attributes.organizationId;
+    if ("userId" in attributes) root.dataset.userId = attributes.userId;
+    root.dataset.catalogUrl = "/api/cadence/application-host/v1/catalog";
+    root.dataset.fallbackHref = "/applications/organization_admin";
+
+    expect(readPhoenixHostConfig(root)).toMatchObject(attributes);
+  });
+
+  it("rejects identifiers from a different host scope", () => {
+    const root = document.createElement("div");
+    root.dataset.applicationKey = "organization_admin";
+    root.dataset.surfaceId = "overview";
+    root.dataset.hostScope = "organization";
+    root.dataset.organizationId = "org-1";
+    root.dataset.missionId = "mission-1";
+    root.dataset.catalogUrl = "/catalog";
+    root.dataset.fallbackHref = "/applications/organization_admin";
+
+    expect(() => readPhoenixHostConfig(root)).toThrow("invalid organization scope");
+  });
 });

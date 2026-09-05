@@ -106,6 +106,33 @@ defmodule CadenceWeb.Router do
         ApplicationHostController,
         :federated
 
+    # These shells stay in the authenticated browser scope so the Phoenix
+    # host can establish organization, user, and admin context from the
+    # current session without inventing a mission resource.
+    get "/applications/:application_key/federated",
+        ApplicationHostController,
+        :organization_federated
+
+    get "/applications/:application_key/:surface_id/federated",
+        ApplicationHostController,
+        :organization_federated
+
+    get "/account/applications/:application_key/federated",
+        ApplicationHostController,
+        :user_federated
+
+    get "/account/applications/:application_key/:surface_id/federated",
+        ApplicationHostController,
+        :user_federated
+
+    get "/admin/applications/:application_key/federated",
+        ApplicationHostController,
+        :admin_federated
+
+    get "/admin/applications/:application_key/:surface_id/federated",
+        ApplicationHostController,
+        :admin_federated
+
     get "/missions/:mission_id/ops/telemetry/explore",
         LegacyOpsRedirectController,
         :telemetry_explore
@@ -612,6 +639,8 @@ defmodule CadenceWeb.Router do
         ApplicationHostController,
         :catalog
 
+    get "/catalog", ApplicationHostController, :catalog
+
     post "/missions/:mission_id/query", ApplicationHostController, :query
 
     post "/missions/:mission_id/spacecraft/:spacecraft_id/query",
@@ -623,6 +652,9 @@ defmodule CadenceWeb.Router do
     post "/missions/:mission_id/spacecraft/:spacecraft_id/actions",
          ApplicationHostController,
          :actions
+
+    post "/query", ApplicationHostController, :query
+    post "/actions", ApplicationHostController, :actions
   end
 
   scope "/api", CadenceWeb do

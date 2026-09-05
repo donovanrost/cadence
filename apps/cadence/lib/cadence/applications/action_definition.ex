@@ -10,7 +10,14 @@ defmodule Cadence.Applications.ActionDefinition do
   alias Cadence.Applications.ActionConfirmation
 
   @type intent :: :configuration | :diagnostic | :operation | :maintenance
-  @type scope :: :organization | :mission | :spacecraft | :source_endpoint | :transport
+  @type scope ::
+          :organization
+          | :user
+          | :admin
+          | :mission
+          | :spacecraft
+          | :source_endpoint
+          | :transport
   @type effect :: :none | :durable | :external
   @type execution :: :immediate | :asynchronous | :approval_required
 
@@ -55,7 +62,7 @@ defmodule Cadence.Applications.ActionDefinition do
   ]
 
   @intents [:configuration, :diagnostic, :operation, :maintenance]
-  @scopes [:organization, :mission, :spacecraft, :source_endpoint, :transport]
+  @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @effects [:none, :durable, :external]
   @executions [:immediate, :asynchronous, :approval_required]
 

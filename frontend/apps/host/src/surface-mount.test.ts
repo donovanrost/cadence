@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { defineComponent, h } from "vue";
+import { fullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { mountFullPageSurface } from "./surface-mount";
 
 const application = {
@@ -39,18 +40,51 @@ const context = {
 } as const;
 
 describe("full-page surface mount", () => {
-  it("mounts a domain renderer into the caller-owned root and unmounts it", () => {
+  it("passes the complete four-prop contract and unmounts it", () => {
     const root = document.createElement("div");
+    const received: Record<string, unknown>[] = [];
     const renderer = defineComponent({
-      props: { bridge: { type: Object }, context: { type: Object } },
-      setup() {
+      props: {
+        application: { type: Object, required: true },
+        surface: { type: Object, required: true },
+        bridge: { type: Object, required: true },
+        context: { type: Object, required: true },
+      },
+      setup(props) {
+        received.push(props);
         return () => h("article", { id: "mounted-surface" }, "Full page");
       },
     });
 
-    const mount = mountFullPageSurface(root, renderer, application, context, {} as never);
+    const bridge = {} as never;
+    const mount = mountFullPageSurface(root, renderer, application, context, bridge);
     expect(root.querySelector("#mounted-surface")?.textContent).toBe("Full page");
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      application,
+      surface: application.surface,
+      context,
+      bridge,
+    });
     mount.unmount();
     expect(root.querySelector("#mounted-surface")).toBeNull();
+  });
+
+  it("accepts the published ops workspace placement but not an ops dock", () => {
+    expect(() =>
+      fullPageSurfaceProps(
+        { ...application, surface: { ...application.surface, placement: "ops_workspace" } },
+        { ...context, scope: "mission" },
+        {} as never,
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      fullPageSurfaceProps(
+        { ...application, surface: { ...application.surface, placement: "ops_dock" } },
+        context,
+        {} as never,
+      ),
+    ).toThrow("application_workspace or ops_workspace");
   });
 });

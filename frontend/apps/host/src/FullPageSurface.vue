@@ -9,5 +9,5 @@ const props = defineProps<{
 </script>
 
 <template>
-  <component :is="props.renderer" :bridge="props.mount.bridge" :context="props.mount.context" />
+  <component :is="props.renderer" v-bind="props.mount" />
 </template>

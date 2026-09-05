@@ -1,28 +1,56 @@
 import {
   assertFrontendApplicationCatalog,
+  type ApplicationScope,
   type CatalogApplication,
   type FrontendApplicationCatalog,
 } from "@cadence/plugin-sdk";
 import { assertKnownFirstPartyIdentity } from "./first-party-composition";
 
-export interface PhoenixHostConfig {
+interface PhoenixHostConfigBase {
   applicationKey: string;
   surfaceId: string;
-  spacecraftId?: string;
-  missionId: string;
   catalogUrl: string;
   fallbackHref: string;
+  hostScope?: ApplicationScope;
+  organizationId?: string;
+  userId?: string;
+  missionId?: string;
+  spacecraftId?: string;
 }
+
+/**
+ * Route configuration is a tagged union. The optional fields in the base keep
+ * old mission/spacecraft callers source-compatible; assertPhoenixHostConfig
+ * applies the same fail-closed rules at the runtime/DOM boundary.
+ */
+export type PhoenixHostConfig = PhoenixHostConfigBase &
+  (
+    | { hostScope: "organization"; organizationId: string }
+    | { hostScope: "user"; userId: string }
+    | { hostScope: "admin" }
+    | { hostScope: "mission"; missionId: string; spacecraftId?: never }
+    | { hostScope: "spacecraft"; missionId: string; spacecraftId: string }
+    | { hostScope?: undefined; missionId: string; spacecraftId?: string }
+  );
 
 export interface PhoenixCatalogRequestOptions {
   fetch?: typeof globalThis.fetch;
   baseUrl?: string;
 }
 
-export interface PhoenixContextRequest {
+type TaggedPhoenixContextRequest =
+  | { scope: "organization"; organizationId: string }
+  | { scope: "user"; userId: string }
+  | { scope: "admin" }
+  | { scope: "mission"; missionId: string }
+  | { scope: "spacecraft"; missionId: string; spacecraftId: string };
+
+interface LegacyPhoenixContextRequest {
   missionId: string;
   spacecraftId?: string;
 }
+
+export type PhoenixContextRequest = TaggedPhoenixContextRequest | LegacyPhoenixContextRequest;
 
 export async function loadPhoenixApplicationCatalog(
   config: PhoenixHostConfig,
@@ -47,12 +75,7 @@ export async function loadPhoenixApplicationCatalog(
   catalog.applications.forEach(assertKnownFirstPartyIdentity);
 
   const context = catalog.session.context;
-  const expectedScope = config.spacecraftId === undefined ? "mission" : "spacecraft";
-  if (
-    context.scope !== expectedScope ||
-    context.missionId !== config.missionId ||
-    context.spacecraftId !== (config.spacecraftId ?? null)
-  ) {
+  if (!matchesPhoenixContext(context, contextRequest(config))) {
     throw new Error("The application catalog is not scoped to the requested context.");
   }
 
@@ -61,10 +84,13 @@ export async function loadPhoenixApplicationCatalog(
 
 export function selectPhoenixApplication(
   catalog: FrontendApplicationCatalog,
-  config: Pick<PhoenixHostConfig, "applicationKey" | "surfaceId" | "spacecraftId">,
+  config: Pick<
+    PhoenixHostConfig,
+    "applicationKey" | "surfaceId" | "hostScope" | "organizationId" | "userId" | "missionId" | "spacecraftId"
+  >,
 ): CatalogApplication {
   assertSelectionContext(config);
-  const expectedScope = config.spacecraftId === undefined ? "mission" : "spacecraft";
+  const expectedScope = scopeFromConfig(config);
   const application = catalog.applications.find(
     ({ applicationKey }) => applicationKey === config.applicationKey,
   );
@@ -96,10 +122,10 @@ export function selectPhoenixApplication(
 
 export function phoenixCatalogUrl(
   catalogUrl: string,
-  context: PhoenixContextRequest | string,
+  context: PhoenixContextRequest | PhoenixHostConfig | string,
   baseUrl = currentOrigin(),
 ): string {
-  const request = typeof context === "string" ? { missionId: context } : context;
+  const { legacy, request } = normalizeContextRequest(context);
   assertContextRequest(request);
 
   if (!nonEmptyString(catalogUrl)) {
@@ -120,10 +146,21 @@ export function phoenixCatalogUrl(
     throw new Error("The Phoenix application catalog must use the same origin as the host.");
   }
 
-  target.searchParams.set("mission_id", request.missionId);
-  if (request.spacecraftId !== undefined) {
+  if (!legacy) target.searchParams.set("scope", request.scope);
+  target.searchParams.delete("organization_id");
+  target.searchParams.delete("user_id");
+  target.searchParams.delete("mission_id");
+  target.searchParams.delete("spacecraft_id");
+  if (request.scope === "organization") {
+    target.searchParams.set("organization_id", request.organizationId);
+  } else if (request.scope === "user") {
+    target.searchParams.set("user_id", request.userId);
+  } else if (request.scope === "mission") {
+    target.searchParams.set("mission_id", request.missionId);
+  } else if (request.scope === "spacecraft") {
+    target.searchParams.set("mission_id", request.missionId);
     target.searchParams.set("spacecraft_id", request.spacecraftId);
-  } else target.searchParams.delete("spacecraft_id");
+  }
   target.hash = "";
 
   return catalogUrl.startsWith("/") && !catalogUrl.startsWith("//")
@@ -140,10 +177,6 @@ function assertPhoenixHostConfig(config: PhoenixHostConfig): void {
     throw new Error("The Phoenix host requires a surface id.");
   }
 
-  if (!nonEmptyString(config.missionId)) {
-    throw new Error("The Phoenix host requires a mission id.");
-  }
-
   if (!nonEmptyString(config.catalogUrl)) {
     throw new Error("The Phoenix host requires a catalog URL.");
   }
@@ -152,24 +185,151 @@ function assertPhoenixHostConfig(config: PhoenixHostConfig): void {
     throw new Error("The Phoenix host requires a Phoenix fallback href.");
   }
 
-  assertContextRequest(config);
+  const context = contextRequest(config);
+  assertContextRequest(context);
 }
 
 function assertSelectionContext(
-  config: Pick<PhoenixHostConfig, "applicationKey" | "surfaceId" | "spacecraftId">,
+  config: Pick<
+    PhoenixHostConfig,
+    "applicationKey" | "surfaceId" | "hostScope" | "organizationId" | "userId" | "missionId" | "spacecraftId"
+  >,
 ): void {
-  if (config.spacecraftId !== undefined && !nonEmptyString(config.spacecraftId)) {
-    throw new Error("The Phoenix host requires a non-empty spacecraft id when provided.");
+  contextRequest(config);
+}
+
+function assertContextRequest(context: TaggedPhoenixContextRequest): void {
+  switch (context.scope) {
+    case "organization":
+      if (!nonEmptyString(context.organizationId) || "userId" in context || "missionId" in context || "spacecraftId" in context) {
+        throw new Error("The Phoenix host organization context is invalid.");
+      }
+      return;
+    case "user":
+      if (!nonEmptyString(context.userId) || "organizationId" in context || "missionId" in context || "spacecraftId" in context) {
+        throw new Error("The Phoenix host user context is invalid.");
+      }
+      return;
+    case "admin":
+      if ("organizationId" in context || "userId" in context || "missionId" in context || "spacecraftId" in context) {
+        throw new Error("The Phoenix host admin context is invalid.");
+      }
+      return;
+    case "mission":
+      if (!nonEmptyString(context.missionId) || "organizationId" in context || "userId" in context || "spacecraftId" in context) {
+        throw new Error("The Phoenix host mission context is invalid.");
+      }
+      return;
+    case "spacecraft":
+      if (!nonEmptyString(context.missionId) || !nonEmptyString(context.spacecraftId) || "organizationId" in context || "userId" in context) {
+        throw new Error("The Phoenix host spacecraft context is invalid.");
+      }
+      return;
   }
 }
 
-function assertContextRequest(context: PhoenixContextRequest): void {
-  if (!nonEmptyString(context.missionId)) {
-    throw new Error("The Phoenix host requires a mission id.");
+function contextRequest(config: {
+  hostScope?: ApplicationScope;
+  organizationId?: string;
+  userId?: string;
+  missionId?: string;
+  spacecraftId?: string;
+}): TaggedPhoenixContextRequest {
+  const scope = config.hostScope ?? (config.spacecraftId === undefined ? "mission" : "spacecraft");
+
+  switch (scope) {
+    case "organization":
+      if (!nonEmptyString(config.organizationId) || config.userId || config.missionId || config.spacecraftId) {
+        throw new Error("The Phoenix host organization context is invalid.");
+      }
+      return { scope, organizationId: config.organizationId };
+    case "user":
+      if (!nonEmptyString(config.userId) || config.organizationId || config.missionId || config.spacecraftId) {
+        throw new Error("The Phoenix host user context is invalid.");
+      }
+      return { scope, userId: config.userId };
+    case "admin":
+      if (config.organizationId || config.userId || config.missionId || config.spacecraftId) {
+        throw new Error("The Phoenix host admin context is invalid.");
+      }
+      return { scope };
+    case "mission":
+      if (!nonEmptyString(config.missionId) || config.organizationId || config.userId || config.spacecraftId) {
+        throw new Error("The Phoenix host mission context is invalid.");
+      }
+      return { scope, missionId: config.missionId };
+    case "spacecraft":
+      if (!nonEmptyString(config.missionId) || !nonEmptyString(config.spacecraftId) || config.organizationId || config.userId) {
+        throw new Error("The Phoenix host spacecraft context is invalid.");
+      }
+      return { scope, missionId: config.missionId, spacecraftId: config.spacecraftId };
+    default:
+      throw new Error("The Phoenix host scope is invalid.");
+  }
+}
+
+function normalizeContextRequest(
+  context: PhoenixContextRequest | PhoenixHostConfig | string,
+): { legacy: boolean; request: TaggedPhoenixContextRequest } {
+  if (typeof context === "string") {
+    return { legacy: true, request: { scope: "mission", missionId: context } };
   }
 
-  if (context.spacecraftId !== undefined && !nonEmptyString(context.spacecraftId)) {
-    throw new Error("The Phoenix host requires a non-empty spacecraft id when provided.");
+  if ("applicationKey" in context) {
+    return {
+      legacy: context.hostScope === undefined,
+      request: contextRequest(context),
+    };
+  }
+
+  if ("scope" in context) {
+    return { legacy: false, request: context };
+  }
+
+  if (context.spacecraftId !== undefined) {
+    return {
+      legacy: true,
+      request: {
+        scope: "spacecraft",
+        missionId: context.missionId,
+        spacecraftId: context.spacecraftId,
+      },
+    };
+  }
+
+  return { legacy: true, request: { scope: "mission", missionId: context.missionId } };
+}
+
+function scopeFromConfig(config: {
+  hostScope?: ApplicationScope;
+  organizationId?: string;
+  userId?: string;
+  missionId?: string;
+  spacecraftId?: string;
+}): ApplicationScope {
+  return contextRequest(config).scope;
+}
+
+function matchesPhoenixContext(
+  actual: import("@cadence/plugin-sdk").HostContext,
+  expected: TaggedPhoenixContextRequest,
+): boolean {
+  if (actual.scope !== expected.scope) return false;
+  switch (expected.scope) {
+    case "organization":
+      return actual.organizationId === expected.organizationId;
+    case "user":
+      return actual.scope === "user" && actual.userId === expected.userId;
+    case "admin":
+      return true;
+    case "mission":
+      return actual.scope === "mission" && actual.missionId === expected.missionId;
+    case "spacecraft":
+      return (
+        actual.scope === "spacecraft" &&
+        actual.missionId === expected.missionId &&
+        actual.spacecraftId === expected.spacecraftId
+      );
   }
 }
 

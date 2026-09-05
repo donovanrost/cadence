@@ -115,6 +115,26 @@ const spacecraftConfig: PhoenixHostConfig = {
 };
 
 describe("Phoenix application catalog bootstrap", () => {
+  it("encodes every tagged host scope without a fake mission id", () => {
+    expect(
+      phoenixCatalogUrl("/catalog", { scope: "organization", organizationId: "org-1" }),
+    ).toBe("/catalog?scope=organization&organization_id=org-1");
+    expect(phoenixCatalogUrl("/catalog", { scope: "user", userId: "user-1" })).toBe(
+      "/catalog?scope=user&user_id=user-1",
+    );
+    expect(phoenixCatalogUrl("/catalog", { scope: "admin" })).toBe("/catalog?scope=admin");
+  });
+
+  it("rejects a tagged context carrying an identity from another scope", () => {
+    expect(() =>
+      phoenixCatalogUrl("/catalog", {
+        scope: "organization",
+        organizationId: "org-1",
+        missionId: "mission-1",
+      } as never),
+    ).toThrow("organization context is invalid");
+  });
+
   it("selects the requested mission Comms application and preserves same-origin credentials", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(input).toBe("/api/cadence/application-host/v1/catalog?mission_id=mission-1");
@@ -169,6 +189,7 @@ describe("Phoenix application catalog bootstrap", () => {
       selectPhoenixApplication(missionCatalog, {
         applicationKey: "comms_overview",
         surfaceId: "overview",
+        missionId: "mission-1",
         spacecraftId: "spacecraft-1",
       }),
     ).toThrow("not approved for spacecraft context");
@@ -179,6 +200,7 @@ describe("Phoenix application catalog bootstrap", () => {
       selectPhoenixApplication(missionCatalog, {
         applicationKey: "missing_application",
         surfaceId: "overview",
+        missionId: "mission-1",
       }),
     ).toThrow('does not provide requested application "missing_application"');
 
@@ -186,6 +208,7 @@ describe("Phoenix application catalog bootstrap", () => {
       selectPhoenixApplication(missionCatalog, {
         applicationKey: "comms_overview",
         surfaceId: "missing_surface",
+        missionId: "mission-1",
       }),
     ).toThrow('does not provide requested surface "missing_surface"');
   });
