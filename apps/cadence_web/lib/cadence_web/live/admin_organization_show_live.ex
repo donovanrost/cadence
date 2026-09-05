@@ -85,6 +85,7 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
           application_key="organization_admin"
           surface_id="admin_organization_show"
           host_scope="admin"
+          query_params={%{organization_id: @organization.organization_id}}
           v-ssr={false}
         />
       </div>

@@ -42,8 +42,12 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
     assert vue =~ "FederatedFullPageSurface"
     assert vue =~ "createLiveVue"
     assert vue =~ "data-catalog-url"
+    refute vue =~ "surfaceForPath"
+    refute vue =~ "location.pathname"
     assert app =~ "MutationObserver"
     assert app =~ "/assets/application-host/host/host.js"
+    assert app =~ "phx:page-loading-stop"
+    assert app =~ "mounted.unmount()"
   end
 
   test "non-Ops federated full pages pass descriptors without legacy renderer bindings" do
@@ -66,8 +70,34 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
       assert mount =~ ~r/\bsurface_id=/, path
       assert mount =~ ~r/\bhost_scope=/, path
       assert mount =~ "v-ssr={false}"
+      refute path =~ ~r{/(admin_home|admin_organization_list|admin_organization_new|admin_runtime|notifications)_live\.ex$} and
+               mount !~ ~r/\bquery_params=/
       refute mount =~ ~r/\bv-on:/, path
       refute mount =~ ~r/\b(presentation|page|form|navigation|overview|actions)=/, path
+    end)
+  end
+
+  test "route-owned ids are passed as bounded query parameters" do
+    contracts = [
+      {"catalog/catalog_artifact_show_live.ex", ~w(mission_id artifact_id)},
+      {"catalog/catalog_database_show_live.ex", ~w(mission_id catalog_database_id)},
+      {"catalog/catalog_revision_show_live.ex", ~w(mission_id catalog_revision_id)},
+      {"catalog/catalog_import_run_show_live.ex", ~w(mission_id import_run_id)},
+      {"provider_account_show_live.ex", ~w(organization_id provider_account_id)},
+      {"spacecraft_applications_live.ex", ~w(mission_id spacecraft_id)},
+      {"comms_ground_station_show_live.ex", ~w(mission_id ground_station_id)},
+      {"comms_routing_show_live.ex", ~w(mission_id routing_rule_id)}
+    ]
+
+    Enum.each(contracts, fn {relative_path, keys} ->
+      source = File.read!(Path.join(@live_root, relative_path))
+      [mount] = Regex.run(~r/v-component="FederatedFullPageSurface"[\s\S]*?\/>/, source)
+
+      assert mount =~ ~r/\bquery_params=/, relative_path
+
+      Enum.each(keys, fn key ->
+        assert mount =~ ~r/#{key}: /, "#{relative_path} omits #{key}"
+      end)
     end)
   end
 end

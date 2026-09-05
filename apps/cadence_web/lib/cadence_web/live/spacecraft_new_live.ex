@@ -99,9 +99,10 @@ defmodule CadenceWeb.SpacecraftNewLive do
         v-component="FederatedFullPageSurface"
         application_key="spacecraft"
         surface_id="new"
-        host_scope="mission"
-        mission_id={@current_mission.mission_id}
-        v-ssr={false}
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id}}
+          v-ssr={false}
       />
     </Layouts.app>
     """

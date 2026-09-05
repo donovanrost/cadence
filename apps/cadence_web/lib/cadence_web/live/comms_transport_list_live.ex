@@ -106,9 +106,10 @@ defmodule CadenceWeb.CommsTransportListLive do
         v-component="FederatedFullPageSurface"
         application_key="comms"
         surface_id="transports"
-        host_scope="mission"
-        mission_id={@current_mission.mission_id}
-        v-ssr={false}
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id}}
+          v-ssr={false}
         class="contents"
       />
     </Layouts.app>

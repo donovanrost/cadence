@@ -96,9 +96,10 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
         v-component="FederatedFullPageSurface"
         application_key="mission_catalog"
         surface_id="catalog_artifact_show"
-        host_scope="mission"
-        mission_id={@current_mission.mission_id}
-        v-ssr={false}
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id, artifact_id: @artifact.artifact_id}}
+          v-ssr={false}
         class="contents"
       />
     </Layouts.app>

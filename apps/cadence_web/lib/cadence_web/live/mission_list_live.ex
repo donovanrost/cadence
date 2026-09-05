@@ -27,6 +27,7 @@ defmodule CadenceWeb.MissionListLive do
         surface_id="mission_list"
         host_scope="organization"
         organization_id={@current_scope.organization.organization_id}
+        query_params={%{organization_id: @current_scope.organization.organization_id}}
         v-ssr={false}
       />
     </Layouts.app>

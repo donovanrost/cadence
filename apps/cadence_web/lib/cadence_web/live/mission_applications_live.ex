@@ -45,9 +45,10 @@ defmodule CadenceWeb.MissionApplicationsLive do
         v-component="FederatedFullPageSurface"
         application_key="mission_catalog"
         surface_id="mission_applications"
-        host_scope="mission"
-        mission_id={@current_mission.mission_id}
-        v-ssr={false}
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id}}
+          v-ssr={false}
         class="contents"
       />
     </Layouts.app>

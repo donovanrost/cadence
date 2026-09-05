@@ -23,20 +23,96 @@ liveSocket.connect()
 
 window.liveSocket = liveSocket
 
-let federationHostLoad
+const federationHostAsset = "/assets/application-host/host/host.js"
+let federationHostModuleLoad
+const federationHostMounts = new Map()
+const federationHostPending = new Map()
 
-function bootFederationHost() {
-  if (federationHostLoad || !document.querySelector("#cadence-federation-root")) return
-
-  const federationHostAsset = "/assets/application-host/host/host.js"
-  federationHostLoad = import(/* @vite-ignore */ federationHostAsset).catch((reason) => {
-    federationHostLoad = undefined
-    console.error("Cadence federated host failed to load.", reason)
-  })
+function federationRootSignature(root) {
+  return [
+    root.dataset.applicationKey,
+    root.dataset.surfaceId,
+    root.dataset.hostScope,
+    root.dataset.organizationId,
+    root.dataset.userId,
+    root.dataset.missionId,
+    root.dataset.spacecraftId,
+    root.dataset.queryParams,
+    root.dataset.catalogUrl,
+    root.dataset.fallbackHref
+  ].join("\u0000")
 }
 
+function connectedFederationRoot(root) {
+  return root.isConnected && document.documentElement.contains(root)
+}
+
+function loadFederationHostModule() {
+  if (!federationHostModuleLoad) {
+    federationHostModuleLoad = import(/* @vite-ignore */ federationHostAsset).catch((reason) => {
+      federationHostModuleLoad = undefined
+      throw reason
+    })
+  }
+
+  return federationHostModuleLoad
+}
+
+function cleanupFederationHostRoots() {
+  for (const [root, mounted] of federationHostMounts) {
+    if (!connectedFederationRoot(root)) {
+      mounted.unmount()
+      federationHostMounts.delete(root)
+    }
+  }
+
+  for (const root of federationHostPending.keys()) {
+    if (!connectedFederationRoot(root)) federationHostPending.delete(root)
+  }
+}
+
+export function bootstrapFederationRoot(root) {
+  cleanupFederationHostRoots()
+  const signature = federationRootSignature(root)
+  const mounted = federationHostMounts.get(root)
+  if (mounted?.signature === signature) return
+
+  if (mounted) {
+    mounted.unmount()
+    federationHostMounts.delete(root)
+  }
+
+  if (federationHostPending.get(root) === signature) return
+  federationHostPending.set(root, signature)
+
+  loadFederationHostModule()
+    .then((hostModule) => {
+      if (federationHostPending.get(root) !== signature) return
+      federationHostPending.delete(root)
+      if (!connectedFederationRoot(root)) return
+
+      const mountedHost = hostModule.bootstrapPhoenixHost(root)
+      federationHostMounts.set(root, {mountedHost, signature, unmount: () => mountedHost.unmount()})
+    })
+    .catch((reason) => {
+      if (federationHostPending.get(root) === signature) federationHostPending.delete(root)
+      console.error("Cadence federated host failed to load or mount.", reason)
+    })
+}
+
+function bootFederationHost() {
+  cleanupFederationHostRoots()
+  for (const root of document.querySelectorAll("#cadence-federation-root")) {
+    bootstrapFederationRoot(root)
+  }
+}
+
+document.addEventListener("phx:page-loading-stop", bootFederationHost)
 bootFederationHost()
-new MutationObserver(bootFederationHost).observe(document.body, {
-  childList: true,
-  subtree: true
-})
+
+if (document.body) {
+  new MutationObserver(bootFederationHost).observe(document.body, {
+    childList: true,
+    subtree: true
+  })
+}

@@ -80,6 +80,7 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
         application_key="organization_admin"
         surface_id="admin_organization_invite"
         host_scope="admin"
+        query_params={%{organization_id: @organization.organization_id}}
         v-ssr={false}
       />
     </Layouts.app>

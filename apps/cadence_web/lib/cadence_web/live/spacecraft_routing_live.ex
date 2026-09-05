@@ -40,9 +40,10 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
         application_key="spacecraft"
         surface_id="routing"
         host_scope="spacecraft"
-        mission_id={@current_mission.mission_id}
-        spacecraft_id={@current_spacecraft.spacecraft_id}
-        v-ssr={false}
+          mission_id={@current_mission.mission_id}
+          spacecraft_id={@current_spacecraft.spacecraft_id}
+          query_params={%{mission_id: @current_mission.mission_id, spacecraft_id: @current_spacecraft.spacecraft_id}}
+          v-ssr={false}
       />
     </Layouts.app>
     """
