@@ -6,7 +6,6 @@ import {
   type FrontendApplicationCatalog,
   type HostQueryParams,
 } from "@cadence/plugin-sdk";
-import { assertKnownFirstPartyIdentity } from "./first-party-composition";
 
 interface PhoenixHostConfigBase {
   applicationKey: string;
@@ -75,7 +74,6 @@ export async function loadPhoenixApplicationCatalog(
 
   const catalog: unknown = await response.json();
   assertFrontendApplicationCatalog(catalog);
-  catalog.applications.forEach(assertKnownFirstPartyIdentity);
 
   const context = catalog.session.context;
   if (!matchesPhoenixContext(context, contextRequest(config))) {

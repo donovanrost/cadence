@@ -1,55 +1,34 @@
 import type { CatalogApplication, FirstPartyApplicationManifest } from "@cadence/plugin-sdk";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  APPROVED_FIRST_PARTY_APPLICATIONS,
-  createHostContributionBootstrap,
-} from "./first-party-composition";
+import { createHostContributionBootstrap } from "./first-party-composition";
 
-const context = {
-  scope: "mission",
-  organizationId: "org-1",
-  missionId: "mission-1",
-  missionName: "Firebird",
-  spacecraftId: null,
-  spacecraftName: null,
-  actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
-} as const;
-
-function applicationFor(
-  contract: (typeof APPROVED_FIRST_PARTY_APPLICATIONS)[number],
-): CatalogApplication {
-  const exposedModule =
-    contract.applicationKey === "comms_overview" ? "./LegacyApplication" : "./Application";
-  const surface = {
+const application = {
+  applicationKey: "unlisted_application",
+  applicationVersion: 7,
+  displayName: "Unlisted application",
+  description: "A valid catalog contribution that is unknown to the host source.",
+  package: { packageId: "example.unlisted-application", version: 3 },
+  surface: {
     surfaceId: "overview",
-    version: 1,
+    version: 2,
     purpose: "overview" as const,
-    scope: "mission" as const,
+    scope: "organization" as const,
     placement: "application_workspace" as const,
     navigation: { label: "Overview", order: 1 },
-    dataContract: { id: `cadence.${contract.applicationKey}.overview`, version: 1 },
+    dataContract: { id: "example.unlisted-application.overview", version: 4 },
     actions: [],
-    renderer: { kind: "federated-vue" as const, exposedModule },
-  };
+    renderer: { kind: "federated-vue" as const, exposedModule: "./Application" },
+  },
+  release: {
+    federation: "module_federation" as const,
+    releaseId: "release-7",
+    remoteName: "example_unlisted_application",
+    manifestUrl: "/assets/application-host/unlisted-application/mf-manifest.json",
+    exposedModule: "./Application",
+  },
+} satisfies CatalogApplication;
 
-  return {
-    applicationKey: contract.applicationKey,
-    applicationVersion: 1,
-    displayName: contract.applicationKey,
-    description: "First-party contribution contract fixture.",
-    package: { packageId: contract.packageId, version: 1 },
-    surface,
-    release: {
-      federation: "module_federation",
-      releaseId: `sha256:${"a".repeat(64)}`,
-      remoteName: contract.remoteName,
-      manifestUrl: `/assets/application-host/${contract.publicationBundle}/mf-manifest.json`,
-      exposedModule,
-    },
-  };
-}
-
-function moduleFor(application: CatalogApplication): {
+function moduleFor(value: CatalogApplication): {
   manifest: FirstPartyApplicationManifest;
   default: object;
 } {
@@ -57,7 +36,7 @@ function moduleFor(application: CatalogApplication): {
     manifest: {
       schema: "cadence.first-party-federated-application.v1",
       hostContract: "cadence.application-host.v1",
-      package: { ...application.package, trust: "first_party" },
+      package: { ...value.package, trust: "first_party" },
       compatibility: {
         cadenceApplicationContract: 1,
         cadenceSurfaceContract: 1,
@@ -65,65 +44,48 @@ function moduleFor(application: CatalogApplication): {
         cadenceThemeContract: 1,
       },
       application: {
-        applicationKey: application.applicationKey,
-        version: application.applicationVersion,
-        displayName: application.displayName,
-        description: application.description,
-        installableScopes: [context.scope],
+        applicationKey: value.applicationKey,
+        version: value.applicationVersion,
+        displayName: value.displayName,
+        description: value.description,
+        installableScopes: [value.surface.scope],
       },
-      surfaces: [application.surface],
+      surfaces: [value.surface],
     },
     default: {},
   };
 }
 
-describe("approved first-party host composition", () => {
-  it("pins the Organization Admin catalog identity to the published package and remote", () => {
+describe("generic host composition", () => {
+  it("admits an unknown but valid Phoenix catalog application", () => {
+    const bootstrap = createHostContributionBootstrap();
+    const module = moduleFor(application);
+
+    expect(bootstrap.register(application, module)).toBe(module);
+    expect(bootstrap.registry.list()).toHaveLength(1);
     expect(
-      APPROVED_FIRST_PARTY_APPLICATIONS.find(
-        ({ applicationKey }) => applicationKey === "organization_admin",
-      ),
-    ).toEqual({
-      applicationKey: "organization_admin",
-      packageId: "cadence.organization-admin",
-      remoteName: "cadence_organization_admin",
-      publicationBundle: "organization-admin",
-    });
+      bootstrap.registry.get(application.applicationKey, application.applicationVersion),
+    ).toMatchObject({ manifest: module.manifest });
   });
 
-  it("registers every approved application through the catalog admission boundary", () => {
+  it("fails closed when the loaded module identity differs from the admitted catalog", () => {
     const bootstrap = createHostContributionBootstrap();
-
-    for (const contract of APPROVED_FIRST_PARTY_APPLICATIONS) {
-      const application = applicationFor(contract);
-      const module = moduleFor(application);
-      expect(bootstrap.register(application, module)).toBe(module);
-    }
-
-    expect(bootstrap.registry.list()).toHaveLength(APPROVED_FIRST_PARTY_APPLICATIONS.length);
-    expect(
-      bootstrap.registry.list().map(({ manifest }) => manifest.application.applicationKey),
-    ).toEqual(APPROVED_FIRST_PARTY_APPLICATIONS.map(({ applicationKey }) => applicationKey));
-  });
-
-  it("rejects a known application with a catalog-swapped remote identity", () => {
-    const bootstrap = createHostContributionBootstrap();
-    const contract = APPROVED_FIRST_PARTY_APPLICATIONS[0];
-    const application = applicationFor(contract);
     const module = moduleFor(application);
 
     expect(() =>
       bootstrap.register(
-        { ...application, release: { ...application.release, remoteName: "cadence_imposter" } },
+        {
+          ...application,
+          package: { ...application.package, packageId: "example.other-application" },
+        },
         module,
       ),
-    ).toThrow("unexpected package or remote identity");
+    ).toThrow("does not match the host-approved application contract");
     expect(bootstrap.registry.list()).toHaveLength(0);
   });
 
   it("does not replace an already admitted contribution with a later module instance", () => {
     const bootstrap = createHostContributionBootstrap();
-    const application = applicationFor(APPROVED_FIRST_PARTY_APPLICATIONS[0]);
     const first = moduleFor(application);
     const second = moduleFor(application);
 

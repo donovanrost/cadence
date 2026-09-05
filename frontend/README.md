@@ -3,8 +3,8 @@
 This workspace proves the trusted first-party frontend application boundary with a Vue host and two
 independently built Module Federation remotes:
 
-- `apps/host` owns the Vue entry journey, development administrator session, system-administration
-  shell, and the downstream application workspace. The application workspace receives a
+- `apps/host` owns the generic Vue entry and downstream application workspace. The application
+  workspace receives a
   host-approved release catalog and owns mission context, compatibility checks, HTTP query/action
   dispatch, loading and render-error containment, and the operator activity rail.
 - `apps/telemetry-decom` contributes a trusted Telemetry Decom renderer. Packet filtering and draft
@@ -49,23 +49,10 @@ does not silently move with their release channels.
 
 ## Entry journey
 
-The Vue host starts at `/sign-in`. It deliberately has no registration route while Cadence's
-account-registration mechanism is unsettled. The frontend-only session boundary reads the same
-`CADENCE_ADMIN_EMAIL`, `CADENCE_ADMIN_PASSWORD`, `CADENCE_ADMIN_DISPLAY_NAME`, and
-`CADENCE_ADMIN_MODE_TTL_SECONDS` environment contract used by local Cadence development. The
-checked-in `mise.toml` defaults are `admin@example.com` and `change-me`.
-
-A successful sign-in establishes a same-origin, HTTP-only PoC cookie and enters `/admin`. The first
-admin slice includes these routes:
-
-- `/admin` — system overview and control-surface index
-- `/admin/organizations` — organization boundary register
-- `/admin/runtime` — session authority and frontend contract evidence
-- `/applications` — the existing federated application-host PoC
-
-The session service exists only to make the Vue development loop coherent. It does not replace the
-eventual Phoenix authentication adapter, and the organization/admin data is explicitly marked as a
-frontend fixture until those read models are connected.
+The standalone Vue host starts at `/` and immediately discovers the demo catalog. It has no
+application-specific routes, authentication flow, default application, or application identity
+allowlist. The catalog chooses the active application and release; the Phoenix entry uses the
+same host renderer with route-provided application and surface identity.
 
 ## Commands
 
@@ -132,19 +119,19 @@ that cannot be proven by rendering alone. `storybook:test` renders all stories i
 
 ## Runtime proof matrix
 
-After sign-in, `/applications` loads the current Telemetry Decom release. These URLs exercise the
-other evidence:
+At `/`, the generic host loads the first catalog application. These URLs exercise the other
+evidence:
 
-| URL                                        | Expected result                                                             |
-| ------------------------------------------ | --------------------------------------------------------------------------- |
-| `/applications?application=contract_probe` | Loads a second application through the same generic host path               |
-| `/applications?release=previous`           | Pins and loads the previous Telemetry Decom production artifact             |
-| `/applications?scenario=offline`           | Contains an unreachable approved release without losing the host shell      |
-| `/applications?scenario=incompatible`      | Rejects an application-version mismatch before mounting                     |
-| `/applications?scenario=throw`             | Contains an exception raised after the remote component mounts              |
-| `/applications?scenario=malformed`         | Rejects the host catalog before loading any remote code                     |
-| `/applications?scenario=viewer`            | Loads data but rejects configuration actions using server-owned permissions |
-| `/applications?scenario=stale`             | Returns a structured optimistic-concurrency conflict                        |
+| URL                           | Expected result                                                             |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `/?application=<catalog-key>` | Selects a catalog application without a host allowlist                      |
+| `/?release=previous`          | Requests the catalog's previous release                                     |
+| `/?scenario=offline`          | Contains an unreachable release without losing the host shell               |
+| `/?scenario=incompatible`     | Rejects an application-version mismatch before mounting                     |
+| `/?scenario=throw`            | Contains an exception raised after the remote component mounts              |
+| `/?scenario=malformed`        | Rejects the host catalog before loading any remote code                     |
+| `/?scenario=viewer`           | Loads data but rejects configuration actions using server-owned permissions |
+| `/?scenario=stale`            | Returns a structured optimistic-concurrency conflict                        |
 
 ## Federation transport decision
 
@@ -169,14 +156,10 @@ demo service with authenticated Phoenix endpoints for catalog discovery, version
 typed actions. The server is authoritative for `current_scope`, installations, package versions,
 scope, permissions, query/action registration, validation, persistence, and audit receipts.
 
-When the Vue shell is connected to Phoenix, `/sign-in` belongs in a `CadenceWeb` scope using the
-`:browser` pipeline so it can establish the normal session and redirect an already authenticated
-user. `/admin`, `/applications`, and controller-backed bridge endpoints belong in a separate
-`CadenceWeb` scope using `pipe_through [:browser, :require_authenticated_user]`: the browser
-pipeline supplies the authenticated session and CSRF protection, while
-`:require_authenticated_user` prevents the SPA or a remote from reaching protected resources
-without `current_scope`. This preserves router-level authentication even though Vue owns the
-rendered interface. Plugins do not contribute routes or authentication plugs.
+When the Vue shell is connected to Phoenix, the host root belongs in the Phoenix scope that supplies
+the authenticated session and CSRF protection, while the catalog and controller-backed bridge
+endpoints remain behind `:require_authenticated_user`. Phoenix owns route placement, authentication,
+authorization, and context; plugins do not contribute routes or authentication plugs.
 
 This PoC does not add those Phoenix routes, alter Elixir code, or approve third-party browser code.
 Signed release metadata, artifact integrity enforcement, CDN failover, and the separate Extism/WIT

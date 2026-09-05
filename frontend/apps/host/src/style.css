@@ -59,7 +59,7 @@
   height: 12px;
 }
 
-.mission-context {
+.host-context {
   display: flex;
   overflow: hidden;
   align-items: baseline;
@@ -68,7 +68,7 @@
   white-space: nowrap;
 }
 
-.mission-context__label,
+.host-context__label,
 .rail__section-label,
 .rail__foot span,
 .breadcrumb,
@@ -82,20 +82,20 @@
   letter-spacing: 0.105em;
 }
 
-.mission-context__label {
+.host-context__label {
   color: var(--steel-500);
 }
 
-.mission-context strong {
+.host-context strong {
   color: var(--paper);
   font-size: 14px;
 }
 
-.mission-context__separator {
+.host-context__separator {
   color: var(--amber);
 }
 
-.mission-context > span:last-child {
+.host-context > span:last-child {
   overflow: hidden;
   color: var(--steel-300);
   font-size: 13px;
@@ -575,13 +575,13 @@
     padding: 0 14px;
   }
 
-  .mission-context {
+  .host-context {
     padding: 0 14px;
   }
 
-  .mission-context__label,
-  .mission-context__separator,
-  .mission-context > span:last-child,
+  .host-context__label,
+  .host-context__separator,
+  .host-context > span:last-child,
   .operator-context {
     display: none;
   }

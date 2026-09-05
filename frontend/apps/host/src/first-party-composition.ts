@@ -9,51 +9,6 @@ import {
   type ApplicationContributionRegistry,
 } from "./contribution-registry";
 
-export const APPROVED_FIRST_PARTY_APPLICATIONS = Object.freeze([
-  {
-    applicationKey: "organization_admin",
-    packageId: "cadence.organization-admin",
-    remoteName: "cadence_organization_admin",
-    publicationBundle: "organization-admin",
-  },
-  {
-    applicationKey: "mission_catalog",
-    packageId: "cadence.mission-catalog",
-    remoteName: "cadence_mission_catalog",
-    publicationBundle: "mission-catalog",
-  },
-  {
-    applicationKey: "spacecraft",
-    packageId: "cadence.spacecraft",
-    remoteName: "cadence_spacecraft",
-    publicationBundle: "spacecraft",
-  },
-  {
-    applicationKey: "telemetry_decom",
-    packageId: "cadence.telemetry-applications",
-    remoteName: "cadence_telemetry_decom",
-    publicationBundle: "telemetry-decom",
-  },
-  {
-    applicationKey: "comms",
-    packageId: "cadence.comms",
-    remoteName: "cadence_comms",
-    publicationBundle: "comms",
-  },
-  {
-    applicationKey: "comms_overview",
-    packageId: "cadence.comms_overview",
-    remoteName: "cadence_comms",
-    publicationBundle: "comms",
-  },
-  {
-    applicationKey: "ops_console",
-    packageId: "cadence.ops_console",
-    remoteName: "cadence_ops_console",
-    publicationBundle: "ops-console",
-  },
-] as const);
-
 export type HostRemoteModule = FederatedApplicationModule<Component>;
 
 export interface HostContributionBootstrap {
@@ -73,7 +28,6 @@ export function createHostContributionBootstrap(): HostContributionBootstrap {
     registry,
     register(application, module) {
       assertReleaseMatchesModule(application, module);
-      assertKnownFirstPartyIdentity(application);
 
       const existing = registry.get(application.applicationKey, application.applicationVersion);
       if (existing) {
@@ -90,20 +44,4 @@ export function createHostContributionBootstrap(): HostContributionBootstrap {
       return module;
     },
   };
-}
-
-export function assertKnownFirstPartyIdentity(application: CatalogApplication): void {
-  const expected = APPROVED_FIRST_PARTY_APPLICATIONS.find(
-    ({ applicationKey }) => applicationKey === application.applicationKey,
-  );
-
-  if (!expected) return;
-  if (
-    application.package.packageId !== expected.packageId ||
-    application.release.remoteName !== expected.remoteName
-  ) {
-    throw new Error(
-      `Approved application ${application.applicationKey} has an unexpected package or remote identity.`,
-    );
-  }
 }

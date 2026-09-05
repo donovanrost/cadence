@@ -152,6 +152,39 @@ describe("Phoenix application catalog bootstrap", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("loads an unknown but valid Phoenix-admitted application without host identity knowledge", async () => {
+    const unknownApplication: CatalogApplication = {
+      ...missionCommsApplication,
+      applicationKey: "unlisted_application",
+      displayName: "Unlisted application",
+      package: { packageId: "example.unlisted-application", version: 3 },
+      surface: {
+        ...missionCommsApplication.surface,
+        surfaceId: "unlisted_surface",
+        dataContract: { id: "example.unlisted-application.surface", version: 1 },
+      },
+      release: {
+        ...missionCommsApplication.release,
+        releaseId: "unlisted-release-v1",
+        remoteName: "example_unlisted_application",
+        manifestUrl: "/assets/application-host/unlisted-application/mf-manifest.json",
+      },
+    };
+    const unknownCatalog = { ...missionCatalog, applications: [unknownApplication] };
+    const config: PhoenixHostConfig = {
+      ...missionConfig,
+      applicationKey: unknownApplication.applicationKey,
+      surfaceId: unknownApplication.surface.surfaceId,
+    };
+    const fetcher = vi.fn(async () => Response.json(unknownCatalog));
+
+    const catalog = await loadPhoenixApplicationCatalog(config, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    expect(selectPhoenixApplication(catalog, config)).toEqual(unknownApplication);
+  });
+
   it("selects the requested spacecraft telemetry surface and requests exact context", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       expect(input).toBe(

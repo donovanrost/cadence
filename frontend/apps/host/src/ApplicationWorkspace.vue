@@ -11,12 +11,8 @@ import { loadFrontendApplicationCatalog } from "./catalog-client";
 import { createHttpHostBridge, type HttpHostBridge } from "./http-host-bridge";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 
-const emit = defineEmits<{
-  navigate: [path: string];
-}>();
-
 const pageUrl = new URL(window.location.href);
-const requestedApplication = pageUrl.searchParams.get("application");
+const requestedApplication = pageUrl.searchParams.get("application")?.trim() || undefined;
 const requestedRelease =
   pageUrl.searchParams.get("release") === "previous" ? "previous" : "current";
 const requestedScenario = pageUrl.searchParams.get("scenario") ?? undefined;
@@ -25,7 +21,7 @@ const catalog = shallowRef<FrontendApplicationCatalog>();
 const bridge = shallowRef<HttpHostBridge>();
 const manifest = shallowRef<FirstPartyApplicationManifest>();
 const bootError = ref<string>();
-const activeApplicationKey = ref(requestedApplication ?? "telemetry_decom");
+const activeApplicationKey = ref(requestedApplication);
 const activity = ref<HostActivityEvent[]>([]);
 const activityOpen = ref(true);
 const mountGeneration = ref(0);
@@ -77,13 +73,11 @@ async function loadCatalog(): Promise<void> {
     if (generation !== catalogGeneration) return;
     catalog.value = nextCatalog;
 
-    if (!nextCatalog.applications.some(matchesActiveApplication)) {
-      activeApplicationKey.value = nextCatalog.applications[0]?.applicationKey ?? "";
-    }
+    if (!nextCatalog.applications.some(matchesActiveApplication))
+      activeApplicationKey.value = nextCatalog.applications[0]?.applicationKey;
 
     const nextApplication = nextCatalog.applications.find(matchesActiveApplication);
-    if (!nextApplication)
-      throw new Error("The host catalog did not provide an active application.");
+    if (!nextApplication) throw new Error("The host catalog did not provide an application.");
 
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication);
     if (generation !== catalogGeneration) {
@@ -156,9 +150,6 @@ function recordActivity(event: HostActivityEvent): void {
 }
 
 function activityLabel(event: HostActivityEvent): string {
-  if (event.contractId === "cadence.packet_bindings.manage") return "Packet data query";
-  if (event.contractId === "cadence.contract_probe.snapshot") return "Contract probe query";
-  if (event.contractId === "save_packet_bindings") return "Save packet bindings";
   return event.contractId;
 }
 
@@ -180,6 +171,45 @@ function initials(displayName: string | undefined): string {
     .toUpperCase();
 }
 
+function contextLabel(): string {
+  return context.value ? `${context.value.scope.toUpperCase()} CONTEXT` : "CONTEXT";
+}
+
+function contextName(): string {
+  const activeContext = context.value;
+  if (!activeContext) return "RESOLVING";
+
+  switch (activeContext.scope) {
+    case "organization":
+      return activeContext.organizationId;
+    case "user":
+    case "admin":
+      return activeContext.actor.displayName;
+    case "mission":
+      return activeContext.missionName;
+    case "spacecraft":
+      return activeContext.spacecraftName;
+  }
+}
+
+function contextDetails(): string {
+  const activeContext = context.value;
+  if (!activeContext) return "RESOLVING";
+
+  switch (activeContext.scope) {
+    case "organization":
+      return activeContext.organizationId;
+    case "user":
+      return activeContext.userId;
+    case "admin":
+      return "GLOBAL";
+    case "mission":
+      return activeContext.missionId;
+    case "spacecraft":
+      return `${activeContext.missionId} · ${activeContext.spacecraftId}`;
+  }
+}
+
 function messageFor(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
@@ -188,48 +218,36 @@ function messageFor(reason: unknown, fallback: string): string {
 <template>
   <div id="cadence-host" class="host-shell">
     <header class="topbar">
-      <a
-        class="wordmark"
-        href="/admin"
-        aria-label="Cadence administration"
-        @click.prevent="emit('navigate', '/admin')"
-      >
+      <div class="wordmark" aria-label="Cadence application host">
         <span class="wordmark__signal" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span>CADENCE</span>
-      </a>
+        <span>CADENCE / HOST</span>
+      </div>
 
-      <div class="mission-context">
-        <span class="mission-context__label">ACTIVE MISSION</span>
-        <strong>{{ context?.missionName ?? "RESOLVING" }}</strong>
-        <span class="mission-context__separator">/</span>
-        <span>{{ context?.spacecraftName ?? "HOST CONTEXT" }}</span>
+      <div class="host-context">
+        <span class="host-context__label">{{ contextLabel() }}</span>
+        <strong>{{ contextName() }}</strong>
+        <span class="host-context__separator">/</span>
+        <span>{{ contextDetails() }}</span>
       </div>
 
       <div class="operator-context">
         <CStatus class="operator-context__status" :tone="context ? 'nominal' : 'warning'" pulse>
-          {{ context ? "SESSION AUTHENTICATED" : "SESSION CHECK" }}
+          {{ context ? "CATALOG AUTHENTICATED" : "CATALOG CHECK" }}
         </CStatus>
         <CTooltip align="end" :content="operatorTooltip">
-          <button id="operator-menu" type="button" aria-label="Open operator menu">
+          <span id="operator-menu" aria-label="Current catalog actor">
             {{ initials(context?.actor.displayName) }}
-          </button>
+          </span>
         </CTooltip>
       </div>
     </header>
 
-    <aside class="rail" aria-label="Primary navigation">
-      <div class="rail__section-label">MISSION</div>
-      <nav>
-        <button type="button" @click="emit('navigate', '/admin')"><span>00</span>Admin</button>
-        <a href="#"><span>01</span>Overview</a>
-        <a href="#"><span>02</span>Operations</a>
-        <a href="#"><span>03</span>Telemetry</a>
-      </nav>
-      <div class="rail__section-label rail__section-label--apps">APPLICATIONS</div>
+    <aside class="rail" aria-label="Admitted applications">
+      <div class="rail__section-label">ADMITTED APPLICATIONS</div>
       <nav id="application-navigation">
         <button
           v-for="application in applications"
-          :id="`open-${application.applicationKey}`"
+          :id="`application-${application.applicationKey}`"
           :key="application.applicationKey"
           type="button"
           :class="{ active: activeApplicationKey === application.applicationKey }"
@@ -238,7 +256,7 @@ function messageFor(reason: unknown, fallback: string): string {
           <span
             :class="activeApplicationKey === application.applicationKey ? 'active-mark' : undefined"
           ></span>
-          {{ application.displayName }}
+          {{ application.displayName }} / {{ application.surface.navigation.label }}
         </button>
         <span v-if="applications.length === 0" class="rail__loading">Resolving catalog…</span>
       </nav>
@@ -251,8 +269,8 @@ function messageFor(reason: unknown, fallback: string): string {
 
     <main class="workspace">
       <section v-if="bootError" id="catalog-error" class="host-boot-error">
-        <p class="eyebrow">Host catalog unavailable</p>
-        <h1>Cadence rejected the application catalog.</h1>
+        <p class="eyebrow">Catalog unavailable</p>
+        <h1>The application catalog was rejected.</h1>
         <p>{{ bootError }}</p>
         <CButton id="retry-catalog" variant="primary" @click="loadCatalog">Retry catalog</CButton>
       </section>
@@ -261,7 +279,8 @@ function messageFor(reason: unknown, fallback: string): string {
         <div class="workspace__head">
           <div>
             <p class="breadcrumb">
-              APPLICATIONS / {{ activeApplication.displayName.toUpperCase() }}
+              {{ activeApplication.applicationKey.toUpperCase() }} /
+              {{ activeApplication.surface.surfaceId.toUpperCase() }}
             </p>
             <h1>{{ activeApplication.surface.navigation.label }}</h1>
           </div>
@@ -273,7 +292,7 @@ function messageFor(reason: unknown, fallback: string): string {
 
         <div class="surface-frame">
           <div class="surface-frame__chrome">
-            <span>TRUSTED FIRST-PARTY SURFACE</span>
+            <span>ADMITTED FEDERATED SURFACE</span>
             <span>
               {{ activeApplication.package.packageId }}@{{ activeApplication.package.version }} ·
               RELEASE {{ activeApplication.release.releaseId }}

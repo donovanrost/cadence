@@ -70,7 +70,7 @@ async function mountWorkspace(bridges: TestBridge[]) {
 }
 
 beforeEach(() => {
-  window.history.replaceState({}, "", "/applications");
+  window.history.replaceState({}, "", "/");
   vi.mocked(loadFrontendApplicationCatalog).mockReset();
   vi.mocked(createHttpHostBridge).mockReset();
 });
@@ -81,8 +81,10 @@ describe("ApplicationWorkspace bridge ownership", () => {
     const secondBridge = testBridge();
     const wrapper = await mountWorkspace([firstBridge, secondBridge]);
 
-    expect(wrapper.find("#open-telemetry_decom").exists()).toBe(true);
-    await wrapper.get("#open-contract_probe").trigger("click");
+    const firstApplicationId = `#application-${workspaceCatalog.applications[0].applicationKey}`;
+    const secondApplicationId = `#application-${workspaceCatalog.applications[1].applicationKey}`;
+    expect(wrapper.find(firstApplicationId).exists()).toBe(true);
+    await wrapper.get(secondApplicationId).trigger("click");
 
     expect(firstBridge.unsubscribe).toHaveBeenCalledTimes(1);
     expect(firstBridge.invalidate).toHaveBeenCalledTimes(1);
@@ -90,7 +92,7 @@ describe("ApplicationWorkspace bridge ownership", () => {
       firstBridge.invalidate.mock.invocationCallOrder[0],
     );
     expect(secondBridge.subscribeMock).toHaveBeenCalledTimes(1);
-    expect(wrapper.find("#open-contract_probe").classes()).toContain("active");
+    expect(wrapper.find(secondApplicationId).classes()).toContain("active");
 
     wrapper.unmount();
     expect(secondBridge.unsubscribe).toHaveBeenCalledTimes(1);
