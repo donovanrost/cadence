@@ -5,7 +5,6 @@ import {readFileSync, realpathSync} from "node:fs"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
-import {peelCadenceInlineWarnings} from "./inline_warning_test_support.mjs"
 import {
   opsAuthorHeaderCallerNames,
   peelCadenceOpsAuthorHeader,
@@ -39,61 +38,6 @@ const collapsibleClosing = `            </CadenceCollapsibleContent>
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 
 const callers = Object.freeze([
-  Object.freeze({
-    path: "apps/cadence_web/assets/vue/OpsFleetPlanningPolicy.vue",
-    baseSha256: "eeeeeecf2d79a27ef6aeea3da5e472cc61e3162ff3f90e504e0aa759a308f6f4",
-    baseDetailsCount: 4,
-    disclosureSeedHelper: null,
-    controlledDisclosures: Object.freeze([
-      Object.freeze({
-        label: "policy",
-        openingIndent: "        ",
-        nativeOpening: '<details :open="policy_form.open">',
-        openingSha256: "1c3488bb5db768112ced67f1d1fd2a24716270c13e7ecaf78d4a1afd4f102310",
-        nativeSummary: `          <summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
-            {{ policy_form.summary }}
-          </summary>`,
-        componentOpening: `        <CadenceCollapsible
-          :content-id="policy_form.id"
-          :open="policy_form.open"
-          client-seeded
-          :seed-epoch="\`\${policy_form.id}:\${policy_form.open}\`"
-          :unmount-on-hide="false"
-        >
-          <div>
-            <CadenceCollapsibleTrigger>
-              <button type="button" class="cursor-pointer px-4 py-3 text-sm font-semibold">
-                {{ policy_form.summary }}
-              </button>
-            </CadenceCollapsibleTrigger>
-            <CadenceCollapsibleContent>`,
-        componentClosing: collapsibleClosing,
-        contentSeparator: "\n",
-      }),
-    ]),
-    boundaries: Object.freeze([
-      Object.freeze({
-        componentOpening:
-          '            <CadenceDetailsFrame :id="policy_form.redundancy.id" class="border border-base-300">',
-        nativeOpening:
-          '            <details :id="policy_form.redundancy.id" class="border border-base-300">',
-        componentClosing: "            </CadenceDetailsFrame>",
-        nativeClosing: "            </details>",
-      }),
-      Object.freeze({
-        componentOpening: "        <CadenceDetailsFrame>",
-        nativeOpening: "        <details>",
-        componentClosing: "        </CadenceDetailsFrame>",
-        nativeClosing: "        </details>",
-      }),
-      Object.freeze({
-        componentOpening: "        <CadenceDetailsFrame>",
-        nativeOpening: "        <details>",
-        componentClosing: "        </CadenceDetailsFrame>",
-        nativeClosing: "        </details>",
-      }),
-    ]),
-  }),
   Object.freeze({
     path: "apps/cadence_web/assets/vue/OpsDashboardLibrary.vue",
     baseSha256: "03b5d0004874c7903cc919ae2417cc827b532e87fd5c8fd6794813b324555324",
@@ -317,7 +261,6 @@ const reconstructParent = (source, caller) => {
   if (opsViewportCallerNames.includes(caller.path.split("/").at(-1))) {
     source = peelCadenceOpsViewport(source, caller.path)
   }
-  source = peelCadenceInlineWarnings(source, caller.path)
 
   assert.equal(
     occurrences(source, detailsFrameImportLine),
@@ -419,16 +362,16 @@ assert.equal(
   realpathSync(pinnedNode),
   `migration proof must run with ${pinnedNode}`,
 )
-assert.equal(callers.length, 2, "the frozen migration ledger contains exactly two callers")
+assert.equal(callers.length, 1, "the frozen migration ledger contains exactly one caller")
 assert.equal(
   callers.reduce((count, caller) => count + caller.boundaries.length, 0),
-  4,
-  "the frozen migration ledger contains exactly four safe roots",
+  1,
+  "the frozen migration ledger contains exactly one safe root",
 )
 assert.equal(
   callers.reduce((count, caller) => count + caller.controlledDisclosures.length, 0),
-  3,
-  "the frozen predecessor ledger contains exactly three retired controlled native roots",
+  2,
+  "the frozen predecessor ledger contains exactly two retired controlled native roots",
 )
 
 for (const caller of callers) {

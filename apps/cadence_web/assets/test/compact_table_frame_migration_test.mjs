@@ -21,9 +21,6 @@ import {
 import {opsListBodyFramePath} from "./ops_list_body_frame_test_support.mjs"
 import {narrowFormPageFramePath} from "./narrow_form_page_frame_test_support.mjs"
 import {
-  peelCadenceDefinitionListPanelBeforeOlderLayers,
-} from "./definition_list_panel_test_support.mjs"
-import {
   elementAttributes,
   expectedNodeVersion,
   installDom,
@@ -60,13 +57,13 @@ const walkVueFiles = async (directory) => {
 }
 
 assert.equal(git("cat-file", "-t", compactTableFramePredecessor).trim(), "commit")
-assert.equal(compactTableFrameMigrations.length, 3, "three callers own the compact cohort")
+assert.equal(compactTableFrameMigrations.length, 2, "two callers own the compact cohort")
 assert.equal(
   compactTableFrameMigrations.reduce((total, entry) => total + entry.boundaries.length, 0),
-  4,
-  "the frozen migration ledger has exactly four native-table boundaries",
+  3,
+  "the frozen migration ledger has exactly three native-table boundaries",
 )
-assert.equal(compactTableNativeExclusions.length, 3, "all three native-table exclusions are frozen")
+assert.equal(compactTableNativeExclusions.length, 0, "no deleted native-table exclusions remain")
 
 const currentVuePaths = (await walkVueFiles(vueDirectory))
   .map((path) => path.slice(repositoryRoot.length + 1))
@@ -98,6 +95,9 @@ const allowedPostPredecessorVuePaths = Object.freeze([
 const postPredecessorVuePaths = currentVuePaths.filter(
   (path) => !predecessorVuePaths.includes(path),
 )
+const survivingPredecessorVuePaths = predecessorVuePaths.filter((path) =>
+  currentVuePaths.includes(path),
+)
 
 assert.deepEqual(
   postPredecessorVuePaths,
@@ -106,13 +106,13 @@ assert.deepEqual(
 )
 assert.deepEqual(
   currentVuePaths,
-  [...predecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
-  "the audit covers the full current tree: every frozen predecessor SFC plus eleven allowed additions",
+  [...survivingPredecessorVuePaths, ...allowedPostPredecessorVuePaths].sort(),
+  "the audit covers the full current tree: every surviving predecessor SFC plus eleven allowed additions",
 )
 assert.equal(predecessorVuePaths.length, 222, "the frozen audit covers exactly 222 Vue SFCs")
 
 const predecessorSources = new Map(
-  predecessorVuePaths.map((path) => [
+  survivingPredecessorVuePaths.map((path) => [
     path,
     git("show", `${compactTableFramePredecessor}:${path}`),
   ]),
@@ -164,7 +164,7 @@ assert.equal(
     (total, source) => total + (source.match(/<\/table>/g)?.length ?? 0),
     0,
   ),
-  7,
+  3,
   "every predecessor native-table opening has one closing",
 )
 
@@ -195,10 +195,7 @@ for (const migration of compactTableFrameMigrations) {
   assert.equal(current.match(/<CadenceTableFrame\b/g)?.length, migration.boundaries.length)
   assert.equal(current.match(/<\/CadenceTableFrame>/g)?.length, migration.boundaries.length)
   assert.equal(
-    peelCompactTableFrames(
-      peelCadenceDefinitionListPanelBeforeOlderLayers(current, migration.file),
-      migration.file,
-    ),
+    peelCompactTableFrames(current, migration.file),
     predecessor,
     `${migration.file} inversely reconstructs ${compactTableFramePredecessor} byte-for-byte`,
   )
@@ -226,7 +223,7 @@ assert.deepEqual(
     .sort((left, right) =>
       `${left.path}\0${left.opening}`.localeCompare(`${right.path}\0${right.opening}`),
     ),
-  "only the three explicitly excluded native tables remain",
+  "no native compact tables remain after the audited migrations",
 )
 
 const currentFrameCallers = [...currentSources]
@@ -244,23 +241,23 @@ assert.equal(
     (total, source) => total + (source.match(/^import CadenceTableFrame\b/gm)?.length ?? 0),
     0,
   ),
-  18,
-  "the source tree has exactly 18 audited TableFrame importers",
+  16,
+  "the source tree has exactly 16 audited TableFrame importers",
 )
 assert.equal(
   [...currentSources.values()].reduce(
     (total, source) => total + (source.match(/<CadenceTableFrame\b/g)?.length ?? 0),
     0,
   ),
-  23,
-  "the source tree has 19 predecessor frames plus the four compact boundaries",
+  21,
+  "the source tree has 18 surviving predecessor frames plus the three compact boundaries",
 )
 assert.equal(
   [...currentSources.values()].reduce(
     (total, source) => total + (source.match(/<\/CadenceTableFrame>/g)?.length ?? 0),
     0,
   ),
-  23,
+  21,
 )
 
 const literalCompactVariants = [...currentSources]

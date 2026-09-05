@@ -200,14 +200,6 @@ const components = Object.freeze([
     sha256: "d2022be7b608d52fbbdc9c853601c6e9798ef009cb181fd55776598b4666440a",
     fields: [field("form.name", 8), field("form.description", 8)],
   },
-  {
-    file: "OpsDataOperations.vue",
-    sha256: "9ae5b5009325a9fbecc9fab68dafe26989aded2960580fffefc43bce898d2372",
-    fields: [
-      field("request_form.fields.workflow", 14),
-      field("request_form.fields.reason", 14),
-    ],
-  },
 ])
 
 const reconstructField = (source, {expression, indent, multilineLabel}, file) => {
@@ -323,7 +315,7 @@ for (const component of loadedComponents) {
   totalFields += fields.length
 }
 
-assert.equal(totalFields, 21, "the frozen DASHBOARD/DATA cohort contains exactly 21 fields")
+assert.equal(totalFields, 19, "the frozen DASHBOARD cohort contains exactly 19 fields")
 
 const dashboardNewSource = loadedComponents.find(
   ({file}) => file === "OpsDashboardNew.vue",
@@ -344,28 +336,6 @@ assert.match(
   dashboardNewPredecessorSource,
   /<div v-if="form\.document_json !== null" class="fieldset mb-3">\n\s*<label :for="form\.document_json\.id">[\s\S]*?<textarea[\s\S]*?v-model="dashboard\.document_json"/,
   "the excluded conditional textarea and its reconciliation remain exact after the newest peel",
-)
-
-const dataOperationsSource = loadedComponents.find(
-  ({file}) => file === "OpsDataOperations.vue",
-).source
-const dataOperationsPredecessorSource = peelConditionalKeyedCadenceFields(
-  dataOperationsSource,
-  "OpsDataOperations.vue",
-)
-for (const fieldKeys of ["primaryRequestFieldKeys", "sourceRangeFieldKeys"]) {
-  assert.match(
-    dataOperationsPredecessorSource,
-    new RegExp(
-      `<div\\n\\s+v-for="fieldKey in ${fieldKeys}"\\n\\s+:key="request_form\\.fields\\[fieldKey\\]\\.id"\\n\\s+class="fieldset mb-3"`,
-    ),
-    `${fieldKeys} frozen dynamic exclusion reconstructs exactly`,
-  )
-}
-assert.match(
-  dataOperationsSource,
-  /<div class="fieldset mb-3">\n\s*<label class="flex cursor-pointer items-start gap-3">\n\s*<input\n\s*type="hidden"\n\s*:name="request_form\.fields\.confirmed\.name"\n\s*value="false">?[\s\S]*?<input\n\s*:id="request_form\.fields\.confirmed\.id"[\s\S]*?type="checkbox"\n\s*value="true"/,
-  "the hidden-false and checkbox pair remains together in its manual label",
 )
 
 dom.window.close()

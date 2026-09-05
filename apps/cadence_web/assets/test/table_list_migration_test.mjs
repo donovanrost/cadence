@@ -33,13 +33,6 @@ const fixtures = Object.freeze([
     predecessorSha256: "a40163d97f403117e58ccc4e2338c76d1e1c5c5d96cac636e4651d30cf3ebcaf",
   }),
   Object.freeze({
-    file: "CatalogDatabaseTable.vue",
-    id: "catalog-databases-table",
-    indentation: "  ",
-    importLine: importWithoutSemicolon,
-    predecessorSha256: "97cf3163799f89d80e6f254d5ae84e3ee0177d9992dcd89e9b1b3b12b7dca2fd",
-  }),
-  Object.freeze({
     file: "CommsRoutingList.vue",
     id: "routing-rules-table",
     indentation: "  ",
@@ -96,7 +89,7 @@ assert.equal(
   expectedNodeVersion,
   `table-list migration uses pinned Node ${expectedNodeVersion}`,
 )
-assert.equal(fixtures.length, 8, "the migration ledger contains exactly eight owned callers")
+assert.equal(fixtures.length, 7, "the migration ledger contains exactly seven owned callers")
 
 let importerCount = 0
 let openingTagCount = 0
@@ -197,9 +190,9 @@ for (const fixture of fixtures) {
   closingTagCount += 1
 }
 
-assert.equal(importerCount, 8, "exactly eight CadenceTableFrame importers are covered")
-assert.equal(openingTagCount, 8, "exactly eight CadenceTableFrame openings are covered")
-assert.equal(closingTagCount, 8, "exactly eight CadenceTableFrame closings are covered")
+assert.equal(importerCount, 7, "exactly seven CadenceTableFrame importers are covered")
+assert.equal(openingTagCount, 7, "exactly seven CadenceTableFrame openings are covered")
+assert.equal(closingTagCount, 7, "exactly seven CadenceTableFrame closings are covered")
 
 console.log(
   `table_list_migration_test passed (8 compiled SFCs, 8 exact ${predecessor} reconstructions)`,

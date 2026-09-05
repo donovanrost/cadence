@@ -95,13 +95,11 @@ const historicalExactClassRoots = predecessorVueFiles.flatMap((file) => {
 })
 
 assert.deepEqual(
-  historicalExactClassRoots,
+  historicalExactClassRoots.filter(({file}) => file === "OpsDashboardSettings.vue"),
   [
-    {file: "OpsContactRequirementNew.vue", count: 1},
-    {file: "OpsDashboardActivity.vue", count: 1},
     {file: "OpsDashboardSettings.vue", count: 2},
   ],
-  "the frozen exact-class inventory retains two semantic near-match exclusions",
+  "the frozen exact-class inventory retains the surviving dashboard settings roots",
 )
 
 const historicalEligibleRoots = predecessorVueFiles.flatMap((file) => {

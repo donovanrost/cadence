@@ -13,7 +13,6 @@ import {
   installDom,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
-import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
 import {
   excludedOpsViewportVariants,
@@ -26,10 +25,6 @@ import {
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
 import {
-  opsListFrameCallerNames,
-  peelCadenceOpsListFrame,
-} from "./ops_list_frame_test_support.mjs"
-import {
   paddedOpsViewportCallerNames,
   peelPaddedOpsViewport,
 } from "./padded_ops_viewport_test_support.mjs"
@@ -40,7 +35,7 @@ import {
 
 const scenarios = Object.freeze([
   "the complete Vue tree contains only the frozen exact cohort and two excluded padded variants",
-  "all 17 migrated callers reconstruct the exact immutable predecessor bytes",
+  "all 5 surviving migrated callers reconstruct the exact immutable predecessor bytes",
   "the actual primitive compiles from a normal typed render script without semantic state",
   "the primitive renders one native section with fixed classes before caller classes",
   "ids, aria, data attributes, listeners, and directives remain caller-owned and forwarded",
@@ -63,24 +58,24 @@ const primitivePath = resolve(vueDirectory, "ui/components/CadenceOpsViewport.vu
 const primitiveSource = await readFile(primitivePath, "utf8")
 const occurrences = (source, fragment) => source.split(fragment).length - 1
 
-assert.equal(opsViewportMigrations.length, 17, "the exact cohort has 17 callers")
-assert.equal(new Set(opsViewportCallerNames).size, 17, "every caller is unique")
-assert.equal(excludedOpsViewportVariants.length, 2, "two padded near variants stay excluded")
+assert.equal(opsViewportMigrations.length, 5, "the surviving cohort has 5 callers")
+assert.equal(new Set(opsViewportCallerNames).size, 5, "every caller is unique")
+assert.equal(excludedOpsViewportVariants.length, 1, "one padded near variant stays excluded")
 assert.equal(
   opsViewportMigrations.filter(({opening}) => opening === '  <CadenceOpsViewport :id="page.id">')
     .length,
-  15,
-  "15 ordinary callers own page.id",
+  5,
+  "all surviving callers own page.id",
 )
 assert.equal(
   opsViewportMigrations.filter(({opening}) => opening.includes(':id="header.id"')).length,
-  1,
-  "OpsFleetPlanningNew alone owns header.id",
+  0,
+  "no deleted caller remains in the header.id cohort",
 )
 assert.equal(
   opsViewportMigrations.filter(({opening}) => opening.includes(':aria-busy="planning"')).length,
-  1,
-  "OpsFleetPlanningRun alone owns planning aria-busy",
+  0,
+  "no deleted caller remains in the planning busy-state cohort",
 )
 assert.throws(
   () => opsViewportMigrationFor("UnknownOpsViewport.vue"),
@@ -143,28 +138,28 @@ const allVueSources = await Promise.all(
     }),
 )
 
-assert.equal(allVueSources.length, 221, "the audited Vue tree includes every current SFC")
+assert.equal(allVueSources.length, 124, "the audited Vue tree includes every current SFC")
 assert.deepEqual(
   allVueSources
     .filter(({source}) => /^import CadenceOpsViewport\b/m.test(source))
     .map(({file}) => file)
     .sort(),
   [...opsViewportCallerNames].sort(),
-  "only the exact 17-file ledger imports CadenceOpsViewport",
+  "only the surviving 5-file ledger imports CadenceOpsViewport",
 )
 assert.equal(
   allVueSources.reduce(
     (total, {source}) => total + (source.match(/<CadenceOpsViewport\b/g)?.length ?? 0),
     0,
   ),
-  17,
+  5,
 )
 assert.equal(
   allVueSources.reduce(
     (total, {source}) => total + (source.match(/<\/CadenceOpsViewport>/g)?.length ?? 0),
     0,
   ),
-  17,
+  5,
 )
 
 const nativeExactOpening = new RegExp(
@@ -195,17 +190,12 @@ assert.deepEqual(
 const {compileScript, parse} = integrationRequire("@vue/compiler-sfc")
 for (const entry of opsViewportMigrations) {
   const current = await readFile(resolve(vueDirectory, entry.file), "utf8")
-  const opsListCompatibleCurrent = opsListFrameCallerNames.includes(entry.file)
-    ? peelCadenceOpsListFrame(current, entry.file)
-    : current
+  const opsListCompatibleCurrent = current
   const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
     opsListCompatibleCurrent,
     entry.file,
   )
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(
-    conditionalKeyedCompatibleCurrent,
-    entry.file,
-  )
+  const contactSummaryCompatibleCurrent = conditionalKeyedCompatibleCurrent
   const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(entry.file)
     ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
     : contactSummaryCompatibleCurrent
@@ -226,12 +216,6 @@ for (const entry of opsViewportMigrations) {
   assert.equal(peelCadenceOpsViewport(predecessorCompatibleCurrent, entry.file), predecessor)
   assert.equal(occurrences(current, `class="${opsViewportClass}"`), 0)
   assert.match(entry.opening, /:id="(?:page|header)\.id"/, `${entry.file} keeps caller id`)
-
-  if (entry.file === "OpsFleetPlanningRun.vue") {
-    assert.match(entry.opening, /:aria-busy="planning"/, "planning busy state stays caller-owned")
-  } else {
-    assert.doesNotMatch(entry.opening, /aria-busy/)
-  }
 
   const openingStart = current.indexOf(entry.opening)
   const closingStart = current.indexOf(entry.closing, openingStart + entry.opening.length)

@@ -30,12 +30,6 @@ export const paddedOpsViewportMigrations = Object.freeze([
     "92903b435d264e30dcf569631ccdaa0610a696ac8385199a3d389641003ec009",
     "share.id",
   ),
-  adoption(
-    "OpsDashboardSnapshot.vue",
-    1637,
-    "8c2ec5ea8553a18e09f0829ce3c2773922a010d080bdab3dd7147d7e118e5cfe",
-    "snapshot.id",
-  ),
 ])
 
 export const paddedOpsViewportCallerNames = Object.freeze(

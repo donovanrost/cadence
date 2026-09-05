@@ -60,28 +60,6 @@ export const hoverTableRowMigrations = Object.freeze([
     nativeClosing: "            </tr>",
   }),
   Object.freeze({
-    file: "CatalogDatabaseTable.vue",
-    importLine: importWithoutSemicolon,
-    predecessorSha256: "57fa491232046550e04700aa31f526075f750b7b1792bf92485464cfda027380",
-    openings: Object.freeze([
-      Object.freeze({
-        component: `      <CadenceHoverTableRow
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-      >`,
-        native: `      <tr
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-        class="${hoverTableRowClass}"
-      >`,
-      }),
-    ]),
-    componentClosing: "      </CadenceHoverTableRow>",
-    nativeClosing: "      </tr>",
-  }),
-  Object.freeze({
     file: "CommsProviderTable.vue",
     importLine: importWithoutSemicolon,
     predecessorSha256: "16f1dcb341de79db74bd613397ab856259dd8e81f77e4258382e2e9f1166ee22",
@@ -232,30 +210,10 @@ export const excludedHoverTableRowFiles = Object.freeze([
     fragments: Object.freeze([reorderedHoverTableRowClass, reorderedHoverTableRowClass]),
   }),
   Object.freeze({
-    file: "WidgetRows.vue",
-    sha256: "5ab4b5078f7e01aeb8497c58c64cf958aecb26a3ebf66d57f093c84b99ae7eec",
-    fragments: Object.freeze([
-      '<tr :class="presentation.head.row_class">',
-      `      <tr
-        v-for="row in presentation.rows"
-        :key="row.key"
-        :class="row.class"
-        v-bind="row.attrs"
-      >`,
-    ]),
-  }),
-  Object.freeze({
     file: "ApplicationHost.vue",
     sha256: "3970225aa801fe5a126d78298b836d4a5531989bc52d197ee0be0aeab171382e",
     fragments: Object.freeze([
       `:class="resource.resource_kind === 'binary_region' && 'border-l-4 border-l-base-content/25'"`,
-    ]),
-  }),
-  Object.freeze({
-    file: "OpsTelemetryExplore.vue",
-    sha256: "7d61c8875dfafc93ed211cea87b914d89c1a0ff6b8d8746cbff2de741ef991f5",
-    fragments: Object.freeze([
-      `:class="sample.selected && 'bg-primary/10 outline outline-1 outline-primary/40'"`,
     ]),
   }),
 ])

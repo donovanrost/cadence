@@ -92,17 +92,6 @@ export const statTileMigrations = Object.freeze([
     valueExpression: "summary.value",
   }),
   migration({
-    file: "OpsDataSources.vue",
-    predecessorByteLength: 66064,
-    predecessorSha256: "23c174a941aa96984ac41e165b8af91f45e2f5977721e1ad347adf38b3353f5e",
-    predecessorBlobId: "17d6947b0f33ab43ed7bd0e6b34a5e5e55b77e53",
-    indent: "              ",
-    iterator: "stat in page.header.stats",
-    key: "stat.label",
-    labelExpression: "stat.label",
-    valueExpression: "stat.value",
-  }),
-  migration({
     file: "ProviderAccountShow.vue",
     predecessorByteLength: 17595,
     predecessorSha256: "76bd3a9e3ab7839f1ca7c41529de51d1361416794a410037f8fb71c97396d399",
@@ -130,24 +119,7 @@ export const statTileMigrations = Object.freeze([
 
 export const statTileCallerNames = Object.freeze(statTileMigrations.map(({file}) => file))
 
-export const statTileKnownExclusions = Object.freeze([
-  Object.freeze({
-    file: "OpsDataSources.vue",
-    repositoryPath: "apps/cadence_web/assets/vue/OpsDataSources.vue",
-    classification: "semantic-readiness-policy-near-variant",
-    reason:
-      "the root adds text-right and data-source readiness semantics, and its value typography differs",
-    opening: `            <div
-              :id="page.header.readiness_policy.id"
-              class="${statTileClass} text-right"
-              :data-source-readiness-policy-id="page.header.readiness_policy.policy_id"
-              :data-source-readiness-block-health="page.header.readiness_policy.block_source_health"
-              :data-source-readiness-block-freshness="page.header.readiness_policy.block_freshness"
-              :data-source-readiness-block-connection-test="page.header.readiness_policy.block_connection_test"
-            >`,
-    closing: "            </div>",
-  }),
-])
+export const statTileKnownExclusions = Object.freeze([])
 
 export const statTileMigrationFor = (caller) => {
   const file = caller.replaceAll("\\", "/").split("/").at(-1)

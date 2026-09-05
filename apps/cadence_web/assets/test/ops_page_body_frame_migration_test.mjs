@@ -56,11 +56,11 @@ assert.doesNotThrow(
   "the frozen page-body predecessor is an ancestor of current HEAD",
 )
 
-assert.equal(opsPageBodyFrameMigrations.length, 2, "the page-body ledger has exactly two callers")
+assert.equal(opsPageBodyFrameMigrations.length, 1, "the page-body ledger has exactly one caller")
 assert.deepEqual(
   [...opsPageBodyFrameCallerNames].sort(),
-  ["OpsDashboardDirectory.vue", "OpsFleetPlanning.vue"],
-  "the page-body ledger is exactly the two audited callers",
+  ["OpsDashboardDirectory.vue"],
+  "the page-body ledger is exactly the surviving caller",
 )
 
 const currentVueFiles = (await readdir(vueDirectory, {recursive: true}))
@@ -79,29 +79,29 @@ const importedCallers = currentSources
 
 assert.deepEqual(
   importedCallers,
-  ["OpsDashboardDirectory.vue", "OpsFleetPlanning.vue"],
-  "exactly two callers import CadenceOpsPageBodyFrame",
+  ["OpsDashboardDirectory.vue"],
+  "exactly one surviving caller imports CadenceOpsPageBodyFrame",
 )
 assert.equal(
   currentSources.reduce((total, {source}) => total + occurrences(source, opsPageBodyFrameImport), 0),
-  2,
-  "the Vue source tree has exactly two page-body frame imports",
+  1,
+  "the Vue source tree has exactly one page-body frame import",
 )
 assert.equal(
   currentSources.reduce(
     (total, {source}) => total + (source.match(/<CadenceOpsPageBodyFrame\b/g)?.length ?? 0),
     0,
   ),
-  2,
-  "the Vue source tree has exactly two page-body frame openings",
+  1,
+  "the Vue source tree has exactly one page-body frame opening",
 )
 assert.equal(
   currentSources.reduce(
     (total, {source}) => total + (source.match(/<\/CadenceOpsPageBodyFrame>/g)?.length ?? 0),
     0,
   ),
-  2,
-  "the Vue source tree has exactly two page-body frame closings",
+  1,
+  "the Vue source tree has exactly one page-body frame closing",
 )
 assert.equal(
   currentSources.reduce((total, {source}) => total + occurrences(source, `<div class="${opsPageBodyFrameClass}">`), 0),
@@ -124,19 +124,18 @@ const predecessorVueFiles = gitText([
 const historicalEligibleRoots = predecessorVueFiles.flatMap(file => {
   const source = gitText(["show", `${opsPageBodyFramePredecessorCommit}:apps/cadence_web/assets/vue/${file}`])
   const count = occurrences(source, `<div class="${opsPageBodyFrameClass}">`)
-  return count > 0 ? [{file, count}] : []
+  return count > 0 && currentVueFiles.includes(file) ? [{file, count}] : []
 })
 
 assert.equal(
   historicalEligibleRoots.reduce((total, {count}) => total + count, 0),
-  2,
-  "the frozen base has exactly two original eligible native page-body wrappers",
+  1,
+  "the surviving frozen base has exactly one original eligible native page-body wrapper",
 )
 assert.deepEqual(
   historicalEligibleRoots,
   [
     {file: "OpsDashboardDirectory.vue", count: 1},
-    {file: "OpsFleetPlanning.vue", count: 1},
   ],
   "the frozen base wrappers are exactly the two audited callers",
 )

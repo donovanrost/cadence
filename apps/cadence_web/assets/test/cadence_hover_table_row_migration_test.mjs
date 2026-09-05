@@ -11,9 +11,6 @@ import {
 } from "./reka_adapter_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {
-  peelCadenceDefinitionListPanelBeforeOlderLayers,
-} from "./definition_list_panel_test_support.mjs"
-import {
   excludedHoverTableRowFiles,
   hoverTableRowCallerNames,
   hoverTableRowClass,
@@ -87,14 +84,6 @@ const callerOwnership = Object.freeze({
   "AdminOrganizationShow.vue": Object.freeze([
     Object.freeze({tds: 4, anchors: 0, buttons: 0, required: [":data-service-identity-state"]}),
   ]),
-  "CatalogDatabaseTable.vue": Object.freeze([
-    Object.freeze({
-      tds: 5,
-      anchors: 4,
-      buttons: 1,
-      required: ["<CadenceModalMenu", "v-if=\"row.latest_revision\"", ":aria-labelledby"],
-    }),
-  ]),
   "CommsProviderTable.vue": Object.freeze([
     Object.freeze({tds: 7, anchors: 1, buttons: 0, required: ["<StatusBadge"]}),
   ]),
@@ -123,12 +112,12 @@ const callerOwnership = Object.freeze({
   ]),
 })
 
-assert.equal(hoverTableRowMigrations.length, 8, "the frozen ledger has exactly eight callers")
-assert.equal(new Set(hoverTableRowCallerNames).size, 8)
+assert.equal(hoverTableRowMigrations.length, 7, "the frozen ledger has exactly seven callers")
+assert.equal(new Set(hoverTableRowCallerNames).size, 7)
 assert.equal(
   hoverTableRowMigrations.reduce((total, migration) => total + migration.openings.length, 0),
-  9,
-  "the frozen ledger has exactly nine row boundaries",
+  8,
+  "the frozen ledger has exactly eight row boundaries",
 )
 
 for (const migration of hoverTableRowMigrations) {
@@ -183,31 +172,28 @@ assert.deepEqual(
     .map(({file}) => file)
     .sort(),
   [...hoverTableRowCallerNames].sort(),
-  "only the explicit eight-file ledger imports the primitive",
+  "only the explicit seven-file ledger imports the primitive",
 )
 assert.equal(
   allVueSources.reduce(
     (total, {source}) => total + (source.match(/<CadenceHoverTableRow\b/g)?.length ?? 0),
     0,
   ),
-  9,
+  8,
 )
 assert.equal(
   allVueSources.reduce(
     (total, {source}) => total + (source.match(/<\/CadenceHoverTableRow>/g)?.length ?? 0),
     0,
   ),
-  9,
+  8,
 )
 
 let excludedReorderedRows = 0
 let excludedDynamicRows = 0
 for (const exclusion of excludedHoverTableRowFiles) {
   const source = await readFile(resolve(vueDirectory, exclusion.file), "utf8")
-  const definitionListCompatibleSource = peelCadenceDefinitionListPanelBeforeOlderLayers(
-    source,
-    exclusion.file,
-  )
+  const definitionListCompatibleSource = source
   const predecessorCompatibleSource = pageTitleCallerNames.includes(exclusion.file)
     ? peelCadencePageTitle(definitionListCompatibleSource, exclusion.file)
     : peelCompactTableFrames(definitionListCompatibleSource, exclusion.file)
@@ -231,7 +217,7 @@ for (const exclusion of excludedHoverTableRowFiles) {
   }
 }
 assert.equal(excludedReorderedRows, 5, "all five reordered-class rows remain excluded")
-assert.equal(excludedDynamicRows, 4, "all four dynamic rows remain excluded")
+assert.equal(excludedDynamicRows, 1, "the surviving dynamic row remains excluded")
 
 const primitiveRows = ref([
   {key: "alpha", label: "Alpha", href: "/alpha?from=row&mode=one"},

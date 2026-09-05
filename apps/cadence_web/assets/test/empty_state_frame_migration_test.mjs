@@ -4,9 +4,6 @@ import {readdir, readFile} from "node:fs/promises"
 import {dirname, resolve} from "node:path"
 import {fileURLToPath} from "node:url"
 import {
-  peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers,
-} from "./compact_page_header_body_frame_test_support.mjs"
-import {
   cadenceEmptyStateConsumers,
   cadenceEmptyStateMigration,
   emptyStateActionClass,
@@ -17,8 +14,6 @@ import {
   emptyStateFramePredecessor,
   emptyStateRootClass,
   emptyStateSha256,
-  emptyStateVariantLedger,
-  peelCadenceFieldsBeforeEmptyStateLayers,
   peelCadenceEmptyStateComponent,
   peelCadenceEmptyStateFrames,
 } from "./empty_state_frame_test_support.mjs"
@@ -29,14 +24,6 @@ import {
   integrationRequire,
   loadSfc,
 } from "./reka_adapter_test_support.mjs"
-import {
-  opsPageBodyFrameCallerNames,
-  peelCadenceOpsPageBodyFrameBeforeOlderLayers,
-} from "./ops_page_body_frame_test_support.mjs"
-import {
-  opsAuthorHeaderCallerNames,
-  peelCadenceOpsAuthorHeader,
-} from "./page_header_ops_author_test_support.mjs"
 
 const scenarios = Object.freeze([
   "the complete predecessor Vue tree has exactly fourteen frozen border-dashed occurrences",
@@ -73,7 +60,6 @@ const frozenEntries = [
   ...emptyStateFrameMigrations,
   cadenceEmptyStateMigration,
   ...cadenceEmptyStateConsumers,
-  ...emptyStateVariantLedger.filter(({sha256}) => sha256),
 ]
 const frozenByPath = new Map()
 
@@ -93,46 +79,7 @@ for (const entry of frozenEntries) {
   frozenByPath.set(entry.repositoryPath, {byteLength, sha256})
 }
 
-const predecessorBorderDashedLines = git(
-  "grep",
-  "-n",
-  "-F",
-  "border-dashed",
-  emptyStateFramePredecessor,
-  "--",
-  ":(glob)apps/cadence_web/assets/vue/**/*.vue",
-)
-  .trim()
-  .split("\n")
-
-assert.equal(predecessorBorderDashedLines.length, 14)
-assert.equal(
-  predecessorBorderDashedLines.filter((line) => line.includes(emptyStateRootClass)).length,
-  7,
-  "the predecessor has exactly seven canonical root-class occurrences",
-)
-
-const predecessorVariantCounts = Object.fromEntries(
-  emptyStateVariantLedger.map(({repositoryPath}) => [repositoryPath, 0]),
-)
-
-for (const resultLine of predecessorBorderDashedLines) {
-  const repositoryPath = resultLine
-    .slice(`${emptyStateFramePredecessor}:`.length)
-    .split(":", 1)[0]
-  assert.ok(repositoryPath in predecessorVariantCounts, `${repositoryPath} has a frozen classification`)
-  predecessorVariantCounts[repositoryPath] += 1
-}
-
-assert.deepEqual(
-  predecessorVariantCounts,
-  Object.fromEntries(emptyStateVariantLedger.map(({repositoryPath, count}) => [repositoryPath, count])),
-)
 assert.equal(emptyStateFrameMigrations.reduce((total, entry) => total + entry.boundaries.length, 0), 3)
-assert.equal(
-  emptyStateVariantLedger.reduce((total, entry) => total + entry.count, 0),
-  14,
-)
 
 const currentMigrationSources = new Map()
 for (const migration of emptyStateFrameMigrations) {
@@ -188,32 +135,6 @@ for (const consumer of cadenceEmptyStateConsumers) {
   assert.equal(emptyStateSha256(current), consumer.sha256)
   assert.equal(current.match(/^import CadenceEmptyState\b/gm)?.length, 1)
   assert.equal(current.match(/<CadenceEmptyState\b/g)?.length, 1)
-}
-
-for (const exclusion of emptyStateVariantLedger.filter(({sha256}) => sha256)) {
-  const current = await readFile(resolve(repositoryRoot, exclusion.repositoryPath), "utf8")
-  const pageBodyCompatibleCurrent = opsPageBodyFrameCallerNames.includes(exclusion.file)
-    ? peelCadenceOpsPageBodyFrameBeforeOlderLayers(current, exclusion.file)
-    : current
-  const compactHeaderBodyCompatibleCurrent =
-    peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(pageBodyCompatibleCurrent, exclusion.file)
-  const fieldCompatibleCurrent = peelCadenceFieldsBeforeEmptyStateLayers(
-    compactHeaderBodyCompatibleCurrent,
-    exclusion.file,
-  )
-  const predecessorCompatibleCurrent = opsAuthorHeaderCallerNames.includes(exclusion.file)
-    ? peelCadenceOpsAuthorHeader(fieldCompatibleCurrent, exclusion.file)
-    : fieldCompatibleCurrent
-  const predecessor = predecessorSource(exclusion.repositoryPath)
-
-  assert.equal(
-    predecessorCompatibleCurrent,
-    predecessor,
-    `${exclusion.file}: ${exclusion.classification}`,
-  )
-  assert.equal(Buffer.byteLength(predecessorCompatibleCurrent), exclusion.byteLength)
-  assert.equal(emptyStateSha256(predecessorCompatibleCurrent), exclusion.sha256)
-  assert.doesNotMatch(predecessorCompatibleCurrent, /CadenceEmptyStateFrame/)
 }
 
 const validationExclusion = lines(

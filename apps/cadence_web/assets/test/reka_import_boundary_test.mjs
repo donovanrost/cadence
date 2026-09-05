@@ -13,11 +13,9 @@ const deferredFeatureImporters = new Map()
 
 const migratedFeatureConsumers = Object.freeze([
   "CatalogArtifactShow.vue",
-  "CatalogDatabaseTable.vue",
   "CatalogDatabaseShow.vue",
   "DashboardToolbarMenu.vue",
   "MissionOverview.vue",
-  "OpsContactRequirementShow.vue",
   "OpsDashboardDirectory.vue",
   "SpacecraftList.vue",
   "WidgetForm.vue",

@@ -325,20 +325,6 @@ for (const path of liveFiles.filter((path) => extname(path) === ".ex")) {
 
 const rendererOverrides = new Map([
   [
-    "CadenceWeb.OpsDashboardEditorLive",
-    {
-      target: "CadenceWeb.OpsDashboardShowLive.Controller",
-      delegation: /defdelegate render\(assigns\), to: Controller/,
-    },
-  ],
-  [
-    "CadenceWeb.OpsDashboardViewerLive",
-    {
-      target: "CadenceWeb.OpsDashboardShowLive.Controller",
-      delegation: /defdelegate render\(assigns\), to: Controller/,
-    },
-  ],
-  [
     "CadenceWeb.OpsDataSourcesLive",
     {
       target: "CadenceWeb.OpsDataSourcesLive.Page",
@@ -356,15 +342,9 @@ const rendererOverrides = new Map([
 
 const locallyRenderedRouteModules = new Set([
   // Host/auth surfaces are intentionally not federated full-page domain
-  // surfaces, and these in-flight Ops wrappers are explicitly out of scope
-  // for this residual-source batch.
+  // surfaces.
   "CadenceWeb.ApplicationHostLive",
   "CadenceWeb.UserSessionLive",
-  "CadenceWeb.OpsDashboardActivityLive",
-  "CadenceWeb.OpsDashboardEditorLive",
-  "CadenceWeb.OpsDashboardViewerLive",
-  "CadenceWeb.OpsDataOperationsLive",
-  "CadenceWeb.OpsDataSourcesLive",
 ])
 
 const controllerPageContracts = [

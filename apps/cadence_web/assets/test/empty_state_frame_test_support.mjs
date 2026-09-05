@@ -1,14 +1,9 @@
 import assert from "node:assert/strict"
 import {createHash} from "node:crypto"
 import {peelLabeledControlFieldsBeforeOlderLayers} from "./labeled_control_field_test_support.mjs"
-import {peelOpsDataSourcesCadenceFields} from "./ops_data_sources_field_test_support.mjs"
 
 export const peelCadenceFieldsBeforeEmptyStateLayers = (source, caller) => {
-  const labeledCompatibleSource = peelLabeledControlFieldsBeforeOlderLayers(source, caller)
-
-  return caller.split("/").at(-1) === "OpsDataSources.vue"
-    ? peelOpsDataSourcesCadenceFields(labeledCompatibleSource, caller)
-    : labeledCompatibleSource
+  return peelLabeledControlFieldsBeforeOlderLayers(source, caller)
 }
 
 export const emptyStateFramePredecessor = "96e8a4bb542d9abf784de4eb5c9c61492860e937"
@@ -318,22 +313,6 @@ export const emptyStateVariantLedger = Object.freeze([
     classification: "exclude no-action root without rounded",
   }),
   Object.freeze({
-    file: "OpsContactRequirementList.vue",
-    repositoryPath: "apps/cadence_web/assets/vue/OpsContactRequirementList.vue",
-    byteLength: 5_499,
-    sha256: "878390e2432063248890c76d599feec4e0695f1e049d59c8ca77da6312cd1ad8",
-    count: 1,
-    classification: "exclude different root classes and shape",
-  }),
-  Object.freeze({
-    file: "OpsDashboardActivity.vue",
-    repositoryPath: "apps/cadence_web/assets/vue/OpsDashboardActivity.vue",
-    byteLength: 8_087,
-    sha256: "8aaf5a4277bfb5b9ef8e0f74eb09b90ded26f9ee3f7bdf08daf4d7fb6cf77ce6",
-    count: 1,
-    classification: "exclude stream-only paragraph shape",
-  }),
-  Object.freeze({
     file: "OpsDashboardDirectory.vue",
     repositoryPath: "apps/cadence_web/assets/vue/OpsDashboardDirectory.vue",
     byteLength: 12_658,
@@ -356,14 +335,6 @@ export const emptyStateVariantLedger = Object.freeze([
     sha256: "4084749b4e50c73fd43f24f73d19c1b49914f73e2146ab7b2d4e38fb0338c510",
     count: 1,
     classification: "exclude stream-only single-copy shape",
-  }),
-  Object.freeze({
-    file: "OpsDataSources.vue",
-    repositoryPath: "apps/cadence_web/assets/vue/OpsDataSources.vue",
-    byteLength: 65_754,
-    sha256: "216d258ab5725d7b7a6d5fe2f5cd79a9c091a42548c1b9611de214942a10c6ff",
-    count: 1,
-    classification: "exclude different padding and single-copy shape",
   }),
 ])
 

@@ -15,20 +15,12 @@ import {
   installDom,
   integrationRequire,
 } from "./reka_adapter_test_support.mjs"
-import {peelContactSummaryBand} from "./contact_summary_band_test_support.mjs"
 import {peelCompactTableFrames} from "./compact_table_frame_test_support.mjs"
 import {peelConditionalKeyedCadenceFields} from "./conditional_keyed_field_test_support.mjs"
-import {
-  peelCadenceDefinitionListPanelBeforeOlderLayers,
-} from "./definition_list_panel_test_support.mjs"
 import {
   opsViewportCallerNames,
   peelCadenceOpsViewport,
 } from "./ops_viewport_test_support.mjs"
-import {
-  opsListFrameCallerNames,
-  peelCadenceOpsListFrame,
-} from "./ops_list_frame_test_support.mjs"
 import {
   paddedOpsViewportCallerNames,
   peelPaddedOpsViewport,
@@ -44,7 +36,6 @@ import {
   pageTitleMigrationFor,
   pageTitleMigrations,
   pageTitlePredecessorCommit,
-  peelCadenceFieldsBeforePageTitleLayers,
   peelCadencePageTitle,
   sha256,
 } from "./page_title_test_support.mjs"
@@ -68,7 +59,7 @@ const occurrences = (source, fragment) => source.split(fragment).length - 1
 
 assert.equal(pageTitleMigrations.length, 26, "the exact cohort has 26 callers")
 assert.equal(new Set(pageTitleCallerNames).size, 26, "every caller is unique")
-assert.equal(excludedPageTitles.length, 51, "the full adjacent-title exclusion ledger is frozen")
+assert.equal(excludedPageTitles.length, 29, "the surviving adjacent-title exclusion ledger is frozen")
 assert.throws(
   () => pageTitleMigrationFor("UnknownPage.vue"),
   /audited CadencePageTitle caller/,
@@ -83,10 +74,7 @@ for (const entry of pageTitleMigrations) {
     compactHeaderBodyCompatibleCurrent,
     entry.file,
   )
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(
-    residualCardCompatibleCurrent,
-    entry.file,
-  )
+  const contactSummaryCompatibleCurrent = residualCardCompatibleCurrent
   const predecessor = execFileSync(
     "git",
     ["-C", repositoryRoot, "show", `${pageTitlePredecessorCommit}:apps/cadence_web/assets/vue/${entry.file}`],
@@ -119,29 +107,19 @@ for (const entry of excludedPageTitles) {
     current,
     entry.file,
   )
-  const opsListCompatibleCurrent = opsListFrameCallerNames.includes(entry.file)
-    ? peelCadenceOpsListFrame(formSectionFrameCompatibleCurrent, entry.file)
-    : formSectionFrameCompatibleCurrent
+  const opsListCompatibleCurrent = formSectionFrameCompatibleCurrent
   const compactHeaderBodyCompatibleCurrent = peelCadenceCompactPageHeaderBodyFrameBeforeOlderLayers(
     opsListCompatibleCurrent,
     entry.file,
   )
-  const definitionListCompatibleCurrent = peelCadenceDefinitionListPanelBeforeOlderLayers(
+  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
     compactHeaderBodyCompatibleCurrent,
     entry.file,
   )
-  const conditionalKeyedCompatibleCurrent = peelConditionalKeyedCadenceFields(
-    definitionListCompatibleCurrent,
-    entry.file,
-  )
-  const fieldCompatibleCurrent = peelCadenceFieldsBeforePageTitleLayers(
-    conditionalKeyedCompatibleCurrent,
-    entry.file,
-  )
-  const contactSummaryCompatibleCurrent = peelContactSummaryBand(fieldCompatibleCurrent, entry.file)
+  const fieldCompatibleCurrent = conditionalKeyedCompatibleCurrent
   const opsAuthorHeaderCompatibleSource = opsAuthorHeaderCallerNames.includes(entry.file)
-    ? peelCadenceOpsAuthorHeader(contactSummaryCompatibleCurrent, entry.file)
-    : contactSummaryCompatibleCurrent
+    ? peelCadenceOpsAuthorHeader(fieldCompatibleCurrent, entry.file)
+    : fieldCompatibleCurrent
   const paddedOpsViewportCompatibleSource = paddedOpsViewportCallerNames.includes(entry.file)
     ? peelPaddedOpsViewport(opsAuthorHeaderCompatibleSource, entry.file)
     : opsAuthorHeaderCompatibleSource
@@ -159,9 +137,9 @@ for (const entry of excludedPageTitles) {
   exclusionCounts[entry.reason] = (exclusionCounts[entry.reason] ?? 0) + entry.count
 }
 assert.deepEqual({...exclusionCounts}, {
-  dynamic: 18,
-  "ops-mt-1": 15,
-  "reduced-or-structural": 13,
+  dynamic: 15,
+  "ops-mt-1": 5,
+  "reduced-or-structural": 4,
   "reordered-token": 5,
 })
 
@@ -215,7 +193,7 @@ assert.equal(
 )
 assert.equal(
   allVueSources.reduce((total, {source}) => total + (source.match(/<h1\b/g)?.length ?? 0), 0),
-  51,
+  29,
 )
 
 const dom = installDom('<div id="page-title-contract"></div>')

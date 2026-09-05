@@ -19,14 +19,6 @@ export const opsPageBodyFrameMigrations = Object.freeze([
     predecessorSha256:
       "305b2c5fbae09713197e2c2ba1cbc9e7a88777142444c18d10b9109269959b5c",
   }),
-  Object.freeze({
-    file: "OpsFleetPlanning.vue",
-    repositoryPath: "apps/cadence_web/assets/vue/OpsFleetPlanning.vue",
-    predecessorByteLength: 11_009,
-    predecessorBlobId: "a752c027e56061390b83c34ca4c8f2fbc84db6d0",
-    predecessorSha256:
-      "a918ee3477e6d5dc4f129daf58563fe05806224a03426c6609f8db2665d35e05",
-  }),
 ])
 
 export const opsPageBodyFrameCallerNames = Object.freeze(

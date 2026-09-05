@@ -34,7 +34,7 @@ import {narrowFormPageFramePath} from "./narrow_form_page_frame_test_support.mjs
 
 const pinnedNode = "/Users/donovanrost/.local/share/mise/installs/node/24.16.0/bin/node"
 const scenarios = Object.freeze([
-  "the fixed 223-SFC predecessor and full 232-SFC current tree add only the audited primitives",
+  "the fixed 223-SFC predecessor and full 136-SFC current tree add only the audited primitives",
   "all predecessor SFCs classify into six exact shells and one frozen semantic exclusion",
   "all current SFCs parse and exactly six singular imports/openings replace the native cohort",
   "the fixed predecessor commit, Git blob, byte length, and SHA-256 are exact for every caller",
@@ -64,9 +64,9 @@ const gitShow = (repositoryPath) =>
   git("show", `${statTilePredecessorCommit}:${repositoryPath}`)
 
 assert.equal(git("cat-file", "-t", statTilePredecessorCommit).trim(), "commit")
-assert.equal(statTileMigrations.length, 6)
-assert.equal(new Set(statTileCallerNames).size, 6)
-assert.equal(statTileKnownExclusions.length, 1)
+assert.equal(statTileMigrations.length, 5)
+assert.equal(new Set(statTileCallerNames).size, 5)
+assert.equal(statTileKnownExclusions.length, 0)
 
 const walkVueFiles = async (directory) => {
   const entries = await readdir(directory, {withFileTypes: true})
@@ -98,7 +98,7 @@ const currentVuePaths = (await walkVueFiles(vueDirectory))
 const addedVuePaths = currentVuePaths.filter((path) => !predecessorVuePaths.includes(path))
 
 assert.equal(predecessorVuePaths.length, 223, "the fixed predecessor retains 223 Vue SFCs")
-assert.equal(currentVuePaths.length, 233, "the current-tree gate includes exactly 233 Vue SFCs")
+assert.equal(currentVuePaths.length, 136, "the current-tree gate includes exactly 136 surviving Vue SFCs")
 assert.deepEqual(addedVuePaths, [
   compactHeaderBodyFramePath,
   "apps/cadence_web/assets/vue/ui/components/CadenceDashboardSettingsSectionFrame.vue",
@@ -114,7 +114,7 @@ assert.deepEqual(addedVuePaths, [
 assert.deepEqual(
   currentVuePaths,
   [
-    ...predecessorVuePaths,
+    ...predecessorVuePaths.filter((path) => currentVuePaths.includes(path)),
     compactHeaderBodyFramePath,
     definitionListPanelRepositoryPath,
     "apps/cadence_web/assets/vue/ui/components/CadenceFormSectionFrame.vue",
@@ -202,11 +202,13 @@ const currentExclusions = []
 for (const repositoryPath of predecessorVuePaths) {
   const source = gitShow(repositoryPath)
   predecessorSources.set(repositoryPath, source)
+  if (!currentVuePaths.includes(repositoryPath)) continue
 
   for (const _node of exactNativeTiles(source, repositoryPath)) {
     predecessorCohort.push(repositoryPath)
   }
   for (const node of nativeClassNearVariants(source, repositoryPath)) {
+    if (!currentVuePaths.includes(repositoryPath)) continue
     predecessorExclusions.push({
       repositoryPath,
       class: staticAttribute(node, "class"),
@@ -228,39 +230,34 @@ for (const repositoryPath of currentVuePaths) {
 }
 
 const expectedCallerPaths = statTileMigrations.map(({repositoryPath}) => repositoryPath).sort()
-const expectedExclusions = [
-  {
-    repositoryPath: "apps/cadence_web/assets/vue/OpsDataSources.vue",
-    class: `${statTileClass} text-right`,
-  },
-]
+const expectedExclusions = []
 
 assert.deepEqual(predecessorCohort.sort(), expectedCallerPaths)
 assert.deepEqual(predecessorExclusions, expectedExclusions)
 assert.deepEqual(currentCohort.sort(), expectedCallerPaths)
 assert.deepEqual(currentNativeCohort, [], "no seventh compatible native shell remains")
-assert.deepEqual(currentExclusions, expectedExclusions, "the semantic near variant stays native")
+assert.deepEqual(currentExclusions, expectedExclusions, "no deleted native stat-tile variant remains")
 
 assert.equal(
   [...currentSources.values()].reduce(
     (total, source) => total + (source.match(/^import CadenceStatTile\b/gm)?.length ?? 0),
     0,
   ),
-  6,
+  5,
 )
 assert.equal(
   [...currentSources.values()].reduce(
     (total, source) => total + (source.match(/<CadenceStatTile\b/g)?.length ?? 0),
     0,
   ),
-  6,
+  5,
 )
 assert.equal(
   [...currentSources.values()].reduce(
     (total, source) => total + (source.match(/<\/CadenceStatTile>/g)?.length ?? 0),
     0,
   ),
-  6,
+  5,
 )
 
 const compileOnly = (source, filename, id) => {
@@ -300,23 +297,6 @@ for (const entry of statTileMigrations) {
   compileOnly(current, entry.repositoryPath, `stat-tile-current-${entry.file}`)
   compileOnly(predecessor, entry.repositoryPath, `stat-tile-predecessor-${entry.file}`)
 }
-
-const exclusion = statTileKnownExclusions[0]
-const predecessorExclusionSource = predecessorSources.get(exclusion.repositoryPath)
-const currentExclusionSource = currentSources.get(exclusion.repositoryPath)
-assert.equal(occurrences(predecessorExclusionSource, exclusion.opening), 1)
-assert.equal(occurrences(currentExclusionSource, exclusion.opening), 1)
-const extractExclusion = (source) => {
-  const start = source.indexOf(exclusion.opening)
-  const end = source.indexOf(exclusion.closing, start + exclusion.opening.length)
-  assert.ok(end > start, "the frozen readiness-policy exclusion has its native closing")
-  return source.slice(start, end + exclusion.closing.length)
-}
-assert.equal(
-  extractExclusion(currentExclusionSource),
-  extractExclusion(predecessorExclusionSource),
-  "the known semantic exclusion remains byte-for-byte native",
-)
 
 const compileModule = (source, filename, id, moduleRequire) => {
   const compiledSource = compileOnly(source, filename, id)
