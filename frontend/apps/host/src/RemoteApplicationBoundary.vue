@@ -5,7 +5,6 @@ import type {
   HostBridge,
   HostContext,
 } from "@cadence/plugin-sdk";
-import { CButton } from "@cadence/ui";
 import { onBeforeUnmount, onErrorCaptured, shallowRef, watch } from "vue";
 import type { Component } from "vue";
 import FullPageSurface from "./FullPageSurface.vue";
@@ -75,25 +74,42 @@ function failureFor(message: string): { message: string; referenceId: string } {
 </script>
 
 <template>
-  <section v-if="error" id="remote-error" class="remote-state remote-state--error">
-    <p class="eyebrow">Remote unavailable</p>
-    <h2>{{ application.displayName }} was contained.</h2>
+  <section
+    v-if="error"
+    id="remote-error"
+    class="alert alert-error m-6 flex flex-col items-start gap-3"
+    role="alert"
+    aria-live="assertive"
+  >
+    <h2 class="text-lg font-semibold">{{ application.displayName }} was contained.</h2>
     <p id="remote-error-message">{{ error.message }}</p>
-    <p id="remote-error-reference">Reference ID: {{ error.referenceId }}</p>
-    <p class="remote-state__hint">
-      The Cadence shell, session, navigation, and other applications remain available.
+    <p id="remote-error-reference" class="font-mono text-xs">
+      Reference ID: {{ error.referenceId }}
     </p>
-    <CButton id="retry-remote" @click="$emit('retry')">Retry approved release</CButton>
+    <p class="text-sm">The current Cadence page remains available.</p>
+    <button
+      id="retry-remote"
+      type="button"
+      class="btn btn-primary btn-sm"
+      @click="$emit('retry')"
+    >
+      Retry approved release
+    </button>
   </section>
 
-  <section v-else-if="!component" id="remote-loading" class="remote-state">
-    <div class="loader-grid" aria-hidden="true">
-      <span v-for="cell in 12" :key="cell"></span>
-    </div>
+  <section
+    v-else-if="!component"
+    id="remote-loading"
+    class="flex min-h-48 items-center justify-center gap-3 p-6"
+    role="status"
+    aria-live="polite"
+  >
+    <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
     <div>
-      <p class="eyebrow">Resolving trusted renderer</p>
-      <h2>Mounting {{ application.displayName }}</h2>
-      <p>Resolving {{ application.release.releaseId }} and validating its contracts…</p>
+      <h2 class="text-lg font-semibold">Loading {{ application.displayName }}</h2>
+      <p class="text-sm text-base-content/70">
+        Resolving the approved release and validating its contracts…
+      </p>
     </div>
   </section>
 
