@@ -59,6 +59,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     {:noreply,
      socket
      |> assign(:source_focus, source_focus)
+     |> assign(:federated_query_params, Map.take(params, ["data_source_id"]))
      |> assign_source_focus_resources()
      |> assign_source_focus_state()}
   end

@@ -6,6 +6,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Applications.{HostContext, JSONBoundary, SurfaceQueryRequest}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
+  alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
   @application_key "ops_console"
   @application_version 1
@@ -71,6 +72,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       MapSet.new([
         "mission_id",
         "dashboard_id",
+        "version",
+        "panel",
+        "activity_filter",
+        "activity_event",
+        "selected_publish_issue",
         "share_id",
         "snapshot_id",
         "playlist_id",
@@ -107,7 +113,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
         "validity_state",
         "question",
         "order",
-        "limit_mode"
+        "limit_mode",
+        "group"
       ])
 
     with true <- Enum.all?(Map.keys(params), &is_binary/1),
@@ -128,6 +135,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
         "contact_detail" -> "provider_reservation_id"
         "contact_record" -> "contact_id"
         "dashboard_settings" -> "dashboard_id"
+        "dashboard_show" -> "dashboard_id"
+        "dashboard_editor" -> "dashboard_id"
+        "dashboard_activity" -> "dashboard_id"
         "dashboard_share" -> "share_id"
         "dashboard_snapshot" -> "snapshot_id"
         "dashboard_diagnostics" -> "dashboard_id"
@@ -189,7 +199,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp validate_subject(surface_id, organization_id, mission_id, params)
-       when surface_id in ["dashboard_settings", "dashboard_diagnostics"] do
+       when surface_id in [
+              "dashboard_settings",
+              "dashboard_diagnostics",
+              "dashboard_show",
+              "dashboard_editor",
+              "dashboard_activity"
+            ] do
     fetch_subject(Cadence.Dashboards, :fetch_document, [
       organization_id,
       mission_id,
@@ -229,7 +245,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
         params["fleet_planning_run_id"]
       ])
 
-  defp validate_subject("data_sources", organization_id, mission_id, params) do
+  defp validate_subject(surface_id, organization_id, mission_id, params)
+       when surface_id in ["data_sources", "data_source_settings"] do
     case params["data_source_id"] do
       nil ->
         :ok
@@ -281,7 +298,37 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp dispatch("dashboard_directory", scope, mission, params),
     do: dashboard_directory(scope, mission, params)
 
-  defp dispatch("data_sources", scope, mission, params), do: data_sources(scope, mission, params)
+  defp dispatch("dashboard_show", scope, mission, params),
+    do: envelope("OpsDashboardShow", Presentation.dashboard(scope, mission, params, :view))
+
+  defp dispatch("dashboard_editor", scope, mission, params),
+    do: envelope("OpsDashboardShow", Presentation.dashboard(scope, mission, params, :edit))
+
+  defp dispatch("dashboard_activity", scope, mission, params),
+    do:
+      envelope(
+        "OpsDashboardActivitySurface",
+        Presentation.dashboard_activity(scope, mission, params)
+      )
+
+  defp dispatch("data_sources", scope, mission, params),
+    do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :reader))
+
+  defp dispatch("data_source_registration", scope, mission, params),
+    do:
+      envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :registration))
+
+  defp dispatch("data_source_settings", scope, mission, params),
+    do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :settings))
+
+  defp dispatch("data_operations", scope, mission, params),
+    do:
+      envelope("OpsDataOperations", Presentation.data_operations(scope, mission, params, :reader))
+
+  defp dispatch("data_operations_manage", scope, mission, params),
+    do:
+      envelope("OpsDataOperations", Presentation.data_operations(scope, mission, params, :manage))
+
   defp dispatch(surface_id, _scope, mission, params), do: generic(surface_id, mission, params)
 
   defp landing(mission, title) do
@@ -592,6 +639,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp component_name("contact_detail"), do: "OpsContactDetail"
   defp component_name("contact_record"), do: "OpsContactRecord"
   defp component_name("dashboard_directory"), do: "OpsDashboardDirectory"
+  defp component_name("dashboard_show"), do: "OpsDashboardShow"
+  defp component_name("dashboard_editor"), do: "OpsDashboardShow"
+  defp component_name("dashboard_activity"), do: "OpsDashboardActivitySurface"
   defp component_name("dashboard_new"), do: "OpsDashboardNew"
   defp component_name("dashboard_library"), do: "OpsDashboardLibrary"
   defp component_name("dashboard_playlists"), do: "OpsDashboardPlaylists"
@@ -608,7 +658,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp component_name("commands"), do: "OpsCommands"
   defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
   defp component_name("data_operations"), do: "OpsDataOperations"
+  defp component_name("data_operations_manage"), do: "OpsDataOperationsManage"
   defp component_name("data_sources"), do: "OpsDataSources"
+  defp component_name("data_source_registration"), do: "OpsDataSourceRegistration"
+  defp component_name("data_source_settings"), do: "OpsDataSourceSettings"
   defp component_name("alarms"), do: "OpsAlarms"
   defp component_name("timeline"), do: "OpsTimeline"
 

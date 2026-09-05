@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsDashboardActivityLive do
 
   alias Cadence.Dashboards.{Document, ValidationResult, Version}
   alias CadenceWeb.DashboardAuthorAuth
-  alias Phoenix.LiveView.JS
 
   alias CadenceWeb.OpsDashboardShowLive.{
     PublishReadinessModel,
@@ -28,7 +27,7 @@ defmodule CadenceWeb.OpsDashboardActivityLive do
       |> assign(:version_count, 0)
       |> assign(:activity_count, 0)
 
-    {:ok, load_activity(socket)}
+    {:ok, socket |> load_activity() |> assign(:federated_query_params, %{})}
   end
 
   @impl true
@@ -38,6 +37,10 @@ defmodule CadenceWeb.OpsDashboardActivityLive do
     {:noreply,
      socket
      |> assign(:selected_publish_issue_id, params["selected_publish_issue"])
+     |> assign(
+       :federated_query_params,
+       Map.take(params, ["dashboard_id", "version", "selected_publish_issue"])
+     )
      |> assign_selected_version(selected)}
   end
 
@@ -86,69 +89,17 @@ defmodule CadenceWeb.OpsDashboardActivityLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <section id="dashboard-activity-page" class="h-full overflow-y-auto bg-base-100">
-        <.vue
-          id="dashboard-activity-header-component"
-          v-component="OpsDashboardActivity"
-          surface="header"
-          page={@dashboard_activity_page}
-          v-ssr={false}
-          class="contents"
-        />
-
-        <div class="mx-auto grid max-w-[100rem] gap-5 p-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:p-7">
-          <.vue
-            id="dashboard-activity-versions-component"
-            v-component="OpsDashboardActivity"
-            surface="versions"
-            page={@dashboard_activity_page}
-            selected_version_number={@selected_version && @selected_version.version}
-            dashboard_versions={@streams.dashboard_versions}
-            v-ssr={false}
-            class="contents"
-          />
-
-          <div class="min-w-0 space-y-5">
-            <section
-              id="dashboard-version-detail"
-              class="border border-base-300 bg-base-200/20 p-5"
-              data-selected-version={@selected_version && @selected_version.version}
-            >
-              <.vue
-                id="dashboard-activity-detail-component"
-                v-component="OpsDashboardActivity"
-                surface="detail"
-                page={@dashboard_activity_page}
-                selected_version_detail={@selected_version_detail}
-                v-on:publish_version={JS.push("publish_version")}
-                v-on:restore_version={JS.push("restore_version")}
-                v-ssr={false}
-                class="contents"
-              />
-              <%= if @selected_version do %>
-                <div class="mt-5 border-t border-base-300 pt-4">
-                  <PublishValidationComponents.publish_validation
-                    publish_readiness={@dashboard_publish_readiness}
-                    selected_publish_issue_id={@selected_publish_issue_id}
-                    dashboard_document={@selected_version.document}
-                    dashboard_current_path={~p"/missions/#{@current_mission.mission_id}/ops/dashboards/#{@dashboard_id}/activity?version=#{@selected_version.version}"}
-                  />
-                </div>
-              <% end %>
-            </section>
-
-            <.vue
-              id="dashboard-activity-events-component"
-              v-component="OpsDashboardActivity"
-              surface="activity"
-              page={@dashboard_activity_page}
-              dashboard_activity={@streams.dashboard_activity}
-              v-ssr={false}
-              class="contents"
-            />
-          </div>
-        </div>
-      </section>
+      <.vue
+        id="ops-dashboard-activity-surface"
+        v-component="FederatedFullPageSurface"
+        application_key="ops_console"
+        surface_id="dashboard_activity"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={@federated_query_params}
+        v-ssr={false}
+        class="contents"
+      />
     </Layouts.app>
     """
   end
