@@ -1,7 +1,7 @@
 defmodule Cadence.Reads.ApplicationSurfaces.SpacecraftTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{HostContext, Spacecraft, SurfaceQueryRequest}
+  alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
 
@@ -33,27 +33,28 @@ defmodule Cadence.Reads.ApplicationSurfaces.SpacecraftTest do
 
     %{
       scope: scope,
-      providers: ProviderRegistry.providers(Spacecraft.surface_query_contributions())
+      providers: ProviderRegistry.providers()
     }
   end
 
-  test "dispatches every contributed query through a supplied provider map", context do
-    assert Map.keys(context.providers) ==
+  test "dispatches Spacecraft queries through the default central provider registry", context do
+    assert Enum.all?(
              [
-               {"spacecraft", "cadence.spacecraft.applications"},
-               {"spacecraft", "cadence.spacecraft.edit"},
-               {"spacecraft", "cadence.spacecraft.list"},
-               {"spacecraft", "cadence.spacecraft.new"},
-               {"spacecraft", "cadence.spacecraft.profile.new"},
-               {"spacecraft", "cadence.spacecraft.profile.show"},
-               {"spacecraft", "cadence.spacecraft.profiles"},
-               {"spacecraft", "cadence.spacecraft.readiness"},
-               {"spacecraft", "cadence.spacecraft.routing"},
-               {"spacecraft", "cadence.spacecraft.show"},
-               {"spacecraft", "cadence.spacecraft.commanding"},
-               {"spacecraft", "cadence.telemetry_decom.manage"}
-             ]
-             |> Enum.sort()
+               "cadence.spacecraft.applications",
+               "cadence.spacecraft.edit",
+               "cadence.spacecraft.list",
+               "cadence.spacecraft.new",
+               "cadence.spacecraft.profile.new",
+               "cadence.spacecraft.profile.show",
+               "cadence.spacecraft.profiles",
+               "cadence.spacecraft.readiness",
+               "cadence.spacecraft.routing",
+               "cadence.spacecraft.show",
+               "cadence.spacecraft.commanding",
+               "cadence.telemetry_decom.manage"
+             ],
+             &Map.has_key?(context.providers, {"spacecraft", &1})
+           )
 
     assert {:ok, %{"data" => %{"page" => %{"id" => "spacecraft-new-page"}}}} =
              dispatch(context, HostContext.mission(@mission_id), "new", "cadence.spacecraft.new")
