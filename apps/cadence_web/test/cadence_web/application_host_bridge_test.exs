@@ -1,15 +1,20 @@
 defmodule CadenceWeb.ApplicationHostBridgeTest do
-  use ExUnit.Case, async: true
+  use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Applications.{
     ActionDefinition,
+    ActionRequest,
+    ApplicationInstallations,
     ApplicationDefinition,
+    HostContext,
     Spacecraft,
     SurfaceDefinition
   }
 
   alias Cadence.Auth.Scope
-  alias CadenceWeb.ApplicationHostBridge
+  alias CadenceWeb.{ApplicationHostBridge, TestFixtures}
+
+  @now "2026-09-03T12:00:00Z"
 
   test "rejects recursively oversized query input before provider dispatch" do
     params = %{"params" => Enum.to_list(1..101)}
@@ -102,11 +107,94 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
            )
   end
 
+  test "carries explicit admitted surface identity into provider dispatch" do
+    {scope, route_context} = installed_telemetry_context()
+
+    params = %{
+      "applicationKey" => "telemetry_decom",
+      "applicationVersion" => 1,
+      "surfaceId" => "packet_bindings",
+      "surfaceVersion" => 1,
+      "actionId" => "save_packet_bindings",
+      "params" => %{"selected" => true}
+    }
+
+    assert {:ok, prepared} =
+             ApplicationHostBridge.prepare_action(
+               scope,
+               route_context,
+               params,
+               "bridge-surface-identity",
+               now: @now
+             )
+
+    assert %ActionRequest{
+             surface_id: "packet_bindings",
+             surface_version: 1,
+             params: %{"selected" => true}
+           } = prepared.dispatch_request
+
+    assert prepared.request_document["surfaceId"] == "packet_bindings"
+    assert prepared.request_document["surfaceVersion"] == 1
+  end
+
+  test "keeps the deliberately supported omitted surface legacy path" do
+    {scope, route_context} = installed_telemetry_context()
+
+    params = %{
+      "applicationKey" => "telemetry_decom",
+      "applicationVersion" => 1,
+      "actionId" => "save_packet_bindings",
+      "params" => %{"selected" => true}
+    }
+
+    assert {:ok, prepared} =
+             ApplicationHostBridge.prepare_action(
+               scope,
+               route_context,
+               params,
+               "bridge-legacy-surface",
+               now: @now
+             )
+
+    assert %ActionRequest{surface_id: nil, surface_version: nil} = prepared.dispatch_request
+    assert prepared.request_document["surfaceId"] == "packet_bindings"
+    assert prepared.request_document["surfaceVersion"] == 1
+  end
+
   test "returns stable host ids for every application scope" do
     assert ApplicationHostBridge.host_dom_id(:mission) == "mission-application-host"
     assert ApplicationHostBridge.host_dom_id(:spacecraft) == "spacecraft-application-host"
     assert ApplicationHostBridge.host_dom_id(:organization) == "organization-application-host"
     assert ApplicationHostBridge.host_dom_id(:user) == "user-application-host"
     assert ApplicationHostBridge.host_dom_id(:admin) == "admin-application-host"
+  end
+
+  defp installed_telemetry_context do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission)
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "telemetry_decom")
+
+    {scope,
+     %{
+       host_context: host_context,
+       mission: mission,
+       spacecraft: spacecraft
+     }}
   end
 end
