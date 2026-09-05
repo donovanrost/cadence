@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
@@ -164,23 +165,207 @@ type ReleaseBundleItem = {
 };
 
 const exactHostInitializationPath = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+const exactHostInitializationFacadeId =
+  "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
+const generatedHostInitializationSourceDigests = new Set([
+  "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068",
+]);
 
-function isGeneratedHostInitializationChunk(
-  fileName: string,
-  item: ReleaseBundleItem,
-): item is ReleaseBundleItem & { code: string } {
+function readJavaScriptLiteral(source: string, start: number) {
+  const quote = source[start];
+  if (quote !== "'" && quote !== '"' && quote !== "`") return null;
+
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (source[index] === quote) {
+      return {
+        contentStart: start + 1,
+        end: index + 1,
+        value: source.slice(start + 1, index),
+      };
+    }
+  }
+
+  return null;
+}
+
+function skipJavaScriptTrivia(source: string, start: number) {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index])) {
+      index += 1;
+      continue;
+    }
+    if (source.startsWith("//", index)) {
+      const lineEnd = source.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? source.length : lineEnd + 1;
+      continue;
+    }
+    if (source.startsWith("/*", index)) {
+      const commentEnd = source.indexOf("*/", index + 2);
+      index = commentEnd === -1 ? source.length : commentEnd + 2;
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+function generatedImportLiterals(source: string) {
+  const literals = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const quote = source[index];
+    if (quote === "'" || quote === '"' || quote === "`") {
+      const literal = readJavaScriptLiteral(source, index);
+      if (!literal) return null;
+      index = literal.end - 1;
+      continue;
+    }
+    if (source.startsWith("//", index)) {
+      const lineEnd = source.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? source.length : lineEnd;
+      continue;
+    }
+    if (source.startsWith("/*", index)) {
+      const commentEnd = source.indexOf("*/", index + 2);
+      if (commentEnd === -1) return null;
+      index = commentEnd + 1;
+      continue;
+    }
+    if (!source.startsWith("import", index)) continue;
+
+    const previous = source[index - 1];
+    if (/[A-Za-z0-9_$]/.test(previous ?? "") && source.slice(index - 5, index) !== "await") {
+      continue;
+    }
+    const afterImport = skipJavaScriptTrivia(source, index + "import".length);
+    let literalStart = null;
+    if (source[afterImport] === "(") {
+      const argumentStart = skipJavaScriptTrivia(source, afterImport + 1);
+      if (
+        source[argumentStart] === "'" ||
+        source[argumentStart] === '"' ||
+        source[argumentStart] === "`"
+      ) {
+        literalStart = argumentStart;
+      }
+    } else if (source[afterImport] === "'" || source[afterImport] === '"') {
+      literalStart = afterImport;
+    } else if (source[afterImport] === "{" || source[afterImport] === "*") {
+      for (let cursor = afterImport; cursor < source.length; cursor += 1) {
+        if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === "`") {
+          const literal = readJavaScriptLiteral(source, cursor);
+          if (!literal) return null;
+          cursor = literal.end - 1;
+          continue;
+        }
+        if (
+          source.startsWith("from", cursor) &&
+          !/[A-Za-z0-9_$]/.test(source[cursor - 1] ?? "") &&
+          !/[A-Za-z0-9_$]/.test(source[cursor + "from".length] ?? "")
+        ) {
+          const candidateStart = skipJavaScriptTrivia(source, cursor + "from".length);
+          if (source[candidateStart] === "'" || source[candidateStart] === '"') {
+            literalStart = candidateStart;
+          }
+          break;
+        }
+        if (source[cursor] === ";") break;
+      }
+    }
+    if (literalStart === null) continue;
+    const literal = readJavaScriptLiteral(source, literalStart);
+    if (!literal) return null;
+    literals.push(literal);
+    index = literal.end - 1;
+  }
+  return literals;
+}
+
+function canonicalHostInitializationSource(source: string) {
+  if (typeof source !== "string") return null;
+  const expectedRemoteName = federationConfig.name;
+  const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const preloadImport = /^\.\/vite-preload-helper-([A-Za-z0-9_-]{8})\.js$/;
+  const sharedImport = new RegExp(
+    `^\\./_virtual_mf-localSharedImportMap___mfe_internal__(${escapedRemoteName})__mf_owner__1-([A-Za-z0-9_-]{8})\\.js$`,
+  );
+  const edits = [];
+  let preloadCount = 0;
+  let sharedCount = 0;
+  for (const literal of generatedImportLiterals(source) ?? []) {
+    const preloadMatch = preloadImport.exec(literal.value);
+    if (preloadMatch) {
+      preloadCount += 1;
+      edits.push({
+        end: literal.contentStart + preloadMatch[1].length + "./vite-preload-helper-".length,
+        replacement: "<hash>",
+        start: literal.contentStart + "./vite-preload-helper-".length,
+      });
+      continue;
+    }
+    const sharedMatch = sharedImport.exec(literal.value);
+    if (sharedMatch) {
+      sharedCount += 1;
+      const prefixLength = "./_virtual_mf-localSharedImportMap___mfe_internal__".length;
+      const remoteStart = literal.contentStart + prefixLength;
+      const hashStart = remoteStart + expectedRemoteName.length + "__mf_owner__1-".length;
+      edits.push(
+        {
+          end: remoteStart + expectedRemoteName.length,
+          replacement: "<remote>",
+          start: remoteStart,
+        },
+        {
+          end: hashStart + sharedMatch[2].length,
+          replacement: "<hash>",
+          start: hashStart,
+        },
+      );
+    }
+  }
+  if (preloadCount !== 1 || sharedCount !== 1) return null;
+  return edits
+    .sort((left, right) => right.start - left.start)
+    .reduce(
+      (canonical, edit) =>
+        `${canonical.slice(0, edit.start)}${edit.replacement}${canonical.slice(edit.end)}`,
+      source,
+    );
+}
+
+function hasHostInitializationShape(fileName: string, item: ReleaseBundleItem) {
   return (
     exactHostInitializationPath.test(fileName) &&
     item.type === "chunk" &&
     item.isEntry === false &&
     (item.name === "hostInit" || item.name === basename(fileName, ".js")) &&
-    (item.facadeModuleId === undefined ||
-      /hostAutoInit|hostInit|module-federation/i.test(item.facadeModuleId)) &&
     typeof item.code === "string" &&
     item.code.includes("__mf_module_cache__") &&
     item.code.includes("loadShare") &&
     /export\s*\{(?=[^}]*\bhostInitPromise\b)(?=[^}]*\binitHost\b)[^}]*\}/s.test(
       item.code,
+    )
+  );
+}
+
+function isAuthoritativeHostInitializationChunk(
+  fileName: string,
+  item: ReleaseBundleItem,
+): item is ReleaseBundleItem & { code: string } {
+  if (!hasHostInitializationShape(fileName, item)) return false;
+  if (typeof item.code !== "string") return false;
+  if (item.name !== "hostInit" || item.facadeModuleId !== exactHostInitializationFacadeId) {
+    return false;
+  }
+  const canonical = canonicalHostInitializationSource(item.code);
+  return (
+    canonical !== null &&
+    generatedHostInitializationSourceDigests.has(
+      createHash("sha256").update(canonical, "utf8").digest("hex"),
     )
   );
 }
@@ -229,17 +414,33 @@ function releaseOutputPlugin() {
       config.build.manifest = false;
     },
     generateBundle(_options: unknown, bundle: Record<string, ReleaseBundleItem>) {
-      const generatedHostInitialization = Object.entries(bundle).filter(([fileName, item]) =>
-        isGeneratedHostInitializationChunk(fileName, item),
+      const structuralHostInitializationLookalikes = Object.entries(bundle).filter(
+        ([fileName, item]) => hasHostInitializationShape(fileName, item),
       );
-      const unreferencedHostInitialization = generatedHostInitialization.filter(
-        ([fileName]) =>
-          !Object.entries(bundle).some(
-            ([owner, item]) =>
-              owner !== fileName && bundleItemReferencesTarget(owner, item, fileName),
-          ),
+      const authoritativeHostInitialization = Object.entries(bundle).filter(
+        ([fileName, item]) => isAuthoritativeHostInitializationChunk(fileName, item),
       );
-      if (unreferencedHostInitialization.length === 0) return;
+      if (authoritativeHostInitialization.length === 0) {
+        throw new Error("release cleanup requires one authoritative host initialization chunk");
+      }
+      if (authoritativeHostInitialization.length > 1) {
+        throw new Error("release cleanup found multiple authoritative host initialization chunks");
+      }
+      if (structuralHostInitializationLookalikes.length !== 1) {
+        throw new Error(
+          "release cleanup found conflicting structural host initialization lookalikes",
+        );
+      }
+
+      const [[fileName, item]] = authoritativeHostInitialization;
+      if (
+        Object.entries(bundle).some(
+          ([owner, ownerItem]) =>
+            owner !== fileName && bundleItemReferencesTarget(owner, ownerItem, fileName),
+        )
+      ) {
+        return;
+      }
 
       const statsAsset = bundle["mf-stats.json"];
       if (statsAsset?.type !== "asset" || statsAsset.source === undefined) {
@@ -277,25 +478,21 @@ function releaseOutputPlugin() {
         throw new Error("release cleanup requires federation buildOutput records");
       }
 
-      const removed = new Set<string>();
-      for (const [fileName, item] of unreferencedHostInitialization) {
-        const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
-        if (matching.length !== 1) {
-          throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
-        }
-        const [record] = matching;
-        if (
-          record.type !== "chunk" ||
-          record.isEntry !== false ||
-          record.size !== new TextEncoder().encode(item.code).byteLength
-        ) {
-          throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
-        }
-        delete bundle[fileName];
-        removed.add(fileName);
+      const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
+      if (matching.length !== 1) {
+        throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
       }
+      const [record] = matching;
+      if (
+        record.type !== "chunk" ||
+        record.isEntry !== false ||
+        record.size !== new TextEncoder().encode(item.code).byteLength
+      ) {
+        throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
+      }
+      delete bundle[fileName];
       stats.buildOutput = stats.buildOutput.filter(
-        (output) => !removed.has(output.fileName ?? ""),
+        (output) => output.fileName !== fileName,
       );
       statsAsset.source = JSON.stringify(stats);
     },
