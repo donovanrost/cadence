@@ -21,24 +21,28 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   @surface_contracts [
     %{
       id: "organization_home",
+      scope: :organization,
       component: "OrganizationHome",
       query: "cadence.organization.home",
       actions: []
     },
     %{
       id: "provider_accounts",
+      scope: :organization,
       component: "ProviderAccountListPage",
       query: "cadence.organization.provider_accounts.list",
       actions: []
     },
     %{
       id: "provider_account_new",
+      scope: :organization,
       component: "ProviderAccountNew",
       query: "cadence.organization.provider_accounts.new",
       actions: ["validate_provider_account", "register_provider_account"]
     },
     %{
       id: "provider_account_show",
+      scope: :organization,
       component: "ProviderAccountShow",
       query: "cadence.organization.provider_account.show",
       actions: [
@@ -51,48 +55,56 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
     },
     %{
       id: "notifications",
+      scope: :user,
       component: "NotificationsPage",
       query: "cadence.organization.notifications",
       actions: ["accept_invitation", "mark_notification_read"]
     },
     %{
       id: "notifications_bell",
+      scope: :user,
       component: "NotificationsBell",
       query: "cadence.organization.notifications_bell",
       actions: ["mark_notification_read"]
     },
     %{
       id: "admin_home",
+      scope: :admin,
       component: "AdminHome",
       query: "cadence.platform_admin.home",
       actions: []
     },
     %{
       id: "admin_runtime",
+      scope: :admin,
       component: "AdminRuntime",
       query: "cadence.platform_admin.runtime",
       actions: ["refresh_runtime", "filter_runtime_decisions"]
     },
     %{
       id: "admin_organizations",
+      scope: :admin,
       component: "AdminOrganizationListPage",
       query: "cadence.platform_admin.organizations",
       actions: []
     },
     %{
       id: "admin_organization_new",
+      scope: :admin,
       component: "AdminOrganizationNew",
       query: "cadence.platform_admin.organization.new",
       actions: ["validate_organization", "create_organization"]
     },
     %{
       id: "admin_organization_show",
+      scope: :admin,
       component: "AdminOrganizationShow",
       query: "cadence.platform_admin.organization.show",
       actions: ["issue_service_identity", "dismiss_service_token", "open_organization"]
     },
     %{
       id: "admin_organization_invite",
+      scope: :admin,
       component: "AdminOrganizationInvite",
       query: "cadence.platform_admin.organization.invite",
       actions: ["validate_invitation", "invite_organization_member"]
@@ -190,7 +202,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
         "Manage organization membership, providers, notifications, and administration.",
       trust: :first_party,
       availability: :available,
-      installable_scopes: [:organization],
+      installable_scopes: [:organization, :user, :admin],
       actions: action_definitions(),
       surfaces: Enum.map(@surface_contracts, &surface_definition/1)
     }
@@ -221,7 +233,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
         release_id: "organization-admin-v1",
         remote_name: @remote_name,
         manifest_path: @manifest_path,
-        exposed_module: "./#{surface.component}"
+        exposed_module: "./Application"
       }
     end)
   end
@@ -293,11 +305,13 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
     |> Enum.flat_map(& &1.actions)
     |> Enum.uniq()
     |> Enum.map(fn action_id ->
+      scope = action_scope(action_id)
+
       %ActionDefinition{
         action_id: action_id,
         version: @version,
         intent: :configuration,
-        scope: :organization,
+        scope: scope,
         input_contract: %{schema_id: "cadence.organization_admin.#{action_id}.input", version: 1},
         result_contract: %{
           schema_id: "cadence.organization_admin.#{action_id}.result",
@@ -316,7 +330,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
       surface_id: surface.id,
       version: @version,
       purpose: surface_purpose(surface.id),
-      scope: :organization,
+      scope: surface.scope,
       placement: :application_workspace,
       navigation: %{label: surface.id, order: surface_order(surface.id)},
       data_contract: %{query_id: surface.query, version: @version},
@@ -342,4 +356,10 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
        do: :configuration
 
   defp surface_purpose(_surface_id), do: :overview
+
+  defp action_scope(action_id) do
+    @surface_contracts
+    |> Enum.find(&Enum.member?(&1.actions, action_id))
+    |> Map.fetch!(:scope)
+  end
 end

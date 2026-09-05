@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FederatedApplicationProps,
+  FullPageSurfaceProps,
   HostBridge,
   MissionHostContext,
 } from "@cadence/plugin-sdk";
@@ -67,8 +67,26 @@ const presentationResponse: CommsOverviewResponse = {
   },
 };
 
-function propsFor(query: unknown): FederatedApplicationProps {
+const application = {
+  applicationKey: "comms_overview",
+  applicationVersion: 1,
+  displayName: "Communications Overview",
+  description: "Mission communications overview.",
+  package: { packageId: "cadence.comms_overview", version: 1 },
+  surface: legacyManifest.surfaces[0],
+  release: {
+    federation: "module_federation" as const,
+    releaseId: "comms-overview-v1",
+    remoteName: "cadence_comms_overview",
+    manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
+    exposedModule: "./Application",
+  },
+};
+
+function propsFor(query: unknown): FullPageSurfaceProps {
   return {
+    application,
+    surface: application.surface,
     context,
     bridge: {
       query: query as HostBridge["query"],

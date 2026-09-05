@@ -3,7 +3,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
 
   alias Cadence.Applications.{ApplicationDefinition, OpsConsole, ReleaseContribution}
 
-  test "declares one first-party mission Ops surface and workspace coverage" do
+  test "declares both first-party mission Ops surfaces and workspace coverage" do
     assert %ApplicationDefinition{} = definition = OpsConsole.definition()
     assert ApplicationDefinition.validate(definition) == :ok
     assert definition.application_key == "ops_console"
@@ -12,6 +12,34 @@ defmodule Cadence.Applications.OpsConsoleTest do
     assert Enum.map(definition.surfaces, &{&1.surface_id, &1.placement}) == [
              {"workspace", :application_workspace},
              {"ops", :ops_workspace}
+           ]
+
+    assert Enum.map(definition.surfaces, &{&1.surface_id, &1.actions}) == [
+             {"workspace", []},
+             {
+               "ops",
+               [
+                 "validate",
+                 "save",
+                 "filter",
+                 "refresh",
+                 "select",
+                 "open_data_link",
+                 "open_evidence",
+                 "set_chart_time_range"
+               ]
+             }
+           ]
+
+    assert Enum.map(definition.actions, & &1.action_id) == [
+             "validate",
+             "save",
+             "filter",
+             "refresh",
+             "select",
+             "open_data_link",
+             "open_evidence",
+             "set_chart_time_range"
            ]
   end
 

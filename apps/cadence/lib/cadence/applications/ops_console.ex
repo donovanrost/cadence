@@ -2,6 +2,7 @@ defmodule Cadence.Applications.OpsConsole do
   @moduledoc "The first-party contribution boundary for the federated Ops Console."
 
   alias Cadence.Applications.{
+    ActionDefinition,
     ApplicationDefinition,
     CatalogContribution,
     ReleaseContribution,
@@ -21,6 +22,17 @@ defmodule Cadence.Applications.OpsConsole do
     exposed_module: "./Application"
   }
 
+  @ops_actions [
+    "validate",
+    "save",
+    "filter",
+    "refresh",
+    "select",
+    "open_data_link",
+    "open_evidence",
+    "set_chart_time_range"
+  ]
+
   @surface_specs [
     %{
       id: "workspace",
@@ -29,6 +41,7 @@ defmodule Cadence.Applications.OpsConsole do
       label: "Ops Console",
       order: 10,
       query_id: "cadence.ops.workspace",
+      actions: [],
       fallback_path: "/missions/:mission_id/ops"
     },
     %{
@@ -38,6 +51,7 @@ defmodule Cadence.Applications.OpsConsole do
       label: "Operations",
       order: 10,
       query_id: "cadence.ops.console",
+      actions: @ops_actions,
       fallback_path: "/missions/:mission_id/ops"
     }
   ]
@@ -105,6 +119,7 @@ defmodule Cadence.Applications.OpsConsole do
       trust: :first_party,
       availability: :available,
       installable_scopes: [:mission],
+      actions: action_definitions(),
       surfaces: Enum.map(@surface_specs, &surface_definition/1)
     }
   end
@@ -122,9 +137,26 @@ defmodule Cadence.Applications.OpsConsole do
         fallback_path: spec.fallback_path
       },
       data_contract: %{query_id: spec.query_id, version: @identity.surface_version},
-      actions: [],
+      actions: spec.actions,
       refresh: :static,
       renderer: {:trusted, "cadence.ops.console"}
     }
+  end
+
+  defp action_definitions do
+    Enum.map(@ops_actions, fn action_id ->
+      %ActionDefinition{
+        action_id: action_id,
+        version: @identity.application_version,
+        intent: :operation,
+        scope: :mission,
+        input_contract: %{schema_id: "cadence.ops_console.#{action_id}.input", version: 1},
+        result_contract: %{schema_id: "cadence.ops_console.#{action_id}.result", version: 1},
+        required_permission: "operate_mission",
+        effect: :durable,
+        execution: :immediate,
+        concurrency: %{strategy: :expected_version}
+      }
+    end)
   end
 end

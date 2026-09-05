@@ -6,18 +6,6 @@ export default createModuleFederationConfig({
   manifest: true,
   exposes: {
     "./Application": "./src/federated-application.ts",
-    "./OrganizationHome": "./src/OrganizationHome.vue",
-    "./ProviderAccountListPage": "./src/ProviderAccountListPage.vue",
-    "./ProviderAccountNew": "./src/ProviderAccountNew.vue",
-    "./ProviderAccountShow": "./src/ProviderAccountShow.vue",
-    "./NotificationsPage": "./src/NotificationsPage.vue",
-    "./NotificationsBell": "./src/NotificationsBell.vue",
-    "./AdminHome": "./src/AdminHome.vue",
-    "./AdminRuntime": "./src/AdminRuntime.vue",
-    "./AdminOrganizationListPage": "./src/AdminOrganizationListPage.vue",
-    "./AdminOrganizationNew": "./src/AdminOrganizationNew.vue",
-    "./AdminOrganizationShow": "./src/AdminOrganizationShow.vue",
-    "./AdminOrganizationInvite": "./src/AdminOrganizationInvite.vue",
   },
   shared: {
     vue: {
