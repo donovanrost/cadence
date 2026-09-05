@@ -1,10 +1,8 @@
 import vue from "@vitejs/plugin-vue";
 import tidewave from "tidewave/vite-plugin";
 import { defineConfig, lazyPlugins } from "vite-plus";
-import { createDemoAuthMiddleware } from "../../tools/demo-auth-service";
 import { createDemoHostMiddleware } from "../../tools/demo-host-service";
 
-const demoAuthMiddleware = createDemoAuthMiddleware("development");
 const demoHostMiddleware = createDemoHostMiddleware("development");
 
 export default defineConfig({
@@ -30,7 +28,6 @@ export default defineConfig({
     {
       name: "cadence-demo-host-api",
       configureServer(server) {
-        server.middlewares.use(demoAuthMiddleware);
         server.middlewares.use(demoHostMiddleware);
       },
     },

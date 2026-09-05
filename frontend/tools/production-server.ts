@@ -2,14 +2,12 @@ import { createReadStream } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
-import { createDemoAuthMiddleware } from "./demo-auth-service.ts";
 import { createDemoHostMiddleware } from "./demo-host-service.ts";
 
 const frontendRoot = resolve(import.meta.dirname, "..");
 const hostRoot = resolve(frontendRoot, "apps/host/dist");
 const telemetryRoot = resolve(frontendRoot, "apps/telemetry-decom/dist");
 const probeRoot = resolve(frontendRoot, "apps/contract-probe/dist");
-const authMiddleware = createDemoAuthMiddleware("production");
 const hostMiddleware = createDemoHostMiddleware("production");
 
 await Promise.all([
@@ -20,28 +18,26 @@ await Promise.all([
 ]);
 
 const host = createServer((request, response) => {
-  void authMiddleware(request, response, () => {
-    void hostMiddleware(request, response, () => {
-      const pathname = new URL(request.url ?? "/", "http://127.0.0.1:5173").pathname;
-      const requestedPath = pathname === "/" ? "/index.html" : pathname;
-      void serveStatic(response, hostRoot, requestedPath, {
-        fallback: "/index.html",
-        headers: {
-          "content-security-policy": [
-            "default-src 'self'",
-            "script-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
-            "style-src 'self' 'unsafe-inline' http://127.0.0.1:4174 http://127.0.0.1:4175",
-            "font-src 'self' data:",
-            "connect-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
-            "img-src 'self' data:",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "frame-ancestors 'none'",
-          ].join("; "),
-          "x-content-type-options": "nosniff",
-        },
-      }).catch(() => serverError(response));
-    });
+  void hostMiddleware(request, response, () => {
+    const pathname = new URL(request.url ?? "/", "http://127.0.0.1:5173").pathname;
+    const requestedPath = pathname === "/" ? "/index.html" : pathname;
+    void serveStatic(response, hostRoot, requestedPath, {
+      fallback: "/index.html",
+      headers: {
+        "content-security-policy": [
+          "default-src 'self'",
+          "script-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
+          "style-src 'self' 'unsafe-inline' http://127.0.0.1:4174 http://127.0.0.1:4175",
+          "font-src 'self' data:",
+          "connect-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
+          "img-src 'self' data:",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "frame-ancestors 'none'",
+        ].join("; "),
+        "x-content-type-options": "nosniff",
+      },
+    }).catch(() => serverError(response));
   });
 });
 
