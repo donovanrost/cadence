@@ -350,7 +350,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   def validate do
     with :ok <- OrganizationAdminQuery.validate(),
          :ok <- OrganizationAdminAction.validate(),
-         :ok <- validate_surface_ids() do
+         :ok <- validate_surface_ids(),
+         :ok <- validate_action_bindings() do
       validate_queries_and_actions()
     end
   end
@@ -372,6 +373,19 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
         _error -> {:halt, {:error, {:invalid_surface_contract, surface.id}}}
       end
     end)
+  end
+
+  defp validate_action_bindings do
+    expected =
+      Enum.flat_map(@surface_contracts, fn surface ->
+        Enum.map(surface.actions, &{surface.id, @version, &1})
+      end)
+
+    actual =
+      OrganizationAdminAction.all()
+      |> Enum.map(&{&1.surface_id, &1.version, &1.id})
+
+    if actual == expected, do: :ok, else: {:error, :invalid_action_bindings}
   end
 
   defp validate_actions(%{id: surface_id, actions: actions}) do

@@ -144,6 +144,22 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
   @spec all() :: [map()]
   def all, do: @action_contracts
 
+  @doc "Validates a complete provider-owned surface/action binding ledger."
+  @spec validate_bindings([map()]) :: :ok | {:error, atom()}
+  def validate_bindings(action_contracts) when is_list(action_contracts) do
+    if Enum.all?(action_contracts, &valid_action_contract?/1) do
+      identities = Enum.map(action_contracts, &{&1.surface_id, &1.version, &1.id})
+
+      if length(identities) == length(Enum.uniq(identities)),
+        do: :ok,
+        else: {:error, :duplicate_action_bindings}
+    else
+      {:error, :invalid_action_contracts}
+    end
+  end
+
+  def validate_bindings(_action_contracts), do: {:error, :invalid_action_contracts}
+
   @doc false
   @spec application_key() :: binary()
   def application_key, do: "organization_admin"
@@ -156,7 +172,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
         %HostContext{} = host_context,
         %ActionRequest{application_key: "organization_admin", application_version: 1} = request
       ) do
-    with :ok <- ensure_action_context(scope, host_context, request.action_id),
+    with :ok <- ensure_surface_binding(request),
+         :ok <- ensure_action_context(scope, host_context, request.action_id),
          {:ok, result} <- execute_action(scope, host_context, request) do
       {:ok, result}
     end
@@ -353,6 +370,17 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
 
   defp execute_action(_scope, _host_context, _request),
     do: {:error, failure("unsupported_action", "The organization action is not implemented.")}
+
+  defp ensure_surface_binding(%ActionRequest{
+         surface_id: surface_id,
+         surface_version: surface_version,
+         action_id: action_id
+       }) do
+    case fetch(surface_id, action_id, surface_version) do
+      {:ok, _contract} -> :ok
+      {:error, :unknown_action} -> {:error, :unsupported_application_action}
+    end
+  end
 
   defp provider_account_action(scope, "rotate_provider_credential", account_id, _params) do
     with {:ok, _account, version} <-
@@ -592,15 +620,22 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
   end
 
   @doc false
-  @spec validate() :: :ok | {:error, :invalid_action_contracts}
+  @spec validate() :: :ok | {:error, atom()}
   def validate do
-    valid? =
-      Enum.all?(@action_contracts, fn contract ->
-        is_binary(contract.id) and is_binary(contract.surface_id) and
-          contract.version > 0 and contract.effect in [:none, :durable, :external] and
-          is_boolean(contract.host_owned?)
-      end)
-
-    if valid?, do: :ok, else: {:error, :invalid_action_contracts}
+    validate_bindings(@action_contracts)
   end
+
+  defp valid_action_contract?(contract) when is_map(contract) do
+    id = Map.get(contract, :id)
+    surface_id = Map.get(contract, :surface_id)
+    version = Map.get(contract, :version)
+    effect = Map.get(contract, :effect)
+    host_owned? = Map.get(contract, :host_owned?)
+
+    is_binary(id) and id != "" and is_binary(surface_id) and surface_id != "" and
+      is_integer(version) and version > 0 and effect in [:none, :durable, :external] and
+      is_boolean(host_owned?)
+  end
+
+  defp valid_action_contract?(_contract), do: false
 end
