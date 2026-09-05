@@ -104,7 +104,10 @@ defmodule CadenceWeb.CommsTransportListLive do
       <.vue
         id="comms-transport-list-page-component"
         v-component="FederatedFullPageSurface"
-        presentation={@presentation}
+        application_key="comms"
+        surface_id="transports"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

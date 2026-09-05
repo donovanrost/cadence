@@ -11,7 +11,6 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   }
 
   alias CadenceWeb.{ApplicationHostCatalog, ApplicationInventory, ApplicationInventoryLifecycle}
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -74,11 +73,11 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       <.vue
         id="spacecraft-applications-page-component"
         v-component="FederatedFullPageSurface"
-        presentation={@presentation}
-        v-on:install={JS.push("install_application")}
-        v-on:disable={JS.push("disable_application")}
-        v-on:uninstall={JS.push("uninstall_application")}
-        v-diff={false}
+        application_key="spacecraft"
+        surface_id="applications"
+        host_scope="spacecraft"
+        mission_id={@current_mission.mission_id}
+        spacecraft_id={@current_spacecraft.spacecraft_id}
         v-ssr={false}
         class="contents"
       />

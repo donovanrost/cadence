@@ -14,8 +14,6 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     ProviderEventInbox
   }
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(%{"provider_account_id" => provider_account_id}, _session, socket) do
     socket =
@@ -165,22 +163,11 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="provider-account-show-component"
-        v-component="ProviderAccountShow"
-        page={provider_account_page_dto(@provider_account, @account_version)}
-        actions={account_actions_dto(@account_action, @credential)}
-        stats={account_stats_dto(@provider_account, @account_version, @credential, @active_grant_count)}
-        grant_form={@grant_form}
-        configuration={configuration_dto(@provider_account, @account_version)}
-        ingestion={ingestion_dto(@account_version, @ingestion_summary)}
-        guardrails={guardrails_dto(@account_version.guardrails)}
-        diagnostics={diagnostics_dto(@account_version, @credential)}
-        account_grants={@streams.account_grants}
-        account_audit={@streams.account_audit}
-        v-on:validate-account={JS.push("validate-account")}
-        v-on:rotate-credential={JS.push("rotate-credential")}
-        v-on:revoke-credential={JS.push("revoke-credential")}
-        v-on:grant-mission={JS.push("grant-mission")}
-        v-on:revoke-grant={JS.push("revoke-grant")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="provider_account_show"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
         class="contents"
       />

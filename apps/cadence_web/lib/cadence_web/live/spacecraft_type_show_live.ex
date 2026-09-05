@@ -44,11 +44,11 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
       <div id="spacecraft-profile-show-page">
         <.vue
           id="spacecraft-profile-show-component"
-          v-component="SpacecraftTypeShow"
-          profile={@profile_details}
-          navigation={@navigation}
-          labels={@labels}
-          versions={@version_rows}
+          v-component="FederatedFullPageSurface"
+          application_key="spacecraft"
+          surface_id="profile_show"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

@@ -5,7 +5,6 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   alias Cadence.Applications.ApplicationDefinition
   alias Cadence.ExtensionCatalog
   alias Cadence.SpacecraftType
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -71,13 +70,11 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-profile-new-component"
-        v-component="SpacecraftTypeNew"
-        page={@page}
-        form={@form}
-        options={@options}
-        applications={@applications}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        v-component="FederatedFullPageSurface"
+        application_key="spacecraft"
+        surface_id="profile_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="space-y-6 max-w-2xl"
       />

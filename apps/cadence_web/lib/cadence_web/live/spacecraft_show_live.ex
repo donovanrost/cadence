@@ -111,11 +111,11 @@ defmodule CadenceWeb.SpacecraftShowLive do
       <.vue
         id="spacecraft-show-component"
         v-component="FederatedFullPageSurface"
-        page={@spacecraft_page}
-        profile_binding={@profile_binding}
-        applications={@application_inventory}
-        workflow_cards={@workflow_cards}
-        overview={@spacecraft_overview}
+        application_key="spacecraft"
+        surface_id="show"
+        host_scope="spacecraft"
+        mission_id={@current_mission.mission_id}
+        spacecraft_id={@current_spacecraft.spacecraft_id}
         v-ssr={false}
       />
     </Layouts.app>

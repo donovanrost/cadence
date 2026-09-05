@@ -7,7 +7,6 @@ defmodule CadenceWeb.SpacecraftNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Spacecraft
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -98,11 +97,10 @@ defmodule CadenceWeb.SpacecraftNewLive do
       <.vue
         id="spacecraft-new-component"
         v-component="FederatedFullPageSurface"
-        page={@spacecraft_page}
-        form={@spacecraft_form}
-        profile_options={@profile_options}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="spacecraft"
+        surface_id="new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
       />
     </Layouts.app>

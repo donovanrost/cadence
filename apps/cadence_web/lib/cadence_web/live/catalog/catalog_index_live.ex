@@ -56,7 +56,10 @@ defmodule CadenceWeb.CatalogIndexLive do
       <.vue
         id="catalog-index-component"
         v-component="FederatedFullPageSurface"
-        presentation={@catalog_index_presentation}
+        application_key="mission_catalog"
+        surface_id="catalog_index"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

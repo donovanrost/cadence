@@ -5,7 +5,6 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.RoutingRule
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(params, _session, socket) do
@@ -87,11 +86,10 @@ defmodule CadenceWeb.CommsRoutingNewLive do
       <.vue
         id="comms-routing-new-component"
         v-component="FederatedFullPageSurface"
-        page={@page}
-        form={@form}
-        options={@options}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="comms"
+        surface_id="routing"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="space-y-6 max-w-2xl"
       />

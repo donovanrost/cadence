@@ -51,9 +51,10 @@ defmodule CadenceWeb.CommsRoutingShowLive do
         <.vue
           id="comms-routing-show-component"
           v-component="FederatedFullPageSurface"
-          navigation={@navigation}
-          rule={@rule}
-          events={@events}
+          application_key="comms"
+          surface_id="routing_detail"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

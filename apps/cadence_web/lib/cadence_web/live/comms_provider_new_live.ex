@@ -11,8 +11,6 @@ defmodule CadenceWeb.CommsProviderNewLive do
     ProviderAccounts
   }
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(_params, _session, socket) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
@@ -69,12 +67,10 @@ defmodule CadenceWeb.CommsProviderNewLive do
       <.vue
         id="comms-provider-new-component"
         v-component="FederatedFullPageSurface"
-        page={@page}
-        accounts={@accounts}
-        notes={@notes}
-        form={@form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="comms"
+        surface_id="provider_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="max-w-3xl space-y-6"
       />

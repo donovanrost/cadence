@@ -21,8 +21,10 @@ defmodule CadenceWeb.AdminOrganizationListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="admin-organization-list-page-component"
-        v-component="AdminOrganizationListPage"
-        presentation={@presentation}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="admin_organizations"
+        host_scope="admin"
         v-ssr={false}
       />
     </Layouts.app>

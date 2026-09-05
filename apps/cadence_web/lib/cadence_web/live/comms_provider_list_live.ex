@@ -34,7 +34,10 @@ defmodule CadenceWeb.CommsProviderListLive do
       <.vue
         id="comms-provider-list-component"
         v-component="FederatedFullPageSurface"
-        presentation={@presentation}
+        application_key="comms"
+        surface_id="provider_list"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

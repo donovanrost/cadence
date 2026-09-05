@@ -8,7 +8,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Events
-  alias Phoenix.LiveView.JS
 
   @default_database_description "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."
 
@@ -200,18 +199,10 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
         <.vue
           id="catalog-database-show-component"
           v-component="FederatedFullPageSurface"
-          database={@database_details}
-          navigation={@navigation}
-          revision_form_open={@show_revision_form}
-          revision_form={revision_upload_form_dto(@revision_form)}
-          upload={upload_dto(@uploads.artifact)}
-          detected_importer={detected_importer_dto(@uploads.artifact.entries)}
-          submit_disabled={submit_disabled?(@uploads.artifact.entries)}
-          revisions={@revision_rows}
-          import_runs={@import_run_rows}
-          v-on:toggle-revision-form={JS.push("toggle_revision_form")}
-          v-on:validate={JS.push("validate")}
-          v-on:cancel-upload={JS.push("cancel_upload")}
+          application_key="mission_catalog"
+          surface_id="catalog_database_show"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

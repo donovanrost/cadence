@@ -31,7 +31,10 @@ defmodule CadenceWeb.CommsValidationLive do
       <.vue
         id="comms-validation-component"
       v-component="FederatedFullPageSurface"
-        validation={@validation}
+      application_key="comms"
+      surface_id="validation"
+      host_scope="mission"
+      mission_id={@current_mission.mission_id}
         v-ssr={false}
       />
     </Layouts.app>

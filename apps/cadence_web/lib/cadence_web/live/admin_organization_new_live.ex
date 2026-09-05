@@ -3,7 +3,6 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Organizations.Organization
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -55,11 +54,10 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="admin-organization-new-component"
-        v-component="AdminOrganizationNew"
-        page={@page}
-        form={@form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="admin_organization_new"
+        host_scope="admin"
         v-ssr={false}
       />
     </Layouts.app>

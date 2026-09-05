@@ -13,8 +13,6 @@ defmodule CadenceWeb.CommsProviderShowLive do
     ServiceProfile
   }
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(%{"provider_id" => provider_id}, _session, socket) do
     socket = assign(socket, :provider_action_opts, provider_action_opts())
@@ -140,18 +138,10 @@ defmodule CadenceWeb.CommsProviderShowLive do
       <.vue
         id="comms-provider-show-component"
         v-component="FederatedFullPageSurface"
-        navigation={navigation_dto(@current_mission, @provider)}
-        provider={provider_dto(@provider, @service_profile_count, @delivery_profile_count)}
-        actions={actions_dto(@provider_action)}
-        profiles={profiles_dto(@service_profiles_empty?, @delivery_profiles_empty?)}
-        details={details_dto(@provider)}
-        diagnostics={diagnostics_dto(@provider)}
-        service_profiles={@streams.service_profiles}
-        delivery_profiles={@streams.delivery_profiles}
-        provider_versions={@streams.provider_versions}
-        v-on:validate-provider={JS.push("validate-provider")}
-        v-on:sync-provider={JS.push("sync-provider")}
-        v-on:archive-provider={JS.push("archive-provider")}
+        application_key="comms"
+        surface_id="provider_show"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

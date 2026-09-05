@@ -9,7 +9,6 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -194,13 +193,10 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
       <.vue
         id="catalog-database-new-component"
         v-component="FederatedFullPageSurface"
-        page={@page}
-        form={database_upload_form_dto(@database_form)}
-        upload={upload_dto(@uploads.artifact)}
-        detected_importer={detected_importer_dto(@uploads.artifact.entries)}
-        submit_disabled={submit_disabled?(@uploads.artifact.entries)}
-        v-on:validate={JS.push("validate")}
-        v-on:cancel-upload={JS.push("cancel_upload")}
+        application_key="mission_catalog"
+        surface_id="catalog_database_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

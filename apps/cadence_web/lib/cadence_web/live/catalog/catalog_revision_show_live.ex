@@ -81,11 +81,10 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
         <.vue
           id="catalog-revision-show-component"
           v-component="FederatedFullPageSurface"
-          revision={@revision}
-          navigation={@navigation}
-          provenance={@provenance}
-          runtime_usage={@runtime_usage}
-          mission_model={@mission_model}
+          application_key="mission_catalog"
+          surface_id="catalog_revision_show"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

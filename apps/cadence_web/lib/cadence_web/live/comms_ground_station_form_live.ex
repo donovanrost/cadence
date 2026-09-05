@@ -6,7 +6,6 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
 
   alias Cadence.Comms.GroundStation
   alias CadenceWeb.CommsComponents
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(params, _session, socket) do
@@ -135,11 +134,10 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
       <.vue
         id="comms-ground-station-form-component"
         v-component="FederatedFullPageSurface"
-        page={@page}
-        mode={Atom.to_string(@mode)}
-        form={@form_props}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="comms"
+        surface_id="ground_station"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
       />
     </Layouts.app>

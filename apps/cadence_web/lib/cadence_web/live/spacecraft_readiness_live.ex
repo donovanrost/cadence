@@ -38,9 +38,11 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
       <.vue
         id="spacecraft-readiness-component"
         v-component="FederatedFullPageSurface"
-        page={@readiness_page}
-        panels={@readiness_panels}
-        applications={@readiness_applications}
+        application_key="spacecraft"
+        surface_id="readiness"
+        host_scope="spacecraft"
+        mission_id={@current_mission.mission_id}
+        spacecraft_id={@current_spacecraft.spacecraft_id}
         v-ssr={false}
       />
     </Layouts.app>

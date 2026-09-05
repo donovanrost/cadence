@@ -45,4 +45,29 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
     assert app =~ "MutationObserver"
     assert app =~ "/assets/application-host/host/host.js"
   end
+
+  test "non-Ops federated full pages pass descriptors without legacy renderer bindings" do
+    mounts =
+      @live_root
+      |> Path.join("**/*.{ex,heex}")
+      |> Path.wildcard()
+      |> Enum.reject(&String.contains?(&1, "/ops_"))
+      |> Enum.filter(fn path ->
+        File.read!(path) =~ "v-component=\"FederatedFullPageSurface\""
+      end)
+
+    assert mounts != []
+
+    Enum.each(mounts, fn path ->
+      source = File.read!(path)
+      [mount] = Regex.run(~r/v-component="FederatedFullPageSurface"[\s\S]*?\/>/, source)
+
+      assert mount =~ ~r/\bapplication_key=/, path
+      assert mount =~ ~r/\bsurface_id=/, path
+      assert mount =~ ~r/\bhost_scope=/, path
+      assert mount =~ "v-ssr={false}"
+      refute mount =~ ~r/\bv-on:/, path
+      refute mount =~ ~r/\b(presentation|page|form|navigation|overview|actions)=/, path
+    end)
+  end
 end

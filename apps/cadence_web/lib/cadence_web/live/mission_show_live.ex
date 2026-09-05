@@ -25,8 +25,10 @@ defmodule CadenceWeb.MissionShowLive do
         <.vue
           id="mission-overview-component"
           v-component="FederatedFullPageSurface"
-          overview={@mission_overview}
-          spacecraft_readiness={@streams.spacecraft_readiness}
+          application_key="mission_catalog"
+          surface_id="mission_overview"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
           class="space-y-6"
         />

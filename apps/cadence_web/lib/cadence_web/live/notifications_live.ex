@@ -3,7 +3,6 @@ defmodule CadenceWeb.NotificationsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Notifications.Notification
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -78,10 +77,11 @@ defmodule CadenceWeb.NotificationsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="notifications-page-component"
-        v-component="NotificationsPage"
-        presentation={@notifications_page_presentation}
-        v-on:accept-invitation={JS.push("accept_invitation")}
-        v-on:mark-read={JS.push("mark_read")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="notifications"
+        host_scope="user"
+        user_id={@current_scope.user.user_id}
         v-ssr={false}
         class="contents"
       />

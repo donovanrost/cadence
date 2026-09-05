@@ -19,7 +19,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.ApplicationReferences
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket), do: mount_surface(socket)
@@ -172,35 +171,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     <.vue
       id="spacecraft-telemetry-decom-component"
       v-component="FederatedFullPageSurface"
-      page={@telemetry_decom_page}
-      card={@telemetry_decom_card}
-      status={status_dto(@config, @active_binding_set_summary, @saved_at)}
-      revision={revision_dto(@revisions, @selected_revision_id)}
-      no_revisions={no_revisions_dto(@revisions, @current_mission)}
-      packet_handoff={
-        packet_handoff_dto(
-          @revisions,
-          @apid_rows,
-          @selection,
-          @current_mission,
-          @current_spacecraft
-        )
-      }
-      preview={preview_dto(@revisions, @preview)}
-      preflight={preflight_dto(@activation_preflight)}
-      pending_activation={pending_activation_dto(@pending_activation_request)}
-      lifecycle_actions={
-        lifecycle_actions_dto(
-          @config,
-          @pending_activation_request,
-          @activation_preflight,
-          @application_definition.lifecycle_contract
-        )
-      }
-      v-on:change_revision={JS.push("change_revision")}
-      v-on:save_catalog_revision={JS.push("save_catalog_revision")}
-      v-on:enable={JS.push("enable")}
-      v-on:disable={JS.push("disable")}
+      application_key="spacecraft"
+      surface_id="telemetry_decom"
+      host_scope="spacecraft"
+      mission_id={@current_mission.mission_id}
+      spacecraft_id={@current_spacecraft.spacecraft_id}
       v-ssr={false}
       class="contents"
     />
