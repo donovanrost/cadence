@@ -30,6 +30,69 @@ import {
 
 const origin = "http://127.0.0.1:43721";
 
+function makeDiagnosticClient() {
+  const listeners = new Map();
+  return {
+    on(method, listener) {
+      const methodListeners = listeners.get(method) || new Set();
+      methodListeners.add(listener);
+      listeners.set(method, methodListeners);
+      return () => methodListeners.delete(listener);
+    },
+    emit(method, event) {
+      for (const listener of listeners.get(method) || []) listener(event);
+    },
+  };
+}
+
+function emitCanonicalNetworkResourceError(client, url, requestId = "expected-403", status = 403) {
+  client.emit("Log.entryAdded", {
+    entry: {
+      source: "network",
+      level: "error",
+      text: `Failed to load resource: the server responded with a status of ${status} (Forbidden)`,
+      url,
+      networkRequestId: requestId,
+    },
+  });
+}
+
+function emitExpectedActionRequest(client, requestId, url) {
+  client.emit("Network.requestWillBeSent", {
+    requestId,
+    request: { url, method: "POST", headers: {} },
+    type: "XHR",
+  });
+}
+
+function emitActionResponse(client, requestId, url, status) {
+  client.emit("Network.responseReceived", {
+    requestId,
+    response: { url, status },
+    type: "XHR",
+  });
+}
+
+function emitActionExtraInfo(client, requestId, statusCode) {
+  client.emit("Network.responseReceivedExtraInfo", {
+    requestId,
+    statusCode,
+    headers: {},
+  });
+}
+
+function assertDirty(diagnostics, label) {
+  let failure;
+  assert.throws(
+    () => diagnostics.assertClean(label),
+    (error) => {
+      failure = error;
+      return /browser diagnostics failed/.test(error.message);
+    },
+  );
+  return failure.message;
+}
+
 function record({
   url = `${origin}/api/query`,
   method = "POST",
@@ -415,6 +478,259 @@ test("conditional 304 cancellation is accepted only with exact ExtraInfo evidenc
   });
   assert.throws(() => rejectedDiagnostics.assertClean("non-304 cancellation"), /browser diagnostics failed/);
   rejectedDiagnostics.dispose();
+});
+
+test("one canonical delayed Chrome network resource error is attributed to one exact expected 403", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "expected-403",
+    request: { url, method: "POST", headers: {} },
+    type: "XHR",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "expected-403",
+    response: { url, status: 403 },
+    type: "XHR",
+  });
+  client.emit("Network.loadingFinished", { requestId: "expected-403" });
+  emitCanonicalNetworkResourceError(client, url);
+  assert.doesNotThrow(() => diagnostics.assertClean("expected CSRF rejection"));
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("a canonical network resource error without networkRequestId remains visible", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "expected-403", url);
+  emitActionResponse(client, "expected-403", url, 403);
+  client.emit("Log.entryAdded", {
+    entry: {
+      source: "network",
+      level: "error",
+      text: "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      url,
+    },
+  });
+
+  assert.match(assertDirty(diagnostics, "missing network request ID"), /Failed to load resource/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("response 403 then ExtraInfo 500 revokes the allowance and restores canonical logs", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "expected-403", url);
+  emitActionResponse(client, "expected-403", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "expected-403", 403);
+  emitActionExtraInfo(client, "expected-403", 500);
+  emitCanonicalNetworkResourceError(client, url, "expected-403", 403);
+
+  const failure = assertDirty(diagnostics, "response then ExtraInfo disagreement");
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 2);
+  assert.match(failure, /response=403, ExtraInfo=500/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("ExtraInfo 403 then response 500 revokes the allowance and restores canonical logs", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "expected-403", url);
+  emitActionExtraInfo(client, "expected-403", 403);
+  emitCanonicalNetworkResourceError(client, url, "expected-403", 403);
+  emitActionResponse(client, "expected-403", url, 500);
+  emitCanonicalNetworkResourceError(client, url, "expected-403", 403);
+
+  const failure = assertDirty(diagnostics, "ExtraInfo then response disagreement");
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 2);
+  assert.match(failure, /ExtraInfo=403, response=500/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("loadingFailed before and after contradictory status evidence remains visible", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "expected-403", url);
+  emitActionResponse(client, "expected-403", url, 403);
+  client.emit("Network.loadingFailed", {
+    requestId: "expected-403",
+    errorText: "net::ERR_FAILED_BEFORE_DRIFT",
+  });
+  emitActionExtraInfo(client, "expected-403", 500);
+  client.emit("Network.loadingFailed", {
+    requestId: "expected-403",
+    errorText: "net::ERR_FAILED_AFTER_DRIFT",
+  });
+
+  const failure = assertDirty(diagnostics, "loading failure status disagreement");
+  assert.match(failure, /ERR_FAILED_BEFORE_DRIFT/);
+  assert.match(failure, /ERR_FAILED_AFTER_DRIFT/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("cleanup and event-order permutations never hide a canonical error", () => {
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  for (const order of ["response-first", "log-first", "request-first", "cleanup-first"]) {
+    const client = makeDiagnosticClient();
+    const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+    const removeAllowance = diagnostics.allowExpectedFailure(
+      (candidate) => candidate.method === "POST" && candidate.url === url,
+      { status: 403 },
+    );
+
+    if (order !== "cleanup-first") emitExpectedActionRequest(client, "expected-403", url);
+    if (order === "response-first") emitActionResponse(client, "expected-403", url, 403);
+    if (order === "log-first") emitCanonicalNetworkResourceError(client, url);
+    if (order === "log-first") emitActionResponse(client, "expected-403", url, 403);
+    if (order === "request-first") {
+      emitActionResponse(client, "expected-403", url, 403);
+      emitCanonicalNetworkResourceError(client, url);
+    }
+    if (order === "response-first") emitCanonicalNetworkResourceError(client, url);
+    if (order === "cleanup-first") {
+      removeAllowance();
+      emitExpectedActionRequest(client, "expected-403", url);
+      emitActionResponse(client, "expected-403", url, 403);
+      emitCanonicalNetworkResourceError(client, url);
+    } else {
+      removeAllowance();
+      emitCanonicalNetworkResourceError(client, url, "unexpected-403");
+    }
+
+    assertDirty(diagnostics, `cleanup and ${order}`);
+    removeAllowance();
+    diagnostics.dispose();
+  }
+});
+
+test("a distinct same-URL browser error remains visible during an active expected failure", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "expected-403",
+    request: { url, method: "POST", headers: {} },
+    type: "XHR",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "expected-403",
+    response: { url, status: 403 },
+    type: "XHR",
+  });
+  emitCanonicalNetworkResourceError(client, url, "unrelated-403");
+  assert.throws(() => diagnostics.assertClean("same-URL unrelated error"), /browser diagnostics failed/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("a duplicate canonical error beyond one exact expected request remains visible", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "expected-403",
+    request: { url, method: "POST", headers: {} },
+    type: "XHR",
+  });
+  client.emit("Network.responseReceived", {
+    requestId: "expected-403",
+    response: { url, status: 403 },
+    type: "XHR",
+  });
+  emitCanonicalNetworkResourceError(client, url);
+  emitCanonicalNetworkResourceError(client, url);
+  assert.throws(() => diagnostics.assertClean("duplicate canonical error"), /browser diagnostics failed/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("unrelated diagnostics stay visible with an active or removed expected-failure registration", () => {
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const activeClient = makeDiagnosticClient();
+  const activeDiagnostics = installDiagnostics(activeClient, { expectedOrigin: origin });
+  const removeActiveAllowance = activeDiagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+  activeClient.emit("Runtime.consoleAPICalled", {
+    type: "error",
+    args: [{ value: "same-url console error" }],
+  });
+  activeClient.emit("Runtime.exceptionThrown", {
+    exceptionDetails: { text: "same-url runtime exception" },
+  });
+  activeClient.emit("Log.entryAdded", {
+    entry: { source: "javascript", level: "error", text: "same-url JavaScript error", url },
+  });
+  assert.throws(() => activeDiagnostics.assertClean("active unrelated diagnostics"), /browser diagnostics failed/);
+  removeActiveAllowance();
+  activeDiagnostics.dispose();
+
+  const removedClient = makeDiagnosticClient();
+  const removedDiagnostics = installDiagnostics(removedClient, { expectedOrigin: origin });
+  const removeAllowance = removedDiagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+  removedClient.emit("Network.requestWillBeSent", {
+    requestId: "expected-403",
+    request: { url, method: "POST", headers: {} },
+    type: "XHR",
+  });
+  removedClient.emit("Network.responseReceived", {
+    requestId: "expected-403",
+    response: { url, status: 403 },
+    type: "XHR",
+  });
+  removeAllowance();
+  emitCanonicalNetworkResourceError(removedClient, url);
+  assert.throws(() => removedDiagnostics.assertClean("removed expected-failure registration"), /browser diagnostics failed/);
+  removedDiagnostics.dispose();
 });
 
 test("the cache-enabled federation browser gate never disables Chrome cache", async () => {

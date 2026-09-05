@@ -178,4 +178,62 @@ describe("Phoenix host application", () => {
     );
     wrapper.unmount();
   });
+
+  it("performs one bounded authenticated recovery and sanitizes a repeated 401", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        { message: "SECRET-RAW-CATALOG-DETAIL" },
+        { status: 401 },
+      ),
+    );
+    const wrapper = mount(PhoenixHostApp, {
+      props: {
+        applicationKey: "comms_overview",
+        surfaceId: "overview",
+        missionId: "mission-1",
+        catalogUrl: "/catalog",
+        fallbackHref: "/missions/mission-1",
+        fetcher: fetcher as typeof fetch,
+      },
+    });
+
+    await flushPromises();
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wrapper.find("#remote-boundary-stub").exists()).toBe(false);
+    expect(wrapper.find("#phoenix-host-error").text()).toContain(
+      "The authenticated application catalog could not be loaded.",
+    );
+    expect(wrapper.find("#phoenix-host-error").text()).not.toContain("SECRET-RAW-CATALOG-DETAIL");
+    expect(wrapper.find("#phoenix-host-error-reference").text()).toMatch(
+      /^Reference ID: [0-9a-f-]{36}$/,
+    );
+    wrapper.unmount();
+  });
+
+  it("contains a 503 catalog failure without mounting a remote", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({ message: "SECRET-RAW-503-DETAIL" }, { status: 503 }),
+    );
+    const wrapper = mount(PhoenixHostApp, {
+      props: {
+        applicationKey: "comms_overview",
+        surfaceId: "overview",
+        missionId: "mission-1",
+        catalogUrl: "/catalog",
+        fallbackHref: "/missions/mission-1",
+        fetcher: fetcher as typeof fetch,
+      },
+    });
+
+    await flushPromises();
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wrapper.find("#remote-boundary-stub").exists()).toBe(false);
+    expect(wrapper.find("#phoenix-host-error").text()).toContain(
+      "The authenticated application catalog could not be loaded.",
+    );
+    expect(wrapper.find("#phoenix-host-error").text()).not.toContain("SECRET-RAW-503-DETAIL");
+    wrapper.unmount();
+  });
 });

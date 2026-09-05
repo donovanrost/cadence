@@ -7,18 +7,34 @@ import type {
   HostContext,
 } from "@cadence/plugin-sdk";
 import { CButton, CStatus } from "@cadence/ui";
-import { onMounted, ref, shallowRef } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 import {
   loadPhoenixApplicationCatalog,
   selectPhoenixApplication,
   type PhoenixHostConfig,
 } from "./phoenix-catalog-client";
-import { createHttpHostBridge } from "./http-host-bridge";
+import {
+  createHttpHostBridge,
+  isHostSessionFailure,
+  type HostBridgeError,
+} from "./http-host-bridge";
+
+const DEFAULT_CATALOG_TIMEOUT_MS = 10_000;
+
+type HostFailure = {
+  message: string;
+  referenceId: string;
+};
 
 const props = withDefaults(
-  defineProps<PhoenixHostConfig & { fetcher?: typeof globalThis.fetch }>(),
-  { fetcher: undefined },
+  defineProps<
+    PhoenixHostConfig & {
+      fetcher?: typeof globalThis.fetch;
+      catalogTimeoutMs?: number;
+    }
+  >(),
+  { fetcher: undefined, catalogTimeoutMs: undefined },
 );
 
 const catalog = shallowRef<FrontendApplicationCatalog>();
@@ -26,17 +42,31 @@ const application = shallowRef<CatalogApplication>();
 const bridge = shallowRef<HostBridge>();
 const context = shallowRef<HostContext>();
 const manifest = shallowRef<FirstPartyApplicationManifest>();
-const bootError = ref<string>();
+const bootError = shallowRef<HostFailure>();
+const actionFailure = shallowRef<HostFailure>();
 const loading = ref(true);
 const mountGeneration = ref(0);
 let loadGeneration = 0;
+let authRecoveryUsed = false;
+let catalogAbortController: AbortController | undefined;
+let activeBridgeInvalidator: (() => void) | undefined;
 
 onMounted(loadCatalog);
+onBeforeUnmount(() => {
+  loadGeneration += 1;
+  catalogAbortController?.abort(new Error("Phoenix host unmounted."));
+  invalidateActiveContext();
+});
 
-async function loadCatalog(): Promise<void> {
+async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
   const generation = ++loadGeneration;
+  catalogAbortController?.abort(new Error("A newer Phoenix host catalog load superseded this load."));
+  invalidateActiveContext();
+  const controller = new AbortController();
+  catalogAbortController = controller;
   loading.value = true;
   bootError.value = undefined;
+  if (!automaticRecovery) actionFailure.value = undefined;
   manifest.value = undefined;
   catalog.value = undefined;
   application.value = undefined;
@@ -44,21 +74,48 @@ async function loadCatalog(): Promise<void> {
   context.value = undefined;
 
   try {
-    const nextCatalog = await loadPhoenixApplicationCatalog(props, { fetch: props.fetcher });
+    const fetcher = props.fetcher ?? globalThis.fetch;
+    if (typeof fetcher !== "function") {
+      throw new Error("The Phoenix application host cannot fetch its catalog.");
+    }
+
+    const nextCatalog = await loadPhoenixApplicationCatalog(props, {
+      fetch: (input, init) =>
+        boundedCatalogFetch(
+          fetcher,
+          input,
+          init,
+          controller,
+          props.catalogTimeoutMs ?? DEFAULT_CATALOG_TIMEOUT_MS,
+        ),
+    });
     const nextApplication = selectPhoenixApplication(nextCatalog, props);
-    if (generation !== loadGeneration) return;
+    if (generation !== loadGeneration || controller.signal.aborted) return;
 
     catalog.value = nextCatalog;
     application.value = nextApplication;
     context.value = nextCatalog.session.context;
-    bridge.value = createHttpHostBridge(nextCatalog.session, nextApplication);
+    const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication, {
+      onSessionFailure: handleBridgeSessionFailure,
+    });
+    if (generation !== loadGeneration || controller.signal.aborted) {
+      nextBridge.invalidate();
+      return;
+    }
+    bridge.value = nextBridge;
+    activeBridgeInvalidator = nextBridge.invalidate;
     mountGeneration.value += 1;
   } catch (reason) {
     if (generation !== loadGeneration) return;
-    bootError.value =
-      reason instanceof Error ? reason.message : "The application host failed to load.";
+    if (!automaticRecovery && !authRecoveryUsed && isHostSessionFailure(reason)) {
+      authRecoveryUsed = true;
+      await loadCatalog({ automaticRecovery: true });
+      return;
+    }
+    bootError.value = catalogFailureFor(reason);
   } finally {
     if (generation === loadGeneration) loading.value = false;
+    if (catalogAbortController === controller) catalogAbortController = undefined;
   }
 }
 
@@ -69,6 +126,36 @@ function remountApplication(): void {
 
 function recordManifest(value: FirstPartyApplicationManifest): void {
   manifest.value = value;
+}
+
+function handleBridgeSessionFailure(
+  operation: "query" | "action",
+  error: HostBridgeError,
+): void {
+  if (operation === "action") {
+    actionFailure.value = {
+      message: "The action was stopped. No automatic retry was attempted.",
+      referenceId: error.referenceId,
+    };
+  }
+
+  invalidateActiveContext();
+  if (authRecoveryUsed) return;
+  authRecoveryUsed = true;
+  void loadCatalog({ automaticRecovery: true });
+}
+
+function invalidateActiveContext(): void {
+  activeBridgeInvalidator?.();
+  activeBridgeInvalidator = undefined;
+}
+
+function catalogFailureFor(reason: unknown): HostFailure {
+  const detail = reason instanceof Error ? reason.message : "";
+  const message = detail.startsWith("The application catalog does not provide")
+    ? detail
+    : "The authenticated application catalog could not be loaded.";
+  return { message, referenceId: crypto.randomUUID() };
 }
 
 function contextLabel(): string {
@@ -89,6 +176,51 @@ function contextDetails(): string {
   }
   return context.value.missionId;
 }
+
+function boundedCatalogFetch(
+  fetcher: typeof globalThis.fetch,
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  controller: AbortController,
+  timeoutMs: number,
+): Promise<Response> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return Promise.reject(new Error("The Phoenix catalog timeout must be positive."));
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    const finishResponse = (response: Response): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
+      resolve(response);
+    };
+    const finishError = (reason: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
+      reject(reason);
+    };
+    const onAbort = () =>
+      finishError(controller.signal.reason ?? new Error("Phoenix catalog load cancelled."));
+    const timer = setTimeout(() => {
+      const error = new Error("Phoenix catalog load timed out.");
+      controller.abort(error);
+      finishError(error);
+    }, timeoutMs);
+
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve()
+      .then(() => fetcher(input, { ...(init ?? {}), signal: controller.signal }))
+      .then(
+        finishResponse,
+        finishError,
+      );
+  });
+}
 </script>
 
 <template>
@@ -106,6 +238,18 @@ function contextDetails(): string {
     </header>
 
     <main class="phoenix-host-main">
+      <aside
+        v-if="actionFailure"
+        id="phoenix-host-action-stopped"
+        class="phoenix-host-action-stopped"
+        role="alert"
+        aria-live="assertive"
+      >
+        <strong>Action stopped</strong>
+        <span>{{ actionFailure.message }}</span>
+        <span>Reference ID: {{ actionFailure.referenceId }}</span>
+      </aside>
+
       <section v-if="loading" id="phoenix-host-loading" class="phoenix-host-state" role="status">
         <p class="phoenix-host-eyebrow">APPLICATION SURFACE HOST</p>
         <h1>Resolving application surface</h1>
@@ -119,7 +263,8 @@ function contextDetails(): string {
       >
         <p class="phoenix-host-eyebrow">HOST CATALOG UNAVAILABLE</p>
         <h1>Cadence rejected the application catalog.</h1>
-        <p>{{ bootError }}</p>
+        <p>{{ bootError.message }}</p>
+        <p id="phoenix-host-error-reference">Reference ID: {{ bootError.referenceId }}</p>
         <CButton id="retry-phoenix-host" variant="primary" @click="loadCatalog">
           Retry catalog
         </CButton>
@@ -316,6 +461,28 @@ function contextDetails(): string {
 }
 .phoenix-host-state--error .phoenix-host-eyebrow {
   color: var(--cadence-color-danger);
+}
+
+.phoenix-host-action-stopped {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--cadence-color-warning);
+  background: var(--cadence-color-surface-inset);
+  color: var(--cadence-color-text-secondary);
+}
+
+.phoenix-host-action-stopped strong,
+.phoenix-host-action-stopped span:last-child {
+  font-family: var(--cadence-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.105em;
+  text-transform: uppercase;
+}
+
+.phoenix-host-action-stopped strong {
+  color: var(--cadence-color-warning);
 }
 
 @media (max-width: 700px) {

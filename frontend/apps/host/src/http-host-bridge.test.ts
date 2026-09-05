@@ -4,6 +4,7 @@ import {
   type FrontendApplicationCatalog,
   type HostActivityEvent,
   type HostContext,
+  type HostQueryRequest,
   type HostSessionDescriptor,
 } from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -55,6 +56,41 @@ const telemetryApplication: CatalogApplication = {
     exposedModule: "./Application",
   },
 };
+
+function deferred<TResult>() {
+  let resolve!: (value: TResult | PromiseLike<TResult>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<TResult>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(iterations = 6): Promise<void> {
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    await Promise.resolve();
+  }
+}
+
+function queryRequest(): HostQueryRequest {
+  return {
+    queryId: "cadence.packet_bindings.manage",
+    version: 1,
+    context,
+  };
+}
+
+function actionRequest(idempotencyKey?: string) {
+  return {
+    applicationKey: "telemetry_decom",
+    applicationVersion: 1,
+    actionId: "save_packet_bindings",
+    input: { expectedConfigurationVersion: 7, selectedApids: [100] },
+    context,
+    ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+  };
+}
 
 describe("the HTTP host bridge", () => {
   it("sends the selected Telemetry application identity and scope", async () => {
@@ -181,13 +217,16 @@ describe("the HTTP host bridge", () => {
       fetch: fetcher as typeof fetch,
     });
 
-    await bridge.execute({
+    const action = {
       applicationKey: "telemetry_decom",
       applicationVersion: 1,
       actionId: "save_packet_bindings",
       input: { expectedConfigurationVersion: 7, selectedApids: [100] },
       context,
-    });
+      idempotencyKey: "logical-action-retry-1",
+    };
+    await bridge.execute(action);
+    await bridge.execute(action);
 
     const request = fetcher.mock.calls[0]?.[1];
     const serializedBody = request?.body;
@@ -208,7 +247,13 @@ describe("the HTTP host bridge", () => {
     const headers = new Headers(request?.headers);
     expect(headers.get("x-cadence-poc-session")).toBe("session-1");
     expect(headers.get("x-csrf-token")).toBe("csrf-1");
-    expect(headers.get("idempotency-key")).toBeTruthy();
+    expect(headers.get("idempotency-key")).toBe("logical-action-retry-1");
+    const secondRequest = (
+      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
+    )[1]?.[1];
+    expect(new Headers(secondRequest?.headers).get("idempotency-key")).toBe(
+      "logical-action-retry-1",
+    );
     expect(request?.credentials).toBe("same-origin");
   });
 
@@ -236,6 +281,403 @@ describe("the HTTP host bridge", () => {
         context,
       }),
     ).rejects.toMatchObject({ status: 403, code: "forbidden" } satisfies Partial<HostBridgeError>);
+  });
+
+  it("rejects malformed and empty successful query responses with sanitized operation errors", async () => {
+    for (const body of ["not-json", ""]) {
+      const fetcher = vi.fn(async () => new Response(body, { status: 200 }));
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as typeof fetch,
+      });
+
+      const error = await bridge.query(queryRequest()).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 200, code: "invalid_response" });
+      expect((error as HostBridgeError).message).toContain("host query response");
+      if (body.length > 0) expect((error as HostBridgeError).message).not.toContain(body);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rejects malformed and empty successful action responses with sanitized operation errors", async () => {
+    for (const body of ["not-json", ""]) {
+      const fetcher = vi.fn(async () => new Response(body, { status: 201 }));
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as typeof fetch,
+      });
+
+      const error = await bridge
+        .execute(actionRequest("invalid-response-action"))
+        .catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 201, code: "invalid_response" });
+      expect((error as HostBridgeError).message).toContain("host action response");
+      if (body.length > 0) expect((error as HostBridgeError).message).not.toContain(body);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("preserves non-success status for malformed query and action error responses", async () => {
+    const rawErrorBody = "SECRET-RAW-MALFORMED-HOST-ERROR";
+    const fetcher = vi.fn(async () => new Response(rawErrorBody, { status: 502 }));
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    for (const operation of ["query", "action"] as const) {
+      const error =
+        operation === "query"
+          ? await bridge.query(queryRequest()).catch((reason: unknown) => reason)
+          : await bridge
+              .execute(actionRequest("malformed-error-action"))
+              .catch((reason: unknown) => reason);
+
+      expect(error).toBeInstanceOf(HostBridgeError);
+      expect(error).toMatchObject({ status: 502, code: "host_request_failed" });
+      expect((error as HostBridgeError).message).not.toContain(rawErrorBody);
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops a rejected action without replaying it and reports a sanitized reference", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          schema: "cadence.application-host-problem.v1",
+          code: "invalid_csrf",
+          message: "SECRET-RAW-CSRF-DETAIL",
+        },
+        { status: 403 },
+      ),
+    );
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+
+    const action = {
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      actionId: "save_packet_bindings",
+      input: { expectedConfigurationVersion: 7, selectedApids: [100] },
+      context,
+      idempotencyKey: "logical-action-retry-2",
+    };
+
+    await expect(bridge.execute(action)).rejects.toMatchObject({
+      status: 403,
+      code: "invalid_csrf",
+      message: expect.stringContaining(
+        "The action was stopped because its security token was rejected.",
+      ),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const sentRequest = (
+      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
+    )[0]?.[1];
+    expect(JSON.stringify(sentRequest)).not.toContain("SECRET-RAW-CSRF-DETAIL");
+    expect(onSessionFailure).toHaveBeenCalledWith("action", expect.any(HostBridgeError));
+
+    bridge.invalidate();
+    await expect(bridge.execute(action)).rejects.toMatchObject({ code: "stale_context" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps invalidation before fetch resolution to stale context and suppresses late events", async () => {
+    const fetchResult = deferred<Response>();
+    let requestSignal: AbortSignal | undefined;
+    const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+      requestSignal = request?.signal ?? undefined;
+      return fetchResult.promise;
+    });
+    const activity: HostActivityEvent[] = [];
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+    bridge.subscribe((event) => activity.push(event));
+
+    const pending = bridge.query(queryRequest());
+    await flushMicrotasks();
+    bridge.invalidate();
+
+    await expect(pending).rejects.toMatchObject({
+      status: 409,
+      code: "stale_context",
+    } satisfies Partial<HostBridgeError>);
+    expect(requestSignal?.aborted).toBe(true);
+
+    fetchResult.resolve(Response.json({ queryVersion: 1 }));
+    await flushMicrotasks();
+    expect(activity.map(({ status }) => status)).toEqual(["started"]);
+    expect(onSessionFailure).not.toHaveBeenCalled();
+
+    bridge.invalidate();
+  });
+
+  it("maps invalidation during JSON decoding to stale context", async () => {
+    const jsonResult = deferred<unknown>();
+    const json = vi.fn(() => jsonResult.promise);
+    const response = { ok: true, status: 200, json } as unknown as Response;
+    const fetcher = vi.fn(() => response);
+    const activity: HostActivityEvent[] = [];
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as unknown as typeof fetch,
+    });
+    bridge.subscribe((event) => activity.push(event));
+
+    const pending = bridge.query(queryRequest());
+    await flushMicrotasks();
+    expect(json).toHaveBeenCalledTimes(1);
+    bridge.invalidate();
+
+    await expect(pending).rejects.toMatchObject({
+      status: 409,
+      code: "stale_context",
+    } satisfies Partial<HostBridgeError>);
+    jsonResult.resolve({ queryVersion: 1 });
+    await flushMicrotasks();
+    expect(activity.map(({ status }) => status)).toEqual(["started"]);
+  });
+
+  it("does not retain post-invalidation subscribers and makes lifecycle cleanup idempotent", async () => {
+    const fetchResult = deferred<Response>();
+    const fetcher = vi.fn(() => fetchResult.promise);
+    const activity = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+    const unsubscribeBeforeInvalidation = bridge.subscribe(activity);
+    const pending = bridge.query(queryRequest());
+    await flushMicrotasks();
+
+    bridge.invalidate();
+    unsubscribeBeforeInvalidation();
+    unsubscribeBeforeInvalidation();
+
+    const postInvalidationListener = vi.fn();
+    const unsubscribeAfterInvalidation = bridge.subscribe(postInvalidationListener);
+    unsubscribeAfterInvalidation();
+    unsubscribeAfterInvalidation();
+    bridge.invalidate();
+
+    fetchResult.resolve(Response.json({ queryVersion: 1 }));
+    await expect(pending).rejects.toMatchObject({ code: "stale_context" });
+    await flushMicrotasks();
+    expect(activity).toHaveBeenCalledTimes(1);
+    expect(postInvalidationListener).not.toHaveBeenCalled();
+  });
+
+  it("maps a fetch deadline to request_timed_out without session recovery", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchResult = deferred<Response>();
+      let requestSignal: AbortSignal | undefined;
+      const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+        requestSignal = request?.signal ?? undefined;
+        return fetchResult.promise;
+      });
+      const onSessionFailure = vi.fn();
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as typeof fetch,
+        onSessionFailure,
+        requestTimeoutMs: 25,
+      });
+
+      const pending = bridge.query(queryRequest());
+      await flushMicrotasks();
+      const timeoutExpectation = expect(pending).rejects.toMatchObject({
+        status: 0,
+        code: "request_timed_out",
+      } satisfies Partial<HostBridgeError>);
+      await vi.advanceTimersByTimeAsync(25);
+
+      await timeoutExpectation;
+      expect(requestSignal?.aborted).toBe(true);
+      expect(onSessionFailure).not.toHaveBeenCalled();
+
+      fetchResult.resolve(Response.json({ queryVersion: 1 }));
+      await flushMicrotasks();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps a JSON decoding deadline to request_timed_out", async () => {
+    vi.useFakeTimers();
+    try {
+      const jsonResult = deferred<unknown>();
+      const json = vi.fn(() => jsonResult.promise);
+      const response = { ok: true, status: 200, json } as unknown as Response;
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: vi.fn(() => response) as unknown as typeof fetch,
+        requestTimeoutMs: 25,
+      });
+
+      const pending = bridge.query(queryRequest());
+      await flushMicrotasks();
+      expect(json).toHaveBeenCalledTimes(1);
+      const timeoutExpectation = expect(pending).rejects.toMatchObject({
+        status: 0,
+        code: "request_timed_out",
+      } satisfies Partial<HostBridgeError>);
+      await vi.advanceTimersByTimeAsync(25);
+
+      await timeoutExpectation;
+      jsonResult.resolve({ queryVersion: 1 });
+      await flushMicrotasks();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts every concurrent query and action when one bridge is invalidated", async () => {
+    const fetchResults = [deferred<Response>(), deferred<Response>()];
+    const requestSignals: AbortSignal[] = [];
+    let requestIndex = 0;
+    const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+      const signal = request?.signal;
+      if (!signal) throw new Error("Expected a request abort signal.");
+      requestSignals.push(signal);
+      const result = fetchResults[requestIndex];
+      requestIndex += 1;
+      if (!result) throw new Error("Unexpected request count.");
+      return result.promise;
+    });
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    const pendingQuery = bridge.query(queryRequest());
+    const pendingAction = bridge.execute(actionRequest("concurrent-action-1"));
+    await flushMicrotasks();
+    bridge.invalidate();
+
+    await Promise.all([
+      expect(pendingQuery).rejects.toMatchObject({ code: "stale_context" }),
+      expect(pendingAction).rejects.toMatchObject({ code: "stale_context" }),
+    ]);
+    expect(requestSignals).toHaveLength(2);
+    expect(requestSignals.every((signal) => signal.aborted)).toBe(true);
+
+    fetchResults[0]?.resolve(Response.json({ queryVersion: 1 }));
+    fetchResults[1]?.resolve(
+      Response.json({
+        receiptId: "receipt-1",
+        completedAt: "2026-08-22T20:00:00.000Z",
+        result: {},
+      }),
+    );
+    await flushMicrotasks();
+  });
+
+  it("handles a late underlying rejection without an unhandled rejection or late event", async () => {
+    const fetchResult = deferred<Response>();
+    const activity: HostActivityEvent[] = [];
+    const fetcher = vi.fn(() => fetchResult.promise);
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+    bridge.subscribe((event) => activity.push(event));
+
+    const pending = bridge.query(queryRequest());
+    await flushMicrotasks();
+    bridge.invalidate();
+    await expect(pending).rejects.toMatchObject({ code: "stale_context" });
+
+    fetchResult.reject(new Error("late underlying failure"));
+    await flushMicrotasks();
+    expect(activity.map(({ status }) => status)).toEqual(["started"]);
+  });
+
+  it("passes signals to successful query and action requests and cleans up each deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const requestInits: RequestInit[] = [];
+      const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+        if (!request) throw new Error("Expected request options.");
+        requestInits.push(request);
+        return requestInits.length === 1
+          ? Response.json({ queryVersion: 1 })
+          : Response.json({
+              receiptId: "receipt-1",
+              completedAt: "2026-08-22T20:00:00.000Z",
+              result: { configurationVersion: 8 },
+            });
+      });
+      const bridge = createHttpHostBridge(session, telemetryApplication, {
+        fetch: fetcher as unknown as typeof fetch,
+        requestTimeoutMs: 100,
+      });
+
+      await bridge.query(queryRequest());
+      expect(vi.getTimerCount()).toBe(0);
+      await bridge.execute(actionRequest());
+      expect(vi.getTimerCount()).toBe(0);
+      expect(requestInits).toHaveLength(2);
+      expect(requestInits.every(({ signal }) => signal instanceof AbortSignal)).toBe(true);
+      expect(requestInits.every(({ signal }) => !signal?.aborted)).toBe(true);
+      expect(new Headers(requestInits[1]?.headers).get("idempotency-key")).toMatch(
+        /^[0-9a-f-]{36}$/,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recovers once from a query 401 without replaying the query", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          schema: "cadence.application-host-problem.v1",
+          code: "unauthenticated",
+          message: "SECRET-RAW-QUERY-401",
+        },
+        { status: 401 },
+      ),
+    );
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+
+    await expect(bridge.query(queryRequest())).rejects.toMatchObject({
+      status: 401,
+      code: "unauthenticated",
+    } satisfies Partial<HostBridgeError>);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onSessionFailure).toHaveBeenCalledTimes(1);
+    expect(onSessionFailure).toHaveBeenCalledWith("query", expect.any(HostBridgeError));
+  });
+
+  it("recovers once from an action 401 without replaying the action", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          schema: "cadence.application-host-problem.v1",
+          code: "invalid_session",
+          message: "SECRET-RAW-ACTION-401",
+        },
+        { status: 401 },
+      ),
+    );
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+
+    await expect(bridge.execute(actionRequest("action-401-retry"))).rejects.toMatchObject({
+      status: 401,
+      code: "invalid_session",
+    } satisfies Partial<HostBridgeError>);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onSessionFailure).toHaveBeenCalledTimes(1);
+    expect(onSessionFailure).toHaveBeenCalledWith("action", expect.any(HostBridgeError));
   });
 });
 

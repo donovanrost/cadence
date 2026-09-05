@@ -6,7 +6,7 @@ import type {
   HostContext,
 } from "@cadence/plugin-sdk";
 import { CButton } from "@cadence/ui";
-import { onErrorCaptured, shallowRef, watch } from "vue";
+import { onBeforeUnmount, onErrorCaptured, shallowRef, watch } from "vue";
 import type { Component } from "vue";
 import { loadFederatedApplication } from "./remote-loader";
 
@@ -22,35 +22,50 @@ const emit = defineEmits<{
 }>();
 
 const component = shallowRef<Component>();
-const error = shallowRef<string>();
+const error = shallowRef<{ message: string; referenceId: string }>();
 let loadGeneration = 0;
+let loadController: AbortController | undefined;
 
 watch(() => props.application, loadApplication, { immediate: true });
 
-onErrorCaptured((reason) => {
+onBeforeUnmount(() => {
+  loadGeneration += 1;
+  loadController?.abort(new Error("Remote application boundary unmounted."));
+});
+
+onErrorCaptured((_reason) => {
+  loadGeneration += 1;
+  loadController?.abort(new Error("Remote application mount failed."));
   component.value = undefined;
-  error.value = messageFor(reason, "The application failed after it mounted.");
+  error.value = failureFor("The approved application failed after mounting.");
   return false;
 });
 
 async function loadApplication(): Promise<void> {
   const generation = ++loadGeneration;
+  loadController?.abort(new Error("A newer remote application load superseded this load."));
+  const controller = new AbortController();
+  loadController = controller;
   component.value = undefined;
   error.value = undefined;
 
   try {
-    const remote = await loadFederatedApplication(props.application);
-    if (generation !== loadGeneration) return;
+    const remote = await loadFederatedApplication(props.application, undefined, {
+      signal: controller.signal,
+    });
+    if (generation !== loadGeneration || controller.signal.aborted) return;
     component.value = remote.default;
     emit("ready", remote.manifest);
   } catch (reason) {
-    if (generation !== loadGeneration) return;
-    error.value = messageFor(reason, "The application remote could not be loaded.");
+    if (generation !== loadGeneration || controller.signal.aborted) return;
+    error.value = failureFor("The approved application release could not be loaded.");
+  } finally {
+    if (loadController === controller) loadController = undefined;
   }
 }
 
-function messageFor(reason: unknown, fallback: string): string {
-  return reason instanceof Error ? reason.message : fallback;
+function failureFor(message: string): { message: string; referenceId: string } {
+  return { message, referenceId: crypto.randomUUID() };
 }
 </script>
 
@@ -58,7 +73,8 @@ function messageFor(reason: unknown, fallback: string): string {
   <section v-if="error" id="remote-error" class="remote-state remote-state--error">
     <p class="eyebrow">Remote unavailable</p>
     <h2>{{ application.displayName }} was contained.</h2>
-    <p>{{ error }}</p>
+    <p id="remote-error-message">{{ error.message }}</p>
+    <p id="remote-error-reference">Reference ID: {{ error.referenceId }}</p>
     <p class="remote-state__hint">
       The Cadence shell, session, navigation, and other applications remain available.
     </p>
