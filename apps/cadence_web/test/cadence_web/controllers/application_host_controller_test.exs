@@ -468,6 +468,39 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              "/assets/application-host/comms/mf-manifest.json"
   end
 
+  test "canonical Comms query emits the un-nested trusted surface envelope" do
+    {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
+    host_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
+    {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
+    valid_scope = scope_document(organization, mission)
+
+    response =
+      post_bridge(catalog, catalog_conn, mission.mission_id, %{
+        "applicationKey" => "comms",
+        "applicationVersion" => 1,
+        "surfaceId" => "overview",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.comms.overview",
+        "queryVersion" => 1,
+        "scope" => valid_scope
+      })
+
+    expected_fallback_href = "/missions/#{mission.mission_id}/comms"
+
+    assert %{
+             "navigation" => %{"fallback_href" => ^expected_fallback_href},
+             "trusted_surface" => trusted_surface
+           } = json_response(response, 200)
+
+    assert trusted_surface["root"]["attrs"]["id"] == "comms-overview-page"
+    assert trusted_surface["overview"]["transport"]["id"] == "comms-transports"
+    refute Map.has_key?(trusted_surface, "data")
+  end
+
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{
     conn: _conn
   } do

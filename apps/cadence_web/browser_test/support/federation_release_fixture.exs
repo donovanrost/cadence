@@ -98,7 +98,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
         n_minus_1: [
           package!(
             node,
-            "comms-overview-n-minus-1",
+            "comms-n-minus-1",
             comms_build,
             comms_metadata(:n_minus_1),
             temp_root
@@ -140,7 +140,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           )
         ],
         n: [
-          package!(node, "comms-overview-n", comms_build, comms_metadata(:n), temp_root),
+          package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
           package!(node, "telemetry-decom-n", telemetry_build, telemetry_metadata(:n), temp_root),
           package!(
             node,
@@ -532,16 +532,15 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
 
   defp comms_metadata(slot) do
     metadata(
-      "comms_overview",
-      "cadence.comms_overview",
+      "comms",
+      "cadence.comms",
       "overview",
       "cadence.comms.overview",
       [],
       "cadence_comms",
-      "federation-browser-comms-overview-#{slot_name(slot)}",
+      "federation-browser-comms-#{slot_name(slot)}",
       released_at(slot)
     )
-    |> put_in(["module", "exposedModule"], "./LegacyApplication")
   end
 
   defp telemetry_metadata(slot) do

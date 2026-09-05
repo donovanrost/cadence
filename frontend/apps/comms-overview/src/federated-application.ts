@@ -5,7 +5,6 @@ import {
   type FederatedSurfaceDefinition,
 } from "@cadence/plugin-sdk";
 import CommsApplication from "./CommsApplication.vue";
-import CommsOverviewApplication from "./CommsOverviewApplication.vue";
 
 export const legacyManifest = defineApplicationManifest({
   schema: FEDERATED_APPLICATION_MANIFEST_SCHEMA,
@@ -144,7 +143,6 @@ export const canonicalManifest = defineApplicationManifest({
 });
 
 export const manifest = canonicalManifest;
-export { CommsOverviewApplication as legacyApplication };
 export default CommsApplication;
 
 function canonicalSurface(

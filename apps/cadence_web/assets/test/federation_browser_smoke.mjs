@@ -896,7 +896,7 @@ export function browserUrls({ port, missionId, spacecraftId, host = "127.0.0.1",
   return {
     baseUrl,
     loginUrl: `${baseUrl}/sign-in`,
-    commsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/comms_overview/federated`,
+    commsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/comms/federated`,
     telemetryUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/applications/telemetry_decom/packet_bindings/federated`,
   };
 }
@@ -3192,14 +3192,14 @@ export function assertManifestAssetsRequested(
   });
   const releasePrefix = releaseArtifactPrefix(applicationKey, releaseId);
   const assetStrings = new Set();
+  const requiredAssetStrings = new Set();
 
-  let manifestForBrowser = manifest;
+  let selectedExpose;
   if (requiredExposedModule !== undefined) {
-    const expose = (manifest.exposes || []).find(
+    selectedExpose = (manifest.exposes || []).find(
       (candidate) => candidate.path === requiredExposedModule,
     );
-    assert.ok(expose, `${label} does not declare exposed module ${requiredExposedModule}`);
-    manifestForBrowser = { ...manifest, exposes: [expose] };
+    assert.ok(selectedExpose, `${label} does not declare exposed module ${requiredExposedModule}`);
   }
 
   const visit = (value, key) => {
@@ -3212,7 +3212,27 @@ export function assertManifestAssetsRequested(
       for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
     }
   };
-  visit(manifestForBrowser);
+  visit(manifest);
+
+  const visitSynchronousAssets = (value, key) => {
+    if (key === "async") {
+      return;
+    } else if (typeof value === "string" && /\.(?:m?js|css)(?:[?#]|$)/i.test(value)) {
+      requiredAssetStrings.add(value);
+    } else if (Array.isArray(value)) {
+      for (const child of value) visitSynchronousAssets(child);
+    } else if (value && typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value)) {
+        visitSynchronousAssets(child, childKey);
+      }
+    }
+  };
+
+  const runtimeEntry =
+    (typeof manifest.entry === "string" && manifest.entry) || manifest.metaData?.remoteEntry?.name;
+  if (runtimeEntry) requiredAssetStrings.add(runtimeEntry);
+  if (selectedExpose) visitSynchronousAssets(selectedExpose.assets);
+  for (const shared of manifest.shared || []) visitSynchronousAssets(shared.assets || shared);
 
   assert.ok(assetStrings.size > 0, `${label} declared no JavaScript or CSS assets`);
   const assets = [...assetStrings].map((asset) =>
@@ -3226,10 +3246,18 @@ export function assertManifestAssetsRequested(
     assets.every((asset) => asset.pathname.startsWith(releasePrefix)),
     `${label} declared an asset outside its release path`,
   );
+  const requiredAssetHrefs = new Set(
+    [...requiredAssetStrings].map((asset) =>
+      assertReleaseArtifactUrl(new URL(asset, manifestLocation).href, origin, {
+        applicationKey,
+        releaseId,
+        label: `${label} required asset`,
+      }).href,
+    ),
+  );
   for (const asset of assets) {
-    const loaded = records
+    const observed = (records || [])
       .filter((record) => {
-        if (!record.response || record.failed || !record.finished) return false;
         try {
           return new URL(record.url).href === asset.href;
         } catch {
@@ -3237,8 +3265,13 @@ export function assertManifestAssetsRequested(
         }
       })
       .sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
-      .at(-1);
-    assert.ok(loaded, `${label} asset was not successfully requested: ${asset.href}`);
+      ;
+    if (!requiredAssetHrefs.has(asset.href) && observed.length === 0) continue;
+    const loaded = observed.at(-1);
+    assert.ok(
+      loaded?.response && loaded.finished && !loaded.failed,
+      `${label} asset was not successfully requested: ${asset.href}`,
+    );
     assert.equal(loaded.response.status, 200, `${label} asset was not HTTP 200: ${asset.href}`);
     assert.deepEqual(loaded.redirects, [], `${label} asset redirected: ${asset.href}`);
     if (requireImmutableCache) assertImmutableArtifactResponse(loaded, `${label} asset`);
@@ -3550,7 +3583,7 @@ async function assertContainedRemoteFailureAndRetry({
     });
     await waitForExpression(
       client,
-      "Boolean(document.querySelector('#remote-error') && document.querySelector('#remote-error-message') && document.querySelector('#remote-error-reference') && !document.querySelector('#comms-overview-application'))",
+      "Boolean(document.querySelector('#remote-error') && document.querySelector('#remote-error-message') && document.querySelector('#remote-error-reference') && !document.querySelector('#comms-application'))",
       "contained manifest failure",
       { signal },
     );
@@ -3853,7 +3886,7 @@ async function assertRemoteSurface({
   reportProgress(`${applicationKey} manifest assets asserted`);
 
   const staticRemotePrefix = {
-    comms_overview: "/assets/application-host/comms/",
+    comms: "/assets/application-host/comms/",
     telemetry_decom: "/assets/application-host/telemetry-decom/",
     mission_catalog: "/assets/application-host/mission-catalog/",
     ops_console: "/assets/application-host/ops-console/",
@@ -4039,7 +4072,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const origin = assertHttpUrl(commsUrl, undefined, "Comms surface URL").origin;
   assert.equal(
     new URL(commsUrl).pathname,
-    `/missions/${encodeURIComponent(missionId)}/applications/comms_overview/federated`,
+    `/missions/${encodeURIComponent(missionId)}/applications/comms/federated`,
     "Comms surface must use the authenticated federated route",
   );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
@@ -4048,7 +4081,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   assertHttpUrl(lifecycleUrl, undefined, "federation lifecycle URL");
   const releases = {
     nMinus1: {
-      comms_overview: requiredArg(args, "--n-minus-1-comms-release-id"),
+      comms: requiredArg(args, "--n-minus-1-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
       mission_catalog: requiredArg(args, "--n-minus-1-mission-catalog-release-id"),
       ops_console: requiredArg(args, "--n-minus-1-ops-console-release-id"),
@@ -4056,7 +4089,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       spacecraft: requiredArg(args, "--n-minus-1-spacecraft-release-id"),
     },
     n: {
-      comms_overview: requiredArg(args, "--n-comms-release-id"),
+      comms: requiredArg(args, "--n-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
       mission_catalog: requiredArg(args, "--n-mission-catalog-release-id"),
       ops_console: requiredArg(args, "--n-ops-console-release-id"),
@@ -4173,19 +4206,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     url: commsUrl,
     expectedOrigin: origin,
     catalogPath: commsCatalogPath,
-    applicationKey: "comms_overview",
+    applicationKey: "comms",
     surfaceId: "overview",
     expectedScope: "mission",
-    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
     queryPath: commsQueryPath,
     queryId: "cadence.comms.overview",
     queryVersion: 1,
-    expectedReleaseId: releases.nMinus1.comms_overview,
+    expectedReleaseId: releases.nMinus1.comms,
   });
-  assert.equal(comms.query.queryVersion, 1);
-  assert.equal(comms.query.presentation.root.attrs.id, "comms-overview-page");
-  assert.equal(comms.query.presentation.overview.transport.id, "comms-transports");
-  assert.equal(comms.query.presentation.overview.transport.count, 1);
+  assert.equal(comms.query.navigation.fallback_href, `/missions/${encodeURIComponent(missionId)}/comms`);
+  assert.equal(comms.query.trusted_surface.root.attrs.id, "comms-overview-page");
+  assert.equal(comms.query.trusted_surface.overview.transport.id, "comms-transports");
+  assert.equal(comms.query.trusted_surface.overview.transport.count, 1);
 
   reportProgress("verifying Comms Overview DOM and network contract");
   assert.equal(
@@ -4200,8 +4233,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     signal,
     url: commsUrl,
     expectedOrigin: origin,
-    expectedReleaseId: releases.nMinus1.comms_overview,
-    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    expectedReleaseId: releases.nMinus1.comms,
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
   });
   reportProgress("manifest failure containment and immutable-release retry observed");
 
@@ -4492,14 +4525,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     url: commsUrl,
     expectedOrigin: origin,
     catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-    applicationKey: "comms_overview",
+    applicationKey: "comms",
     surfaceId: "overview",
     expectedScope: "mission",
-    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
     queryPath: commsQueryPath,
     queryId: "cadence.comms.overview",
     queryVersion: 1,
-    expectedReleaseId: releases.n.comms_overview,
+    expectedReleaseId: releases.n.comms,
   });
   const promotedTelemetry = await assertRemoteSurface({
     client,
@@ -4517,11 +4550,27 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryVersion: 1,
     expectedReleaseId: releases.n.telemetry_decom,
   });
+  for (const config of representativeConfigs) {
+    await assertRepresentativeRemoteSurface({
+      ...config,
+      client,
+      diagnostics,
+      signal,
+      args,
+      expectedOrigin: origin,
+      expectedReleaseId: releases.n[config.applicationKey],
+      navigateSurface: true,
+    });
+  }
   assertNoReleaseArtifactRequests(
     diagnostics.completed(() => true, { generation: promotedTelemetry.generation }),
     [
-      { applicationKey: "comms_overview", releaseId: releases.nMinus1.comms_overview },
+      { applicationKey: "comms", releaseId: releases.nMinus1.comms },
       { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
+      { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
+      { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
+      { applicationKey: "organization_admin", releaseId: releases.nMinus1.organization_admin },
+      { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
     ],
     "generation N reload",
   );
@@ -4536,14 +4585,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     url: commsUrl,
     expectedOrigin: origin,
     catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-    applicationKey: "comms_overview",
+    applicationKey: "comms",
     surfaceId: "overview",
     expectedScope: "mission",
-    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-overview-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-overview-content') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-overview-error'))",
+    readyExpression: "Boolean(document.querySelector('.phoenix-host-release')?.textContent.trim() === 'REMOTE READY' && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
     queryPath: commsQueryPath,
     queryId: "cadence.comms.overview",
     queryVersion: 1,
-    expectedReleaseId: releases.nMinus1.comms_overview,
+    expectedReleaseId: releases.nMinus1.comms,
   });
   const rolledBackTelemetry = await assertRemoteSurface({
     client,
@@ -4561,19 +4610,39 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryVersion: 1,
     expectedReleaseId: releases.nMinus1.telemetry_decom,
   });
+  for (const config of representativeConfigs) {
+    await assertRepresentativeRemoteSurface({
+      ...config,
+      client,
+      diagnostics,
+      signal,
+      args,
+      expectedOrigin: origin,
+      expectedReleaseId: releases.nMinus1[config.applicationKey],
+      navigateSurface: true,
+    });
+  }
   assertNoReleaseArtifactRequests(
     diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
     [
-      { applicationKey: "comms_overview", releaseId: releases.n.comms_overview },
+      { applicationKey: "comms", releaseId: releases.n.comms },
       { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
+      { applicationKey: "mission_catalog", releaseId: releases.n.mission_catalog },
+      { applicationKey: "ops_console", releaseId: releases.n.ops_console },
+      { applicationKey: "organization_admin", releaseId: releases.n.organization_admin },
+      { applicationKey: "spacecraft", releaseId: releases.n.spacecraft },
     ],
     "generation N-1 rollback",
   );
   assertImmutableReleaseCacheReuse(
     diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
     [
-      { applicationKey: "comms_overview", releaseId: releases.nMinus1.comms_overview },
+      { applicationKey: "comms", releaseId: releases.nMinus1.comms },
       { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
+      { applicationKey: "mission_catalog", releaseId: releases.nMinus1.mission_catalog },
+      { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
+      { applicationKey: "organization_admin", releaseId: releases.nMinus1.organization_admin },
+      { applicationKey: "spacecraft", releaseId: releases.nMinus1.spacecraft },
     ],
     "generation N-1 rollback",
   );
