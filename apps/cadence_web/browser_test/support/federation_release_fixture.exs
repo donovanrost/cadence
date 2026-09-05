@@ -62,6 +62,38 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           Path.join(temp_root, "release-build-telemetry-decom")
         )
 
+      mission_catalog_build =
+        build_release!(
+          node,
+          "@cadence/mission-catalog-plugin",
+          Path.join(app_root, "priv/static/assets/application-host/mission-catalog"),
+          Path.join(temp_root, "release-build-mission-catalog")
+        )
+
+      ops_console_build =
+        build_release!(
+          node,
+          "@cadence/ops-console-plugin",
+          Path.join(app_root, "priv/static/assets/application-host/ops-console"),
+          Path.join(temp_root, "release-build-ops-console")
+        )
+
+      organization_admin_build =
+        build_release!(
+          node,
+          "@cadence/organization-admin-plugin",
+          Path.join(app_root, "priv/static/assets/application-host/organization-admin"),
+          Path.join(temp_root, "release-build-organization-admin")
+        )
+
+      spacecraft_build =
+        build_release!(
+          node,
+          "@cadence/spacecraft-plugin",
+          Path.join(app_root, "priv/static/assets/application-host/spacecraft"),
+          Path.join(temp_root, "release-build-spacecraft")
+        )
+
       packages = %{
         n_minus_1: [
           package!(
@@ -77,11 +109,55 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
             telemetry_build,
             telemetry_metadata(:n_minus_1),
             temp_root
+          ),
+          package!(
+            node,
+            "mission-catalog-n-minus-1",
+            mission_catalog_build,
+            mission_catalog_metadata(:n_minus_1),
+            temp_root
+          ),
+          package!(
+            node,
+            "ops-console-n-minus-1",
+            ops_console_build,
+            ops_console_metadata(:n_minus_1),
+            temp_root
+          ),
+          package!(
+            node,
+            "organization-admin-n-minus-1",
+            organization_admin_build,
+            organization_admin_metadata(:n_minus_1),
+            temp_root
+          ),
+          package!(
+            node,
+            "spacecraft-n-minus-1",
+            spacecraft_build,
+            spacecraft_metadata(:n_minus_1),
+            temp_root
           )
         ],
         n: [
           package!(node, "comms-overview-n", comms_build, comms_metadata(:n), temp_root),
-          package!(node, "telemetry-decom-n", telemetry_build, telemetry_metadata(:n), temp_root)
+          package!(node, "telemetry-decom-n", telemetry_build, telemetry_metadata(:n), temp_root),
+          package!(
+            node,
+            "mission-catalog-n",
+            mission_catalog_build,
+            mission_catalog_metadata(:n),
+            temp_root
+          ),
+          package!(node, "ops-console-n", ops_console_build, ops_console_metadata(:n), temp_root),
+          package!(
+            node,
+            "organization-admin-n",
+            organization_admin_build,
+            organization_admin_metadata(:n),
+            temp_root
+          ),
+          package!(node, "spacecraft-n", spacecraft_build, spacecraft_metadata(:n), temp_root)
         ]
       }
 
@@ -107,7 +183,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
 
       assert %{
                "data" => %{
-                 "identityCount" => 2,
+                 "identityCount" => 6,
                  "outcome" => "initial",
                  "sequence" => 1,
                  "status" => "activated"
@@ -117,7 +193,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       assert {:ok, %{source: :database, entries: entries}} =
                ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-      assert length(entries) == 2
+      assert length(entries) == 6
       assert_registry_paths!(entries, admitted.n_minus_1)
 
       accepted_snapshot = ApplicationReleaseRegistry.snapshot(now: @activation_now)
@@ -481,6 +557,58 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     )
   end
 
+  defp mission_catalog_metadata(slot) do
+    metadata(
+      "mission_catalog",
+      "cadence.mission-catalog",
+      "mission_list",
+      "cadence.mission_catalog.mission_list",
+      [],
+      "cadence_mission_catalog",
+      "federation-browser-mission-catalog-#{slot_name(slot)}",
+      released_at(slot)
+    )
+  end
+
+  defp ops_console_metadata(slot) do
+    metadata(
+      "ops_console",
+      "cadence.ops_console",
+      "dashboard_directory",
+      "cadence.ops.dashboard_directory",
+      [],
+      "cadence_ops_console",
+      "federation-browser-ops-console-#{slot_name(slot)}",
+      released_at(slot)
+    )
+  end
+
+  defp organization_admin_metadata(slot) do
+    metadata(
+      "organization_admin",
+      "cadence.organization-admin",
+      "organization_home",
+      "cadence.organization.home",
+      [],
+      "cadence_organization_admin",
+      "federation-browser-organization-admin-#{slot_name(slot)}",
+      released_at(slot)
+    )
+  end
+
+  defp spacecraft_metadata(slot) do
+    metadata(
+      "spacecraft",
+      "cadence.spacecraft",
+      "list",
+      "cadence.spacecraft.list",
+      [],
+      "cadence_spacecraft",
+      "federation-browser-spacecraft-#{slot_name(slot)}",
+      released_at(slot)
+    )
+  end
+
   defp metadata(
          application_id,
          package_id,
@@ -697,7 +825,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     assert {:ok, %{source: :database, entries: entries}} =
              ApplicationReleaseRegistry.snapshot(now: @activation_now)
 
-    assert length(entries) == 2
+    assert length(entries) == 6
     :ok
   end
 

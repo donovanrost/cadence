@@ -3727,10 +3727,15 @@ async function assertRemoteSurface({
   });
   reportProgress(`${applicationKey} manifest assets asserted`);
 
-  const staticRemotePrefix =
-    applicationKey === "comms_overview"
-      ? "/assets/application-host/comms/"
-      : "/assets/application-host/telemetry-decom/";
+  const staticRemotePrefix = {
+    comms_overview: "/assets/application-host/comms/",
+    telemetry_decom: "/assets/application-host/telemetry-decom/",
+    mission_catalog: "/assets/application-host/mission-catalog/",
+    ops_console: "/assets/application-host/ops-console/",
+    organization_admin: "/assets/application-host/organization-admin/",
+    spacecraft: "/assets/application-host/spacecraft/",
+  }[applicationKey];
+  assert.ok(staticRemotePrefix, `${applicationKey} has no static fallback prefix contract`);
   const staticFallback = diagnostics.completed(
     (record) => {
       try {
@@ -3817,6 +3822,45 @@ async function assertRemoteSurface({
   };
 }
 
+async function assertRepresentativeRemoteSurface({
+  client,
+  diagnostics,
+  signal,
+  args,
+  argName,
+  expectedPath,
+  applicationKey,
+  surfaceId,
+  expectedScope,
+  readyExpression,
+  catalogPath,
+  queryPath,
+  queryId,
+  expectedReleaseId,
+  expectedOrigin,
+}) {
+  const url = requiredArg(args, argName);
+  const target = assertHttpUrl(url, expectedOrigin, `${applicationKey} representative URL`);
+  assert.equal(target.pathname, expectedPath, `${applicationKey} representative route changed`);
+
+  return assertRemoteSurface({
+    client,
+    diagnostics,
+    signal,
+    url: target.href,
+    expectedOrigin,
+    catalogPath,
+    applicationKey,
+    surfaceId,
+    expectedScope,
+    readyExpression,
+    queryPath,
+    queryId,
+    queryVersion: 1,
+    expectedReleaseId,
+  });
+}
+
 async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
   const endpoint = assertHttpUrl(
     new URL(`/${transition}`, `${lifecycleUrl.replace(/\/$/, "")}/`).href,
@@ -3863,10 +3907,18 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     nMinus1: {
       comms_overview: requiredArg(args, "--n-minus-1-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
+      mission_catalog: requiredArg(args, "--n-minus-1-mission-catalog-release-id"),
+      ops_console: requiredArg(args, "--n-minus-1-ops-console-release-id"),
+      organization_admin: requiredArg(args, "--n-minus-1-organization-admin-release-id"),
+      spacecraft: requiredArg(args, "--n-minus-1-spacecraft-release-id"),
     },
     n: {
       comms_overview: requiredArg(args, "--n-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
+      mission_catalog: requiredArg(args, "--n-mission-catalog-release-id"),
+      ops_console: requiredArg(args, "--n-ops-console-release-id"),
+      organization_admin: requiredArg(args, "--n-organization-admin-release-id"),
+      spacecraft: requiredArg(args, "--n-spacecraft-release-id"),
     },
   };
   for (const releaseIds of Object.values(releases)) {
@@ -3902,6 +3954,72 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   diagnostics.assertClean("authenticated sign-in");
   reportProgress("authenticated LiveView websocket asserted");
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
+
+  const representativeConfigs = [
+    {
+      argName: "--mission-catalog-url",
+      expectedPath: "/missions",
+      applicationKey: "mission_catalog",
+      surfaceId: "mission_list",
+      expectedScope: "organization",
+      readyExpression: "Boolean(document.querySelector('#mission-catalog-application') && document.querySelector('#mission-list-table') && !document.querySelector('#mission-catalog-error') && !document.querySelector('#remote-error'))",
+      catalogPath: "/api/cadence/application-host/v1/catalog",
+      queryPath: "/api/cadence/application-host/v1/query",
+      queryId: "cadence.mission_catalog.mission_list",
+      expectedReleaseId: releases.nMinus1.mission_catalog,
+    },
+    {
+      argName: "--ops-url",
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/ops/dashboards`,
+      applicationKey: "ops_console",
+      surfaceId: "dashboard_directory",
+      expectedScope: "mission",
+      readyExpression: "Boolean(document.querySelector('#ops-console-application[data-ops-console-surface=\"dashboard_directory\"]') && document.querySelector('#ops-dashboard-directory-page') && !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'))",
+      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
+      queryId: "cadence.ops.dashboard_directory",
+      expectedReleaseId: releases.nMinus1.ops_console,
+    },
+    {
+      argName: "--organization-admin-url",
+      expectedPath: "/",
+      applicationKey: "organization_admin",
+      surfaceId: "organization_home",
+      expectedScope: "organization",
+      readyExpression: "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-recent-missions') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
+      catalogPath: "/api/cadence/application-host/v1/catalog",
+      queryPath: "/api/cadence/application-host/v1/query",
+      queryId: "cadence.organization.home",
+      expectedReleaseId: releases.nMinus1.organization_admin,
+    },
+    {
+      argName: "--spacecraft-url",
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/spacecraft`,
+      applicationKey: "spacecraft",
+      surfaceId: "list",
+      expectedScope: "mission",
+      readyExpression: "Boolean(document.querySelector('#spacecraft-remote-application') && document.querySelector('#spacecraft-list-content') && !document.querySelector('#spacecraft-error') && !document.querySelector('#remote-error'))",
+      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
+      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
+      queryId: "cadence.spacecraft.list",
+      expectedReleaseId: releases.nMinus1.spacecraft,
+    },
+  ];
+
+  const representatives = [];
+  for (const config of representativeConfigs) {
+    representatives.push(
+      await assertRepresentativeRemoteSurface({
+        ...config,
+        client,
+        diagnostics,
+        signal,
+        args,
+        expectedOrigin: origin,
+      }),
+    );
+  }
+  reportProgress("representative mission, ops, organization, and spacecraft remotes mounted");
 
   const comms = await assertRemoteSurface({
     client,
