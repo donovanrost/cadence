@@ -236,8 +236,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
     end
   end
 
-  defp selected_detail_or_nil(nil, _dashboard_id, _author?), do: nil
-
   defp selected_detail_or_nil(version, dashboard_id, author?),
     do: selected_detail(version, dashboard_id, author?)
 

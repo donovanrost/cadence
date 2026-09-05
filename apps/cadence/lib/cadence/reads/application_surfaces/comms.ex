@@ -331,6 +331,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     end
   end
 
+  defp dispatch_surface(_scope, _mission, _surface_id, _params),
+    do: {:error, :unsupported_application_surface_query}
+
   defp transport_form_data(mission, kind_entry, params) do
     providers = Providers.list_providers(mission.organization_id, mission.mission_id)
     form = transport_form_values(params, kind_entry)
@@ -934,9 +937,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
 
   defp option_dto({label, value, opts}),
     do: %{"label" => label, "value" => value, "disabled" => Keyword.get(opts, :disabled, false)}
-
-  defp dispatch_surface(_scope, _mission, _surface_id, _params),
-    do: {:error, :unsupported_application_surface_query}
 
   defp validate_query_identity(surface_id, query_id) do
     case Comms.query_id(surface_id) do
