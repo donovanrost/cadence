@@ -121,25 +121,29 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
        )
        when is_binary(organization_id) and organization_id != "" and
               is_binary(mission_id) and mission_id != "" do
-    cond do
-      not HostContext.valid?(host_context) ->
-        {:error, :unsupported_application_action}
-
-      is_binary(scoped_mission_id) and scoped_mission_id != mission_id ->
-        {:error, :scope_mismatch}
-
-      is_nil(scoped_mission_id) or is_binary(scoped_mission_id) ->
-        case Missions.fetch_mission(organization_id, mission_id) do
-          {:ok, _mission} -> {:ok, mission_id}
-          {:error, _reason} -> {:error, :mission_not_found}
-        end
-
-      true ->
-        {:error, :unsupported_application_action}
+    if HostContext.valid?(host_context) do
+      validate_context_mission(scoped_mission_id, organization_id, mission_id)
+    else
+      {:error, :unsupported_application_action}
     end
   end
 
   defp validate_context(_scope, _host_context),
+    do: {:error, :unsupported_application_action}
+
+  defp validate_context_mission(scoped_mission_id, _organization_id, mission_id)
+       when is_binary(scoped_mission_id) and scoped_mission_id != mission_id,
+       do: {:error, :scope_mismatch}
+
+  defp validate_context_mission(scoped_mission_id, organization_id, mission_id)
+       when is_nil(scoped_mission_id) or is_binary(scoped_mission_id) do
+    case Missions.fetch_mission(organization_id, mission_id) do
+      {:ok, _mission} -> {:ok, mission_id}
+      {:error, _reason} -> {:error, :mission_not_found}
+    end
+  end
+
+  defp validate_context_mission(_scoped_mission_id, _organization_id, _mission_id),
     do: {:error, :unsupported_application_action}
 
   defp validate_mission_param(mission_id, params) do

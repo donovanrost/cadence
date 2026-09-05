@@ -399,53 +399,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
     endpoint_id = endpoint && endpoint.source_endpoint_id
     assigned = Enum.filter(assignments, &(&1.source_endpoint_ref == endpoint_id))
 
-    available =
-      Enum.count(
-        templates,
-        &(&1.direction == :downlink and is_nil(&1.source_endpoint_ref) and
-            &1.provider_profile_refs != [])
-      )
-
-    provider_paths =
-      Enum.count(assigned, &(&1.direction == :downlink and &1.provider_profile_refs != []))
-
-    status =
-      cond do
-        is_nil(spacecraft.scid) -> "blocked"
-        is_nil(endpoint) -> "blocked"
-        provider_paths > 0 -> "ready"
-        true -> "attention"
-      end
-
-    issue =
-      cond do
-        is_nil(spacecraft.scid) ->
-          "Set SCID so Cadence can identify this spacecraft from TM transfer frames."
-
-        is_nil(endpoint) ->
-          "Sync the internal telemetry identity for this spacecraft."
-
-        available > 0 ->
-          "Assign an available downlink route to this spacecraft."
-
-        true ->
-          "Create a provider-backed downlink routing rule for this spacecraft."
-      end
-
-    path_label =
-      cond do
-        is_nil(endpoint) ->
-          "No downlink route"
-
-        provider_paths > 0 ->
-          "#{provider_paths} downlink route#{if(provider_paths == 1, do: "", else: "s")}"
-
-        available > 0 ->
-          "Available to assign"
-
-        true ->
-          "No downlink route"
-      end
+    available = available_template_count(templates)
+    provider_paths = provider_path_count(assigned)
+    status = readiness_status(spacecraft, endpoint, provider_paths)
+    issue = readiness_issue(spacecraft, endpoint, available)
+    path_label = readiness_path_label(endpoint, provider_paths, available)
 
     %{
       "id" => spacecraft.spacecraft_id,
@@ -457,31 +415,88 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
       "endpoint_label" => if(is_nil(endpoint), do: "Missing", else: "Telemetry identity"),
       "endpoint_ref_label" => endpoint_id || "Not created",
       "path_label" => path_label,
-      "path_detail" =>
-        if(provider_paths > 0,
-          do: "#{provider_paths} provider-backed",
-          else:
-            if(available > 0,
-              do:
-                "#{available} available mission template#{if(available == 1, do: "", else: "s")}",
-              else: "Not configured"
-            )
-        ),
+      "path_detail" => readiness_path_detail(provider_paths, available),
       "status" => status,
       "status_label" =>
         %{"ready" => "Ready", "attention" => "Needs link", "blocked" => "Needs identity"}[status],
       "issue" => issue,
-      "primary_action" =>
-        %{
-          "ready" => "Review readiness",
-          "attention" => "Assign link",
-          "blocked" => if(is_nil(spacecraft.scid), do: "Set SCID", else: "Sync identity")
-        }[status],
+      "primary_action" => primary_action(status, spacecraft),
       "primary_action_href" =>
         "/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness",
       "view_spacecraft_href" => "/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
     }
   end
+
+  defp available_template_count(templates) do
+    Enum.count(
+      templates,
+      &(&1.direction == :downlink and is_nil(&1.source_endpoint_ref) and
+          &1.provider_profile_refs != [])
+    )
+  end
+
+  defp provider_path_count(assigned),
+    do: Enum.count(assigned, &(&1.direction == :downlink and &1.provider_profile_refs != []))
+
+  defp readiness_status(spacecraft, endpoint, provider_paths) do
+    cond do
+      is_nil(spacecraft.scid) -> "blocked"
+      is_nil(endpoint) -> "blocked"
+      provider_paths > 0 -> "ready"
+      true -> "attention"
+    end
+  end
+
+  defp readiness_issue(spacecraft, endpoint, available) do
+    cond do
+      is_nil(spacecraft.scid) ->
+        "Set SCID so Cadence can identify this spacecraft from TM transfer frames."
+
+      is_nil(endpoint) ->
+        "Sync the internal telemetry identity for this spacecraft."
+
+      available > 0 ->
+        "Assign an available downlink route to this spacecraft."
+
+      true ->
+        "Create a provider-backed downlink routing rule for this spacecraft."
+    end
+  end
+
+  defp readiness_path_label(endpoint, provider_paths, available) do
+    cond do
+      is_nil(endpoint) ->
+        "No downlink route"
+
+      provider_paths > 0 ->
+        "#{provider_paths} downlink route#{if(provider_paths == 1, do: "", else: "s")}"
+
+      available > 0 ->
+        "Available to assign"
+
+      true ->
+        "No downlink route"
+    end
+  end
+
+  defp readiness_path_detail(provider_paths, available) do
+    cond do
+      provider_paths > 0 ->
+        "#{provider_paths} provider-backed"
+
+      available > 0 ->
+        "#{available} available mission template#{if(available == 1, do: "", else: "s")}"
+
+      true ->
+        "Not configured"
+    end
+  end
+
+  defp primary_action("ready", _spacecraft), do: "Review readiness"
+  defp primary_action("attention", _spacecraft), do: "Assign link"
+
+  defp primary_action("blocked", spacecraft),
+    do: if(is_nil(spacecraft.scid), do: "Set SCID", else: "Sync identity")
 
   defp mission_applications(scope, mission_id) do
     host_context = HostContext.mission(mission_id)

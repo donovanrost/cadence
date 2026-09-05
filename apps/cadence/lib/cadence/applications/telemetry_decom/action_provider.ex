@@ -3,6 +3,8 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
 
   @behaviour Cadence.Applications.ActionProvider
 
+  alias Cadence.Applications.ActionContractLedger
+
   alias Cadence.Applications.{
     ActionRequest,
     ApplicationInstallations,
@@ -132,7 +134,7 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     do: {:error, :application_action_scope_required}
 
   defp ensure_surface_binding(%ActionRequest{} = request),
-    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
+    do: ActionContractLedger.admit(request, __MODULE__)
 
   @impl true
   def configuration_reference(

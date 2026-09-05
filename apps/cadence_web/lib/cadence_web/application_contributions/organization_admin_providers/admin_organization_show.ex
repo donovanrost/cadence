@@ -10,21 +10,23 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviders.AdminOr
 
   @spec props(binary()) :: map() | {:error, term()}
   def props(org_id) when is_binary(org_id) do
-    with {:ok, organization} <- Cadence.Organizations.fetch_organization(org_id) do
-      {:ok,
-       %{
-         organization: organization_dto(organization),
-         navigation: navigation_dto(organization),
-         members: Cadence.Accounts.list_organization_members(org_id) |> Enum.map(&member_dto/1),
-         invitations:
-           Cadence.Accounts.list_pending_invitations(org_id) |> Enum.map(&invitation_dto/1),
-         service_identities:
-           Cadence.Auth.list_service_identities(org_id) |> Enum.map(&service_identity_dto/1),
-         service_identity_form: service_identity_form_dto(%{}),
-         issued_service_token: nil
-       }}
-    else
-      {:error, _reason} -> {:error, :organization_not_found}
+    case Cadence.Organizations.fetch_organization(org_id) do
+      {:ok, organization} ->
+        {:ok,
+         %{
+           organization: organization_dto(organization),
+           navigation: navigation_dto(organization),
+           members: Cadence.Accounts.list_organization_members(org_id) |> Enum.map(&member_dto/1),
+           invitations:
+             Cadence.Accounts.list_pending_invitations(org_id) |> Enum.map(&invitation_dto/1),
+           service_identities:
+             Cadence.Auth.list_service_identities(org_id) |> Enum.map(&service_identity_dto/1),
+           service_identity_form: service_identity_form_dto(%{}),
+           issued_service_token: nil
+         }}
+
+      {:error, _reason} ->
+        {:error, :organization_not_found}
     end
   end
 

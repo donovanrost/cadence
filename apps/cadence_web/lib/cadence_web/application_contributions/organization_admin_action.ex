@@ -1,8 +1,11 @@
 defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
   @moduledoc "Stable Phoenix-owned action contracts for the organization admin remote."
 
+  alias Cadence.Applications.ActionContractLedger
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Providers, as: ControlProviders
+  alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
   alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
 
   @action_contracts [
@@ -174,9 +177,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
         %ActionRequest{application_key: "organization_admin", application_version: 1} = request
       ) do
     with :ok <- ensure_surface_binding(request),
-         :ok <- ensure_action_context(scope, host_context, request.action_id),
-         {:ok, result} <- execute_action(scope, host_context, request) do
-      {:ok, result}
+         :ok <- ensure_action_context(scope, host_context, request.action_id) do
+      execute_action(scope, host_context, request)
     end
   end
 
@@ -201,9 +203,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          action_id: "register_provider_account",
          params: params
        }) do
-    with {:ok, values} <- required_input_map(params, "provider_account"),
-         {:ok, result} <- Providers.ProviderAccountNew.create(scope, values) do
-      {:ok, result}
+    with {:ok, values} <- required_input_map(params, "provider_account") do
+      Providers.ProviderAccountNew.create(scope, values)
     end
   end
 
@@ -213,7 +214,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
        }) do
     with {:ok, provider_account_id} <- required_param(params, "provider_account_id"),
          {:ok, _account} <-
-           Cadence.GroundNetworks.ProviderAccounts.validate(scope, provider_account_id),
+           ProviderAccounts.validate(scope, provider_account_id),
          {:ok, props} <- Providers.ProviderAccountShow.props(scope, provider_account_id) do
       {:ok, %{patch: props}}
     end
@@ -354,9 +355,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          params: params
        }) do
     with {:ok, organization_id} <- required_param(params, "organization_id"),
-         {:ok, values} <- required_input_map(params, "invite"),
-         {:ok, result} <- Providers.AdminOrganizationInvite.create(scope, organization_id, values) do
-      {:ok, result}
+         {:ok, values} <- required_input_map(params, "invite") do
+      Providers.AdminOrganizationInvite.create(scope, organization_id, values)
     end
   end
 
@@ -364,13 +364,13 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
     do: {:error, failure("unsupported_action", "The organization action is not implemented.")}
 
   defp ensure_surface_binding(%ActionRequest{} = request),
-    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
+    do: ActionContractLedger.admit(request, __MODULE__)
 
   defp provider_account_action(scope, "rotate_provider_credential", account_id, _params) do
     with {:ok, _account, version} <-
-           Cadence.GroundNetworks.ProviderAccounts.fetch(scope, account_id),
+           ProviderAccounts.fetch(scope, account_id),
          {:ok, _result} <-
-           Cadence.GroundNetworks.ProviderCredentials.rotate(
+           ProviderCredentials.rotate(
              scope,
              account_id,
              version.credential_ref,
@@ -382,9 +382,9 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
 
   defp provider_account_action(scope, "revoke_provider_credential", account_id, _params) do
     with {:ok, _account, version} <-
-           Cadence.GroundNetworks.ProviderAccounts.fetch(scope, account_id),
+           ProviderAccounts.fetch(scope, account_id),
          {:ok, _result} <-
-           Cadence.GroundNetworks.ProviderCredentials.revoke(
+           ProviderCredentials.revoke(
              scope,
              account_id,
              version.credential_ref,
@@ -398,7 +398,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
     grant = input_map(params, "grant")
 
     with {:ok, mission_id} <- required_param(grant, "mission_id") do
-      Cadence.GroundNetworks.ProviderAccountGrants.grant(
+      ProviderAccountGrants.grant(
         scope,
         mission_id,
         account_id,
@@ -412,7 +412,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
 
   defp provider_account_action(scope, "revoke_provider_account_mission", _account_id, params) do
     with {:ok, grant_id} <- required_param(params, "grant-id") do
-      Cadence.Control.Providers.revoke_account_grant(
+      ControlProviders.revoke_account_grant(
         scope,
         grant_id,
         "Revoked by organization administrator"

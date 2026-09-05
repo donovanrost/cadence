@@ -85,9 +85,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          :ok <- validate_json_params(request.params),
          :ok <- validate_mission_param(mission_id, request.params),
          {:ok, params} <- normalize_params(request.action_id, request.params),
-         :ok <- authorize(scope, organization_id, mission_id),
-         {:ok, value} <- dispatch(scope, host_context, request, params) do
-      {:ok, value}
+         :ok <- authorize(scope, organization_id, mission_id) do
+      dispatch(scope, host_context, request, params)
     end
   end
 
@@ -228,9 +227,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
            Policy.authorize(scope, :operate_mission, %{
              organization_id: organization_id,
              mission_id: mission_id
-           }),
-         :ok <- Policy.authorize(scope, :read_organization, %{organization_id: organization_id}) do
-      :ok
+           }) do
+      Policy.authorize(scope, :read_organization, %{organization_id: organization_id})
     end
   end
 
@@ -491,13 +489,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     source = data_source(attrs, organization_id, mission_id)
     payload = action_payload(request)
 
-    with :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope),
-         {:ok, persisted} <-
-           DataSources.persist_data_source(source,
-             actor_id: actor_id(scope),
-             payload: payload
-           ) do
-      {:ok, persisted}
+    with :ok <- maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
+      DataSources.persist_data_source(source, actor_id: actor_id(scope), payload: payload)
     end
   end
 
@@ -554,18 +547,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     with {:ok, binding} <- scoped_binding(organization_id, mission_id, binding_id),
          :ok <- different_source?(binding, data_source_id),
          {:ok, source} <- scoped_source(organization_id, mission_id, data_source_id),
-         :ok <- compatible_source?(source, binding),
-         {:ok, persisted} <-
-           DataSources.persist_data_binding(
-             %DataBinding{binding | data_source_id: data_source_id},
-             actor_id: actor_id(scope),
-             payload:
-               Map.merge(action_payload(request), %{
-                 "previous_data_source_id" => binding.data_source_id,
-                 "current_data_source_id" => data_source_id
-               })
-           ) do
-      {:ok, persisted}
+         :ok <- compatible_source?(source, binding) do
+      DataSources.persist_data_binding(
+        %DataBinding{binding | data_source_id: data_source_id},
+        actor_id: actor_id(scope),
+        payload:
+          Map.merge(action_payload(request), %{
+            "previous_data_source_id" => binding.data_source_id,
+            "current_data_source_id" => data_source_id
+          })
+      )
     end
   end
 

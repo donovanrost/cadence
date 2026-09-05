@@ -8,8 +8,8 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.TestFixtures
   alias Cadence.Applications.OpsConsole
+  alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
   test "reader route ignores unowned dashboard context" do

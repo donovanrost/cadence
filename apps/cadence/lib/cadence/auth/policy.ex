@@ -20,9 +20,8 @@ defmodule Cadence.Auth.Policy do
       }) do
     case current_scope.actor_kind do
       :user ->
-        with :ok <- authenticated_user(current_scope),
-             :ok <- authorized_mission_organization(current_scope, organization_id) do
-          :ok
+        with :ok <- authenticated_user(current_scope) do
+          authorized_mission_organization(current_scope, organization_id)
         end
 
       :service ->

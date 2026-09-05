@@ -160,9 +160,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardDeepActions do
 
   defp validate_action_params(action_id, params)
        when action_id in ["remove_dashboard_section", "move_dashboard_section"] do
-    with :ok <- required_text(params, "section-id"),
-         :ok <- optional_direction(action_id, params) do
-      :ok
+    with :ok <- required_text(params, "section-id") do
+      optional_direction(action_id, params)
     end
   end
 
@@ -225,95 +224,214 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardDeepActions do
   end
 
   defp dispatch(scope, organization_id, mission_id, dashboard_id, action_id, params) do
-    case action_id do
-      "layout_changed" ->
-        mutate(
-          scope,
-          mission_id,
-          dashboard_id,
-          &Document.apply_layouts(&1, params["layouts"]),
-          "Layout updated"
-        )
-
-      "validate_dashboard_section" ->
-        validate_section(organization_id, mission_id, dashboard_id, params["section"])
-
-      "save_dashboard_section" ->
-        mutate(
-          scope,
-          mission_id,
-          dashboard_id,
-          &Document.put_section(&1, Section.from_map(params["section"])),
-          "Section saved"
-        )
-
-      "remove_dashboard_section" ->
-        mutate(
-          scope,
-          mission_id,
-          dashboard_id,
-          &Document.remove_section(&1, params["section-id"]),
-          "Section removed"
-        )
-
-      "move_dashboard_section" ->
-        move_section(scope, mission_id, dashboard_id, params)
-
-      "preview_widget_binding" ->
-        current_document(organization_id, mission_id, dashboard_id, "Widget binding preview")
-
-      "validate_widget" ->
-        validate_widget(organization_id, mission_id, dashboard_id, params["widget"])
-
-      "save_widget" ->
-        save_widget(scope, mission_id, dashboard_id, params["widget"])
-
-      "remove_widget" ->
-        mutate(
-          scope,
-          mission_id,
-          dashboard_id,
-          &Document.remove_placement(&1, params["widget-id"]),
-          "Widget removed"
-        )
-
-      "rename" ->
-        mutate(
-          scope,
-          mission_id,
-          dashboard_id,
-          &rename_document(&1, params["dashboard"]),
-          "Dashboard renamed"
-        )
-
-      "archive_dashboard" ->
-        archive_dashboard(scope, mission_id, dashboard_id)
-
-      "publish_dashboard" ->
-        publish(scope, mission_id, dashboard_id, nil)
-
-      "publish_dashboard_version" ->
-        publish(scope, mission_id, dashboard_id, params["version"])
-
-      "save_runtime_defaults" ->
-        mutate(scope, mission_id, dashboard_id, & &1, "Runtime defaults saved")
-
-      "restore_version_as_draft" ->
-        restore(scope, mission_id, dashboard_id, params["version"])
-
-      action_id when action_id in ["save_editor", "review_editor"] ->
-        mutate(scope, mission_id, dashboard_id, & &1, "Editor saved")
-
-      action_id when action_id in ["discard_editor", "reload_editor"] ->
-        current_document(organization_id, mission_id, dashboard_id, "Editor reloaded")
-
-      "publish_version" ->
-        publish(scope, mission_id, dashboard_id, params["version"])
-
-      "restore_version" ->
-        restore(scope, mission_id, dashboard_id, params["version"])
-    end
+    dispatch_action(
+      action_id,
+      scope,
+      organization_id,
+      mission_id,
+      dashboard_id,
+      params
+    )
   end
+
+  defp dispatch_action(
+         "layout_changed",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do:
+         mutate(
+           scope,
+           mission_id,
+           dashboard_id,
+           &Document.apply_layouts(&1, params["layouts"]),
+           "Layout updated"
+         )
+
+  defp dispatch_action(
+         "validate_dashboard_section",
+         _scope,
+         organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: validate_section(organization_id, mission_id, dashboard_id, params["section"])
+
+  defp dispatch_action(
+         "save_dashboard_section",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do:
+         mutate(
+           scope,
+           mission_id,
+           dashboard_id,
+           &Document.put_section(&1, Section.from_map(params["section"])),
+           "Section saved"
+         )
+
+  defp dispatch_action(
+         "remove_dashboard_section",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do:
+         mutate(
+           scope,
+           mission_id,
+           dashboard_id,
+           &Document.remove_section(&1, params["section-id"]),
+           "Section removed"
+         )
+
+  defp dispatch_action(
+         "move_dashboard_section",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: move_section(scope, mission_id, dashboard_id, params)
+
+  defp dispatch_action(
+         "preview_widget_binding",
+         _scope,
+         organization_id,
+         mission_id,
+         dashboard_id,
+         _params
+       ),
+       do: current_document(organization_id, mission_id, dashboard_id, "Widget binding preview")
+
+  defp dispatch_action(
+         "validate_widget",
+         _scope,
+         organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: validate_widget(organization_id, mission_id, dashboard_id, params["widget"])
+
+  defp dispatch_action("save_widget", scope, _organization_id, mission_id, dashboard_id, params),
+    do: save_widget(scope, mission_id, dashboard_id, params["widget"])
+
+  defp dispatch_action(
+         "remove_widget",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do:
+         mutate(
+           scope,
+           mission_id,
+           dashboard_id,
+           &Document.remove_placement(&1, params["widget-id"]),
+           "Widget removed"
+         )
+
+  defp dispatch_action("rename", scope, _organization_id, mission_id, dashboard_id, params),
+    do:
+      mutate(
+        scope,
+        mission_id,
+        dashboard_id,
+        &rename_document(&1, params["dashboard"]),
+        "Dashboard renamed"
+      )
+
+  defp dispatch_action(
+         "archive_dashboard",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         _params
+       ),
+       do: archive_dashboard(scope, mission_id, dashboard_id)
+
+  defp dispatch_action(
+         "publish_dashboard",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         _params
+       ),
+       do: publish(scope, mission_id, dashboard_id, nil)
+
+  defp dispatch_action(
+         "publish_dashboard_version",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: publish(scope, mission_id, dashboard_id, params["version"])
+
+  defp dispatch_action(
+         "save_runtime_defaults",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         _params
+       ),
+       do: mutate(scope, mission_id, dashboard_id, & &1, "Runtime defaults saved")
+
+  defp dispatch_action(
+         "restore_version_as_draft",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: restore(scope, mission_id, dashboard_id, params["version"])
+
+  defp dispatch_action(action_id, scope, _organization_id, mission_id, dashboard_id, _params)
+       when action_id in ["save_editor", "review_editor"],
+       do: mutate(scope, mission_id, dashboard_id, & &1, "Editor saved")
+
+  defp dispatch_action(action_id, _scope, organization_id, mission_id, dashboard_id, _params)
+       when action_id in ["discard_editor", "reload_editor"],
+       do: current_document(organization_id, mission_id, dashboard_id, "Editor reloaded")
+
+  defp dispatch_action(
+         "publish_version",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: publish(scope, mission_id, dashboard_id, params["version"])
+
+  defp dispatch_action(
+         "restore_version",
+         scope,
+         _organization_id,
+         mission_id,
+         dashboard_id,
+         params
+       ),
+       do: restore(scope, mission_id, dashboard_id, params["version"])
 
   defp current_document(organization_id, mission_id, dashboard_id, status) do
     with {:ok, %Document{} = document} <-

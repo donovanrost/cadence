@@ -20,18 +20,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviders.Provide
       credentials =
         Map.new(accounts, fn account ->
           version = Map.fetch!(versions, account.provider_account_id)
-
-          credential =
-            case ProviderCredentials.fetch(
-                   scope.organization_id,
-                   account.provider_account_id,
-                   version.credential_ref
-                 ) do
-              {:ok, credential} -> credential
-              {:error, _reason} -> nil
-            end
-
-          {account.provider_account_id, credential}
+          {account.provider_account_id, credential_for(scope, account, version)}
         end)
 
       rows =
@@ -49,6 +38,17 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviders.Provide
          presentation: page_presentation(length(accounts), accounts == []),
          provider_accounts: rows
        }}
+    end
+  end
+
+  defp credential_for(scope, account, version) do
+    case ProviderCredentials.fetch(
+           scope.organization_id,
+           account.provider_account_id,
+           version.credential_ref
+         ) do
+      {:ok, credential} -> credential
+      {:error, _reason} -> nil
     end
   end
 

@@ -1,8 +1,9 @@
 defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
   @moduledoc "Phoenix-owned presentation adapter for the deep Ops route cohort."
 
-  alias Cadence.Dashboards.Document
   alias Cadence.Auth.Policy
+  alias Cadence.Dashboards.Document
+  alias Cadence.Reads.DataSources
 
   @spec dashboard(map(), map(), map(), :view | :edit) :: map()
   def dashboard(scope, mission, params, mode) do
@@ -110,10 +111,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
   @spec data_sources(map(), map(), map(), :reader | :registration | :settings) :: map()
   def data_sources(scope, mission, params, mode) do
     sources =
-      Cadence.Reads.DataSources.list_data_sources(scope.organization_id, mission.mission_id)
+      DataSources.list_data_sources(scope.organization_id, mission.mission_id)
 
     bindings =
-      Cadence.Reads.DataSources.list_data_bindings(scope.organization_id, mission.mission_id)
+      DataSources.list_data_bindings(scope.organization_id, mission.mission_id)
 
     selected_id = params["data_source_id"]
 

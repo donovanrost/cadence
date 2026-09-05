@@ -57,15 +57,9 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
   @spec execute(Scope.t(), HostContext.t(), ActionRequest.t()) ::
           {:ok, term()} | {:error, term()}
   @impl true
-  def execute(scope, host_context = %HostContext{}, request = %ActionRequest{}) do
+  def execute(scope, %HostContext{} = host_context, %ActionRequest{} = request) do
     if @dispatch_valid? do
-      with :ok <- validate_request(request),
-           {:ok, adapter} <- adapter_for(request.surface_id, request.action_id) do
-        case adapter.execute(scope, host_context, request.surface_id, request) do
-          {:ok, value} -> {:ok, adapter.result(value)}
-          {:error, _reason} = error -> error
-        end
-      end
+      dispatch(scope, host_context, request)
     else
       {:error, :unsupported_application_action}
     end
@@ -73,6 +67,16 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
 
   def execute(_scope, _host_context, _request),
     do: {:error, :unsupported_application_action}
+
+  defp dispatch(scope, host_context, request) do
+    with :ok <- validate_request(request),
+         {:ok, adapter} <- adapter_for(request.surface_id, request.action_id) do
+      case adapter.execute(scope, host_context, request.surface_id, request) do
+        {:ok, value} -> {:ok, adapter.result(value)}
+        {:error, _reason} = error -> error
+      end
+    end
+  end
 
   @impl true
   def result(value) do

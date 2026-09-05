@@ -8,10 +8,10 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.TestFixtures
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
+  alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
   test "data sources forward only the bounded source subject" do

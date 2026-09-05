@@ -36,9 +36,9 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Listing.Page
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
-  alias Cadence.Reads.ApplicationSurfaces.CommsProviders
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
+  alias Cadence.Reads.ApplicationSurfaces.CommsProviders
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
   alias Cadence.Repo
   alias Cadence.Runtime.MissionRuntimeSpec

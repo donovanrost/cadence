@@ -8,9 +8,9 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.TestFixtures
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
+  alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
   test "capability remediation forwards only the source subject" do

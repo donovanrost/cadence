@@ -395,9 +395,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     do: {:error, :unsupported_action}
 
   defp form_params(params, wrapper, fields) do
-    with {:ok, form} <- wrapped_map(params, wrapper),
-         {:ok, form} <- exact_string_map(form, fields) do
-      {:ok, form}
+    with {:ok, form} <- wrapped_map(params, wrapper) do
+      exact_string_map(form, fields)
     end
   end
 
@@ -629,19 +628,21 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp selected_snapshots_match(organization_id, mission_id, run_id, requirement_id, ids) do
-    if Enum.all?(ids, fn id ->
-         case ContactPlans.fetch_opportunity_snapshot(organization_id, mission_id, id) do
-           {:ok, snapshot} ->
-             snapshot.contact_planning_run_id == run_id and
-               snapshot.contact_requirement_id == requirement_id
-
-           _not_found ->
-             false
-         end
-       end) do
+    if Enum.all?(ids, &snapshot_matches?(organization_id, mission_id, run_id, requirement_id, &1)) do
       :ok
     else
       {:error, :opportunity_scope_mismatch}
+    end
+  end
+
+  defp snapshot_matches?(organization_id, mission_id, run_id, requirement_id, id) do
+    case ContactPlans.fetch_opportunity_snapshot(organization_id, mission_id, id) do
+      {:ok, snapshot} ->
+        snapshot.contact_planning_run_id == run_id and
+          snapshot.contact_requirement_id == requirement_id
+
+      _not_found ->
+        false
     end
   end
 

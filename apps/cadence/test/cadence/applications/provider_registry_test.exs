@@ -13,6 +13,7 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     SurfaceQueryContribution
   }
 
+  alias Cadence.Applications.Spacecraft
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
@@ -339,9 +340,9 @@ defmodule Cadence.Applications.ProviderRegistryTest do
   end
 
   test "registers Spacecraft through its stable application identity" do
-    assert Cadence.Applications.Spacecraft.application_key() == "spacecraft"
+    assert Spacecraft.application_key() == "spacecraft"
 
-    assert ActionProviderRegistry.providers([Cadence.Applications.Spacecraft]) == %{
+    assert ActionProviderRegistry.providers([Spacecraft]) == %{
              "spacecraft" => Cadence.Applications.Spacecraft.ActionProvider
            }
   end

@@ -946,32 +946,35 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   end
 
   defp validate_params(surface_id, params) do
-    allowed_keys =
-      cond do
-        surface_id in @list_surfaces ->
-          MapSet.new(~w(mission_id q sort dir page pageSize))
+    validate_param_keys(Map.keys(params), allowed_param_keys(surface_id))
+  end
 
-        surface_id == "routing_new" ->
-          MapSet.new(~w(mission_id spacecraft_id))
+  defp allowed_param_keys(surface_id) do
+    cond do
+      surface_id in @list_surfaces ->
+        MapSet.new(~w(mission_id q sort dir page pageSize))
 
-        surface_id == "ground_station_edit" ->
-          MapSet.new(~w(mission_id ground_station_id))
+      surface_id == "routing_new" ->
+        MapSet.new(~w(mission_id spacecraft_id))
 
-        surface_id in @form_surfaces ->
-          MapSet.new(["mission_id"])
+      surface_id == "ground_station_edit" ->
+        MapSet.new(~w(mission_id ground_station_id))
 
-        Map.has_key?(@detail_params, surface_id) ->
-          MapSet.new(["mission_id", Map.fetch!(@detail_params, surface_id)])
+      surface_id in @form_surfaces ->
+        MapSet.new(["mission_id"])
 
-        surface_id in Comms.surface_ids() ->
-          MapSet.new()
+      Map.has_key?(@detail_params, surface_id) ->
+        MapSet.new(["mission_id", Map.fetch!(@detail_params, surface_id)])
 
-        true ->
-          MapSet.new()
-      end
+      surface_id in Comms.surface_ids() ->
+        MapSet.new()
 
-    keys = Map.keys(params)
+      true ->
+        MapSet.new()
+    end
+  end
 
+  defp validate_param_keys(keys, allowed_keys) do
     cond do
       length(keys) > @max_map_keys -> {:error, :application_surface_bounds_exceeded}
       not Enum.all?(keys, &is_binary/1) -> {:error, :invalid_application_request}

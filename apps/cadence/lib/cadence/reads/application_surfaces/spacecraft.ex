@@ -19,8 +19,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   alias Cadence.Missions
   alias Cadence.Reads.Applications.Inventory
   alias Cadence.Reads.Applications.InventoryItem
-  alias Cadence.SpacecraftStore
   alias Cadence.Spacecraft, as: SpacecraftAsset
+  alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftTypeStore
 
@@ -1189,20 +1189,16 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
     }
 
   defp spacecraft_form(kind, spacecraft, _types) do
-    edit? = kind == "edit"
-
     %{
-      "id" => if(edit?, do: "spacecraft-edit-form", else: "spacecraft-form"),
+      "id" => spacecraft_form_id(kind),
       "sections" => %{
         "identity" => %{
-          "id" =>
-            if(edit?, do: "spacecraft-edit-identity-section", else: "spacecraft-identity-section"),
+          "id" => identity_section_id(kind),
           "number" => "01",
           "title" => "Identity"
         },
         "profile" => %{
-          "id" =>
-            if(edit?, do: "spacecraft-edit-profile-section", else: "spacecraft-profile-section"),
+          "id" => profile_section_id(kind),
           "number" => "02",
           "title" => "Profile"
         }
@@ -1210,7 +1206,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
       "fields" => %{
         "display_name" =>
           field(
-            if(edit?, do: "spacecraft-edit-display-name", else: "spacecraft-display-name"),
+            display_name_field_id(kind),
             "spacecraft[display_name]",
             "text",
             "Display Name",
@@ -1219,7 +1215,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
           ),
         "scid" =>
           field(
-            if(edit?, do: "spacecraft-edit-scid", else: "spacecraft-scid"),
+            scid_field_id(kind),
             "spacecraft[scid]",
             "text",
             "SCID",
@@ -1228,7 +1224,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
           ),
         "spacecraft_type_id" =>
           field(
-            if(edit?, do: "spacecraft-edit-profile", else: "spacecraft-profile"),
+            profile_field_id(kind),
             "spacecraft[spacecraft_type_id]",
             "select",
             "Spacecraft Profile",
@@ -1238,19 +1234,44 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
       },
       "actions" => %{
         "submit" => %{
-          "id" =>
-            if(edit?, do: "save-spacecraft-identity-button", else: "create-spacecraft-button"),
-          "label" => if(edit?, do: "Save Identity", else: "Create Spacecraft")
+          "id" => submit_button_id(kind),
+          "label" => submit_button_label(kind)
         },
         "cancel" => %{
-          "id" =>
-            if(edit?, do: "cancel-spacecraft-identity-link", else: "cancel-spacecraft-link"),
+          "id" => cancel_link_id(kind),
           "label" => "Cancel",
-          "href" => if(edit?, do: "", else: "")
+          "href" => ""
         }
       }
     }
   end
+
+  defp spacecraft_form_id("edit"), do: "spacecraft-edit-form"
+  defp spacecraft_form_id(_kind), do: "spacecraft-form"
+
+  defp identity_section_id("edit"), do: "spacecraft-edit-identity-section"
+  defp identity_section_id(_kind), do: "spacecraft-identity-section"
+
+  defp profile_section_id("edit"), do: "spacecraft-edit-profile-section"
+  defp profile_section_id(_kind), do: "spacecraft-profile-section"
+
+  defp display_name_field_id("edit"), do: "spacecraft-edit-display-name"
+  defp display_name_field_id(_kind), do: "spacecraft-display-name"
+
+  defp scid_field_id("edit"), do: "spacecraft-edit-scid"
+  defp scid_field_id(_kind), do: "spacecraft-scid"
+
+  defp profile_field_id("edit"), do: "spacecraft-edit-profile"
+  defp profile_field_id(_kind), do: "spacecraft-profile"
+
+  defp submit_button_id("edit"), do: "save-spacecraft-identity-button"
+  defp submit_button_id(_kind), do: "create-spacecraft-button"
+
+  defp submit_button_label("edit"), do: "Save Identity"
+  defp submit_button_label(_kind), do: "Create Spacecraft"
+
+  defp cancel_link_id("edit"), do: "cancel-spacecraft-identity-link"
+  defp cancel_link_id(_kind), do: "cancel-spacecraft-link"
 
   defp field(id, name, type, label, value, required),
     do: %{

@@ -4,8 +4,8 @@ defmodule Cadence.Applications.CommsApplicationTest do
   alias Cadence.Applications.{
     ActionProviderRegistry,
     ApplicationDefinition,
-    Comms,
     CatalogRegistry,
+    Comms,
     LegacyCommsOverview,
     Registry,
     ReleaseContribution,

@@ -3,6 +3,7 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
 
   @behaviour Cadence.Applications.ActionProvider
 
+  alias Cadence.Applications.ActionContractLedger
   alias Cadence.Applications.{ActionRequest, ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
@@ -98,7 +99,7 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
     do: {:error, :invalid_application_action_request}
 
   defp ensure_surface_binding(%ActionRequest{} = request),
-    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
+    do: ActionContractLedger.admit(request, __MODULE__)
 
   defp validate_mission(%{"mission" => params}) when is_map(params) do
     with {:ok, display_name} <- required_text(params, "display_name"),

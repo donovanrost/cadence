@@ -37,9 +37,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.TelemetryExplore do
          :ok <- validate_context(scope, host_context),
          :ok <- validate_json(request.params),
          :ok <- validate_mission_param(mission_id, request.params),
-         :ok <- authorize(scope, organization_id, mission_id, request.action_id),
-         {:ok, result} <- dispatch(scope, mission_id, request.action_id, request.params) do
-      {:ok, result}
+         :ok <- authorize(scope, organization_id, mission_id, request.action_id) do
+      dispatch(scope, mission_id, request.action_id, request.params)
     end
   end
 

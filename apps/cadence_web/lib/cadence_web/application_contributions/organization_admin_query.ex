@@ -3,6 +3,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
 
   alias Cadence.Applications.{HostContext, SurfaceQueryContribution, SurfaceQueryRequest}
   alias Cadence.Auth.{Policy, Scope}
+  alias CadenceWeb.ApplicationContributions.OrganizationAdmin
   alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
 
   @query_contracts [
@@ -251,7 +252,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
   defp fetch_surface_scope(surface_id) do
     case Enum.find(@query_contracts, &(&1.surface_id == surface_id)) do
       %{surface_id: ^surface_id} ->
-        case CadenceWeb.ApplicationContributions.OrganizationAdmin.fetch_surface(surface_id) do
+        case OrganizationAdmin.fetch_surface(surface_id) do
           {:ok, %{scope: scope}} -> {:ok, scope}
           _other -> {:error, :unknown_surface}
         end

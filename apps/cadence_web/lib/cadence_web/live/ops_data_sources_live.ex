@@ -3,6 +3,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
   use CadenceWeb, :live_view
 
+  alias CadenceWeb.OpsDataSourcesLive.Page
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -18,5 +20,5 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   @impl true
-  def render(assigns), do: CadenceWeb.OpsDataSourcesLive.Page.render(assigns)
+  def render(assigns), do: Page.render(assigns)
 end

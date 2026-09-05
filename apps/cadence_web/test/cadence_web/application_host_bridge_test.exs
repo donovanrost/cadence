@@ -4,8 +4,8 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
   alias Cadence.Applications.{
     ActionDefinition,
     ActionRequest,
-    ApplicationInstallations,
     ApplicationDefinition,
+    ApplicationInstallations,
     HostContext,
     Spacecraft,
     SurfaceDefinition
