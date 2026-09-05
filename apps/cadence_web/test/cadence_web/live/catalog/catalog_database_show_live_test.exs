@@ -9,7 +9,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
-  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -22,7 +21,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
     {TestFixtures.member_conn(user), org, mission}
   end
 
-  test "renders JSON-safe database details, navigation, revisions, imports, and status semantics" do
+  test "authenticated mount exposes the catalog database show federated descriptor" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
     database =
@@ -31,10 +30,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
         slug: "payload-catalog",
         description: "Payload telemetry and command definitions."
       )
-
-    run = TestFixtures.start_catalog_revision_import!(database, revision_label: "Payload 7")
-    completed = TestFixtures.complete_catalog_import_run!(run)
-    revision = TestFixtures.fetch_catalog_revision_for_run!(completed)
 
     {:ok, view, _html} =
       live(
@@ -47,119 +42,19 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
     vue = catalog_database_vue(view)
 
-    assert vue.component == "CatalogDatabaseShow"
+    assert vue.component == "FederatedFullPageSurface"
     assert vue.ssr == false
-    assert is_binary(Jason.encode!(vue.props))
+    assert vue.handlers == %{}
 
-    assert Map.take(vue.props, [
-             "database",
-             "import_runs",
-             "navigation",
-             "revision_form_open",
-             "revisions"
-           ]) == %{
-             "database" => %{
-               "description" => "Payload telemetry and command definitions.",
-               "id" => database.catalog_database_id,
-               "name" => "Payload Catalog",
-               "runtime_usage_summary" => "No runtime bindings yet.",
-               "slug" => "payload-catalog"
-             },
-             "import_runs" => [
-               %{
-                 "href" =>
-                   "/missions/#{mission.mission_id}/catalog/imports/#{completed.import_run_id}",
-                 "id" => "catalog-import-run-row-#{completed.import_run_id}",
-                 "run_id" => completed.import_run_id,
-                 "status" => %{
-                   "label" => "Completed",
-                   "tone" => "ready",
-                   "value" => "completed"
-                 }
-               }
-             ],
-             "navigation" => %{
-               "catalog" => %{
-                 "href" => "/missions/#{mission.mission_id}/catalog",
-                 "label" => "Catalog"
-               },
-               "current" => %{"label" => "Payload Catalog"},
-               "mission" => %{
-                 "href" => "/missions/#{mission.mission_id}",
-                 "label" => "Primary Mission"
-               }
-             },
-             "revision_form_open" => false,
-             "revisions" => [
-               %{
-                 "href" =>
-                   "/missions/#{mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}",
-                 "id" => "catalog-revision-row-#{revision.catalog_revision_id}",
-                 "label" => "Payload 7",
-                 "mission_model_revision_id" => revision.mission_model_revision_id,
-                 "number" => revision.revision_number,
-                 "revision_id" => revision.catalog_revision_id
-               }
-             ]
-           }
-
-    revision_form = vue.props["revision_form"]
-
-    assert revision_form["id"] == "catalog-revision-upload-form"
-    assert revision_form["name"] == "catalog_revision"
-
-    assert revision_form["card"] == %{
-             "body_class" => "card-body p-6",
-             "class" => "card bg-base-200 border border-base-300",
-             "id" => "catalog-revision-upload-card",
-             "title" => "Add revision",
-             "title_class" => "hud-label"
-           }
-
-    assert Enum.map(revision_form["primary_fields"], fn field ->
-             Map.take(field, ["id", "key", "name", "type", "value"])
-           end) == [
-             %{
-               "id" => "catalog_revision_revision_label",
-               "key" => "revision_label",
-               "name" => "catalog_revision[revision_label]",
-               "type" => "text",
-               "value" => ""
-             },
-             %{
-               "id" => "catalog_revision_revision_notes",
-               "key" => "revision_notes",
-               "name" => "catalog_revision[revision_notes]",
-               "type" => "text",
-               "value" => ""
+    assert vue.props == %{
+             "application_key" => "mission_catalog",
+             "surface_id" => "catalog_database_show",
+             "host_scope" => "mission",
+             "mission_id" => mission.mission_id,
+             "query_params" => %{
+               "mission_id" => mission.mission_id,
+               "catalog_database_id" => database.catalog_database_id
              }
-           ]
-
-    upload = vue.props["upload"]
-
-    assert is_binary(upload["ref"])
-
-    assert Map.drop(upload, ["ref"]) == %{
-             "accept" => false,
-             "auto_upload" => false,
-             "entries" => [],
-             "errors" => [],
-             "max_entries" => 1,
-             "max_file_size" => 50 * 1024 * 1024,
-             "name" => "artifact"
-           }
-
-    assert vue.props["detected_importer"] == %{
-             "display_name" => nil,
-             "status" => "empty"
-           }
-
-    assert vue.props["submit_disabled"] == true
-
-    assert vue.handlers == %{
-             "cancel-upload" => JS.push("cancel_upload"),
-             "toggle-revision-form" => JS.push("toggle_revision_form"),
-             "validate" => JS.push("validate")
            }
   end
 
@@ -182,35 +77,12 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
         ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
       )
 
-    initial_vue = catalog_database_vue(view)
-
-    assert initial_vue.props["revision_form_open"] == false
-    assert initial_vue.props["revisions"] == []
-    assert initial_vue.props["import_runs"] == []
-
-    assert initial_vue.props["database"]["description"] ==
-             "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."
-
-    assert initial_vue.props["revision_form"]["id"] == "catalog-revision-upload-form"
-
-    assert initial_vue.props["revision_form"]["submit"]["id"] ==
-             "catalog-revision-upload-submit"
+    refute has_element?(view, "#catalog-revision-upload-live-form")
 
     render_click(view, "toggle_revision_form", %{})
 
-    open_vue = catalog_database_vue(view)
-
-    assert open_vue.props["revision_form_open"] == true
-    assert open_vue.props["revision_form"]["card"]["id"] == "catalog-revision-upload-card"
-
-    assert open_vue.props["revision_form"]["submit"] == %{
-             "class" => "btn btn-primary",
-             "id" => "catalog-revision-upload-submit",
-             "label" => "Upload revision"
-           }
-
-    assert open_vue.handlers["validate"] == JS.push("validate")
-    assert open_vue.handlers["cancel-upload"] == JS.push("cancel_upload")
+    assert has_element?(view, "#catalog-revision-upload-live-form")
+    assert has_element?(view, "#catalog-revision-upload-live-form input[type=file]")
   end
 
   test "cancelling the add-revision reveal hides the form" do
@@ -225,8 +97,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
     render_click(view, "toggle_revision_form", %{})
 
-    open_vue = catalog_database_vue(view)
-    assert open_vue.props["revision_form_open"] == true
+    assert has_element?(view, "#catalog-revision-upload-live-form")
 
     uploads =
       file_input(view, "#catalog-revision-upload-live-form", :artifact, [
@@ -240,16 +111,9 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
     _ = render_upload(uploads, "mission.bin")
 
-    assert [%{"client_name" => "mission.bin"}] =
-             catalog_database_vue(view).props["upload"]["entries"]
-             |> Enum.map(&Map.take(&1, ["client_name"]))
-
     render_click(view, "toggle_revision_form", %{})
 
-    closed_vue = catalog_database_vue(view)
-    assert closed_vue.props["revision_form_open"] == false
-    assert closed_vue.props["upload"]["entries"] == []
-    assert closed_vue.props["detected_importer"]["status"] == "empty"
+    refute has_element?(view, "#catalog-revision-upload-live-form")
   end
 
   test "uploads a supported file as a new revision and navigates to the import run" do
@@ -285,15 +149,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
     _ = render_upload(uploads, "mission.yaml")
 
-    vue = catalog_database_vue(view)
-
-    assert vue.props["detected_importer"] == %{
-             "display_name" => "Cadence YAML Database",
-             "status" => "detected"
-           }
-
-    assert vue.props["submit_disabled"] == false
-
     result =
       render_submit(view, "save", %{
         "catalog_revision" => %{
@@ -324,31 +179,20 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
         ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
       )
 
-    initial_run = import_run_prop(view, run.import_run_id)
-
-    assert initial_run["status"] == %{
-             "label" => "Running",
-             "tone" => "info",
-             "value" => "running"
-           }
-
-    assert catalog_database_vue(view).props["revisions"] == []
+    assert has_element?(view, "#catalog-database-show-component")
 
     completed = TestFixtures.complete_catalog_import_run!(run)
     send(view.pid, {:import_run_completed, completed})
     _ = render(view)
 
-    completed_run = import_run_prop(view, run.import_run_id)
+    assert has_element?(view, "#catalog-database-show-component")
 
-    assert completed_run["status"] == %{
-             "label" => "Completed",
-             "tone" => "ready",
-             "value" => "completed"
-           }
-
-    assert [%{"label" => "Live 2"}] =
-             catalog_database_vue(view).props["revisions"]
-             |> Enum.map(&Map.take(&1, ["label"]))
+    assert [_revision] =
+             Cadence.Catalog.list_revisions(
+               mission.organization_id,
+               mission.mission_id,
+               database.catalog_database_id
+             )
   end
 
   test "does not expose a catalog database outside the current organization scope" do
@@ -379,12 +223,5 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
   defp catalog_database_vue(view) do
     LiveVue.Test.get_vue(view, id: "catalog-database-show-component")
-  end
-
-  defp import_run_prop(view, import_run_id) do
-    view
-    |> catalog_database_vue()
-    |> get_in([:props, "import_runs"])
-    |> Enum.find(&(&1["run_id"] == import_run_id))
   end
 end

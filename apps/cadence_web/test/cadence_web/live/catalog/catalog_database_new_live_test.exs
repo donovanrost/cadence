@@ -9,7 +9,6 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
-  alias Phoenix.LiveView.JS
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -19,104 +18,34 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
     {TestFixtures.member_conn(user), org, mission}
   end
 
-  test "renders the new database form" do
+  test "authenticated mount exposes the catalog database new federated descriptor" do
     {conn, _org, mission} = signed_in_org_and_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog/new")
 
-    assert has_element?(view, "#catalog-database-new-component")
+    assert has_element?(view, "#catalog-database-new-component.contents")
+    assert has_element?(view, "#catalog-upload-live-form")
+    assert has_element?(view, "#catalog-upload-live-form input[type=file]")
 
     vue = catalog_database_new_vue(view)
 
-    assert vue.component == "CatalogDatabaseNew"
+    assert vue.component == "FederatedFullPageSurface"
     assert vue.ssr == false
     assert vue.class == "contents"
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
+    assert vue.handlers == %{}
 
-    assert vue.props["page"] == %{
-             "id" => "catalog-database-new-page",
-             "heading" => "New catalog database",
-             "breadcrumbs" => [
-               %{
-                 "label" => "Primary Mission",
-                 "href" => "/missions/#{mission.mission_id}"
-               },
-               %{
-                 "label" => "Catalog",
-                 "href" => "/missions/#{mission.mission_id}/catalog"
-               },
-               %{"label" => "New database", "href" => nil}
-             ],
-             "cancel" => %{
-               "id" => "catalog-database-new-cancel",
-               "label" => "Cancel",
-               "href" => "/missions/#{mission.mission_id}/catalog"
-             }
+    assert vue.props == %{
+             "application_key" => "mission_catalog",
+             "surface_id" => "catalog_database_new",
+             "host_scope" => "mission",
+             "mission_id" => mission.mission_id,
+             "query_params" => %{"mission_id" => mission.mission_id}
            }
+  end
 
-    form = vue.props["form"]
-
-    assert form["id"] == "catalog-upload-form"
-    assert form["name"] == "catalog_database"
-    assert form["card"]["title"] == "Create catalog database revision"
-
-    assert form["submit"] == %{
-             "class" => "btn btn-primary",
-             "id" => nil,
-             "label" => "Upload & import"
-           }
-
-    assert Enum.map(form["primary_fields"] ++ form["secondary_fields"], fn field ->
-             Map.take(field, ["id", "key", "name", "type", "value"])
-           end) == [
-             %{
-               "id" => "catalog_database_name",
-               "key" => "name",
-               "name" => "catalog_database[name]",
-               "type" => "text",
-               "value" => ""
-             },
-             %{
-               "id" => "catalog_database_revision_label",
-               "key" => "revision_label",
-               "name" => "catalog_database[revision_label]",
-               "type" => "text",
-               "value" => ""
-             },
-             %{
-               "id" => "catalog_database_revision_notes",
-               "key" => "revision_notes",
-               "name" => "catalog_database[revision_notes]",
-               "type" => "textarea",
-               "value" => ""
-             }
-           ]
-
-    upload = vue.props["upload"]
-
-    assert is_binary(upload["ref"])
-
-    assert Map.drop(upload, ["ref"]) == %{
-             "accept" => false,
-             "auto_upload" => false,
-             "entries" => [],
-             "errors" => [],
-             "max_entries" => 1,
-             "max_file_size" => 50 * 1024 * 1024,
-             "name" => "artifact"
-           }
-
-    assert vue.props["detected_importer"] == %{
-             "display_name" => nil,
-             "status" => "empty"
-           }
-
-    assert vue.props["submit_disabled"] == true
-
-    assert vue.handlers == %{
-             "cancel-upload" => JS.push("cancel_upload"),
-             "validate" => JS.push("validate")
-           }
+  test "unauthenticated requests redirect to sign in", %{conn: conn} do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(conn, ~p"/missions/mission-test/catalog/new")
   end
 
   test "shows a friendly banner when no importer matches the file" do
@@ -136,17 +65,15 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.bin")
 
-    vue = catalog_database_new_vue(view)
+    render_submit(view, "save", %{"catalog_database" => %{}})
 
-    assert vue.props["detected_importer"] == %{
-             "display_name" => nil,
-             "status" => "unsupported"
-           }
+    assert has_element?(view, "#catalog-upload-live-form input[type=file]")
 
-    assert [%{"client_name" => "mission.bin", "progress" => 100}] =
-             Enum.map(vue.props["upload"]["entries"], &Map.take(&1, ["client_name", "progress"]))
-
-    assert vue.props["submit_disabled"] == true
+    assert has_element?(
+             view,
+             "#flash-error[role='alert']",
+             "Pick a file with a supported format before uploading."
+           )
   end
 
   test "discovers packaged built-ins through the extension catalog" do
@@ -173,15 +100,6 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
       ])
 
     _ = render_upload(uploads, "mission.yaml")
-
-    vue = catalog_database_new_vue(view)
-
-    assert vue.props["detected_importer"] == %{
-             "display_name" => "Cadence YAML Database",
-             "status" => "detected"
-           }
-
-    assert vue.props["submit_disabled"] == false
 
     result =
       render_submit(view, "save", %{
@@ -220,11 +138,6 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.yaml")
 
-    assert catalog_database_new_vue(view).props["detected_importer"] == %{
-             "display_name" => "Cadence YAML Database",
-             "status" => "detected"
-           }
-
     result =
       render_submit(view, "save", %{
         "catalog_database" => %{"name" => "Mission DB", "revision_label" => "Rev A"}
@@ -255,14 +168,10 @@ defmodule CadenceWeb.CatalogDatabaseNewLiveTest do
 
     _ = render_upload(uploads, "mission.bin")
 
-    [entry] = catalog_database_new_vue(view).props["upload"]["entries"]
+    [entry] = uploads.entries
     render_hook(view, "cancel_upload", %{"ref" => entry["ref"]})
 
-    vue = catalog_database_new_vue(view)
-
-    assert vue.props["upload"]["entries"] == []
-    assert vue.props["detected_importer"]["status"] == "empty"
-    assert vue.props["submit_disabled"] == true
+    assert has_element?(view, "#catalog-upload-live-form input[type=file]")
   end
 
   defp catalog_database_new_vue(view) do
