@@ -126,6 +126,84 @@ defmodule Cadence.Applications.OpsConsole do
       actions: ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]
     },
     %{
+      id: "dashboard_show",
+      purpose: :subject_detail,
+      label: "Dashboard",
+      path: "/missions/:mission_id/ops/dashboards/:dashboard_id",
+      subject_param: "dashboard_id",
+      query_params: [
+        "dashboard_id",
+        "panel",
+        "activity_filter",
+        "activity_event",
+        "selected_publish_issue",
+        "selected_time",
+        "time_mode",
+        "time_axis",
+        "from",
+        "to",
+        "limit_mode",
+        "replay_run_id",
+        "selection_view",
+        "selected_widget",
+        "selected_target",
+        "selected_id",
+        "selected_placement",
+        "selected_data_view",
+        "selected_scope_kind",
+        "selected_scope_id",
+        "selected_resource_id",
+        "selected_spacecraft_id",
+        "selected_contact_id",
+        "selected_transport_id",
+        "selected_source_endpoint_id",
+        "selected_ground_station_id",
+        "selected_scope_link_id",
+        "realm",
+        "data_source_id",
+        "source_binding_id"
+      ],
+      actions: []
+    },
+    %{
+      id: "dashboard_editor",
+      purpose: :configuration,
+      label: "Dashboard Editor",
+      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
+      subject_param: "dashboard_id",
+      query_params: ["dashboard_id"],
+      actions: [
+        "layout_changed",
+        "validate_dashboard_section",
+        "save_dashboard_section",
+        "remove_dashboard_section",
+        "move_dashboard_section",
+        "preview_widget_binding",
+        "validate_widget",
+        "save_widget",
+        "remove_widget",
+        "rename",
+        "archive_dashboard",
+        "publish_dashboard",
+        "publish_dashboard_version",
+        "save_runtime_defaults",
+        "restore_version_as_draft",
+        "save_editor",
+        "review_editor",
+        "discard_editor",
+        "reload_editor"
+      ]
+    },
+    %{
+      id: "dashboard_activity",
+      purpose: :activity,
+      label: "Dashboard Activity",
+      path: "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
+      subject_param: "dashboard_id",
+      query_params: ["dashboard_id", "version", "selected_publish_issue"],
+      actions: ["publish_version", "restore_version"]
+    },
+    %{
       id: "dashboard_new",
       purpose: :configuration,
       label: "New Dashboard",
@@ -258,6 +336,20 @@ defmodule Cadence.Applications.OpsConsole do
       ]
     },
     %{
+      id: "data_operations_manage",
+      purpose: :operations,
+      label: "Manage Data Operations",
+      path: "/missions/:mission_id/ops/data-operations/manage",
+      query_params: ["group"],
+      actions: [
+        "validate-request",
+        "record-historical-workflow-request",
+        "transition-group",
+        "retry-group",
+        "request-correction"
+      ]
+    },
+    %{
       id: "data_sources",
       purpose: :configuration,
       label: "Data Sources",
@@ -268,6 +360,34 @@ defmodule Cadence.Applications.OpsConsole do
         "register-source",
         "open-change-binding",
         "cancel-change-binding",
+        "change-binding",
+        "disable-source",
+        "enable-source",
+        "reconcile-tsdb-backend",
+        "deprovision-tsdb-backend",
+        "provision-tsdb-backend",
+        "probe-source",
+        "rotate-source-credential",
+        "retry-deployment-run",
+        "requeue-deployment-run"
+      ]
+    },
+    %{
+      id: "data_source_registration",
+      purpose: :configuration,
+      label: "Register Data Source",
+      path: "/missions/:mission_id/ops/data-sources/registration/new",
+      query_params: [],
+      actions: ["register-source"]
+    },
+    %{
+      id: "data_source_settings",
+      purpose: :configuration,
+      label: "Data Source Settings",
+      path: "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
+      subject_param: "data_source_id",
+      query_params: ["data_source_id"],
+      actions: [
         "change-binding",
         "disable-source",
         "enable-source",
@@ -321,6 +441,29 @@ defmodule Cadence.Applications.OpsConsole do
     ],
     "contact_schedule" => ["validate", "search", "reserve", "cancel"],
     "dashboard_directory" => ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"],
+    "dashboard_show" => [],
+    "dashboard_editor" => [
+      "layout_changed",
+      "validate_dashboard_section",
+      "save_dashboard_section",
+      "remove_dashboard_section",
+      "move_dashboard_section",
+      "preview_widget_binding",
+      "validate_widget",
+      "save_widget",
+      "remove_widget",
+      "rename",
+      "archive_dashboard",
+      "publish_dashboard",
+      "publish_dashboard_version",
+      "save_runtime_defaults",
+      "restore_version_as_draft",
+      "save_editor",
+      "review_editor",
+      "discard_editor",
+      "reload_editor"
+    ],
+    "dashboard_activity" => ["publish_version", "restore_version"],
     "dashboard_library" => ["stage-library-item", "create-library-item", "add-library-version"],
     "dashboard_new" => ["validate", "save"],
     "dashboard_playlist_present" => ["next-dashboard"],
@@ -340,12 +483,32 @@ defmodule Cadence.Applications.OpsConsole do
       "retry-group",
       "request-correction"
     ],
+    "data_operations_manage" => [
+      "validate-request",
+      "record-historical-workflow-request",
+      "transition-group",
+      "retry-group",
+      "request-correction"
+    ],
     "data_sources" => [
       "open-register-source",
       "cancel-register-source",
       "register-source",
       "open-change-binding",
       "cancel-change-binding",
+      "change-binding",
+      "disable-source",
+      "enable-source",
+      "reconcile-tsdb-backend",
+      "deprovision-tsdb-backend",
+      "provision-tsdb-backend",
+      "probe-source",
+      "rotate-source-credential",
+      "retry-deployment-run",
+      "requeue-deployment-run"
+    ],
+    "data_source_registration" => ["register-source"],
+    "data_source_settings" => [
       "change-binding",
       "disable-source",
       "enable-source",
@@ -377,6 +540,76 @@ defmodule Cadence.Applications.OpsConsole do
     "timeline" => ["apply_timeline_filters", "clear_timeline_selection"]
   }
 
+  @deep_route_interaction_ledger %{
+    "dashboard_show" => %{
+      host_actions: [],
+      navigation: ["open_dashboard_activity", "open_dashboard_editor", "open_dashboard_settings"],
+      phoenix_events: []
+    },
+    "dashboard_editor" => %{
+      host_actions: [],
+      navigation: ["open_dashboard_activity", "open_dashboard_settings"],
+      phoenix_events: [
+        "layout_changed",
+        "validate_dashboard_section",
+        "save_dashboard_section",
+        "remove_dashboard_section",
+        "move_dashboard_section",
+        "validate_widget",
+        "preview_widget_binding",
+        "save_widget",
+        "remove_widget",
+        "rename",
+        "archive_dashboard",
+        "publish_dashboard",
+        "publish_dashboard_version",
+        "save_runtime_defaults",
+        "restore_version_as_draft",
+        "save_editor",
+        "review_editor",
+        "discard_editor",
+        "reload_editor"
+      ]
+    },
+    "dashboard_activity" => %{
+      host_actions: [],
+      navigation: ["open_dashboard_viewer", "open_dashboard_editor"],
+      phoenix_events: ["publish_version", "restore_version"]
+    },
+    "data_source_registration" => %{
+      host_actions: [],
+      navigation: ["open_data_sources"],
+      phoenix_events: ["register-source"]
+    },
+    "data_source_settings" => %{
+      host_actions: [],
+      navigation: ["open_data_sources", "open_data_source_settings"],
+      phoenix_events: [
+        "change-binding",
+        "rotate-source-credential",
+        "reconcile-tsdb-backend",
+        "provision-tsdb-backend",
+        "deprovision-tsdb-backend",
+        "probe-source",
+        "disable-source",
+        "enable-source",
+        "retry-deployment-run",
+        "requeue-deployment-run"
+      ]
+    },
+    "data_operations_manage" => %{
+      host_actions: [],
+      navigation: ["open_data_operations"],
+      phoenix_events: [
+        "validate-request",
+        "record-historical-workflow-request",
+        "transition-group",
+        "retry-group",
+        "request-correction"
+      ]
+    }
+  }
+
   @spec identity() :: map()
   def identity, do: @identity
 
@@ -390,6 +623,25 @@ defmodule Cadence.Applications.OpsConsole do
 
   @spec residual_action_ledger() :: %{binary() => [binary()]}
   def residual_action_ledger, do: @residual_action_ledger
+
+  @spec deep_route_interaction_ledger() :: %{binary() => map()}
+  def deep_route_interaction_ledger, do: @deep_route_interaction_ledger
+
+  @spec surface_query_contract(binary()) ::
+          {:ok, %{subject_param: binary() | nil, query_params: [binary()]}} | :error
+  def surface_query_contract(surface_id) when is_binary(surface_id) do
+    case Enum.find(@surface_specs, &(&1.id == surface_id)) do
+      nil ->
+        :error
+
+      spec ->
+        {:ok,
+         %{
+           subject_param: Map.get(spec, :subject_param),
+           query_params: Map.get(spec, :query_params, [])
+         }}
+    end
+  end
 
   @spec route_action_completion() :: {:complete, 0} | {:residual, non_neg_integer()}
   def route_action_completion do
@@ -473,6 +725,7 @@ defmodule Cadence.Applications.OpsConsole do
       scope: :mission,
       placement: Map.get(spec, :placement, :ops_workspace),
       navigation: %{label: spec.label, order: Map.get(spec, :order, 10), fallback_path: spec.path},
+      subject_contract: subject_contract(spec),
       data_contract: %{
         query_id: Map.get(spec, :query_id, "cadence.ops.#{spec.id}"),
         version: @identity.surface_version
@@ -482,6 +735,12 @@ defmodule Cadence.Applications.OpsConsole do
       renderer: {:trusted, "cadence.ops.console"}
     }
   end
+
+  defp subject_contract(%{subject_param: subject_param} = spec) when is_binary(subject_param) do
+    %{schema_id: "cadence.ops_console.#{spec.id}.subject", version: 1}
+  end
+
+  defp subject_contract(_spec), do: nil
 
   defp action_definitions do
     Enum.map(@ops_actions, fn action_id ->

@@ -8,7 +8,7 @@ import type {
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
-import { manifest, surfaceContracts } from "./federated-application";
+import { manifest, routeQueryContracts, surfaceContracts } from "./federated-application";
 import { OPS_COMPONENTS, OPS_COMPONENT_NAMES } from "./ops-components";
 import { unwrapOpsConsoleResponse } from "./ops-console";
 
@@ -49,6 +49,9 @@ const expectedSurfaceTable = [
   ["contact_detail", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_detail", ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]],
   ["contact_record", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_record", []],
   ["dashboard_directory", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_directory", ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]],
+  ["dashboard_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_show", []],
+  ["dashboard_editor", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_editor", ["layout_changed", "validate_dashboard_section", "save_dashboard_section", "remove_dashboard_section", "move_dashboard_section", "preview_widget_binding", "validate_widget", "save_widget", "remove_widget", "rename", "archive_dashboard", "publish_dashboard", "publish_dashboard_version", "save_runtime_defaults", "restore_version_as_draft", "save_editor", "review_editor", "discard_editor", "reload_editor"]],
+  ["dashboard_activity", "activity", "mission", "ops_workspace", "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]],
   ["dashboard_new", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_new", ["validate", "save"]],
   ["dashboard_library", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_library", ["stage-library-item", "create-library-item", "add-library-version"]],
   ["dashboard_playlists", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_playlists", ["create-playlist"]],
@@ -65,7 +68,10 @@ const expectedSurfaceTable = [
   ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", ["filter", "reset_filters", "follow_command", "clear_command_focus"]],
   ["telemetry_explore", "operations", "mission", "ops_workspace", "cadence.ops.telemetry_explore", ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]],
   ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
+  ["data_operations_manage", "operations", "mission", "ops_workspace", "cadence.ops.data_operations_manage", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
   ["data_sources", "configuration", "mission", "ops_workspace", "cadence.ops.data_sources", ["open-register-source", "cancel-register-source", "register-source", "open-change-binding", "cancel-change-binding", "change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
+  ["data_source_registration", "configuration", "mission", "ops_workspace", "cadence.ops.data_source_registration", ["register-source"]],
+  ["data_source_settings", "configuration", "mission", "ops_workspace", "cadence.ops.data_source_settings", ["change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
   ["alarms", "operations", "mission", "ops_workspace", "cadence.ops.alarms", ["filter", "reset_filters"]],
   ["timeline", "activity", "mission", "ops_workspace", "cadence.ops.timeline", ["apply_timeline_filters", "clear_timeline_selection"]],
 ] as const;
@@ -218,14 +224,44 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(30);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(30);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(82);
+    expect(surfaceContracts).toHaveLength(36);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(36);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(103);
     expect(
       surfaceContracts
         .slice(2)
-        .every((surface) => Boolean(OPS_COMPONENTS[`Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`])),
+        .every((surface) => {
+          const componentName =
+            surface.surfaceId === "dashboard_editor"
+              ? "OpsDashboardShow"
+              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
+          return Boolean(OPS_COMPONENTS[componentName]);
+        }),
     ).toBe(true);
+  });
+
+  it("publishes exact deep-route subject and query contracts", () => {
+    expect(routeQueryContracts.dashboard_show.subjectParam).toBe("dashboard_id");
+    expect(routeQueryContracts.dashboard_editor.queryParams).toEqual(["dashboard_id"]);
+    expect(routeQueryContracts.dashboard_activity.queryParams).toEqual([
+      "dashboard_id",
+      "version",
+      "selected_publish_issue",
+    ]);
+    expect(routeQueryContracts.data_source_registration).toEqual({ subjectParam: null, queryParams: [] });
+    expect(routeQueryContracts.data_operations_manage.queryParams).toEqual(["group"]);
+
+    for (const surfaceId of [
+      "dashboard_show",
+      "dashboard_editor",
+      "dashboard_activity",
+      "data_source_registration",
+      "data_source_settings",
+      "data_operations_manage",
+    ]) {
+      const surface = surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId);
+      expect(surface?.actions).toBeDefined();
+    }
   });
 
   it("matches the complete Phoenix Ops purpose, scope, placement, query, and action table", () => {

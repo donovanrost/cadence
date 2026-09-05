@@ -78,7 +78,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
   # surface. Keep the application-wide envelope explicit while allowing the
   # Ops cohort to retain its exact declared identities.
   @max_actions 128
-  @max_surfaces 32
+  @max_surfaces 64
   @max_capability_contributions 32
 
   @spec available?(t()) :: boolean()

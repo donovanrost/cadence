@@ -21,14 +21,15 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
     {"ops_dashboard_diagnostics_live.ex", "dashboard_diagnostics"},
     {"ops_dashboard_library_live.ex", "dashboard_library"},
     {"ops_dashboard_list_live.ex", "dashboard_directory"},
+    {"ops_dashboard_viewer_live.ex", "dashboard_show"},
+    {"ops_dashboard_editor_live.ex", "dashboard_editor"},
+    {"ops_dashboard_activity_live.ex", "dashboard_activity"},
     {"ops_dashboard_new_live.ex", "dashboard_new"},
     {"ops_dashboard_playlist_present_live.ex", "dashboard_playlist_present"},
     {"ops_dashboard_playlists_live.ex", "dashboard_playlists"},
     {"ops_dashboard_settings_live.ex", "dashboard_settings"},
     {"ops_dashboard_share_live.ex", "dashboard_share"},
     {"ops_dashboard_snapshot_live.ex", "dashboard_snapshot"},
-    {"ops_data_operations_live.ex", "data_operations"},
-    {"ops_data_sources_live/page.ex", "data_sources"},
     {"ops_fleet_planning_live.ex", "fleet_planning"},
     {"ops_fleet_planning_new_live.ex", "fleet_planning_new"},
     {"ops_fleet_planning_policy_live.ex", "fleet_planning_policy"},
@@ -103,7 +104,7 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
   end
 
   test "the owned Ops route cohort has descriptor-only mission mounts" do
-    assert length(@ops_route_mounts) == 28
+    assert length(@ops_route_mounts) == 29
 
     Enum.each(@ops_route_mounts, fn {relative_path, surface_id} ->
       source = File.read!(Path.join(@live_root, relative_path))
@@ -115,6 +116,27 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
       assert source =~ "query_params=", relative_path
       assert source =~ "v-ssr={false}", relative_path
       refute source =~ "v-on:", relative_path
+    end)
+  end
+
+  test "mode-specific Ops routes select first-class surface identities" do
+    sources = %{
+      "data_sources" => File.read!(Path.join(@live_root, "ops_data_sources_live/page.ex")),
+      "data_operations" => File.read!(Path.join(@live_root, "ops_data_operations_live.ex"))
+    }
+
+    assert sources["data_sources"] =~ "data_source_registration"
+    assert sources["data_sources"] =~ "data_source_settings"
+    assert sources["data_sources"] =~ "surface_id={surface_id}"
+    assert sources["data_operations"] =~ "data_operations_manage"
+    assert sources["data_operations"] =~ "surface_id={if(@data_operations_admin?"
+
+    Enum.each(sources, fn {path, source} ->
+      assert source =~ "v-component=\"FederatedFullPageSurface\"", path
+      assert source =~ "host_scope=\"mission\"", path
+      assert source =~ "query_params=", path
+      assert source =~ "v-ssr={false}", path
+      refute source =~ "v-on:", path
     end)
   end
 end
