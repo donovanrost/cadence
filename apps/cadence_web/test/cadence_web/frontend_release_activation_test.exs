@@ -751,6 +751,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         %{
           "applicationKey" => "comms_overview",
           "applicationVersion" => 1,
+          "surfaceId" => "overview",
+          "surfaceVersion" => 1,
           "actionId" => "anything",
           "input" => %{},
           "scope" => scope_document

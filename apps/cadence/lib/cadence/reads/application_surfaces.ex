@@ -200,6 +200,18 @@ defmodule Cadence.Reads.ApplicationSurfaces do
   end
 
   defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :spacecraft, mission_id: mission_id},
+         %SurfaceDefinition{scope: :spacecraft}
+       )
+       when is_binary(mission_id) do
+    Policy.authorize(current_scope, :operate_mission, %{
+      organization_id: current_scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize_surface(
          %Scope{actor_kind: :user, user: %{user_id: user_id}},
          %HostContext{placement: :user, user_id: user_id},
          %SurfaceDefinition{scope: :user}
