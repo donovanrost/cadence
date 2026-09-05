@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
-const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vue");
 const federatedEntry = resolve(__dirname, "src/federated-application.ts");
 const publicationManifest = {
   additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
@@ -42,11 +41,6 @@ export default defineConfig({
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
   base: "/assets/application-host/telemetry-decom/",
-  resolve: {
-    alias: {
-      "@cadence/cadence-web-vue": cadenceVueSource,
-    },
-  },
   build: {
     target: "chrome89",
     outDir: publicationRoot,
