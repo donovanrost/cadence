@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
+import {
+  createFederatedActionLifecycle,
+  type FullPageSurfaceProps,
+  type HostActionReceipt,
+} from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { computed, onMounted, ref, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
 import type { OrganizationAdminSurface } from "./organization-admin-contract";
 import { SURFACE_CONTRACTS } from "./organization-admin-contract";
@@ -14,7 +18,9 @@ const presentation = shallowRef<SurfacePayload>();
 const loading = ref(true);
 const error = ref<string>();
 const actionPending = ref(false);
+const actionError = ref<string>();
 const actionNotice = ref<string>();
+const actionReceipt = shallowRef<HostActionReceipt<unknown>>();
 let loadGeneration = 0;
 
 const surfaceId = computed(() => props.surface.surfaceId as OrganizationAdminSurface);
@@ -76,6 +82,35 @@ const actionListeners = computed(() =>
   ),
 );
 
+const actionLifecycle = createFederatedActionLifecycle({
+  applicationKey: props.application.applicationKey,
+  applicationVersion: props.application.applicationVersion,
+  surfaceId: props.surface.surfaceId,
+  surfaceVersion: props.surface.version,
+  declaredActions: props.surface.actions,
+  context: props.context,
+  execute: props.bridge.execute,
+  requery: loadSurface,
+  navigate: (href) => window.location.assign(href),
+  onStarted: () => {
+    actionPending.value = true;
+    actionError.value = undefined;
+    actionNotice.value = undefined;
+    actionReceipt.value = undefined;
+  },
+  onCompleted: (actionId, receipt) => {
+    actionReceipt.value = receipt;
+    actionNotice.value = `Phoenix completed ${actionId}.`;
+  },
+  onRejected: (actionId, reason) => {
+    actionError.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
+  },
+  onFinished: () => {
+    actionPending.value = false;
+  },
+});
+
+onBeforeUnmount(() => actionLifecycle.invalidate());
 onMounted(() => void loadSurface());
 
 async function loadSurface(): Promise<void> {
@@ -103,42 +138,7 @@ async function loadSurface(): Promise<void> {
 }
 
 async function executeAction(actionId: string, input: unknown): Promise<void> {
-  if (actionPending.value) return;
-  if (!props.surface.actions.includes(actionId)) {
-    error.value = `Phoenix did not declare ${actionId} for ${props.surface.surfaceId}.`;
-    return;
-  }
-
-  actionPending.value = true;
-  actionNotice.value = undefined;
-  error.value = undefined;
-
-  try {
-    const receipt = await props.bridge.execute<Record<string, unknown>, Record<string, unknown>>({
-      applicationKey: props.application.applicationKey,
-      applicationVersion: props.application.applicationVersion,
-      actionId,
-      input: isRecord(input) ? input : {},
-      context: props.context,
-    });
-    actionNotice.value = `Phoenix accepted ${actionId}.`;
-    const result = receipt.result;
-
-    if (isRecord(result) && typeof result.navigate === "string") {
-      window.location.assign(result.navigate);
-    } else if (isRecord(result) && isRecord(result.patch)) {
-      presentation.value = {
-        ...(presentation.value ?? {}),
-        ...result.patch,
-      };
-    } else {
-      await loadSurface();
-    }
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : "The organization action failed.";
-  } finally {
-    actionPending.value = false;
-  }
+  await actionLifecycle.execute(actionId, isRecord(input) ? input : {});
 }
 
 function unwrapSurfaceResponse(value: unknown, expectedVersion: number): SurfacePayload {
@@ -194,8 +194,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       <aside v-if="actionPending" id="organization-admin-action-loading" role="status">
         Sending the organization action to Phoenix…
       </aside>
-      <aside v-if="actionNotice" id="organization-admin-action-notice" role="status">
-        {{ actionNotice }}
+      <aside
+        v-if="actionError"
+        id="organization-admin-action-error"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ actionError }}
+      </aside>
+      <aside
+        v-if="actionNotice && actionReceipt"
+        id="organization-admin-action-notice"
+        role="status"
+        aria-live="polite"
+        :data-receipt-id="actionReceipt.receiptId"
+        :data-completed-at="actionReceipt.completedAt"
+      >
+        {{ actionNotice }} Receipt {{ actionReceipt.receiptId }} completed at
+        {{ actionReceipt.completedAt }}.
       </aside>
       <component :is="renderer" v-bind="presentation" v-on="actionListeners" />
     </template>

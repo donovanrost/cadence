@@ -64,14 +64,19 @@ function applicationFor(surfaceId: string): CatalogApplication {
   };
 }
 
-function bridgeFor(query: HostBridge["query"]) {
-  return {
-    query,
-    execute: vi.fn<HostBridge["execute"]>().mockResolvedValue({
+function bridgeFor(query: HostBridge["query"], execute?: HostBridge["execute"]) {
+  const action = execute ?? vi.fn<HostBridge["execute"]>();
+  if (!execute) {
+    action.mockResolvedValue({
       receiptId: "receipt-1",
       completedAt: "2026-09-04T00:00:00Z",
       result: {},
-    }),
+    });
+  }
+
+  return {
+    query,
+    execute: action,
     subscribe: vi.fn(),
   };
 }
@@ -82,11 +87,14 @@ describe("Spacecraft federated application adapter", () => {
       const surface = manifest.surfaces.find((item) => item.surfaceId === surfaceId)!;
       const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
       const wrapper = mount(SpacecraftApplication, {
-        props: { application: applicationFor(surfaceId), surface, context, bridge: bridgeFor(query) },
+        props: {
+          application: applicationFor(surfaceId),
+          surface,
+          context,
+          bridge: bridgeFor(query),
+        },
         global: {
-          stubs: Object.fromEntries(
-            componentNames.map((name) => [name, { template: "<span />" }]),
-          ),
+          stubs: Object.fromEntries(componentNames.map((name) => [name, { template: "<span />" }])),
         },
       });
 
@@ -111,7 +119,7 @@ describe("Spacecraft federated application adapter", () => {
       global: {
         stubs: {
           SpacecraftApplicationsPage: {
-          template: `<button id="install" @click="$emit('install', { key: 'telemetry_decom' })" />`,
+            template: `<button id="install" @click="$emit('install', { key: 'telemetry_decom' })" />`,
           },
         },
       },
@@ -124,11 +132,91 @@ describe("Spacecraft federated application adapter", () => {
     expect(bridge.execute).toHaveBeenCalledWith({
       applicationKey: "spacecraft",
       applicationVersion: 1,
+      surfaceId: "applications",
+      surfaceVersion: 1,
       actionId: "install",
       input: { key: "telemetry_decom" },
       context,
     });
     expect(query).toHaveBeenCalledTimes(2);
+    expect(wrapper.find("#spacecraft-action-notice").attributes("data-receipt-id")).toBe(
+      "receipt-1",
+    );
+    wrapper.unmount();
+  });
+
+  it("shows rejected actions without replacing the current surface", async () => {
+    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const execute = vi.fn<HostBridge["execute"]>().mockRejectedValue(new Error("action denied"));
+    const wrapper = mount(SpacecraftApplication, {
+      props: {
+        application: applicationFor("applications"),
+        surface,
+        context,
+        bridge: bridgeFor(query, execute),
+      },
+      global: {
+        stubs: {
+          SpacecraftApplicationsPage: {
+            template: `<button id="install" @click="$emit('install', { key: 'telemetry_decom' })" />`,
+          },
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.get("#install").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("#spacecraft-action-error").text()).toContain("action denied");
+    expect(query).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
+    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
+    const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
+    const execute = vi
+      .fn<HostBridge["execute"]>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const bridge = bridgeFor(query);
+    bridge.execute = execute;
+    const wrapper = mount(SpacecraftApplication, {
+      props: { application: applicationFor("applications"), surface, context, bridge },
+      global: {
+        stubs: {
+          SpacecraftApplicationsPage: {
+            template: `<button id="install" @click="$emit('install', { key: 'telemetry_decom' })" />`,
+          },
+        },
+      },
+    });
+
+    await flushPromises();
+    await wrapper.get("#install").trigger("click");
+    await wrapper.get("#install").trigger("click");
+    second.resolve({ receiptId: "receipt-2", completedAt: "2026-09-04T00:00:02Z", result: {} });
+    await flushPromises();
+    first.resolve({ receiptId: "receipt-1", completedAt: "2026-09-04T00:00:01Z", result: {} });
+    await flushPromises();
+
+    expect(wrapper.find("#spacecraft-action-notice").attributes("data-receipt-id")).toBe(
+      "receipt-2",
+    );
+    expect(query).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 });
+
+function deferred<TResult>() {
+  let resolve!: (value: TResult | PromiseLike<TResult>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<TResult>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from "vue";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
 import StatusBadge from "./StatusBadge.vue";
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
@@ -51,7 +52,7 @@ type ImportRun = {
 
 type CatalogUploadFormProps = InstanceType<typeof CatalogUploadForm>["$props"];
 
-defineProps<{
+const props = defineProps<{
   database: CatalogDatabase;
   navigation: Navigation;
   revision_form_open: boolean;
@@ -63,19 +64,34 @@ defineProps<{
   import_runs: ImportRun[];
 }>();
 
+const revisionFormOpen = ref(props.revision_form_open);
+watch(
+  () => props.revision_form_open,
+  (open) => {
+    revisionFormOpen.value = open;
+  },
+);
+
 const emit = defineEmits<{
   "toggle-revision-form": [payload: Record<string, never>];
   validate: [payload: Record<string, Record<string, string>>];
   save: [];
   "cancel-upload": [payload: { ref: string }];
 }>();
+
+const requestRevisionFormChange = (open: boolean) => {
+  revisionFormOpen.value = open;
+  emit("toggle-revision-form", {});
+};
 </script>
 
 <template>
   <CadenceCollapsible
     content-id="catalog-revision-upload-slot"
-    :open="revision_form_open"
-    @request-change="emit('toggle-revision-form', {})"
+    :open="revisionFormOpen"
+    client-seeded
+    :seed-epoch="revision_form_open ? 'open' : 'closed'"
+    @request-change="requestRevisionFormChange"
   >
     <div id="catalog-database-show-surface" class="space-y-6">
       <CadencePageHeaderFrame variant="compact">
@@ -113,9 +129,9 @@ const emit = defineEmits<{
                 id="add-revision-toggle"
                 type="button"
                 class="btn"
-                :class="revision_form_open ? 'btn-ghost' : 'btn-primary'"
+                :class="revisionFormOpen ? 'btn-ghost' : 'btn-primary'"
               >
-                {{ revision_form_open ? "Cancel" : "+ Add revision" }}
+                {{ revisionFormOpen ? "Cancel" : "+ Add revision" }}
               </button>
             </CadenceCollapsibleTrigger>
           </template>
