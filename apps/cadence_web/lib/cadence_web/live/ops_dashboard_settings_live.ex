@@ -176,7 +176,7 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-settings-component"
-        v-component="OpsDashboardSettings"
+        v-component="FederatedFullPageSurface"
         page={@settings_page}
         settings_form={@settings_form}
         share_form={@share_form}

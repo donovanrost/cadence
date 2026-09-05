@@ -199,7 +199,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
 
         <.vue
           id="catalog-database-show-component"
-          v-component="CatalogDatabaseShow"
+          v-component="FederatedFullPageSurface"
           database={@database_details}
           navigation={@navigation}
           revision_form_open={@show_revision_form}

@@ -83,7 +83,7 @@ defmodule CadenceWeb.MissionNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="mission-new-component"
-        v-component="MissionNew"
+        v-component="FederatedFullPageSurface"
         page={@mission_page}
         form={@mission_form}
         v-on:validate={JS.push("validate")}

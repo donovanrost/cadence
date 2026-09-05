@@ -58,7 +58,7 @@ defmodule CadenceWeb.OpsAlarmsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-alarms-component"
-        v-component="OpsAlarms"
+        v-component="FederatedFullPageSurface"
         page={@alarms_page}
         summary={@alarm_summary}
         filters={@alarm_filters}

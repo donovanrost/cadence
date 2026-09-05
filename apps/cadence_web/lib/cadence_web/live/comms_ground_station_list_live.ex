@@ -113,7 +113,7 @@ defmodule CadenceWeb.CommsGroundStationListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-ground-station-list-page-component"
-        v-component="CommsGroundStationListPage"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
         class="contents"

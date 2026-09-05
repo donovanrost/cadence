@@ -86,7 +86,7 @@ defmodule CadenceWeb.OpsContactDetailLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-detail-component"
-        v-component="OpsContactDetail"
+        v-component="FederatedFullPageSurface"
         page={@contact_detail_page}
         provider_changes={@streams.provider_changes}
         provider_audit_entries={@streams.provider_audit_entries}

@@ -50,7 +50,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
       <div id="comms-routing-show-page">
         <.vue
           id="comms-routing-show-component"
-          v-component="CommsRoutingShow"
+          v-component="FederatedFullPageSurface"
           navigation={@navigation}
           rule={@rule}
           events={@events}

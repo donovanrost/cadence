@@ -110,7 +110,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-show-component"
-        v-component="SpacecraftShow"
+        v-component="FederatedFullPageSurface"
         page={@spacecraft_page}
         profile_binding={@profile_binding}
         applications={@application_inventory}

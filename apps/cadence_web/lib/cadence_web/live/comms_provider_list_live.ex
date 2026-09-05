@@ -33,7 +33,7 @@ defmodule CadenceWeb.CommsProviderListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-provider-list-component"
-        v-component="CommsProviderList"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
         class="contents"

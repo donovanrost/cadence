@@ -139,7 +139,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-provider-show-component"
-        v-component="CommsProviderShow"
+        v-component="FederatedFullPageSurface"
         navigation={navigation_dto(@current_mission, @provider)}
         provider={provider_dto(@provider, @service_profile_count, @delivery_profile_count)}
         actions={actions_dto(@provider_action)}

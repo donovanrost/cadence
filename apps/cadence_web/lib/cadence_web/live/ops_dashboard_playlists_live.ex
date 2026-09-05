@@ -58,7 +58,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="dashboard-playlists-component"
-        v-component="OpsDashboardPlaylists"
+        v-component="FederatedFullPageSurface"
         page={@playlist_page}
         form={@playlist_form}
         options={@dashboard_options}

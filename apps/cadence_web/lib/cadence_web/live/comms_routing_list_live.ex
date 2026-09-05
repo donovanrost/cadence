@@ -47,7 +47,7 @@ defmodule CadenceWeb.CommsRoutingListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-routing-list-page-component"
-        v-component="CommsRoutingListPage"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
         class="contents"

@@ -134,7 +134,7 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-ground-station-form-component"
-        v-component="CommsGroundStationForm"
+        v-component="FederatedFullPageSurface"
         page={@page}
         mode={Atom.to_string(@mode)}
         form={@form_props}

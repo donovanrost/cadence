@@ -55,7 +55,7 @@ defmodule CadenceWeb.CatalogIndexLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="catalog-index-component"
-        v-component="CatalogIndex"
+        v-component="FederatedFullPageSurface"
         presentation={@catalog_index_presentation}
         v-ssr={false}
         class="contents"

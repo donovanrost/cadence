@@ -131,7 +131,7 @@ defmodule CadenceWeb.OpsDashboardLibraryLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="dashboard-library-component"
-        v-component="OpsDashboardLibrary"
+        v-component="FederatedFullPageSurface"
         page={@library_page}
         dashboard_options={@dashboard_options}
         library_options={@library_options}

@@ -35,7 +35,7 @@ defmodule CadenceWeb.OpsDashboardShareLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-share-component"
-        v-component="OpsDashboardShare"
+        v-component="FederatedFullPageSurface"
         share={@dashboard_share_props}
         v-ssr={false}
         class="h-full"

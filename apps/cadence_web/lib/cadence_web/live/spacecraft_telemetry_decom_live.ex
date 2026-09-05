@@ -171,7 +171,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     ~H"""
     <.vue
       id="spacecraft-telemetry-decom-component"
-      v-component="SpacecraftTelemetryDecom"
+      v-component="FederatedFullPageSurface"
       page={@telemetry_decom_page}
       card={@telemetry_decom_card}
       status={status_dto(@config, @active_binding_set_summary, @saved_at)}

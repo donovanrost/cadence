@@ -1,0 +1,421 @@
+{
+  "schema": "cadence.federation-host-owned-surfaces.v1",
+  "policy": "Authenticated full-page domain surfaces use FederatedFullPageSurface; local entries below are intentional compatibility or host-owned fallbacks.",
+  "federated_component": "FederatedFullPageSurface",
+  "local_fallbacks": [
+    {
+      "component": "AuthLayoutBrand",
+      "reason": "Pre-authentication branding remains in the Phoenix auth layout."
+    },
+    {
+      "component": "NoOrganizationPage",
+      "reason": "Organization bootstrap and no-organization transition remain Phoenix-owned."
+    },
+    {
+      "component": "OrganizationInvitationPage",
+      "reason": "Invitation validation and acceptance remain Phoenix-owned."
+    },
+    {
+      "component": "AdminModePage",
+      "reason": "Admin-mode reauthentication and session transition remain Phoenix-owned."
+    },
+    {
+      "component": "UserSession",
+      "reason": "Sign-in and session establishment remain Phoenix-owned."
+    },
+    {
+      "component": "ApplicationHost",
+      "reason": "The authenticated application-host compatibility shell is already the host boundary."
+    },
+    {
+      "component": "GlobalSidebarNavigation",
+      "reason": "Persistent Phoenix navigation is layout chrome, not a full-page domain surface."
+    },
+    {
+      "component": "MissionSidebarNavigation",
+      "reason": "Persistent Phoenix mission navigation is layout chrome, not a full-page domain surface."
+    },
+    {
+      "component": "UserMenu",
+      "reason": "Persistent authenticated account controls remain host-owned layout chrome."
+    },
+    {
+      "component": "NotificationsBell",
+      "reason": "Persistent notification affordance remains host-owned layout chrome."
+    },
+    {
+      "component": "OpsStatusBar",
+      "reason": "Persistent operations shell status remains host-owned layout chrome."
+    },
+    {
+      "component": "OpsNavRail",
+      "reason": "Persistent operations navigation remains host-owned layout chrome."
+    },
+    {
+      "component": "OpsApplicationDock",
+      "reason": "Application switching dock remains host-owned shell chrome."
+    },
+    {
+      "component": "OpsContextRail",
+      "reason": "Context rail is a nested operations shell boundary, not a full-page surface."
+    },
+    {
+      "component": "DashboardCanvas",
+      "reason": "Dashboard canvas is a nested stateful LiveView surface with Phoenix-owned events."
+    },
+    {
+      "component": "DashboardEditorGuard",
+      "reason": "Dashboard editing guard remains a nested LiveView lifecycle boundary."
+    },
+    {
+      "component": "OpsDashboardActivity",
+      "reason": "Dashboard activity is a nested LiveView surface with Phoenix-owned events."
+    },
+    {
+      "component": "OpsDashboardDiagnostics",
+      "reason": "Dashboard diagnostics is a nested LiveView surface with Phoenix-owned events."
+    },
+    {
+      "component": "OpsDashboardSnapshot",
+      "reason": "Dashboard snapshot is a nested LiveView surface with Phoenix-owned lifecycle."
+    },
+    {
+      "component": "OpsDataSources",
+      "reason": "Data-source forms and events remain in the Phoenix compatibility wrapper."
+    },
+    {
+      "component": "OpsDataOperations",
+      "reason": "Data-operation forms and events remain in the Phoenix compatibility wrapper."
+    },
+    {
+      "component": "OpsFleetPlanning",
+      "reason": "Fleet-planning forms and actions remain in the Phoenix compatibility wrapper."
+    },
+    {
+      "component": "OpsFleetPlanningNew",
+      "reason": "Fleet-planning creation validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "OpsFleetPlanningPolicy",
+      "reason": "Policy validation and approval lifecycle remain Phoenix-owned."
+    },
+    {
+      "component": "OpsFleetPlanningRun",
+      "reason": "Planning-run lifecycle and actions remain Phoenix-owned."
+    },
+    {
+      "component": "OpsContactSchedule",
+      "reason": "Contact scheduling lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactRequirementTemplate",
+      "reason": "Requirement-template lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactRequirementList",
+      "reason": "Requirement listing lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactRequirementNew",
+      "reason": "Requirement creation validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "OpsContactRequirementShow",
+      "reason": "Requirement detail lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactPlanShow",
+      "reason": "Contact-plan lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactRecord",
+      "reason": "Contact-record lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsContactDetail",
+      "reason": "Contact-detail lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsCommands",
+      "reason": "Command validation, CSRF, and actions remain Phoenix-owned."
+    },
+    {
+      "component": "OpsAlarms",
+      "reason": "Alarm lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "OpsTimeline",
+      "reason": "Timeline stream and events remain Phoenix-owned."
+    },
+    {
+      "component": "OpsTelemetryExplore",
+      "reason": "Telemetry exploration filters and events remain Phoenix-owned."
+    },
+    {
+      "component": "CatalogUploadForm",
+      "reason": "Upload and CSRF lifecycle remains Phoenix-owned in the catalog compatibility page."
+    },
+    {
+      "component": "CatalogDatabaseTable",
+      "reason": "Catalog table remains a nested compatibility component."
+    },
+    {
+      "component": "CatalogImportRunShow",
+      "reason": "Import-run status lifecycle remains Phoenix-owned until a released surface is admitted."
+    },
+    {
+      "component": "CommsValidation",
+      "reason": "Validation actions remain Phoenix-owned until a matching released surface is admitted."
+    },
+    {
+      "component": "SpacecraftTypeListPage",
+      "reason": "Spacecraft profile compatibility page remains Phoenix-owned until a matching release is admitted."
+    },
+    {
+      "component": "SpacecraftTypeNew",
+      "reason": "Spacecraft profile validation and actions remain Phoenix-owned until a matching release is admitted."
+    },
+    {
+      "component": "SpacecraftTypeShow",
+      "reason": "Spacecraft profile detail lifecycle remains Phoenix-owned until a matching release is admitted."
+    },
+    {
+      "component": "LiveVuePocPage",
+      "reason": "Developer-only LiveVue proof page is not an authenticated domain surface."
+    },
+    {
+      "component": "AdminHome",
+      "reason": "Platform-admin transition remains in the authenticated Phoenix admin compatibility surface."
+    },
+    {
+      "component": "AdminRuntime",
+      "reason": "Platform-admin runtime actions remain Phoenix-owned until an admin-scope host surface is admitted."
+    },
+    {
+      "component": "AdminOrganizationListPage",
+      "reason": "Platform-admin organization lifecycle remains Phoenix-owned until an admin-scope host surface is admitted."
+    },
+    {
+      "component": "AdminOrganizationNew",
+      "reason": "Platform-admin organization validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "AdminOrganizationShow",
+      "reason": "Platform-admin organization detail lifecycle remains Phoenix-owned."
+    },
+    {
+      "component": "AdminOrganizationInvite",
+      "reason": "Platform-admin invitation validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "NotificationsPage",
+      "reason": "User-scope notifications have no mission context required by the current host bootstrap."
+    },
+    {
+      "component": "OrganizationHome",
+      "reason": "Organization-scope home has no mission context required by the current host bootstrap."
+    },
+    {
+      "component": "ProviderAccountListPage",
+      "reason": "Organization-scope provider accounts have no mission context required by the current host bootstrap."
+    },
+    {
+      "component": "ProviderAccountNew",
+      "reason": "Organization-scope provider validation has no mission context required by the current host bootstrap."
+    },
+    {
+      "component": "ProviderAccountShow",
+      "reason": "Organization-scope provider detail has no mission context required by the current host bootstrap."
+    },
+    {
+      "component": "ActivityTimeline",
+      "reason": "Dashboard activity is a nested stateful LiveView renderer."
+    },
+    {
+      "component": "ActivityTimelineRow",
+      "reason": "Dashboard activity rows are nested stateful LiveView renderers."
+    },
+    {
+      "component": "ComparisonReviewActivityDetails",
+      "reason": "Dashboard comparison details are nested stateful LiveView renderers."
+    },
+    {
+      "component": "DashboardComparisonInspector",
+      "reason": "Dashboard comparison inspection is a nested stateful LiveView renderer."
+    },
+    {
+      "component": "DashboardWarnings",
+      "reason": "Dashboard warnings are nested within the Phoenix-owned dashboard lifecycle."
+    },
+    {
+      "component": "DashboardWidget",
+      "reason": "Dashboard widgets are nested within the Phoenix-owned dashboard lifecycle."
+    },
+    {
+      "component": "DashboardPanel",
+      "reason": "Dashboard panels are nested within the Phoenix-owned dashboard lifecycle."
+    },
+    {
+      "component": "DashboardEditorConflict",
+      "reason": "Dashboard editor conflict actions remain Phoenix-owned."
+    },
+    {
+      "component": "DashboardHealth",
+      "reason": "Dashboard health is a nested stateful LiveView renderer."
+    },
+    {
+      "component": "DashboardRuntimeContextSelector",
+      "reason": "Dashboard runtime context selection remains Phoenix-owned."
+    },
+    {
+      "component": "DashboardRuntimeControls",
+      "reason": "Dashboard runtime controls remain Phoenix-owned."
+    },
+    {
+      "component": "DashboardSectionManager",
+      "reason": "Dashboard section management remains Phoenix-owned."
+    },
+    {
+      "component": "DashboardTimePicker",
+      "reason": "Dashboard time selection remains Phoenix-owned."
+    },
+    {
+      "component": "DashboardToolbar",
+      "reason": "Dashboard toolbar actions remain Phoenix-owned."
+    },
+    {
+      "component": "EvidenceInspectorPanel",
+      "reason": "Evidence inspection is a nested stateful LiveView renderer."
+    },
+    {
+      "component": "HealthSnapshotActivity",
+      "reason": "Health snapshot activity is a nested stateful LiveView renderer."
+    },
+    {
+      "component": "HistoricalWorkflowActionExplanations",
+      "reason": "Historical workflow action explanations are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "HistoricalWorkflowControls",
+      "reason": "Historical workflow controls and actions remain Phoenix-owned."
+    },
+    {
+      "component": "HistoricalWorkflowCorrectionForm",
+      "reason": "Historical workflow correction validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "HistoricalWorkflowGroupForm",
+      "reason": "Historical workflow group validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "HistoricalWorkflowGroupStatus",
+      "reason": "Historical workflow group status is a nested Phoenix-owned renderer."
+    },
+    {
+      "component": "HistoricalWorkflowJobStatus",
+      "reason": "Historical workflow job status is a nested Phoenix-owned renderer."
+    },
+    {
+      "component": "HistoricalWorkflowLatestAction",
+      "reason": "Historical workflow latest actions remain Phoenix-owned."
+    },
+    {
+      "component": "HistoricalWorkflowReplacementStatus",
+      "reason": "Historical workflow replacement status is a nested Phoenix-owned renderer."
+    },
+    {
+      "component": "HistoricalWorkflowRequestForm",
+      "reason": "Historical workflow request validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "HistoricalWorkflowStageForm",
+      "reason": "Historical workflow stage validation and actions remain Phoenix-owned."
+    },
+    {
+      "component": "PublishValidation",
+      "reason": "Dashboard publish validation remains Phoenix-owned."
+    },
+    {
+      "component": "RuntimeCacheSummary",
+      "reason": "Dashboard runtime cache diagnostics are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "RuntimeDegradedSource",
+      "reason": "Dashboard degraded-source diagnostics are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "RuntimeDiagnosticsPanel",
+      "reason": "Dashboard runtime diagnostics remain Phoenix-owned."
+    },
+    {
+      "component": "RuntimeNoRefreshSummary",
+      "reason": "Dashboard runtime refresh diagnostics are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "RuntimeRecentInvalidations",
+      "reason": "Dashboard runtime invalidation diagnostics are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "SelectedActivityActions",
+      "reason": "Dashboard selected-activity actions remain Phoenix-owned."
+    },
+    {
+      "component": "SelectedActivityEventSummary",
+      "reason": "Dashboard selected-activity details are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "SourceHealth",
+      "reason": "Dashboard source-health diagnostics are nested Phoenix-owned renderers."
+    },
+    {
+      "component": "SourceSelection",
+      "reason": "Dashboard source selection remains Phoenix-owned."
+    },
+    {
+      "component": "VersionHistoryPanel",
+      "reason": "Dashboard version history remains Phoenix-owned."
+    },
+    {
+      "component": "VersionList",
+      "reason": "Dashboard version history remains Phoenix-owned."
+    },
+    {
+      "component": "WidgetDataLinks",
+      "reason": "Dashboard data-link actions remain Phoenix-owned."
+    },
+    {
+      "component": "ChartDataManagementStrip",
+      "reason": "Dashboard data-management controls remain Phoenix-owned."
+    },
+    {
+      "component": "WidgetForm",
+      "reason": "Dashboard widget forms and validation remain Phoenix-owned."
+    },
+    {
+      "component": "WidgetInspectPanel",
+      "reason": "Dashboard widget inspection remains Phoenix-owned."
+    },
+    {
+      "component": "WidgetPoint",
+      "reason": "Dashboard widget points remain nested Phoenix-owned renderers."
+    },
+    {
+      "component": "WidgetRows",
+      "reason": "Dashboard widget rows remain nested Phoenix-owned renderers."
+    },
+    {
+      "component": "WidgetQueryDiagnostics",
+      "reason": "Dashboard widget query diagnostics remain Phoenix-owned."
+    },
+    {
+      "component": "WidgetWarning",
+      "reason": "Dashboard widget warnings remain Phoenix-owned."
+    }
+  ],
+  "federated_pages": [
+    "mission_catalog",
+    "spacecraft",
+    "comms",
+    "ops_console"
+  ]
+}

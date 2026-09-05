@@ -55,7 +55,7 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-data-sources-component"
-        v-component="OpsDataSources"
+        v-component="FederatedFullPageSurface"
         page={@ops_data_sources_page}
         v-on:open-register-source={JS.push("open_register_source")}
         v-on:cancel-register-source={JS.push("cancel_register_source")}

@@ -68,7 +68,7 @@ defmodule CadenceWeb.CommsProviderNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-provider-new-component"
-        v-component="CommsProviderNew"
+        v-component="FederatedFullPageSurface"
         page={@page}
         accounts={@accounts}
         notes={@notes}

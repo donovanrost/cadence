@@ -63,7 +63,7 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-diagnostics-page-component"
-        v-component="OpsDashboardDiagnostics"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         diagnostic_rows={@streams.diagnostic_rows}
         v-diff={false}

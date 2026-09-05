@@ -19,7 +19,7 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-telemetry-explore-component"
-        v-component="OpsTelemetryExplore"
+        v-component="FederatedFullPageSurface"
         {@telemetry_explore_props}
         v-on:apply_filters={JS.push("apply_filters")}
         v-on:apply_question={JS.push("apply_question")}

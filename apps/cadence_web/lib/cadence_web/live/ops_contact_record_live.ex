@@ -47,7 +47,7 @@ defmodule CadenceWeb.OpsContactRecordLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-record-component"
-        v-component="OpsContactRecord"
+        v-component="FederatedFullPageSurface"
         record={@contact_record}
         v-ssr={false}
         class="contents"

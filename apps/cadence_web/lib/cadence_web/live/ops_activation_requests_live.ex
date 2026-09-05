@@ -63,7 +63,7 @@ defmodule CadenceWeb.OpsActivationRequestsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="activation-requests-component"
-        v-component="OpsActivationRequests"
+        v-component="FederatedFullPageSurface"
         page={@activation_requests_page}
         selected={@selected_request}
         form={@decision_form}

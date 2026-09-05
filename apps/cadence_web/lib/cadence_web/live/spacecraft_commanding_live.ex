@@ -22,7 +22,7 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-commanding-component"
-        v-component="SpacecraftCommanding"
+        v-component="FederatedFullPageSurface"
         page={@commanding_page}
         panels={@command_panels}
         readiness={@readiness_impact}

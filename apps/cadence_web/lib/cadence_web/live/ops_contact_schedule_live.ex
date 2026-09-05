@@ -282,7 +282,7 @@ defmodule CadenceWeb.OpsContactScheduleLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-schedule-component"
-        v-component="OpsContactSchedule"
+        v-component="FederatedFullPageSurface"
         page={page_dto(
           @current_mission,
           @contact_record_count,
