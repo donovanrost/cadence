@@ -41,6 +41,30 @@ defmodule Cadence.Applications.MissionCatalogTest do
              Enum.map(contributions, &ReleaseContribution.key/1)
   end
 
+  test "registers every surface query and interactive action contract" do
+    assert length(MissionCatalog.surface_query_contributions()) == 10
+
+    assert Enum.map(MissionCatalog.surface_query_contributions(), & &1.query_id) ==
+             Enum.map(
+               MissionCatalog.definition().surfaces,
+               &Map.fetch!(&1.data_contract, :query_id)
+             )
+
+    assert MissionCatalog.definition().actions
+           |> Enum.map(& &1.action_id)
+           |> Enum.sort() ==
+             [
+               "cancel-upload",
+               "disable",
+               "install",
+               "reimport",
+               "save",
+               "toggle-revision-form",
+               "uninstall",
+               "validate"
+             ]
+  end
+
   test "catalog contribution carries the same package and application identity" do
     [contribution] = MissionCatalog.catalog_contributions()
 

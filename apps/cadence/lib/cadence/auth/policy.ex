@@ -15,6 +15,24 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  def authorize(%Scope{} = current_scope, :operate_organization, %{
+        organization_id: organization_id
+      }) do
+    case current_scope.actor_kind do
+      :user ->
+        with :ok <- authenticated_user(current_scope),
+             :ok <- authorized_mission_organization(current_scope, organization_id) do
+          :ok
+        end
+
+      :service ->
+        {:error, :authenticated_user_required}
+
+      _invalid_actor ->
+        {:error, :authenticated_user_required}
+    end
+  end
+
   def authorize(%Scope{} = current_scope, :manage_provider_accounts, %{
         organization_id: organization_id
       }) do

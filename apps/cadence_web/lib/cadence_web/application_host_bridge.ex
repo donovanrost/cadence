@@ -339,7 +339,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     with true <- action_id in surface.actions,
          {:ok, %ActionDefinition{} = action} <-
            ApplicationDefinition.fetch_action(definition, action_id),
-         true <- action.scope == surface.scope,
+         true <- action_scope_compatible?(definition, surface, action),
          :ok <- ensure_declared_action_version(action, action_version),
          :ok <- ActionDefinition.validate(action) do
       {:ok, action}
@@ -349,6 +349,27 @@ defmodule CadenceWeb.ApplicationHostBridge do
       _invalid -> {:error, :unsupported_application_action}
     end
   end
+
+  @doc false
+  @spec action_scope_compatible?(
+          ApplicationDefinition.t(),
+          SurfaceDefinition.t(),
+          ActionDefinition.t()
+        ) :: boolean()
+  def action_scope_compatible?(
+        %ApplicationDefinition{application_key: "mission_catalog"},
+        %SurfaceDefinition{scope: :organization},
+        %ActionDefinition{action_id: action_id, scope: :mission}
+      )
+      when action_id in ["validate", "save"],
+      do: true
+
+  def action_scope_compatible?(
+        %ApplicationDefinition{},
+        %SurfaceDefinition{scope: surface_scope},
+        %ActionDefinition{scope: action_scope}
+      ),
+      do: surface_scope == action_scope
 
   defp ensure_declared_action_version(%ActionDefinition{}, nil), do: :ok
 
@@ -405,7 +426,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
       dom_id: host_dom_id(surface.scope),
       application_key: definition.application_key,
       application_version: definition.version,
-      application_installation_id: installation.application_installation_id,
+      application_installation_id: installation && installation.application_installation_id,
       surface_id: surface.surface_id,
       renderer: renderer_name(surface)
     }
