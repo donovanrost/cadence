@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import type {
   CatalogApplication,
-  FirstPartyApplicationManifest,
   FrontendApplicationCatalog,
   HostBridge,
   HostContext,
 } from "@cadence/plugin-sdk";
-import { CButton, CStatus } from "@cadence/ui";
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 import {
@@ -41,7 +39,6 @@ const catalog = shallowRef<FrontendApplicationCatalog>();
 const application = shallowRef<CatalogApplication>();
 const bridge = shallowRef<HostBridge>();
 const context = shallowRef<HostContext>();
-const manifest = shallowRef<FirstPartyApplicationManifest>();
 const bootError = shallowRef<HostFailure>();
 const actionFailure = shallowRef<HostFailure>();
 const loading = ref(true);
@@ -69,7 +66,6 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
   loading.value = true;
   bootError.value = undefined;
   if (!automaticRecovery) actionFailure.value = undefined;
-  manifest.value = undefined;
   catalog.value = undefined;
   application.value = undefined;
   bridge.value = undefined;
@@ -123,12 +119,7 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
 }
 
 function remountApplication(): void {
-  manifest.value = undefined;
   mountGeneration.value += 1;
-}
-
-function recordManifest(value: FirstPartyApplicationManifest): void {
-  manifest.value = value;
 }
 
 function handleBridgeSessionFailure(operation: "query" | "action", error: HostBridgeError): void {
@@ -156,42 +147,6 @@ function catalogFailureFor(reason: unknown): HostFailure {
     ? detail
     : "The authenticated application catalog could not be loaded.";
   return { message, referenceId: crypto.randomUUID() };
-}
-
-function contextLabel(): string {
-  return context.value ? `${context.value.scope.toUpperCase()} CONTEXT` : "CONTEXT";
-}
-
-function contextName(): string {
-  if (!context.value) return "RESOLVING";
-  switch (context.value.scope) {
-    case "organization":
-      return context.value.organizationId;
-    case "user":
-      return context.value.actor.displayName;
-    case "admin":
-      return context.value.actor.displayName;
-    case "mission":
-      return context.value.missionName;
-    case "spacecraft":
-      return context.value.spacecraftName;
-  }
-}
-
-function contextDetails(): string {
-  if (!context.value) return "RESOLVING";
-  switch (context.value.scope) {
-    case "organization":
-      return context.value.organizationId;
-    case "user":
-      return context.value.userId;
-    case "admin":
-      return "GLOBAL";
-    case "mission":
-      return context.value.missionId;
-    case "spacecraft":
-      return `${context.value.missionId} · ${context.value.spacecraftId}`;
-  }
 }
 
 function boundedCatalogFetch(
@@ -238,282 +193,55 @@ function boundedCatalogFetch(
 </script>
 
 <template>
-  <div id="cadence-phoenix-host" class="phoenix-host-shell">
-    <header class="phoenix-host-header">
-      <a id="phoenix-host-home" class="phoenix-host-wordmark" :href="props.fallbackHref">
-        <span class="phoenix-host-signal" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span>CADENCE</span>
-      </a>
-      <div class="phoenix-host-context">
-        <span>{{ contextLabel() }}</span>
-        <strong>{{ contextName() }}</strong>
-      </div>
-      <CStatus tone="nominal" pulse>PHOENIX HOST</CStatus>
-    </header>
+  <div id="cadence-phoenix-host" class="contents">
+    <aside
+      v-if="actionFailure"
+      id="phoenix-host-action-stopped"
+      class="alert alert-warning m-6 flex flex-col items-start gap-1"
+      role="alert"
+      aria-live="assertive"
+    >
+      <strong>Action stopped</strong>
+      <span>{{ actionFailure.message }}</span>
+      <span class="font-mono text-xs">Reference ID: {{ actionFailure.referenceId }}</span>
+    </aside>
 
-    <main class="phoenix-host-main">
-      <aside
-        v-if="actionFailure"
-        id="phoenix-host-action-stopped"
-        class="phoenix-host-action-stopped"
-        role="alert"
-        aria-live="assertive"
-      >
-        <strong>Action stopped</strong>
-        <span>{{ actionFailure.message }}</span>
-        <span>Reference ID: {{ actionFailure.referenceId }}</span>
-      </aside>
+    <section
+      v-if="loading"
+      id="phoenix-host-loading"
+      class="flex min-h-48 items-center justify-center gap-3 p-6"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+      <span>Loading the approved application surface…</span>
+    </section>
 
-      <section v-if="loading" id="phoenix-host-loading" class="phoenix-host-state" role="status">
-        <p class="phoenix-host-eyebrow">APPLICATION SURFACE HOST</p>
-        <h1>Resolving application surface</h1>
-        <p>Loading the approved catalog with same-origin credentials.</p>
-      </section>
-
-      <section
-        v-else-if="bootError"
-        id="phoenix-host-error"
-        class="phoenix-host-state phoenix-host-state--error"
-      >
-        <p class="phoenix-host-eyebrow">HOST CATALOG UNAVAILABLE</p>
-        <h1>Cadence rejected the application catalog.</h1>
+    <section v-else-if="bootError" id="phoenix-host-error" class="m-6 max-w-3xl" role="alert">
+      <div class="alert alert-error flex flex-col items-start gap-3">
+        <h1 class="text-lg font-semibold">The application catalog could not be loaded.</h1>
         <p>{{ bootError.message }}</p>
-        <p id="phoenix-host-error-reference">Reference ID: {{ bootError.referenceId }}</p>
-        <CButton id="retry-phoenix-host" variant="primary" @click="loadCatalog">
+        <p id="phoenix-host-error-reference" class="font-mono text-xs">
+          Reference ID: {{ bootError.referenceId }}
+        </p>
+        <button
+          id="retry-phoenix-host"
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="loadCatalog"
+        >
           Retry catalog
-        </CButton>
-      </section>
+        </button>
+      </div>
+    </section>
 
-      <template v-else-if="application && bridge && context">
-        <div class="phoenix-host-titlebar">
-          <div>
-            <p class="phoenix-host-eyebrow">
-              APPLICATIONS / {{ application.displayName.toUpperCase() }} /
-              {{ application.surface.navigation.label.toUpperCase() }}
-            </p>
-            <h1>{{ application.surface.navigation.label }}</h1>
-          </div>
-          <span class="phoenix-host-release" :class="{ 'phoenix-host-release--ready': manifest }">
-            {{ manifest ? "REMOTE READY" : "REMOTE CHECK" }}
-          </span>
-        </div>
-
-        <div class="phoenix-host-surface">
-          <div class="phoenix-host-surface__chrome">
-            <span>
-              {{ application.displayName }} · {{ application.surface.purpose.toUpperCase() }}
-            </span>
-            <span>{{ application.release.releaseId }} · {{ contextDetails() }}</span>
-          </div>
-          <RemoteApplicationBoundary
-            :key="`${application.release.releaseId}:${mountGeneration}`"
-            :application="application"
-            :bridge="bridge"
-            :context="context"
-            @ready="recordManifest"
-            @retry="remountApplication"
-          />
-        </div>
-      </template>
-    </main>
+    <RemoteApplicationBoundary
+      v-else-if="application && bridge && context"
+      :key="`${application.release.releaseId}:${mountGeneration}`"
+      :application="application"
+      :bridge="bridge"
+      :context="context"
+      @retry="remountApplication"
+    />
   </div>
 </template>
-
-<style scoped>
-.phoenix-host-shell {
-  min-height: 100vh;
-  color: var(--cadence-color-text);
-  background: var(--cadence-color-canvas);
-  font-family: var(--cadence-font-sans);
-}
-
-.phoenix-host-header {
-  display: grid;
-  grid-template-columns: minmax(200px, 240px) 1fr auto;
-  align-items: center;
-  min-height: 60px;
-  border-bottom: 1px solid var(--cadence-color-border);
-  background: var(--cadence-color-shell);
-}
-
-.phoenix-host-wordmark {
-  display: flex;
-  align-items: center;
-  align-self: stretch;
-  gap: 12px;
-  padding: 0 20px;
-  border-right: 1px solid var(--cadence-color-border);
-  color: var(--cadence-color-text-strong);
-  font-size: 15px;
-  font-weight: 760;
-  letter-spacing: 0.19em;
-  text-decoration: none;
-}
-
-.phoenix-host-signal {
-  display: flex;
-  align-items: end;
-  gap: 2px;
-  width: 20px;
-  height: 20px;
-}
-
-.phoenix-host-signal i {
-  display: block;
-  width: 4px;
-  background: var(--cadence-color-accent);
-}
-
-.phoenix-host-signal i:nth-child(1) {
-  height: 8px;
-}
-.phoenix-host-signal i:nth-child(2) {
-  height: 17px;
-}
-.phoenix-host-signal i:nth-child(3) {
-  height: 12px;
-}
-
-.phoenix-host-context {
-  display: grid;
-  gap: 4px;
-  padding: 0 24px;
-}
-
-.phoenix-host-context span,
-.phoenix-host-eyebrow,
-.phoenix-host-surface__chrome,
-.phoenix-host-release {
-  font-family: var(--cadence-font-mono);
-  font-size: 10px;
-  font-weight: 630;
-  letter-spacing: 0.105em;
-  text-transform: uppercase;
-}
-
-.phoenix-host-context span,
-.phoenix-host-eyebrow,
-.phoenix-host-surface__chrome {
-  color: var(--cadence-color-text-muted);
-}
-
-.phoenix-host-context strong {
-  color: var(--cadence-color-text-strong);
-}
-
-.phoenix-host-header > .cui-status {
-  margin-right: 20px;
-}
-
-.phoenix-host-main {
-  width: min(1160px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 38px 0 64px;
-}
-
-.phoenix-host-titlebar {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.phoenix-host-eyebrow {
-  margin: 0 0 9px;
-  color: var(--cadence-color-accent);
-}
-.phoenix-host-titlebar h1,
-.phoenix-host-state h1 {
-  margin: 0;
-  color: var(--cadence-color-text-strong);
-  font-size: clamp(30px, 4vw, 50px);
-  font-weight: 620;
-  letter-spacing: -0.045em;
-  line-height: 0.98;
-}
-
-.phoenix-host-release {
-  padding: 8px 10px;
-  border: 1px solid var(--cadence-color-border);
-  color: var(--cadence-color-warning);
-}
-
-.phoenix-host-release--ready {
-  border-color: var(--cadence-color-success);
-  color: var(--cadence-color-success);
-}
-
-.phoenix-host-surface {
-  border: 1px solid var(--cadence-color-border);
-  background: var(--cadence-color-surface-inset);
-}
-
-.phoenix-host-surface__chrome {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--cadence-color-border);
-}
-
-.phoenix-host-state {
-  max-width: 760px;
-  margin: 72px auto;
-  padding: 40px;
-  border: 1px solid var(--cadence-color-border);
-  background: var(--cadence-color-surface-inset);
-}
-
-.phoenix-host-state p:not(.phoenix-host-eyebrow) {
-  margin: 20px 0 28px;
-  color: var(--cadence-color-text-secondary);
-}
-
-.phoenix-host-state--error {
-  border-left: 4px solid var(--cadence-color-danger);
-}
-.phoenix-host-state--error .phoenix-host-eyebrow {
-  color: var(--cadence-color-danger);
-}
-
-.phoenix-host-action-stopped {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 20px;
-  padding: 12px 16px;
-  border-left: 4px solid var(--cadence-color-warning);
-  background: var(--cadence-color-surface-inset);
-  color: var(--cadence-color-text-secondary);
-}
-
-.phoenix-host-action-stopped strong,
-.phoenix-host-action-stopped span:last-child {
-  font-family: var(--cadence-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.105em;
-  text-transform: uppercase;
-}
-
-.phoenix-host-action-stopped strong {
-  color: var(--cadence-color-warning);
-}
-
-@media (max-width: 700px) {
-  .phoenix-host-header {
-    grid-template-columns: 1fr auto;
-  }
-  .phoenix-host-context {
-    display: none;
-  }
-  .phoenix-host-main {
-    width: min(100% - 32px, 1160px);
-    padding-top: 24px;
-  }
-  .phoenix-host-titlebar,
-  .phoenix-host-surface__chrome {
-    align-items: start;
-    flex-direction: column;
-  }
-}
-</style>

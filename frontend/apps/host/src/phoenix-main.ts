@@ -1,4 +1,3 @@
-import "@cadence/design-tokens/base.css";
 export {
   bootstrapPhoenixHost,
   parsePhoenixQueryParams,
