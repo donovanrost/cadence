@@ -97,7 +97,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     args = [
       Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),
       "--comms-url",
-      "#{base_url}/missions/#{context.mission.mission_id}/applications/comms_overview/federated",
+      "#{base_url}/missions/#{context.mission.mission_id}/applications/comms/federated",
       "--telemetry-url",
       "#{base_url}/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated",
       "--mission-catalog-url",
@@ -125,11 +125,11 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--federation-lifecycle-url",
       release_fixture.lifecycle.url,
       "--n-minus-1-comms-release-id",
-      Map.fetch!(release_fixture.release_ids.n_minus_1, "comms_overview"),
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "comms"),
       "--n-minus-1-telemetry-release-id",
       Map.fetch!(release_fixture.release_ids.n_minus_1, "telemetry_decom"),
       "--n-comms-release-id",
-      Map.fetch!(release_fixture.release_ids.n, "comms_overview"),
+      Map.fetch!(release_fixture.release_ids.n, "comms"),
       "--n-telemetry-release-id",
       Map.fetch!(release_fixture.release_ids.n, "telemetry_decom"),
       "--n-minus-1-mission-catalog-release-id",
@@ -204,6 +204,9 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, mission_context, "ops_console")
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, mission_context, "comms")
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, mission_context, "spacecraft")

@@ -2,6 +2,7 @@ defmodule Cadence.Applications.HostQueryRegistry do
   @moduledoc "Bounded, identity-bound registry for compatibility host queries."
 
   alias Cadence.Applications.JSONBoundary
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
   @max_providers 16
   @contributors [Cadence.Applications.Comms]
@@ -92,7 +93,7 @@ defmodule Cadence.Applications.HostQueryRegistry do
         )
 
       {nil, query_id} when is_binary(query_id) ->
-        identity_mismatch_or_not_handled(registered_providers, query_id)
+        identity_mismatch_or_not_handled(registered_providers, nil, query_id)
 
       {_invalid_application_key, query_id} when is_binary(query_id) ->
         {:error, :application_query_identity_mismatch}
@@ -115,7 +116,7 @@ defmodule Cadence.Applications.HostQueryRegistry do
         dispatch_provider(scope, host_context, params, provider, application_key, query_id)
 
       :error ->
-        identity_mismatch_or_not_handled(registered_providers, query_id)
+        identity_mismatch_or_not_handled(registered_providers, application_key, query_id)
     end
   end
 
@@ -265,15 +266,24 @@ defmodule Cadence.Applications.HostQueryRegistry do
 
   defp valid_registered_entry?(_entry), do: false
 
-  defp identity_mismatch_or_not_handled(registered_providers, query_id) do
-    if Enum.any?(Map.keys(registered_providers), fn
-         {_application_key, ^query_id} -> true
-         _other -> false
-       end) do
-      {:error, :application_query_identity_mismatch}
-    else
-      :not_handled
+  defp identity_mismatch_or_not_handled(registered_providers, application_key, query_id) do
+    cond do
+      canonical_surface_query?(application_key, query_id) ->
+        :not_handled
+
+      Enum.any?(Map.keys(registered_providers), fn
+        {_application_key, ^query_id} -> true
+        _other -> false
+      end) ->
+        {:error, :application_query_identity_mismatch}
+
+      true ->
+        :not_handled
     end
+  end
+
+  defp canonical_surface_query?(application_key, query_id) do
+    match?({:ok, _provider}, SurfaceProviderRegistry.fetch(application_key, query_id))
   end
 
   defp valid_identity?(value) when is_binary(value) and value != "" do

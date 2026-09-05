@@ -184,7 +184,7 @@ function syntheticGateDependencies() {
 function syntheticGateArgs(timeout) {
   return [
     "--comms-url",
-    `${origin}/missions/mission-1/applications/comms_overview/federated`,
+    `${origin}/missions/mission-1/applications/comms/federated`,
     ...(timeout ? ["--scenario-timeout-ms", String(timeout)] : []),
   ];
 }
@@ -285,7 +285,7 @@ test("the browser URL contract uses an actual isolated HTTP endpoint", async () 
     assert.notEqual(new URL(firstUrls.commsUrl).origin, new URL(secondUrls.commsUrl).origin);
     assert.equal(
       new URL(firstUrls.commsUrl).pathname,
-      "/missions/mission%2Fone/applications/comms_overview/federated",
+      "/missions/mission%2Fone/applications/comms/federated",
     );
     assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));
   } finally {
@@ -364,23 +364,48 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
   );
 });
 
-test("manifest validation follows every declared transitive JavaScript and CSS asset", () => {
+test("manifest validation separates declared candidates from required and observed assets", () => {
   const releaseId = `sha256:${"a".repeat(64)}`;
   const releasePrefix = releaseArtifactPrefix("telemetry_decom", releaseId);
   const manifestUrl = `${origin}${releasePrefix}mf-manifest.json`;
   const manifest = {
     metaData: { remoteEntry: { name: "remoteEntry.js" }, ssrRemoteEntry: { name: "remoteEntry.ssr.js" } },
     entry: "remoteEntry.js",
-    files: ["chunks/Application-1.js", "styles/Application.css"],
+    files: [
+      "chunks/Application-1.js",
+      "styles/Application.css",
+      "chunks/unused-async-sibling.js",
+    ],
     exposes: [
-      { path: "./Application", assets: { js: { sync: ["chunks/Application-1.js"] } } },
+      {
+        path: "./Application",
+        assets: {
+          js: {
+            async: ["chunks/unused-async-sibling.js"],
+            sync: ["chunks/Application-1.js"],
+          },
+          css: { sync: ["styles/Application.css"] },
+        },
+      },
       { path: "./Failure", assets: { js: { sync: ["chunks/Failure.js"] } } },
+    ],
+    shared: [
+      {
+        name: "vue",
+        assets: {
+          js: {
+            async: ["chunks/unused-shared-async.js"],
+            sync: ["chunks/shared.js"],
+          },
+        },
+      },
     ],
   };
   const assets = [
     record({ url: `${origin}${releasePrefix}remoteEntry.js`, method: "GET", body: undefined, resourceType: "Script" }),
     record({ url: `${origin}${releasePrefix}chunks/Application-1.js`, method: "GET", body: undefined, resourceType: "Script" }),
     record({ url: `${origin}${releasePrefix}styles/Application.css`, method: "GET", body: undefined, resourceType: "Stylesheet" }),
+    record({ url: `${origin}${releasePrefix}chunks/shared.js`, method: "GET", body: undefined, resourceType: "Script" }),
   ];
   const releaseOptions = {
     origin,
@@ -393,10 +418,13 @@ test("manifest validation follows every declared transitive JavaScript and CSS a
       label: "telemetry manifest",
       ...releaseOptions,
     }).length,
-    3,
+    7,
   );
+  assert.doesNotThrow(() => assertManifestAssetsRequested(manifest, manifestUrl, assets, releaseOptions));
   assert.doesNotThrow(() => assertManifestAssetsRequested(manifest, manifestUrl, [
-    ...assets.slice(0, 2),
+    assets[0],
+    assets[1],
+    assets[3],
     record({
       url: `${origin}${releasePrefix}styles/Application.css`,
       method: "GET",
@@ -416,15 +444,70 @@ test("manifest validation follows every declared transitive JavaScript and CSS a
     ...releaseOptions,
   }));
   assert.throws(
-    () => assertManifestAssetsRequested(manifest, manifestUrl, assets.slice(0, 2), { ...releaseOptions, label: "missing asset manifest" }),
+    () => assertManifestAssetsRequested(manifest, manifestUrl, [assets[0], assets[1], assets[3]], { ...releaseOptions, label: "missing asset manifest" }),
     /was not successfully requested.*Application\.css/,
   );
   assert.throws(
     () => assertManifestAssetsRequested(manifest, manifestUrl, [
-      ...assets.slice(0, 2),
+      assets[0],
+      assets[1],
+      assets[3],
       record({ url: `${origin}${releasePrefix}styles/Application.css`, method: "GET", body: undefined, status: 404 }),
     ], { ...releaseOptions, label: "404 asset manifest" }),
     /was not successfully requested|HTTP 200/,
+  );
+  for (const [label, responseHeaders, message] of [
+    ["observed async cache", { etag: `"${releaseId}"` }, /immutable caching/],
+    ["observed async digest", { "cache-control": "public, max-age=31536000, immutable", etag: '"sha256:bad"' }, /strong digest ETag/],
+  ]) {
+    const immutableAssets = assets.map((asset) => ({
+      ...asset,
+      response: {
+        ...asset.response,
+        headers: {
+          "cache-control": "public, max-age=31536000, immutable",
+          etag: `"${releaseId}"`,
+        },
+      },
+    }));
+    assert.throws(
+      () => assertManifestAssetsRequested(manifest, manifestUrl, [
+        ...immutableAssets,
+        record({
+          url: `${origin}${releasePrefix}chunks/unused-async-sibling.js`,
+          method: "GET",
+          body: undefined,
+          resourceType: "Script",
+          responseHeaders,
+        }),
+      ], { ...releaseOptions, label, requireImmutableCache: true }),
+      message,
+    );
+  }
+  assert.throws(
+    () => assertManifestAssetsRequested(
+      {
+        ...manifest,
+        exposes: manifest.exposes.map((expose) =>
+          expose.path === "./Application"
+            ? {
+                ...expose,
+                assets: {
+                  ...expose.assets,
+                  js: {
+                    ...expose.assets.js,
+                    async: ["https://evil.example/unused-async-sibling.js"],
+                  },
+                },
+              }
+            : expose,
+        ),
+      },
+      manifestUrl,
+      assets,
+      { ...releaseOptions, label: "foreign async candidate" },
+    ),
+    /escaped the expected origin/,
   );
   assert.throws(
     () => assertManifestAssetsRequested({ entry: "https://evil.example/remote.js" }, manifestUrl, [], {
@@ -2762,6 +2845,19 @@ test("the shared host body is read on the first load and reused by later 304 che
   assert.match(source, /\[200, 304\]\.includes\(hostRecord\.response\.status\)/);
 });
 
+test("canonical Comms query assertions follow the trusted surface response envelope", async () => {
+  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
+  const commsStart = source.indexOf("const comms = await assertRemoteSurface");
+  const commsEnd = source.indexOf('reportProgress("verifying Comms Overview DOM and network contract")', commsStart);
+  assert.ok(commsStart >= 0 && commsEnd > commsStart);
+  const commsAssertions = source.slice(commsStart, commsEnd);
+  assert.match(commsAssertions, /comms\.query\.trusted_surface\.root\.attrs\.id/);
+  assert.match(commsAssertions, /comms\.query\.trusted_surface\.overview\.transport\.id/);
+  assert.match(commsAssertions, /comms\.query\.trusted_surface\.overview\.transport\.count/);
+  assert.doesNotMatch(commsAssertions, /comms\.query\.data\./);
+  assert.doesNotMatch(commsAssertions, /comms\.query\.trusted_surface\.data\./);
+});
+
 test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
   const pathname = "/api/query";
   const initial = record({ url: `${origin}${pathname}`, requestId: "query-1", startedAtMs: 10 });
@@ -3122,7 +3218,7 @@ test("sign-in URL validation allows only query/hash variation and runs before na
   });
   await assert.rejects(
     runScenario(client, {}, [
-      "--comms-url", `${origin}/missions/mission-1/applications/comms_overview/federated`,
+      "--comms-url", `${origin}/missions/mission-1/applications/comms/federated`,
       "--telemetry-url", `${origin}/missions/mission-1/telemetry/federated`,
       "--login-url", `${origin}/sign-in-extra`,
       "--login-email", "operator@example.test",

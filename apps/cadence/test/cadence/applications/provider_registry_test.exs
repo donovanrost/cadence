@@ -72,6 +72,18 @@ defmodule Cadence.Applications.ProviderRegistryTest do
              )
   end
 
+  test "canonical surface queries fall through compatibility host-query dispatch" do
+    assert :not_handled =
+             HostQueryRegistry.dispatch(
+               @scope,
+               @host_context,
+               %{
+                 "applicationKey" => "comms",
+                 "queryId" => "cadence.comms.overview"
+               }
+             )
+  end
+
   test "host-query dispatch rejects a provider whose identity differs from its map key" do
     providers = %{
       {"synthetic_alpha", "synthetic.shared.read"} => Cadence.TestHostQueryProviders.Beta
