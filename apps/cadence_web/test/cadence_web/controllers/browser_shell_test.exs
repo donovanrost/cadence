@@ -191,14 +191,28 @@ defmodule CadenceWeb.BrowserShellTest do
     admin_mode_expires_at = get_session(elevated_conn, :admin_mode_expires_at)
     assert CadenceWeb.AdminMode.active?(admin_mode_expires_at)
 
-    assert build_conn()
-           |> init_test_session(%{
-             user_session_token: session.session_token,
-             admin_mode_expires_at: admin_mode_expires_at
-           })
-           |> get("/admin")
-           |> html_response(200) =~
-             "Platform Administration"
+    {:ok, admin_home_view, _html} =
+      build_conn()
+      |> init_test_session(%{
+        user_session_token: session.session_token,
+        admin_mode_expires_at: admin_mode_expires_at
+      })
+      |> live("/admin")
+
+    assert has_element?(admin_home_view, "#admin-home-page")
+    assert has_element?(admin_home_view, "#admin-home-component")
+
+    admin_home_vue = Test.get_vue(admin_home_view, id: "admin-home-component")
+    assert admin_home_vue.component == "FederatedFullPageSurface"
+    assert admin_home_vue.id == "admin-home-component"
+    assert admin_home_vue.ssr == false
+    assert admin_home_vue.handlers == %{}
+
+    assert admin_home_vue.props == %{
+             "application_key" => "organization_admin",
+             "surface_id" => "admin_home",
+             "host_scope" => "admin"
+           }
   end
 
   test "leaving admin mode removes the durable administrator's elevation", %{conn: _conn} do

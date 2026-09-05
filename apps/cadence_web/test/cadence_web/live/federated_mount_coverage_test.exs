@@ -124,26 +124,34 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
     end)
   end
 
-  test "route-owned ids are passed as bounded query parameters" do
+  test "route-owned ids use bounded query parameters or canonical host props" do
     contracts = [
-      {"catalog/catalog_artifact_show_live.ex", ~w(mission_id artifact_id)},
-      {"catalog/catalog_database_show_live.ex", ~w(mission_id catalog_database_id)},
-      {"catalog/catalog_revision_show_live.ex", ~w(mission_id catalog_revision_id)},
-      {"catalog/catalog_import_run_show_live.ex", ~w(mission_id import_run_id)},
-      {"provider_account_show_live.ex", ~w(organization_id provider_account_id)},
-      {"spacecraft_applications_live.ex", ~w(mission_id spacecraft_id)},
-      {"comms_ground_station_show_live.ex", ~w(mission_id ground_station_id)},
-      {"comms_routing_show_live.ex", ~w(mission_id routing_rule_id)}
+      {"catalog/catalog_artifact_show_live.ex", ~w(mission_id artifact_id), []},
+      {"catalog/catalog_database_show_live.ex", ~w(mission_id catalog_database_id), []},
+      {"catalog/catalog_revision_show_live.ex", ~w(mission_id catalog_revision_id), []},
+      {"catalog/catalog_import_run_show_live.ex", ~w(mission_id import_run_id), []},
+      {"provider_account_show_live.ex", ~w(organization_id provider_account_id), []},
+      {"spacecraft_applications_live.ex", [],
+       [
+         "mission_id={@current_mission.mission_id}",
+         "spacecraft_id={@current_spacecraft.spacecraft_id}"
+       ]},
+      {"comms_ground_station_show_live.ex", ~w(mission_id ground_station_id), []},
+      {"comms_routing_show_live.ex", ~w(mission_id routing_rule_id), []}
     ]
 
-    Enum.each(contracts, fn {relative_path, keys} ->
+    Enum.each(contracts, fn {relative_path, query_keys, prop_bindings} ->
       source = File.read!(Path.join(@live_root, relative_path))
       [mount] = Regex.run(~r/v-component="FederatedFullPageSurface"[\s\S]*?\/>/, source)
 
       assert mount =~ ~r/\bquery_params=/, relative_path
 
-      Enum.each(keys, fn key ->
+      Enum.each(query_keys, fn key ->
         assert mount =~ ~r/#{key}: /, "#{relative_path} omits #{key}"
+      end)
+
+      Enum.each(prop_bindings, fn binding ->
+        assert mount =~ binding, "#{relative_path} omits #{binding}"
       end)
     end)
   end

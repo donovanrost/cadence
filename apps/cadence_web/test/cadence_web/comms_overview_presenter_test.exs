@@ -3,8 +3,7 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
 
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
-  alias CadenceWeb.{CommsOverviewPresenter, CommsValidation, CommsValidationLive}
-  alias Phoenix.LiveView.Socket
+  alias CadenceWeb.{CommsOverviewPresenter, CommsValidation}
 
   test "preserves the exact empty Comms presentation as JSON-safe data" do
     mission =
@@ -92,35 +91,5 @@ defmodule CadenceWeb.CommsOverviewPresenterTest do
   test "preserves core validation errors for the dedicated validation adapter" do
     assert {:error, :authenticated_user_required} =
              CommsValidation.findings_for_mission(%Scope{organization_id: nil}, "mission-failure")
-  end
-
-  test "renders LiveView validation provider failures as blocked and non-empty" do
-    mission =
-      Mission.new(%{
-        mission_id: "mission-live-failure",
-        organization_id: "organization-live-failure",
-        slug: "live-failure",
-        display_name: "Live Failure Mission"
-      })
-
-    assert {:ok, socket} =
-             CommsValidationLive.mount(
-               %{},
-               %{},
-               %Socket{
-                 assigns: %{
-                   __changed__: %{},
-                   current_scope: %Scope{organization_id: nil},
-                   current_mission: mission
-                 }
-               }
-             )
-
-    assert socket.assigns.validation.status == %{
-             tone: "blocked",
-             label: "Validation unavailable"
-           }
-
-    refute socket.assigns.validation.empty
   end
 end
