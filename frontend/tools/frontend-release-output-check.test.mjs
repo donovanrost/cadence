@@ -19,6 +19,7 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const checkerPath = resolve(import.meta.dirname, "frontend-release-output-check.mjs");
 const execFileAsync = promisify(execFile);
+const legitimateHostInitializationSource = "import{t as e}from\"./vite-preload-helper-C2lBtS7w.js\";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}},globalThis[t].share||={},globalThis[t].remote||={};var n=globalThis[t];for(let e of Object.keys(n.share))if(e.startsWith(`default:`)){let t=e.slice(8);n.share[t]===void 0&&(n.share[t]=n.share[e])}else if(!e.includes(`:`)){let t=`default:`+e;n.share[t]===void 0&&(n.share[t]=n.share[e])}var r;async function i(){return r||=(async()=>{let t=(e,t,n,r)=>{let i=(Array.isArray(r)?r[0]:r)||`default`,a=t||!n?e:e+`@`+n,o={canonical:i+`:`+a};return i===\"default\"&&(o.aliases=[a]),o},r=(e,t)=>{let n=e[t.canonical];if(n!==void 0)return n;let r=t.aliases||[];for(let n of r){if(!Object.prototype.hasOwnProperty.call(e,n))continue;let r=e[n];if(r!==void 0)return e[t.canonical]=r,r}},i=Symbol.for(`module-federation.shared-cache-listeners`),a=Symbol.for(`module-federation.shared-cache-owners`),o=e=>{let t=e[a];return t===void 0&&(t=Object.create(null),Object.defineProperty(e,a,{value:t,enumerable:!1,configurable:!1,writable:!1})),t},s=(e,t)=>{var n;return(n=e[a])==null?void 0:n[t.canonical]},c=(e,t,n,r)=>{var s;e[t.canonical]=n;let c=t.aliases||[];for(let t of c)Object.defineProperty(e,t,{value:n,enumerable:!0,configurable:!0,writable:!0});let l=e[a];r===void 0?l&&delete l[t.canonical]:o(e)[t.canonical]=r;let u=(s=e[i])==null?void 0:s[t.canonical];if(u)for(let e of u)e(n);return n},l=await(await e(()=>import(`../remoteEntry.js`),[])).init(),{usedShared:u}=await e(async()=>{let{usedShared:e}=await import(`./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-CKx0RqLR.js`);return{usedShared:e}},[]),d=e=>{let t=e;for(let e=0;e<5;e++){let e=t==null?void 0:t.default;if(!e||typeof e!=`object`||Object.keys(e).length===0)break;let n=Object.keys(t).filter(e=>e!==\"default\").map(e=>t[e]);if(n.length>0&&n.some(e=>e!==void 0))break;t=e}return t};for(let e of[`vue`]){var f;let i=u[e];if(!i||i.materialize===!1||i.treeShaking)continue;let a=t(e,(f=i.shareConfig)==null?void 0:f.singleton,i.version,i.scope);(r(n.share,a)===void 0||s(n.share,a)===void 0)&&await l.loadShare(e,{customShareInfo:{shareConfig:i.shareConfig}}).then(async e=>{let t=typeof e==`function`?e():e,r=d(await Promise.resolve(t));c(n.share,a,r,`cadence_comms_overview`)})}return l})(),r}r=i();export{r as hostInitPromise,i as initHost};";
 
 async function makeFixture(baseDirectory = tmpdir()) {
   const root = await mkdtemp(join(baseDirectory, "cadence-frontend-release-check-"));
@@ -138,6 +139,48 @@ async function expectCheckFailure(root, expectedRemoteName, pattern, options = {
   );
 }
 
+async function addHostInitializationFixture(
+  root,
+  remoteName,
+  source,
+  { helperHash = "C2lBtS7w", sharedImportHash = "CKx0RqLR" } = {},
+) {
+  const hostPath = "assets/hostInit-ABCDEFGH.js";
+  const helperPath = `assets/vite-preload-helper-${helperHash}.js`;
+  const sharedImportMapPath =
+    `assets/_virtual_mf-localSharedImportMap___mfe_internal__${remoteName}__mf_owner__1-${sharedImportHash}.js`;
+  await writeFile(join(root, hostPath), source);
+  await writeFile(join(root, helperPath), "export const preload = true;\n");
+  await writeFile(join(root, sharedImportMapPath), "export const usedShared = {};\n");
+
+  const manifestPath = join(root, "mf-manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.id = remoteName;
+  manifest.name = remoteName;
+  manifest.exposes[0].assets.js.async.push(helperPath, sharedImportMapPath);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  const statsPath = join(root, "mf-stats.json");
+  const stats = JSON.parse(await readFile(statsPath, "utf8"));
+  stats.id = remoteName;
+  stats.name = remoteName;
+  stats.metaData = {
+    name: remoteName,
+    remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
+  };
+  stats.buildOutput.push(
+    {
+      fileName: hostPath,
+      type: "chunk",
+      isEntry: false,
+      size: Buffer.byteLength(source),
+    },
+    { fileName: helperPath },
+    { fileName: sharedImportMapPath },
+  );
+  await writeFile(statsPath, JSON.stringify(stats));
+}
+
 void test("accepts the complete release reference closure, including comments and external URLs", async () => {
   await withFixture(async (root) => {
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
@@ -225,13 +268,16 @@ void test("fails closed for unresolved dynamic local imports and asset URLs", as
     'const target = "./assets/dynamic.js";\nnew Worker(target);\n',
     'const target = "dynamic";\nnew SharedWorker("./assets/" + target);\n',
     'const target = "dynamic";\nnavigator.serviceWorker.register(`./assets/${target}.js`);\n',
+    'const target = "./assets/dynamic.js";\nnew globalThis["Worker"](target);\n',
+    'const target = "dynamic";\nnew globalThis.URL("./assets/" + target, import.meta.url);\n',
+    'const target = "dynamic";\nnavigator["serviceWorker"]["register"](`./assets/${target}.js`);\n',
   ]) {
     await withFixture(async (root) => {
       await writeFile(join(root, "remoteEntry.js"), source);
       await expectCheckFailure(
         root,
         "fixture_remote",
-        /unresolved dynamic worker URL|dynamic template/,
+        /unresolved dynamic worker URL|unresolved dynamic local asset URL|dynamic template/,
       );
     });
   }
@@ -241,7 +287,7 @@ void test("does not confuse division followed by a regex literal containing impo
   await withFixture(async (root) => {
     await writeFile(
       join(root, "remoteEntry.js"),
-      'const matches = 4 / /import\\("outside.js"\\)/.test("import");\nvoid matches;\n',
+      'if (true) /import\\("outside.js"\\)/.test("import");\nconst matches = 4 / /import\\("outside.js"\\)/.test("import");\nvoid matches;\n',
     );
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
@@ -252,7 +298,7 @@ void test("accepts statically bounded worker references", async () => {
   await withFixture(async (root) => {
     await writeFile(
       join(root, "remoteEntry.js"),
-      'new Worker("./assets/dynamic.js");\nnew SharedWorker(new URL("./assets/dynamic.js", import.meta.url));\nnavigator.serviceWorker.register("./assets/dynamic.js");\n',
+      'new Worker("./assets/dynamic.js");\nnew globalThis.Worker("./assets/dynamic.js");\nnew SharedWorker(new URL("./assets/dynamic.js", import.meta.url));\nnew globalThis.URL("./assets/dynamic.js", import.meta.url);\nnavigator.serviceWorker.register("./assets/dynamic.js");\nnavigator["serviceWorker"]["register"]("./assets/dynamic.js");\n',
     );
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
@@ -326,6 +372,44 @@ void test("requires federation manifest and stats references to existing files",
     stats.buildOutput.push({ fileName: "assets/missing.js" });
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /points to missing/);
+  });
+});
+
+void test("binds federation byte metadata to the exact admitted file bytes", async () => {
+  await withFixture(async (root) => {
+    await writeFile(join(root, "remoteEntry.js"), Buffer.alloc(2353, 0x20));
+    const manifestPath = join(root, "mf-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.metaData.remoteEntry.size = 2381;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expectCheckFailure(root, "fixture_remote", /byte length/);
+  });
+
+  await withFixture(async (root) => {
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.buildOutput[0].size = 2381;
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /byte length/);
+  });
+
+  await withFixture(async (root) => {
+    const manifestPath = join(root, "mf-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.metaData.remoteEntry.size = (await readFile(join(root, "remoteEntry.js"))).byteLength;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    for (const output of stats.buildOutput) {
+      output.size = (
+        await readFile(join(root, ...output.fileName.split("/")))
+      ).byteLength;
+    }
+    await writeFile(statsPath, JSON.stringify(stats));
+
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
   });
 });
 
@@ -429,6 +513,38 @@ void test("rejects near-miss generated host-init structural spoofs", async () =>
   }
 });
 
+void test("binds generated host-init semantics while allowing filename hash variance", async () => {
+  await withFixture(async (root) => {
+    const remoteName = "cadence_comms_overview";
+    await addHostInitializationFixture(root, remoteName, legitimateHostInitializationSource);
+    const result = await validateReleaseOutput(root, remoteName, repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+
+  await withFixture(async (root) => {
+    const remoteName = "cadence_comms_overview";
+    const filenameHashVariant = legitimateHostInitializationSource
+      .replaceAll("C2lBtS7w", "A1b2C3d4")
+      .replaceAll("CKx0RqLR", "D4e5F6g7");
+    await addHostInitializationFixture(root, remoteName, filenameHashVariant, {
+      helperHash: "A1b2C3d4",
+      sharedImportHash: "D4e5F6g7",
+    });
+    const result = await validateReleaseOutput(root, remoteName, repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+
+  await withFixture(async (root) => {
+    const remoteName = "fixture_remote";
+    const alteredSource = legitimateHostInitializationSource.replaceAll(
+      "cadence_comms_overview",
+      remoteName,
+    );
+    await addHostInitializationFixture(root, remoteName, alteredSource);
+    await expectCheckFailure(root, remoteName, /stats references.*missing from manifest closure/);
+  });
+});
+
 void test("canonicalizes deployment paths and rejects cross-publication escapes", async () => {
   for (const deploymentPath of [
     "comms-overview/../telemetry-decom/remoteEntry.js",
@@ -449,6 +565,34 @@ void test("canonicalizes deployment paths and rejects cross-publication escapes"
       );
     });
   }
+
+  for (const publication of [
+    `const publication = "/assets\\/application-host\\/comms-overview\\x2FremoteEntry.js";\n`,
+    `const publication = "\\x2Fassets\\x2Fapplication-host\\x2Fcomms-overview\\x2FremoteEntry.js";\n`,
+    `const publication = "\\u002Fassets\\u002Fapplication-host\\u002Fcomms-overview\\u002FremoteEntry.js";\n`,
+    `const publication = "\\u{2F}assets\\u{002F}application-host\\u{0002F}comms-overview\\u{00002F}remoteEntry.js";\n`,
+  ]) {
+    await withFixture(async (root) => {
+      await writeFile(join(root, "assets", "quoted.js"), publication);
+      const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot, {
+        allowedDeploymentPath: "comms-overview",
+      });
+      assert.equal(result.fileCount > 0, true);
+    });
+  }
+
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "assets", "quoted.js"),
+      `const publication = "\\x2Fassets\\/application-host\\u002Ftelemetry-decom\\u{2F}remoteEntry.js";\n`,
+    );
+    await expectCheckFailure(
+      root,
+      "fixture_remote",
+      /unexpected deployment path|deployment path/,
+      { allowedDeploymentPath: "comms-overview" },
+    );
+  });
 });
 
 void test(

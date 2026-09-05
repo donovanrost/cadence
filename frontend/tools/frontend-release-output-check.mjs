@@ -322,7 +322,10 @@ export function assertLocalReference(
   options = {},
 ) {
   const value = reference.trim();
-  if (value === "" || /^\$\{[^}]+\}$/.test(value)) return;
+  if (value === "") return;
+  if (/^\$\{[^}]+\}$/.test(value)) {
+    fail(`${label} contains a dynamic reference ${JSON.stringify(value)}`);
+  }
 
   if (isExternalReference(value)) return;
 
@@ -378,7 +381,49 @@ function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
   }
 }
 
-function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot) {
+const byteBoundMetadataFields = ["size", "byteSize", "byteLength", "bytes"];
+
+async function assertByteBoundMetadata(record, target, trail, byteLengthForPath) {
+  for (const field of byteBoundMetadataFields) {
+    if (!Object.hasOwn(record, field)) continue;
+    const declared = record[field];
+    if (!Number.isSafeInteger(declared) || declared < 0) {
+      fail(`${trail}.${field} is not a non-negative byte length`);
+    }
+    const actual = await byteLengthForPath(target);
+    if (!Number.isSafeInteger(actual) || actual < 0) {
+      fail(`${trail}.${field} cannot read admitted bytes for ${JSON.stringify(target)}`);
+    }
+    if (declared !== actual) {
+      fail(
+        `${trail}.${field} ${declared} does not match ${JSON.stringify(target)} byte length ${actual}`,
+      );
+    }
+  }
+}
+
+function metadataByteBoundTarget(value, trail, files, outputRoot, pathContext) {
+  for (const key of ["fileName", "filename", "assetPath"]) {
+    if (typeof value[key] === "string") {
+      return assertManifestPath(value[key], files, `${trail}.${key}`, outputRoot);
+    }
+  }
+  if (typeof value.path === "string" && value.path !== "" && pathContext) {
+    return assertManifestPath(value.path, files, `${trail}.path`, outputRoot);
+  }
+  if (trail.endsWith(".remoteEntry") && typeof value.name === "string" && value.name !== "") {
+    return assertManifestPath(value.name, files, `${trail}.name`, outputRoot);
+  }
+  return null;
+}
+
+async function assertGeneratedManifest(
+  manifest,
+  expectedRemoteName,
+  files,
+  outputRoot,
+  byteLengthForPath,
+) {
   if (manifest.id !== expectedRemoteName || manifest.name !== expectedRemoteName) {
     fail(`the federation manifest identity is not ${JSON.stringify(expectedRemoteName)}`);
   }
@@ -397,6 +442,12 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
     files,
     "manifest remoteEntry.name",
     outputRoot,
+  );
+  await assertByteBoundMetadata(
+    remoteEntry,
+    remoteEntryPath,
+    "manifest metaData.remoteEntry",
+    byteLengthForPath,
   );
   const referencedFiles = new Set([remoteEntryPath]);
 
@@ -445,6 +496,7 @@ function assertStatsMetadata(
   pathContext = false,
   seen = new Set(),
   referencedFiles = new Set(),
+  byteBoundRecords = [],
 ) {
   if (typeof value === "string") {
     if (value.trim() === "") return;
@@ -466,6 +518,24 @@ function assertStatsMetadata(
   if (value === null || typeof value !== "object") return;
   if (seen.has(value)) fail(`${trail} contains a cyclic metadata value`);
   seen.add(value);
+  const byteBoundTarget = metadataByteBoundTarget(
+    value,
+    trail,
+    files,
+    outputRoot,
+    pathContext,
+  );
+  for (const field of byteBoundMetadataFields) {
+    if (!Object.hasOwn(value, field)) continue;
+    if (!byteBoundTarget) {
+      fail(`${trail}.${field} is not bound to an admitted output path`);
+    }
+    byteBoundRecords.push({
+      record: value,
+      target: byteBoundTarget,
+      trail,
+    });
+  }
   if (Array.isArray(value)) {
     value.forEach((item, index) =>
       assertStatsMetadata(
@@ -476,6 +546,7 @@ function assertStatsMetadata(
         pathContext,
         seen,
         referencedFiles,
+        byteBoundRecords,
       ),
     );
   } else {
@@ -488,6 +559,7 @@ function assertStatsMetadata(
         pathContext || statsPathKeyPattern.test(key),
         seen,
         referencedFiles,
+        byteBoundRecords,
       );
     }
   }
@@ -512,8 +584,8 @@ function hasFederationStatsProvenance(stats, expectedRemoteName) {
 const generatedHostInitializationPathPattern =
   /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
 const generatedHostInitializationFacadeDigests = new Set([
-  "aa85d145c52d8de884e72e39705ac35f4141769062ba1ca6454cbadbfad153da",
-  "add6febb13abf6c1923f431bbcf9aea1e282de287c64a4b7a0e8ee56768d61bc",
+  "659a49802317843ef974469cbc220aaa3e0107493934928e68905c0d6bf60496",
+  "007bf60ccae9f5ed5dead1143e01c5151fdc63c4d399871ed8144343885d9d01",
 ]);
 const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
 const generatedFederationRuntimeSourceDigests = new Set([
@@ -531,10 +603,9 @@ function canonicalHostInitializationSource(source, expectedRemoteName) {
   return source
     .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
     .replace(
-      /_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-[A-Za-z0-9_-]{8}\.js/g,
-      "_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
+      /(_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-)[A-Za-z0-9_-]{8}(\.js)/g,
+      "$1<hash>$2",
     )
-    .replaceAll(expectedRemoteName, "<remote>")
     .replace(/\s+/g, "");
 }
 
@@ -609,7 +680,13 @@ function isAuthoritativeGeneratedFederationRuntimeArtifact(
   );
 }
 
-function assertStats(stats, expectedRemoteName, files, outputRoot) {
+async function assertStats(
+  stats,
+  expectedRemoteName,
+  files,
+  outputRoot,
+  byteLengthForPath,
+) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
@@ -622,6 +699,7 @@ function assertStats(stats, expectedRemoteName, files, outputRoot) {
   }
   const referencedFiles = new Set();
   const buildOutputByPath = new Map();
+  const byteBoundRecords = [];
   for (const output of stats.buildOutput) {
     if (!output || typeof output !== "object" || Array.isArray(output)) {
       fail("federation buildOutput entry is not an object");
@@ -646,7 +724,11 @@ function assertStats(stats, expectedRemoteName, files, outputRoot) {
     false,
     new Set(),
     referencedFiles,
+    byteBoundRecords,
   );
+  for (const { record, target, trail } of byteBoundRecords) {
+    await assertByteBoundMetadata(record, target, trail, byteLengthForPath);
+  }
   const generatedModuleFederationFiles = new Set();
   if (hasFederationStatsProvenance(stats, expectedRemoteName)) {
     for (const [path, output] of buildOutputByPath) {
@@ -808,6 +890,23 @@ function isMemberProperty(tokens, index) {
   return tokens[index - 1]?.value === ".";
 }
 
+const regexControlStatementWords = new Set(["catch", "do", "else", "for", "if", "while"]);
+
+function isControlStatementClose(tokens) {
+  let depth = 0;
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    if (tokens[index]?.value === ")") {
+      depth += 1;
+    } else if (tokens[index]?.value === "(") {
+      depth -= 1;
+      if (depth === 0) {
+        return regexControlStatementWords.has(tokens[index - 1]?.value);
+      }
+    }
+  }
+  return false;
+}
+
 function canStartRegex(tokens) {
   const previous = tokens.at(-1);
   return (
@@ -831,6 +930,7 @@ function canStartRegex(tokens) {
     previous.value === "~" ||
     previous.value === "<" ||
     previous.value === ">" ||
+    (previous.value === ")" && isControlStatementClose(tokens)) ||
     previous.value === "return" ||
     previous.value === "throw" ||
     previous.value === "case" ||
@@ -1049,6 +1149,16 @@ function isGeneratedFederationExternalImport(tokens, index) {
 
 const workerConstructorNames = new Set(["Worker", "SharedWorker", "ServiceWorker"]);
 
+function isServiceWorkerExpressionEnd(tokens, index) {
+  if (tokens[index]?.value === "serviceWorker") return true;
+  return (
+    tokens[index]?.value === "]" &&
+    staticReferenceToken(tokens[index - 1]) &&
+    tokens[index - 1].value === "serviceWorker" &&
+    tokens[index - 2]?.value === "["
+  );
+}
+
 function workerCallAt(tokens, index) {
   const token = tokens[index];
   const next = tokens[index + 1];
@@ -1091,27 +1201,106 @@ function workerCallAt(tokens, index) {
     return { argument: index + 2 };
   }
   if (
+    (token?.kind === "word" || staticReferenceToken(token)) &&
+    workerConstructorNames.has(token.value) &&
+    tokens[index - 1]?.value === "[" &&
+    tokens[index + 1]?.value === "]" &&
+    tokens[index + 2]?.value === "("
+  ) {
+    return { argument: index + 3 };
+  }
+  if (
     token?.kind === "word" &&
     token.value === "register" &&
+    next?.value === "(" &&
     tokens[index - 1]?.value === "." &&
-    tokens[index - 2]?.value === "serviceWorker" &&
-    next?.value === "("
+    (isServiceWorkerExpressionEnd(tokens, index - 2) ||
+      (tokens[index - 2]?.value === "?" &&
+        isServiceWorkerExpressionEnd(tokens, index - 3)))
   ) {
     return { argument: index + 2 };
+  }
+  if (
+    (token?.kind === "word" || staticReferenceToken(token)) &&
+    token.value === "register" &&
+    tokens[index - 1]?.value === "[" &&
+    tokens[index + 1]?.value === "]" &&
+    tokens[index + 2]?.value === "(" &&
+    isServiceWorkerExpressionEnd(tokens, index - 2)
+  ) {
+    return { argument: index + 3 };
   }
   return null;
 }
 
-function isStaticImportMetaUrlCall(tokens, index) {
+function urlCallAt(tokens, index) {
+  const token = tokens[index];
+  const next = tokens[index + 1];
+  const globalOwners = new Set(["globalThis", "self", "window"]);
+  if (token?.kind === "word" && token.value === "new") {
+    if (next?.value === "URL" && tokens[index + 2]?.value === "(") {
+      return { start: index, argument: index + 3 };
+    }
+    if (
+      globalOwners.has(next?.value) &&
+      tokens[index + 2]?.value === "." &&
+      tokens[index + 3]?.value === "URL" &&
+      tokens[index + 4]?.value === "("
+    ) {
+      return { start: index, argument: index + 5 };
+    }
+    if (
+      next?.kind === "word" &&
+      tokens[index + 2]?.value === "[" &&
+      staticReferenceToken(tokens[index + 3]) &&
+      tokens[index + 3].value === "URL" &&
+      tokens[index + 4]?.value === "]" &&
+      tokens[index + 5]?.value === "("
+    ) {
+      return { start: index, argument: index + 6 };
+    }
+    if (
+      next?.value === "(" &&
+      tokens[index + 2]?.value === "URL" &&
+      tokens[index + 3]?.value === ")" &&
+      tokens[index + 4]?.value === "("
+    ) {
+      return { start: index, argument: index + 5 };
+    }
+    return null;
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "URL" &&
+    next?.value === "(" &&
+    ![".", "new"].includes(tokens[index - 1]?.value)
+  ) {
+    return { start: index, argument: index + 2 };
+  }
+  if (
+    token?.kind === "word" &&
+    next?.value === "[" &&
+    staticReferenceToken(tokens[index + 2]) &&
+    tokens[index + 2].value === "URL" &&
+    tokens[index + 3]?.value === "]" &&
+    tokens[index + 4]?.value === "(" &&
+    tokens[index - 1]?.value !== "new"
+  ) {
+    return { start: index, argument: index + 5 };
+  }
+  return null;
+}
+
+function isStaticImportMetaUrlCall(tokens, argumentIndex) {
   return (
-    staticReferenceToken(tokens[index + 3]) &&
-    tokens[index + 4]?.value === "," &&
-    tokens[index + 5]?.value === "import" &&
-    tokens[index + 6]?.value === "." &&
-    tokens[index + 7]?.value === "meta" &&
-    tokens[index + 8]?.value === "." &&
-    tokens[index + 9]?.value === "url" &&
-    tokens[index + 10]?.value === ")"
+    staticReferenceToken(tokens[argumentIndex]) &&
+    tokens[argumentIndex + 1]?.value === "," &&
+    tokens[argumentIndex + 2]?.value === "import" &&
+    tokens[argumentIndex + 3]?.value === "." &&
+    tokens[argumentIndex + 4]?.value === "meta" &&
+    tokens[argumentIndex + 5]?.value === "." &&
+    tokens[argumentIndex + 6]?.value === "url" &&
+    tokens[argumentIndex + 7]?.value === ")"
   );
 }
 
@@ -1268,12 +1457,15 @@ export function assertImportReferences(
         if (target) referencedFiles.add(target);
       } else if (
         argument?.value === "new" &&
-        tokens[workerCall.argument + 1]?.value === "URL" &&
-        tokens[workerCall.argument + 2]?.value === "(" &&
-        isStaticImportMetaUrlCall(tokens, workerCall.argument)
+        urlCallAt(tokens, workerCall.argument) &&
+        isStaticImportMetaUrlCall(
+          tokens,
+          urlCallAt(tokens, workerCall.argument).argument,
+        )
       ) {
+        const urlCall = urlCallAt(tokens, workerCall.argument);
         const target = assertLocalReference(
-          tokens[workerCall.argument + 3].value,
+          tokens[urlCall.argument].value,
           origin,
           files,
           `${origin} worker URL`,
@@ -1287,15 +1479,10 @@ export function assertImportReferences(
       continue;
     }
 
-    if (
-      token.kind === "word" &&
-      token.value === "new" &&
-      tokens[index + 1]?.value === "URL" &&
-      tokens[index + 2]?.value === "(" &&
-      isStaticImportMetaUrlCall(tokens, index)
-    ) {
+    const urlCall = urlCallAt(tokens, index);
+    if (urlCall && isStaticImportMetaUrlCall(tokens, urlCall.argument)) {
       const target = assertLocalReference(
-        tokens[index + 3].value,
+        tokens[urlCall.argument].value,
         origin,
         files,
         `${origin} asset URL`,
@@ -1306,26 +1493,20 @@ export function assertImportReferences(
       continue;
     }
 
-    if (
-      token.kind === "word" &&
-      token.value === "new" &&
-      tokens[index + 1]?.value === "URL" &&
-      tokens[index + 2]?.value === "("
-    ) {
+    if (urlCall) {
       if (
-        options.authoritativeHostPublication === true ||
         (generatedModuleFederation &&
-          (isGeneratedEmptyFederationCssUrl(tokens, index) ||
-            isGeneratedVitePreloadUrl(tokens, index) ||
-            isGeneratedVitePreloadHelperUrl(tokens, index) ||
-            isGeneratedViteDynamicAssetUrl(tokens, index) ||
-            isGeneratedRuntimeUrl(tokens, index)))
+          (isGeneratedEmptyFederationCssUrl(tokens, urlCall.start) ||
+            isGeneratedVitePreloadUrl(tokens, urlCall.start) ||
+            isGeneratedVitePreloadHelperUrl(tokens, urlCall.start) ||
+            isGeneratedViteDynamicAssetUrl(tokens, urlCall.start) ||
+            isGeneratedRuntimeUrl(tokens, urlCall.start)))
       ) {
         continue;
       }
       if (
-        staticReferenceToken(tokens[index + 3]) &&
-        isExternalReference(tokens[index + 3].value)
+        staticReferenceToken(tokens[urlCall.argument]) &&
+        isExternalReference(tokens[urlCall.argument].value)
       ) {
         continue;
       }
@@ -1593,15 +1774,24 @@ function snapshotOutputFiles(snapshot, outputRoot) {
     files: new Set(names),
     names,
     paths: names.map((name) => join(outputRoot, ...name.split("/"))),
+    readBytes: async (name) => byName.get(name)?.bytes ?? null,
+    byteLengthForPath: async (name) => byName.get(name)?.bytes.byteLength ?? null,
     readText: async (name) => byName.get(name)?.bytes.toString("utf8") ?? null,
   };
 }
 
 function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
   const deploymentMarker = "/assets/application-host";
+  const escapedSlash = String.raw`(?:/|\\/|\\x2f|\\u002f|\\u\{(?:2f|02f|002f|0002f|00002f)\})`;
+  const deploymentPathCharacter = String.raw`(?:${escapedSlash}|[^\s"'\x60),;?}])`;
   const references = [
-    ...source.matchAll(/\/assets\/application-host[^\s"'`),;?}]*/g),
-  ].map(([reference]) => reference);
+    ...source.matchAll(
+      new RegExp(
+        `${escapedSlash}assets${escapedSlash}application-host${deploymentPathCharacter}*`,
+        "gi",
+      ),
+    ),
+  ].map(([reference]) => decodeDeploymentPathEscapes(reference));
   if (references.length === 0) return;
   if (!allowedDeploymentPath) {
     fail(`${origin} contains a deployment-specific publication path`);
@@ -1618,6 +1808,28 @@ function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
       fail(`${origin} contains an incomplete deployment path ${JSON.stringify(reference)}`);
     }
   }
+}
+
+function decodeDeploymentPathEscapes(value) {
+  return value.replace(
+    /\\(?:u\{([0-9a-f]{1,6})\}|u([0-9a-f]{4})|x([0-9a-f]{2})|([/\\]))/gi,
+    (match, bracedCodePoint, unicodeCodePoint, hexCodePoint, escapedCharacter) => {
+      const codePoint = bracedCodePoint
+        ? Number.parseInt(bracedCodePoint, 16)
+        : unicodeCodePoint
+          ? Number.parseInt(unicodeCodePoint, 16)
+          : hexCodePoint
+            ? Number.parseInt(hexCodePoint, 16)
+            : escapedCharacter === "/"
+              ? 0x2f
+              : 0x5c;
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    },
+  );
 }
 
 export async function validateFederationOutput(
@@ -1648,8 +1860,14 @@ export async function validateFederationOutput(
     ? snapshotOutputFiles(artifactSnapshot, outputRoot)
     : {
         paths: await outputFiles(outputRoot, outputRoot),
+        readBytes: async (name) =>
+          readFile(join(outputRoot, ...name.split("/"))).catch(() => null),
+        byteLengthForPath: async (name) =>
+          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.byteLength ??
+          null,
         readText: async (name) =>
-          readFile(join(outputRoot, ...name.split("/")), "utf8").catch(() => null),
+          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.toString("utf8") ??
+          null,
       };
   const paths = snapshot.paths;
   if (paths.length === 0) fail("output is empty");
@@ -1662,15 +1880,22 @@ export async function validateFederationOutput(
   if (!paths.some((path) => extname(path) === ".css")) fail("no CSS asset was emitted");
 
   const manifest = JSON.parse(await snapshot.readText("mf-manifest.json"));
-  const manifestReferences = assertGeneratedManifest(
+  const manifestReferences = await assertGeneratedManifest(
     manifest,
     expectedRemoteName,
     files,
     outputRoot,
+    snapshot.byteLengthForPath,
   );
 
   const stats = JSON.parse(await snapshot.readText("mf-stats.json"));
-  const statsResult = assertStats(stats, expectedRemoteName, files, outputRoot);
+  const statsResult = await assertStats(
+    stats,
+    expectedRemoteName,
+    files,
+    outputRoot,
+    snapshot.byteLengthForPath,
+  );
   const statsReferences = statsResult.references;
   const generatedModuleFederationFiles = statsResult.generatedModuleFederationFiles;
 
