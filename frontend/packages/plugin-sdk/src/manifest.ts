@@ -8,6 +8,7 @@ export const APPLICATION_HOST_CONTRACT = "cadence.application-host.v1" as const;
 export type SurfacePurpose =
   | "overview"
   | "configuration"
+  | "collection"
   | "operations"
   | "activity"
   | "subject_detail";
@@ -187,6 +188,7 @@ function surfacePurpose(value: unknown): value is SurfacePurpose {
   return (
     value === "overview" ||
     value === "configuration" ||
+    value === "collection" ||
     value === "operations" ||
     value === "activity" ||
     value === "subject_detail"

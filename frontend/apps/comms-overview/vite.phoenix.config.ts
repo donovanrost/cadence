@@ -19,12 +19,12 @@ const publicationFederationConfig = {
 };
 const publicationRoot = resolve(
   __dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/comms-overview",
+  "../../../apps/cadence_web/priv/static/assets/application-host/comms",
 );
 
 function publicationOutputPlugin() {
   return {
-    name: "cadence-comms-overview-publication-output",
+    name: "cadence-comms-publication-output",
     enforce: "post",
     apply: "build",
     config(config: ViteUserConfig) {
@@ -38,7 +38,7 @@ export default defineConfig({
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
-  base: "/assets/application-host/comms-overview/",
+  base: "/assets/application-host/comms/",
   build: {
     target: "chrome89",
     outDir: publicationRoot,

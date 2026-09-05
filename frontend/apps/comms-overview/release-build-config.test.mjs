@@ -77,7 +77,7 @@ function replaceOnce(source, from, replacement) {
 }
 
 const exactHostInitializationFacadeId =
-  "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
+  "\0virtual:mf:__mfe_internal__cadence_comms__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
 const generatedHostInitializationDigest =
   "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068";
 const generatedHostInitializationCanonicalSource = Buffer.from(
@@ -117,7 +117,7 @@ const hostInitializationSource = generatedHostInitializationCanonicalSource
   .replace("./vite-preload-helper-<hash>.js", `./vite-preload-helper-${preloadHelperHash}.js`)
   .replace(
     "./_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
-    `./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-${sharedImportHash}.js`,
+    `./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms__mf_owner__1-${sharedImportHash}.js`,
   );
 const canonicalHostInitializationSource = generatedHostInitializationCanonicalSource;
 
@@ -148,7 +148,7 @@ async function releaseOutputPlugin() {
       Uint8Array,
       basename,
       createHash: nodeCreateHash,
-      federationConfig: { name: "cadence_comms_overview" },
+      federationConfig: { name: "cadence_comms" },
       posix,
     };
     sandbox.globalThis = sandbox;
@@ -175,10 +175,10 @@ function hostInitializationBundle({
     "mf-stats.json": {
       type: "asset",
       source: JSON.stringify({
-        id: "cadence_comms_overview",
-        name: "cadence_comms_overview",
+        id: "cadence_comms",
+        name: "cadence_comms",
         metaData: {
-          name: "cadence_comms_overview",
+          name: "cadence_comms",
           remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
         },
         buildOutput: [
@@ -424,7 +424,7 @@ void test("rejects semantic whitespace mutations in string and template literals
 void test("rejects a remote-name substitution in a non-import template literal", async () => {
   const plugin = await releaseOutputPlugin();
   const bundle = hostInitializationBundle({
-    source: replaceOnce(hostInitializationSource, "`<remote>`", "`cadence_comms_overview`"),
+    source: replaceOnce(hostInitializationSource, "`<remote>`", "`cadence_comms`"),
   });
   assert.throws(
     () => plugin.generateBundle({}, bundle),
@@ -435,7 +435,7 @@ void test("rejects a remote-name substitution in a non-import template literal",
 
 void test("removes only the exact legitimate generated host-init entry", async () => {
   const plugin = await releaseOutputPlugin();
-  assert.equal(plugin.name, "cadence-comms-overview-release-output");
+  assert.equal(plugin.name, "cadence-comms-release-output");
   assert.equal(typeof plugin.generateBundle, "function");
   const bundle = hostInitializationBundle();
   assert.doesNotThrow(() => plugin.generateBundle({}, bundle));

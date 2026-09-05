@@ -89,7 +89,13 @@ defmodule Cadence.Applications.RegistryTest do
   test "defines the mission-scoped Comms v1 surface contract" do
     assert {:ok, definition} = Registry.fetch_available("comms", 1)
     assert definition.installable_scopes == [:mission]
-    assert definition.actions == []
+
+    assert Enum.map(definition.actions, & &1.action_id) == [
+             "create_provider",
+             "validate_provider",
+             "sync_provider",
+             "archive_provider"
+           ]
 
     assert Enum.map(Registry.workspace_surfaces(definition, :mission), fn surface ->
              {surface.surface_id, surface.data_contract, surface.renderer}
@@ -109,7 +115,13 @@ defmodule Cadence.Applications.RegistryTest do
              {"ground_stations", %{query_id: "cadence.comms.ground_stations", version: 1},
               {:trusted, "cadence.comms.ground_stations"}},
              {"ground_station", %{query_id: "cadence.comms.ground_station", version: 1},
-              {:trusted, "cadence.comms.ground_station"}}
+              {:trusted, "cadence.comms.ground_station"}},
+             {"provider_list", %{query_id: "cadence.comms.provider_list", version: 1},
+              {:trusted, "cadence.comms.provider_list"}},
+             {"provider_new", %{query_id: "cadence.comms.provider_new", version: 1},
+              {:trusted, "cadence.comms.provider_new"}},
+             {"provider_show", %{query_id: "cadence.comms.provider_show", version: 1},
+              {:trusted, "cadence.comms.provider_show"}}
            ]
 
     assert {:ok, transport} = Registry.fetch_surface(definition, :mission, "transport")
@@ -132,6 +144,13 @@ defmodule Cadence.Applications.RegistryTest do
 
     assert ground_station.subject_contract == %{
              schema_id: "cadence.comms.ground_station.subject",
+             version: 1
+           }
+
+    assert {:ok, provider_show} = Registry.fetch_surface(definition, :mission, "provider_show")
+
+    assert provider_show.subject_contract == %{
+             schema_id: "cadence.comms.provider.subject",
              version: 1
            }
   end

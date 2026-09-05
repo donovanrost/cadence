@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
-import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
@@ -21,7 +22,7 @@ const releaseFederationConfig = {
 };
 const publicationRoot = resolve(
   __dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/comms-overview",
+  "../../../apps/cadence_web/priv/static/assets/application-host/comms",
 );
 const repositoryRoot = realpathSync(resolve(__dirname, "../../.."));
 const releaseOutputEnvironmentName = "CADENCE_RELEASE_OUTPUT_DIR";
@@ -165,7 +166,7 @@ type ReleaseBundleItem = {
 
 const exactHostInitializationPath = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
 const exactHostInitializationFacadeId =
-  "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
+  "\0virtual:mf:__mfe_internal__cadence_comms__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
 const generatedHostInitializationSourceDigests = new Set([
   "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068",
 ]);
@@ -462,13 +463,18 @@ function bundleItemReferencesTarget(owner: string, item: ReleaseBundleItem, targ
 }
 
 function releaseOutputPlugin() {
+  let resolvedOutputDirectory: string | undefined;
+
   return {
-    name: "cadence-comms-overview-release-output",
+    name: "cadence-comms-release-output",
     enforce: "post",
     apply: "build",
     config(config: ViteUserConfig) {
       config.build ??= {};
       config.build.manifest = false;
+    },
+    configResolved(config: { build: { outDir: string } }) {
+      resolvedOutputDirectory = config.build.outDir;
     },
     generateBundle(_options: unknown, bundle: Record<string, ReleaseBundleItem>) {
       const structuralHostInitializationLookalikes = Object.entries(bundle).filter(
@@ -535,6 +541,21 @@ function releaseOutputPlugin() {
         throw new Error("release cleanup requires federation buildOutput records");
       }
 
+      stats.buildOutput = stats.buildOutput.map((output) => {
+        const emitted = output.fileName ? bundle[output.fileName] : undefined;
+        const bytes = emitted?.code ?? emitted?.source;
+
+        if (typeof bytes === "string") {
+          return { ...output, size: new TextEncoder().encode(bytes).byteLength };
+        }
+
+        if (bytes instanceof Uint8Array) {
+          return { ...output, size: bytes.byteLength };
+        }
+
+        return output;
+      });
+
       const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
       if (matching.length !== 1) {
         throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
@@ -550,6 +571,27 @@ function releaseOutputPlugin() {
       delete bundle[fileName];
       stats.buildOutput = stats.buildOutput.filter((output) => output.fileName !== fileName);
       statsAsset.source = JSON.stringify(stats);
+    },
+    async writeBundle() {
+      if (!resolvedOutputDirectory) throw new Error("release output directory was not resolved");
+
+      const statsPath = join(resolvedOutputDirectory, "mf-stats.json");
+      const stats = JSON.parse(await readFile(statsPath, "utf8")) as {
+        buildOutput?: Array<{ fileName?: string; size?: number }>;
+      };
+
+      if (!Array.isArray(stats.buildOutput)) {
+        throw new Error("release output is missing federation buildOutput records");
+      }
+
+      stats.buildOutput = stats.buildOutput.map((output) => {
+        if (!output.fileName) return output;
+
+        const artifactPath = join(resolvedOutputDirectory as string, output.fileName);
+        return { ...output, size: statSync(artifactPath).size };
+      });
+
+      await writeFile(statsPath, JSON.stringify(stats));
     },
   };
 }
@@ -572,7 +614,7 @@ export default defineConfig(({ command, mode }) => {
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
     },
-    base: releaseBuild ? "./" : "/assets/application-host/comms-overview/",
+    base: releaseBuild ? "./" : "/assets/application-host/comms/",
     server: {
       host: "127.0.0.1",
       port: 4176,

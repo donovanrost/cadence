@@ -1,7 +1,14 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { HostBridge, HostQueryRequest, MissionHostContext } from "@cadence/plugin-sdk";
+import type {
+  CatalogApplication,
+  FullPageSurfaceProps,
+  HostBridge,
+  HostQueryRequest,
+  MissionHostContext,
+} from "@cadence/plugin-sdk";
 import CommsApplication from "./CommsApplication.vue";
+import { canonicalManifest } from "./federated-application";
 
 const context: MissionHostContext = {
   scope: "mission",
@@ -22,13 +29,24 @@ const surfaceIds = [
   "routing_detail",
   "ground_stations",
   "ground_station",
+  "provider_list",
+  "provider_new",
+  "provider_show",
 ] as const;
 
 describe("Comms canonical federated application", () => {
   it.each(surfaceIds)("queries and renders the %s surface through Phoenix", async (surfaceId) => {
     const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload(surfaceId));
+    const props = propsFor(surfaceId, query);
     const wrapper = mount(CommsApplication, {
-      props: { context, bridge: bridgeFor(query), surfaceId },
+      props,
+      global: {
+        stubs: {
+          CommsProviderList: true,
+          CommsProviderNew: true,
+          CommsProviderShow: true,
+        },
+      },
     });
 
     await flushPromises();
@@ -49,7 +67,7 @@ describe("Comms canonical federated application", () => {
       .mockResolvedValueOnce({ navigation: {}, data: {} })
       .mockResolvedValueOnce(surfacePayload("validation"));
     const wrapper = mount(CommsApplication, {
-      props: { context, bridge: bridgeFor(query), surfaceId: "validation" },
+      props: propsFor("validation", query),
     });
 
     await flushPromises();
@@ -62,9 +80,56 @@ describe("Comms canonical federated application", () => {
     expect(wrapper.find("#comms-application-error").exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it("does not supply route params to a detail query", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_show"));
+    const wrapper = mount(CommsApplication, {
+      props: propsFor("provider_show", query),
+      global: {
+        stubs: { CommsProviderShow: true },
+      },
+    });
+
+    await flushPromises();
+
+    expect(query).toHaveBeenCalledWith({
+      queryId: "cadence.comms.provider_show",
+      version: 1,
+      context,
+    });
+    wrapper.unmount();
+  });
 });
 
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
+
+function propsFor(surfaceId: (typeof surfaceIds)[number], query: TestQuery): FullPageSurfaceProps {
+  const surface = canonicalManifest.surfaces.find((candidate) => candidate.surfaceId === surfaceId);
+  if (!surface) throw new Error(`Unknown test surface ${surfaceId}`);
+
+  const application: CatalogApplication = {
+    applicationKey: "comms",
+    applicationVersion: 1,
+    displayName: "Communications",
+    description: "Mission communications.",
+    package: { packageId: "cadence.comms", version: 1 },
+    surface,
+    release: {
+      federation: "module_federation",
+      releaseId: "comms-v1",
+      remoteName: "cadence_comms",
+      manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+      exposedModule: "./Application",
+    },
+  };
+
+  return {
+    application,
+    surface,
+    context,
+    bridge: bridgeFor(query),
+  };
+}
 
 function bridgeFor(query: TestQuery): HostBridge {
   return {
@@ -77,6 +142,91 @@ function bridgeFor(query: TestQuery): HostBridge {
 function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
   if (surfaceId === "overview") return overviewPayload();
 
+  if (surfaceId === "provider_list") {
+    return {
+      navigation: providerNavigation("providers"),
+      trusted_surface: {
+        presentation: {
+          root: { attrs: { id: "comms-providers-page", class: "space-y-6" } },
+          header: {
+            attrs: {},
+            body: { attrs: {} },
+            content: { attrs: {} },
+            breadcrumbs: { attrs: {}, items: [] },
+            title: { attrs: {}, text: "Providers", suffix: { attrs: {}, text: "0 configured" } },
+            subtitle: { attrs: {}, text: "Providers" },
+            actions: { attrs: {}, new_provider: { attrs: {}, icon: { attrs: {} }, text: "New" } },
+          },
+          empty_state: null,
+          card: null,
+        },
+      },
+    };
+  }
+
+  if (surfaceId === "provider_new") {
+    return {
+      navigation: providerNavigation("New Provider"),
+      trusted_surface: {
+        page: {
+          id: "comms-provider-new-page",
+          title: "New Mission Provider",
+          subtitle: "Provider setup.",
+          breadcrumbs: [{ label: "New", href: null }],
+        },
+        accounts: {
+          empty: true,
+          options: [],
+          selected: null,
+          empty_state: {
+            id: "mission-provider-no-grants",
+            heading: "No grants",
+            message: "Grant an account.",
+            action: { id: "open-provider-accounts-link", label: "Open", href: "/provider-accounts" },
+          },
+        },
+        notes: { secret_boundary: { id: "secret", text: "Secret boundary." }, resource_boundary: { id: "resource", text: "Resource boundary." } },
+        form: providerFormPayload(),
+      },
+    };
+  }
+
+  if (surfaceId === "provider_show") {
+    return {
+      navigation: providerNavigation("Provider"),
+      trusted_surface: {
+        navigation: providerNavigation("Provider"),
+        provider: {
+          page_id: "comms-provider-show-page",
+          display_name: "Simulator",
+          provider_id: "provider-1",
+          simulated_badge: { id: "simulated-provider-badge", label: "Simulated" },
+          version: "v1",
+          summary_tiles: [],
+        },
+        actions: {
+          validate: { id: "validate-provider-button", label: "Validate", disabled: false },
+          sync: { id: "sync-provider-button", label: "Sync", disabled: false },
+          archive: { id: "archive-provider-button", label: "Archive", confirm: "Archive?", disabled: false },
+        },
+        profiles: {
+          service: { id: "service", heading: "Service", subtitle: "", empty: true, empty_copy: "", table_id: "service-table", table_body_id: "service-body", columns: [] },
+          delivery: { id: "delivery", heading: "Delivery", subtitle: "", empty: true, empty_copy: "", table_id: "delivery-table", table_body_id: "delivery-body", columns: [] },
+        },
+        details: {
+          configuration: { id: "configuration", title: "Configuration", rows: [] },
+          delivery_policy: { id: "policy", title: "Policy", rows: [] },
+          capabilities: { id: "capabilities", title: "Capabilities", empty: true, empty_copy: "", items: [] },
+          version_history: { id: "history", title: "History", stream_id: "history" },
+        },
+        diagnostics: { id: "diagnostics", label: "Diagnostics", json_id: "diagnostics-json", rows: [], json: "{}" },
+        service_profiles: [],
+        delivery_profiles: [],
+        provider_versions: [],
+      },
+    };
+  }
+
   return {
     navigation: {
       fallback_href: `/missions/mission-1/comms/${surfaceId}`,
@@ -86,7 +236,7 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
         { label: surfaceId, href: null },
       ],
     },
-    data: {
+    trusted_surface: {
       id: `comms-${surfaceId.replaceAll("_", "-")}-surface`,
       title: surfaceId,
       empty: true,
@@ -95,6 +245,53 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
       finding_groups: [],
       status: "ready",
     },
+  };
+}
+
+function providerFormPayload() {
+  const keys = [
+    "display_name",
+    "provider_account_grant_id",
+    "permitted_resource_refs",
+    "policy_mode",
+    "maximum_earlier_start_shift_seconds",
+    "maximum_later_start_shift_seconds",
+    "maximum_earlier_end_shift_seconds",
+    "maximum_later_end_shift_seconds",
+    "minimum_retained_duration_seconds",
+    "approved_station_substitutions",
+    "deadline_behavior",
+  ];
+  const fields = Object.fromEntries(
+    keys.map((key) => [
+      key,
+      { key, id: `provider_${key}`, name: `provider[${key}]`, type: "text", label: key, required: false, placeholder: null, min: null, options: [], value: "" },
+    ]),
+  );
+  return {
+    id: "mission-provider-form",
+    sections: {
+      binding: { id: "binding", number: "01", title: "Binding", field_keys: ["display_name", "provider_account_grant_id"] },
+      resource_scope: { id: "resource", number: "02", title: "Resource", field_keys: ["permitted_resource_refs"] },
+      delivery_policy: { id: "policy", number: "03", title: "Policy", field_keys: ["policy_mode", "deadline_behavior"] },
+    },
+    fields,
+    conditional: {
+      approval_guidance: { id: "approval", active: false, visible_when: { field: "policy_mode", equals: "approval_required" }, text: "" },
+      bounded_policy: { id: "bounded", active: false, visible_when: { field: "policy_mode", equals: "bounded_automatic" }, field_keys: [] },
+    },
+    actions: { submit: { id: "submit", label: "Create" }, cancel: { id: "cancel", label: "Cancel", href: "/comms/providers" } },
+  };
+}
+
+function providerNavigation(label: string) {
+  return {
+    fallback_href: "/missions/mission-1/comms/providers",
+    breadcrumbs: [
+      { label: "Firebird", href: "/missions/mission-1" },
+      { label: "Comms", href: "/missions/mission-1/comms" },
+      { label, href: null },
+    ],
   };
 }
 
@@ -107,7 +304,7 @@ function overviewPayload() {
         { label: "Comms", href: null },
       ],
     },
-    data: {
+    trusted_surface: {
       root: { attrs: { class: "space-y-6", id: "comms-overview-page" } },
       header: {
         attrs: { class: "border-b border-primary/20 pb-4" },

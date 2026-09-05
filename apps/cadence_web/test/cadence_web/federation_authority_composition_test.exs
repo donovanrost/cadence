@@ -9,6 +9,7 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     mission_catalog
     spacecraft
     telemetry_decom
+    comms
     comms_overview
     ops_console
   )

@@ -69,22 +69,30 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
     assert release == %{
              federation: :module_federation,
              release_id: "comms-overview-v1",
-             remote_name: "cadence_comms_overview",
-             manifest_path: "/assets/application-host/comms-overview/mf-manifest.json",
-             exposed_module: "./Application"
+             remote_name: "cadence_comms",
+             manifest_path: "/assets/application-host/comms/mf-manifest.json",
+             exposed_module: "./LegacyApplication"
            }
   end
 
-  test "does not advertise the unpublished Comms remote" do
+  test "advertises the canonical Comms release for every admitted surface" do
     surfaces =
-      ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
+      ~w(overview validation transports transport routing routing_detail ground_stations ground_station provider_list provider_new provider_show)
 
     Enum.each(surfaces, fn surface_id ->
-      assert {:error, :unknown_application_release} =
+      assert {:ok, release} =
                ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1, now: @now)
+
+      assert release == %{
+               federation: :module_federation,
+               release_id: "comms-v1",
+               remote_name: "cadence_comms",
+               manifest_path: "/assets/application-host/comms/mf-manifest.json",
+               exposed_module: "./Application"
+             }
     end)
 
-    refute Enum.any?(ApplicationReleaseRegistry.all(now: @now), fn {{application_key, _version,
+    assert Enum.any?(ApplicationReleaseRegistry.all(now: @now), fn {{application_key, _version,
                                                                      _surface, _surface_version},
                                                                     _release} ->
              application_key == "comms"

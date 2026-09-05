@@ -5,6 +5,7 @@ defmodule Cadence.Applications.ActionProviderRegistry do
 
   @max_providers 16
   @contributors [
+    Cadence.Applications.Comms,
     Cadence.Applications.Spacecraft,
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,

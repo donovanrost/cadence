@@ -6,7 +6,12 @@ import type {
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
-import { canonicalManifest, legacyManifest, manifest } from "./federated-application";
+import CanonicalApplication, {
+  canonicalManifest,
+  legacyManifest,
+  manifest,
+} from "./federated-application";
+import LegacyApplication, { manifest as legacyModuleManifest } from "./legacy-application";
 import { unwrapCommsOverviewResponse, type CommsOverviewResponse } from "./comms-overview";
 
 const context: MissionHostContext = {
@@ -77,9 +82,9 @@ const application = {
   release: {
     federation: "module_federation" as const,
     releaseId: "comms-overview-v1",
-    remoteName: "cadence_comms_overview",
-    manifestUrl: "/assets/application-host/comms-overview/mf-manifest.json",
-    exposedModule: "./Application",
+    remoteName: "cadence_comms",
+    manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+    exposedModule: "./LegacyApplication",
   },
 };
 
@@ -205,19 +210,129 @@ describe("Comms Overview federated adapter", () => {
   it("publishes all mission Comms surfaces from the canonical remote manifest", () => {
     expect(canonicalManifest.package).toMatchObject({ packageId: "cadence.comms", version: 1 });
     expect(canonicalManifest.application).toMatchObject({ applicationKey: "comms", version: 1 });
-    expect(canonicalManifest.surfaces.map(({ surfaceId }) => surfaceId)).toEqual([
-      "overview",
-      "validation",
-      "transports",
-      "transport",
-      "routing",
-      "routing_detail",
-      "ground_stations",
-      "ground_station",
+    expect(canonicalManifest.surfaces).toEqual([
+      {
+        surfaceId: "overview",
+        version: 1,
+        purpose: "overview",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Overview", order: 10 },
+        dataContract: { id: "cadence.comms.overview", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "validation",
+        version: 1,
+        purpose: "activity",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Validation", order: 20 },
+        dataContract: { id: "cadence.comms.validation", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "transports",
+        version: 1,
+        purpose: "collection",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Transports", order: 30 },
+        dataContract: { id: "cadence.comms.transports", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "transport",
+        version: 1,
+        purpose: "subject_detail",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Transport", order: 40 },
+        dataContract: { id: "cadence.comms.transport", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "routing",
+        version: 1,
+        purpose: "collection",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Routing", order: 50 },
+        dataContract: { id: "cadence.comms.routing", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "routing_detail",
+        version: 1,
+        purpose: "subject_detail",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Routing Rule", order: 60 },
+        dataContract: { id: "cadence.comms.routing_detail", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "ground_stations",
+        version: 1,
+        purpose: "collection",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Ground Stations", order: 70 },
+        dataContract: { id: "cadence.comms.ground_stations", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "ground_station",
+        version: 1,
+        purpose: "subject_detail",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Ground Station", order: 80 },
+        dataContract: { id: "cadence.comms.ground_station", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "provider_list",
+        version: 1,
+        purpose: "collection",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Providers", order: 90 },
+        dataContract: { id: "cadence.comms.provider_list", version: 1 },
+        actions: [],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "provider_new",
+        version: 1,
+        purpose: "configuration",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "New Provider", order: 100 },
+        dataContract: { id: "cadence.comms.provider_new", version: 1 },
+        actions: ["create_provider"],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
+      {
+        surfaceId: "provider_show",
+        version: 1,
+        purpose: "subject_detail",
+        scope: "mission",
+        placement: "application_workspace",
+        navigation: { label: "Provider", order: 110 },
+        dataContract: { id: "cadence.comms.provider_show", version: 1 },
+        actions: ["validate_provider", "sync_provider", "archive_provider"],
+        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      },
     ]);
-    expect(canonicalManifest.surfaces.every(({ dataContract }) => dataContract.version === 1)).toBe(
-      true,
-    );
   });
 
   it("publishes the exact mission-scoped first-party identity", () => {
@@ -230,7 +345,10 @@ describe("Comms Overview federated adapter", () => {
       version: 1,
     });
     expect(legacyManifest.application.installableScopes).toEqual(["mission"]);
-    expect(manifest).toBe(legacyManifest);
+    expect(manifest).toBe(canonicalManifest);
+    expect(CanonicalApplication).not.toBe(CommsOverviewApplication);
+    expect(legacyModuleManifest).toBe(legacyManifest);
+    expect(LegacyApplication).toBe(CommsOverviewApplication);
     expect(legacyManifest.surfaces).toEqual([
       expect.objectContaining({
         surfaceId: "overview",
@@ -238,7 +356,7 @@ describe("Comms Overview federated adapter", () => {
         scope: "mission",
         dataContract: { id: "cadence.comms.overview", version: 1 },
         actions: [],
-        renderer: { kind: "federated-vue", exposedModule: "./Application" },
+        renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
       }),
     ]);
   });

@@ -17,7 +17,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
 
   @publication_paths [
     "assets/application-host/host/host.js",
-    "assets/application-host/comms-overview/mf-manifest.json",
+    "assets/application-host/comms/mf-manifest.json",
     "assets/application-host/telemetry-decom/mf-manifest.json"
   ]
 

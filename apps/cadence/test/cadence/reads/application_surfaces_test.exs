@@ -36,6 +36,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Listing.Page
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
+  alias Cadence.Reads.ApplicationSurfaces.CommsProviders
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
@@ -459,6 +460,46 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
              CommsSurface.validate_bounded_payload(%{"unsupported" => self()})
   end
 
+  test "provider queries keep subject and immutable account selection separate" do
+    scope = %Scope{
+      actor_kind: :user,
+      organization_id: @organization_id,
+      mission_id: @mission_id,
+      user: %{user_id: "surface-operator"},
+      organization_membership: %{lifecycle_state: :active}
+    }
+
+    assert {:error, :invalid_application_request} =
+             CommsProviders.load(
+               scope,
+               HostContext.mission(@mission_id),
+               %SurfaceQueryRequest{
+                 application_key: "comms",
+                 application_version: 1,
+                 surface_id: "provider_show",
+                 surface_version: 1,
+                 query_id: "cadence.comms.provider_show",
+                 query_version: 1,
+                 params: %{"provider_id" => "provider-1", "mode" => "edit"}
+               }
+             )
+
+    assert {:error, :invalid_application_request} =
+             CommsProviders.load(
+               scope,
+               HostContext.mission(@mission_id),
+               %SurfaceQueryRequest{
+                 application_key: "comms",
+                 application_version: 1,
+                 surface_id: "provider_list",
+                 surface_version: 1,
+                 query_id: "cadence.comms.provider_list",
+                 query_version: 1,
+                 params: %{"provider_account_id" => "account-1"}
+               }
+             )
+  end
+
   test "rejects invalid detail IDs without fabricating a fallback segment" do
     scope = %Scope{
       actor_kind: :user,
@@ -867,6 +908,26 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
       assert is_map(data)
       assert navigation["fallback_href"] =~ "/missions/#{@mission_id}/comms/"
       assert_redacted_surface({:ok, %{"navigation" => navigation, "data" => data}})
+    end
+
+    for {surface_id, params} <- [
+          {"transport", %{"transport_id" => persisted_transport.transport_id, "mode" => "edit"}},
+          {"routing_detail",
+           %{"routing_rule_id" => persisted_rule.routing_rule_id, "mode" => "edit"}},
+          {"ground_station",
+           %{"ground_station_id" => persisted_station.ground_station_id, "mode" => "edit"}}
+        ] do
+      assert {:ok, surface} = Registry.fetch_surface(comms_definition, :mission, surface_id)
+
+      assert {:error, :invalid_application_request} =
+               ApplicationSurfaces.load(
+                 scope,
+                 host_context,
+                 "comms",
+                 1,
+                 surface,
+                 params
+               )
     end
 
     assert {:ok, routing_surface} =

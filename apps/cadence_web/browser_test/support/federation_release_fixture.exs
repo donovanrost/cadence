@@ -50,7 +50,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
         build_release!(
           node,
           "@cadence/comms-overview-plugin",
-          Path.join(app_root, "priv/static/assets/application-host/comms-overview"),
+          Path.join(app_root, "priv/static/assets/application-host/comms"),
           Path.join(temp_root, "release-build-comms-overview")
         )
 
@@ -461,10 +461,11 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       "overview",
       "cadence.comms.overview",
       [],
-      "cadence_comms_overview",
+      "cadence_comms",
       "federation-browser-comms-overview-#{slot_name(slot)}",
       released_at(slot)
     )
+    |> put_in(["module", "exposedModule"], "./LegacyApplication")
   end
 
   defp telemetry_metadata(slot) do

@@ -17,9 +17,9 @@ defmodule Cadence.Applications.LegacyCommsOverview do
     surface_version: 1,
     query_id: "cadence.comms.overview",
     release_id: "comms-overview-v1",
-    remote_name: "cadence_comms_overview",
-    manifest_path: "/assets/application-host/comms-overview/mf-manifest.json",
-    exposed_module: "./Application"
+    remote_name: "cadence_comms",
+    manifest_path: "/assets/application-host/comms/mf-manifest.json",
+    exposed_module: "./LegacyApplication"
   }
 
   @spec identity() :: map()

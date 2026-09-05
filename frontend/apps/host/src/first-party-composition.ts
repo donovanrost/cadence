@@ -35,10 +35,16 @@ export const APPROVED_FIRST_PARTY_APPLICATIONS = Object.freeze([
     publicationBundle: "telemetry-decom",
   },
   {
+    applicationKey: "comms",
+    packageId: "cadence.comms",
+    remoteName: "cadence_comms",
+    publicationBundle: "comms",
+  },
+  {
     applicationKey: "comms_overview",
     packageId: "cadence.comms_overview",
-    remoteName: "cadence_comms_overview",
-    publicationBundle: "comms-overview",
+    remoteName: "cadence_comms",
+    publicationBundle: "comms",
   },
   {
     applicationKey: "ops_console",

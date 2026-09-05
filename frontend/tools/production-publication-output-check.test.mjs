@@ -59,7 +59,7 @@ async function publicationFixture() {
     ["mission-catalog", "cadence_mission_catalog"],
     ["spacecraft", "cadence_spacecraft"],
     ["telemetry-decom", "cadence_telemetry_decom"],
-    ["comms-overview", "cadence_comms_overview"],
+    ["comms", "cadence_comms"],
     ["ops-console", "cadence_ops_console"],
   ]) {
     await mkdir(join(root, bundle));

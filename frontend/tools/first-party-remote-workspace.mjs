@@ -25,8 +25,8 @@ export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
   },
   {
     directoryName: "comms-overview",
-    bundle: "comms-overview",
-    remoteName: "cadence_comms_overview",
+    bundle: "comms",
+    remoteName: "cadence_comms",
   },
   { directoryName: "ops-console", bundle: "ops-console", remoteName: "cadence_ops_console" },
 ]);

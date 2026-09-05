@@ -19,7 +19,7 @@ const expectedApplications = new Map([
     "telemetry-decom",
     { applicationKey: "telemetry_decom", packageId: "cadence.telemetry-applications" },
   ],
-  ["comms-overview", { applicationKey: "comms_overview", packageId: "cadence.comms_overview" }],
+  ["comms-overview", { applicationKey: "comms", packageId: "cadence.comms" }],
   ["ops-console", { applicationKey: "ops_console", packageId: "cadence.ops_console" }],
 ]);
 
@@ -30,10 +30,13 @@ test("the six approved first-party remotes have complete manifest and federation
       bundle,
       remoteName,
     })),
-    [...expectedApplications.keys()].map((directoryName) => ({
+    [...expectedApplications].map(([directoryName]) => ({
       directoryName,
-      bundle: directoryName,
-      remoteName: `cadence_${directoryName.replaceAll("-", "_")}`,
+      bundle: directoryName === "comms-overview" ? "comms" : directoryName,
+      remoteName:
+        directoryName === "comms-overview"
+          ? "cadence_comms"
+          : `cadence_${directoryName.replaceAll("-", "_")}`,
     })),
   );
 
@@ -50,7 +53,9 @@ test("the six approved first-party remotes have complete manifest and federation
     assert.equal(typeof packageJson.scripts?.["build:phoenix"], "string");
     assert.match(
       federation,
-      new RegExp(`name:\\s*["']cadence_${directoryName.replaceAll("-", "_")}["']`),
+      new RegExp(
+        `name:\\s*["']${directoryName === "comms-overview" ? "cadence_comms" : `cadence_${directoryName.replaceAll("-", "_")}`}["']`,
+      ),
     );
     assert.match(federation, /exposes:\s*\{[\s\S]*["']\.\/Application["']\s*:/);
     assert.match(federatedApplication, /defineApplicationManifest/);
@@ -79,10 +84,13 @@ test("real-workspace publication discovery admits exactly the six approved remot
     remotes
       .map(({ bundle, remoteName }) => ({ bundle, remoteName }))
       .sort((left, right) => left.bundle.localeCompare(right.bundle)),
-    [...expectedApplications.keys()]
-      .map((directoryName) => ({
-        bundle: directoryName,
-        remoteName: `cadence_${directoryName.replaceAll("-", "_")}`,
+    [...expectedApplications]
+      .map(([directoryName]) => ({
+        bundle: directoryName === "comms-overview" ? "comms" : directoryName,
+        remoteName:
+          directoryName === "comms-overview"
+            ? "cadence_comms"
+            : `cadence_${directoryName.replaceAll("-", "_")}`,
       }))
       .sort((left, right) => left.bundle.localeCompare(right.bundle)),
   );
