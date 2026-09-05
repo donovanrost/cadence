@@ -8,7 +8,9 @@ import type {
 import { CButton } from "@cadence/ui";
 import { onBeforeUnmount, onErrorCaptured, shallowRef, watch } from "vue";
 import type { Component } from "vue";
+import FullPageSurface from "./FullPageSurface.vue";
 import { loadFederatedApplication } from "./remote-loader";
+import { fullPageSurfaceProps } from "@cadence/plugin-sdk";
 
 const props = defineProps<{
   application: CatalogApplication;
@@ -92,5 +94,9 @@ function failureFor(message: string): { message: string; referenceId: string } {
     </div>
   </section>
 
-  <component :is="component" v-else :bridge="bridge" :context="context" />
+  <FullPageSurface
+    v-else
+    :renderer="component"
+    :mount="fullPageSurfaceProps(application, context, bridge)"
+  />
 </template>

@@ -1,6 +1,6 @@
 import "@cadence/design-tokens/base.css";
-import { createApp } from "vue";
-import App from "./App.vue";
 import "./style.css";
+import { bootstrapHost } from "./host-bootstrap";
 
-createApp(App).mount("#app");
+const root = document.querySelector<HTMLElement>("#app");
+if (root) bootstrapHost(root);
