@@ -504,19 +504,6 @@
     {
       "application_key": "ops_console",
       "application_version": 1,
-      "surface_id": "ops",
-      "surface_version": 1,
-      "query_id": "cadence.ops.console",
-      "query_version": 1,
-      "release_id": "ops-console-v1",
-      "remote_name": "cadence_ops_console",
-      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
-      "exposed_module": "./Application",
-      "classification": "full_page"
-    },
-    {
-      "application_key": "ops_console",
-      "application_version": 1,
       "surface_id": "contact_requirement_list",
       "surface_version": 1,
       "query_id": "cadence.ops.contact_requirement_list",
