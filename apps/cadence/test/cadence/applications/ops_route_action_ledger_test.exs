@@ -2,97 +2,113 @@ defmodule Cadence.Applications.OpsRouteActionLedgerTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.OpsConsole
+  alias Cadence.Applications.OpsConsole.ActionProvider
 
-  @legacy_events %{
-    "activation_requests" => ["review", "decide"],
-    "alarms" => ["filter", "reset_filters"],
+  @residual_action_ledger %{
+    "workspace" => [],
+    "ops" => [
+      "validate",
+      "save",
+      "filter",
+      "refresh",
+      "select",
+      "open_data_link",
+      "open_evidence",
+      "set_chart_time_range"
+    ],
+    "contact_requirement_list" => [],
+    "contact_requirement_new" => [],
+    "contact_requirement_show" => ["toggle-opportunity"],
+    "contact_requirement_template" => [],
+    "contact_schedule" => [],
+    "contact_plan_show" => [],
+    "contact_detail" => [],
+    "contact_record" => [],
+    "dashboard_directory" => [],
+    "dashboard_show" => [],
+    "dashboard_editor" => [],
+    "dashboard_activity" => [],
+    "dashboard_new" => [],
+    "dashboard_library" => [],
+    "dashboard_playlists" => [],
+    "dashboard_playlist_present" => [],
+    "dashboard_settings" => [],
+    "dashboard_share" => [],
+    "dashboard_snapshot" => [],
+    "dashboard_diagnostics" => [],
+    "fleet_planning" => [],
+    "fleet_planning_new" => ["validate-fleet-run"],
+    "fleet_planning_policy" => ["validate-policy", "validate-grant"],
+    "fleet_planning_run" => [],
+    "activation_requests" => ["review"],
     "commands" => ["filter", "reset_filters", "follow_command", "clear_command_focus"],
-    "contact_detail" => [
-      "approve-provider-change",
-      "reject-provider-change",
-      "acknowledge-provider-change"
-    ],
-    "contact_plan_show" => ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
-    "contact_requirement_new" => ["validate", "save"],
-    "contact_requirement_show" => ["plan", "toggle-opportunity", "create-plan"],
-    "contact_requirement_template" => [
-      "validate-template",
-      "create-template",
-      "pause-template",
-      "activate-template",
-      "close-template"
-    ],
-    "contact_schedule" => ["validate", "search", "reserve", "cancel"],
-    "dashboard_directory" => ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"],
-    "dashboard_library" => ["stage-library-item", "create-library-item", "add-library-version"],
-    "dashboard_new" => ["validate", "save"],
-    "dashboard_playlist_present" => ["next-dashboard"],
-    "dashboard_playlists" => ["create-playlist"],
-    "dashboard_settings" => [
-      "validate-settings",
-      "save-settings",
-      "create-share",
-      "revoke-share",
-      "create-snapshot",
-      "archive-dashboard"
-    ],
-    "data_operations" => [
-      "validate-request",
-      "record-historical-workflow-request",
-      "transition-group",
-      "retry-group",
-      "request-correction"
-    ],
-    "data_sources" => [
-      "open-register-source",
-      "cancel-register-source",
-      "register-source",
-      "open-change-binding",
-      "cancel-change-binding",
-      "change-binding",
-      "disable-source",
-      "enable-source",
-      "reconcile-tsdb-backend",
-      "deprovision-tsdb-backend",
-      "provision-tsdb-backend",
-      "probe-source",
-      "rotate-source-credential",
-      "retry-deployment-run",
-      "requeue-deployment-run"
-    ],
-    "fleet_planning" => ["refresh-planning"],
-    "fleet_planning_new" => ["validate-fleet-run", "create-fleet-run"],
-    "fleet_planning_policy" => [
-      "validate-policy",
-      "save-policy",
-      "approve-policy",
-      "validate-grant",
-      "issue-grant",
-      "revoke-grant"
-    ],
-    "fleet_planning_run" => ["refresh-fleet-run", "repair-fleet-run"],
     "telemetry_explore" => [
       "apply_filters",
       "apply_question",
       "add_to_dashboard",
       "clear_selected_sample"
     ],
-    "timeline" => ["apply_timeline_filters", "clear_timeline_selection"]
+    "data_operations" => [],
+    "data_operations_manage" => [],
+    "data_sources" => [
+      "open-register-source",
+      "cancel-register-source",
+      "open-change-binding",
+      "cancel-change-binding"
+    ],
+    "data_source_registration" => [],
+    "data_source_settings" => [],
+    "alarms" => [],
+    "timeline" => []
   }
 
-  test "every removed listener remains declared or is an explicit residual" do
+  test "provider and residual actions form an exact disjoint surface partition" do
+    declared_pairs = MapSet.new(OpsConsole.surface_action_pairs())
+    provider_pairs = MapSet.new(ActionProvider.binding_keys())
+    residual_pairs = residual_pairs()
+
+    assert length(OpsConsole.definition().actions) == 103
+    assert @residual_action_ledger == OpsConsole.residual_action_ledger()
+    assert ActionProvider.duplicate_binding_keys() == []
+    assert MapSet.size(provider_pairs) == length(ActionProvider.binding_keys())
+    assert MapSet.size(residual_pairs) == residual_pair_count()
+    assert MapSet.disjoint?(provider_pairs, residual_pairs)
+    assert MapSet.union(provider_pairs, residual_pairs) == declared_pairs
+    assert MapSet.equal?(declared_pairs, MapSet.union(provider_pairs, residual_pairs))
+
     specs = Map.new(OpsConsole.surface_specs(), &{&1.id, &1})
 
-    assert @legacy_events == OpsConsole.residual_action_ledger()
+    assert Map.keys(OpsConsole.residual_action_ledger()) |> Enum.sort() ==
+             Map.keys(specs) |> Enum.sort()
 
-    Enum.each(@legacy_events, fn {surface_id, events} ->
-      assert Map.has_key?(specs, surface_id)
-      surface = specs[surface_id]
+    Enum.each(OpsConsole.surface_specs(), fn surface ->
+      declared = MapSet.new(Enum.map(surface.actions, &{surface.id, &1}))
 
-      assert MapSet.new(events) == MapSet.new(surface.actions)
-      assert Enum.all?(events, &(&1 in OpsConsole.action_ids()))
+      provider =
+        MapSet.filter(provider_pairs, fn {surface_id, _action} -> surface_id == surface.id end)
+
+      residual =
+        MapSet.filter(residual_pairs, fn {surface_id, _action} -> surface_id == surface.id end)
+
+      assert MapSet.disjoint?(provider, residual)
+      assert MapSet.union(provider, residual) == declared
     end)
 
-    assert {:residual, 77} = OpsConsole.route_action_completion()
+    expected_residual_count =
+      OpsConsole.residual_action_ledger()
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.uniq()
+      |> length()
+
+    assert {:residual, ^expected_residual_count} = OpsConsole.route_action_completion()
   end
+
+  defp residual_pairs do
+    OpsConsole.residual_action_ledger()
+    |> Enum.flat_map(fn {surface_id, actions} -> Enum.map(actions, &{surface_id, &1}) end)
+    |> MapSet.new()
+  end
+
+  defp residual_pair_count, do: residual_pairs() |> MapSet.size()
 end

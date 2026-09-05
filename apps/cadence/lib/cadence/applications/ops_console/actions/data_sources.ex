@@ -17,10 +17,24 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   alias Cadence.Management.DataSources
   alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
 
-  @surface_id "data_sources"
+  @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
+  @surface_version 1
 
-  @host_action_ids [
+  @registration_action_ids ["register-source"]
+  @legacy_action_ids [
     "register-source",
+    "change-binding",
+    "disable-source",
+    "enable-source",
+    "reconcile-tsdb-backend",
+    "deprovision-tsdb-backend",
+    "provision-tsdb-backend",
+    "probe-source",
+    "rotate-source-credential",
+    "retry-deployment-run",
+    "requeue-deployment-run"
+  ]
+  @settings_action_ids [
     "change-binding",
     "disable-source",
     "enable-source",
@@ -47,23 +61,31 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   ]
 
   @spec bindings() :: [{binary(), binary()}]
-  def bindings, do: Enum.map(@host_action_ids, &{@surface_id, &1})
+  def bindings,
+    do:
+      Enum.map(@legacy_action_ids, &{"data_sources", &1}) ++
+        [{"data_source_registration", "register-source"}] ++
+        Enum.map(@settings_action_ids, &{"data_source_settings", &1})
 
   @spec execute(Scope.t(), HostContext.t(), binary(), ActionRequest.t()) ::
           {:ok, term()} | {:error, term()}
+  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
+    execute(scope, host_context, request.surface_id, request)
+  end
+
   def execute(
         %Scope{organization_id: organization_id} = scope,
         %HostContext{placement: :mission, mission_id: mission_id} = host_context,
-        @surface_id,
+        surface_id,
         %ActionRequest{} = request
       )
       when is_binary(organization_id) and organization_id != "" and is_binary(mission_id) and
              mission_id != "" do
-    with :ok <- validate_request(host_context, request),
+    with :ok <- validate_request(surface_id, host_context, request),
          :ok <- validate_json_params(request.params),
          :ok <- validate_mission_param(mission_id, request.params),
-         :ok <- authorize(scope, organization_id, mission_id),
          {:ok, params} <- normalize_params(request.action_id, request.params),
+         :ok <- authorize(scope, organization_id, mission_id),
          {:ok, value} <- dispatch(scope, host_context, request, params) do
       {:ok, value}
     end
@@ -148,24 +170,37 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   def result(_value), do: nil
 
   defp validate_request(
+         surface_id,
          %HostContext{placement: :mission} = host_context,
          %ActionRequest{
            application_key: "ops_console",
            application_version: 1,
+           surface_id: surface_id,
+           surface_version: @surface_version,
            action_id: action_id,
            params: params
          }
        )
-       when is_binary(action_id) and is_map(params) do
-    if HostContext.valid?(host_context) and action_id in @host_action_ids do
+       when is_binary(surface_id) and is_binary(action_id) and is_map(params) do
+    if HostContext.valid?(host_context) and valid_binding?(surface_id, action_id) do
       :ok
     else
       {:error, :unsupported_application_action}
     end
   end
 
-  defp validate_request(_host_context, _request),
+  defp validate_request(_surface_id, _host_context, _request),
     do: {:error, :unsupported_application_action}
+
+  defp valid_binding?(surface_id, action_id) when surface_id in @surface_ids do
+    case surface_id do
+      "data_sources" -> action_id in @legacy_action_ids
+      "data_source_registration" -> action_id in @registration_action_ids
+      "data_source_settings" -> action_id in @settings_action_ids
+    end
+  end
+
+  defp valid_binding?(_surface_id, _action_id), do: false
 
   defp validate_json_params(params) do
     if JSONBoundary.validate(params) == :ok and string_keyed?(params),

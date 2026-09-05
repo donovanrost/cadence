@@ -69,7 +69,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
         id="comms-transport-new-component"
         v-component="FederatedFullPageSurface"
         application_key="comms"
-        surface_id="transport"
+        surface_id="transport_new"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
           query_params={%{mission_id: @current_mission.mission_id}}

@@ -15,6 +15,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     ContactPlans,
     ContactRequirements,
     ContactRequirementTemplates,
+    OpportunityCapability,
     Planner
   }
 
@@ -133,7 +134,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp prepare_params(params, mission_id) when is_map(params) do
-    with :ok <- JSONBoundary.validate(params),
+    with :ok <- validate_params(params),
          true <- Enum.all?(Map.keys(params), &is_binary/1),
          :ok <- request_mission(Map.get(params, "mission_id"), mission_id) do
       {:ok, Map.delete(params, "mission_id")}
@@ -144,6 +145,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp prepare_params(_params, _mission_id), do: {:error, :malformed_input}
+
+  defp validate_params(%{"token" => token} = params)
+       when is_binary(token) and byte_size(token) <= 8_192 do
+    JSONBoundary.validate(Map.delete(params, "token"))
+  end
+
+  defp validate_params(params), do: JSONBoundary.validate(params)
 
   defp request_mission(nil, _mission_id), do: :ok
   defp request_mission(mission_id, mission_id) when is_binary(mission_id), do: :ok
@@ -303,7 +311,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
              form["route_key"],
              window
            ) do
-      {:ok, search_result(found, scope.organization_id, mission_id)}
+      {:ok, search_result(found, scope.organization_id, mission_id, form)}
     end
   end
 
@@ -677,22 +685,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp verify_opportunity(token) do
-    try do
-      case apply(CadenceWeb.OpsContactScheduleLive.OpportunityToken, :verify, [token]) do
-        {:ok, payload} when is_map(payload) ->
-          case JSONBoundary.validate(payload) do
-            :ok -> {:ok, payload}
-            {:error, _reason} -> {:error, :malformed_opportunity_token}
-          end
+    case OpportunityCapability.verify(token) do
+      {:ok, payload} when is_map(payload) ->
+        case JSONBoundary.validate(payload) do
+          :ok -> {:ok, payload}
+          {:error, _reason} -> {:error, :malformed_opportunity_token}
+        end
 
-        {:error, reason} ->
-          {:error, reason}
-
-        _invalid ->
-          {:error, :malformed_opportunity_token}
-      end
-    rescue
-      UndefinedFunctionError -> {:error, :malformed_opportunity_token}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -783,32 +784,24 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     end
   end
 
-  defp search_result(%{route: route, opportunities: opportunities}, organization_id, mission_id) do
+  defp search_result(
+         %{route: route, opportunities: opportunities},
+         organization_id,
+         mission_id,
+         form
+       ) do
     route_token = token_route(route)
 
-    %{
-      "route" => route_token,
-      "opportunities" =>
-        Enum.map(opportunities, fn opportunity ->
-          id = opportunity["id"]
+    rendered_opportunities =
+      Enum.map(opportunities, fn opportunity ->
+        booking_token =
+          OpportunityCapability.sign(
+            opportunity_payload(opportunity, route, organization_id, mission_id)
+          )
 
-          payload = %{
-            "organization_id" => organization_id,
-            "mission_id" => mission_id,
-            "spacecraft_id" => route.spacecraft_id,
-            "route_key" => route.route_key,
-            "route" => route_token,
-            "opportunity" =>
-              Map.take(opportunity, [
-                "id",
-                "ground_station_ref",
-                "antenna_or_service_pool_ref",
-                "starts_at",
-                "ends_at",
-                "extensions"
-              ])
-          }
+        presentation = presentation_opportunity(opportunity, route, booking_token)
 
+        provider_result =
           opportunity
           |> Map.take([
             "id",
@@ -822,14 +815,67 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
           |> Map.put("service_display_name", route.service_display_name)
           |> Map.put("delivery_display_name", route.delivery_display_name)
           |> Map.put("delivery_operator_summary", route.delivery_operator_summary)
-          |> Map.put(
-            "booking_token",
-            apply(CadenceWeb.OpsContactScheduleLive.OpportunityToken, :sign, [payload])
-          )
+          |> Map.put("booking_token", booking_token)
           |> Map.put("route_key", route.route_key)
           |> Map.put("provider_id", route.provider_id)
-          |> Map.put("__dom_id", "opportunity-#{id}")
-        end)
+          |> Map.put("__dom_id", "opportunity-#{opportunity["id"]}")
+
+        {provider_result, presentation}
+      end)
+
+    result = %{
+      "route" => route_token,
+      "opportunities" => Enum.map(rendered_opportunities, &elem(&1, 0))
+    }
+
+    Map.put(result, "props", %{
+      "search" => %{"values" => form},
+      "opportunities" => Enum.map(rendered_opportunities, &elem(&1, 1))
+    })
+  end
+
+  defp opportunity_payload(opportunity, route, organization_id, mission_id) do
+    %{
+      "organization_id" => organization_id,
+      "mission_id" => mission_id,
+      "spacecraft_id" => route.spacecraft_id,
+      "route_key" => route.route_key,
+      "route" => token_route(route),
+      "opportunity" =>
+        Map.take(opportunity, [
+          "id",
+          "ground_station_ref",
+          "antenna_or_service_pool_ref",
+          "starts_at",
+          "ends_at",
+          "extensions"
+        ])
+    }
+  end
+
+  defp presentation_opportunity(opportunity, route, booking_token) do
+    id = opportunity["id"]
+
+    %{
+      "__dom_id" => "opportunity-#{id}",
+      "id" => id,
+      "provider" => route.provider_display_name,
+      "window" => %{
+        "starts_at" => opportunity["starts_at"],
+        "ends_at" => opportunity["ends_at"]
+      },
+      "service_summary" => route.service_display_name,
+      "delivery" => route.delivery_display_name,
+      "antenna" => opportunity["antenna_or_service_pool_ref"],
+      "cost" => get_in(opportunity, ["extensions", "cost"]),
+      "reserve_action" => %{
+        "id" => "reserve-#{id}",
+        "label" => "Reserve",
+        "busy_label" => "Reserving",
+        "busy" => false,
+        "disabled" => false,
+        "payload" => %{"token" => booking_token}
+      }
     }
   end
 

@@ -6,6 +6,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
   alias Cadence.Applications.OpsConsole.Actions.ContactPlanning
   alias Cadence.Auth.Scope
   alias Cadence.ContactPlanning.ContactRequirements
+  alias Cadence.ContactPlanning.OpportunityCapability
   alias Cadence.Spacecraft
 
   @organization_id "org-ops-contact-planning-actions"
@@ -108,6 +109,37 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanningTest do
                host_context,
                "contact_requirement_new",
                request("save", params)
+             )
+  end
+
+  test "rejects tampered and cross-scope reserve capabilities", %{
+    scope: scope,
+    host_context: host_context
+  } do
+    foreign_token =
+      OpportunityCapability.sign(%{
+        "organization_id" => @organization_id,
+        "mission_id" => @other_mission_id,
+        "spacecraft_id" => @spacecraft_id,
+        "route_key" => "route-1",
+        "route" => %{},
+        "opportunity" => %{"id" => "opportunity-1"}
+      })
+
+    assert {:error, :opportunity_scope_mismatch} =
+             ContactPlanning.execute(
+               scope,
+               host_context,
+               "contact_schedule",
+               request("reserve", %{"token" => foreign_token})
+             )
+
+    assert {:error, :invalid_opportunity_capability} =
+             ContactPlanning.execute(
+               scope,
+               host_context,
+               "contact_schedule",
+               request("reserve", %{"token" => foreign_token <> "tampered"})
              )
   end
 

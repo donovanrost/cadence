@@ -38,7 +38,11 @@ defmodule Cadence.Applications.CommsApplicationTest do
              "ground_station",
              "provider_list",
              "provider_new",
-             "provider_show"
+             "provider_show",
+             "transport_new",
+             "routing_new",
+             "ground_station_new",
+             "ground_station_edit"
            ]
 
     assert Enum.map(Comms.surface_query_contributions(), & &1.query_id) == [
@@ -52,7 +56,11 @@ defmodule Cadence.Applications.CommsApplicationTest do
              "cadence.comms.ground_station",
              "cadence.comms.provider_list",
              "cadence.comms.provider_new",
-             "cadence.comms.provider_show"
+             "cadence.comms.provider_show",
+             "cadence.comms.transport_new",
+             "cadence.comms.routing_new",
+             "cadence.comms.ground_station_new",
+             "cadence.comms.ground_station_edit"
            ]
 
     assert Enum.map(Comms.definition().surfaces, &surface_contract/1) == [
@@ -265,6 +273,81 @@ defmodule Cadence.Applications.CommsApplicationTest do
                actions: ["validate_provider", "sync_provider", "archive_provider"],
                refresh: :static,
                renderer: {:trusted, "cadence.comms.provider_show"}
+             },
+             %{
+               surface_id: "transport_new",
+               version: 1,
+               purpose: :configuration,
+               scope: :mission,
+               placement: :application_workspace,
+               subject_contract: nil,
+               navigation: %{
+                 label: "New Transport",
+                 order: 120,
+                 fallback_path: "/comms/transports/new",
+                 fallback_parent_path: "/comms/transports"
+               },
+               data_contract: %{query_id: "cadence.comms.transport_new", version: 1},
+               actions: ["validate", "save"],
+               refresh: :static,
+               renderer: {:trusted, "cadence.comms.transport_new"}
+             },
+             %{
+               surface_id: "routing_new",
+               version: 1,
+               purpose: :configuration,
+               scope: :mission,
+               placement: :application_workspace,
+               subject_contract: nil,
+               navigation: %{
+                 label: "New Routing Rule",
+                 order: 130,
+                 fallback_path: "/comms/routing/new",
+                 fallback_parent_path: "/comms/routing"
+               },
+               data_contract: %{query_id: "cadence.comms.routing_new", version: 1},
+               actions: ["validate", "save"],
+               refresh: :static,
+               renderer: {:trusted, "cadence.comms.routing_new"}
+             },
+             %{
+               surface_id: "ground_station_new",
+               version: 1,
+               purpose: :configuration,
+               scope: :mission,
+               placement: :application_workspace,
+               subject_contract: nil,
+               navigation: %{
+                 label: "New Ground Station",
+                 order: 140,
+                 fallback_path: "/comms/ground-stations/new",
+                 fallback_parent_path: "/comms/ground-stations"
+               },
+               data_contract: %{query_id: "cadence.comms.ground_station_new", version: 1},
+               actions: ["validate", "save"],
+               refresh: :static,
+               renderer: {:trusted, "cadence.comms.ground_station_new"}
+             },
+             %{
+               surface_id: "ground_station_edit",
+               version: 1,
+               purpose: :configuration,
+               scope: :mission,
+               placement: :application_workspace,
+               subject_contract: %{
+                 schema_id: "cadence.comms.ground_station.subject",
+                 version: 1
+               },
+               navigation: %{
+                 label: "Edit Ground Station",
+                 order: 150,
+                 fallback_path: "/comms/ground-stations/:subject/edit",
+                 fallback_parent_path: "/comms/ground-stations"
+               },
+               data_contract: %{query_id: "cadence.comms.ground_station_edit", version: 1},
+               actions: ["validate", "save"],
+               refresh: :static,
+               renderer: {:trusted, "cadence.comms.ground_station_edit"}
              }
            ]
   end
@@ -272,7 +355,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
   test "contributes one immutable module-federation release coordinate per surface" do
     contributions = Comms.release_contributions()
 
-    assert length(contributions) == 11
+    assert length(contributions) == 15
     assert Enum.all?(contributions, &(ReleaseContribution.validate(&1) == :ok))
 
     assert Enum.uniq_by(contributions, &ReleaseContribution.release/1) == [
@@ -309,6 +392,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
              CatalogRegistry.fetch("comms_overview")
 
     assert {:ok, canonical_release} = ReleaseRegistry.fetch("comms", 1, "overview", 1)
+
     assert canonical_release == %ReleaseContribution{
              application_key: "comms",
              application_version: 1,
@@ -322,6 +406,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
            }
 
     assert {:ok, legacy_release} = ReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
+
     assert legacy_release == %ReleaseContribution{
              application_key: "comms_overview",
              application_version: 1,
@@ -362,15 +447,30 @@ defmodule Cadence.Applications.CommsApplicationTest do
   end
 
   test "registers the Comms provider action adapter for declared provider actions" do
+    providers = ActionProviderRegistry.providers([Comms])
+
     assert {:ok, Cadence.Applications.Comms.ActionProvider} =
-             ActionProviderRegistry.fetch("comms")
+             ActionProviderRegistry.fetch("comms", providers)
 
     assert Enum.map(Comms.definition().actions, & &1.action_id) == [
              "create_provider",
              "validate_provider",
              "sync_provider",
-             "archive_provider"
+             "archive_provider",
+             "validate",
+             "save"
            ]
+  end
+
+  test "documents shared form action isolation composition requirement" do
+    assert Enum.map(Comms.definition().actions, &{&1.action_id, &1.effect})
+           |> Enum.take(-2) == [{"validate", :none}, {"save", :durable}]
+
+    assert "transport_new" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
+    assert "ground_station_edit" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
+
+    # The provider reads ActionRequest.surface_id when the host composes it.
+    # Cross-surface action isolation requires that shared host composition.
   end
 
   defp surface_contract(surface) do

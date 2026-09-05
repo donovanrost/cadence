@@ -12,7 +12,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Dashboards.Document
   alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Ingress.RawEvidence
@@ -21,7 +20,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
   alias Cadence.TestSupport.TelemetryPersistencePolicies
   alias CadenceWeb.OpsTelemetryExploreComponents
   alias CadenceWeb.TestFixtures
-  alias Phoenix.LiveView.JS
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
@@ -209,17 +207,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     clipboard = vue.props["clipboard"]
     investigation = vue.props["investigation"]
 
-    assert vue.component == "OpsTelemetryExplore"
+    assert vue.component == "FederatedFullPageSurface"
     assert vue.class == "contents"
     refute vue.ssr
     assert vue.slots == %{}
 
-    assert vue.handlers == %{
-             "add_to_dashboard" => JS.push("add_to_dashboard"),
-             "apply_filters" => JS.push("apply_filters"),
-             "apply_question" => JS.push("apply_question"),
-             "clear_selected_sample" => JS.push("clear_selected_sample")
-           }
+    assert vue.handlers == %{}
+    assert vue.props["application_key"] == "ops_console"
+    assert vue.props["surface_id"] == "telemetry_explore"
+    assert vue.props["host_scope"] == "mission"
+    assert vue.props["mission_id"] == mission.mission_id
+    assert vue.props["query_params"]["point_id"] == "HK.counter"
+    assert vue.props["query_params"]["sample_id"] == older_sample.sample_id
 
     assert vue.props["page"]["source_state"] == "matched"
     assert vue.props["page"]["selected_sample_state"] == "matched"
@@ -489,26 +488,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert version_count(org, mission, dashboard) == 1
 
     {:ok, editor, _html} = live(conn, editor_path)
-    render_dashboard_async(editor)
+    editor_html = render(editor)
+    editor_vue = LiveVue.Test.get_vue(editor, id: "ops-dashboard-editor-surface")
 
-    assert has_element?(
-             editor,
-             ~s(#ops-dashboard-show-page[data-dashboard-editor="true"][data-editor-dirty="true"])
-           )
-
-    assert version_count(org, mission, dashboard) == 1
-    assert {:ok, %Document{placements: []}} = fetch_document(org, mission, dashboard)
-
-    click_editor_action(editor, "dashboard-editor-save")
-    render_dashboard_async(editor)
-
-    assert version_count(org, mission, dashboard) == 2
-
-    assert {:ok, %Document{placements: [placement]}} = fetch_document(org, mission, dashboard)
-    assert placement.widget_def.title == "Counter investigation"
-    assert placement.widget_def.binding.observables == ["HK.counter"]
-
-    stop_dashboard_view(editor)
+    assert has_element?(editor, "#ops-dashboard-editor-surface")
+    assert editor_vue.component == "FederatedFullPageSurface"
+    assert editor_vue.props["surface_id"] == "dashboard_editor"
+    refute editor_html =~ "#ops-dashboard-show-page"
+    refute has_element?(editor, "#ops-dashboard-show-page")
   end
 
   test "presentation contract omits dashboard targets across the non-author boundary" do
@@ -547,22 +534,6 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     assert author_json =~ "Author Board"
     refute_sensitive_keys(viewer_props)
     refute_sensitive_keys(author_props)
-  end
-
-  defp click_editor_action(view, id) do
-    assert has_element?(view, "#dashboard-toolbar-component")
-    presentation = dashboard_editor_actions_presentation(view)
-    assert action = Enum.find(presentation["elements"], &(&1["attrs"]["id"] == id))
-    attrs = action["attrs"]
-
-    render_click(
-      view,
-      Map.fetch!(attrs, "phx-click"),
-      Enum.reduce(attrs, %{}, fn
-        {"phx-value-" <> key, value}, params -> Map.put(params, key, value)
-        {_attribute, _value}, params -> params
-      end)
-    )
   end
 
   defp telemetry_explore_vue(view) do
@@ -729,11 +700,4 @@ defmodule CadenceWeb.OpsDashboardShowLive.TelemetryExploreLiveTest do
     |> length()
   end
 
-  defp fetch_document(org, mission, dashboard) do
-    Cadence.Dashboards.fetch_document(
-      org.organization_id,
-      mission.mission_id,
-      dashboard.dashboard_id
-    )
-  end
 end

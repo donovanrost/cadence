@@ -3,6 +3,16 @@ import Config
 # The web application is the production composition root. It owns runtime
 # configuration for both the Cadence core and its web endpoint.
 
+if config_env() == :prod do
+  case System.get_env("CADENCE_OPPORTUNITY_CAPABILITY_SECRET") do
+    secret when is_binary(secret) and byte_size(secret) >= 32 ->
+      config :cadence, :opportunity_capability_secret, secret
+
+    _missing_or_short ->
+      raise "CADENCE_OPPORTUNITY_CAPABILITY_SECRET must be set to at least 32 bytes in production"
+  end
+end
+
 case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
   endpoint when is_binary(endpoint) and endpoint != "" ->
     config :opentelemetry,

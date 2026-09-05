@@ -269,10 +269,10 @@ defmodule CadenceWeb.OpsDataOperationsLive do
         id="ops-data-operations-component"
         v-component="FederatedFullPageSurface"
         application_key="ops_console"
-        surface_id="data_operations"
+        surface_id={if(@data_operations_admin?, do: "data_operations_manage", else: "data_operations")}
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{}}
+        query_params={if(@selected_group_id, do: %{"group" => @selected_group_id}, else: %{})}
         v-ssr={false}
         class="contents"
       />

@@ -27,7 +27,18 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
              {"data_sources", "probe-source"},
              {"data_sources", "rotate-source-credential"},
              {"data_sources", "retry-deployment-run"},
-             {"data_sources", "requeue-deployment-run"}
+             {"data_sources", "requeue-deployment-run"},
+             {"data_source_registration", "register-source"},
+             {"data_source_settings", "change-binding"},
+             {"data_source_settings", "disable-source"},
+             {"data_source_settings", "enable-source"},
+             {"data_source_settings", "reconcile-tsdb-backend"},
+             {"data_source_settings", "deprovision-tsdb-backend"},
+             {"data_source_settings", "provision-tsdb-backend"},
+             {"data_source_settings", "probe-source"},
+             {"data_source_settings", "rotate-source-credential"},
+             {"data_source_settings", "retry-deployment-run"},
+             {"data_source_settings", "requeue-deployment-run"}
            ]
   end
 
@@ -136,6 +147,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
       application_key: "ops_console",
       application_version: 1,
       action_id: action_id,
+      surface_id: "data_sources",
+      surface_version: 1,
       params: params
     }
   end

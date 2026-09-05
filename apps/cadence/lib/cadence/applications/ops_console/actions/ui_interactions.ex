@@ -192,7 +192,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
        "filters" => filters,
        "observedAt" => iso(snapshot.observed_at),
        "summary" => alarm_summary(snapshot.summary),
-       "rows" => Enum.map(snapshot.rows, &alarm_row/1)
+       "rows" => Enum.map(snapshot.rows, &alarm_row/1),
+       "props" => %{
+         "filters" => %{"values" => filters},
+         "summary" => presentation_alarm_summary(snapshot.summary, snapshot.observed_at),
+         "alarms" => Enum.map(snapshot.rows, &presentation_alarm_row(&1, mission_id))
+       }
      }}
   end
 
@@ -222,7 +227,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
          "missionId" => mission_id,
          "filters" => filters,
          "selectedEventId" => nil,
-         "events" => Enum.map(events, &timeline_event/1)
+         "events" => Enum.map(events, &timeline_event/1),
+         "props" => %{
+           "presentation" => %{"filters" => %{"values" => filters}},
+           "timeline_events" => Enum.map(events, &presentation_timeline_event/1)
+         }
        }}
     end
   end
@@ -282,6 +291,44 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
     }
   end
 
+  defp presentation_alarm_summary(summary, observed_at) do
+    %{
+      "id" => "alarm-summary",
+      "active_count" => summary.active_count,
+      "observed" => iso(observed_at),
+      "badges" => []
+    }
+  end
+
+  defp presentation_alarm_row(row, mission_id) do
+    %{
+      "id" => row.id,
+      "__dom_id" => "alarm-condition-#{row.limit_event_id}",
+      "limit_event_id" => row.limit_event_id,
+      "severity" => to_string(row.severity),
+      "limit_state" => to_string(row.limit_state),
+      "state_label" => to_string(row.limit_state),
+      "point_name" => row.point_name || row.point_id,
+      "context" => to_string(row.spacecraft_id || "Mission"),
+      "value" => %{"label" => "Value", "display" => inspect(row.evaluated_value)},
+      "observed" => %{"label" => "Observed", "display" => iso(row.receipt_time)},
+      "evidence" => %{
+        "id" => "alarm-open-sample-#{row.limit_event_id}",
+        "href" => "/missions/#{mission_id}/ops/explore",
+        "title" => "Open exact sample and evidence",
+        "icon" => "hero-magnifying-glass",
+        "label" => "Evidence"
+      },
+      "definition" => %{
+        "id" => "alarm-open-definition-#{row.limit_event_id}",
+        "href" => "/missions/#{mission_id}/applications/limits/activity",
+        "title" => "Open limit definition and activation history",
+        "icon" => "hero-document-magnifying-glass",
+        "label" => "Definition"
+      }
+    }
+  end
+
   defp timeline_event(event) do
     %{
       "id" => event.mission_event_id,
@@ -294,6 +341,21 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
       "summary" => event.summary,
       "subject" => event.subject_id || event.source_record_id,
       "spacecraftId" => event.spacecraft_id
+    }
+  end
+
+  defp presentation_timeline_event(event) do
+    %{
+      "__dom_id" => "timeline-event-#{event.mission_event_id}",
+      "mission_event_id" => event.mission_event_id,
+      "attrs" => %{"data-event-id" => event.mission_event_id},
+      "occurred" => %{"attrs" => %{}, "text" => iso(event.occurred_at)},
+      "category" => %{"attrs" => %{}, "text" => to_string(event.category)},
+      "event" => %{
+        "title" => %{"attrs" => %{}, "text" => event.title},
+        "summary" => %{"attrs" => %{}, "text" => event.summary}
+      },
+      "subject" => %{"attrs" => %{}, "text" => event.subject_id || event.source_record_id}
     }
   end
 

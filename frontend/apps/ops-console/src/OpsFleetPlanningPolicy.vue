@@ -210,10 +210,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "validate-policy": [payload: { policy: StringPayload }];
   "save-policy": [payload: { policy: StringPayload }];
   "approve-policy": [payload: { decision: { reason: string } }];
-  "validate-grant": [payload: { grant: StringPayload }];
   "issue-grant": [payload: { grant: StringPayload }];
   "revoke-grant": [payload: { revocation: { automation_grant_id: string; reason: string } }];
 }>();
@@ -322,8 +320,7 @@ watch(
 );
 
 const validatePolicy = () => {
-  const values = normalizedPolicy(policy);
-  emit("validate-policy", { policy: values });
+  return Object.values(normalizedPolicy(policy)).every((value) => value !== "");
 };
 
 const savePolicy = () => emit("save-policy", { policy: normalizedPolicy(policy) });
@@ -386,8 +383,7 @@ watch(
 );
 
 const validateGrant = () => {
-  const values = normalizedGrant(grant);
-  emit("validate-grant", { grant: values });
+  return Object.values(normalizedGrant(grant)).every((value) => value !== "");
 };
 
 const issueGrant = () => emit("issue-grant", { grant: normalizedGrant(grant) });

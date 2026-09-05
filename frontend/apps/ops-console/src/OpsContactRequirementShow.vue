@@ -3,6 +3,7 @@ import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
 import CadencePanel from "./ui/components/CadencePanel.vue";
 import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import { computed, ref, watch } from "vue";
 
 type EmptyPayload = Record<string, never>;
 
@@ -76,7 +77,7 @@ type Page = {
       };
     };
     footer: string;
-    create_action: Action<EmptyPayload>;
+    create_action: Action<{ selected_snapshot_ids: string[] }>;
   };
   journey: {
     heading: string;
@@ -146,17 +147,50 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   plan: [payload: EmptyPayload];
-  "toggle-opportunity": [payload: { snapshot_id: string }];
-  "create-plan": [payload: EmptyPayload];
+  "create-plan": [payload: { selected_snapshot_ids: string[] }];
 }>();
 
 const plan = () => emit("plan", props.page.header.plan_action.payload);
 
+const selectedSnapshotIds = ref(
+  new Set(
+    props.opportunities
+      .filter((opportunity) => opportunity.selected)
+      .map((opportunity) => opportunity.contact_opportunity_snapshot_id),
+  ),
+);
+
+watch(
+  () => props.opportunities,
+  (opportunities) => {
+    selectedSnapshotIds.value = new Set(
+      opportunities
+        .filter((opportunity) => opportunity.selected)
+        .map((opportunity) => opportunity.contact_opportunity_snapshot_id),
+    );
+  },
+  { deep: true },
+);
+
+const isSelected = (opportunity: Opportunity) =>
+  selectedSnapshotIds.value.has(opportunity.contact_opportunity_snapshot_id);
+
+const selectedCount = computed(() => selectedSnapshotIds.value.size);
+
 const toggleOpportunity = (opportunity: Opportunity) => {
-  emit("toggle-opportunity", opportunity.toggle_action.payload);
+  if (opportunity.toggle_action.disabled || !opportunity.eligible) return;
+
+  const next = new Set(selectedSnapshotIds.value);
+  const snapshotId = opportunity.contact_opportunity_snapshot_id;
+
+  if (next.has(snapshotId)) next.delete(snapshotId);
+  else next.add(snapshotId);
+
+  selectedSnapshotIds.value = next;
 };
 
-const createPlan = () => emit("create-plan", props.page.opportunities.create_action.payload);
+const createPlan = () =>
+  emit("create-plan", { selected_snapshot_ids: [...selectedSnapshotIds.value] });
 </script>
 
 <template>
@@ -290,7 +324,7 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               </p>
             </div>
             <span :id="page.opportunities.selected_count.id" class="font-mono text-sm text-primary">
-              {{ page.opportunities.selected_count.label }}
+              {{ selectedCount }} selected
             </span>
           </template>
           <div :id="page.opportunities.list.id">
@@ -306,11 +340,11 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
               :key="opportunity.contact_opportunity_snapshot_id"
               :class="[
                 'grid gap-3 border-b border-base-300 px-4 py-4 last:border-b-0 md:grid-cols-[auto_minmax(0,1.2fr)_repeat(3,minmax(7rem,0.55fr))] md:items-center',
-                opportunity.selected && 'bg-primary/[0.06]',
+                isSelected(opportunity) && 'bg-primary/[0.06]',
               ]"
             >
               <CadenceToggle
-                :pressed="opportunity.selected"
+                :pressed="isSelected(opportunity)"
                 :disabled="opportunity.toggle_action.disabled"
                 @request-change="toggleOpportunity(opportunity)"
               >
@@ -321,12 +355,12 @@ const createPlan = () => emit("create-plan", props.page.opportunities.create_act
                   :aria-label="opportunity.toggle_action.aria_label"
                   :class="[
                     'h-5 w-5 border text-center font-mono text-xs',
-                    opportunity.selected && 'border-primary bg-primary text-primary-content',
-                    !opportunity.selected && 'border-base-content/30',
+                    isSelected(opportunity) && 'border-primary bg-primary text-primary-content',
+                    !isSelected(opportunity) && 'border-base-content/30',
                     !opportunity.eligible && 'cursor-not-allowed opacity-30',
                   ]"
                 >
-                  {{ opportunity.selected ? "✓" : "" }}
+                  {{ isSelected(opportunity) ? "✓" : "" }}
                 </button>
               </CadenceToggle>
               <div class="min-w-0">

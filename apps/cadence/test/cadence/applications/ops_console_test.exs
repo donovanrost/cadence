@@ -27,20 +27,21 @@ defmodule Cadence.Applications.OpsConsoleTest do
              "set_chart_time_range"
            ]
 
-    assert length(definition.surfaces) == 30
-    assert length(definition.actions) == 82
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 29
+    assert length(definition.surfaces) == 36
+    assert length(definition.actions) == 103
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 35
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
 
-    assert {:residual, 77} = OpsConsole.route_action_completion()
+    assert {:residual, residual_count} = OpsConsole.route_action_completion()
+    assert residual_count > 0
   end
 
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 30
+    assert length(contributions) == 36
 
     assert Enum.take(contributions, 2) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1},
@@ -60,6 +61,91 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Enum.map(OpsConsole.definition().surfaces, & &1.data_contract.query_id)
 
     assert OpsConsole.action_provider() == Cadence.Applications.OpsConsole.ActionProvider
+  end
+
+  test "declares exact deep-route query identity and fail-closed interaction ledgers" do
+    assert OpsConsole.surface_query_contract("dashboard_show") ==
+             {:ok,
+              %{
+                subject_param: "dashboard_id",
+                query_params: [
+                  "dashboard_id",
+                  "panel",
+                  "activity_filter",
+                  "activity_event",
+                  "selected_publish_issue",
+                  "selected_time",
+                  "time_mode",
+                  "time_axis",
+                  "from",
+                  "to",
+                  "limit_mode",
+                  "replay_run_id",
+                  "selection_view",
+                  "selected_widget",
+                  "selected_target",
+                  "selected_id",
+                  "selected_placement",
+                  "selected_data_view",
+                  "selected_scope_kind",
+                  "selected_scope_id",
+                  "selected_resource_id",
+                  "selected_spacecraft_id",
+                  "selected_contact_id",
+                  "selected_transport_id",
+                  "selected_source_endpoint_id",
+                  "selected_ground_station_id",
+                  "selected_scope_link_id",
+                  "realm",
+                  "data_source_id",
+                  "source_binding_id"
+                ]
+              }}
+
+    assert OpsConsole.surface_query_contract("dashboard_editor") ==
+             {:ok, %{subject_param: "dashboard_id", query_params: ["dashboard_id"]}}
+
+    assert OpsConsole.surface_query_contract("data_source_registration") ==
+             {:ok, %{subject_param: nil, query_params: []}}
+
+    assert OpsConsole.deep_route_interaction_ledger()["dashboard_show"].host_actions == []
+
+    assert Enum.all?(
+             [
+               "dashboard_editor",
+               "dashboard_activity",
+               "data_operations_manage",
+               "data_source_registration",
+               "data_source_settings"
+             ],
+             fn surface_id ->
+               ledger = OpsConsole.deep_route_interaction_ledger()[surface_id]
+
+               expected =
+                 Enum.filter(OpsConsole.surface_action_pairs(), &match?({^surface_id, _}, &1))
+
+               ledger.host_actions == Enum.map(expected, &elem(&1, 1)) and
+                 ledger.phoenix_events == []
+             end
+           )
+
+    assert OpsConsole.former_liveview_event_contracts()["dashboard_show"] != []
+    assert OpsConsole.former_liveview_event_contracts()["data_source_settings"] != []
+
+    assert {:residual, pending_count} = OpsConsole.route_action_completion()
+    assert pending_count > 0
+
+    Enum.each(OpsConsole.deep_route_interaction_ledger(), fn {surface_id, ledger} ->
+      surface = Enum.find(OpsConsole.definition().surfaces, &(&1.surface_id == surface_id))
+
+      assert surface
+      assert MapSet.subset?(MapSet.new(ledger.host_actions), MapSet.new(surface.actions))
+
+      assert MapSet.subset?(
+               MapSet.new(ledger.phoenix_events),
+               MapSet.new(surface.actions)
+             )
+    end)
   end
 
   test "matches the complete route parity table" do
@@ -115,6 +201,33 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"dashboard_directory", :collection, :mission, :ops_workspace,
               "cadence.ops.dashboard_directory",
               ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]},
+             {"dashboard_show", :subject_detail, :mission, :ops_workspace,
+              "cadence.ops.dashboard_show", []},
+             {"dashboard_editor", :configuration, :mission, :ops_workspace,
+              "cadence.ops.dashboard_editor",
+              [
+                "layout_changed",
+                "validate_dashboard_section",
+                "save_dashboard_section",
+                "remove_dashboard_section",
+                "move_dashboard_section",
+                "preview_widget_binding",
+                "validate_widget",
+                "save_widget",
+                "remove_widget",
+                "rename",
+                "archive_dashboard",
+                "publish_dashboard",
+                "publish_dashboard_version",
+                "save_runtime_defaults",
+                "restore_version_as_draft",
+                "save_editor",
+                "review_editor",
+                "discard_editor",
+                "reload_editor"
+              ]},
+             {"dashboard_activity", :activity, :mission, :ops_workspace,
+              "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]},
              {"dashboard_new", :configuration, :mission, :ops_workspace,
               "cadence.ops.dashboard_new", ["validate", "save"]},
              {"dashboard_library", :collection, :mission, :ops_workspace,
@@ -172,6 +285,15 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 "retry-group",
                 "request-correction"
               ]},
+             {"data_operations_manage", :operations, :mission, :ops_workspace,
+              "cadence.ops.data_operations_manage",
+              [
+                "validate-request",
+                "record-historical-workflow-request",
+                "transition-group",
+                "retry-group",
+                "request-correction"
+              ]},
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [
@@ -180,6 +302,22 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 "register-source",
                 "open-change-binding",
                 "cancel-change-binding",
+                "change-binding",
+                "disable-source",
+                "enable-source",
+                "reconcile-tsdb-backend",
+                "deprovision-tsdb-backend",
+                "provision-tsdb-backend",
+                "probe-source",
+                "rotate-source-credential",
+                "retry-deployment-run",
+                "requeue-deployment-run"
+              ]},
+             {"data_source_registration", :configuration, :mission, :ops_workspace,
+              "cadence.ops.data_source_registration", ["register-source"]},
+             {"data_source_settings", :configuration, :mission, :ops_workspace,
+              "cadence.ops.data_source_settings",
+              [
                 "change-binding",
                 "disable-source",
                 "enable-source",

@@ -18,6 +18,9 @@ const routeSurfaces = [
   ["contact_detail", "subject_detail", "Contact Detail", "cadence.ops.contact_detail", ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]],
   ["contact_record", "subject_detail", "Contact Record", "cadence.ops.contact_record", []],
   ["dashboard_directory", "collection", "Dashboards", "cadence.ops.dashboard_directory", ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]],
+  ["dashboard_show", "subject_detail", "Dashboard", "cadence.ops.dashboard_show", []],
+  ["dashboard_editor", "configuration", "Dashboard Editor", "cadence.ops.dashboard_editor", ["layout_changed", "validate_dashboard_section", "save_dashboard_section", "remove_dashboard_section", "move_dashboard_section", "preview_widget_binding", "validate_widget", "save_widget", "remove_widget", "rename", "archive_dashboard", "publish_dashboard", "publish_dashboard_version", "save_runtime_defaults", "restore_version_as_draft", "save_editor", "review_editor", "discard_editor", "reload_editor"]],
+  ["dashboard_activity", "activity", "Dashboard Activity", "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]],
   ["dashboard_new", "configuration", "New Dashboard", "cadence.ops.dashboard_new", ["validate", "save"]],
   ["dashboard_library", "collection", "Dashboard Library", "cadence.ops.dashboard_library", ["stage-library-item", "create-library-item", "add-library-version"]],
   ["dashboard_playlists", "collection", "Dashboard Playlists", "cadence.ops.dashboard_playlists", ["create-playlist"]],
@@ -34,10 +37,25 @@ const routeSurfaces = [
   ["commands", "operations", "Commands", "cadence.ops.commands", ["filter", "reset_filters", "follow_command", "clear_command_focus"]],
   ["telemetry_explore", "operations", "Telemetry Explore", "cadence.ops.telemetry_explore", ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]],
   ["data_operations", "operations", "Data Operations", "cadence.ops.data_operations", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
+  ["data_operations_manage", "operations", "Manage Data Operations", "cadence.ops.data_operations_manage", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
   ["data_sources", "configuration", "Data Sources", "cadence.ops.data_sources", ["open-register-source", "cancel-register-source", "register-source", "open-change-binding", "cancel-change-binding", "change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
+  ["data_source_registration", "configuration", "Register Data Source", "cadence.ops.data_source_registration", ["register-source"]],
+  ["data_source_settings", "configuration", "Data Source Settings", "cadence.ops.data_source_settings", ["change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
   ["alarms", "operations", "Alarms", "cadence.ops.alarms", ["filter", "reset_filters"]],
   ["timeline", "activity", "Timeline", "cadence.ops.timeline", ["apply_timeline_filters", "clear_timeline_selection"]],
 ] as const;
+
+export const routeQueryContracts = {
+  dashboard_show: {
+    subjectParam: "dashboard_id",
+    queryParams: ["dashboard_id", "panel", "activity_filter", "activity_event", "selected_publish_issue", "selected_time", "time_mode", "time_axis", "from", "to", "limit_mode", "replay_run_id", "selection_view", "selected_widget", "selected_target", "selected_id", "selected_placement", "selected_data_view", "selected_scope_kind", "selected_scope_id", "selected_resource_id", "selected_spacecraft_id", "selected_contact_id", "selected_transport_id", "selected_source_endpoint_id", "selected_ground_station_id", "selected_scope_link_id", "realm", "data_source_id", "source_binding_id"],
+  },
+  dashboard_editor: { subjectParam: "dashboard_id", queryParams: ["dashboard_id"] },
+  dashboard_activity: { subjectParam: "dashboard_id", queryParams: ["dashboard_id", "version", "selected_publish_issue"] },
+  data_source_registration: { subjectParam: null, queryParams: [] },
+  data_source_settings: { subjectParam: "data_source_id", queryParams: ["data_source_id"] },
+  data_operations_manage: { subjectParam: null, queryParams: ["group"] },
+} as const;
 
 const makeSurface = (
   surfaceId: string,

@@ -26,7 +26,12 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
              {"data_operations", "record-historical-workflow-request"},
              {"data_operations", "transition-group"},
              {"data_operations", "retry-group"},
-             {"data_operations", "request-correction"}
+             {"data_operations", "request-correction"},
+             {"data_operations_manage", "validate-request"},
+             {"data_operations_manage", "record-historical-workflow-request"},
+             {"data_operations_manage", "transition-group"},
+             {"data_operations_manage", "retry-group"},
+             {"data_operations_manage", "request-correction"}
            ]
   end
 
@@ -35,6 +40,8 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
       application_key: "ops_console",
       application_version: 1,
       action_id: "validate-request",
+      surface_id: "data_operations",
+      surface_version: 1,
       params: %{"historical_workflow_request" => Map.new(@workflow_keys, &{&1, ""})}
     }
 
@@ -79,6 +86,8 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
       application_key: "ops_console",
       application_version: 1,
       action_id: "validate-request",
+      surface_id: "data_operations",
+      surface_version: 1,
       params: %{"historical_workflow_request" => %{"workflow" => self()}}
     }
 
@@ -96,6 +105,8 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
       application_key: "ops_console",
       application_version: 1,
       action_id: "validate-request",
+      surface_id: "data_operations",
+      surface_version: 1,
       params: %{"historical_workflow_request" => Map.new(@workflow_keys, &{&1, ""})}
     }
   end

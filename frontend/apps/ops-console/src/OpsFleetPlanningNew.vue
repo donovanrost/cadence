@@ -106,7 +106,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "validate-fleet-run": [payload: FleetRunPayload];
   "create-fleet-run": [payload: FleetRunPayload];
 }>();
 
@@ -141,7 +140,7 @@ watch(
 
 const validateFleetRun = () => {
   const formValues = values();
-  emit("validate-fleet-run", { fleet_run: formValues });
+  return Boolean(formValues.horizon_start && formValues.horizon_end);
 };
 
 const createFleetRun = () => emit("create-fleet-run", { fleet_run: values() });

@@ -87,7 +87,7 @@ defmodule CadenceWeb.CommsRoutingNewLive do
         id="comms-routing-new-component"
         v-component="FederatedFullPageSurface"
         application_key="comms"
-        surface_id="routing"
+        surface_id="routing_new"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
           query_params={%{mission_id: @current_mission.mission_id}}

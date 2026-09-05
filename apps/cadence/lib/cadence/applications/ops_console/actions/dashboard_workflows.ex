@@ -94,13 +94,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
   defp dispatch(
          _scope,
          _host_context,
-         _organization_id,
-         _mission_id,
+         organization_id,
+         mission_id,
          "dashboard_directory",
          "filter_dashboards",
          params
        ),
-       do: filter_dashboards(params)
+       do: filter_dashboards(organization_id, mission_id, params)
 
   defp dispatch(
          scope,
@@ -278,16 +278,75 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
        ),
        do: {:error, :unsupported_application_action}
 
-  defp filter_dashboards(params) do
+  defp filter_dashboards(organization_id, mission_id, params) do
     with {:ok, directory} <- action_map(params, "directory", [], @filter_keys),
          {:ok, query} <- filter_text(directory, "query", ""),
          {:ok, lifecycle} <-
            filter_enum(directory, "lifecycle", ~w(active archived all), "active"),
          {:ok, tag} <- filter_tag(directory),
          {:ok, sort} <- filter_enum(directory, "sort", ~w(updated name widgets), "updated") do
+      filters = %{"query" => query, "lifecycle" => lifecycle, "tag" => tag, "sort" => sort}
+
+      rows =
+        organization_id
+        |> Dashboards.list_dashboard_summaries(mission_id)
+        |> Enum.filter(&dashboard_matches?(&1, filters))
+        |> Enum.sort_by(&dashboard_sort_key(&1, sort))
+
       {:ok,
-       %{"filters" => %{"query" => query, "lifecycle" => lifecycle, "tag" => tag, "sort" => sort}}}
+       %{
+         "filters" => filters,
+         "props" => %{
+           "filters" => %{"values" => filters},
+           "dashboard_directory" => Enum.map(rows, &presentation_dashboard_row/1)
+         }
+       }}
     end
+  end
+
+  defp dashboard_matches?(summary, filters) do
+    query = filters["query"]
+    lifecycle = filters["lifecycle"]
+    tag = filters["tag"]
+    name = String.downcase(to_string(summary.name))
+
+    (query == "" or String.contains?(name, String.downcase(query))) and
+      lifecycle in ["all", "active"] and
+      (tag == "" or tag in List.wrap(Map.get(summary, :tags, [])))
+  end
+
+  defp dashboard_sort_key(summary, "name"),
+    do: {String.downcase(to_string(summary.name)), summary.dashboard_id}
+
+  defp dashboard_sort_key(summary, "widgets"), do: {summary.latest_version, summary.dashboard_id}
+  defp dashboard_sort_key(summary, _sort), do: {summary.latest_version, summary.dashboard_id}
+
+  defp presentation_dashboard_row(summary) do
+    dashboard_id = summary.dashboard_id
+
+    %{
+      "id" => dashboard_id,
+      "__dom_id" => "dashboard-#{dashboard_id}",
+      "dashboard_id" => dashboard_id,
+      "name" => summary.name,
+      "description" => summary.description,
+      "tags" => List.wrap(Map.get(summary, :tags, [])),
+      "lifecycle" => %{"state" => "active", "class" => "badge-success"},
+      "starred" => false,
+      "open" => %{"id" => "open-#{dashboard_id}", "href" => "#"},
+      "star" => %{
+        "id" => "star-#{dashboard_id}",
+        "payload" => %{"dashboard-id" => dashboard_id, "starred" => "true"},
+        "aria_label" => "Star dashboard",
+        "aria_pressed" => "false",
+        "disabled" => false,
+        "title" => "Star dashboard",
+        "icon" => "hero-star"
+      },
+      "widget_version_label" => "v#{summary.latest_version}",
+      "clone" => nil,
+      "restore" => nil
+    }
   end
 
   defp toggle_dashboard_star(scope, organization_id, mission_id, params) do
