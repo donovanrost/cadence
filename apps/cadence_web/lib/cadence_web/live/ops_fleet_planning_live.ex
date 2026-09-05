@@ -40,15 +40,11 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
       <.vue
         id="ops-fleet-planning-component"
         v-component="FederatedFullPageSurface"
-        page={@planning_page}
-        actions={@planning_actions}
-        control_metrics={@control_metrics}
-        stopped_policy={@stopped_policy}
-        ledger={@planning_ledger}
-        journey={@planning_journey}
-        recurring_demand={@recurring_demand}
-        fleet_runs={@streams.fleet_runs}
-        v-on:refresh-planning={JS.push("refresh-planning")}
+        application_key="ops_console"
+        surface_id="fleet_planning"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

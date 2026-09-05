@@ -59,11 +59,11 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
       <.vue
         id="dashboard-playlists-component"
         v-component="FederatedFullPageSurface"
-        page={@playlist_page}
-        form={@playlist_form}
-        options={@dashboard_options}
-        dashboard_playlists={@streams.dashboard_playlists}
-        v-on:create-playlist={JS.push("create_playlist")}
+        application_key="ops_console"
+        surface_id="dashboard_playlists"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

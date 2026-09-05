@@ -49,8 +49,11 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
       <.vue
         id="ops-contact-requirements-component"
         v-component="FederatedFullPageSurface"
-        page={@contact_requirements_page}
-        requirements={@streams.requirements}
+        application_key="ops_console"
+        surface_id="contact_requirement_list"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

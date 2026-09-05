@@ -16,6 +16,7 @@ defmodule CadenceWeb.OpsDashboardSnapshotLive do
          socket
          |> assign(:page_title, "#{document.name} Snapshot")
          |> assign(:ops_nav_item, :dashboards)
+         |> assign(:snapshot_id, snapshot_id)
          |> assign(:active_dashboard_id, snapshot.dashboard_id)
          |> assign(:dashboard_snapshot, snapshot)
          |> assign(:snapshot_document, document)
@@ -36,7 +37,11 @@ defmodule CadenceWeb.OpsDashboardSnapshotLive do
       <.vue
         id="ops-dashboard-snapshot-component"
         v-component="FederatedFullPageSurface"
-        snapshot={@dashboard_snapshot_props}
+        application_key="ops_console"
+        surface_id="dashboard_snapshot"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"snapshot_id" => @snapshot_id}}
         v-ssr={false}
         class="h-full"
       />

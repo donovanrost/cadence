@@ -96,17 +96,11 @@ defmodule CadenceWeb.OpsCommandsLive do
       <.vue
         id="ops-commands-component"
         v-component="FederatedFullPageSurface"
-        page={@commands_page}
-        summary={@command_summary_dto}
-        filters={@command_filters_dto}
-        reset={@command_reset}
-        focus_banner={@command_focus_banner}
-        empty={@command_empty}
-        commands={@streams.commands}
-        v-on:filter={JS.push("filter")}
-        v-on:reset_filters={JS.push("reset_filters")}
-        v-on:follow_command={JS.push("follow_command")}
-        v-on:clear_command_focus={JS.push("clear_command_focus")}
+        application_key="ops_console"
+        surface_id="commands"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

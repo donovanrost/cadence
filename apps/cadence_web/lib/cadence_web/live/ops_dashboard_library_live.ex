@@ -132,16 +132,11 @@ defmodule CadenceWeb.OpsDashboardLibraryLive do
       <.vue
         id="dashboard-library-component"
         v-component="FederatedFullPageSurface"
-        page={@library_page}
-        dashboard_options={@dashboard_options}
-        library_options={@library_options}
-        stage_form={@library_add_form}
-        create_form={@library_create_form}
-        version_form={@library_version_form}
-        library_items={@streams.library_items}
-        v-on:stage-library-item={JS.push("stage_library_item")}
-        v-on:create-library-item={JS.push("create_library_item")}
-        v-on:add-library-version={JS.push("add_library_version")}
+        application_key="ops_console"
+        surface_id="dashboard_library"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

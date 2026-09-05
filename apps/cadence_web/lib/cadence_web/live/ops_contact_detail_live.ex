@@ -87,12 +87,11 @@ defmodule CadenceWeb.OpsContactDetailLive do
       <.vue
         id="ops-contact-detail-component"
         v-component="FederatedFullPageSurface"
-        page={@contact_detail_page}
-        provider_changes={@streams.provider_changes}
-        provider_audit_entries={@streams.provider_audit_entries}
-        v-on:approve-provider-change={JS.push("approve-provider-change")}
-        v-on:reject-provider-change={JS.push("reject-provider-change")}
-        v-on:acknowledge-provider-change={JS.push("acknowledge-provider-change")}
+        application_key="ops_console"
+        surface_id="contact_detail"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"provider_reservation_id" => @provider_reservation_id}}
         v-ssr={false}
         class="contents"
       />

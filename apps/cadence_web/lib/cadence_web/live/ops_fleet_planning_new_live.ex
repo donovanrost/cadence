@@ -76,13 +76,11 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
       <.vue
         id="ops-fleet-planning-new-component"
         v-component="FederatedFullPageSurface"
-        header={@header}
-        policy_state={@policy_state}
-        form={@fleet_run_form}
-        preview={@preview}
-        paths={@paths}
-        v-on:validate-fleet-run={JS.push("validate-fleet-run")}
-        v-on:create-fleet-run={JS.push("create-fleet-run")}
+        application_key="ops_console"
+        surface_id="fleet_planning_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

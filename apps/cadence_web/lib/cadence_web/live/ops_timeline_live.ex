@@ -78,11 +78,11 @@ defmodule CadenceWeb.OpsTimelineLive do
       <.vue
         id="ops-timeline-page-component"
         v-component="FederatedFullPageSurface"
-        presentation={@timeline_presentation}
-        timeline_events={@streams.timeline_events}
-        v-on:apply_timeline_filters={JS.push("apply_timeline_filters")}
-        v-on:clear_timeline_selection={JS.push("clear_timeline_selection")}
-        v-diff={false}
+        application_key="ops_console"
+        surface_id="timeline"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

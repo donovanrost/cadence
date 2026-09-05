@@ -74,7 +74,10 @@ defmodule Cadence.Applications.ApplicationDefinition do
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
   @max_dependencies 16
   @max_status_placements 8
-  @max_actions 32
+  # Route-level applications may expose a finite action vocabulary per
+  # surface. Keep the application-wide envelope explicit while allowing the
+  # Ops cohort to retain its exact declared identities.
+  @max_actions 128
   @max_surfaces 32
   @max_capability_contributions 32
 

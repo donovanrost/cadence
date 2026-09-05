@@ -64,12 +64,11 @@ defmodule CadenceWeb.OpsActivationRequestsLive do
       <.vue
         id="activation-requests-component"
         v-component="FederatedFullPageSurface"
-        page={@activation_requests_page}
-        selected={@selected_request}
-        form={@decision_form}
-        activation_requests={@streams.activation_requests}
-        v-on:review={JS.push("review")}
-        v-on:decide={JS.push("decide")}
+        application_key="ops_console"
+        surface_id="activation_requests"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

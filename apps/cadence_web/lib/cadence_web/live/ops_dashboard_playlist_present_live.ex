@@ -56,9 +56,11 @@ defmodule CadenceWeb.OpsDashboardPlaylistPresentLive do
       <.vue
         id="dashboard-playlist-present-component"
         v-component="FederatedFullPageSurface"
-        page={@playlist_present_page}
-        current_dashboard={@current_dashboard_details}
-        v-on:next-dashboard={JS.push("next_dashboard")}
+        application_key="ops_console"
+        surface_id="dashboard_playlist_present"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"playlist_id" => @dashboard_playlist.dashboard_playlist_id}}
         v-ssr={false}
         class="contents"
       />

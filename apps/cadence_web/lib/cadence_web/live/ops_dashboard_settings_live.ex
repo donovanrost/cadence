@@ -177,19 +177,11 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
       <.vue
         id="ops-dashboard-settings-component"
         v-component="FederatedFullPageSurface"
-        page={@settings_page}
-        settings_form={@settings_form}
-        share_form={@share_form}
-        snapshot_form={@snapshot_form}
-        dashboard_shares={@streams.dashboard_shares}
-        dashboard_snapshots={@streams.dashboard_snapshots}
-        dashboard_deployments={@streams.dashboard_deployments}
-        v-on:validate-settings={JS.push("validate_settings")}
-        v-on:save-settings={JS.push("save_settings")}
-        v-on:create-share={JS.push("create_share")}
-        v-on:revoke-share={JS.push("revoke_share")}
-        v-on:create-snapshot={JS.push("create_snapshot")}
-        v-on:archive-dashboard={JS.push("archive_dashboard")}
+        application_key="ops_console"
+        surface_id="dashboard_settings"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"dashboard_id" => @active_dashboard_id}}
         v-ssr={false}
         class="contents"
       />

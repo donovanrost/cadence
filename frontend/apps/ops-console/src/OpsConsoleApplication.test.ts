@@ -30,6 +30,46 @@ const response = {
   },
 };
 
+const expectedSurfaceTable = [
+  ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
+  [
+    "ops",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.console",
+    ["validate", "save", "filter", "refresh", "select", "open_data_link", "open_evidence", "set_chart_time_range"],
+  ],
+  ["contact_requirement_list", "collection", "mission", "ops_workspace", "cadence.ops.contact_requirement_list", []],
+  ["contact_requirement_new", "configuration", "mission", "ops_workspace", "cadence.ops.contact_requirement_new", ["validate", "save"]],
+  ["contact_requirement_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_requirement_show", ["plan", "toggle-opportunity", "create-plan"]],
+  ["contact_requirement_template", "configuration", "mission", "ops_workspace", "cadence.ops.contact_requirement_template", ["validate-template", "create-template", "pause-template", "activate-template", "close-template"]],
+  ["contact_schedule", "operations", "mission", "ops_workspace", "cadence.ops.contact_schedule", ["validate", "search", "reserve", "cancel"]],
+  ["contact_plan_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_plan_show", ["submit-plan", "approve-plan", "reject-plan", "execute-plan"]],
+  ["contact_detail", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_detail", ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]],
+  ["contact_record", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_record", []],
+  ["dashboard_directory", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_directory", ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]],
+  ["dashboard_new", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_new", ["validate", "save"]],
+  ["dashboard_library", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_library", ["stage-library-item", "create-library-item", "add-library-version"]],
+  ["dashboard_playlists", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_playlists", ["create-playlist"]],
+  ["dashboard_playlist_present", "operations", "mission", "ops_workspace", "cadence.ops.dashboard_playlist_present", ["next-dashboard"]],
+  ["dashboard_settings", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_settings", ["validate-settings", "save-settings", "create-share", "revoke-share", "create-snapshot", "archive-dashboard"]],
+  ["dashboard_share", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_share", []],
+  ["dashboard_snapshot", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_snapshot", []],
+  ["dashboard_diagnostics", "activity", "mission", "ops_workspace", "cadence.ops.dashboard_diagnostics", []],
+  ["fleet_planning", "operations", "mission", "ops_workspace", "cadence.ops.fleet_planning", ["refresh-planning"]],
+  ["fleet_planning_new", "configuration", "mission", "ops_workspace", "cadence.ops.fleet_planning_new", ["validate-fleet-run", "create-fleet-run"]],
+  ["fleet_planning_policy", "configuration", "mission", "ops_workspace", "cadence.ops.fleet_planning_policy", ["validate-policy", "save-policy", "approve-policy", "validate-grant", "issue-grant", "revoke-grant"]],
+  ["fleet_planning_run", "subject_detail", "mission", "ops_workspace", "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]],
+  ["activation_requests", "operations", "mission", "ops_workspace", "cadence.ops.activation_requests", ["review", "decide"]],
+  ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", ["filter", "reset_filters", "follow_command", "clear_command_focus"]],
+  ["telemetry_explore", "operations", "mission", "ops_workspace", "cadence.ops.telemetry_explore", ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]],
+  ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
+  ["data_sources", "configuration", "mission", "ops_workspace", "cadence.ops.data_sources", ["open-register-source", "cancel-register-source", "register-source", "open-change-binding", "cancel-change-binding", "change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
+  ["alarms", "operations", "mission", "ops_workspace", "cadence.ops.alarms", ["filter", "reset_filters"]],
+  ["timeline", "activity", "mission", "ops_workspace", "cadence.ops.timeline", ["apply_timeline_filters", "clear_timeline_selection"]],
+] as const;
+
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
@@ -63,7 +103,8 @@ function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
 }
 
 describe("Ops Console federated application", () => {
-  it.each(surfaceContracts)("queries the declared $surfaceId surface and renders its DTO", async (surface) => {
+  it("queries the preserved Ops workspace surface and renders its Phoenix DTO", async () => {
+    const surface = surfaceContracts[1];
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
@@ -78,8 +119,24 @@ describe("Ops Console federated application", () => {
       version: surface.dataContract.version,
       context,
     });
-    expect(wrapper.find("#ops-console-surface").exists()).toBe(true);
+    expect(wrapper.find("#ops-console-application").exists()).toBe(true);
     expect(wrapper.text()).toContain("Firebird");
+    wrapper.unmount();
+  });
+
+  it("never supplies route params to the host query bridge", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
+    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query) });
+
+    await flushPromises();
+
+    expect(query).toHaveBeenCalledOnce();
+    expect(query.mock.calls[0]?.[0]).toEqual({
+      queryId: surfaceContracts[1].dataContract.id,
+      version: surfaceContracts[1].dataContract.version,
+      context,
+    });
+    expect(query.mock.calls[0]?.[0]).not.toHaveProperty("params");
     wrapper.unmount();
   });
 
@@ -96,7 +153,7 @@ describe("Ops Console federated application", () => {
     await flushPromises();
 
     expect(query).toHaveBeenCalledTimes(2);
-    expect(wrapper.find("#ops-console-surface").exists()).toBe(true);
+    expect(wrapper.find("#ops-console-application").exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -161,6 +218,27 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
+    expect(surfaceContracts).toHaveLength(30);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(30);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(82);
+    expect(
+      surfaceContracts
+        .slice(2)
+        .every((surface) => Boolean(OPS_COMPONENTS[`Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`])),
+    ).toBe(true);
+  });
+
+  it("matches the complete Phoenix Ops purpose, scope, placement, query, and action table", () => {
+    expect(
+      surfaceContracts.map((surface) => [
+        surface.surfaceId,
+        surface.purpose,
+        surface.scope,
+        surface.placement,
+        surface.dataContract.id,
+        [...surface.actions],
+      ]),
+    ).toEqual(expectedSurfaceTable);
   });
 });
 
@@ -174,6 +252,12 @@ describe("Ops Console response boundary", () => {
         },
         OPS_COMPONENTS,
       ),
-    ).toThrow("presentation component is invalid");
+      ).toThrow("presentation component is invalid");
+  });
+
+  it("accepts the authenticated host response envelope", () => {
+    expect(unwrapOpsConsoleResponse({ trusted_surface: response }, OPS_COMPONENTS)).toEqual(
+      response.presentation,
+    );
   });
 });

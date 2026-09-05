@@ -14,10 +14,6 @@ const actionPending = ref(false);
 const actionNotice = ref<string>();
 let loadGeneration = 0;
 
-const surfaceComponents = {
-  workspace: OPS_COMPONENTS.OpsConsoleLanding,
-  ops: OPS_COMPONENTS.OpsConsoleLanding,
-} as const;
 const actionListeners = computed(() =>
   Object.fromEntries(
     props.surface.actions.map((actionId) => [
@@ -45,10 +41,6 @@ async function loadSurface(): Promise<void> {
   presentation.value = undefined;
 
   try {
-    if (!surfaceComponents[props.surface.surfaceId as "workspace" | "ops"]) {
-      throw new Error("The selected Ops Console surface is unavailable.");
-    }
-
     const response = await props.bridge.query<unknown>({
       queryId: props.surface.dataContract.id,
       version: props.surface.dataContract.version,
@@ -112,7 +104,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     id="ops-console-application"
     class="ops-console-application"
     :data-ops-console-surface="props.surface.surfaceId"
-    data-ops-console-renderer="OpsConsoleLanding"
+    data-ops-console-renderer="federated-surface"
   >
     <CStatePanel
       v-if="loading"

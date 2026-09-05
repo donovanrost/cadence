@@ -59,14 +59,11 @@ defmodule CadenceWeb.OpsAlarmsLive do
       <.vue
         id="ops-alarms-component"
         v-component="FederatedFullPageSurface"
-        page={@alarms_page}
-        summary={@alarm_summary}
-        filters={@alarm_filters}
-        reset={@alarm_reset}
-        empty={@alarm_empty}
-        alarms={@streams.alarms}
-        v-on:filter={JS.push("filter")}
-        v-on:reset_filters={JS.push("reset_filters")}
+        application_key="ops_console"
+        surface_id="alarms"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

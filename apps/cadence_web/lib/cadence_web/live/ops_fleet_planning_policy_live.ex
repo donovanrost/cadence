@@ -134,34 +134,11 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
           <.vue
             id="ops-fleet-planning-policy-component"
             v-component="FederatedFullPageSurface"
-            page={policy_page_dto(@current_mission, @policy, @policy_version)}
-            policy_form={policy_form_dto(@policy_form, @policy, @organization_admin?)}
-            approval_form={approval_form_dto(
-              @decision_form,
-              @policy,
-              @policy_version,
-              @organization_admin?
-            )}
-            authorization={authorization_dto(@organization_admin?)}
-            grant_ledger={grant_ledger_dto(@active_grant_count)}
-            grant_form={grant_form_dto(
-              @grant_form,
-              @service_identity_options,
-              @active_policy_version,
-              @organization_admin?
-            )}
-            revocation_form={revocation_form_dto(
-              @revocation_form,
-              @active_grant_options,
-              @organization_admin?
-            )}
-            automation_grants={@streams.automation_grants}
-            v-on:validate-policy={JS.push("validate-policy")}
-            v-on:save-policy={JS.push("save-policy")}
-            v-on:approve-policy={JS.push("approve-policy")}
-            v-on:validate-grant={JS.push("validate-grant")}
-            v-on:issue-grant={JS.push("issue-grant")}
-            v-on:revoke-grant={JS.push("revoke-grant")}
+            application_key="ops_console"
+            surface_id="fleet_planning_policy"
+            host_scope="mission"
+            mission_id={@current_mission.mission_id}
+            query_params={%{}}
             v-ssr={false}
             class="contents"
           />

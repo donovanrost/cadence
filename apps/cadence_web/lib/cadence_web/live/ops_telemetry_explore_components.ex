@@ -20,11 +20,11 @@ defmodule CadenceWeb.OpsTelemetryExploreComponents do
       <.vue
         id="ops-telemetry-explore-component"
         v-component="FederatedFullPageSurface"
-        {@telemetry_explore_props}
-        v-on:apply_filters={JS.push("apply_filters")}
-        v-on:apply_question={JS.push("apply_question")}
-        v-on:add_to_dashboard={JS.push("add_to_dashboard")}
-        v-on:clear_selected_sample={JS.push("clear_selected_sample")}
+        application_key="ops_console"
+        surface_id="telemetry_explore"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

@@ -74,12 +74,11 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
       <.vue
         id="ops-contact-requirement-new-component"
         v-component="FederatedFullPageSurface"
-        page={@page}
-        journey={@journey}
-        form={@contact_requirement_form}
-        actions={@actions}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="ops_console"
+        surface_id="contact_requirement_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />
