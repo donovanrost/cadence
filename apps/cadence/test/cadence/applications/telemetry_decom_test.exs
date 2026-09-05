@@ -352,7 +352,9 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       request = %ActionRequest{
         application_key: "telemetry_decom",
         application_version: 1,
-        action_id: "request_activation"
+        action_id: "request_activation",
+        surface_id: "manage",
+        surface_version: 1
       }
 
       assert {:ok, %{activation_request: activation_request}} =

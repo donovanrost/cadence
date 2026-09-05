@@ -11,30 +11,78 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
+  @surface_action_bindings [
+    {"new", 1, "validate"},
+    {"new", 1, "save"},
+    {"profile_new", 1, "validate"},
+    {"profile_new", 1, "save"},
+    {"edit", 1, "validate"},
+    {"edit", 1, "save"},
+    {"applications", 1, "install"},
+    {"applications", 1, "disable"},
+    {"applications", 1, "uninstall"},
+    {"telemetry_decom", 1, "save_configuration"},
+    {"telemetry_decom", 1, "request_activation"},
+    {"telemetry_decom", 1, "disable"}
+  ]
+
   @impl true
   def application_key, do: "spacecraft"
 
+  @doc "Returns the frozen provider-owned surface/action binding ledger."
+  @spec surface_action_bindings() :: [{binary(), pos_integer(), binary()}]
+  def surface_action_bindings, do: @surface_action_bindings
+
+  @doc "Validates that every binding row is unique and well formed."
+  @spec validate_bindings(list()) :: :ok | {:error, atom()}
+  def validate_bindings(bindings) when is_list(bindings) do
+    valid? =
+      Enum.all?(bindings, fn
+        {surface_id, surface_version, action_id} ->
+          is_binary(surface_id) and surface_id != "" and
+            is_integer(surface_version) and surface_version > 0 and
+            is_binary(action_id) and action_id != ""
+
+        _other ->
+          false
+      end)
+
+    cond do
+      not valid? -> {:error, :invalid_action_bindings}
+      length(bindings) != length(Enum.uniq(bindings)) -> {:error, :duplicate_action_bindings}
+      true -> :ok
+    end
+  end
+
+  def validate_bindings(_bindings), do: {:error, :invalid_action_bindings}
+
   @impl true
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{action_id: "validate", params: params}
-      ) do
+  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
+    with :ok <- ensure_surface_binding(request) do
+      execute_action(scope, host_context, request)
+    end
+  end
+
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{action_id: "validate", params: params}
+       ) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
          :ok <- validate_form(params) do
       {:ok, %{"valid" => true}}
     end
   end
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "validate", params: params}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "validate", params: params}
+       ) do
     with {:ok, _spacecraft} <-
            SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
          :ok <- validate_form(params) do
@@ -42,26 +90,26 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     end
   end
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{action_id: "save", params: params}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{action_id: "save", params: params}
+       ) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
          {:ok, result} <- save_mission_form(organization_id, mission_id, params) do
       {:ok, result}
     end
   end
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "save", params: params}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "save", params: params}
+       ) do
     with {:ok, spacecraft} <-
            SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
          {:ok, updated} <-
@@ -70,15 +118,15 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     end
   end
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "save_configuration", params: params}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "save_configuration", params: params}
+       ) do
     TelemetryDecom.configure(
       organization_id,
       mission_id,
@@ -87,27 +135,27 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     )
   end
 
-  def execute(
-        %Scope{} = scope,
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "request_activation"}
-      ) do
+  defp execute_action(
+         %Scope{} = scope,
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "request_activation"}
+       ) do
     TelemetryDecom.request_mission_apply(scope, mission_id, spacecraft_id)
   end
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "disable", params: params}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "disable", params: params}
+       ) do
     case Map.get(params, "key") || Map.get(params, :key) do
       key when is_binary(key) and key != "" ->
         {:error, {:local_application_lifecycle_boundary, key}}
@@ -117,11 +165,30 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{action_id: action_id})
-      when action_id in ["install", "uninstall"],
-      do: {:error, :local_application_lifecycle_boundary}
+  defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{action_id: action_id})
+       when action_id in ["install", "uninstall"],
+       do: {:error, :local_application_lifecycle_boundary}
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
+  defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
+    do: {:error, :unsupported_application_action}
+
+  defp ensure_surface_binding(%ActionRequest{
+         application_key: "spacecraft",
+         application_version: 1,
+         surface_id: surface_id,
+         surface_version: surface_version,
+         action_id: action_id
+       }) do
+    with :ok <- validate_bindings(@surface_action_bindings),
+         true <- {surface_id, surface_version, action_id} in @surface_action_bindings do
+      :ok
+    else
+      false -> {:error, :unsupported_application_action}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_surface_binding(%ActionRequest{}),
     do: {:error, :unsupported_application_action}
 
   @impl true

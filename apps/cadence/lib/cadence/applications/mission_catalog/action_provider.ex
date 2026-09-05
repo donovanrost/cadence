@@ -11,6 +11,21 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   alias Cadence.Missions.Mission
 
   @application_key "mission_catalog"
+  @surface_action_bindings [
+    {"mission_new", 1, "validate"},
+    {"mission_new", 1, "save"},
+    {"mission_applications", 1, "install"},
+    {"mission_applications", 1, "disable"},
+    {"mission_applications", 1, "uninstall"},
+    {"catalog_database_new", 1, "validate"},
+    {"catalog_database_new", 1, "save"},
+    {"catalog_database_new", 1, "cancel-upload"},
+    {"catalog_database_show", 1, "toggle-revision-form"},
+    {"catalog_database_show", 1, "validate"},
+    {"catalog_database_show", 1, "save"},
+    {"catalog_database_show", 1, "cancel-upload"},
+    {"catalog_artifact_show", 1, "reimport"}
+  ]
 
   @impl true
   def application_key, do: @application_key
@@ -18,13 +33,46 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   @doc "Lifecycle actions target the application key carried by the card input."
   def handles_lifecycle_actions?, do: true
 
+  @doc "Returns the frozen provider-owned surface/action binding ledger."
+  @spec surface_action_bindings() :: [{binary(), pos_integer(), binary()}]
+  def surface_action_bindings, do: @surface_action_bindings
+
+  @doc "Validates that every binding row is unique and well formed."
+  @spec validate_bindings(list()) :: :ok | {:error, atom()}
+  def validate_bindings(bindings) when is_list(bindings) do
+    valid? =
+      Enum.all?(bindings, fn
+        {surface_id, surface_version, action_id} ->
+          is_binary(surface_id) and surface_id != "" and
+            is_integer(surface_version) and surface_version > 0 and
+            is_binary(action_id) and action_id != ""
+
+        _other ->
+          false
+      end)
+
+    cond do
+      not valid? -> {:error, :invalid_action_bindings}
+      length(bindings) != length(Enum.uniq(bindings)) -> {:error, :duplicate_action_bindings}
+      true -> :ok
+    end
+  end
+
+  def validate_bindings(_bindings), do: {:error, :invalid_action_bindings}
+
   @impl true
-  def execute(
-        %Scope{} = scope,
-        %HostContext{} = host_context,
-        %ActionRequest{action_id: action_id, params: params}
-      )
-      when is_map(params) do
+  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
+    with :ok <- ensure_surface_binding(request) do
+      execute_action(scope, host_context, request)
+    end
+  end
+
+  defp execute_action(
+         %Scope{} = scope,
+         %HostContext{} = host_context,
+         %ActionRequest{action_id: action_id, params: params}
+       )
+       when is_map(params) do
     case action_id do
       "validate" ->
         validate_mission(params)
@@ -46,8 +94,27 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
+  defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :invalid_application_action_request}
+
+  defp ensure_surface_binding(%ActionRequest{
+         application_key: @application_key,
+         application_version: 1,
+         surface_id: surface_id,
+         surface_version: surface_version,
+         action_id: action_id
+       }) do
+    with :ok <- validate_bindings(@surface_action_bindings),
+         true <- {surface_id, surface_version, action_id} in @surface_action_bindings do
+      :ok
+    else
+      false -> {:error, :unsupported_application_action}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_surface_binding(%ActionRequest{}),
+    do: {:error, :unsupported_application_action}
 
   defp validate_mission(%{"mission" => params}) when is_map(params) do
     with {:ok, display_name} <- required_text(params, "display_name"),
