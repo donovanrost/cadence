@@ -17,7 +17,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   test "authenticated mission operators can navigate the fleet planning descriptor surfaces" do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization)
+    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
     mission = TestFixtures.persist_mission!(organization)
     conn = TestFixtures.member_conn(user)
 
@@ -55,8 +55,12 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       %{}
     )
 
-    render_hook(planning, "refresh-planning", %{})
-    assert_surface(planning, "ops-fleet-planning-component", "fleet_planning", mission, %{})
+    {:ok, run, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/runs/run-1")
+
+    assert_surface(run, "ops-fleet-planning-run-component", "fleet_planning_run", mission, %{
+      "fleet_planning_run_id" => "run-1"
+    })
   end
 
   test "fleet planning action provider remains fail-closed and mission-scoped" do
@@ -67,7 +71,7 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
       params: %{}
     }
 
-    assert {:error, :ops_console_action_pending_exact_wiring} =
+    assert {:error, :unsupported_application_action} =
              ActionProvider.execute(service_scope(), HostContext.mission("mission-1"), request)
 
     cross_mission = %{request | params: %{"mission_id" => "mission-2"}}

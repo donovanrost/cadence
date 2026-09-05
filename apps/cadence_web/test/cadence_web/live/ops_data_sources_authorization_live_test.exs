@@ -12,11 +12,11 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "ordinary operators can inspect the reader surface but not administrator routes" do
+  test "members can inspect sources but not administrator routes" do
     {conn, mission} = signed_in(:member)
-    {:ok, inventory, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
 
-    assert_surface(inventory, "ops-data-sources-component", "data_sources", mission, %{})
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{})
 
     assert {:error, {:redirect, %{to: "/"}}} =
              live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
@@ -25,7 +25,7 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
              live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/source-1/settings")
   end
 
-  test "organization administrators receive distinct registration and subject descriptors" do
+  test "administrators receive exact registration and settings subjects" do
     {conn, mission} = signed_in(:organization_admin)
 
     {:ok, registration, _html} =
@@ -42,16 +42,12 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
     {:ok, settings, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/source-1/settings")
 
-    assert_surface(
-      settings,
-      "ops-data-sources-component",
-      "data_source_settings",
-      mission,
-      %{"data_source_id" => "source-1"}
-    )
+    assert_surface(settings, "ops-data-sources-component", "data_source_settings", mission, %{
+      "data_source_id" => "source-1"
+    })
   end
 
-  test "data source descriptors declare exact subject and query contracts" do
+  test "data-source query contracts keep registration unscoped and settings source-scoped" do
     assert {:ok, %{subject_param: nil, query_params: []}} =
              OpsConsole.surface_query_contract("data_source_registration")
 
@@ -70,18 +66,20 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end

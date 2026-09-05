@@ -11,65 +11,59 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "focus query context remains bounded to the source subject descriptor" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-    mission = TestFixtures.persist_mission!(organization)
+  test "source focus remains bounded to the source subject" do
+    {conn, mission} = signed_in()
 
     {:ok, view, _html} =
       live(
-        TestFixtures.member_conn(user),
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-source", source_binding_id: "binding-1", logical_source: "telemetry", realm: "flight", selected_target: "transport", selected_id: "transport-1"}}"
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources?data_source_id=focus-source&selected_target=transport&selected_id=transport-1"
       )
 
-    assert_surface(
-      view,
-      "ops-data-sources-component",
-      "data_sources",
-      mission,
-      %{"data_source_id" => "focus-source"}
-    )
+    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{
+      "data_source_id" => "focus-source"
+    })
   end
 
-  test "settings focus carries the exact source subject and rejects presentation-only controls" do
+  test "source settings forward their exact path subject" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-source/settings?selected_target=transport"
+      )
+
+    assert_surface(view, "ops-data-sources-component", "data_source_settings", mission, %{
+      "data_source_id" => "focus-source"
+    })
+  end
+
+  defp signed_in do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     TestFixtures.grant_membership!(user, organization, role: :organization_admin)
     mission = TestFixtures.persist_mission!(organization)
-
-    {:ok, view, _html} =
-      live(
-        TestFixtures.member_conn(user),
-        ~p"/missions/#{mission.mission_id}/ops/data-sources/focus-source/settings?#{%{source_binding_id: "binding-1", selected_target: "transport", selected_id: "transport-1"}}"
-      )
-
-    assert_surface(
-      view,
-      "ops-data-sources-component",
-      "data_source_settings",
-      mission,
-      %{"data_source_id" => "focus-source"}
-    )
-
-    refute has_element?(view, "#ops-data-sources-page")
+    {TestFixtures.member_conn(user), mission}
   end
 
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end

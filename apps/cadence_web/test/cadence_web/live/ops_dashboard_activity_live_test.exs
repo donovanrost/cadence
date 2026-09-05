@@ -8,51 +8,51 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.Document
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
 
-  test "activity mounts with the dashboard and version query subjects" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
-    %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Activity")
+  test "activity forwards only its bounded dashboard query" do
+    {conn, mission} = signed_in()
+    dashboard_id = "dashboard-1"
 
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity?version=1"
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/activity?version=2&selected_publish_issue=issue-1&stale=ignored"
       )
 
-    assert_surface(
-      view,
-      "ops-dashboard-activity-surface",
-      "dashboard_activity",
-      mission,
-      %{"dashboard_id" => dashboard.dashboard_id, "version" => "1"}
-    )
+    assert_surface(view, "ops-dashboard-activity-surface", "dashboard_activity", mission, %{
+      "dashboard_id" => dashboard_id,
+      "version" => "2",
+      "selected_publish_issue" => "issue-1"
+    })
+  end
+
+  defp signed_in do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
-    vue = LiveVue.Test.get_vue(view, id: id)
+    vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
-  end
-
-  defp signed_in_user_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "dashboard-activity")
-    {TestFixtures.member_conn(user), user, org, mission}
   end
 end

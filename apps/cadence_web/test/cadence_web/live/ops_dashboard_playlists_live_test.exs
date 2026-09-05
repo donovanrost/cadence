@@ -8,66 +8,54 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.Management
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
 
-  test "playlist presentation mounts with the authenticated playlist subject" do
-    {conn, user, org, mission} = signed_in_user_org_and_mission()
-    dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Wallboard")
+  test "playlist routes forward only their bounded subject" do
+    {conn, mission} = signed_in()
 
-    assert {:ok, playlist} =
-             Management.create_playlist(
-               org.organization_id,
-               mission.mission_id,
-               %{"name" => "Flight wallboard", "dashboard_ids" => [dashboard.dashboard_id]},
-               created_by: user.user_id
-             )
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
-      )
+    {:ok, present, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/playlist-1/present")
 
     assert_surface(
-      view,
+      present,
       "dashboard-playlist-present-component",
       "dashboard_playlist_present",
       mission,
-      %{"playlist_id" => playlist.dashboard_playlist_id}
+      %{
+        "playlist_id" => "playlist-1"
+      }
     )
+
+    {:ok, index, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists")
+    assert_surface(index, "dashboard-playlists-component", "dashboard_playlists", mission, %{})
   end
 
-  test "playlist authoring mounts the mission-scoped surface" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists")
-
-    assert_surface(view, "dashboard-playlists-component", "dashboard_playlists", mission, %{})
+  defp signed_in do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
-    vue = LiveVue.Test.get_vue(view, id: id)
+    vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
-  end
-
-  defp signed_in_user_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "dashboard-playlists")
-    {TestFixtures.member_conn(user), user, org, mission}
   end
 end

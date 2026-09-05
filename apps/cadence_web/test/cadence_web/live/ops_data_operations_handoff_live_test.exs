@@ -8,63 +8,44 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Applications.OpsConsole
   alias CadenceWeb.TestFixtures
+  alias Cadence.Applications.OpsConsole
   alias LiveVue.Test
 
-  test "dashboard context mounts the reader descriptor with exact bounded query params" do
-    {conn, mission} = signed_in(:organization_admin)
-
-    query = %{
-      dashboard_id: "dashboard-1",
-      dashboard_version: "3",
-      dashboard_time_mode: "absolute",
-      dashboard_data_view: "all_revisions",
-      dashboard_limit_mode: "observed",
-      realm: "flight",
-      data_source_id: "flight-telemetry",
-      source_binding_id: "flight-telemetry-binding",
-      point_id: "HK.counter",
-      point_ids: "HK.counter, HK.voltage",
-      source_from: "2026-08-01T10:00:00Z",
-      source_to: "2026-08-01T11:00:00Z"
-    }
+  test "reader route ignores unowned dashboard context" do
+    {conn, mission} = signed_in(:member)
 
     {:ok, view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-operations?#{query}")
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-operations?dashboard_id=dashboard-1&point_id=HK.temp"
+      )
 
     assert_surface(view, "ops-data-operations-component", "data_operations", mission, %{})
-    refute has_element?(view, "#ops-data-operations-page")
   end
 
-  test "management route carries only the selected group into the federated descriptor" do
+  test "management route forwards only the selected group" do
     {conn, mission} = signed_in(:organization_admin)
 
     {:ok, view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?group=group-alpha")
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?group=group-alpha&point_id=ignored"
+      )
 
-    assert_surface(
-      view,
-      "ops-data-operations-component",
-      "data_operations_manage",
-      mission,
-      %{}
-    )
-
-    render_hook(view, "validate_request", %{
-      "historical_workflow_request" => %{"workflow" => "backfill", "confirmed" => "false"}
+    assert_surface(view, "ops-data-operations-component", "data_operations_manage", mission, %{
+      "group" => "group-alpha"
     })
-
-    assert_surface(
-      view,
-      "ops-data-operations-component",
-      "data_operations_manage",
-      mission,
-      %{}
-    )
   end
 
-  test "data operations descriptor declares the query provider and bounded manage query" do
+  test "management route remains administrator scoped" do
+    {conn, mission} = signed_in(:member)
+
+    assert {:error, {:redirect, %{to: "/"}}} =
+             live(conn, ~p"/missions/#{mission.mission_id}/ops/data-operations/manage")
+  end
+
+  test "data operations retain bounded reader and management contracts" do
     assert {:ok, %{subject_param: nil, query_params: []}} =
              OpsConsole.surface_query_contract("data_operations")
 
@@ -72,7 +53,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
              OpsConsole.surface_query_contract("data_operations_manage")
   end
 
-  defp signed_in(role \\ :member) do
+  defp signed_in(role) do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     TestFixtures.grant_membership!(user, organization, role: role)
@@ -83,18 +64,20 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end

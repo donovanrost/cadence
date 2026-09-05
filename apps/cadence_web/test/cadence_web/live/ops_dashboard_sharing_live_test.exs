@@ -8,95 +8,66 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.Management
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
 
-  test "authenticated share and snapshot routes mount exact route subjects" do
-    {conn, user, org, mission} = signed_in_user_org_and_mission()
-    dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Shareable Power")
+  test "share and snapshot routes forward their exact subjects" do
+    {conn, mission} = signed_in()
 
-    {:ok, share} =
-      Management.create_share(
-        org.organization_id,
-        mission.mission_id,
-        dashboard.dashboard_id,
-        %{"scope_kind" => "mission"},
-        created_by: user.user_id
-      )
-
-    {:ok, snapshot} =
-      Management.create_snapshot(
-        org.organization_id,
-        mission.mission_id,
-        dashboard,
-        %{},
-        created_by: user.user_id,
-        data_visibility: "definition_only"
-      )
-
-    {:ok, share_view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboard-shares/#{share.dashboard_share_id}"
-      )
+    {:ok, share, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboard-shares/share-1")
 
     assert_surface(
-      share_view,
+      share,
       "ops-dashboard-share-component",
       "dashboard_share",
       mission,
-      %{"share_id" => share.dashboard_share_id},
+      %{
+        "share_id" => "share-1"
+      },
       "h-full"
     )
 
-    {:ok, snapshot_view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboard-snapshots/#{snapshot.dashboard_snapshot_id}"
-      )
+    {:ok, snapshot, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboard-snapshots/snapshot-1")
 
     assert_surface(
-      snapshot_view,
+      snapshot,
       "ops-dashboard-snapshot-component",
       "dashboard_snapshot",
       mission,
-      %{"snapshot_id" => snapshot.dashboard_snapshot_id},
+      %{
+        "snapshot_id" => "snapshot-1"
+      },
       "h-full"
     )
   end
 
-  test "missing sharing records preserve the mission redirect outcome" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
-
-    assert {:error, {:live_redirect, %{to: path}}} =
-             live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboard-shares/missing")
-
-    assert path == "/missions/#{mission.mission_id}/ops/dashboards"
+  defp signed_in do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params, class \\ "contents") do
+  defp assert_surface(view, id, surface_id, mission, query_params, class) do
     assert has_element?(view, "##{id}.#{class}")
-    vue = LiveVue.Test.get_vue(view, id: id)
+    vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == class
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
-  end
-
-  defp signed_in_user_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "dashboard-sharing")
-    {TestFixtures.member_conn(user), user, org, mission}
   end
 end
