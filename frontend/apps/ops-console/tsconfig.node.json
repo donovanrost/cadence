@@ -1,0 +1,15 @@
+{
+  "include": ["vite.config.*", "module-federation.config.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}

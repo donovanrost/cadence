@@ -1,0 +1,34 @@
+{
+  "name": "@cadence/ops-console-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev --host 127.0.0.1 --port 4177 --strictPort",
+    "build": "vue-tsc -b && vp build",
+    "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
+    "build:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && vue-tsc -b && vp build --mode release --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\"",
+    "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node ../../tools/frontend-release-output-check.mjs --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\" --remoteName cadence_ops_console",
+    "preview": "vp preview --host 127.0.0.1 --port 4177 --strictPort",
+    "test": "node --test release-build-config.test.mjs && vp test --run --exclude release-build-config.test.mjs"
+  },
+  "dependencies": {
+    "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "reka-ui": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}
