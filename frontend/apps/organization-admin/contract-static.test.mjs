@@ -5,20 +5,7 @@ import { join } from "node:path";
 
 const appRoot = import.meta.dirname;
 const sourceRoot = join(appRoot, "src");
-const entryComponents = [
-  "OrganizationHome",
-  "ProviderAccountListPage",
-  "ProviderAccountNew",
-  "ProviderAccountShow",
-  "NotificationsPage",
-  "NotificationsBell",
-  "AdminHome",
-  "AdminRuntime",
-  "AdminOrganizationListPage",
-  "AdminOrganizationNew",
-  "AdminOrganizationShow",
-  "AdminOrganizationInvite",
-];
+const entryFiles = ["federated-application.ts"];
 const surfaceIds = [
   "organization_home",
   "provider_accounts",
@@ -45,11 +32,11 @@ async function sourceFiles(directory) {
 }
 
 void test("owns the complete post-auth component closure", async () => {
-  for (const component of entryComponents) {
+  for (const entry of entryFiles) {
     assert.equal(
-      await fileExists(join(sourceRoot, `${component}.vue`)),
+      await fileExists(join(sourceRoot, entry)),
       true,
-      `${component} entry is missing`,
+      `${entry} entry is missing`,
     );
   }
 
@@ -63,22 +50,28 @@ void test("owns the complete post-auth component closure", async () => {
   }
 });
 
-void test("declares one exposed renderer for every contributed surface", async () => {
+void test("declares one app-level exposed renderer for every contributed surface", async () => {
   const federationConfig = await readFile(join(appRoot, "module-federation.config.ts"), "utf8");
   const manifest = await readFile(join(sourceRoot, "federated-application.ts"), "utf8");
   const contribution = await readFile(join(sourceRoot, "organization-admin-contract.ts"), "utf8");
 
-  for (const component of entryComponents) {
-    assert.match(federationConfig, new RegExp(`"\\./${component}"`));
-  }
+  assert.match(federationConfig, /"\.\/Application": "\.\/src\/federated-application\.ts"/);
+  assert.doesNotMatch(federationConfig, /"\.\/(?!Application)[^"]*"\s*:/);
   for (const surfaceId of surfaceIds) {
     assert.match(contribution, new RegExp(`surfaceId: "${surfaceId}"`));
     assert.match(manifest, new RegExp(`surfaceId: surface.surfaceId`));
   }
-  assert.match(manifest, /exposedModule: `\.\/\$\{surface\.component\}`/);
+  assert.match(manifest, /exposedModule: "\.\/Application"/);
   assert.equal(new Set(surfaceIds).size, surfaceIds.length);
   assert.match(manifest, /applicationKey: "organization_admin"/);
-  assert.match(manifest, /installableScopes: \["organization"\]/);
+  assert.match(manifest, /packageId: "cadence\.organization-admin"/);
+  assert.match(
+    manifest,
+    /installableScopes: \["organization", "user", "admin"\]/,
+  );
+  assert.match(contribution, /scope: "organization"/);
+  assert.match(contribution, /scope: "user"/);
+  assert.match(contribution, /scope: "admin"/);
 });
 
 async function fileExists(path) {

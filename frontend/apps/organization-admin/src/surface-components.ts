@@ -11,6 +11,9 @@ import ProviderAccountListPage from "./ProviderAccountListPage.vue";
 import ProviderAccountNew from "./ProviderAccountNew.vue";
 import ProviderAccountShow from "./ProviderAccountShow.vue";
 
+import type { Component } from "vue";
+import type { OrganizationAdminSurface } from "./organization-admin-contract";
+
 export const exposedComponents = {
   OrganizationHome,
   ProviderAccountListPage,
@@ -25,3 +28,19 @@ export const exposedComponents = {
   AdminOrganizationShow,
   AdminOrganizationInvite,
 };
+
+/** The host surface id is the only renderer selection authority in this remote. */
+export const surfaceComponents = {
+  organization_home: OrganizationHome,
+  provider_accounts: ProviderAccountListPage,
+  provider_account_new: ProviderAccountNew,
+  provider_account_show: ProviderAccountShow,
+  notifications: NotificationsPage,
+  notifications_bell: NotificationsBell,
+  admin_home: AdminHome,
+  admin_runtime: AdminRuntime,
+  admin_organizations: AdminOrganizationListPage,
+  admin_organization_new: AdminOrganizationNew,
+  admin_organization_show: AdminOrganizationShow,
+  admin_organization_invite: AdminOrganizationInvite,
+} satisfies Record<OrganizationAdminSurface, Component>;

@@ -1,16 +1,16 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FederatedApplicationProps,
+  FullPageSurfaceProps,
   HostActionReceipt,
   HostActionRequest,
   HostQueryRequest,
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
-import { manifest } from "./federated-application";
+import { manifest, surfaceContracts } from "./federated-application";
 import { OPS_COMPONENTS, OPS_COMPONENT_NAMES } from "./ops-components";
-import { OPS_QUERY_ID, OPS_QUERY_VERSION, unwrapOpsConsoleResponse } from "./ops-console";
+import { unwrapOpsConsoleResponse } from "./ops-console";
 
 const context: MissionHostContext = {
   scope: "mission",
@@ -34,7 +34,24 @@ type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
 function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
+  const surface = surfaceContracts[1];
   return {
+    application: {
+      applicationKey: "ops_console",
+      applicationVersion: 1,
+      displayName: "Ops Console",
+      description: "Mission operations.",
+      package: { packageId: "cadence.ops_console", version: 1 },
+      surface,
+      release: {
+        federation: "module_federation" as const,
+        releaseId: "ops-console-v1",
+        remoteName: "cadence_ops_console",
+        manifestUrl: "/assets/application-host/ops-console/mf-manifest.json",
+        exposedModule: "./Application",
+      },
+    },
+    surface,
     context,
     bridge: {
       query: async <TResult>(request: HostQueryRequest) => (await query(request)) as TResult,
@@ -42,20 +59,23 @@ function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
         (await execute(request as HostActionRequest<unknown>)) as HostActionReceipt<TResult>,
       subscribe: vi.fn(),
     },
-  } satisfies FederatedApplicationProps;
+  } satisfies FullPageSurfaceProps;
 }
 
 describe("Ops Console federated application", () => {
-  it("queries Phoenix and renders the server-selected app-local surface", async () => {
+  it.each(surfaceContracts)("queries the declared $surfaceId surface and renders its DTO", async (surface) => {
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
-    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query) });
+    const baseProps = propsFor(query);
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
 
     expect(wrapper.find("#ops-console-loading").exists()).toBe(true);
     await flushPromises();
 
     expect(query).toHaveBeenCalledWith({
-      queryId: OPS_QUERY_ID,
-      version: OPS_QUERY_VERSION,
+      queryId: surface.dataContract.id,
+      version: surface.dataContract.version,
       context,
     });
     expect(wrapper.find("#ops-console-surface").exists()).toBe(true);
@@ -140,16 +160,7 @@ describe("Ops Console federated application", () => {
     expect(manifest.package).toMatchObject({ packageId: "cadence.ops_console", version: 1 });
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
-    expect(manifest.surfaces).toEqual([
-      expect.objectContaining({
-        surfaceId: "ops",
-        purpose: "operations",
-        scope: "mission",
-        placement: "ops_workspace",
-        dataContract: { id: "cadence.ops.console", version: 1 },
-        renderer: { kind: "federated-vue", exposedModule: "./Application" },
-      }),
-    ]);
+    expect(manifest.surfaces).toEqual(surfaceContracts);
   });
 });
 

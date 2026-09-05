@@ -1,33 +1,35 @@
 <script setup lang="ts">
-import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
+import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { onMounted, ref, shallowRef } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
 import CommsOverviewPage from "./CommsOverviewPage.vue";
-import {
-  COMMS_OVERVIEW_QUERY_ID,
-  COMMS_OVERVIEW_QUERY_VERSION,
-  type CommsOverviewPresentation,
-  unwrapCommsOverviewResponse,
-} from "./comms-overview";
+import { unwrapCommsOverviewResponse, type CommsOverviewPresentation } from "./comms-overview";
 
-const props = defineProps<FederatedApplicationProps>();
+const props = defineProps<FullPageSurfaceProps>();
 const presentation = shallowRef<CommsOverviewPresentation>();
 const loading = ref(true);
 const error = ref<string>();
 let loadGeneration = 0;
 
-onMounted(loadOverview);
+const surfaceComponents = {
+  overview: CommsOverviewPage,
+} as const;
+const renderer = computed(() => surfaceComponents[props.surface.surfaceId as "overview"]);
 
-async function loadOverview(): Promise<void> {
+onMounted(() => void loadSurface());
+
+async function loadSurface(): Promise<void> {
   const generation = ++loadGeneration;
   loading.value = true;
   error.value = undefined;
   presentation.value = undefined;
 
   try {
+    if (!renderer.value) throw new Error("The selected communications surface is unavailable.");
+
     const response = await props.bridge.query<unknown>({
-      queryId: COMMS_OVERVIEW_QUERY_ID,
-      version: COMMS_OVERVIEW_QUERY_VERSION,
+      queryId: props.surface.dataContract.id,
+      version: props.surface.dataContract.version,
       context: props.context,
     });
     if (generation !== loadGeneration) return;
@@ -42,7 +44,12 @@ async function loadOverview(): Promise<void> {
 </script>
 
 <template>
-  <div id="comms-overview-application" class="comms-overview-application">
+  <div
+    id="comms-overview-application"
+    class="comms-overview-application"
+    :data-comms-overview-surface="props.surface.surfaceId"
+    data-comms-overview-renderer="CommsOverviewPage"
+  >
     <CStatePanel
       v-if="loading"
       id="comms-overview-loading"
@@ -60,9 +67,9 @@ async function loadOverview(): Promise<void> {
       aria-live="polite"
     >
       <template #action>
-        <CButton id="retry-comms-overview" size="sm" @click="loadOverview"> Retry query </CButton>
+        <CButton id="retry-comms-overview" size="sm" @click="loadSurface">Retry query</CButton>
       </template>
     </CStatePanel>
-    <CommsOverviewPage v-else-if="presentation" :presentation="presentation" />
+    <component v-else-if="renderer && presentation" :is="renderer" :presentation="presentation" />
   </div>
 </template>

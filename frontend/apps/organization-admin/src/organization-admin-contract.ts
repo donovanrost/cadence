@@ -1,8 +1,11 @@
 import type { SurfacePurpose } from "@cadence/plugin-sdk";
 
+export type OrganizationAdminScope = "organization" | "user" | "admin";
+
 export const SURFACE_CONTRACTS = [
   {
     surfaceId: "organization_home",
+    scope: "organization" as OrganizationAdminScope,
     component: "OrganizationHome",
     purpose: "overview" as SurfacePurpose,
     query: { id: "cadence.organization.home", version: 1 },
@@ -10,6 +13,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "provider_accounts",
+    scope: "organization" as OrganizationAdminScope,
     component: "ProviderAccountListPage",
     purpose: "overview" as SurfacePurpose,
     query: { id: "cadence.organization.provider_accounts.list", version: 1 },
@@ -17,6 +21,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "provider_account_new",
+    scope: "organization" as OrganizationAdminScope,
     component: "ProviderAccountNew",
     purpose: "configuration" as SurfacePurpose,
     query: { id: "cadence.organization.provider_accounts.new", version: 1 },
@@ -24,6 +29,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "provider_account_show",
+    scope: "organization" as OrganizationAdminScope,
     component: "ProviderAccountShow",
     purpose: "configuration" as SurfacePurpose,
     query: { id: "cadence.organization.provider_account.show", version: 1 },
@@ -37,6 +43,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "notifications",
+    scope: "user" as OrganizationAdminScope,
     component: "NotificationsPage",
     purpose: "activity" as SurfacePurpose,
     query: { id: "cadence.organization.notifications", version: 1 },
@@ -44,6 +51,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "notifications_bell",
+    scope: "user" as OrganizationAdminScope,
     component: "NotificationsBell",
     purpose: "activity" as SurfacePurpose,
     query: { id: "cadence.organization.notifications_bell", version: 1 },
@@ -51,6 +59,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_home",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminHome",
     purpose: "overview" as SurfacePurpose,
     query: { id: "cadence.platform_admin.home", version: 1 },
@@ -58,6 +67,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_runtime",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminRuntime",
     purpose: "activity" as SurfacePurpose,
     query: { id: "cadence.platform_admin.runtime", version: 1 },
@@ -65,6 +75,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_organizations",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminOrganizationListPage",
     purpose: "overview" as SurfacePurpose,
     query: { id: "cadence.platform_admin.organizations", version: 1 },
@@ -72,6 +83,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_organization_new",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminOrganizationNew",
     purpose: "configuration" as SurfacePurpose,
     query: { id: "cadence.platform_admin.organization.new", version: 1 },
@@ -79,6 +91,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_organization_show",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminOrganizationShow",
     purpose: "overview" as SurfacePurpose,
     query: { id: "cadence.platform_admin.organization.show", version: 1 },
@@ -86,6 +99,7 @@ export const SURFACE_CONTRACTS = [
   },
   {
     surfaceId: "admin_organization_invite",
+    scope: "admin" as OrganizationAdminScope,
     component: "AdminOrganizationInvite",
     purpose: "configuration" as SurfacePurpose,
     query: { id: "cadence.platform_admin.organization.invite", version: 1 },

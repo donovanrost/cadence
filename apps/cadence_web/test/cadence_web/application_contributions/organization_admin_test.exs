@@ -24,6 +24,25 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminTest do
              "admin_organization_show",
              "admin_organization_invite"
            ]
+
+    assert Enum.map(OrganizationAdmin.surfaces(), &{&1.id, &1.scope}) == [
+             {"organization_home", :organization},
+             {"provider_accounts", :organization},
+             {"provider_account_new", :organization},
+             {"provider_account_show", :organization},
+             {"notifications", :user},
+             {"notifications_bell", :user},
+             {"admin_home", :admin},
+             {"admin_runtime", :admin},
+             {"admin_organizations", :admin},
+             {"admin_organization_new", :admin},
+             {"admin_organization_show", :admin},
+             {"admin_organization_invite", :admin}
+           ]
+
+    assert Enum.all?(OrganizationAdmin.release_contributions(), fn release ->
+             release.exposed_module == "./Application"
+           end)
   end
 
   test "binds every contribution to a Phoenix-owned query and renderer component" do

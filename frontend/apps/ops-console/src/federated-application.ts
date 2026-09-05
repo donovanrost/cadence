@@ -5,6 +5,40 @@ import {
 } from "@cadence/plugin-sdk";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
+export const surfaceContracts = [
+  {
+    surfaceId: "workspace",
+    version: 1,
+    purpose: "overview",
+    scope: "mission",
+    placement: "application_workspace",
+    navigation: { label: "Ops Console", order: 10 },
+    dataContract: { id: "cadence.ops.workspace", version: 1 },
+    actions: [],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+  {
+    surfaceId: "ops",
+    version: 1,
+    purpose: "operations",
+    scope: "mission",
+    placement: "ops_workspace",
+    navigation: { label: "Operations", order: 10 },
+    dataContract: { id: "cadence.ops.console", version: 1 },
+    actions: [
+      "validate",
+      "save",
+      "filter",
+      "refresh",
+      "select",
+      "open_data_link",
+      "open_evidence",
+      "set_chart_time_range",
+    ],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+] as const;
+
 export const manifest = defineApplicationManifest({
   schema: FEDERATED_APPLICATION_MANIFEST_SCHEMA,
   hostContract: APPLICATION_HOST_CONTRACT,
@@ -26,28 +60,7 @@ export const manifest = defineApplicationManifest({
     description: "Mission operations, dashboard runtime, evidence, and control surfaces.",
     installableScopes: ["mission"],
   },
-  surfaces: [
-    {
-      surfaceId: "ops",
-      version: 1,
-      purpose: "operations",
-      scope: "mission",
-      placement: "ops_workspace",
-      navigation: { label: "Ops Console", order: 10 },
-      dataContract: { id: "cadence.ops.console", version: 1 },
-      actions: [
-        "validate",
-        "save",
-        "filter",
-        "refresh",
-        "select",
-        "open_data_link",
-        "open_evidence",
-        "set_chart_time_range",
-      ],
-      renderer: { kind: "federated-vue", exposedModule: "./Application" },
-    },
-  ],
+  surfaces: surfaceContracts,
 });
 
 export default OpsConsoleApplication;
