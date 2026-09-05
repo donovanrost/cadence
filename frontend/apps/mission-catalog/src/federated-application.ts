@@ -15,7 +15,7 @@ const pageSurfaces = [
     navigation: { label: "Missions", order: 10 },
     dataContract: { id: "cadence.mission_catalog.mission_list", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./MissionList" },
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "mission_new",
@@ -25,8 +25,8 @@ const pageSurfaces = [
     placement: "application_workspace",
     navigation: { label: "New mission", order: 20 },
     dataContract: { id: "cadence.mission_catalog.mission_new", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./MissionNew" },
+    actions: ["validate", "save"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "mission_overview",
@@ -37,7 +37,7 @@ const pageSurfaces = [
     navigation: { label: "Mission overview", order: 30 },
     dataContract: { id: "cadence.mission_catalog.mission_overview", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./MissionOverview" },
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "mission_applications",
@@ -47,8 +47,8 @@ const pageSurfaces = [
     placement: "application_workspace",
     navigation: { label: "Applications", order: 40 },
     dataContract: { id: "cadence.mission_catalog.mission_applications", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./MissionApplicationsPage" },
+    actions: ["install", "disable", "uninstall"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_index",
@@ -59,7 +59,7 @@ const pageSurfaces = [
     navigation: { label: "Catalog", order: 50 },
     dataContract: { id: "cadence.mission_catalog.catalog_index", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogIndex" },
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_database_new",
@@ -69,8 +69,8 @@ const pageSurfaces = [
     placement: "application_workspace",
     navigation: { label: "New database", order: 60 },
     dataContract: { id: "cadence.mission_catalog.catalog_database_new", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogDatabaseNew" },
+    actions: ["validate", "save", "cancel-upload"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_database_show",
@@ -80,8 +80,8 @@ const pageSurfaces = [
     placement: "application_workspace",
     navigation: { label: "Database", order: 70 },
     dataContract: { id: "cadence.mission_catalog.catalog_database_show", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogDatabaseShow" },
+    actions: ["toggle-revision-form", "validate", "save", "cancel-upload"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_revision_show",
@@ -92,7 +92,7 @@ const pageSurfaces = [
     navigation: { label: "Revision", order: 80 },
     dataContract: { id: "cadence.mission_catalog.catalog_revision_show", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogRevisionShow" },
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_artifact_show",
@@ -102,8 +102,8 @@ const pageSurfaces = [
     placement: "application_workspace",
     navigation: { label: "Artifact", order: 90 },
     dataContract: { id: "cadence.mission_catalog.catalog_artifact_show", version: 1 },
-    actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogArtifactShowPage" },
+    actions: ["reimport"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
   {
     surfaceId: "catalog_import_run_show",
@@ -114,7 +114,7 @@ const pageSurfaces = [
     navigation: { label: "Import run", order: 100 },
     dataContract: { id: "cadence.mission_catalog.catalog_import_run_show", version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue", exposedModule: "./CatalogImportRunShow" },
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
   },
 ] as const;
 

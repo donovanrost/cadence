@@ -1,107 +1,134 @@
 import "./env.d.ts";
 
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
+import type { CatalogApplication, HostBridge, HostContext } from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
 import SpacecraftApplication from "./SpacecraftApplication.vue";
 import { manifest } from "./federated-application";
 
-describe("Spacecraft federated application", () => {
-  it("claims every Spacecraft page while preserving the Phoenix prop and event boundary", async () => {
+const context: HostContext = {
+  scope: "spacecraft",
+  organizationId: "org-1",
+  missionId: "mission-1",
+  missionName: "Firebird",
+  spacecraftId: "spacecraft-1",
+  spacecraftName: "FB-1",
+  actor: { displayName: "Mara Vance", permissions: ["operate_mission"] },
+};
+
+const surfaceIds = [
+  "list",
+  "new",
+  "profile_list",
+  "profile_new",
+  "profile_show",
+  "show",
+  "edit",
+  "readiness",
+  "routing",
+  "commanding",
+  "applications",
+  "telemetry_decom",
+] as const;
+
+const componentNames = [
+  "SpacecraftListPage",
+  "SpacecraftNew",
+  "SpacecraftTypeListPage",
+  "SpacecraftTypeNew",
+  "SpacecraftTypeShow",
+  "SpacecraftShow",
+  "SpacecraftEdit",
+  "SpacecraftReadiness",
+  "SpacecraftRouting",
+  "SpacecraftCommanding",
+  "SpacecraftApplicationsPage",
+  "SpacecraftTelemetryDecom",
+];
+
+function applicationFor(surfaceId: string): CatalogApplication {
+  return {
+    applicationKey: manifest.application.applicationKey,
+    applicationVersion: manifest.application.version,
+    displayName: manifest.application.displayName,
+    description: manifest.application.description,
+    package: { packageId: manifest.package.packageId, version: manifest.package.version },
+    surface: manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)!,
+    release: {
+      federation: "module_federation",
+      releaseId: "spacecraft-v1",
+      remoteName: "cadence_spacecraft",
+      manifestUrl: "/assets/application-host/spacecraft/mf-manifest.json",
+      exposedModule: "./Application",
+    },
+  };
+}
+
+function bridgeFor(query: HostBridge["query"]) {
+  return {
+    query,
+    execute: vi.fn<HostBridge["execute"]>().mockResolvedValue({
+      receiptId: "receipt-1",
+      completedAt: "2026-09-04T00:00:00Z",
+      result: {},
+    }),
+    subscribe: vi.fn(),
+  };
+}
+
+describe("Spacecraft federated application adapter", () => {
+  it("publishes one app-level renderer for every surface and queries its declared contract", async () => {
+    for (const surfaceId of surfaceIds) {
+      const surface = manifest.surfaces.find((item) => item.surfaceId === surfaceId)!;
+      const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+      const wrapper = mount(SpacecraftApplication, {
+        props: { application: applicationFor(surfaceId), surface, context, bridge: bridgeFor(query) },
+        global: {
+          stubs: Object.fromEntries(
+            componentNames.map((name) => [name, { template: "<span />" }]),
+          ),
+        },
+      });
+
+      await flushPromises();
+
+      expect(query).toHaveBeenCalledWith({
+        queryId: surface.dataContract.id,
+        version: surface.dataContract.version,
+        context,
+      });
+      expect(wrapper.find(`[data-surface-id="${surfaceId}"]`).exists()).toBe(true);
+      wrapper.unmount();
+    }
+  });
+
+  it("forwards a mounted mutation through the selected surface action contract", async () => {
+    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const bridge = bridgeFor(query);
     const wrapper = mount(SpacecraftApplication, {
-      props: {
-        component: "SpacecraftCommanding",
-        pageProps: {
-          page: {
-            id: "spacecraft-commanding-page",
-            title: "Commanding for Firebird",
-            subtitle: "Server-owned commanding setup.",
-            eyebrow: "Command Interpretation",
-            breadcrumbs: [{ label: "Firebird", href: null }],
-            status: { tone: "info", label: "Not tracked" },
-          },
-          panels: [],
-          readiness: {
-            eyebrow: "Readiness Impact",
-            title: "Not part of readiness",
-            description: "Phoenix owns readiness.",
-            status: { tone: "info", label: "Placeholder" },
+      props: { application: applicationFor("applications"), surface, context, bridge },
+      global: {
+        stubs: {
+          SpacecraftApplicationsPage: {
+          template: `<button id="install" @click="$emit('install', { key: 'telemetry_decom' })" />`,
           },
         },
       },
     });
 
-    expect(wrapper.find("#spacecraft-remote-application").exists()).toBe(true);
-    expect(wrapper.find("#spacecraft-commanding-page").exists()).toBe(true);
-    wrapper.unmount();
-  });
+    await flushPromises();
+    await wrapper.get("#install").trigger("click");
+    await flushPromises();
 
-  it("keeps the first-party manifest identity and page surface contracts stable", () => {
-    expect(manifest.application.applicationKey).toBe("spacecraft");
-    expect(manifest.package.trust).toBe("first_party");
-    expect(manifest.surfaces).toHaveLength(12);
-    expect(manifest.surfaces.map((surface) => surface.surfaceId)).toContain("telemetry_decom");
-    expect(
-      manifest.surfaces.find((surface) => surface.surfaceId === "telemetry_decom")?.dataContract,
-    ).toEqual({
-      id: "cadence.telemetry_decom.manage",
-      version: 1,
+    expect(bridge.execute).toHaveBeenCalledWith({
+      applicationKey: "spacecraft",
+      applicationVersion: 1,
+      actionId: "install",
+      input: { key: "telemetry_decom" },
+      context,
     });
-  });
-
-  it("forwards application lifecycle contributions to the Phoenix-owned caller", async () => {
-    const install = vi.fn();
-    const wrapper = mount(SpacecraftApplication, {
-      props: {
-        component: "SpacecraftApplications",
-        pageProps: {
-          profile: {
-            kind: "pinned",
-            id: "spacecraft-applications-profile",
-            label: "Pinned Profile",
-            display_name: "Firebird bus",
-            version: 1,
-            status: { tone: "ready", label: "Current" },
-          },
-          applications: [
-            {
-              id: "spacecraft-application-telemetry_decom",
-              application_key: "telemetry_decom",
-              application_version: 1,
-              display_name: "Telemetry Decom",
-              description: "Packet interpretation.",
-              lifecycle_state: null,
-              installable: true,
-              manageable: false,
-              uninstallable: false,
-              scope_label: "Spacecraft application",
-              manage_path: "#",
-              status: {
-                state: "available",
-                label: "Available",
-                tone: "info",
-                facts: [],
-              },
-              install_action: {
-                id: "install-spacecraft-application-telemetry_decom",
-                action_id: "install_application",
-                label: "Install",
-                variant: "primary",
-                effect: "persist",
-                execution: "synchronous",
-                confirmation: null,
-              },
-              disable_action: null,
-              uninstall_action: null,
-              unavailable_message: null,
-            },
-          ],
-        },
-        onInstall: install,
-      },
-    });
-
-    await wrapper.find("#install-spacecraft-application-telemetry_decom").trigger("click");
-    expect(install).toHaveBeenCalledWith({ key: "telemetry_decom" });
+    expect(query).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 });

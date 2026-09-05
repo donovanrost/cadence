@@ -35,18 +35,7 @@ defmodule Cadence.Applications.MissionCatalogTest do
     assert length(contributions) == length(MissionCatalog.definition().surfaces)
     assert Enum.all?(contributions, &(ReleaseContribution.validate(&1) == :ok))
 
-    assert Enum.map(contributions, &{&1.surface_id, &1.exposed_module}) == [
-             {"mission_list", "./MissionList"},
-             {"mission_new", "./MissionNew"},
-             {"mission_overview", "./MissionOverview"},
-             {"mission_applications", "./MissionApplicationsPage"},
-             {"catalog_index", "./CatalogIndex"},
-             {"catalog_database_new", "./CatalogDatabaseNew"},
-             {"catalog_database_show", "./CatalogDatabaseShow"},
-             {"catalog_revision_show", "./CatalogRevisionShow"},
-             {"catalog_artifact_show", "./CatalogArtifactShowPage"},
-             {"catalog_import_run_show", "./CatalogImportRunShow"}
-           ]
+    assert Enum.all?(contributions, &(&1.exposed_module == "./Application"))
 
     assert Enum.uniq(Enum.map(contributions, &ReleaseContribution.key/1)) ==
              Enum.map(contributions, &ReleaseContribution.key/1)

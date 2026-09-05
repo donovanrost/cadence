@@ -1,267 +1,142 @@
 <script setup lang="ts">
-import type {
-  FederatedApplicationProps,
-  HostActionRequest,
-  HostBridge,
-  HostContext,
-  HostQueryRequest,
-} from "@cadence/plugin-sdk";
+import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { computed, onMounted, ref, useAttrs } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
+import type { Component } from "vue";
 import ApplicationHost from "./ApplicationHost.vue";
 import TelemetryDecomManage from "./TelemetryDecomManage.vue";
-import type { TelemetryDecomManageProps } from "./telemetry_decom_props";
 
-type ApplicationHostDto = Required<
-  Pick<
-    InstanceType<typeof ApplicationHost>["$props"],
-    | "host"
-    | "navigation"
-    | "declarative_surface"
-    | "application_surface_rows"
-    | "application_surface_activity"
-    | "application_surface_packet_groups"
-  >
->;
+const props = defineProps<FullPageSurfaceProps>();
 
-type ApplicationAction = {
-  "action-id": string;
-  application_action: Record<string, string | string[]>;
+const surfaceComponents: Record<string, Component> = {
+  manage: TelemetryDecomManage,
+  packet_bindings: ApplicationHost,
 };
 
-type HostAction = {
-  applicationKey: "telemetry_decom";
-  applicationVersion: 1;
-  actionId: string;
-  application_action: Record<string, string | string[]>;
-  context: HostContext;
-  idempotencyKey: string;
+const actionBindings: Record<string, Record<string, string>> = {
+  manage: {
+    change_revision: "save_configuration",
+    save_catalog_revision: "save_configuration",
+    enable: "request_activation",
+    disable: "disable",
+  },
+  packet_bindings: { application_action: "save_packet_bindings" },
 };
 
-type TelemetryHost = {
-  query<TResult>(request: HostQueryRequest): Promise<TResult>;
-  action(request: HostAction): Promise<unknown>;
-};
-
-type TelemetryApplicationProps = {
-  context: FederatedApplicationProps["context"];
-  surface?: "manage" | "packet_bindings";
-  pageProps?: TelemetryDecomManageProps;
-  host?: TelemetryHost;
-  bridge?: HostBridge;
-};
-
-defineOptions({ inheritAttrs: false });
-const props = defineProps<TelemetryApplicationProps>();
-const attrs = useAttrs();
-const host = props.host ?? (props.bridge ? legacyHost(props.bridge) : undefined);
-const managedSurface = props.surface === "manage";
-const managedProps = computed(
-  () => ({ ...(props.pageProps ?? {}), ...attrs }) as TelemetryDecomManageProps,
-);
-
-const presentation = ref<ApplicationHostDto>();
+const pageProps = shallowRef<Record<string, unknown>>();
 const loading = ref(true);
 const error = ref<string>();
-const actionPending = ref(false);
-const actionError = ref<string>();
-const actionNotice = ref<string>();
 let loadGeneration = 0;
 
-onMounted(() => {
-  if (!managedSurface) loadApplication();
-});
+const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
+const selectedBindings = computed(() => actionBindings[props.surface.surfaceId] ?? {});
 
-async function loadApplication(): Promise<boolean> {
+onMounted(loadSurface);
+
+async function loadSurface(): Promise<void> {
   const generation = ++loadGeneration;
   loading.value = true;
   error.value = undefined;
-  presentation.value = undefined;
+  pageProps.value = undefined;
 
   try {
-    if (!host) throw new Error("The telemetry application host bridge is unavailable.");
+    if (!selectedComponent.value) throw new Error("The selected telemetry surface has no renderer.");
 
-    const response = await host.query<unknown>({
-      queryId: "cadence.packet_bindings.manage",
-      version: 1,
+    const response = await props.bridge.query<unknown>({
+      queryId: props.surface.dataContract.id,
+      version: props.surface.dataContract.version,
       context: props.context,
     });
-    if (generation !== loadGeneration) return false;
-    presentation.value = assertApplicationHostDto(response);
-    return true;
+    if (generation !== loadGeneration) return;
+    pageProps.value = pagePropsFor(response);
   } catch (reason) {
-    if (generation !== loadGeneration) return false;
-    error.value = messageFor(reason, "The packet bindings host query failed.");
-    return false;
+    if (generation !== loadGeneration) return;
+    error.value = reason instanceof Error ? reason.message : "The telemetry surface query failed.";
   } finally {
     if (generation === loadGeneration) loading.value = false;
   }
 }
 
-async function retryQuery(): Promise<void> {
-  actionError.value = undefined;
-  actionNotice.value = undefined;
-  await loadApplication();
-}
+async function execute(actionId: string, input: unknown): Promise<void> {
+  if (!props.surface.actions.includes(actionId)) {
+    error.value = `Action ${actionId} is not declared by ${props.surface.surfaceId}.`;
+    return;
+  }
 
-async function submitApplicationAction(payload: ApplicationAction): Promise<void> {
-  actionPending.value = true;
-  actionError.value = undefined;
-  actionNotice.value = undefined;
+  loading.value = true;
+  error.value = undefined;
 
   try {
-    if (!host) throw new Error("The telemetry application host bridge is unavailable.");
-
-    await host.action({
-      applicationKey: "telemetry_decom",
-      applicationVersion: 1,
-      actionId: payload["action-id"],
-      application_action: payload.application_action,
-      context: props.context,
-      idempotencyKey: crypto.randomUUID(),
-    });
-
-    if (await loadApplication()) {
-      actionNotice.value = "Action accepted and packet bindings refreshed from the host.";
-    } else {
-      actionError.value = "Action completed, but the refreshed packet bindings are unavailable.";
-    }
-  } catch (reason) {
-    actionError.value = messageFor(reason, "The packet bindings action failed.");
-  } finally {
-    actionPending.value = false;
-  }
-}
-
-function ignoreApplicationFormChange(): void {
-  // This surface has no host-side form-change contract; only submitted packet actions are supported.
-}
-
-function ignoreApplicationTablePage(): void {
-  // This surface has no paginated table contract; page events are intentionally ignored.
-}
-
-function assertApplicationHostDto(value: unknown): ApplicationHostDto {
-  if (
-    !isRecord(value) ||
-    !isRecord(value.host) ||
-    !("navigation" in value) ||
-    !("declarative_surface" in value) ||
-    !Array.isArray(value.application_surface_rows) ||
-    !Array.isArray(value.application_surface_activity) ||
-    !Array.isArray(value.application_surface_packet_groups)
-  ) {
-    throw new Error("The packet bindings query returned an invalid ApplicationHost DTO.");
-  }
-
-  if (value.navigation !== null && !isRecord(value.navigation)) {
-    throw new Error("The packet bindings query returned an invalid navigation DTO.");
-  }
-
-  if (value.declarative_surface !== null && !isRecord(value.declarative_surface)) {
-    throw new Error("The packet bindings query returned an invalid declarative surface DTO.");
-  }
-
-  return value as ApplicationHostDto;
-}
-
-function legacyHost(bridge: HostBridge): TelemetryHost {
-  return {
-    query: (request) => bridge.query(request),
-    action: ({
-      applicationKey,
-      applicationVersion,
+    await props.bridge.execute({
+      applicationKey: props.application.applicationKey,
+      applicationVersion: props.application.applicationVersion,
       actionId,
-      application_action,
-      context,
-      idempotencyKey,
-    }) => {
-      const request: HostActionRequest<Record<string, string | string[]>> & {
-        idempotencyKey: string;
-      } = {
-        applicationKey,
-        applicationVersion,
-        actionId,
-        input: application_action,
-        context,
-        idempotencyKey,
-      };
+      input: input ?? {},
+      context: props.context,
+    });
+    await loadSurface();
+  } catch (reason) {
+    loading.value = false;
+    error.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
+  }
+}
 
-      return bridge.execute(request);
-    },
-  };
+const listeners = computed(() =>
+  Object.fromEntries(
+    Object.entries(selectedBindings.value).map(([event, actionId]) => [
+      event,
+      (input: unknown) => execute(actionId, actionInput(event, input)),
+    ]),
+  ),
+);
+
+function actionInput(event: string, input: unknown): unknown {
+  if (event === "application_action" && isRecord(input)) return input.application_action ?? {};
+  if (isRecord(input) && "action-id" in input) {
+    const { ["action-id"]: _actionId, ...rest } = input;
+    return rest;
+  }
+  return input;
+}
+
+function pagePropsFor(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  if (props.surface.surfaceId === "packet_bindings") return value;
+  if (isRecord(value.trusted_surface)) {
+    return isRecord(value.trusted_surface.data) ? value.trusted_surface.data : value.trusted_surface;
+  }
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-function messageFor(reason: unknown, fallback: string): string {
-  return reason instanceof Error ? reason.message : fallback;
-}
 </script>
 
 <template>
   <div id="telemetry-decom-application">
-    <TelemetryDecomManage v-if="managedSurface" v-bind="managedProps" />
     <CStatePanel
-      v-else-if="loading"
+      v-if="loading"
       id="telemetry-decom-loading"
-      title="Loading packet bindings"
-      :description="
-        actionPending
-          ? 'The host accepted the action. Refreshing the canonical packet-binding surface.'
-          : 'Requesting the spacecraft packet-binding presentation from the Phoenix host.'
-      "
+      title="Loading telemetry surface"
+      description="Requesting the Phoenix-owned presentation from the host."
       tone="loading"
       aria-live="polite"
     />
-
     <CStatePanel
       v-else-if="error"
       id="telemetry-decom-error"
-      title="Packet bindings unavailable"
+      title="Telemetry surface unavailable"
       :description="error"
       tone="error"
-      aria-live="polite"
+      aria-live="assertive"
     >
       <template #action>
-        <CButton id="retry-telemetry-decom" size="sm" @click="retryQuery"> Retry query </CButton>
+        <CButton id="retry-telemetry-decom" size="sm" @click="loadSurface"> Retry query </CButton>
       </template>
     </CStatePanel>
-
-    <template v-else-if="presentation">
-      <aside
-        v-if="actionPending"
-        id="telemetry-decom-action-loading"
-        role="status"
-        aria-live="polite"
-      >
-        Submitting the packet bindings action…
-      </aside>
-      <aside
-        v-if="actionError"
-        id="telemetry-decom-action-error"
-        role="alert"
-        aria-live="assertive"
-      >
-        {{ actionError }}
-      </aside>
-      <aside
-        v-if="actionNotice"
-        id="telemetry-decom-action-notice"
-        role="status"
-        aria-live="polite"
-      >
-        {{ actionNotice }}
-      </aside>
-
-      <ApplicationHost
-        v-bind="presentation"
-        @application_action="submitApplicationAction"
-        @application_form_change="ignoreApplicationFormChange"
-        @application_table_page="ignoreApplicationTablePage"
-      />
-    </template>
+    <div v-else-if="selectedComponent && pageProps" :data-surface-id="props.surface.surfaceId">
+      <component :is="selectedComponent" v-bind="pageProps" v-on="listeners" />
+    </div>
   </div>
 </template>

@@ -6,7 +6,6 @@ export default createModuleFederationConfig({
   manifest: true,
   exposes: {
     "./Application": "./src/federated-application.ts",
-    "./Failure": "./src/failure-application.ts",
   },
   shared: {
     vue: {

@@ -35,7 +35,7 @@ export const manifest = defineApplicationManifest({
       placement: "application_workspace",
       navigation: { label: "Manage", order: 10 },
       dataContract: { id: "cadence.telemetry_decom.manage", version: 1 },
-      actions: ["change_revision", "save_catalog_revision", "enable", "disable"],
+      actions: ["save_configuration", "request_activation", "disable"],
       renderer: { kind: "federated-vue", exposedModule: "./Application" },
     },
     {

@@ -148,7 +148,7 @@ defmodule Cadence.Applications.MissionCatalog do
         release_id: "mission-catalog-#{spec.id}-v1",
         remote_name: @remote_name,
         manifest_path: @manifest_path,
-        exposed_module: spec.exposed_module
+        exposed_module: "./Application"
       }
     end)
   end

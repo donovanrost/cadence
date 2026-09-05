@@ -78,7 +78,7 @@ export const manifest = defineApplicationManifest({
       "spacecraft",
       "Telemetry Decom",
       "cadence.telemetry_decom.manage",
-      ["change_revision", "save_catalog_revision", "enable", "disable"],
+      ["save_configuration", "request_activation", "disable"],
     ),
   ],
 });

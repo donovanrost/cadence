@@ -12,5 +12,6 @@ test("publication config uses the mission-catalog asset boundary", () => {
   assert.match(config, /application-host\/mission-catalog/);
   assert.match(config, /CADENCE_RELEASE_OUTPUT_DIR|publicationRoot/);
   assert.match(federation, /cadence_mission_catalog/);
-  assert.match(federation, /\.\/CatalogImportRunShow/);
+  assert.match(federation, /"\.\/Application"/);
+  assert.doesNotMatch(federation, /CatalogImportRunShow/);
 });

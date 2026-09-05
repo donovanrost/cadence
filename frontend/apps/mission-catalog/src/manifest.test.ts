@@ -30,7 +30,7 @@ describe("mission and catalog remote manifest", () => {
     ]);
 
     expect(pageSurfaces.every(({ renderer }) => renderer.kind === "federated-vue")).toBe(true);
-    expect(pageSurfaces.every(({ renderer }) => renderer.exposedModule.startsWith("./"))).toBe(
+    expect(pageSurfaces.every(({ renderer }) => renderer.exposedModule === "./Application")).toBe(
       true,
     );
   });
