@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
+import {
+  createFederatedActionLifecycle,
+  type FullPageSurfaceProps,
+  type HostActionReceipt,
+} from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { computed, onMounted, ref, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
 import ApplicationHost from "./ApplicationHost.vue";
 import TelemetryDecomManage from "./TelemetryDecomManage.vue";
@@ -26,12 +30,45 @@ const actionBindings: Record<string, Record<string, string>> = {
 const pageProps = shallowRef<Record<string, unknown>>();
 const loading = ref(true);
 const error = ref<string>();
+const actionPending = ref(false);
+const actionError = ref<string>();
+const actionNotice = ref<string>();
+const actionReceipt = shallowRef<HostActionReceipt<unknown>>();
 let loadGeneration = 0;
 
 const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
 const selectedBindings = computed(() => actionBindings[props.surface.surfaceId] ?? {});
 
-onMounted(loadSurface);
+const actionLifecycle = createFederatedActionLifecycle({
+  applicationKey: props.application.applicationKey,
+  applicationVersion: props.application.applicationVersion,
+  surfaceId: props.surface.surfaceId,
+  surfaceVersion: props.surface.version,
+  declaredActions: props.surface.actions,
+  context: props.context,
+  execute: props.bridge.execute,
+  requery: loadSurface,
+  navigate: (href) => window.location.assign(href),
+  onStarted: () => {
+    actionPending.value = true;
+    actionError.value = undefined;
+    actionNotice.value = undefined;
+    actionReceipt.value = undefined;
+  },
+  onCompleted: (actionId, receipt) => {
+    actionReceipt.value = receipt;
+    actionNotice.value = `Phoenix completed ${actionId}.`;
+  },
+  onRejected: (actionId, reason) => {
+    actionError.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
+  },
+  onFinished: () => {
+    actionPending.value = false;
+  },
+});
+
+onBeforeUnmount(() => actionLifecycle.invalidate());
+onMounted(() => void loadSurface());
 
 async function loadSurface(): Promise<void> {
   const generation = ++loadGeneration;
@@ -40,7 +77,8 @@ async function loadSurface(): Promise<void> {
   pageProps.value = undefined;
 
   try {
-    if (!selectedComponent.value) throw new Error("The selected telemetry surface has no renderer.");
+    if (!selectedComponent.value)
+      throw new Error("The selected telemetry surface has no renderer.");
 
     const response = await props.bridge.query<unknown>({
       queryId: props.surface.dataContract.id,
@@ -57,35 +95,11 @@ async function loadSurface(): Promise<void> {
   }
 }
 
-async function execute(actionId: string, input: unknown): Promise<void> {
-  if (!props.surface.actions.includes(actionId)) {
-    error.value = `Action ${actionId} is not declared by ${props.surface.surfaceId}.`;
-    return;
-  }
-
-  loading.value = true;
-  error.value = undefined;
-
-  try {
-    await props.bridge.execute({
-      applicationKey: props.application.applicationKey,
-      applicationVersion: props.application.applicationVersion,
-      actionId,
-      input: input ?? {},
-      context: props.context,
-    });
-    await loadSurface();
-  } catch (reason) {
-    loading.value = false;
-    error.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
-  }
-}
-
 const listeners = computed(() =>
   Object.fromEntries(
     Object.entries(selectedBindings.value).map(([event, actionId]) => [
       event,
-      (input: unknown) => execute(actionId, actionInput(event, input)),
+      (input: unknown) => void actionLifecycle.execute(actionId, actionInput(event, input) ?? {}),
     ]),
   ),
 );
@@ -103,7 +117,9 @@ function pagePropsFor(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) return {};
   if (props.surface.surfaceId === "packet_bindings") return value;
   if (isRecord(value.trusted_surface)) {
-    return isRecord(value.trusted_surface.data) ? value.trusted_surface.data : value.trusted_surface;
+    return isRecord(value.trusted_surface.data)
+      ? value.trusted_surface.data
+      : value.trusted_surface;
   }
   return value;
 }
@@ -119,7 +135,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       v-if="loading"
       id="telemetry-decom-loading"
       title="Loading telemetry surface"
-      description="Requesting the Phoenix-owned presentation from the host."
+      :description="
+        actionPending
+          ? 'Phoenix is processing the action and refreshing this surface.'
+          : 'Requesting the Phoenix-owned presentation from the host.'
+      "
       tone="loading"
       aria-live="polite"
     />
@@ -136,6 +156,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       </template>
     </CStatePanel>
     <div v-else-if="selectedComponent && pageProps" :data-surface-id="props.surface.surfaceId">
+      <aside
+        v-if="actionPending"
+        id="telemetry-decom-action-loading"
+        role="status"
+        aria-live="polite"
+      >
+        Sending the telemetry action to Phoenix…
+      </aside>
+      <aside
+        v-if="actionError"
+        id="telemetry-decom-action-error"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ actionError }}
+      </aside>
+      <aside
+        v-if="actionNotice && actionReceipt"
+        id="telemetry-decom-action-notice"
+        role="status"
+        aria-live="polite"
+        :data-receipt-id="actionReceipt.receiptId"
+        :data-completed-at="actionReceipt.completedAt"
+      >
+        {{ actionNotice }} Receipt {{ actionReceipt.receiptId }} completed at
+        {{ actionReceipt.completedAt }}.
+      </aside>
       <component :is="selectedComponent" v-bind="pageProps" v-on="listeners" />
     </div>
   </div>

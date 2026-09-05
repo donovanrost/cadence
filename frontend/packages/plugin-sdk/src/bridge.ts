@@ -149,9 +149,19 @@ export interface HostQueryRequest {
 export interface HostActionRequest<TInput = unknown> {
   applicationKey: string;
   applicationVersion: number;
+  /** Optional for compatibility with older host bridge implementations. */
+  surfaceId?: string;
+  /** Optional for compatibility with older host bridge implementations. */
+  surfaceVersion?: number;
   actionId: string;
+  /** The exact Phoenix action params document. The HTTP host serializes this as params. */
   input: TInput;
   context: HostContext;
+}
+
+export interface FederatedHostActionRequest<TInput = unknown> extends HostActionRequest<TInput> {
+  surfaceId: string;
+  surfaceVersion: 1;
 }
 
 export interface HostActionReceipt<TResult = unknown> {
@@ -181,12 +191,123 @@ export interface FederatedApplicationProps {
   bridge: HostBridge;
 }
 
+export interface FederatedActionLifecycleConfig {
+  applicationKey: string;
+  applicationVersion: number;
+  surfaceId: string;
+  surfaceVersion: number;
+  declaredActions: readonly string[];
+  context: HostContext;
+  execute: <TInput, TResult>(
+    request: FederatedHostActionRequest<TInput>,
+  ) => Promise<HostActionReceipt<TResult>>;
+  requery: () => Promise<void>;
+  navigate: (href: string) => void;
+  onStarted: (actionId: string) => void;
+  onCompleted: (actionId: string, receipt: HostActionReceipt<unknown>) => void;
+  onRejected: (actionId: string, reason: unknown) => void;
+  onFinished: () => void;
+}
+
+/**
+ * Runs every federated action through the same identity, receipt, navigation,
+ * refresh, and stale-response lifecycle. The newest invocation owns UI state.
+ */
+export function createFederatedActionLifecycle(config: FederatedActionLifecycleConfig) {
+  let generation = 0;
+
+  return {
+    async execute<TParams>(actionId: string, params: TParams): Promise<void> {
+      if (!config.declaredActions.includes(actionId)) {
+        config.onRejected(
+          actionId,
+          new Error(`The ${actionId} action is not declared by ${config.surfaceId}.`),
+        );
+        return;
+      }
+
+      const requestGeneration = ++generation;
+      config.onStarted(actionId);
+
+      try {
+        const receipt = await config.execute<TParams, unknown>({
+          applicationKey: config.applicationKey,
+          applicationVersion: config.applicationVersion,
+          surfaceId: config.surfaceId,
+          surfaceVersion: requireSurfaceVersion(config.surfaceVersion),
+          actionId,
+          input: params,
+          context: config.context,
+        });
+
+        if (requestGeneration !== generation) return;
+        assertValidHostActionReceipt(receipt);
+        config.onCompleted(actionId, receipt);
+
+        const href = sameOriginNavigationFor(receipt);
+        if (href) {
+          config.navigate(href);
+        } else {
+          await config.requery();
+        }
+      } catch (reason) {
+        if (requestGeneration !== generation) return;
+        config.onRejected(actionId, reason);
+      } finally {
+        if (requestGeneration === generation) config.onFinished();
+      }
+    },
+    invalidate(): void {
+      generation += 1;
+    },
+  };
+}
+
+function requireSurfaceVersion(value: number): 1 {
+  if (value !== 1) throw new Error("Federated action surface versions must be 1.");
+  return 1;
+}
+
+function assertValidHostActionReceipt(value: unknown): asserts value is HostActionReceipt<unknown> {
+  if (
+    !isRecord(value) ||
+    typeof value.receiptId !== "string" ||
+    value.receiptId.trim() === "" ||
+    typeof value.completedAt !== "string" ||
+    value.completedAt.trim() === ""
+  ) {
+    throw new Error("The host action returned an invalid receipt.");
+  }
+}
+
+function sameOriginNavigationFor(receipt: HostActionReceipt<unknown>): string | null {
+  if (!isRecord(receipt.result)) return null;
+
+  const navigation = isRecord(receipt.result.navigation) ? receipt.result.navigation : undefined;
+  const candidate =
+    navigation?.href ?? receipt.result.navigate ?? receipt.result.redirect ?? receipt.result.href;
+  if (typeof candidate !== "string" || candidate.trim() === "") return null;
+
+  const location = globalThis.location;
+  if (!location?.href) return null;
+
+  try {
+    const target = new URL(candidate, location.href);
+    const current = new URL(location.href);
+    if (target.origin !== current.origin || target.username || target.password) return null;
+    if (target.protocol !== "http:" && target.protocol !== "https:") return null;
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function assertHostQueryParams(value: unknown): asserts value is HostQueryParams {
-  const state = {keys: 0};
+  const state = { keys: 0 };
 
   if (!isPlainObject(value)) throw new Error("Host query parameters must be a plain JSON object.");
   visitQueryValue(value, 0, state, true);
@@ -209,7 +330,7 @@ export function isHostQueryParams(value: unknown): value is HostQueryParams {
 function visitQueryValue(
   value: unknown,
   depth: number,
-  state: {keys: number},
+  state: { keys: number },
   root = false,
 ): void {
   if (typeof value === "string") {
@@ -220,7 +341,8 @@ function visitQueryValue(
   }
 
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("Host query parameters contain an invalid number.");
+    if (!Number.isFinite(value))
+      throw new Error("Host query parameters contain an invalid number.");
     return;
   }
 
@@ -244,7 +366,10 @@ function visitQueryValue(
     if (state.keys > HOST_QUERY_PARAMS_MAX_KEYS) {
       throw new Error("Host query parameters contain too many keys.");
     }
-    if (forbiddenQueryParamKeys.has(key) || utf8ByteLength(key) > HOST_QUERY_PARAMS_MAX_STRING_BYTES) {
+    if (
+      forbiddenQueryParamKeys.has(key) ||
+      utf8ByteLength(key) > HOST_QUERY_PARAMS_MAX_STRING_BYTES
+    ) {
       throw new Error("Host query parameters contain a forbidden or oversized key.");
     }
 
