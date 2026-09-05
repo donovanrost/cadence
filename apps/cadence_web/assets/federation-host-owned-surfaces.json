@@ -2,6 +2,1143 @@
   "schema": "cadence.federation-host-owned-surfaces.v1",
   "policy": "Authenticated full-page domain surfaces use FederatedFullPageSurface; local entries below are intentional compatibility or host-owned fallbacks.",
   "federated_component": "FederatedFullPageSurface",
+  "surface_classifications": {
+    "organization_admin": "organization_admin",
+    "telemetry_decom": "nested"
+  },
+  "surface_identities": [
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "mission_list",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.mission_list",
+      "query_version": 1,
+      "release_id": "mission-catalog-mission_list-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "mission_new",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.mission_new",
+      "query_version": 1,
+      "release_id": "mission-catalog-mission_new-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "mission_overview",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.mission_overview",
+      "query_version": 1,
+      "release_id": "mission-catalog-mission_overview-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "mission_applications",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.mission_applications",
+      "query_version": 1,
+      "release_id": "mission-catalog-mission_applications-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_index",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_index",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_index-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_database_new",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_database_new",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_database_new-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_database_show",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_database_show",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_database_show-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_revision_show",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_revision_show",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_revision_show-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_artifact_show",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_artifact_show",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_artifact_show-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "mission_catalog",
+      "application_version": 1,
+      "surface_id": "catalog_import_run_show",
+      "surface_version": 1,
+      "query_id": "cadence.mission_catalog.catalog_import_run_show",
+      "query_version": 1,
+      "release_id": "mission-catalog-catalog_import_run_show-v1",
+      "remote_name": "cadence_mission_catalog",
+      "manifest_path": "/assets/application-host/mission-catalog/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "list",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.list",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "new",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.new",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "profile_list",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.profiles",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "profile_new",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.profile.new",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "profile_show",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.profile.show",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "show",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.show",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "edit",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.edit",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "readiness",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.readiness",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "routing",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.routing",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "commanding",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.commanding",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "applications",
+      "surface_version": 1,
+      "query_id": "cadence.spacecraft.applications",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "spacecraft",
+      "application_version": 1,
+      "surface_id": "telemetry_decom",
+      "surface_version": 1,
+      "query_id": "cadence.telemetry_decom.manage",
+      "query_version": 1,
+      "release_id": "spacecraft-v1",
+      "remote_name": "cadence_spacecraft",
+      "manifest_path": "/assets/application-host/spacecraft/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "nested"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "overview",
+      "surface_version": 1,
+      "query_id": "cadence.comms.overview",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "validation",
+      "surface_version": 1,
+      "query_id": "cadence.comms.validation",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "transports",
+      "surface_version": 1,
+      "query_id": "cadence.comms.transports",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "transport",
+      "surface_version": 1,
+      "query_id": "cadence.comms.transport",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "routing",
+      "surface_version": 1,
+      "query_id": "cadence.comms.routing",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "routing_detail",
+      "surface_version": 1,
+      "query_id": "cadence.comms.routing_detail",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "ground_stations",
+      "surface_version": 1,
+      "query_id": "cadence.comms.ground_stations",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "ground_station",
+      "surface_version": 1,
+      "query_id": "cadence.comms.ground_station",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "provider_list",
+      "surface_version": 1,
+      "query_id": "cadence.comms.provider_list",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "provider_new",
+      "surface_version": 1,
+      "query_id": "cadence.comms.provider_new",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "provider_show",
+      "surface_version": 1,
+      "query_id": "cadence.comms.provider_show",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "transport_new",
+      "surface_version": 1,
+      "query_id": "cadence.comms.transport_new",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "routing_new",
+      "surface_version": 1,
+      "query_id": "cadence.comms.routing_new",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "ground_station_new",
+      "surface_version": 1,
+      "query_id": "cadence.comms.ground_station_new",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "comms",
+      "application_version": 1,
+      "surface_id": "ground_station_edit",
+      "surface_version": 1,
+      "query_id": "cadence.comms.ground_station_edit",
+      "query_version": 1,
+      "release_id": "comms-v1",
+      "remote_name": "cadence_comms",
+      "manifest_path": "/assets/application-host/comms/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "workspace",
+      "surface_version": 1,
+      "query_id": "cadence.ops.workspace",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "ops",
+      "surface_version": 1,
+      "query_id": "cadence.ops.console",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_requirement_list",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_requirement_list",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_requirement_new",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_requirement_new",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_requirement_show",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_requirement_show",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_requirement_template",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_requirement_template",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_schedule",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_schedule",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_plan_show",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_plan_show",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_detail",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_detail",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "contact_record",
+      "surface_version": 1,
+      "query_id": "cadence.ops.contact_record",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_directory",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_directory",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_show",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_show",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_editor",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_editor",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_activity",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_activity",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_new",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_new",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_library",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_library",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_playlists",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_playlists",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_playlist_present",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_playlist_present",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_settings",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_settings",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_share",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_share",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_snapshot",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_snapshot",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "dashboard_diagnostics",
+      "surface_version": 1,
+      "query_id": "cadence.ops.dashboard_diagnostics",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "fleet_planning",
+      "surface_version": 1,
+      "query_id": "cadence.ops.fleet_planning",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "fleet_planning_new",
+      "surface_version": 1,
+      "query_id": "cadence.ops.fleet_planning_new",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "fleet_planning_policy",
+      "surface_version": 1,
+      "query_id": "cadence.ops.fleet_planning_policy",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "fleet_planning_run",
+      "surface_version": 1,
+      "query_id": "cadence.ops.fleet_planning_run",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "activation_requests",
+      "surface_version": 1,
+      "query_id": "cadence.ops.activation_requests",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "commands",
+      "surface_version": 1,
+      "query_id": "cadence.ops.commands",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "telemetry_explore",
+      "surface_version": 1,
+      "query_id": "cadence.ops.telemetry_explore",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "data_operations",
+      "surface_version": 1,
+      "query_id": "cadence.ops.data_operations",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "data_operations_manage",
+      "surface_version": 1,
+      "query_id": "cadence.ops.data_operations_manage",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "data_sources",
+      "surface_version": 1,
+      "query_id": "cadence.ops.data_sources",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "data_source_registration",
+      "surface_version": 1,
+      "query_id": "cadence.ops.data_source_registration",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "data_source_settings",
+      "surface_version": 1,
+      "query_id": "cadence.ops.data_source_settings",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "alarms",
+      "surface_version": 1,
+      "query_id": "cadence.ops.alarms",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "ops_console",
+      "application_version": 1,
+      "surface_id": "timeline",
+      "surface_version": 1,
+      "query_id": "cadence.ops.timeline",
+      "query_version": 1,
+      "release_id": "ops-console-v1",
+      "remote_name": "cadence_ops_console",
+      "manifest_path": "/assets/application-host/ops-console/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "full_page"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "organization_home",
+      "surface_version": 1,
+      "query_id": "cadence.organization.home",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "provider_accounts",
+      "surface_version": 1,
+      "query_id": "cadence.organization.provider_accounts.list",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "provider_account_new",
+      "surface_version": 1,
+      "query_id": "cadence.organization.provider_accounts.new",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "provider_account_show",
+      "surface_version": 1,
+      "query_id": "cadence.organization.provider_account.show",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "notifications",
+      "surface_version": 1,
+      "query_id": "cadence.organization.notifications",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "notifications_bell",
+      "surface_version": 1,
+      "query_id": "cadence.organization.notifications_bell",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_home",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.home",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_runtime",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.runtime",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_organizations",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.organizations",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_organization_new",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.organization.new",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_organization_show",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.organization.show",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "organization_admin",
+      "application_version": 1,
+      "surface_id": "admin_organization_invite",
+      "surface_version": 1,
+      "query_id": "cadence.platform_admin.organization.invite",
+      "query_version": 1,
+      "release_id": "organization-admin-v1",
+      "remote_name": "cadence_organization_admin",
+      "manifest_path": "/assets/application-host/organization-admin/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "organization_admin"
+    },
+    {
+      "application_key": "telemetry_decom",
+      "application_version": 1,
+      "surface_id": "manage",
+      "surface_version": 1,
+      "query_id": "cadence.telemetry_decom.manage",
+      "query_version": 1,
+      "release_id": "telemetry-decom-v1",
+      "remote_name": "cadence_telemetry_decom",
+      "manifest_path": "/assets/application-host/telemetry-decom/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "nested"
+    },
+    {
+      "application_key": "telemetry_decom",
+      "application_version": 1,
+      "surface_id": "packet_bindings",
+      "surface_version": 1,
+      "query_id": "cadence.packet_bindings.manage",
+      "query_version": 1,
+      "release_id": "telemetry-decom-v1",
+      "remote_name": "cadence_telemetry_decom",
+      "manifest_path": "/assets/application-host/telemetry-decom/mf-manifest.json",
+      "exposed_module": "./Application",
+      "classification": "nested"
+    }
+  ],
   "local_fallbacks": [
     {
       "component": "AuthLayoutBrand",
@@ -58,290 +1195,6 @@
     {
       "component": "OpsContextRail",
       "reason": "Context rail is a nested operations shell boundary, not a full-page surface."
-    },
-    {
-      "component": "DashboardCanvas",
-      "reason": "Dashboard canvas is a nested stateful LiveView surface with Phoenix-owned events."
-    },
-    {
-      "component": "DashboardEditorGuard",
-      "reason": "Dashboard editing guard remains a nested LiveView lifecycle boundary."
-    },
-    {
-      "component": "OpsDashboardActivity",
-      "reason": "Dashboard activity is a nested LiveView surface with Phoenix-owned events."
-    },
-    {
-      "component": "OpsDashboardDiagnostics",
-      "reason": "Dashboard diagnostics is a nested LiveView surface with Phoenix-owned events."
-    },
-    {
-      "component": "OpsDashboardSnapshot",
-      "reason": "Dashboard snapshot is a nested LiveView surface with Phoenix-owned lifecycle."
-    },
-    {
-      "component": "OpsDataSources",
-      "reason": "Data-source forms and events remain in the Phoenix compatibility wrapper."
-    },
-    {
-      "component": "OpsDataOperations",
-      "reason": "Data-operation forms and events remain in the Phoenix compatibility wrapper."
-    },
-    {
-      "component": "OpsFleetPlanning",
-      "reason": "Fleet-planning forms and actions remain in the Phoenix compatibility wrapper."
-    },
-    {
-      "component": "OpsFleetPlanningNew",
-      "reason": "Fleet-planning creation validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "OpsFleetPlanningPolicy",
-      "reason": "Policy validation and approval lifecycle remain Phoenix-owned."
-    },
-    {
-      "component": "OpsFleetPlanningRun",
-      "reason": "Planning-run lifecycle and actions remain Phoenix-owned."
-    },
-    {
-      "component": "OpsContactSchedule",
-      "reason": "Contact scheduling lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactRequirementTemplate",
-      "reason": "Requirement-template lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactRequirementList",
-      "reason": "Requirement listing lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactRequirementNew",
-      "reason": "Requirement creation validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "OpsContactRequirementShow",
-      "reason": "Requirement detail lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactPlanShow",
-      "reason": "Contact-plan lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactRecord",
-      "reason": "Contact-record lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsContactDetail",
-      "reason": "Contact-detail lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsCommands",
-      "reason": "Command validation, CSRF, and actions remain Phoenix-owned."
-    },
-    {
-      "component": "OpsAlarms",
-      "reason": "Alarm lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "OpsTimeline",
-      "reason": "Timeline stream and events remain Phoenix-owned."
-    },
-    {
-      "component": "OpsTelemetryExplore",
-      "reason": "Telemetry exploration filters and events remain Phoenix-owned."
-    },
-    {
-      "component": "CatalogUploadForm",
-      "reason": "Upload and CSRF lifecycle remains Phoenix-owned in the catalog compatibility page."
-    },
-    {
-      "component": "CatalogDatabaseTable",
-      "reason": "Catalog table remains a nested compatibility component."
-    },
-    {
-      "component": "ActivityTimeline",
-      "reason": "Dashboard activity is a nested stateful LiveView renderer."
-    },
-    {
-      "component": "ActivityTimelineRow",
-      "reason": "Dashboard activity rows are nested stateful LiveView renderers."
-    },
-    {
-      "component": "ComparisonReviewActivityDetails",
-      "reason": "Dashboard comparison details are nested stateful LiveView renderers."
-    },
-    {
-      "component": "DashboardComparisonInspector",
-      "reason": "Dashboard comparison inspection is a nested stateful LiveView renderer."
-    },
-    {
-      "component": "DashboardWarnings",
-      "reason": "Dashboard warnings are nested within the Phoenix-owned dashboard lifecycle."
-    },
-    {
-      "component": "DashboardWidget",
-      "reason": "Dashboard widgets are nested within the Phoenix-owned dashboard lifecycle."
-    },
-    {
-      "component": "DashboardPanel",
-      "reason": "Dashboard panels are nested within the Phoenix-owned dashboard lifecycle."
-    },
-    {
-      "component": "DashboardEditorConflict",
-      "reason": "Dashboard editor conflict actions remain Phoenix-owned."
-    },
-    {
-      "component": "DashboardHealth",
-      "reason": "Dashboard health is a nested stateful LiveView renderer."
-    },
-    {
-      "component": "DashboardRuntimeContextSelector",
-      "reason": "Dashboard runtime context selection remains Phoenix-owned."
-    },
-    {
-      "component": "DashboardRuntimeControls",
-      "reason": "Dashboard runtime controls remain Phoenix-owned."
-    },
-    {
-      "component": "DashboardSectionManager",
-      "reason": "Dashboard section management remains Phoenix-owned."
-    },
-    {
-      "component": "DashboardTimePicker",
-      "reason": "Dashboard time selection remains Phoenix-owned."
-    },
-    {
-      "component": "DashboardToolbar",
-      "reason": "Dashboard toolbar actions remain Phoenix-owned."
-    },
-    {
-      "component": "EvidenceInspectorPanel",
-      "reason": "Evidence inspection is a nested stateful LiveView renderer."
-    },
-    {
-      "component": "HealthSnapshotActivity",
-      "reason": "Health snapshot activity is a nested stateful LiveView renderer."
-    },
-    {
-      "component": "HistoricalWorkflowActionExplanations",
-      "reason": "Historical workflow action explanations are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "HistoricalWorkflowControls",
-      "reason": "Historical workflow controls and actions remain Phoenix-owned."
-    },
-    {
-      "component": "HistoricalWorkflowCorrectionForm",
-      "reason": "Historical workflow correction validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "HistoricalWorkflowGroupForm",
-      "reason": "Historical workflow group validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "HistoricalWorkflowGroupStatus",
-      "reason": "Historical workflow group status is a nested Phoenix-owned renderer."
-    },
-    {
-      "component": "HistoricalWorkflowJobStatus",
-      "reason": "Historical workflow job status is a nested Phoenix-owned renderer."
-    },
-    {
-      "component": "HistoricalWorkflowLatestAction",
-      "reason": "Historical workflow latest actions remain Phoenix-owned."
-    },
-    {
-      "component": "HistoricalWorkflowReplacementStatus",
-      "reason": "Historical workflow replacement status is a nested Phoenix-owned renderer."
-    },
-    {
-      "component": "HistoricalWorkflowRequestForm",
-      "reason": "Historical workflow request validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "HistoricalWorkflowStageForm",
-      "reason": "Historical workflow stage validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "PublishValidation",
-      "reason": "Dashboard publish validation remains Phoenix-owned."
-    },
-    {
-      "component": "RuntimeCacheSummary",
-      "reason": "Dashboard runtime cache diagnostics are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "RuntimeDegradedSource",
-      "reason": "Dashboard degraded-source diagnostics are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "RuntimeDiagnosticsPanel",
-      "reason": "Dashboard runtime diagnostics remain Phoenix-owned."
-    },
-    {
-      "component": "RuntimeNoRefreshSummary",
-      "reason": "Dashboard runtime refresh diagnostics are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "RuntimeRecentInvalidations",
-      "reason": "Dashboard runtime invalidation diagnostics are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "SelectedActivityActions",
-      "reason": "Dashboard selected-activity actions remain Phoenix-owned."
-    },
-    {
-      "component": "SelectedActivityEventSummary",
-      "reason": "Dashboard selected-activity details are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "SourceHealth",
-      "reason": "Dashboard source-health diagnostics are nested Phoenix-owned renderers."
-    },
-    {
-      "component": "SourceSelection",
-      "reason": "Dashboard source selection remains Phoenix-owned."
-    },
-    {
-      "component": "VersionHistoryPanel",
-      "reason": "Dashboard version history remains Phoenix-owned."
-    },
-    {
-      "component": "VersionList",
-      "reason": "Dashboard version history remains Phoenix-owned."
-    },
-    {
-      "component": "WidgetDataLinks",
-      "reason": "Dashboard data-link actions remain Phoenix-owned."
-    },
-    {
-      "component": "ChartDataManagementStrip",
-      "reason": "Dashboard data-management controls remain Phoenix-owned."
-    },
-    {
-      "component": "WidgetForm",
-      "reason": "Dashboard widget forms and validation remain Phoenix-owned."
-    },
-    {
-      "component": "WidgetInspectPanel",
-      "reason": "Dashboard widget inspection remains Phoenix-owned."
-    },
-    {
-      "component": "WidgetPoint",
-      "reason": "Dashboard widget points remain nested Phoenix-owned renderers."
-    },
-    {
-      "component": "WidgetRows",
-      "reason": "Dashboard widget rows remain nested Phoenix-owned renderers."
-    },
-    {
-      "component": "WidgetQueryDiagnostics",
-      "reason": "Dashboard widget query diagnostics remain Phoenix-owned."
-    },
-    {
-      "component": "WidgetWarning",
-      "reason": "Dashboard widget warnings remain Phoenix-owned."
     }
   ],
   "federated_pages": [
