@@ -4,72 +4,16 @@ defmodule Cadence.Applications.OpsRouteActionLedgerTest do
   alias Cadence.Applications.OpsConsole
   alias Cadence.Applications.OpsConsole.ActionProvider
 
-  @residual_action_ledger %{
-    "workspace" => [],
-    "ops" => [
-      "validate",
-      "save",
-      "filter",
-      "refresh",
-      "select",
-      "open_data_link",
-      "open_evidence",
-      "set_chart_time_range"
-    ],
-    "contact_requirement_list" => [],
-    "contact_requirement_new" => [],
-    "contact_requirement_show" => ["toggle-opportunity"],
-    "contact_requirement_template" => [],
-    "contact_schedule" => [],
-    "contact_plan_show" => [],
-    "contact_detail" => [],
-    "contact_record" => [],
-    "dashboard_directory" => [],
-    "dashboard_show" => [],
-    "dashboard_editor" => [],
-    "dashboard_activity" => [],
-    "dashboard_new" => [],
-    "dashboard_library" => [],
-    "dashboard_playlists" => [],
-    "dashboard_playlist_present" => [],
-    "dashboard_settings" => [],
-    "dashboard_share" => [],
-    "dashboard_snapshot" => [],
-    "dashboard_diagnostics" => [],
-    "fleet_planning" => [],
-    "fleet_planning_new" => ["validate-fleet-run"],
-    "fleet_planning_policy" => ["validate-policy", "validate-grant"],
-    "fleet_planning_run" => [],
-    "activation_requests" => ["review"],
-    "commands" => ["filter", "reset_filters", "follow_command", "clear_command_focus"],
-    "telemetry_explore" => [
-      "apply_filters",
-      "apply_question",
-      "add_to_dashboard",
-      "clear_selected_sample"
-    ],
-    "data_operations" => [],
-    "data_operations_manage" => [],
-    "data_sources" => [
-      "open-register-source",
-      "cancel-register-source",
-      "open-change-binding",
-      "cancel-change-binding"
-    ],
-    "data_source_registration" => [],
-    "data_source_settings" => [],
-    "alarms" => [],
-    "timeline" => []
-  }
-
   test "provider and residual actions form an exact disjoint surface partition" do
     declared_pairs = MapSet.new(OpsConsole.surface_action_pairs())
     provider_pairs = MapSet.new(ActionProvider.binding_keys())
     residual_pairs = residual_pairs()
 
-    assert length(OpsConsole.definition().actions) == 103
-    assert @residual_action_ledger == OpsConsole.residual_action_ledger()
+    assert length(OpsConsole.definition().actions) == 89
+    assert length(OpsConsole.surface_action_pairs()) == 108
+    assert OpsConsole.residual_action_ledger() == Map.new(OpsConsole.surface_ids(), &{&1, []})
     assert ActionProvider.duplicate_binding_keys() == []
+    assert length(ActionProvider.binding_keys()) == 108
     assert MapSet.size(provider_pairs) == length(ActionProvider.binding_keys())
     assert MapSet.size(residual_pairs) == residual_pair_count()
     assert MapSet.disjoint?(provider_pairs, residual_pairs)
@@ -101,7 +45,8 @@ defmodule Cadence.Applications.OpsRouteActionLedgerTest do
       |> Enum.uniq()
       |> length()
 
-    assert {:residual, ^expected_residual_count} = OpsConsole.route_action_completion()
+    assert expected_residual_count == 0
+    assert OpsConsole.route_action_completion() == {:complete, 0}
   end
 
   defp residual_pairs do

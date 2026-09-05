@@ -9,8 +9,8 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
     request = %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
-      action_id: "refresh",
-      surface_id: "ops",
+      action_id: "save",
+      surface_id: "fleet_planning",
       surface_version: 1,
       params: %{}
     }
@@ -67,8 +67,8 @@ defmodule Cadence.Applications.OpsConsoleActionProviderTest do
     request = %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
-      action_id: "refresh",
-      surface_id: "ops",
+      action_id: "refresh-planning",
+      surface_id: "fleet_planning",
       surface_version: 1,
       params: %{"mission_id" => "mission-2"}
     }

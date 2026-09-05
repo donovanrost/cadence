@@ -21,9 +21,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
 
   @bindings [
     {"fleet_planning", "refresh-planning"},
+    {"fleet_planning_new", "validate-fleet-run"},
     {"fleet_planning_new", "create-fleet-run"},
+    {"fleet_planning_policy", "validate-policy"},
     {"fleet_planning_policy", "save-policy"},
     {"fleet_planning_policy", "approve-policy"},
+    {"fleet_planning_policy", "validate-grant"},
     {"fleet_planning_policy", "issue-grant"},
     {"fleet_planning_policy", "revoke-grant"},
     {"fleet_planning_run", "refresh-fleet-run"},
@@ -161,7 +164,27 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     end
   end
 
+  defp validate_input("fleet_planning_new", "validate-fleet-run", params) do
+    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
+         :ok <- exact_nested_map(fleet_run, ~w(horizon_start horizon_end include_recurring)),
+         {:ok, _start} <-
+           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
+         {:ok, _end} <-
+           parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
+         {:ok, _include_recurring} <- json_boolean(fleet_run["include_recurring"]) do
+      :ok
+    end
+  end
+
   defp validate_input("fleet_planning_policy", "save-policy", params) do
+    with {:ok, policy} <- nested_map(params, "policy"),
+         :ok <- exact_nested_map(policy, @policy_fields),
+         {:ok, _attrs} <- policy_attributes(policy) do
+      :ok
+    end
+  end
+
+  defp validate_input("fleet_planning_policy", "validate-policy", params) do
     with {:ok, policy} <- nested_map(params, "policy"),
          :ok <- exact_nested_map(policy, @policy_fields),
          {:ok, _attrs} <- policy_attributes(policy) do
@@ -181,6 +204,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     with {:ok, grant} <- nested_map(params, "grant"),
          :ok <- exact_nested_map(grant, @grant_fields),
          {:ok, _attrs} <- grant_form_values(grant) do
+      :ok
+    end
+  end
+
+  defp validate_input("fleet_planning_policy", "validate-grant", params) do
+    with {:ok, grant} <- nested_map(params, "grant"),
+         :ok <- exact_nested_map(grant, @grant_fields),
+         {:ok, _values} <- grant_form_values(grant) do
       :ok
     end
   end
@@ -247,10 +278,19 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   defp authorize(scope, mission_id, _surface_id, action_id)
        when action_id in [
               "refresh-planning",
+              "validate-fleet-run",
               "create-fleet-run",
               "refresh-fleet-run",
               "repair-fleet-run"
             ] do
+    Policy.authorize(scope, :operate_mission, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize(scope, mission_id, "fleet_planning_policy", action_id)
+       when action_id in ["validate-policy", "validate-grant"] do
     Policy.authorize(scope, :operate_mission, %{
       organization_id: scope.organization_id,
       mission_id: mission_id
@@ -324,11 +364,28 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     end
   end
 
+  defp dispatch(_scope, _mission_id, "fleet_planning_new", "validate-fleet-run", params) do
+    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
+         {:ok, _start} <-
+           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
+         {:ok, _end} <- parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
+         {:ok, _include_recurring} <- json_boolean(fleet_run["include_recurring"]) do
+      {:ok, validation_result("fleet_planning_new", "validate-fleet-run")}
+    end
+  end
+
   defp dispatch(scope, mission_id, "fleet_planning_policy", "save-policy", params) do
     with {:ok, policy_params} <- nested_map(params, "policy"),
          {:ok, attrs} <- policy_attributes(policy_params),
          {:ok, policy, version} <- save_policy(scope, mission_id, attrs) do
       {:ok, policy_result(policy, version)}
+    end
+  end
+
+  defp dispatch(_scope, _mission_id, "fleet_planning_policy", "validate-policy", params) do
+    with {:ok, policy} <- nested_map(params, "policy"),
+         {:ok, _attrs} <- policy_attributes(policy) do
+      {:ok, validation_result("fleet_planning_policy", "validate-policy")}
     end
   end
 
@@ -362,6 +419,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
          "lifecycleState" => Atom.to_string(grant.lifecycle_state),
          "fleetPlanningPolicyVersion" => grant.fleet_planning_policy_version
        }}
+    end
+  end
+
+  defp dispatch(_scope, _mission_id, "fleet_planning_policy", "validate-grant", params) do
+    with {:ok, grant} <- nested_map(params, "grant"),
+         {:ok, _values} <- grant_form_values(grant) do
+      {:ok, validation_result("fleet_planning_policy", "validate-grant")}
     end
   end
 
@@ -484,6 +548,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
       "fleetPlanningRunId" => run.fleet_planning_run_id,
       "lifecycleState" => Atom.to_string(run.lifecycle_state),
       "phase" => Atom.to_string(run.phase)
+    }
+  end
+
+  defp validation_result(surface_id, action_id) do
+    %{
+      "surfaceId" => surface_id,
+      "actionId" => action_id,
+      "valid" => true,
+      "errors" => []
     }
   end
 

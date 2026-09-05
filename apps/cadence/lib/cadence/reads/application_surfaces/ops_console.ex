@@ -290,7 +290,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp dispatch("workspace", _scope, mission, _params), do: landing(mission, "Ops Console")
-  defp dispatch("ops", _scope, mission, _params), do: landing(mission, "Operations")
   defp dispatch("alarms", scope, mission, params), do: alarms(scope, mission, params)
   defp dispatch("timeline", scope, mission, params), do: timeline(scope, mission, params)
   defp dispatch("commands", scope, mission, params), do: commands(scope, mission, params)
@@ -630,7 +629,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp component_name("contact_requirement_list"), do: "OpsContactRequirementList"
   defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("ops"), do: "OpsConsoleLanding"
   defp component_name("contact_requirement_new"), do: "OpsContactRequirementNew"
   defp component_name("contact_requirement_show"), do: "OpsContactRequirementShow"
   defp component_name("contact_requirement_template"), do: "OpsContactRequirementTemplate"
