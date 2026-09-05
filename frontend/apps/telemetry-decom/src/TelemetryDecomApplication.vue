@@ -7,8 +7,9 @@ import type {
   HostQueryRequest,
 } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { onMounted, ref } from "vue";
-import ApplicationHost from "@cadence/cadence-web-vue/ApplicationHost.vue";
+import { onMounted, ref, useAttrs } from "vue";
+import ApplicationHost from "./ApplicationHost.vue";
+import TelemetryDecomManage from "./TelemetryDecomManage.vue";
 
 type ApplicationHostDto = {
   host: Record<string, unknown>;
@@ -40,12 +41,17 @@ type TelemetryHost = {
 
 type TelemetryApplicationProps = {
   context: FederatedApplicationProps["context"];
+  surface?: "manage" | "packet_bindings";
+  pageProps?: Record<string, unknown>;
   host?: TelemetryHost;
   bridge?: HostBridge;
 };
 
+defineOptions({ inheritAttrs: false });
 const props = defineProps<TelemetryApplicationProps>();
+const attrs = useAttrs();
 const host = props.host ?? (props.bridge ? legacyHost(props.bridge) : undefined);
+const managedSurface = props.surface === "manage";
 
 const presentation = ref<ApplicationHostDto>();
 const loading = ref(true);
@@ -55,7 +61,9 @@ const actionError = ref<string>();
 const actionNotice = ref<string>();
 let loadGeneration = 0;
 
-onMounted(loadApplication);
+onMounted(() => {
+  if (!managedSurface) loadApplication();
+});
 
 async function loadApplication(): Promise<boolean> {
   const generation = ++loadGeneration;
@@ -188,8 +196,13 @@ function messageFor(reason: unknown, fallback: string): string {
 
 <template>
   <div id="telemetry-decom-application">
+    <TelemetryDecomManage
+      v-if="managedSurface"
+      v-bind="props.pageProps ?? {}"
+      v-bind="attrs"
+    />
     <CStatePanel
-      v-if="loading"
+      v-else-if="loading"
       id="telemetry-decom-loading"
       title="Loading packet bindings"
       :description="

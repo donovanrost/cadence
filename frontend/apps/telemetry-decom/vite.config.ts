@@ -5,7 +5,6 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
-const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vue");
 const federatedEntry = resolve(__dirname, "src/federated-application.ts");
 const releaseFederationConfig = {
   ...federationConfig,
@@ -197,11 +196,6 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base,
-    resolve: {
-      alias: {
-        "@cadence/cadence-web-vue": cadenceVueSource,
-      },
-    },
     define: {
       __CADENCE_REMOTE_RELEASE__: JSON.stringify(
         command === "serve" ? "development" : releaseBuild ? "release" : releaseId,

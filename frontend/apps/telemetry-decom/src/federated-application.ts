@@ -28,6 +28,17 @@ export const manifest = defineApplicationManifest({
   },
   surfaces: [
     {
+      surfaceId: "manage",
+      version: 1,
+      purpose: "configuration",
+      scope: "spacecraft",
+      placement: "application_workspace",
+      navigation: { label: "Manage", order: 10 },
+      dataContract: { id: "cadence.telemetry_decom.manage", version: 1 },
+      actions: ["change_revision", "save_catalog_revision", "enable", "disable"],
+      renderer: { kind: "federated-vue", exposedModule: "./Application" },
+    },
+    {
       surfaceId: "packet_bindings",
       version: 1,
       purpose: "configuration",

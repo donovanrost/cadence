@@ -3,8 +3,9 @@ import "./env.d.ts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi, afterEach } from "vite-plus/test";
 import type { HostContext } from "@cadence/plugin-sdk";
-import ApplicationHost from "@cadence/cadence-web-vue/ApplicationHost.vue";
+import ApplicationHost from "./ApplicationHost.vue";
 import TelemetryDecomApplication from "./TelemetryDecomApplication.vue";
+import { manifest } from "./federated-application";
 
 const context: HostContext = {
   scope: "spacecraft",
@@ -19,6 +20,23 @@ const context: HostContext = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Telemetry Decom Phoenix host bridge", () => {
+  it("keeps manage and packet-binding surfaces under the telemetry_decom identity", () => {
+    expect(manifest.application.applicationKey).toBe("telemetry_decom");
+    expect(manifest.package.packageId).toBe("cadence.telemetry-applications");
+    expect(manifest.surfaces.map((surface) => surface.surfaceId)).toEqual([
+      "manage",
+      "packet_bindings",
+    ]);
+    expect(manifest.surfaces[0].dataContract).toEqual({
+      id: "cadence.telemetry_decom.manage",
+      version: 1,
+    });
+    expect(manifest.surfaces[1].dataContract).toEqual({
+      id: "cadence.packet_bindings.manage",
+      version: 1,
+    });
+  });
+
   it("queries packet bindings v1 and renders the canonical ApplicationHost DTO", async () => {
     const dto = applicationHostDto();
     const query = vi.fn().mockResolvedValue(dto);
