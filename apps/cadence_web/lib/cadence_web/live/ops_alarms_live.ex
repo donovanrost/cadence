@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsAlarmsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Reads.Alarms
-  alias Phoenix.LiveView.JS
 
   @filter_keys ~w(severity state spacecraft_id query)
 

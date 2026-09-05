@@ -19,7 +19,6 @@ defmodule CadenceWeb.OpsContactDetailLive do
   }
 
   alias Phoenix.HTML.Form
-  alias Phoenix.LiveView.JS
 
   @decision_states [:pending_approval, :acknowledgment_required]
 

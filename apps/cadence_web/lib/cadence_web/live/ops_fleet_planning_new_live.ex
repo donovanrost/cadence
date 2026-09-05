@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsFleetPlanningNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{FleetPlanner, FleetPlanningPolicies}
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do

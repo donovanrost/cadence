@@ -7,7 +7,6 @@ defmodule CadenceWeb.OpsDashboardListLive do
   use CadenceWeb, :live_view
 
   alias CadenceWeb.OpsShellHook
-  alias Phoenix.LiveView.JS
 
   @filter_keys ~w(query lifecycle tag sort)
   @default_filters %{"query" => "", "lifecycle" => "active", "tag" => "all", "sort" => "updated"}

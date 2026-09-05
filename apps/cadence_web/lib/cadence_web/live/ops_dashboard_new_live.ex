@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsDashboardNewLive do
 
   alias Cadence.Dashboards.Document
   alias CadenceWeb.CommsComponents
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(params, _session, socket) do

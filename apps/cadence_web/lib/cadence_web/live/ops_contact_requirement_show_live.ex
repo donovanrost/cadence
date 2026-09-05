@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
   use CadenceWeb, :live_view
 
   alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"contact_requirement_id" => requirement_id}, _session, socket) do

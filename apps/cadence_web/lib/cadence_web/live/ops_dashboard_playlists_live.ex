@@ -3,7 +3,6 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.Management
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do

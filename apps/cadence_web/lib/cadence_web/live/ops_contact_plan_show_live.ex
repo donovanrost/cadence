@@ -7,7 +7,6 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Projections.ContactStatus
   alias Phoenix.HTML.Form
-  alias Phoenix.LiveView.JS
   alias Phoenix.LiveView.Socket
 
   @impl true

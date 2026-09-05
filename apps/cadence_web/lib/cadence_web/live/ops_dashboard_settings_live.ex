@@ -3,7 +3,6 @@ defmodule CadenceWeb.OpsDashboardSettingsLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.{Document, Management}
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"dashboard_id" => dashboard_id} = params, _session, socket) do

@@ -5,7 +5,6 @@ defmodule CadenceWeb.OpsActivationRequestsLive do
 
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Management.Activations, as: ManagementActivations
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
