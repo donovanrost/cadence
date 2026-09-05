@@ -7,33 +7,13 @@ defmodule CadenceWeb.OpsDashboardEditorLive do
 
   use CadenceWeb, :live_view
 
-  alias CadenceWeb.OpsDashboardShowLive.Controller
+  @impl true
+  def mount(%{"dashboard_id" => dashboard_id}, _session, socket),
+    do: {:ok, assign(socket, :dashboard_id, dashboard_id)}
 
   @impl true
-  def mount(params, session, socket) do
-    with {:ok, socket} <- Controller.mount(params, session, socket) do
-      {:ok, assign(socket, :federated_query_params, %{})}
-    end
-  end
-
-  @impl true
-  def handle_params(params, uri, socket) do
-    with {:noreply, socket} <- Controller.handle_params(params, uri, socket) do
-      {:noreply, assign(socket, :federated_query_params, Map.take(params, ["dashboard_id"]))}
-    end
-  end
-
-  @impl true
-  defdelegate handle_info(message, socket), to: Controller
-
-  @impl true
-  defdelegate handle_async(name, result, socket), to: Controller
-
-  @impl true
-  defdelegate handle_event(event, params, socket), to: Controller
-
-  @impl true
-  defdelegate terminate(reason, socket), to: Controller
+  def handle_params(params, _uri, socket),
+    do: {:noreply, assign(socket, :federated_query_params, Map.take(params, ["dashboard_id"]))}
 
   @impl true
   def render(assigns) do
