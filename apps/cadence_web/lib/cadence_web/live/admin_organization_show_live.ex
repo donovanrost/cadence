@@ -99,6 +99,46 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
     """
   end
 
+  @doc false
+  def federated_props(org_id) when is_binary(org_id) do
+    with {:ok, organization} <- Cadence.Organizations.fetch_organization(org_id) do
+      %{
+        organization: organization_dto(organization),
+        navigation: navigation_dto(organization),
+        members:
+          Cadence.Accounts.list_organization_members(org_id)
+          |> Enum.map(&member_dto/1),
+        invitations:
+          Cadence.Accounts.list_pending_invitations(org_id)
+          |> Enum.map(&invitation_dto/1),
+        service_identities:
+          Cadence.Auth.list_service_identities(org_id)
+          |> Enum.map(&service_identity_dto/1),
+        service_identity_form: service_identity_form_dto(%{}),
+        issued_service_token: nil
+      }
+    else
+      {:error, _reason} -> {:error, :organization_not_found}
+    end
+  end
+
+  @doc false
+  def federated_issue_service_identity(org_id, params)
+      when is_binary(org_id) and is_map(params) do
+    with {:ok, attrs} <- service_identity_attrs(org_id, params),
+         {:ok, %{service_identity: identity, api_token: api_token}} <-
+           Cadence.Auth.issue_service_identity(ServiceIdentity.new(attrs)) do
+      {:ok,
+       %{
+         service_identities:
+           Cadence.Auth.list_service_identities(org_id)
+           |> Enum.map(&service_identity_dto/1),
+         issued_service_token: issued_service_token_dto(identity, api_token),
+         service_identity_form: service_identity_form_dto(%{})
+       }}
+    end
+  end
+
   defp organization_dto(organization) do
     %{
       organization_id: organization.organization_id,

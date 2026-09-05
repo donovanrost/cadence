@@ -38,7 +38,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
       scope: :organization,
       component: "ProviderAccountNew",
       query: "cadence.organization.provider_accounts.new",
-      actions: ["validate_provider_account", "register_provider_account"]
+      actions: ["validate_provider_account_form", "register_provider_account"]
     },
     %{
       id: "provider_account_show",
@@ -242,6 +242,18 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   @spec surfaces() :: [map()]
   def surfaces, do: @surface_contracts
 
+  @doc "Stable application identity used by the central optional registries."
+  @spec application_key() :: binary()
+  def application_key, do: @application_key
+
+  @doc "Returns the executable query contributions for every declared surface."
+  @spec surface_query_contributions() :: [Cadence.Applications.SurfaceQueryContribution.t()]
+  def surface_query_contributions, do: OrganizationAdminQuery.contributions()
+
+  @doc "Returns the executable action provider for this optional web contribution."
+  @spec action_provider() :: module()
+  def action_provider, do: OrganizationAdminAction
+
   @doc "Returns the Phoenix-owned transitions intentionally outside this remote."
   @spec host_owned_flows() :: map()
   def host_owned_flows, do: @host_owned_flows
@@ -310,20 +322,82 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
       %ActionDefinition{
         action_id: action_id,
         version: @version,
-        intent: :configuration,
         scope: scope,
         input_contract: %{schema_id: "cadence.organization_admin.#{action_id}.input", version: 1},
         result_contract: %{
           schema_id: "cadence.organization_admin.#{action_id}.result",
           version: 1
         },
-        required_permission: "manage_organization",
-        effect: :durable,
+        required_permission: action_permission(action_id),
+        effect: action_effect(action_id),
+        intent: action_intent(action_id),
         execution: :immediate,
         concurrency: %{strategy: :expected_version}
       }
     end)
   end
+
+  defp action_permission("validate_provider_account_form"), do: "manage_provider_accounts"
+  defp action_permission("validate_provider_account"), do: "manage_provider_accounts"
+  defp action_permission("register_provider_account"), do: "manage_provider_accounts"
+
+  defp action_permission(action_id)
+       when action_id in [
+              "rotate_provider_credential",
+              "revoke_provider_credential",
+              "grant_provider_account_mission",
+              "revoke_provider_account_mission"
+            ],
+       do: "manage_provider_accounts"
+
+  defp action_permission("accept_invitation"), do: "accept_invitation"
+  defp action_permission("mark_notification_read"), do: "read_notifications"
+
+  defp action_permission(action_id)
+       when action_id in ["refresh_runtime", "filter_runtime_decisions"],
+       do: "view_runtime"
+
+  defp action_permission(action_id)
+       when action_id in ["validate_organization", "create_organization"],
+       do: "manage_organizations"
+
+  defp action_permission("issue_service_identity"), do: "manage_service_identities"
+  defp action_permission("dismiss_service_token"), do: "dismiss_service_token"
+  defp action_permission("open_organization"), do: "open_organization"
+  defp action_permission("validate_invitation"), do: "manage_organizations"
+  defp action_permission("invite_organization_member"), do: "manage_organizations"
+
+  defp action_effect(action_id)
+       when action_id in [
+              "validate_provider_account_form",
+              "refresh_runtime",
+              "filter_runtime_decisions",
+              "validate_organization",
+              "dismiss_service_token",
+              "validate_invitation"
+            ],
+       do: :none
+
+  defp action_effect("accept_invitation"), do: :durable
+  defp action_effect("open_organization"), do: :external
+  defp action_effect("validate_provider_account"), do: :external
+  defp action_effect(_action_id), do: :durable
+
+  defp action_intent(action_id)
+       when action_id in [
+              "refresh_runtime",
+              "filter_runtime_decisions",
+              "validate_provider_account_form",
+              "validate_organization",
+              "validate_invitation",
+              "dismiss_service_token"
+            ],
+       do: :diagnostic
+
+  defp action_intent("accept_invitation"), do: :operation
+  defp action_intent("open_organization"), do: :operation
+  defp action_intent("validate_provider_account"), do: :maintenance
+  defp action_intent(_action_id), do: :configuration
 
   defp surface_definition(surface) do
     %SurfaceDefinition{

@@ -89,6 +89,55 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
     """
   end
 
+  @doc false
+  def federated_props(org_id) when is_binary(org_id) do
+    with {:ok, organization} <- Cadence.Organizations.fetch_organization(org_id) do
+      %{
+        page: page_dto(organization),
+        form: form_dto(default_invite_params())
+      }
+    else
+      {:error, _reason} -> {:error, :organization_not_found}
+    end
+  end
+
+  @doc false
+  def federated_form(params) when is_map(params), do: form_dto(params)
+
+  @doc false
+  def federated_create(%Cadence.Auth.Scope{} = scope, org_id, params)
+      when is_binary(org_id) and is_map(params) do
+    result =
+      Cadence.Accounts.establish_organization_access(
+        params["email"],
+        org_id,
+        membership_role: normalize_role(params["membership_role"]),
+        grant_platform_admin: params["grant_platform_admin"] in [true, "true"],
+        invited_by_user_id: scope.user.user_id,
+        display_name: params["display_name"],
+        force_invitation: true
+      )
+
+    case result do
+      {:ok, %{mode: :granted}} ->
+        {:ok, %{navigate: ~p"/admin/organizations/#{org_id}"}}
+
+      {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} ->
+        with {:ok, organization} <- Cadence.Organizations.fetch_organization(org_id) do
+          CadenceWeb.UserNotifier.deliver_organization_invitation(
+            invitation,
+            organization,
+            url(~p"/invitations/#{token}")
+          )
+
+          {:ok, %{navigate: ~p"/admin/organizations/#{org_id}"}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp page_dto(organization) do
     %{
       title: "Invite User",

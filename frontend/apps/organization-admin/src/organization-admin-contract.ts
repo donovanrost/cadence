@@ -25,7 +25,7 @@ export const SURFACE_CONTRACTS = [
     component: "ProviderAccountNew",
     purpose: "configuration" as SurfacePurpose,
     query: { id: "cadence.organization.provider_accounts.new", version: 1 },
-    actions: ["validate_provider_account", "register_provider_account"] as const,
+    actions: ["validate_provider_account_form", "register_provider_account"] as const,
   },
   {
     surfaceId: "provider_account_show",

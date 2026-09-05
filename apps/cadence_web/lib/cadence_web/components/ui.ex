@@ -27,9 +27,9 @@ defmodule CadenceWeb.UI do
     * `count` — unread count (integer)
     * `notifications` — list of `%Cadence.Notifications.Notification{}` (top 5)
   """
-  attr :id, :string, required: true
-  attr :count, :integer, default: 0
-  attr :notifications, :list, default: []
+  attr(:id, :string, required: true)
+  attr(:count, :integer, default: 0)
+  attr(:notifications, :list, default: [])
 
   def notifications_bell(assigns) do
     assigns = assign(assigns, :presentation, notifications_bell_presentation(assigns))
@@ -114,13 +114,17 @@ defmodule CadenceWeb.UI do
   defp unread_label(_count), do: nil
 
   defp notification_presentation(notification, index, notifications_path) do
+    notification_id = notification |> Map.get(:notification_id, index) |> to_string()
+
     %{
-      "key" => notification |> Map.get(:notification_id, index) |> to_string(),
+      "key" => notification_id,
+      "notification_id" => notification_id,
       "link" => %{
         "class" => "flex items-start gap-2 px-3 py-2",
         "attrs" => navigate_attrs(notifications_path)
       },
       "dot_class" => notification_dot_class(notification.read_at),
+      "action" => if(is_nil(notification.read_at), do: "mark_read", else: nil),
       "content_class" => "flex-1 min-w-0",
       "title" => %{
         "class" => "block text-xs font-semibold text-base-content truncate",
@@ -158,10 +162,10 @@ defmodule CadenceWeb.UI do
     * `memberships` — list of `%{membership: OrganizationMembership.t(), organization: Organization.t()}`
     * `platform_admin?` — boolean
   """
-  attr :id, :string, required: true
-  attr :scope, :any, required: true
-  attr :memberships, :list, default: []
-  attr :platform_admin?, :boolean, default: false
+  attr(:id, :string, required: true)
+  attr(:scope, :any, required: true)
+  attr(:memberships, :list, default: [])
+  attr(:platform_admin?, :boolean, default: false)
 
   def user_menu(assigns) do
     assigns = assign(assigns, :presentation, user_menu_presentation(assigns))

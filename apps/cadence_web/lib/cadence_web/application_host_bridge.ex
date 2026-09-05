@@ -6,6 +6,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     ActionDispatcher,
     ActionRequest,
     ApplicationDefinition,
+    ApplicationInstallation,
     JSONBoundary,
     SurfaceDefinition,
     SurfaceDocument
@@ -405,7 +406,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
       dom_id: host_dom_id(surface.scope),
       application_key: definition.application_key,
       application_version: definition.version,
-      application_installation_id: installation.application_installation_id,
+      application_installation_id: installation_id(installation),
       surface_id: surface.surface_id,
       renderer: renderer_name(surface)
     }
@@ -414,8 +415,16 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp renderer_name(%SurfaceDefinition{renderer: {:trusted, _renderer_id}}), do: "trusted"
   defp renderer_name(%SurfaceDefinition{}), do: "declarative"
 
-  defp host_dom_id(:spacecraft), do: "spacecraft-application-host"
-  defp host_dom_id(:mission), do: "mission-application-host"
+  @doc "Returns the stable DOM id for an application host scope."
+  @spec host_dom_id(atom()) :: binary()
+  def host_dom_id(:spacecraft), do: "spacecraft-application-host"
+  def host_dom_id(:mission), do: "mission-application-host"
+  def host_dom_id(:organization), do: "organization-application-host"
+  def host_dom_id(:user), do: "user-application-host"
+  def host_dom_id(:admin), do: "admin-application-host"
+
+  defp installation_id(%ApplicationInstallation{application_installation_id: id}), do: id
+  defp installation_id(nil), do: nil
 
   defp receipt_id(idempotency_key_digest),
     do: "application-host-receipt-" <> idempotency_key_digest

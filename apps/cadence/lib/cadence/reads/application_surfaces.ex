@@ -92,11 +92,7 @@ defmodule Cadence.Reads.ApplicationSurfaces do
          :ok <- ensure_declared_surface(definition, surface, host_context),
          :ok <- authorize_surface(current_scope, host_context),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
-             current_scope,
-             host_context,
-             application_key
-           ),
+           maybe_fetch_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
          {:ok, provider} <- fetch_provider(application_key, query_id) do
@@ -183,11 +179,37 @@ defmodule Cadence.Reads.ApplicationSurfaces do
   end
 
   defp authorize_surface(current_scope, host_context) do
-    Policy.authorize(current_scope, :operate_mission, %{
-      organization_id: current_scope.organization_id,
-      mission_id: host_context.mission_id
-    })
+    case host_context do
+      %HostContext{placement: :organization, organization_id: organization_id} ->
+        Policy.authorize(current_scope, :read_organization, %{organization_id: organization_id})
+
+      %HostContext{placement: :user, user_id: user_id} ->
+        if (current_scope.actor_kind == :user and current_scope.user) &&
+             current_scope.user.user_id == user_id,
+           do: :ok,
+           else: {:error, :scope_mismatch}
+
+      %HostContext{placement: :admin} ->
+        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+
+      %HostContext{} ->
+        Policy.authorize(current_scope, :operate_mission, %{
+          organization_id: current_scope.organization_id,
+          mission_id: host_context.mission_id
+        })
+    end
   end
+
+  defp maybe_fetch_installation(
+         _current_scope,
+         %HostContext{placement: placement},
+         "organization_admin"
+       )
+       when placement in [:organization, :user, :admin],
+       do: {:ok, nil}
+
+  defp maybe_fetch_installation(current_scope, host_context, application_key),
+    do: ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
 
   defp ensure_installation_version(
          %ApplicationInstallation{application_version: version},
@@ -197,6 +219,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   defp ensure_installation_version(%ApplicationInstallation{}, _requested_version),
     do: {:error, :application_installation_version_mismatch}
+
+  defp ensure_installation_version(nil, _requested_version), do: :ok
 
   defp query_contract(%SurfaceDefinition{data_contract: data_contract}) do
     case {Map.get(data_contract, :query_id), Map.get(data_contract, :version)} do

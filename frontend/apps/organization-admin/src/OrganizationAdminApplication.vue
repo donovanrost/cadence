@@ -30,7 +30,7 @@ const actionEvents: Record<OrganizationAdminSurface, Record<string, string>> = {
   organization_home: {},
   provider_accounts: {},
   provider_account_new: {
-    validate: "validate_provider_account",
+    validate: "validate_provider_account_form",
     save: "register_provider_account",
   },
   provider_account_show: {
@@ -44,7 +44,9 @@ const actionEvents: Record<OrganizationAdminSurface, Record<string, string>> = {
     "accept-invitation": "accept_invitation",
     "mark-read": "mark_notification_read",
   },
-  notifications_bell: {},
+  notifications_bell: {
+    "mark-read": "mark_notification_read",
+  },
   admin_home: {},
   admin_runtime: {
     refresh: "refresh_runtime",
@@ -112,7 +114,7 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
   error.value = undefined;
 
   try {
-    await props.bridge.execute({
+    const receipt = await props.bridge.execute<Record<string, unknown>, Record<string, unknown>>({
       applicationKey: props.application.applicationKey,
       applicationVersion: props.application.applicationVersion,
       actionId,
@@ -120,7 +122,18 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
       context: props.context,
     });
     actionNotice.value = `Phoenix accepted ${actionId}.`;
-    await loadSurface();
+    const result = receipt.result;
+
+    if (isRecord(result) && typeof result.navigate === "string") {
+      window.location.assign(result.navigate);
+    } else if (isRecord(result) && isRecord(result.patch)) {
+      presentation.value = {
+        ...(presentation.value ?? {}),
+        ...result.patch,
+      };
+    } else {
+      await loadSurface();
+    }
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "The organization action failed.";
   } finally {

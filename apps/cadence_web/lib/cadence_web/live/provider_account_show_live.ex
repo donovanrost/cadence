@@ -188,6 +188,71 @@ defmodule CadenceWeb.ProviderAccountShowLive do
     """
   end
 
+  @doc false
+  def federated_props(%Cadence.Auth.Scope{} = scope, provider_account_id)
+      when is_binary(provider_account_id) do
+    with {:ok, account, version} <- ProviderAccounts.fetch(scope, provider_account_id),
+         {:ok, credential} <-
+           ProviderCredentials.fetch(
+             scope.organization_id,
+             account.provider_account_id,
+             version.credential_ref
+           ),
+         {:ok, grants} <- ProviderAccountGrants.list(scope, account.provider_account_id) do
+      missions = Cadence.Missions.list_missions(scope.organization_id)
+      mission_names = Map.new(missions, &{&1.mission_id, &1.display_name})
+      granted_missions = MapSet.new(grants, & &1.mission_id)
+
+      mission_options =
+        missions
+        |> Enum.reject(&MapSet.member?(granted_missions, &1.mission_id))
+        |> Enum.map(&{&1.display_name, &1.mission_id})
+
+      audits =
+        ProviderAudit.list_entries(scope.organization_id,
+          provider_account_id: account.provider_account_id,
+          limit: 20
+        )
+
+      cursors =
+        ProviderEventCursors.list(scope.organization_id,
+          provider_account_id: account.provider_account_id
+        )
+
+      inbox_counts = ProviderEventInbox.counts(scope.organization_id, account.provider_account_id)
+
+      grant_rows =
+        grants
+        |> Enum.map(&grant_dto(&1, mission_names))
+        |> Enum.map(&Map.put(&1, :__dom_id, "account-grant-#{&1.id}"))
+
+      audit_rows =
+        audits
+        |> Enum.map(&audit_dto/1)
+        |> Enum.map(&Map.put(&1, :__dom_id, "account-audit-#{&1.id}"))
+
+      {:ok,
+       %{
+         page: provider_account_page_dto(account, version),
+         actions: account_actions_dto(nil, credential),
+         stats:
+           account_stats_dto(
+             account,
+             version,
+             credential,
+             Enum.count(grants, &(&1.lifecycle_state == :active))
+           ),
+         grant_form: grant_form_dto(mission_options),
+         configuration: configuration_dto(account, version),
+         ingestion: ingestion_dto(version, ingestion_summary(cursors, inbox_counts)),
+         guardrails: guardrails_dto(version.guardrails),
+         diagnostics: diagnostics_dto(version, credential),
+         account_grants: grant_rows,
+         account_audit: audit_rows
+       }}
+    end
+  end
+
   defp load_account(socket, provider_account_id) do
     scope = socket.assigns.current_scope
 

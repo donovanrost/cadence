@@ -1,6 +1,9 @@
 defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
   @moduledoc "Stable Phoenix-owned query contracts for the post-auth organization admin remote."
 
+  alias Cadence.Applications.{HostContext, SurfaceQueryContribution, SurfaceQueryRequest}
+  alias Cadence.Auth.{Policy, Scope}
+
   @query_contracts [
     %{
       id: "cadence.organization.home",
@@ -74,6 +77,195 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
   @doc "Returns the complete bounded query contract set."
   @spec all() :: [map()]
   def all, do: @query_contracts
+
+  @doc false
+  @spec application_key() :: binary()
+  def application_key, do: "organization_admin"
+
+  @doc "Returns one bounded provider contribution for each declared query."
+  @spec contributions() :: [SurfaceQueryContribution.t()]
+  def contributions do
+    Enum.map(@query_contracts, fn contract ->
+      %SurfaceQueryContribution{
+        application_key: application_key(),
+        application_version: 1,
+        query_id: contract.id,
+        query_version: contract.version,
+        provider: __MODULE__
+      }
+    end)
+  end
+
+  @doc "Loads the Phoenix-owned props for one authenticated organization surface."
+  @spec load(Scope.t(), HostContext.t(), SurfaceQueryRequest.t()) ::
+          {:ok, map()} | {:error, term()}
+  def load(
+        %Scope{} = scope,
+        %HostContext{} = host_context,
+        %SurfaceQueryRequest{} = request
+      ) do
+    with :ok <- validate_request(request),
+         :ok <- validate_context(scope, host_context, request.surface_id),
+         {:ok, data} <- surface_data(scope, host_context, request.surface_id, request.params) do
+      {:ok, %{"navigation" => %{}, "data" => data}}
+    end
+  end
+
+  defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
+    with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
+      {:ok, %{presentation: CadenceWeb.OrganizationHomeLive.federated_presentation(organization)}}
+    end
+  end
+
+  defp surface_data(scope, %HostContext{placement: :organization}, "provider_accounts", _params),
+    do: CadenceWeb.ProviderAccountListLive.federated_props(scope)
+
+  defp surface_data(
+         _scope,
+         %HostContext{placement: :organization},
+         "provider_account_new",
+         _params
+       ),
+       do: {:ok, CadenceWeb.ProviderAccountNewLive.federated_props()}
+
+  defp surface_data(
+         scope,
+         %HostContext{placement: :organization},
+         "provider_account_show",
+         params
+       ) do
+    with {:ok, provider_account_id} <- required_param(params, "provider_account_id") do
+      CadenceWeb.ProviderAccountShowLive.federated_props(scope, provider_account_id)
+    end
+  end
+
+  defp surface_data(scope, %HostContext{placement: :user}, "notifications", _params),
+    do: {:ok, %{presentation: CadenceWeb.NotificationsLive.federated_presentation(scope)}}
+
+  defp surface_data(
+         %Scope{user: %{user_id: user_id}},
+         %HostContext{placement: :user},
+         "notifications_bell",
+         _params
+       ) do
+    notifications = Cadence.Notifications.list_notifications(user_id, limit: 5)
+
+    {:ok,
+     %{
+       presentation:
+         CadenceWeb.UI.notifications_bell_presentation(%{
+           id: "notifications-bell-application",
+           count: Cadence.Notifications.count_unread_notifications(user_id),
+           notifications: notifications
+         })
+     }}
+  end
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_home", _params),
+    do: {:ok, CadenceWeb.AdminHomeLive.federated_props()}
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_runtime", params),
+    do: {:ok, CadenceWeb.AdminRuntimeLive.federated_props(params)}
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organizations", _params),
+    do: {:ok, CadenceWeb.AdminOrganizationListLive.federated_props()}
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_new", _params),
+    do: {:ok, CadenceWeb.AdminOrganizationNewLive.federated_props()}
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_show", params) do
+    with {:ok, organization_id} <- required_param(params, "organization_id") do
+      CadenceWeb.AdminOrganizationShowLive.federated_props(organization_id)
+    end
+  end
+
+  defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_invite", params) do
+    with {:ok, organization_id} <- required_param(params, "organization_id") do
+      CadenceWeb.AdminOrganizationInviteLive.federated_props(organization_id)
+    end
+  end
+
+  defp surface_data(_scope, _host_context, _surface_id, _params),
+    do: {:error, :unsupported_application_host_context}
+
+  defp validate_request(%SurfaceQueryRequest{
+         application_key: application_key,
+         application_version: 1,
+         surface_id: surface_id,
+         query_id: query_id,
+         query_version: query_version,
+         params: params
+       })
+       when application_key == "organization_admin" and is_map(params) do
+    case fetch(query_id, query_version) do
+      {:ok, %{id: ^query_id, version: ^query_version, surface_id: ^surface_id}} -> :ok
+      _unknown -> {:error, :unknown_application_surface_query}
+    end
+  end
+
+  defp validate_request(_request), do: {:error, :invalid_application_surface_query_contract}
+
+  defp validate_context(
+         %Scope{organization_id: organization_id} = scope,
+         %HostContext{placement: :organization, organization_id: organization_id},
+         surface_id
+       )
+       when is_binary(organization_id) do
+    with :ok <- Policy.authorize(scope, :read_organization, %{organization_id: organization_id}),
+         {:ok, surface} <- fetch_surface_scope(surface_id) do
+      if surface == :organization, do: :ok, else: {:error, :unsupported_application_host_context}
+    end
+  end
+
+  defp validate_context(
+         %Scope{actor_kind: :user, user: %{user_id: user_id}} = _scope,
+         %HostContext{placement: :user, user_id: user_id},
+         surface_id
+       ) do
+    case fetch_surface_scope(surface_id) do
+      {:ok, :user} -> :ok
+      _other -> {:error, :unsupported_application_host_context}
+    end
+  end
+
+  defp validate_context(%Scope{} = scope, %HostContext{placement: :admin}, surface_id) do
+    with true <- Scope.admin_mode?(scope),
+         {:ok, :admin} <- fetch_surface_scope(surface_id) do
+      :ok
+    else
+      false -> {:error, :forbidden}
+      _other -> {:error, :unsupported_application_host_context}
+    end
+  end
+
+  defp validate_context(_scope, _host_context, _surface_id),
+    do: {:error, :scope_mismatch}
+
+  defp fetch_surface_scope(surface_id) do
+    case Enum.find(@query_contracts, &(&1.surface_id == surface_id)) do
+      %{surface_id: ^surface_id} ->
+        case CadenceWeb.ApplicationContributions.OrganizationAdmin.fetch_surface(surface_id) do
+          {:ok, %{scope: scope}} -> {:ok, scope}
+          _other -> {:error, :unknown_surface}
+        end
+
+      nil ->
+        {:error, :unknown_surface}
+    end
+  end
+
+  defp required_param(params, key) when is_map(params) do
+    case Map.get(params, key) || Map.get(params, query_param_key(key)) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _missing -> {:error, :application_surface_subject_required}
+    end
+  end
+
+  defp required_param(_params, _key), do: {:error, :application_surface_subject_required}
+
+  defp query_param_key("provider_account_id"), do: :provider_account_id
+  defp query_param_key("organization_id"), do: :organization_id
+  defp query_param_key(_key), do: nil
 
   @doc "Fetches a query contract by its durable string identity."
   @spec fetch(binary(), pos_integer()) :: {:ok, map()} | {:error, :unknown_query}

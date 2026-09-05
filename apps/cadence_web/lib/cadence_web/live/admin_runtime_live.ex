@@ -79,6 +79,49 @@ defmodule CadenceWeb.AdminRuntimeLive do
     """
   end
 
+  @doc false
+  def federated_props(params \\ %{}) when is_map(params) do
+    filters = filter_params(params)
+    selected_decision_key = Map.get(params, "decision")
+
+    decisions =
+      filters
+      |> decision_filter_opts()
+      |> DashboardRuntimeInvalidations.list()
+
+    summary = summarize_decisions(decisions)
+    selected_in_results? = selected_decision_in_results?(decisions, selected_decision_key)
+    selected = selected_decision(decisions, selected_decision_key)
+    selected_missing? = selected_decision_key not in [nil, ""] and is_nil(selected)
+
+    selected_outside? =
+      selected_decision_key not in [nil, ""] and not is_nil(selected) and
+        not selected_in_results?
+
+    result_state =
+      selected_decision_result_state(selected_decision_key, selected, selected_in_results?)
+
+    rows =
+      Enum.map(decisions, &decision_dto(&1, filters, selected_decision_key))
+      |> Enum.map(&Map.put(&1, :__dom_id, &1.id))
+
+    %{
+      summary: summary_dto(summary, length(decisions), result_state),
+      filters: filters_dto(filters),
+      decisions: rows,
+      selection:
+        selection_dto(
+          selected,
+          selected_decision_key,
+          result_state,
+          selected_missing?,
+          selected_outside?,
+          filters
+        ),
+      navigation: %{admin_href: ~p"/admin"}
+    }
+  end
+
   defp assign_runtime_diagnostics(socket, filters, selected_decision_key) do
     decisions =
       filters

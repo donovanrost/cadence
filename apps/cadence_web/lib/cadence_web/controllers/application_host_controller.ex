@@ -386,7 +386,7 @@ defmodule CadenceWeb.ApplicationHostController do
 
       "user" ->
         with :user <- current_scope.actor_kind,
-             %{id: user_id} <- current_scope.user do
+             %{user_id: user_id} <- current_scope.user do
           requested_user_id = Map.get(params, "user_id")
 
           if generic_scope_ids_match?(params, :user, user_id) and

@@ -66,6 +66,14 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
     """
   end
 
+  @doc false
+  def federated_props do
+    %{page: page_dto(), form: form_dto(%{})}
+  end
+
+  @doc false
+  def federated_form(params) when is_map(params), do: form_dto(params)
+
   defp page_dto do
     %{
       title: "Create Organization",

@@ -28,4 +28,9 @@ defmodule CadenceWeb.AdminOrganizationListLive do
     </Layouts.app>
     """
   end
+
+  @doc false
+  def federated_props do
+    %{presentation: Presentation.build(Cadence.Organizations.list_organizations())}
+  end
 end
