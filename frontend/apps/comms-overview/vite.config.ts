@@ -167,30 +167,174 @@ type ReleaseBundleItem = {
 const exactHostInitializationPath = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
 const exactHostInitializationFacadeId =
   "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
-const exactHostInitializationFacadeIds = new Set([
-  exactHostInitializationFacadeId,
-  exactHostInitializationFacadeId.slice(1),
-]);
 const generatedHostInitializationSourceDigests = new Set([
   "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068",
 ]);
 
+function readJavaScriptLiteral(source: string, start: number) {
+  const quote = source[start];
+  if (quote !== "'" && quote !== '"' && quote !== "`") return null;
+
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (source[index] === quote) {
+      return {
+        contentStart: start + 1,
+        end: index + 1,
+        value: source.slice(start + 1, index),
+      };
+    }
+  }
+
+  return null;
+}
+
+function skipJavaScriptTrivia(source: string, start: number) {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index])) {
+      index += 1;
+      continue;
+    }
+    if (source.startsWith("//", index)) {
+      const lineEnd = source.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? source.length : lineEnd + 1;
+      continue;
+    }
+    if (source.startsWith("/*", index)) {
+      const commentEnd = source.indexOf("*/", index + 2);
+      index = commentEnd === -1 ? source.length : commentEnd + 2;
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+function generatedImportLiterals(source: string) {
+  const literals = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const quote = source[index];
+    if (quote === "'" || quote === '"' || quote === "`") {
+      const literal = readJavaScriptLiteral(source, index);
+      if (!literal) return null;
+      index = literal.end - 1;
+      continue;
+    }
+    if (source.startsWith("//", index)) {
+      const lineEnd = source.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? source.length : lineEnd;
+      continue;
+    }
+    if (source.startsWith("/*", index)) {
+      const commentEnd = source.indexOf("*/", index + 2);
+      if (commentEnd === -1) return null;
+      index = commentEnd + 1;
+      continue;
+    }
+    if (!source.startsWith("import", index)) continue;
+
+    const previous = source[index - 1];
+    if (/[A-Za-z0-9_$]/.test(previous ?? "") && source.slice(index - 5, index) !== "await") {
+      continue;
+    }
+    const afterImport = skipJavaScriptTrivia(source, index + "import".length);
+    let literalStart = null;
+    if (source[afterImport] === "(") {
+      const argumentStart = skipJavaScriptTrivia(source, afterImport + 1);
+      if (
+        source[argumentStart] === "'" ||
+        source[argumentStart] === '"' ||
+        source[argumentStart] === "`"
+      ) {
+        literalStart = argumentStart;
+      }
+    } else if (source[afterImport] === "'" || source[afterImport] === '"') {
+      literalStart = afterImport;
+    } else if (source[afterImport] === "{" || source[afterImport] === "*") {
+      for (let cursor = afterImport; cursor < source.length; cursor += 1) {
+        if (source[cursor] === "'" || source[cursor] === '"' || source[cursor] === "`") {
+          const literal = readJavaScriptLiteral(source, cursor);
+          if (!literal) return null;
+          cursor = literal.end - 1;
+          continue;
+        }
+        if (
+          source.startsWith("from", cursor) &&
+          !/[A-Za-z0-9_$]/.test(source[cursor - 1] ?? "") &&
+          !/[A-Za-z0-9_$]/.test(source[cursor + "from".length] ?? "")
+        ) {
+          const candidateStart = skipJavaScriptTrivia(source, cursor + "from".length);
+          if (source[candidateStart] === "'" || source[candidateStart] === '"') {
+            literalStart = candidateStart;
+          }
+          break;
+        }
+        if (source[cursor] === ";") break;
+      }
+    }
+    if (literalStart === null) continue;
+    const literal = readJavaScriptLiteral(source, literalStart);
+    if (!literal) return null;
+    literals.push(literal);
+    index = literal.end - 1;
+  }
+  return literals;
+}
+
 function canonicalHostInitializationSource(source: string) {
-  if (typeof source !== "string" || /(?:^|[^\\])\/(?:\/|\*)/.test(source)) return null;
+  if (typeof source !== "string") return null;
   const expectedRemoteName = federationConfig.name;
   const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const expectedSharedImport = new RegExp(
-    `_virtual_mf-localSharedImportMap___mfe_internal__${escapedRemoteName}__mf_owner__1-[A-Za-z0-9_-]{8}\\.js`,
+  const preloadImport = /^\.\/vite-preload-helper-([A-Za-z0-9_-]{8})\.js$/;
+  const sharedImport = new RegExp(
+    `^\\./_virtual_mf-localSharedImportMap___mfe_internal__(${escapedRemoteName})__mf_owner__1-([A-Za-z0-9_-]{8})\\.js$`,
   );
-  if (!expectedSharedImport.test(source)) return null;
-  return source
-    .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
-    .replace(
-      /_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-[A-Za-z0-9_-]{8}\.js/g,
-      "_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
-    )
-    .replaceAll(expectedRemoteName, "<remote>")
-    .replace(/\s+/g, "");
+  const edits = [];
+  let preloadCount = 0;
+  let sharedCount = 0;
+  for (const literal of generatedImportLiterals(source) ?? []) {
+    const preloadMatch = preloadImport.exec(literal.value);
+    if (preloadMatch) {
+      preloadCount += 1;
+      edits.push({
+        end: literal.contentStart + preloadMatch[1].length + "./vite-preload-helper-".length,
+        replacement: "<hash>",
+        start: literal.contentStart + "./vite-preload-helper-".length,
+      });
+      continue;
+    }
+    const sharedMatch = sharedImport.exec(literal.value);
+    if (sharedMatch) {
+      sharedCount += 1;
+      const prefixLength = "./_virtual_mf-localSharedImportMap___mfe_internal__".length;
+      const remoteStart = literal.contentStart + prefixLength;
+      const hashStart = remoteStart + expectedRemoteName.length + "__mf_owner__1-".length;
+      edits.push(
+        {
+          end: remoteStart + expectedRemoteName.length,
+          replacement: "<remote>",
+          start: remoteStart,
+        },
+        {
+          end: hashStart + sharedMatch[2].length,
+          replacement: "<hash>",
+          start: hashStart,
+        },
+      );
+    }
+  }
+  if (preloadCount !== 1 || sharedCount !== 1) return null;
+  return edits
+    .sort((left, right) => right.start - left.start)
+    .reduce(
+      (canonical, edit) =>
+        `${canonical.slice(0, edit.start)}${edit.replacement}${canonical.slice(edit.end)}`,
+      source,
+    );
 }
 
 function hasHostInitializationShape(fileName: string, item: ReleaseBundleItem) {
@@ -214,7 +358,7 @@ function isAuthoritativeHostInitializationChunk(
 ): item is ReleaseBundleItem & { code: string } {
   if (!hasHostInitializationShape(fileName, item)) return false;
   if (typeof item.code !== "string") return false;
-  if (item.name !== "hostInit" || !exactHostInitializationFacadeIds.has(item.facadeModuleId ?? "")) {
+  if (item.name !== "hostInit" || item.facadeModuleId !== exactHostInitializationFacadeId) {
     return false;
   }
   const canonical = canonicalHostInitializationSource(item.code);

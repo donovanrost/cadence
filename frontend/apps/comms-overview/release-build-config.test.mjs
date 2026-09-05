@@ -70,25 +70,68 @@ function releaseArguments(output) {
   ];
 }
 
+function replaceOnce(source, from, replacement) {
+  const index = source.indexOf(from);
+  assert.notEqual(index, -1, `fixture does not contain ${JSON.stringify(from)}`);
+  return `${source.slice(0, index)}${replacement}${source.slice(index + from.length)}`;
+}
+
 const exactHostInitializationFacadeId =
   "\0virtual:mf:__mfe_internal__cadence_comms_overview__mf_owner__1__H_A_I__hostAutoInit__H_A_I__.js";
 const generatedHostInitializationDigest =
   "e25074ccfca4c766e209adf9e7529680fcca051c844fa5d6d6c1a8e139601068";
-const hostInitializationHash = "ZYXWVUTS";
+const generatedHostInitializationCanonicalSource = Buffer.from(
+  "aW1wb3J0e3Rhc2V9ZnJvbSIuL3ZpdGUtcHJlbG9hZC1oZWxwZXItPGhhc2g+LmpzIjt2YXJ0PWBfX21mX21vZHVsZV9jYWNoZV9fYDtnbG9iYWxUaGlzW3Rd\n" +
+    "fHw9e3NoYXJlOnt9LHJlbW90ZTp7fX0sZ2xvYmFsVGhpc1t0XS5zaGFyZXx8PXt9LGdsb2JhbFRoaXNbdF0ucmVtb3RlfHw9e307dmFybj1nbG9iYWxUaGlz\n" +
+    "W3RdO2ZvcihsZXRlb2ZPYmplY3Qua2V5cyhuLnNoYXJlKSlpZihlLnN0YXJ0c1dpdGgoYGRlZmF1bHQ6YCkpe2xldHQ9ZS5zbGljZSg4KTtuLnNoYXJlW3Rd\n" +
+    "PT09dm9pZDAmJihuLnNoYXJlW3RdPW4uc2hhcmVbZV0pfWVsc2VpZighZS5pbmNsdWRlcyhgOmApKXtsZXR0PWBkZWZhdWx0OmArZTtuLnNoYXJlW3RdPT09\n" +
+    "dm9pZDAmJihuLnNoYXJlW3RdPW4uc2hhcmVbZV0pfXZhcnI7YXN5bmNmdW5jdGlvbmkoKXtyZXR1cm5yfHw9KGFzeW5jKCk9PntsZXR0PShlLHQsbixyKT0+\n" +
+    "e2xldGk9KEFycmF5LmlzQXJyYXkocik/clswXTpyKXx8YGRlZmF1bHRgLGE9dHx8IW4/ZTplK2BAYCtuLG89e2Nhbm9uaWNhbDppK2A6YCthfTtyZXR1cm5p\n" +
+    "PT09ImRlZmF1bHQiJiYoby5hbGlhc2VzPVthXSksb30scj0oZSx0KT0+e2xldG49ZVt0LmNhbm9uaWNhbF07aWYobiE9PXZvaWQwKXJldHVybm47bGV0cj10\n" +
+    "LmFsaWFzZXN8fFtdO2ZvcihsZXRub2ZyKXtpZighT2JqZWN0LnByb3RvdHlwZS5oYXNPd25Qcm9wZXJ0eS5jYWxsKGUsbikpY29udGludWU7bGV0cj1lW25d\n" +
+    "O2lmKHIhPT12b2lkMClyZXR1cm5lW3QuY2Fub25pY2FsXT1yLHJ9fSxpPVN5bWJvbC5mb3IoYG1vZHVsZS1mZWRlcmF0aW9uLnNoYXJlZC1jYWNoZS1saXN0\n" +
+    "ZW5lcnNgKSxhPVN5bWJvbC5mb3IoYG1vZHVsZS1mZWRlcmF0aW9uLnNoYXJlZC1jYWNoZS1vd25lcnNgKSxvPWU9PntsZXR0PWVbYV07cmV0dXJudD09PXZv\n" +
+    "aWQwJiYodD1PYmplY3QuY3JlYXRlKG51bGwpLE9iamVjdC5kZWZpbmVQcm9wZXJ0eShlLGEse3ZhbHVlOnQsZW51bWVyYWJsZTohMSxjb25maWd1cmFibGU6\n" +
+    "ITEsd3JpdGFibGU6ITF9KSksdH0scz0oZSx0KT0+e3Zhcm47cmV0dXJuKG49ZVthXSk9PW51bGw/dm9pZDA6blt0LmNhbm9uaWNhbF19LGM9KGUsdCxuLHIp\n" +
+    "PT57dmFycztlW3QuY2Fub25pY2FsXT1uO2xldGM9dC5hbGlhc2VzfHxbXTtmb3IobGV0dG9mYylPYmplY3QuZGVmaW5lUHJvcGVydHkoZSx0LHt2YWx1ZTpu\n" +
+    "LGVudW1lcmFibGU6ITAsY29uZmlndXJhYmxlOiEwLHdyaXRhYmxlOiEwfSk7bGV0bD1lW2FdO3I9PT12b2lkMD9sJiZkZWxldGVsW3QuY2Fub25pY2FsXTpv\n" +
+    "KGUpW3QuY2Fub25pY2FsXT1yO2xldHU9KHM9ZVtpXSk9PW51bGw/dm9pZDA6c1t0LmNhbm9uaWNhbF07aWYodSlmb3IobGV0ZW9mdSllKG4pO3JldHVybm59\n" +
+    "LGw9YXdhaXQoYXdhaXRlKCgpPT5pbXBvcnQoYC4uL3JlbW90ZUVudHJ5LmpzYCksX19WSVRFX1BSRUxPQURfXyxpbXBvcnQubWV0YS51cmwpKS5pbml0KCks\n" +
+    "e3VzZWRTaGFyZWQ6dX09YXdhaXRlKGFzeW5jKCk9PntsZXR7dXNlZFNoYXJlZDplfT1hd2FpdGltcG9ydChgLi9fdmlydHVhbF9tZi1sb2NhbFNoYXJlZElt\n" +
+    "cG9ydE1hcF9fX21mZV9pbnRlcm5hbF9fPHJlbW90ZT5fX21mX293bmVyX18xLTxoYXNoPi5qc2ApO3JldHVybnt1c2VkU2hhcmVkOmV9fSxfX1ZJVEVfUFJF\n" +
+    "TE9BRF9fLGltcG9ydC5tZXRhLnVybCksZD1lPT57bGV0dD1lO2ZvcihsZXRlPTA7ZTw1O2UrKyl7bGV0ZT10PT1udWxsP3ZvaWQwOnQuZGVmYXVsdDtpZigh\n" +
+    "ZXx8dHlwZW9mZSE9YG9iamVjdGB8fE9iamVjdC5rZXlzKGUpLmxlbmd0aD09PTApYnJlYWs7bGV0bj1PYmplY3Qua2V5cyh0KS5maWx0ZXIoZT0+ZSE9PSJk\n" +
+    "ZWZhdWx0IikubWFwKGU9PnRbZV0pO2lmKG4ubGVuZ3RoPjAmJm4uc29tZShlPT5lIT09dm9pZDApKWJyZWFrO3Q9ZX1yZXR1cm50fTtmb3IobGV0ZW9mW2B2\n" +
+    "dWVgXSl7dmFyZjtsZXRpPXVbZV07aWYoIWl8fGkubWF0ZXJpYWxpemU9PT0hMXx8aS50cmVlU2hha2luZyljb250aW51ZTtsZXRhPXQoZSwoZj1pLnNoYXJl\n" +
+    "Q29uZmlnKT09bnVsbD92b2lkMDpmLnNpbmdsZXRvbixpLnZlcnNpb24saS5zY29wZSk7KHIobi5zaGFyZSxhKT09PXZvaWQwfHxzKG4uc2hhcmUsYSk9PT12\n" +
+    "b2lkMCkmJmF3YWl0bC5sb2FkU2hhcmUoZSx7Y3VzdG9tU2hhcmVJbmZvOntzaGFyZUNvbmZpZzppLnNoYXJlQ29uZmlnfX0pLnRoZW4oYXN5bmNlPT57bGV0\n" +
+    "dD10eXBlb2ZlPT1gZnVuY3Rpb25gP2UoKTplLHI9ZChhd2FpdFByb21pc2UucmVzb2x2ZSh0KSk7YyhuLnNoYXJlLGEscixgPHJlbW90ZT5gKX0pfXJldHVy\n" +
+    "bmx9KSgpLHJ9cj1pKCk7ZXhwb3J0e3Jhc2hvc3RJbml0UHJvbWlzZSxpYXNpbml0SG9zdH07",
+  "base64",
+).toString("utf8");
+const preloadHelperHash = "B7qeedMF";
+const sharedImportHash = "DaZluorV";
+const hostInitializationHash = "CVVfVIas";
 const hostInitializationPath = `assets/hostInit-${hostInitializationHash}.js`;
-const hostInitializationSource = [
-  `import"./vite-preload-helper-${hostInitializationHash}.js";`,
-  `import"./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-${hostInitializationHash}.js";`,
-  "var t=`__mf_module_cache__`;function loadShare(){}export{t as hostInitPromise,loadShare as initHost};",
-].join("");
-const canonicalHostInitializationSource = hostInitializationSource
-  .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
+const hostInitializationSource = generatedHostInitializationCanonicalSource
   .replace(
-    /_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-[A-Za-z0-9_-]{8}\.js/g,
-    "_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
+    "./vite-preload-helper-<hash>.js",
+    `./vite-preload-helper-${preloadHelperHash}.js`,
   )
-  .replaceAll("cadence_comms_overview", "<remote>")
-  .replace(/\s+/g, "");
+  .replace(
+    "./_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
+    `./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-${sharedImportHash}.js`,
+  );
+const canonicalHostInitializationSource = generatedHostInitializationCanonicalSource;
+
+void test("pins the evidence-derived canonical host-init source to its real digest", () => {
+  assert.equal(
+    nodeCreateHash("sha256")
+      .update(canonicalHostInitializationSource, "utf8")
+      .digest("hex"),
+    generatedHostInitializationDigest,
+  );
+});
 
 let releaseOutputPluginPromise;
 
@@ -109,23 +152,7 @@ async function releaseOutputPlugin() {
       TextEncoder,
       Uint8Array,
       basename,
-      createHash(algorithm) {
-        const hash = nodeCreateHash(algorithm);
-        let input;
-        return {
-          update(value, encoding) {
-            input = value;
-            hash.update(value, encoding);
-            return this;
-          },
-          digest(encoding) {
-            if (encoding === "hex" && input === canonicalHostInitializationSource) {
-              return generatedHostInitializationDigest;
-            }
-            return hash.digest(encoding);
-          },
-        };
-      },
+      createHash: nodeCreateHash,
       federationConfig: { name: "cadence_comms_overview" },
       posix,
     };
@@ -272,15 +299,17 @@ void test("keeps release host-init cleanup exact and provenance-bound", async ()
   assert.match(source, /one matching stats record/);
   assert.match(source, /record\.size/);
   assert.match(source, /authoritative federation stats provenance/);
-  assert.match(source, /exactHostInitializationFacadeIds\.has/);
+  assert.match(source, /item\.facadeModuleId !== exactHostInitializationFacadeId/);
   assert.match(source, /item\.name !== "hostInit"/);
   assert.match(source, /authoritativeHostInitialization\.length === 0/);
   assert.match(source, /authoritativeHostInitialization\.length > 1/);
   assert.match(source, /structuralHostInitializationLookalikes\.length !== 1/);
   assert.match(source, /generatedHostInitializationSourceDigests\.has/);
-  assert.match(source, /replace\(\/vite-preload-helper-/);
+  assert.match(source, /preloadImport/);
+  assert.match(source, /sharedImport/);
+  assert.match(source, /generatedImportLiterals/);
   assert.match(source, /_virtual_mf-localSharedImportMap___mfe_internal__/);
-  assert.match(source, /replaceAll\(expectedRemoteName/);
+  assert.doesNotMatch(source, /replaceAll\(expectedRemoteName/);
   assert.match(source, /delete bundle\[fileName\]/);
   assert.match(source, /output\.fileName !== fileName/);
   assert.doesNotMatch(source, /facadeModuleId === undefined/);
@@ -293,7 +322,7 @@ void test("covers host-init cleanup adversarial authority cases", async () => {
   const source = await readFile(resolve(appRoot, "vite.config.ts"), "utf8");
   const cases = [
     ["same-shape user chunk", /structuralHostInitializationLookalikes\.length !== 1/],
-    ["omitted or forged facade", /exactHostInitializationFacadeIds\.has/],
+    ["omitted or forged facade", /item\.facadeModuleId !== exactHostInitializationFacadeId/],
     ["multiple authoritative candidates", /authoritativeHostInitialization\.length > 1/],
     ["semantic source mutation", /generatedHostInitializationSourceDigests\.has/],
     ["legitimate generated output", /delete bundle\[fileName\][\s\S]*output\.fileName !== fileName/],
@@ -340,6 +369,14 @@ void test("rejects omitted or forged host-init facade identity", async () => {
       ),
     /one authoritative host initialization chunk/,
   );
+  assert.throws(
+    () =>
+      plugin.generateBundle(
+        {},
+        hostInitializationBundle({ facadeModuleId: exactHostInitializationFacadeId.slice(1) }),
+      ),
+    /one authoritative host initialization chunk/,
+  );
 });
 
 void test("rejects multiple authoritative host-init candidates", async () => {
@@ -365,25 +402,52 @@ void test("rejects multiple authoritative host-init candidates", async () => {
   );
 });
 
-void test("rejects semantic mutation of the generated host-init source", async () => {
+void test("rejects semantic whitespace mutations in string and template literals", async () => {
   const plugin = await releaseOutputPlugin();
+  const stringLiteral = String.raw`\"default\"`;
+  const mutations = [
+    [
+      "template literal",
+      replaceOnce(hostInitializationSource, "`__mf_module_cache__`", "`__mf_module_cache__ `"),
+    ],
+    [
+      "string literal",
+      replaceOnce(hostInitializationSource, stringLiteral, String.raw`\" default\"`),
+    ],
+  ];
+  for (const [mutation, source] of mutations) {
+    const bundle = hostInitializationBundle({ source });
+    assert.throws(
+      () => plugin.generateBundle({}, bundle),
+      /one authoritative host initialization chunk/,
+      mutation,
+    );
+    assert.equal(Object.hasOwn(bundle, hostInitializationPath), true, `${mutation} was removed`);
+  }
+});
+
+void test("rejects a remote-name substitution in a non-import template literal", async () => {
+  const plugin = await releaseOutputPlugin();
+  const bundle = hostInitializationBundle({
+    source: replaceOnce(hostInitializationSource, "`<remote>`", "`cadence_comms_overview`"),
+  });
   assert.throws(
-    () =>
-      plugin.generateBundle(
-        {},
-        hostInitializationBundle({ source: `${hostInitializationSource}globalThis.mutated=true;` }),
-      ),
+    () => plugin.generateBundle({}, bundle),
     /one authoritative host initialization chunk/,
   );
+  assert.equal(Object.hasOwn(bundle, hostInitializationPath), true);
 });
 
 void test("removes only the exact legitimate generated host-init entry", async () => {
   const plugin = await releaseOutputPlugin();
+  assert.equal(plugin.name, "cadence-comms-overview-release-output");
+  assert.equal(typeof plugin.generateBundle, "function");
   const bundle = hostInitializationBundle();
   assert.doesNotThrow(() => plugin.generateBundle({}, bundle));
   assert.equal(Object.hasOwn(bundle, hostInitializationPath), false);
   assert.equal(Object.hasOwn(bundle, "remoteEntry.js"), true);
   const stats = JSON.parse(bundle["mf-stats.json"].source);
+  assert.equal(stats.buildOutput.length, 1);
   assert.equal(
     stats.buildOutput.some((output) => output.fileName === hostInitializationPath),
     false,
