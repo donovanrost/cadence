@@ -5,6 +5,17 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
   alias CadenceWeb.ApplicationContributions.OrganizationAdmin
 
+  @provider_ledger [
+    Cadence.Applications.Comms,
+    Cadence.Applications.Spacecraft,
+    Cadence.Applications.MissionCatalog,
+    Cadence.Applications.TelemetryDecom,
+    Cadence.Applications.DerivedTelemetry,
+    Cadence.Applications.Limits,
+    Cadence.Applications.OpsConsole,
+    OrganizationAdmin
+  ]
+
   @canonical_keys ~w(
     organization_admin
     mission_catalog
@@ -45,8 +56,12 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
 
   test "composes the exact core and optional web query contribution ledger" do
     contributions = SurfaceProviderRegistry.contributions()
+    provider_ledger = Enum.flat_map(@provider_ledger, & &1.surface_query_contributions())
 
-    assert length(contributions) == 89
+    assert length(contributions) == length(provider_ledger)
+
+    assert Enum.sort(Enum.map(contributions, &contribution_identity/1)) ==
+             Enum.sort(Enum.map(provider_ledger, &contribution_identity/1))
 
     assert contributions
            |> Enum.frequencies_by(& &1.application_key) == %{
@@ -56,10 +71,20 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
              "telemetry_decom" => 1,
              "derived_telemetry" => 1,
              "limits" => 2,
-             "ops_console" => 36,
+             "ops_console" => 35,
              "organization_admin" => 12
            }
 
     assert Enum.count(contributions, &(&1.application_key == "organization_admin")) == 12
+  end
+
+  defp contribution_identity(contribution) do
+    {
+      contribution.application_key,
+      contribution.application_version,
+      contribution.query_id,
+      contribution.query_version,
+      contribution.provider
+    }
   end
 end
