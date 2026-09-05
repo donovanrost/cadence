@@ -1269,11 +1269,13 @@ function strictHttpsUrl(value: unknown, path: string): VerificationResult<Strict
 }
 
 function parseNow(value: string | Date | undefined): VerificationResult<number> {
-  if (value === undefined) return { ok: true, value: Date.now() };
-  if (value instanceof Date)
-    return Number.isFinite(value.getTime())
-      ? { ok: true, value: value.getTime() }
+  if (value === undefined) return fail("invalid_timestamp", "$.now");
+  if (value instanceof Date) {
+    const milliseconds = value.getTime();
+    return Number.isFinite(milliseconds) && milliseconds >= 0
+      ? { ok: true, value: milliseconds }
       : fail("invalid_timestamp", "$.now");
+  }
   return parseTimestamp(value, "$.now");
 }
 

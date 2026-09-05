@@ -1697,11 +1697,22 @@ defmodule CadenceWeb.FrontendReleaseCatalog do
     do: if(byte_size(value) == size, do: :ok, else: {:error, error(:invalid_value, path)})
 
   defp verification_time(opts) do
-    case Keyword.get(opts, :now, System.system_time(:millisecond)) do
-      value when is_integer(value) and value >= 0 -> {:ok, value}
-      %DateTime{} = value -> {:ok, DateTime.to_unix(value, :millisecond)}
-      value when is_binary(value) -> parse_timestamp(value, "$.now")
-      _ -> {:error, error(:invalid_timestamp, "$.now")}
+    case Keyword.fetch(opts, :now) do
+      {:ok, value} when is_integer(value) and value >= 0 ->
+        {:ok, value}
+
+      {:ok, %DateTime{} = value} ->
+        milliseconds = DateTime.to_unix(value, :millisecond)
+
+        if milliseconds >= 0,
+          do: {:ok, milliseconds},
+          else: {:error, error(:invalid_timestamp, "$.now")}
+
+      {:ok, value} when is_binary(value) ->
+        parse_timestamp(value, "$.now")
+
+      _missing_or_invalid ->
+        {:error, error(:invalid_timestamp, "$.now")}
     end
   end
 

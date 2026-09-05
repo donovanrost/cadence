@@ -6,7 +6,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   alias CadenceWeb.FrontendReleaseCatalog
 
   @publication_config_key {CadenceWeb.FrontendReleasePublication, :publication_config}
-  @snapshot_clock_key {__MODULE__, :snapshot_clock}
+  @canonical_timestamp ~r/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
 
   @type federation :: :module_federation | :native_federation
 
@@ -34,9 +34,15 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
   def snapshot(opts \\ [])
 
   def snapshot(opts) when is_list(opts) do
-    with {:ok, now_ms} <- snapshot_now(Keyword.get_lazy(opts, :now, &snapshot_clock/0)),
+    with true <- Keyword.keyword?(opts),
+         {:ok, now} <- Keyword.fetch(opts, :now),
+         {:ok, now_ms} <- normalize_now(now),
          {:ok, rows} <- read_catalog_rows() do
       build_snapshot(rows, now_ms)
+    else
+      :error -> {:error, {:integrity_failure, :invalid_snapshot_clock}}
+      false -> {:error, {:integrity_failure, :invalid_snapshot_options}}
+      {:error, reason} -> {:error, reason}
     end
   rescue
     error in [DBConnection.ConnectionError, Postgrex.Error] ->
@@ -48,24 +54,53 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   def snapshot(_opts), do: {:error, {:integrity_failure, :invalid_snapshot_options}}
 
-  @doc "Returns the process-scoped key used to override the registry snapshot clock in tests."
-  @spec snapshot_clock_key() :: {module(), atom()}
-  def snapshot_clock_key, do: @snapshot_clock_key
+  @doc "Validates an explicit registry clock without sampling an ambient clock."
+  @spec normalize_now(term()) :: {:ok, non_neg_integer()} | {:error, error_reason()}
+  def normalize_now(value) when is_integer(value) and value >= 0 do
+    if valid_epoch_milliseconds?(value),
+      do: {:ok, value},
+      else: invalid_snapshot_clock()
+  end
 
-  @spec all() :: [{key(), release()}] | {:error, error_reason()}
-  def all do
-    case snapshot() do
-      {:ok, %{entries: entries}} -> entries
-      {:error, reason} -> {:error, reason}
+  def normalize_now(%DateTime{} = value) do
+    milliseconds = DateTime.to_unix(value, :millisecond)
+
+    if valid_epoch_milliseconds?(milliseconds),
+      do: {:ok, milliseconds},
+      else: invalid_snapshot_clock()
+  rescue
+    ArgumentError -> invalid_snapshot_clock()
+  end
+
+  def normalize_now(value) when is_binary(value) do
+    case canonical_timestamp_milliseconds(value) do
+      {:ok, milliseconds} -> {:ok, milliseconds}
+      :error -> invalid_snapshot_clock()
     end
   end
 
-  @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
+  def normalize_now(_value), do: invalid_snapshot_clock()
+
+  @spec all(keyword()) :: [{key(), release()}] | {:error, error_reason()}
+  def all(opts \\ []) do
+    if is_list(opts) do
+      case snapshot(opts) do
+        {:ok, %{entries: entries}} -> entries
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, {:integrity_failure, :invalid_snapshot_options}}
+    end
+  end
+
+  @spec fetch(binary(), pos_integer(), binary(), pos_integer(), keyword()) ::
           {:ok, release()} | {:error, :unknown_application_release | error_reason()}
-  def fetch(application_key, application_version, surface_id, surface_version)
+  def fetch(application_key, application_version, surface_id, surface_version, opts \\ [])
+
+  def fetch(application_key, application_version, surface_id, surface_version, opts)
       when is_binary(application_key) and is_integer(application_version) and
-             is_binary(surface_id) and is_integer(surface_version) do
-    case snapshot() do
+             is_binary(surface_id) and is_integer(surface_version) and is_list(opts) do
+    case snapshot(opts) do
       {:ok, snapshot} ->
         fetch_from_snapshot(
           snapshot,
@@ -80,7 +115,12 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  def fetch(_application_key, _application_version, _surface_id, _surface_version),
+  def fetch(application_key, application_version, surface_id, surface_version, _opts)
+      when is_binary(application_key) and is_integer(application_version) and
+             is_binary(surface_id) and is_integer(surface_version),
+      do: {:error, {:integrity_failure, :invalid_snapshot_options}}
+
+  def fetch(_application_key, _application_version, _surface_id, _surface_version, _opts),
     do: {:error, :unknown_application_release}
 
   @spec fetch_from_snapshot(snapshot(), binary(), pos_integer(), binary(), pos_integer()) ::
@@ -765,21 +805,26 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     end
   end
 
-  defp snapshot_now(value) when is_integer(value), do: {:ok, value}
-
-  defp snapshot_now(%DateTime{} = value), do: {:ok, DateTime.to_unix(value, :millisecond)}
-
-  defp snapshot_now(value) when is_binary(value) do
-    case timestamp_milliseconds(value) do
-      {:ok, milliseconds} -> {:ok, milliseconds}
-      :error -> {:error, {:integrity_failure, :invalid_snapshot_clock}}
+  defp valid_epoch_milliseconds?(milliseconds) when is_integer(milliseconds) do
+    case DateTime.from_unix(milliseconds, :millisecond) do
+      {:ok, %DateTime{year: year}} -> year >= 1970 and year <= 9999
+      _ -> false
     end
   end
 
-  defp snapshot_now(_value), do: {:error, {:integrity_failure, :invalid_snapshot_clock}}
+  defp invalid_snapshot_clock,
+    do: {:error, {:integrity_failure, :invalid_snapshot_clock}}
 
-  defp snapshot_clock do
-    Process.get(@snapshot_clock_key, System.system_time(:millisecond))
+  defp canonical_timestamp_milliseconds(value) do
+    with true <- byte_size(value) <= 512,
+         true <- String.valid?(value),
+         true <- Regex.match?(@canonical_timestamp, value),
+         {:ok, datetime, 0} <- DateTime.from_iso8601(value),
+         true <- datetime.year >= 1970 and datetime.year <= 9999 do
+      {:ok, DateTime.to_unix(datetime, :millisecond)}
+    else
+      _ -> :error
+    end
   end
 
   defp timestamp_milliseconds(value) when is_binary(value) do

@@ -776,7 +776,6 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   const webSocketFailures = [];
   const servedFromCacheRequestIds = new Set();
   const expectedFailureRegistrations = [];
-  const pendingNetworkLogs = [];
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
@@ -798,6 +797,19 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (!record.statusDisagreement || record.statusDisagreementReported || record.method === "?") return;
     record.statusDisagreementReported = true;
     requestFailures.push(`${record.method} ${record.url || record.requestId}: ${record.statusDisagreement}`);
+  };
+  const replayInvalidatedAllowance = (allowance) => {
+    if (allowance.replayed) return;
+    allowance.replayed = true;
+    for (const entry of allowance.consumedEntries || []) logError(entry);
+    for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
+  };
+  const invalidateExpectedFailure = (record, reason) => {
+    const allowance = record?.expectedFailureAllowance;
+    if (!allowance || allowance.revoked) return;
+    allowance.revoked = true;
+    allowance.invalidatedBy = reason;
+    replayInvalidatedAllowance(allowance);
   };
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
@@ -823,32 +835,48 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     reportStatusDisagreement(record);
   };
-  const invalidateExpectedFailure = (record, reason) => {
-    const allowance = record?.expectedFailureAllowance;
-    if (!allowance || allowance.revoked) return;
-    allowance.revoked = true;
-    allowance.invalidatedBy = reason;
-    for (const entry of allowance.consumedEntries || []) logError(entry);
-    for (const failure of allowance.suppressedFailures || []) requestFailures.push(failure);
+  const matchesExpectedFailureRegistration = (record, registration) => {
+    if (
+      !record ||
+      !registration?.active ||
+      record.method === "?" ||
+      typeof record.url !== "string" ||
+      record.sequence <= registration.registeredAfterSequence ||
+      (registration.requestId && registration.requestId !== record.requestId) ||
+      (registration.pendingRequestId && registration.pendingRequestId !== record.requestId)
+    ) return false;
+    try {
+      return registration.predicate(record);
+    } catch {
+      return false;
+    }
+  };
+  const reserveExpectedFailureRegistration = (record) => {
+    const existing = record?.expectedFailureRegistration;
+    if (matchesExpectedFailureRegistration(record, existing)) return existing;
+    const registration = expectedFailureRegistrations.find((candidate) =>
+      matchesExpectedFailureRegistration(record, candidate),
+    );
+    if (!registration) return undefined;
+    registration.pendingRequestId = record.requestId;
+    record.expectedFailureRegistration = registration;
+    return registration;
   };
   const expectedFailureRegistrationFor = (record) => {
     const status = observedResponseStatus(record);
     if (!Number.isInteger(status)) return undefined;
-    return expectedFailureRegistrations.find((registration) => {
-      const allowance = record.expectedFailureAllowance;
-      if (
-        !registration.active ||
-        registration.expectedStatus !== status ||
-        record.sequence <= registration.registeredAfterSequence ||
-        (registration.requestId && registration.requestId !== record.requestId) ||
-        allowance?.revoked
-      ) return false;
-      try {
-        return registration.predicate(record);
-      } catch {
-        return false;
-      }
-    });
+    const reserved = record?.expectedFailureRegistration;
+    if (
+      reserved &&
+      reserved.expectedStatus === status &&
+      matchesExpectedFailureRegistration(record, reserved) &&
+      !record.expectedFailureAllowance?.revoked
+    ) return reserved;
+    return expectedFailureRegistrations.find((registration) =>
+      registration.expectedStatus === status &&
+      matchesExpectedFailureRegistration(record, registration) &&
+      !record.expectedFailureAllowance?.revoked,
+    );
   };
   const validExpectedFailureAllowance = (record) => {
     const allowance = record?.expectedFailureAllowance;
@@ -868,15 +896,20 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (existing) return Boolean(validExpectedFailureAllowance(record));
     const registration = expectedFailureRegistrationFor(record);
     if (!registration) return false;
+    const status = observedResponseStatus(record);
+    if (registration.expectedStatus !== status) return false;
     registration.requestId = record.requestId;
+    delete registration.pendingRequestId;
+    record.expectedFailureRegistration = registration;
     record.expectedFailureAllowance = {
       registration,
       requestId: record.requestId,
       url: record.url,
-      status: observedResponseStatus(record),
+      status,
       consumed: false,
       consumedEntries: [],
       suppressedFailures: [],
+      replayed: false,
     };
     return true;
   };
@@ -890,59 +923,93 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const match = /^Failed to load resource: the server responded with a status of ([1-5]\d{2}) \([^()\r\n]*\)$/.exec(entry.text);
     return match ? Number(match[1]) : undefined;
   };
-  const expectedFailureLogRecords = (entry, status, registrations) =>
-    [...requests.values()].filter((record) => {
-      const allowance = validExpectedFailureAllowance(record);
-      return (
-        allowance &&
-        allowance.registration.active &&
-        (!registrations || registrations.has(allowance.registration)) &&
-        !allowance.consumed &&
-        allowance.requestId === record.requestId &&
-        allowance.url === entry.url &&
-        record.url === entry.url &&
-        record.method !== "?" &&
-        observedResponseStatus(record) === status &&
-        typeof entry.networkRequestId === "string" &&
-        entry.networkRequestId.length > 0 &&
-        entry.networkRequestId === record.requestId
-      );
-    });
+  const hasNonemptyNetworkRequestId = (entry) =>
+    typeof entry?.networkRequestId === "string" && entry.networkRequestId.trim().length > 0;
   const consumeExpectedFailureLog = (entry, status, registrations) => {
-    const candidates = expectedFailureLogRecords(entry, status, registrations);
-    if (candidates.length !== 1) return false;
-    const allowance = candidates[0].expectedFailureAllowance;
+    if (!hasNonemptyNetworkRequestId(entry)) return false;
+    const record = requests.get(entry.networkRequestId);
+    const allowance = validExpectedFailureAllowance(record);
+    if (
+      !allowance ||
+      !allowance.registration.active ||
+      (registrations && !registrations.has(allowance.registration)) ||
+      allowance.consumed ||
+      allowance.requestId !== record.requestId ||
+      allowance.url !== entry.url ||
+      record.url !== entry.url ||
+      record.method === "?" ||
+      allowance.status !== status ||
+      observedResponseStatus(record) !== status
+    ) return false;
     allowance.consumed = true;
     allowance.consumedEntries.push(entry);
     return true;
   };
-  const knownResponseForLog = (entry, status) =>
-    [...requests.values()].some(
-      (record) =>
-        record.method !== "?" &&
-        record.url === entry.url &&
-        observedResponseStatus(record) === status,
-    );
+  const pendingExpectedFailureRegistrationFor = (record, status) => {
+    if (
+      !record ||
+      record.expectedFailureAllowance?.revoked ||
+      record.finished ||
+      record.failed ||
+      record.statusDisagreement ||
+      record.method === "?" ||
+      record.url === undefined
+    ) return undefined;
+    const registration = record.expectedFailureRegistration || reserveExpectedFailureRegistration(record);
+    if (
+      !registration ||
+      registration.expectedStatus !== status ||
+      !matchesExpectedFailureRegistration(record, registration)
+    ) return undefined;
+    const observedStatus = observedResponseStatus(record);
+    if (Number.isInteger(observedStatus) && observedStatus !== status) return undefined;
+    return registration;
+  };
+  const holdPendingExpectedFailureLog = (entry, status) => {
+    if (!hasNonemptyNetworkRequestId(entry)) return false;
+    const record = requests.get(entry.networkRequestId);
+    if (!record || record.pendingExpectedFailureLog) return false;
+    const registration = pendingExpectedFailureRegistrationFor(record, status);
+    if (!registration || record.url !== entry.url) return false;
+    registration.pendingRequestId = record.requestId;
+    record.pendingExpectedFailureLog = { entry, status, registration };
+    return true;
+  };
   const reconcilePendingNetworkLogs = () => {
-    const remaining = [];
-    for (const pending of pendingNetworkLogs) {
-      if (consumeExpectedFailureLog(pending.entry, pending.status, pending.registrations)) continue;
-      if (
-        disposed ||
-        ![...pending.registrations].some((registration) => registration.active) ||
-        knownResponseForLog(pending.entry, pending.status)
-      ) {
+    for (const record of requests.values()) {
+      const pending = record.pendingExpectedFailureLog;
+      if (!pending) continue;
+      const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
+      if (consumeExpectedFailureLog(pending.entry, pending.status, registrations)) {
+        delete record.pendingExpectedFailureLog;
+        continue;
+      }
+      const observedStatus = observedResponseStatus(record);
+      const canRemainPending =
+        !disposed &&
+        !record.finished &&
+        !record.failed &&
+        !record.statusDisagreement &&
+        pending.registration.active &&
+        registrations.has(pending.registration) &&
+        pending.registration.expectedStatus === pending.status &&
+        (!pending.registration.requestId || pending.registration.requestId === record.requestId) &&
+        (!Number.isInteger(observedStatus) || observedStatus === pending.status) &&
+        record.url === pending.entry.url &&
+        matchesExpectedFailureRegistration(record, pending.registration);
+      if (!canRemainPending) {
         logError(pending.entry);
-      } else {
-        remaining.push(pending);
+        delete record.pendingExpectedFailureLog;
       }
     }
-    pendingNetworkLogs.length = 0;
-    pendingNetworkLogs.push(...remaining);
   };
   const flushPendingNetworkLogs = () => {
-    for (const pending of pendingNetworkLogs) logError(pending.entry);
-    pendingNetworkLogs.length = 0;
+    for (const record of requests.values()) {
+      const pending = record.pendingExpectedFailureLog;
+      if (!pending) continue;
+      logError(pending.entry);
+      delete record.pendingExpectedFailureLog;
+    }
   };
   const beginRequestGeneration = (label = "request generation") => {
     const generation = {
@@ -1012,6 +1079,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       dataUrl: isDataUrl(request.url),
     };
     requests.set(requestId, record);
+    reserveExpectedFailureRegistration(record);
     markExpectedFailure(record);
     reportStatusDisagreement(record);
     reconcilePendingNetworkLogs();
@@ -1134,7 +1202,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 
   on("Network.loadingFinished", ({ requestId }) => {
     const record = requests.get(requestId);
-    if (record) record.finished = true;
+    if (record) {
+      record.finished = true;
+      reconcilePendingNetworkLogs();
+    }
   });
 
   on("Network.loadingFailed", ({ requestId, errorText, canceled, blockedReason }) => {
@@ -1158,7 +1229,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     } else if (expected) {
       allowance.suppressedFailures.push(failure);
     }
-    if (record) record.failed = detail;
+    if (record) {
+      record.failed = detail;
+      reconcilePendingNetworkLogs();
+    }
   });
 
   on("Network.webSocketCreated", ({ requestId, url }) => {
@@ -1264,13 +1338,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         return;
       }
       const registrations = new Set(expectedFailureRegistrations.filter((registration) => registration.active));
-      if (!registrations.size || !consumeExpectedFailureLog(entry, status, registrations)) {
-        if (!registrations.size || knownResponseForLog(entry, status)) {
-          logError(entry);
-        } else {
-          pendingNetworkLogs.push({ entry, status, registrations });
-        }
-      }
+      if (
+        registrations.size &&
+        (consumeExpectedFailureLog(entry, status, registrations) || holdPendingExpectedFailureLog(entry, status))
+      ) return;
+      logError(entry);
     }
   });
 
@@ -1323,6 +1395,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       return () => {
         if (!registration.active) return;
         registration.active = false;
+        delete registration.pendingRequestId;
         const index = expectedFailureRegistrations.indexOf(registration);
         if (index >= 0) expectedFailureRegistrations.splice(index, 1);
         reconcilePendingNetworkLogs();

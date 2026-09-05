@@ -3,6 +3,7 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
   use CadenceWeb, :controller
 
+  alias CadenceWeb.ApplicationReleaseRegistry
   alias CadenceWeb.FrontendReleaseActivation
   alias CadenceWeb.FrontendReleasePublication
   alias CadenceWeb.Plugs.FrontendReleasePublisher
@@ -13,15 +14,19 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
   @promotion_route "/api/cadence/frontend-release/v1/promotions"
   @max_publisher_identity_bytes 128
   @publication_config_key :frontend_release_publication_config
+  @authority_now_key :frontend_release_authority_now
 
   @spec create(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def create(conn, _params) do
+    authority_now = authority_now(conn)
+
     with :ok <- application_json?(conn),
+         {:ok, authority_now} <- authority_now,
          {:ok, body} <- FrontendReleaseRequestBody.raw_body(conn),
          {:ok, request} <- decode_request(body),
          {:ok, publisher_identity} <- publisher_identity(conn),
          {:ok, outcome, publication} <-
-           publish(request, publisher_identity, conn) do
+           publish(request, publisher_identity, conn, authority_now) do
       response(conn, outcome, publication)
     else
       {:error, :unsupported_media_type} ->
@@ -32,6 +37,9 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
       {:error, :malformed_body} ->
         error_response(conn, 400, "malformed_body")
+
+      {:error, :invalid_authority_now} ->
+        error_response(conn, 422, "admission_rejected")
 
       {:error, :admission_rejected} ->
         error_response(conn, 422, "admission_rejected")
@@ -49,14 +57,17 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
   @spec promote(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def promote(conn, _params) do
+    authority_now = authority_now(conn)
+
     if conn.request_path == @promotion_route do
       with :ok <- application_json?(conn),
+           {:ok, authority_now} <- authority_now,
            {:ok, body} <- FrontendReleaseRequestBody.raw_body(conn),
            {:ok, document} <- decode_promotion_request(body),
            {:ok, idempotency_key} <- idempotency_key(conn),
            {:ok, publisher_identity} <- publisher_identity(conn),
            {:ok, response} <-
-             activate_catalog(document, idempotency_key, publisher_identity, conn) do
+             activate_catalog(document, idempotency_key, publisher_identity, conn, authority_now) do
         send_exact_response(conn, response)
       else
         {:error, :unsupported_media_type} ->
@@ -67,6 +78,9 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
 
         {:error, :malformed_body} ->
           error_response(conn, 400, "malformed_body")
+
+        {:error, :invalid_authority_now} ->
+          error_response(conn, 422, "admission_rejected")
 
         {:error, :malformed_idempotency_key} ->
           error_response(conn, 400, "malformed_idempotency_key")
@@ -155,11 +169,12 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
     end
   end
 
-  defp activate_catalog(document, idempotency_key, publisher_identity, conn) do
+  defp activate_catalog(document, idempotency_key, publisher_identity, conn, authority_now) do
     opts =
       []
       |> maybe_put(:publisher_identity, publisher_identity)
       |> maybe_put(:publication_config, Map.get(conn.private, @publication_config_key))
+      |> Keyword.put(:now, authority_now)
 
     case FrontendReleaseActivation.activate_catalog(document, idempotency_key, opts) do
       {:ok, response} -> {:ok, response}
@@ -341,8 +356,14 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
     end
   end
 
-  defp publish(%{document: document, artifacts: artifacts}, publisher_identity, conn) do
+  defp publish(
+         %{document: document, artifacts: artifacts},
+         publisher_identity,
+         conn,
+         authority_now
+       ) do
     opts = if publisher_identity, do: [publisher_identity: publisher_identity], else: []
+    opts = Keyword.put(opts, :now, authority_now)
 
     opts =
       case Map.get(conn.private, @publication_config_key) do
@@ -359,6 +380,21 @@ defmodule CadenceWeb.FrontendReleasePublisherController do
       else
         reraise(error, __STACKTRACE__)
       end
+  end
+
+  defp authority_now(conn) do
+    candidate = Map.get_lazy(conn.private, @authority_now_key, &request_boundary_now/0)
+
+    case ApplicationReleaseRegistry.normalize_now(candidate) do
+      {:ok, _milliseconds} -> {:ok, candidate}
+      {:error, _reason} -> {:error, :invalid_authority_now}
+    end
+  end
+
+  defp request_boundary_now do
+    DateTime.utc_now()
+    |> DateTime.truncate(:millisecond)
+    |> DateTime.to_iso8601()
   end
 
   defp classify_publish_result({:ok, publication, outcome}),

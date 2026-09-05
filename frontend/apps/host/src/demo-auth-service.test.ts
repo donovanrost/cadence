@@ -77,4 +77,24 @@ describe("development administrator session boundary", () => {
     expect(signedOut?.headers?.["set-cookie"]).toContain("Max-Age=0");
     expect(current?.status).toBe(204);
   });
+
+  it("uses the injected clock for expiry without changing session identity", () => {
+    let now = Date.parse("2026-09-03T12:00:00.000Z");
+    const service = new DemoAuthService("development", credentials, () => now);
+    const created = service.handle({
+      method: "POST",
+      url: "/api/cadence/session",
+      body: { email: "admin@example.com", password: "change-me" },
+    });
+    const cookie = created?.headers?.["set-cookie"]?.split(";", 1)[0];
+
+    expect(created?.body).toMatchObject({
+      authority: { adminModeExpiresAt: "2026-09-03T13:00:00.000Z" },
+    });
+
+    now += credentials.ttlSeconds * 1_000;
+    expect(
+      service.handle({ method: "GET", url: "/api/cadence/session", headers: { cookie } }),
+    ).toMatchObject({ status: 204 });
+  });
 });

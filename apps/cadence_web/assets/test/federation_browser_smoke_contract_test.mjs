@@ -81,6 +81,10 @@ function emitActionExtraInfo(client, requestId, statusCode) {
   });
 }
 
+function emitActionLoadingFailed(client, requestId, errorText) {
+  client.emit("Network.loadingFailed", { requestId, errorText });
+}
+
 function assertDirty(diagnostics, label) {
   let failure;
   assert.throws(
@@ -527,6 +531,163 @@ test("a canonical network resource error without networkRequestId remains visibl
   });
 
   assert.match(assertDirty(diagnostics, "missing network request ID"), /Failed to load resource/);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("unmatched canonical logs are visible immediately without pending retention", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  for (let index = 0; index < 10_000; index += 1) {
+    emitCanonicalNetworkResourceError(client, url, `unmatched-${index}`);
+  }
+
+  assert.equal(diagnostics.logErrors.length, 10_000);
+  assert.equal(diagnostics.requests.size, 0);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("one exact active expected request holds at most one canonical log", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "held-403", url);
+  emitCanonicalNetworkResourceError(client, url, "held-403");
+  assert.equal(
+    diagnostics.requests.get("held-403").pendingExpectedFailureLog.entry.networkRequestId,
+    "held-403",
+  );
+  for (let index = 0; index < 9_999; index += 1) {
+    emitCanonicalNetworkResourceError(client, url, "held-403");
+  }
+  assert.equal(diagnostics.logErrors.length, 9_999);
+  assert.ok(diagnostics.requests.get("held-403").pendingExpectedFailureLog);
+
+  emitActionResponse(client, "held-403", url, 403);
+  client.emit("Network.loadingFinished", { requestId: "held-403" });
+  assert.equal(diagnostics.requests.get("held-403").pendingExpectedFailureLog, undefined);
+  assert.equal(diagnostics.logErrors.length, 9_999);
+  const failure = assertDirty(diagnostics, "duplicate held canonical logs");
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 9_999);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("a held canonical log surfaces when cleanup completes without a valid allowance", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "unfinished-403", url);
+  emitCanonicalNetworkResourceError(client, url, "unfinished-403");
+  assert.equal(diagnostics.logErrors.length, 0);
+  assert.ok(diagnostics.requests.get("unfinished-403").pendingExpectedFailureLog);
+  diagnostics.dispose();
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(diagnostics.requests.get("unfinished-403").pendingExpectedFailureLog, undefined);
+  removeAllowance();
+});
+
+test("a held canonical log surfaces when request completion precedes valid evidence", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "completed-without-status", url);
+  emitCanonicalNetworkResourceError(client, url, "completed-without-status");
+  client.emit("Network.loadingFinished", { requestId: "completed-without-status" });
+  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(diagnostics.requests.get("completed-without-status").pendingExpectedFailureLog, undefined);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("a consumed canonical log is restored exactly once after response status contradiction", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "response-contradiction", url);
+  emitActionResponse(client, "response-contradiction", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "response-contradiction");
+  client.emit("Network.loadingFinished", { requestId: "response-contradiction" });
+  emitActionExtraInfo(client, "response-contradiction", 500);
+
+  const first = assertDirty(diagnostics, "response status contradiction");
+  assert.equal((first.match(/Failed to load resource/g) || []).length, 1);
+  emitActionExtraInfo(client, "response-contradiction", 501);
+  removeAllowance();
+  removeAllowance();
+  const second = assertDirty(diagnostics, "repeated response status contradiction");
+  assert.equal((second.match(/Failed to load resource/g) || []).length, 1);
+  diagnostics.dispose();
+});
+
+test("a consumed canonical log is restored exactly once after ExtraInfo status contradiction", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "extra-info-contradiction", url);
+  emitActionExtraInfo(client, "extra-info-contradiction", 403);
+  emitCanonicalNetworkResourceError(client, url, "extra-info-contradiction");
+  emitActionResponse(client, "extra-info-contradiction", url, 500);
+  client.emit("Network.loadingFinished", { requestId: "extra-info-contradiction" });
+
+  const failure = assertDirty(diagnostics, "ExtraInfo status contradiction");
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  removeAllowance();
+  diagnostics.dispose();
+});
+
+test("contradiction after a consumed canonical log and loadingFailed restores both diagnostics", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
+  const removeAllowance = diagnostics.allowExpectedFailure(
+    (candidate) => candidate.method === "POST" && candidate.url === url,
+    { status: 403 },
+  );
+
+  emitExpectedActionRequest(client, "loading-failed-contradiction", url);
+  emitActionResponse(client, "loading-failed-contradiction", url, 403);
+  emitCanonicalNetworkResourceError(client, url, "loading-failed-contradiction");
+  emitActionLoadingFailed(client, "loading-failed-contradiction", "net::ERR_FAILED_BEFORE_DRIFT");
+  assert.equal(diagnostics.logErrors.length, 0);
+  assert.equal(diagnostics.requestFailures.length, 0);
+  emitActionExtraInfo(client, "loading-failed-contradiction", 500);
+
+  const failure = assertDirty(diagnostics, "canonical and loadingFailed contradiction");
+  assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
+  assert.equal((failure.match(/ERR_FAILED_BEFORE_DRIFT/g) || []).length, 1);
   removeAllowance();
   diagnostics.dispose();
 });

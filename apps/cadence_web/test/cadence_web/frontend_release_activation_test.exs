@@ -46,23 +46,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   setup do
     previous = Process.get({FrontendReleasePublication, :publication_config}, :not_configured)
 
-    previous_snapshot_clock =
-      Process.get(ApplicationReleaseRegistry.snapshot_clock_key(), :not_configured)
-
     Process.put({FrontendReleasePublication, :publication_config}, @config)
-    Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), @now)
 
     on_exit(fn ->
       if previous == :not_configured do
         Process.delete({FrontendReleasePublication, :publication_config})
       else
         Process.put({FrontendReleasePublication, :publication_config}, previous)
-      end
-
-      if previous_snapshot_clock == :not_configured do
-        Process.delete(ApplicationReleaseRegistry.snapshot_clock_key())
-      else
-        Process.put(ApplicationReleaseRegistry.snapshot_clock_key(), previous_snapshot_clock)
       end
     end)
 
@@ -76,6 +66,49 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     assert {:ok, %{status: 201, outcome: "initial", replay?: false} = response} =
              activate(catalog, "initial-key")
+
+    expected_catalog_publication_id =
+      "frontend_release_catalog_publication_" <> digest_hex(catalog)
+
+    assert response.catalog_publication_id == expected_catalog_publication_id
+
+    expected_generation_id =
+      "frontend_release_catalog_generation_" <>
+        digest_hex(
+          canonical(%{
+            "catalogPublicationId" => expected_catalog_publication_id,
+            "identityCount" => 1,
+            "predecessorCatalogPublicationId" => nil,
+            "predecessorKind" => "none",
+            "sequence" => 1,
+            "snapshotDigest" => snapshot_digest,
+            "transition" => "initial"
+          })
+        )
+
+    assert response.generation_id == expected_generation_id
+
+    expected_request_id =
+      "frontend_release_activation_request_" <>
+        digest_hex(
+          canonical(%{
+            "documentDigest" => sha256(catalog),
+            "idempotencyKeyDigest" => sha256("initial-key")
+          })
+        )
+
+    assert Repo.one!(Request).request_id == expected_request_id
+
+    assert {:ok, replay} =
+             FrontendReleaseActivation.activate_catalog(catalog, "initial-key",
+               now: "2026-09-01T20:00:00Z",
+               publication_config: @config,
+               publisher_identity: "github-actions/frontend-release"
+             )
+
+    assert replay.replay? == true
+    assert replay.catalog_publication_id == response.catalog_publication_id
+    assert replay.generation_id == response.generation_id
 
     assert response.body ==
              canonical_response(%{
@@ -131,6 +164,20 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                (SELECT COUNT(*) FROM frontend_release_catalog_bindings),
                (SELECT COUNT(*) FROM frontend_release_activation_requests)
              """).rows
+
+    baseline_snapshot = ApplicationReleaseRegistry.snapshot(now: @now)
+
+    Repo.query!(
+      "SET CONSTRAINTS frontend_release_catalog_publications_generation_guard IMMEDIATE"
+    )
+
+    Repo.query!("SET LOCAL session_replication_role = replica")
+    Repo.query!("UPDATE frontend_release_catalog_publications SET accepted_at = now()")
+    Repo.query!("UPDATE frontend_release_catalog_generations SET inserted_at = now()")
+    Repo.query!("UPDATE frontend_release_catalog_bindings SET inserted_at = now()")
+    Repo.query!("UPDATE frontend_release_activation_controls SET cutover_at = now()")
+
+    assert ApplicationReleaseRegistry.snapshot(now: @now) == baseline_snapshot
   end
 
   test "two signed remotes sharing Application survive initial activation and promotion" do
@@ -210,7 +257,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert Repo.aggregate(CatalogGeneration, :count, :generation_id) == 2
     assert Repo.aggregate(CatalogBinding, :count, :generation_id) == 4
 
-    assert {:ok, %{source: :database, entries: entries}} = ApplicationReleaseRegistry.snapshot()
+    assert {:ok, %{source: :database, entries: entries}} =
+             ApplicationReleaseRegistry.snapshot(now: @now)
 
     assert Enum.map(entries, fn {key, release} ->
              {key, release.remote_name, release.exposed_module, release.release_id}
@@ -407,7 +455,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                 source: :database,
                 entries: [{{"telemetry_decom", 1, "packet_bindings", 1}, entry}]
               }} =
-               ApplicationReleaseRegistry.snapshot()
+               ApplicationReleaseRegistry.snapshot(now: @now)
 
       assert_receive {:application_release_registry_query, query}
       refute_receive {:application_release_registry_query, _query}, 50
@@ -427,7 +475,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              }
 
       assert {:ok, ^entry} =
-               ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+               ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
+                 now: @now
+               )
 
       assert release["artifactBaseUrl"] ==
                @origin <> "/releases/telemetry_decom/" <> release["releaseId"] <> "/artifacts/"
@@ -438,7 +488,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end
 
     assert {:error, :no_history} =
-             ApplicationReleaseRegistry.fetch("missing_application", 1, "missing_surface", 1)
+             ApplicationReleaseRegistry.fetch("missing_application", 1, "missing_surface", 1,
+               now: @now
+             )
   end
 
   test "post-cutover default admission scans to the valid telemetry surface and builds its catalog" do
@@ -454,7 +506,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "telemetry_decom"
+               "telemetry_decom",
+               nil,
+               now: @now
              )
 
     assert admission.surface.surface_id == "packet_bindings"
@@ -468,7 +522,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                session_id: "reader-default-scan-session",
                csrf_token: "reader-default-scan-csrf",
                bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
              )
 
     assert [application] = catalog["applications"]
@@ -493,7 +548,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {scope, route_context} = installed_telemetry_context()
 
     assert {:error, :application_unavailable} =
-             ApplicationHostCatalog.admit_application(scope, route_context, "telemetry_decom")
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom",
+               nil,
+               now: @now
+             )
   end
 
   test "post-cutover contributed admission accepts its exact package identity" do
@@ -514,7 +575,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {scope, route_context} = installed_comms_context()
 
     assert {:ok, admission} =
-             ApplicationHostCatalog.admit_application(scope, route_context, "comms_overview")
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "comms_overview",
+               nil,
+               now: @now
+             )
 
     assert admission.package == %{package_id: "cadence.comms_overview", version: 1}
     assert admission.release.package_id == "cadence.comms_overview"
@@ -546,7 +613,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-contributed-key")
 
     assert {:error, :application_unavailable} =
-             ApplicationHostCatalog.admit_application(scope, route_context, "comms_overview")
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "comms_overview",
+               nil,
+               now: @now
+             )
 
     scope_document = ApplicationHostCatalog.scope_document(scope, route_context)
 
@@ -612,7 +685,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert {:ok, %{status: 201}} = activate(document, "reader-artifact-path-parity-key")
 
     assert {:ok, _release} =
-             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
+               now: @now
+             )
   end
 
   test "post-cutover no_history is sanitized for catalog, registered query, and action paths" do
@@ -704,7 +779,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {scope, route_context} = installed_comms_context()
 
     assert {:error, :no_history} =
-             ApplicationHostCatalog.admit_application(scope, route_context, "comms")
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "comms",
+               nil,
+               now: @now
+             )
   end
 
   test "host catalog build does not swallow database no_history for an installed application" do
@@ -723,7 +804,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                session_id: "reader-host-session",
                csrf_token: "reader-host-csrf",
                bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-               manifest_url: fn path -> "https://example.test" <> path end
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
              )
   end
 
@@ -742,10 +824,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
       """)
     end)
 
-    assert {:ok, %{source: :static, entries: entries}} = ApplicationReleaseRegistry.snapshot()
+    assert {:ok, %{source: :static, entries: entries}} =
+             ApplicationReleaseRegistry.snapshot(now: @now)
 
     assert {:ok, static_release} =
-             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
+               now: @now
+             )
 
     assert static_release.manifest_path ==
              "/assets/application-host/telemetry-decom/mf-manifest.json"
@@ -774,7 +859,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     )
 
     assert {:error, {:integrity_failure, :release_publication_integrity_failure}} =
-             ApplicationReleaseRegistry.snapshot()
+             ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
   test "duplicate binding identities are rejected and snapshot reconstruction fails closed" do
@@ -864,7 +949,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert {:ok, _duplicate} = Repo.insert(CatalogBinding.changeset(duplicate_attrs))
 
     assert {:error, {:integrity_failure, :duplicate_application_surface_identity}} =
-             ApplicationReleaseRegistry.snapshot()
+             ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
   test "same key replays exact accepted bytes, while a different document is a 409" do
@@ -1079,7 +1164,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end)
 
     assert {:error, {:integrity_failure, :generation_identity_count_mismatch}} =
-             ApplicationReleaseRegistry.snapshot()
+             ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
   test "first legacy successor records exact legacy provenance and ignores only legacy expiry" do
@@ -1143,10 +1228,12 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
              WHERE control_id = 1
              """).rows
 
-    assert {:ok, %{source: :database}} = ApplicationReleaseRegistry.snapshot()
+    assert {:ok, %{source: :database}} = ApplicationReleaseRegistry.snapshot(now: @now)
 
     assert {:ok, reader_release} =
-             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
+               now: @now
+             )
 
     assert reader_release.release_id == second_release["releaseId"]
   end
@@ -1758,7 +1845,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     payload =
       canonical(%{
         "entries" => [entry],
-        "expiresAt" => "2026-09-02T18:00:00Z",
+        "expiresAt" => "2026-09-30T18:00:00Z",
         "identityCount" => 1,
         "publishedAt" => published_at,
         "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
@@ -1787,7 +1874,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     payload =
       canonical(%{
         "entries" => entries,
-        "expiresAt" => "2026-09-02T18:00:00Z",
+        "expiresAt" => "2026-09-30T18:00:00Z",
         "identityCount" => length(entries),
         "publishedAt" => published_at,
         "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
@@ -1809,7 +1896,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
           "previous" => if(previous, do: snapshot_release(previous), else: nil)
         }
       ],
-      "expiresAt" => "2026-09-02T18:00:00.000000Z",
+      "expiresAt" => "2026-09-30T18:00:00.000000Z",
       "identityCount" => 1,
       "publishedAt" => normalize_timestamp(published_at),
       "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",
@@ -1830,7 +1917,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
             "previous" => if(previous, do: snapshot_release(previous), else: nil)
           }
         end),
-      "expiresAt" => "2026-09-02T18:00:00.000000Z",
+      "expiresAt" => "2026-09-30T18:00:00.000000Z",
       "identityCount" => length(release_pairs),
       "publishedAt" => normalize_timestamp(published_at),
       "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",

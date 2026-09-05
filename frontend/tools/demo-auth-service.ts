@@ -12,6 +12,8 @@ export interface DemoAdminCredentials {
   ttlSeconds: number;
 }
 
+export type DemoClock = () => number;
+
 interface DemoAdminSession {
   expiresAt: number;
   session: FrontendSession;
@@ -36,11 +38,17 @@ export interface FrontendSession {
 export class DemoAuthService {
   readonly #credentials: DemoAdminCredentials;
   readonly #mode: DemoMode;
+  readonly #clock: DemoClock;
   readonly #sessions = new Map<string, DemoAdminSession>();
 
-  constructor(mode: DemoMode, credentials: DemoAdminCredentials = environmentCredentials()) {
+  constructor(
+    mode: DemoMode,
+    credentials: DemoAdminCredentials = environmentCredentials(),
+    clock: DemoClock = systemClock,
+  ) {
     this.#mode = mode;
     this.#credentials = credentials;
+    this.#clock = clock;
   }
 
   handle(request: DemoRequest): DemoResponse | undefined {
@@ -74,7 +82,7 @@ export class DemoAuthService {
     }
 
     const sessionId = randomUUID();
-    const expiresAt = Date.now() + this.#credentials.ttlSeconds * 1_000;
+    const expiresAt = this.#clock() + this.#credentials.ttlSeconds * 1_000;
     const session: FrontendSession = {
       schema: "cadence.frontend-session.v1",
       actor: {
@@ -119,7 +127,7 @@ export class DemoAuthService {
     const session = this.#sessions.get(sessionId);
     if (!session) return undefined;
 
-    if (session.expiresAt <= Date.now()) {
+    if (session.expiresAt <= this.#clock()) {
       this.#sessions.delete(sessionId);
       return undefined;
     }
@@ -128,8 +136,8 @@ export class DemoAuthService {
   }
 }
 
-export function createDemoAuthMiddleware(mode: DemoMode) {
-  const service = new DemoAuthService(mode);
+export function createDemoAuthMiddleware(mode: DemoMode, clock: DemoClock = systemClock) {
+  const service = new DemoAuthService(mode, environmentCredentials(), clock);
 
   return async function demoAuthMiddleware(
     request: IncomingMessage,
@@ -169,6 +177,10 @@ export function createDemoAuthMiddleware(mode: DemoMode) {
 
     writeResponse(response, result);
   };
+}
+
+function systemClock(): number {
+  return Date.now();
 }
 
 function environmentCredentials(): DemoAdminCredentials {

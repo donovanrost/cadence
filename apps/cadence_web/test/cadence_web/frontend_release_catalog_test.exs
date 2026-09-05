@@ -47,6 +47,59 @@ defmodule CadenceWeb.FrontendReleaseCatalogTest do
              catalog["envelope"]["signature"]
   end
 
+  test "requires an explicit verification timestamp for release and catalog admission" do
+    opts = [allowed_origins: ["https://cdn.example.com"]]
+
+    assert {:error, %{code: :invalid_timestamp, path: "$.now"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               @corpus["keys"],
+               opts
+             )
+
+    assert {:error, %{code: :invalid_timestamp, path: "$.now"}} =
+             FrontendReleaseCatalog.verify_catalog(
+               @corpus["catalog"]["envelope"],
+               @corpus["keys"],
+               opts
+             )
+  end
+
+  test "explicit verification timestamp does not alter signed release identity" do
+    release = @corpus["release"]["envelope"]
+
+    assert {:ok, first} =
+             FrontendReleaseCatalog.verify_release(
+               release,
+               @corpus["keys"],
+               @opts
+             )
+
+    assert {:ok, second} =
+             FrontendReleaseCatalog.verify_release(
+               release,
+               @corpus["keys"],
+               Keyword.put(@opts, :now, "2026-08-30T18:31:00Z")
+             )
+
+    assert second.release["releaseId"] == first.release["releaseId"]
+    assert second.digest == first.digest
+    assert second.payload_bytes == first.payload_bytes
+    assert second.key_id == first.key_id
+    assert second.signing_role == first.signing_role
+  end
+
+  test "rejects a pre-epoch DateTime verification clock" do
+    opts = Keyword.put(@opts, :now, ~U[1969-12-31 23:59:59Z])
+
+    assert {:error, %{code: :invalid_timestamp, path: "$.now"}} =
+             FrontendReleaseCatalog.verify_release(
+               @corpus["release"]["envelope"],
+               @corpus["keys"],
+               opts
+             )
+  end
+
   test "the bounded v2 adversarial corpus is consumed in order with exact outcomes" do
     assert @corpus["version"] == 2
     assert @corpus["corpusSchema"] == "cadence.frontend-release-contract.adversarial.v2"

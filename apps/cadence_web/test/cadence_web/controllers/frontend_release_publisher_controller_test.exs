@@ -20,6 +20,7 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
   @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
   @origin "https://cdn.example.com"
+  @authority_now "2026-09-03T12:00:00Z"
   @token "frontend-release-publisher-test-token"
   @max_envelope_bytes 4_000_000
   @publication_config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
@@ -49,6 +50,32 @@ defmodule CadenceWeb.FrontendReleasePublisherControllerTest do
     assert publication.signed_document_bytes == document
     assert publication.metadata == %{"publisher_identity" => "github-actions/frontend-release"}
     assert publication.provenance["buildId"] == "http-success"
+  end
+
+  test "fails closed when the request-boundary clock authority is malformed", %{conn: conn} do
+    {document, _release, bytes_by_path} = release_document("http-malformed-clock")
+
+    response =
+      conn
+      |> authenticated()
+      |> put_private(:frontend_release_authority_now, "not-a-canonical-timestamp")
+      |> post(@path, request_body(document, bytes_by_path))
+
+    assert %{"error" => %{"code" => "admission_rejected"}} = json_response(response, 422)
+
+    assert Repo.query!("SELECT COUNT(*) FROM frontend_release_publications", []).rows == [[0]]
+  end
+
+  test "uses an injected authority clock without sampling an ambient fallback", %{conn: conn} do
+    {document, _release, bytes_by_path} = release_document("http-injected-clock")
+
+    response =
+      conn
+      |> authenticated()
+      |> put_private(:frontend_release_authority_now, @authority_now)
+      |> post(@path, request_body(document, bytes_by_path))
+
+    assert %{"data" => %{"status" => "published"}} = json_response(response, 201)
   end
 
   test "returns a deterministic exact replay response", %{conn: conn} do

@@ -309,7 +309,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     end)
 
     assert {:ok, %{source: :database, entries: entries}} =
-             CadenceWeb.ApplicationReleaseRegistry.snapshot()
+             CadenceWeb.ApplicationReleaseRegistry.snapshot(now: "2026-09-03T00:00:00Z")
 
     assert [{{"telemetry_decom", 1, "packet_bindings", 1}, active_release}] = entries
     assert active_release.release_id == n_minus_1.release["releaseId"]

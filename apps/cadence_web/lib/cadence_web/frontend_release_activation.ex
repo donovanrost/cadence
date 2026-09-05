@@ -4,7 +4,6 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   import Ecto.Changeset
   import Ecto.Query
 
-  alias Cadence.Ids
   alias Cadence.Repo
 
   alias CadenceWeb.FrontendReleaseCatalog
@@ -807,11 +806,14 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   end
 
   defp insert_catalog(verified, raw_document_bytes, entries) do
+    signed_document_digest = FrontendReleaseCatalog.digest(raw_document_bytes)
+
     attrs = %{
-      publication_id: Ids.new("frontend_release_catalog_publication"),
+      publication_id:
+        deterministic_id("frontend_release_catalog_publication", raw_document_bytes),
       sequence: verified.sequence,
       catalog_digest: FrontendReleaseCatalog.digest(verified.payload_bytes),
-      signed_document_digest: FrontendReleaseCatalog.digest(raw_document_bytes),
+      signed_document_digest: signed_document_digest,
       signed_document_bytes: raw_document_bytes,
       payload_bytes: verified.payload_bytes,
       signing_key_id: verified.key_id,
@@ -872,8 +874,22 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   end
 
   defp insert_generation(verified, catalog, state) do
+    generation_identity = %{
+      "catalogPublicationId" => catalog.publication_id,
+      "identityCount" => verified.identity_count,
+      "predecessorCatalogPublicationId" => state.predecessor_catalog_publication_id,
+      "predecessorKind" => state.predecessor_kind,
+      "sequence" => verified.sequence,
+      "snapshotDigest" => verified.snapshot_digest,
+      "transition" => verified.transition
+    }
+
     attrs = %{
-      generation_id: Ids.new("frontend_release_catalog_generation"),
+      generation_id:
+        deterministic_id(
+          "frontend_release_catalog_generation",
+          FrontendReleaseCatalog.canonical_json(generation_identity)
+        ),
       catalog_publication_id: catalog.publication_id,
       sequence: verified.sequence,
       identity_count: verified.identity_count,
@@ -1096,7 +1112,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
 
   defp insert_accepted_request(response, idempotency_key_digest, document_digest, _state, opts) do
     attrs = %{
-      request_id: Ids.new("frontend_release_activation_request"),
+      request_id: activation_request_id(idempotency_key_digest, document_digest),
       idempotency_key_digest: idempotency_key_digest,
       document_digest: document_digest,
       outcome: state_outcome(response),
@@ -1126,7 +1142,7 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     body = canonical_response(%{"error" => %{"code" => stable_code(code), "path" => path}})
 
     attrs = %{
-      request_id: Ids.new("frontend_release_activation_request"),
+      request_id: activation_request_id(idempotency_key_digest, document_digest),
       idempotency_key_digest: idempotency_key_digest,
       document_digest: document_digest,
       outcome: "rejected",
@@ -1289,6 +1305,23 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   defp stable_code(code) when is_binary(code), do: code
   defp stable_code(_code), do: "invalid_state"
 
+  defp activation_request_id(idempotency_key_digest, document_digest) do
+    deterministic_id(
+      "frontend_release_activation_request",
+      FrontendReleaseCatalog.canonical_json(%{
+        "documentDigest" => document_digest,
+        "idempotencyKeyDigest" => idempotency_key_digest
+      })
+    )
+  end
+
+  defp deterministic_id(prefix, canonical_bytes)
+       when is_binary(prefix) and is_binary(canonical_bytes),
+       do: prefix <> "_" <> digest_hex(canonical_bytes)
+
+  defp digest_hex(bytes),
+    do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
+
   defp semantic_error(code, path), do: %{code: code, path: path}
 
   defp response_error(status, code, reason \\ nil, body \\ nil) do
@@ -1313,13 +1346,27 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     response = response_from_result(result)
     duration = System.monotonic_time() - started_at
 
+    document_digest = if is_binary(document), do: FrontendReleaseCatalog.digest(document)
+    key_digest = if is_binary(key), do: FrontendReleaseCatalog.digest(key)
+    outcome = response && Map.get(response, :outcome)
+    status = response && Map.get(response, :status)
+
     metadata = %{
-      request_id: Ids.new("frontend_release_activation_log"),
-      outcome: response && Map.get(response, :outcome),
-      status: response && Map.get(response, :status),
-      document_digest: if(is_binary(document), do: FrontendReleaseCatalog.digest(document)),
-      key_digest: if(is_binary(key), do: FrontendReleaseCatalog.digest(key)),
-      transition: response && Map.get(response, :outcome),
+      request_id:
+        deterministic_id(
+          "frontend_release_activation_log",
+          FrontendReleaseCatalog.canonical_json(%{
+            "documentDigest" => document_digest,
+            "keyDigest" => key_digest,
+            "outcome" => outcome,
+            "status" => status
+          })
+        ),
+      outcome: outcome,
+      status: status,
+      document_digest: document_digest,
+      key_digest: key_digest,
+      transition: outcome,
       sequence: response && Map.get(response, :sequence),
       identity_count: response && Map.get(response, :identity_count),
       code: response && Map.get(response, :code)

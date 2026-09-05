@@ -19,12 +19,15 @@ defmodule CadenceWeb.ApplicationHostBridge do
 
   @type route_context :: ApplicationHostCatalog.route_context()
 
-  @spec query(Scope.t(), route_context(), map()) :: {:ok, map()} | {:error, term()}
-  def query(%Scope{} = current_scope, route_context, params) when is_map(params) do
+  @spec query(Scope.t(), route_context(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def query(current_scope, route_context, params, opts \\ [])
+
+  def query(%Scope{} = current_scope, route_context, params, opts)
+      when is_map(params) and is_list(opts) do
     result =
       with :ok <- validate_request(params),
            {:ok, request} <- query_request(params),
-           {:ok, admission} <- admit_surface(current_scope, route_context, request),
+           {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
            :ok <- ensure_query_contract(admission, request) do
         case HostQueryRegistry.dispatch(current_scope, route_context, params) do
           :not_handled -> generic_query(current_scope, route_context, request, admission)
@@ -38,25 +41,28 @@ defmodule CadenceWeb.ApplicationHostBridge do
     end
   end
 
-  def query(%Scope{}, _route_context, _params), do: {:error, :invalid_application_request}
+  def query(%Scope{}, _route_context, _params, _opts), do: {:error, :invalid_application_request}
 
-  @spec action(Scope.t(), route_context(), map(), binary()) ::
+  @spec action(Scope.t(), route_context(), map(), binary(), keyword()) ::
           {:ok, map()} | {:error, term()}
+  def action(current_scope, route_context, params, idempotency_key, opts \\ [])
+
   def action(
         %Scope{} = current_scope,
         route_context,
         params,
-        idempotency_key
+        idempotency_key,
+        opts
       )
       when is_map(params) and is_binary(idempotency_key) and
-             idempotency_key != "" do
+             idempotency_key != "" and is_list(opts) do
     with :ok <- validate_request(params),
          :ok <- validate_idempotency_key(idempotency_key) do
-      generic_action(current_scope, route_context, params, idempotency_key)
+      generic_action(current_scope, route_context, params, idempotency_key, opts)
     end
   end
 
-  def action(%Scope{}, _route_context, _params, _idempotency_key),
+  def action(%Scope{}, _route_context, _params, _idempotency_key, _opts),
     do: {:error, :invalid_application_request}
 
   defp generic_query(current_scope, route_context, request, admission) do
@@ -73,9 +79,9 @@ defmodule CadenceWeb.ApplicationHostBridge do
     end
   end
 
-  defp generic_action(current_scope, route_context, params, idempotency_key) do
+  defp generic_action(current_scope, route_context, params, idempotency_key, opts) do
     with {:ok, request} <- action_request(params, idempotency_key),
-         {:ok, admission} <- admit_surface(current_scope, route_context, request),
+         {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
          {:ok, action} <- declared_action(admission, request),
          {:ok, result} <-
            ActionDispatcher.dispatch(
@@ -93,7 +99,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
       safe_output(
         %{
           "receiptId" => receipt_id(idempotency_key),
-          "completedAt" => DateTime.utc_now() |> DateTime.to_iso8601(),
+          "completedAt" => Keyword.fetch!(opts, :now),
           "result" => action_result
         },
         :application_action_output_bounds_exceeded
@@ -197,13 +203,14 @@ defmodule CadenceWeb.ApplicationHostBridge do
     end
   end
 
-  defp admit_surface(current_scope, route_context, request) do
+  defp admit_surface(current_scope, route_context, request, opts) do
     with {:ok, admission} <-
            ApplicationHostCatalog.admit_application(
              current_scope,
              route_context,
              request.application_key,
-             request.surface_id
+             request.surface_id,
+             opts
            ),
          :ok <- ensure_application_version(admission, request.application_version),
          :ok <- ensure_surface_version(admission.surface, request.surface_version) do

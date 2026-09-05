@@ -102,6 +102,81 @@ describe("signed first-party frontend release contracts", () => {
     expect(catalog.value.acceptedState.digest).toBe(catalog.value.digest);
   });
 
+  it("requires explicit verification time and keeps signed identities clock-independent", async () => {
+    const missingReleaseNow = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { allowedOrigins: [corpus.origin] },
+    );
+    expect(missingReleaseNow).toEqual({
+      ok: false,
+      error: { code: "invalid_timestamp", path: "$.now" },
+    });
+
+    const missingCatalogNow = await verifyFirstPartyFrontendReleaseCatalog(
+      corpus.catalog.envelope,
+      corpus.keys,
+      { allowedOrigins: [corpus.origin] },
+    );
+    expect(missingCatalogNow).toEqual({
+      ok: false,
+      error: { code: "invalid_timestamp", path: "$.now" },
+    });
+
+    const first = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      options,
+    );
+    const second = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { ...options, now: "2026-08-30T18:31:00Z" },
+    );
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    expect(second.value.release.releaseId).toBe(first.value.release.releaseId);
+    expect(second.value.digest).toBe(first.value.digest);
+    expect(second.value.payloadBytes).toEqual(first.value.payloadBytes);
+    expect(second.value.keyId).toBe(first.value.keyId);
+    expect(second.value.signingRole).toBe(first.value.signingRole);
+  });
+
+  it("rejects a pre-epoch Date verification clock while preserving valid Date clocks", async () => {
+    const beforeEpoch = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { ...options, now: new Date(-1) },
+    );
+    expect(beforeEpoch).toEqual({
+      ok: false,
+      error: { code: "invalid_timestamp", path: "$.now" },
+    });
+
+    const validDate = await verifyFirstPartyFrontendRelease(
+      corpus.release.envelope,
+      corpus.keys,
+      { ...options, now: new Date(Date.parse(corpus.now)) },
+    );
+    expect(validDate.ok).toBe(true);
+  });
+
+  it("binds intentional release timestamp changes to the signed release identity", async () => {
+    const release = JSON.parse(corpus.release.payload) as JsonRecord;
+    const shifted = await withReleaseId({
+      ...release,
+      releasedAt: "2026-08-30T17:01:00Z",
+    });
+
+    expect(shifted.releaseId).not.toBe(release.releaseId);
+    expect(shifted.application).toEqual(release.application);
+    expect(shifted.package).toEqual(release.package);
+    expect(shifted.surface).toEqual(release.surface);
+    expect(shifted.artifacts).toEqual(release.artifacts);
+  });
+
   it("consumes every bounded v2 adversarial case with the shared exact outcome", async () => {
     expect(corpus.version).toBe(2);
     expect(corpus.corpusSchema).toBe("cadence.frontend-release-contract.adversarial.v2");
