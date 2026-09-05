@@ -14,16 +14,18 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
           {"data_sources", Map.get(assigns, :federated_query_params, %{})}
       end
 
+    assigns = assign(assigns, surface_id: surface_id, query_params: query_params)
+
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-data-sources-component"
         v-component="FederatedFullPageSurface"
         application_key="ops_console"
-        surface_id={surface_id}
+        surface_id={@surface_id}
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={query_params}
+        query_params={@query_params}
         v-ssr={false}
         class="contents"
       />

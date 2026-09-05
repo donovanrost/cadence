@@ -260,7 +260,6 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     case GroundStationStore.fetch_ground_station(scope.organization_id, mission_id, id) do
       {:ok, _existing} -> {:error, :ground_station_already_exists}
       {:error, :ground_station_not_found} -> persist_ground_station(scope, mission_id, attrs)
-      {:error, reason} -> {:error, reason}
     end
   end
 

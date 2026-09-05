@@ -546,73 +546,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     })
   end
 
-  defp data_sources(scope, mission, _params) do
-    sources =
-      Cadence.Reads.DataSources.list_data_sources(scope.organization_id, mission.mission_id)
-
-    bindings =
-      Cadence.Reads.DataSources.list_data_bindings(scope.organization_id, mission.mission_id)
-
-    page = %{
-      "id" => "ops-data-sources-page",
-      "mode" => "reader",
-      "focus" => %{
-        "state" => "none",
-        "data_source_id" => nil,
-        "source_binding_id" => nil,
-        "logical_source" => nil,
-        "realm" => nil,
-        "scope_kind" => nil,
-        "contact_id" => nil,
-        "evidence" => nil
-      },
-      "header" => %{
-        "heading" => "Data Sources",
-        "mission_id" => mission.mission_id,
-        "register_link" => nil,
-        "stats" => [
-          %{"label" => "sources", "value" => length(sources)},
-          %{"label" => "bindings", "value" => length(bindings)},
-          %{"label" => "health", "value" => 0}
-        ],
-        "readiness_policy" => %{
-          "id" => "source-readiness-policy",
-          "label" => "readiness policy",
-          "policy_id" => "mission-default",
-          "block_source_health" => true,
-          "block_freshness" => true,
-          "block_connection_test" => true,
-          "connection_summary" => "connection checks are Phoenix-owned"
-        }
-      },
-      "bindings" => %{
-        "heading" => "Bindings",
-        "description" => "grouped by logical source and realm",
-        "empty" => "No dashboard source bindings registered.",
-        "groups" => Enum.map(bindings, &binding_group/1)
-      },
-      "sources" => %{
-        "heading" => "Physical Sources",
-        "subtitle" => "Registered adapter-backed stores",
-        "empty" => "No data sources registered.",
-        "rows" => Enum.map(sources, &source_row/1)
-      },
-      "deployment_runs" => %{
-        "heading" => "Deployment Runs",
-        "subtitle" => "TSDB backend lifecycle jobs",
-        "empty" => "No deployment runs recorded.",
-        "rows" => []
-      },
-      "activity" => %{
-        "binding_events" => event_list("dashboard-data-binding-events", "Recent Binding Events"),
-        "source_events" => event_list("dashboard-data-source-events", "Recent Source Events"),
-        "health_events" => event_list("dashboard-source-health-events", "Recent Source Health")
-      }
-    }
-
-    envelope("OpsDataSources", %{"page" => page})
-  end
-
   defp page(id, title, mission, params),
     do: %{
       "id" => id,
@@ -1265,49 +1198,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "latest_version" => summary.latest_version,
       "open" => %{"href" => "#", "id" => "open-#{summary.dashboard_id}", "label" => "Open"},
       "restore" => nil
-    }
-
-  defp binding_group(binding),
-    do: %{
-      "id" => binding.binding_id,
-      "logical_source_text" => to_string(binding.logical_source),
-      "realm_text" => to_string(binding.realm),
-      "group_status" => "active",
-      "count_label" => "1 binding",
-      "rows" => [
-        %{
-          "data_source_id" => binding.data_source_id,
-          "logical_source_text" => to_string(binding.logical_source),
-          "realm_text" => to_string(binding.realm),
-          "binding_status" => "active"
-        }
-      ]
-    }
-
-  defp source_row(source),
-    do: %{
-      "data_source_id" => source.data_source_id,
-      "status_text" => to_string(source.status),
-      "kind_text" => to_string(source.kind),
-      "owner_text" => to_string(source.owner),
-      "isolation_text" => to_string(source.isolation_level),
-      "adapter_text" => to_string(source.adapter),
-      "credential_ref_text" => "",
-      "credential_state_text" => "",
-      "deployment_status_text" => "",
-      "health_status" => "unknown",
-      "health_reason_text" => "",
-      "watermark_text" => "",
-      "actions" => []
-    }
-
-  defp event_list(id, heading),
-    do: %{
-      "id" => id,
-      "heading" => heading,
-      "subtitle" => "Phoenix projection",
-      "empty" => "No events recorded.",
-      "rows" => []
     }
 
   defp timeline_presentation(mission, _params),
