@@ -150,7 +150,6 @@ defmodule CadenceWeb.Router do
       live "/", OrganizationHomeLive, :show
       live "/missions", MissionListLive, :index
       live "/missions/new", MissionNewLive, :new
-      live "/livevue-poc", LiveVuePocLive, :index
     end
 
     live_session :provider_accounts,

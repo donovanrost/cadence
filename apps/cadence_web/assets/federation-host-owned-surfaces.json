@@ -160,10 +160,6 @@
       "reason": "Catalog table remains a nested compatibility component."
     },
     {
-      "component": "LiveVuePocPage",
-      "reason": "Developer-only LiveVue proof page is not an authenticated domain surface."
-    },
-    {
       "component": "ActivityTimeline",
       "reason": "Dashboard activity is a nested stateful LiveView renderer."
     },

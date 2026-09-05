@@ -68,7 +68,7 @@ const occurrences = (source, fragment) => source.split(fragment).length - 1
 
 assert.equal(pageTitleMigrations.length, 26, "the exact cohort has 26 callers")
 assert.equal(new Set(pageTitleCallerNames).size, 26, "every caller is unique")
-assert.equal(excludedPageTitles.length, 52, "the full adjacent-title exclusion ledger is frozen")
+assert.equal(excludedPageTitles.length, 51, "the full adjacent-title exclusion ledger is frozen")
 assert.throws(
   () => pageTitleMigrationFor("UnknownPage.vue"),
   /audited CadencePageTitle caller/,
@@ -159,7 +159,7 @@ for (const entry of excludedPageTitles) {
   exclusionCounts[entry.reason] = (exclusionCounts[entry.reason] ?? 0) + entry.count
 }
 assert.deepEqual({...exclusionCounts}, {
-  dynamic: 19,
+  dynamic: 18,
   "ops-mt-1": 15,
   "reduced-or-structural": 13,
   "reordered-token": 5,
@@ -215,7 +215,7 @@ assert.equal(
 )
 assert.equal(
   allVueSources.reduce((total, {source}) => total + (source.match(/<h1\b/g)?.length ?? 0), 0),
-  52,
+  51,
 )
 
 const dom = installDom('<div id="page-title-contract"></div>')

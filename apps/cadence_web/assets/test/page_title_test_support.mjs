@@ -85,7 +85,6 @@ export const excludedPageTitles = Object.freeze([
   exclusion("CommsProviderList.vue", "c440d997fa54dd9d7f75acb3e31b81688be3ff8b72ad4f51b6388d7dc2ef113f", "dynamic", '<h1 v-bind="props.presentation.header.title.attrs">'),
   exclusion("CommsProviderNew.vue", "a2d6937f98d77372226f0f3b3b7224dae00338c963da25cc4628f6801ae3223a", "reordered-token", '<h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">'),
   exclusion("DashboardToolbar.vue", "ee5f7265adf59aa1a73e0513006407d28a83b0b994af01d8faf0f7fd52e75203", "dynamic", '<h1 v-bind="props.presentation.title.attrs">'),
-  exclusion("LiveVuePocPage.vue", "dfccdc52ed9baa9fd49bdc8392cb903802111d997dbc1be3115f5eea00d5bf60", "dynamic", '<h1 v-bind="props.presentation.header.title.attrs">'),
   exclusion("MissionApplicationsPage.vue", "27312a2349986804b5359d7b7159a798e482b9b314f2576898663d7a8e06e537", "dynamic", '<h1 v-bind="props.presentation.header.title.attrs">'),
   exclusion("MissionList.vue", "fe5b2278303ae0ba0a6f806f654bcc848c833b857a3b4dd35723f76f131387c2", "dynamic", '<h1 :class="presentation.header.title.class">'),
   exclusion("NoOrganizationPage.vue", "60e0dda5f3cbddbb542a34e6aa3ce7b66d85e031bc5cc9e474ff18c0ac5536b4", "dynamic", '<h1 v-bind="presentation.heading.attrs">'),

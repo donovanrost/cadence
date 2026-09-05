@@ -33,7 +33,6 @@ auth|/sign-in|UserSessionLive|new
 organization|/|OrganizationHomeLive|show
 organization|/missions|MissionListLive|index
 organization|/missions/new|MissionNewLive|new
-organization|/livevue-poc|LiveVuePocLive|index
 provider_accounts|/provider-accounts|ProviderAccountListLive|index
 provider_accounts|/provider-accounts/new|ProviderAccountNewLive|new
 provider_accounts|/provider-accounts/:provider_account_id|ProviderAccountShowLive|show
@@ -160,7 +159,7 @@ redirect|/missions/:mission_id/comms/advanced/runtime-identities|LegacyCommsRedi
 redirect|/missions/:mission_id/comms/advanced/runtime-identities/new|LegacyCommsRedirectController|runtime_identities_new
 `.trim().split("\n")
 
-assert.equal(expectedLiveRoutes.length, 89)
+assert.equal(expectedLiveRoutes.length, 88)
 assert.equal(expectedBrowserGets.length, 37)
 
 const walkFiles = async (directory) => {
@@ -355,6 +354,19 @@ const rendererOverrides = new Map([
   ],
 ])
 
+const locallyRenderedRouteModules = new Set([
+  // Host/auth surfaces are intentionally not federated full-page domain
+  // surfaces, and these in-flight Ops wrappers are explicitly out of scope
+  // for this residual-source batch.
+  "CadenceWeb.ApplicationHostLive",
+  "CadenceWeb.UserSessionLive",
+  "CadenceWeb.OpsDashboardActivityLive",
+  "CadenceWeb.OpsDashboardEditorLive",
+  "CadenceWeb.OpsDashboardViewerLive",
+  "CadenceWeb.OpsDataOperationsLive",
+  "CadenceWeb.OpsDataSourcesLive",
+])
+
 const controllerPageContracts = [
   {
     controller: "admin_mode_controller.ex",
@@ -397,10 +409,27 @@ for (const entry of expectedLiveRoutes) {
   const override = rendererOverrides.get(fullModule)
   if (override) {
     assert.match(routeSource.source, override.delegation)
-    rendererTargets.set(override.target, path)
+    if (!locallyRenderedRouteModules.has(fullModule)) {
+      rendererTargets.set(override.target, path)
+    }
   } else {
     assert.match(routeSource.source, /\bdef render\s*\(/, `${fullModule} defines render`)
-    rendererTargets.set(fullModule, path)
+    if (!locallyRenderedRouteModules.has(fullModule)) {
+      rendererTargets.set(fullModule, path)
+    }
+  }
+
+  if (!locallyRenderedRouteModules.has(fullModule)) {
+    const renderedSource = liveModuleSources.get(override?.target || fullModule)
+    assert.ok(
+      renderedSource?.source.includes('v-component="FederatedFullPageSurface"'),
+      `${path} must resolve to a FederatedFullPageSurface renderer`,
+    )
+    assert.doesNotMatch(
+      renderedSource.source,
+      /v-component="(?!FederatedFullPageSurface)[^"]+"/,
+      `${path} must not retain a local LiveVue page renderer`,
+    )
   }
 }
 
