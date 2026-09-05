@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
-import { CButton, CStatePanel } from "@cadence/ui";
 import { computed, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
 import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
@@ -182,26 +181,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 <template>
   <div id="comms-application" class="comms-application">
-    <CStatePanel
+    <section
       v-if="loading"
       id="comms-application-loading"
-      title="Loading communications surface"
-      description="Requesting the mission-scoped presentation from the Phoenix host."
-      tone="loading"
+      class="card min-h-80 border border-base-300 bg-base-200"
       aria-live="polite"
-    />
-    <CStatePanel
+    >
+      <div class="card-body flex items-center justify-center gap-5 p-8 text-base-content/70">
+        <span
+          class="loading loading-spinner loading-md"
+          aria-label="Loading communications surface"
+        ></span>
+        <div>
+          <strong class="mb-1 block text-lg font-medium tracking-tight text-base-content"
+            >Loading communications surface</strong
+          >
+          <p class="text-sm leading-6">
+            Requesting the mission-scoped presentation from the Phoenix host.
+          </p>
+        </div>
+      </div>
+    </section>
+    <section
       v-else-if="error"
       id="comms-application-error"
-      title="Communications surface unavailable"
-      :description="error"
-      tone="error"
+      class="card border border-error/40 bg-base-200"
       aria-live="assertive"
     >
-      <template #action>
-        <CButton id="retry-comms-application" size="sm" @click="loadSurface">Retry query</CButton>
-      </template>
-    </CStatePanel>
+      <div class="card-body p-6">
+        <div class="flex items-start gap-3">
+          <span
+            class="grid size-10 shrink-0 place-items-center border border-error font-mono text-error"
+            aria-hidden="true"
+            >!</span
+          >
+          <div>
+            <strong class="block text-lg font-medium tracking-tight text-base-content"
+              >Communications surface unavailable</strong
+            >
+            <p class="mt-1 text-sm leading-6 text-base-content/70">{{ error }}</p>
+            <button
+              id="retry-comms-application"
+              type="button"
+              class="btn btn-sm mt-5"
+              @click="loadSurface"
+            >
+              Retry query
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
     <div v-else-if="selectedComponent && pageProps" :data-surface-id="props.surface.surfaceId">
       <component
         :is="selectedComponent"

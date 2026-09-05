@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { CButton } from "@cadence/ui";
 import { reactive, watch } from "vue";
 import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
 import CadenceField from "./ui/components/CadenceField.vue";
@@ -156,9 +155,9 @@ const save = () => emit("save", payload());
       </CadenceField>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-        <CButton :id="form.actions.submit.id" type="submit" variant="primary">
+        <button :id="form.actions.submit.id" type="submit" class="btn btn-primary">
           {{ form.actions.submit.label }}
-        </CButton>
+        </button>
         <a
           :id="form.actions.cancel.id"
           :href="form.actions.cancel.href"

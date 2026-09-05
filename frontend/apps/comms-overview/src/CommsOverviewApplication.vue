@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
-import { CButton, CStatePanel } from "@cadence/ui";
 import { computed, onMounted, ref, shallowRef } from "vue";
 import CommsOverviewPage from "./CommsOverviewPage.vue";
 import { unwrapCommsOverviewResponse, type CommsOverviewPresentation } from "./comms-overview";
@@ -50,26 +49,57 @@ async function loadSurface(): Promise<void> {
     :data-comms-overview-surface="props.surface.surfaceId"
     data-comms-overview-renderer="CommsOverviewPage"
   >
-    <CStatePanel
+    <section
       v-if="loading"
       id="comms-overview-loading"
-      title="Loading communications overview"
-      description="Requesting the mission-scoped presentation from the Phoenix host."
-      tone="loading"
-      aria-live="polite"
-    />
-    <CStatePanel
-      v-else-if="error"
-      id="comms-overview-error"
-      title="Communications overview unavailable"
-      :description="error"
-      tone="error"
+      class="card min-h-80 border border-base-300 bg-base-200"
       aria-live="polite"
     >
-      <template #action>
-        <CButton id="retry-comms-overview" size="sm" @click="loadSurface">Retry query</CButton>
-      </template>
-    </CStatePanel>
+      <div class="card-body flex items-center justify-center gap-5 p-8 text-base-content/70">
+        <span
+          class="loading loading-spinner loading-md"
+          aria-label="Loading communications overview"
+        ></span>
+        <div>
+          <strong class="mb-1 block text-lg font-medium tracking-tight text-base-content"
+            >Loading communications overview</strong
+          >
+          <p class="text-sm leading-6">
+            Requesting the mission-scoped presentation from the Phoenix host.
+          </p>
+        </div>
+      </div>
+    </section>
+    <section
+      v-else-if="error"
+      id="comms-overview-error"
+      class="card border border-error/40 bg-base-200"
+      aria-live="polite"
+    >
+      <div class="card-body p-6">
+        <div class="flex items-start gap-3">
+          <span
+            class="grid size-10 shrink-0 place-items-center border border-error font-mono text-error"
+            aria-hidden="true"
+            >!</span
+          >
+          <div>
+            <strong class="block text-lg font-medium tracking-tight text-base-content"
+              >Communications overview unavailable</strong
+            >
+            <p class="mt-1 text-sm leading-6 text-base-content/70">{{ error }}</p>
+            <button
+              id="retry-comms-overview"
+              type="button"
+              class="btn btn-sm mt-5"
+              @click="loadSurface"
+            >
+              Retry query
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
     <component v-else-if="renderer && presentation" :is="renderer" :presentation="presentation" />
   </div>
 </template>

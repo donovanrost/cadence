@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Fragment, defineComponent, h, isVNode, type VNodeChild } from "vue";
-import type { BreadcrumbsPresentation } from "@cadence/ui";
+import type { BreadcrumbsPresentation } from "./page_shell";
 
 const props = defineProps<{ breadcrumbs?: BreadcrumbsPresentation }>();
 
