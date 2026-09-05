@@ -8,6 +8,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   alias Cadence.Auth.Scope
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias CadenceWeb.ApplicationActionIdempotency
   alias CadenceWeb.FrontendReleaseActivation.{CatalogBinding, CatalogGeneration, Request}
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
@@ -779,7 +780,11 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       )
 
     action = json_response(action_response, 200)
-    assert action["receiptId"] == "application-host-receipt-phase-d-action"
+
+    assert {:ok, idempotency_key_digest} =
+             ApplicationActionIdempotency.key_digest("phase-d-action")
+
+    assert action["receiptId"] == "application-host-receipt-" <> idempotency_key_digest
     assert action["result"]["applicationKey"] == "telemetry_decom"
     assert action["result"]["applicationVersion"] == 1
     assert action["result"]["inputId"] == "telemetry-fields"

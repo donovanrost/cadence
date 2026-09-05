@@ -141,28 +141,37 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          surface_id,
          release_snapshot
        ) do
-    case ApplicationInstallations.fetch_installed(
-           current_scope,
-           route_context.host_context,
-           application_key
-         ) do
-      {:ok, installation} ->
-        registered_application(
-          application_key,
-          installation,
-          route_context.host_context,
-          surface_id,
-          release_snapshot
-        )
+    admission =
+      case ApplicationInstallations.fetch_installed(
+             current_scope,
+             route_context.host_context,
+             application_key
+           ) do
+        {:ok, installation} ->
+          registered_application(
+            application_key,
+            installation,
+            route_context.host_context,
+            surface_id,
+            release_snapshot
+          )
 
-      {:error, :application_not_installed} ->
-        contributed_application_admission(
-          current_scope,
-          application_key,
-          route_context,
-          surface_id,
-          release_snapshot
-        )
+        {:error, :application_not_installed} ->
+          contributed_application_admission(
+            current_scope,
+            application_key,
+            route_context,
+            surface_id,
+            release_snapshot
+          )
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+
+    case admission do
+      {:ok, application} ->
+        {:ok, Map.put(application, :generation_id, release_snapshot.generation_id)}
 
       {:error, reason} ->
         {:error, reason}

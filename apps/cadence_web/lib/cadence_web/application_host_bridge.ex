@@ -14,7 +14,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   alias Cadence.Applications.HostQueryRegistry
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces
-  alias CadenceWeb.ApplicationHostCatalog
+  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationHostCatalog}
   alias CadenceWeb.ApplicationSurfaces.{Declarative, DocumentState}
 
   @type route_context :: ApplicationHostCatalog.route_context()
@@ -56,14 +56,93 @@ defmodule CadenceWeb.ApplicationHostBridge do
       )
       when is_map(params) and is_binary(idempotency_key) and
              idempotency_key != "" and is_list(opts) do
-    with :ok <- validate_request(params),
-         :ok <- validate_idempotency_key(idempotency_key) do
-      generic_action(current_scope, route_context, params, idempotency_key, opts)
+    with {:ok, prepared} <-
+           prepare_action(current_scope, route_context, params, idempotency_key, opts) do
+      execute_action(current_scope, route_context, prepared, opts)
     end
   end
 
   def action(%Scope{}, _route_context, _params, _idempotency_key, _opts),
     do: {:error, :invalid_application_request}
+
+  @doc "Validates and authorizes an action without executing it."
+  @spec prepare_action(Scope.t(), route_context(), map(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def prepare_action(current_scope, route_context, params, raw_idempotency_key, opts \\ [])
+
+  def prepare_action(
+        %Scope{} = current_scope,
+        route_context,
+        params,
+        raw_idempotency_key,
+        opts
+      )
+      when is_map(params) and is_binary(raw_idempotency_key) and raw_idempotency_key != "" and
+             is_list(opts) do
+    with :ok <- validate_request(params),
+         {:ok, idempotency_key_digest} <-
+           ApplicationActionIdempotency.key_digest(raw_idempotency_key),
+         {:ok, request} <- action_request(params, idempotency_key_digest),
+         {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
+         {:ok, action} <- declared_action(admission, request),
+         {:ok, dispatch_request} <- dispatch_request(request, admission, action),
+         :ok <-
+           ActionDispatcher.authorize(
+             current_scope,
+             route_context.host_context,
+             dispatch_request
+           ),
+         {:ok, identity} <-
+           ApplicationActionIdempotency.identity(
+             current_scope,
+             route_context.host_context,
+             admission,
+             action
+           ) do
+      {:ok,
+       %{
+         admission: admission,
+         action: action,
+         dispatch_request: dispatch_request,
+         idempotency_key_digest: idempotency_key_digest,
+         identity: identity,
+         request: request,
+         request_document: request_document(admission, action, request)
+       }}
+    end
+  end
+
+  def prepare_action(%Scope{}, _route_context, _params, _raw_idempotency_key, _opts),
+    do: {:error, :invalid_application_request}
+
+  @doc "Executes an action that has already passed the host authorization gate."
+  @spec execute_action(Scope.t(), route_context(), map(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def execute_action(current_scope, route_context, prepared, opts \\ [])
+
+  def execute_action(
+        %Scope{} = current_scope,
+        route_context,
+        %{
+          dispatch_request: dispatch_request,
+          idempotency_key_digest: idempotency_key_digest,
+          request: request
+        },
+        opts
+      ) do
+    with {:ok, result} <-
+           ActionDispatcher.dispatch(current_scope, route_context.host_context, dispatch_request),
+         {:ok, action_result} <- action_result(request.application_key, result) do
+      safe_output(
+        %{
+          "receiptId" => receipt_id(idempotency_key_digest),
+          "completedAt" => Keyword.fetch!(opts, :now),
+          "result" => action_result
+        },
+        :application_action_output_bounds_exceeded
+      )
+    end
+  end
 
   defp generic_query(current_scope, route_context, request, admission) do
     with {:ok, document} <-
@@ -76,34 +155,6 @@ defmodule CadenceWeb.ApplicationHostBridge do
              request.params
            ) do
       query_response(admission, document)
-    end
-  end
-
-  defp generic_action(current_scope, route_context, params, idempotency_key, opts) do
-    with {:ok, request} <- action_request(params, idempotency_key),
-         {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
-         {:ok, action} <- declared_action(admission, request),
-         {:ok, result} <-
-           ActionDispatcher.dispatch(
-             current_scope,
-             route_context.host_context,
-             %ActionRequest{
-               application_key: admission.definition.application_key,
-               application_version: admission.definition.version,
-               action_id: action.action_id,
-               params: request.params,
-               idempotency_key: idempotency_key
-             }
-           ),
-         {:ok, action_result} <- action_result(request.application_key, result) do
-      safe_output(
-        %{
-          "receiptId" => receipt_id(idempotency_key),
-          "completedAt" => Keyword.fetch!(opts, :now),
-          "result" => action_result
-        },
-        :application_action_output_bounds_exceeded
-      )
     end
   end
 
@@ -184,6 +235,41 @@ defmodule CadenceWeb.ApplicationHostBridge do
       {action_params, input} when is_map(action_params) and action_params == input -> {:ok, input}
       _invalid -> {:error, :invalid_application_request}
     end
+  end
+
+  defp dispatch_request(
+         %{
+           application_key: application_key,
+           application_version: application_version,
+           params: params
+         },
+         _admission,
+         %ActionDefinition{action_id: action_id}
+       ) do
+    {:ok,
+     %ActionRequest{
+       application_key: application_key,
+       application_version: application_version,
+       action_id: action_id,
+       params: params,
+       idempotency_key: nil
+     }}
+  end
+
+  defp request_document(
+         %{definition: definition, surface: surface},
+         %ActionDefinition{} = action,
+         %{params: params}
+       ) do
+    %{
+      "applicationKey" => definition.application_key,
+      "applicationVersion" => definition.version,
+      "surfaceId" => surface.surface_id,
+      "surfaceVersion" => surface.version,
+      "operation" => action.action_id,
+      "operationVersion" => action.version,
+      "params" => params
+    }
   end
 
   defp optional_surface(params) do
@@ -331,8 +417,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp host_dom_id(:spacecraft), do: "spacecraft-application-host"
   defp host_dom_id(:mission), do: "mission-application-host"
 
-  defp receipt_id(idempotency_key),
-    do: "application-host-receipt-" <> idempotency_key
+  defp receipt_id(idempotency_key_digest),
+    do: "application-host-receipt-" <> idempotency_key_digest
 
   defp required_text(params, key) do
     case Map.get(params, key) do
@@ -375,13 +461,6 @@ defmodule CadenceWeb.ApplicationHostBridge do
     case JSONBoundary.validate(params) do
       :ok -> :ok
       {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
-    end
-  end
-
-  defp validate_idempotency_key(key) do
-    case JSONBoundary.validate(key) do
-      :ok -> :ok
-      {:error, _reason} -> {:error, :invalid_application_request}
     end
   end
 

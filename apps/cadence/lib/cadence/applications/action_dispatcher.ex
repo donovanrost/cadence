@@ -71,6 +71,39 @@ defmodule Cadence.Applications.ActionDispatcher do
   def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :application_action_scope_required}
 
+  @doc "Runs every action authorization and preflight check without executing the provider."
+  @spec authorize(Scope.t(), HostContext.t(), ActionRequest.t()) :: :ok | {:error, term()}
+  def authorize(
+        %Scope{organization_id: organization_id} = current_scope,
+        %HostContext{} = host_context,
+        %ActionRequest{} = request
+      )
+      when is_binary(organization_id) do
+    authorize(current_scope, host_context, request, ActionProviderRegistry.providers())
+  end
+
+  def authorize(%Scope{}, %HostContext{}, %ActionRequest{}),
+    do: {:error, :application_action_scope_required}
+
+  @doc false
+  @spec authorize(Scope.t(), HostContext.t(), ActionRequest.t(), map()) ::
+          :ok | {:error, term()}
+  def authorize(
+        %Scope{organization_id: organization_id} = current_scope,
+        %HostContext{} = host_context,
+        %ActionRequest{} = request,
+        registered_providers
+      )
+      when is_binary(organization_id) and is_map(registered_providers) do
+    case authorization_context(current_scope, host_context, request, registered_providers) do
+      {:ok, _context} -> :ok
+      {:error, _reason} = error -> error
+    end
+  end
+
+  def authorize(%Scope{}, %HostContext{}, %ActionRequest{}, _registered_providers),
+    do: {:error, :application_action_scope_required}
+
   @doc false
   @spec dispatch(Scope.t(), HostContext.t(), ActionRequest.t(), map()) ::
           {:ok, term()} | {:error, term()}
@@ -81,22 +114,8 @@ defmodule Cadence.Applications.ActionDispatcher do
         registered_providers
       )
       when is_binary(organization_id) and is_map(registered_providers) do
-    with {:ok, definition} <-
-           Registry.fetch_available(request.application_key, request.application_version),
-         :ok <- ensure_host_scope(definition, host_context),
-         {:ok, required_permission} <- declared_action_permission(definition, request.action_id),
-         {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
-         :ok <- authorize_action(current_scope, host_context, required_permission),
-         {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
-             current_scope,
-             host_context,
-             request.application_key
-           ),
-         :ok <- ensure_installation_version(installation, request.application_version),
-         :ok <- ensure_expected_configuration_version(installation, request),
-         :ok <-
-           ensure_action_preflight(current_scope, host_context, definition, request.action_id),
+    with {:ok, %{provider: provider, installation: installation}} <-
+           authorization_context(current_scope, host_context, request, registered_providers),
          {:ok, result} <- invoke_execute(provider, current_scope, host_context, request),
          {:ok, _installation} <-
            record_installation_outcome(
@@ -113,6 +132,32 @@ defmodule Cadence.Applications.ActionDispatcher do
 
   def dispatch(%Scope{}, %HostContext{}, %ActionRequest{}, _registered_providers),
     do: {:error, :application_action_scope_required}
+
+  defp authorization_context(
+         current_scope,
+         host_context,
+         request,
+         registered_providers
+       ) do
+    with {:ok, definition} <-
+           Registry.fetch_available(request.application_key, request.application_version),
+         :ok <- ensure_host_scope(definition, host_context),
+         {:ok, required_permission} <- declared_action_permission(definition, request.action_id),
+         {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
+         :ok <- authorize_action(current_scope, host_context, required_permission),
+         {:ok, installation} <-
+           ApplicationInstallations.fetch_installed(
+             current_scope,
+             host_context,
+             request.application_key
+           ),
+         :ok <- ensure_installation_version(installation, request.application_version),
+         :ok <- ensure_expected_configuration_version(installation, request),
+         :ok <-
+           ensure_action_preflight(current_scope, host_context, definition, request.action_id) do
+      {:ok, %{provider: provider, installation: installation}}
+    end
+  end
 
   defp ensure_host_scope(
          %ApplicationDefinition{installable_scopes: scopes},

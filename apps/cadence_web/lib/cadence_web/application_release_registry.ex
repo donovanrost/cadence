@@ -22,6 +22,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
 
   @type snapshot :: %{
           source: :static | :database,
+          generation_id: binary(),
           entries: [{key(), release()}]
         }
 
@@ -187,7 +188,14 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     if row.cutover_at != nil or row.legacy_catalog_publication_id != nil do
       {:error, {:integrity_failure, :invalid_pre_cutover_control}}
     else
-      {:ok, %{source: :static, entries: static_entries()}}
+      entries = static_entries()
+
+      {:ok,
+       %{
+         source: :static,
+         generation_id: static_generation_id(entries),
+         entries: entries
+       }}
     end
   end
 
@@ -211,7 +219,12 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
          {:ok, catalog} <- validate_catalog(row, now_ms),
          {:ok, entries} <- validate_bindings(bindings, catalog.entries),
          :ok <- validate_snapshot_digest(row, entries) do
-      {:ok, %{source: :database, entries: Enum.map(entries, &entry_pair/1)}}
+      {:ok,
+       %{
+         source: :database,
+         generation_id: row.generation_id,
+         entries: Enum.map(entries, &entry_pair/1)
+       }}
     end
   end
 
@@ -1268,6 +1281,11 @@ defmodule CadenceWeb.ApplicationReleaseRegistry do
     |> Enum.map(fn contribution ->
       {ReleaseContribution.key(contribution), ReleaseContribution.release(contribution)}
     end)
+  end
+
+  defp static_generation_id(entries) do
+    digest = :crypto.hash(:sha256, :erlang.term_to_binary(entries, [:deterministic]))
+    "static:" <> Base.encode16(digest, case: :lower)
   end
 
   defp allowed_origins, do: Keyword.get(publication_config(), :allowed_origins, [])
