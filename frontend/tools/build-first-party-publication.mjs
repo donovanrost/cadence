@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
 
 const frontendRoot = resolve(import.meta.dirname, "..");
@@ -22,9 +23,10 @@ export async function buildFirstPartyPublication() {
 }
 
 function runPnpm(argumentsList) {
-  const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  const command = process.platform === "win32" ? "corepack.cmd" : "corepack";
+  const commandArguments = ["pnpm", ...argumentsList];
   return new Promise((resolveResult, reject) => {
-    const child = spawn(command, argumentsList, {
+    const child = spawn(command, commandArguments, {
       cwd: frontendRoot,
       env: process.env,
       stdio: "inherit",
@@ -33,12 +35,15 @@ function runPnpm(argumentsList) {
     child.once("close", (code, signal) => {
       if (code === 0) resolveResult();
       else
-        reject(new Error(`${command} ${argumentsList.join(" ")} exited with ${code ?? signal}.`));
+        reject(
+          new Error(`${command} ${commandArguments.join(" ")} exited with ${code ?? signal}.`),
+        );
     });
   });
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.url);
+const isMain =
+  process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 if (isMain) {
   buildFirstPartyPublication().catch((error) => {
     console.error(error instanceof Error ? error.message : error);

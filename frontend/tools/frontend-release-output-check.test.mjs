@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   assertLocalReference,
+  assertImportReferences,
   assertOutputOutsideRepository,
   assertReleaseArtifactPath,
   canonicalPathWithMissingTail,
@@ -264,6 +265,24 @@ void test("fails closed for unresolved dynamic local imports and asset URLs", as
     await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local asset URL/);
   });
 
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const currentPage = new URL(window.location.href);\nvoid currentPage;\n',
+    );
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+
+  await withFixture(async (root) => {
+    await writeFile(
+      join(root, "remoteEntry.js"),
+      'const currentPage = new URL(target.value, window.location.origin);\nvoid currentPage;\n',
+    );
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
+
   for (const source of [
     'const target = "./assets/dynamic.js";\nnew Worker(target);\n',
     'const target = "dynamic";\nnew SharedWorker("./assets/" + target);\n',
@@ -303,6 +322,48 @@ void test("accepts statically bounded worker references", async () => {
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
   });
+});
+
+void test("bounds host runtime URL exceptions to exact generated call contexts", () => {
+  const files = new Set(["host.js"]);
+  const options = { authoritativeHostPublication: true };
+  const assertHostSource = (source) =>
+    assert.doesNotThrow(() =>
+      assertImportReferences(source, "host.js", files, repositoryRoot, new Set(), options),
+    );
+
+  assertHostSource(
+    'var nf = typeof ENV_TARGET > "u" || ENV_TARGET !== "web" ? (e, t, n, r) => { return new URL(e); } : (e, t, n, r) => { return e; };\n',
+  );
+  assertHostSource("function mf(e, t) { return new URL(e, t).href; }\n");
+  assertHostSource("function eg(e, a, n) { return new URL(n), new URL(e, a); }\n");
+  assertHostSource(
+    'function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n',
+  );
+
+  assert.throws(
+    () =>
+      assertImportReferences(
+        "function mutable(value) { return new URL(value); }\n",
+        "host.js",
+        files,
+        repositoryRoot,
+        new Set(),
+        options,
+      ),
+    /unresolved dynamic local asset URL/,
+  );
+  assert.throws(
+    () =>
+      assertImportReferences(
+        'function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n',
+        "host.js",
+        files,
+        repositoryRoot,
+        new Set(),
+      ),
+    /unresolved dynamic local asset URL/,
+  );
 });
 
 void test("rejects encoded, split, invalid, and cross-platform forbidden artifact paths", () => {
@@ -381,39 +442,26 @@ void test("requires federation manifest and stats references to existing files",
   });
 });
 
-void test("binds federation byte metadata to the exact admitted file bytes", async () => {
+void test("distinguishes producer size metadata from explicit byte metadata", async () => {
   await withFixture(async (root) => {
-    await writeFile(join(root, "remoteEntry.js"), Buffer.alloc(2353, 0x20));
     const manifestPath = join(root, "mf-manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.metaData.remoteEntry.size = 2381;
     await writeFile(manifestPath, JSON.stringify(manifest));
-    await expectCheckFailure(root, "fixture_remote", /byte length/);
-  });
-
-  await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
     const stats = JSON.parse(await readFile(statsPath, "utf8"));
     stats.buildOutput[0].size = 2381;
     await writeFile(statsPath, JSON.stringify(stats));
-    await expectCheckFailure(root, "fixture_remote", /byte length/);
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
   });
 
   await withFixture(async (root) => {
-    const manifestPath = join(root, "mf-manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.metaData.remoteEntry.size = (await readFile(join(root, "remoteEntry.js"))).byteLength;
-    await writeFile(manifestPath, JSON.stringify(manifest));
-
     const statsPath = join(root, "mf-stats.json");
     const stats = JSON.parse(await readFile(statsPath, "utf8"));
-    for (const output of stats.buildOutput) {
-      output.size = (await readFile(join(root, ...output.fileName.split("/")))).byteLength;
-    }
+    stats.buildOutput[0].byteLength = 2381;
     await writeFile(statsPath, JSON.stringify(stats));
-
-    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
-    assert.equal(result.fileCount > 0, true);
+    await expectCheckFailure(root, "fixture_remote", /byte length/);
   });
 });
 
@@ -669,6 +717,12 @@ void test("rejects forbidden publication references in admitted file contents", 
       await expectCheckFailure(root, "fixture_remote", message);
     });
   }
+
+  await withFixture(async (root) => {
+    await writeFile(join(root, "assets", "quoted.js"), 'const className = "ops-standalone";\n');
+    const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
+    assert.equal(result.fileCount > 0, true);
+  });
 
   await withFixture(async (root) => {
     const manifestPath = join(root, "mf-manifest.json");

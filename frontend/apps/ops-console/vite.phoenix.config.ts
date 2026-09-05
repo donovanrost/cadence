@@ -1,13 +1,33 @@
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
+const publicationManifest = {
+  additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
+    if (!Object.hasOwn(stats, "assetAnalysis")) return stats;
+    const publicationStats = { ...stats };
+    delete publicationStats.assetAnalysis;
+    return publicationStats;
+  },
+};
 const publicationRoot = resolve(
   import.meta.dirname,
   "../../../apps/cadence_web/priv/static/assets/application-host/ops-console",
 );
+
+function publicationOutputPlugin() {
+  return {
+    name: "cadence-ops-console-publication-output",
+    enforce: "post" as const,
+    apply: "build" as const,
+    config(config: ViteUserConfig) {
+      config.build ??= {};
+      config.build.manifest = false;
+    },
+  };
+}
 
 export default defineConfig({
   define: {
@@ -21,5 +41,9 @@ export default defineConfig({
     manifest: false,
     rollupOptions: { input: resolve(import.meta.dirname, "src/federated-application.ts") },
   },
-  plugins: lazyPlugins(() => [vue(), federation(federationConfig)]),
+  plugins: lazyPlugins(() => [
+    vue(),
+    federation({ ...federationConfig, manifest: publicationManifest, publicPath: "auto" }),
+    publicationOutputPlugin(),
+  ]),
 });
