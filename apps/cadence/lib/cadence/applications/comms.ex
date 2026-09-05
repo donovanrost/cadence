@@ -2,6 +2,7 @@ defmodule Cadence.Applications.Comms do
   @moduledoc "The single source of truth for the first-party Comms application contract."
 
   alias Cadence.Applications.{
+    ActionDefinition,
     ApplicationDefinition,
     CatalogContribution,
     ReleaseContribution,
@@ -77,11 +78,45 @@ defmodule Cadence.Applications.Comms do
       subject_schema: "cadence.comms.ground_station.subject",
       fallback_path: "/comms/ground-stations/:subject",
       fallback_parent_path: "/comms/ground-stations"
+    },
+    %{
+      id: "provider_list",
+      purpose: :collection,
+      label: "Providers",
+      order: 90,
+      fallback_path: "/comms/providers"
+    },
+    %{
+      id: "provider_new",
+      purpose: :configuration,
+      label: "New Provider",
+      order: 100,
+      fallback_path: "/comms/providers/new",
+      fallback_parent_path: "/comms/providers"
+    },
+    %{
+      id: "provider_show",
+      purpose: :subject_detail,
+      label: "Provider",
+      order: 110,
+      subject_schema: "cadence.comms.provider.subject",
+      fallback_path: "/comms/providers/:subject",
+      fallback_parent_path: "/comms/providers"
     }
+  ]
+
+  @provider_actions [
+    %{id: "create_provider", surface: "provider_new", effect: :durable},
+    %{id: "validate_provider", surface: "provider_show", effect: :external},
+    %{id: "sync_provider", surface: "provider_show", effect: :external},
+    %{id: "archive_provider", surface: "provider_show", effect: :durable}
   ]
 
   @spec identity() :: map()
   def identity, do: @identity
+
+  @spec application_key() :: binary()
+  def application_key, do: @identity.application_key
 
   @spec release_contributions() :: [ReleaseContribution.t()]
   def release_contributions do
@@ -132,13 +167,21 @@ defmodule Cadence.Applications.Comms do
         application_version: @identity.application_version,
         query_id: "cadence.comms." <> spec.id,
         query_version: @identity.surface_version,
-        provider: Cadence.Reads.ApplicationSurfaces.Comms
+        provider: query_provider(spec.id)
       }
     end)
   end
 
   @spec host_query_providers() :: [module()]
   def host_query_providers, do: [Cadence.Applications.LegacyCommsOverview.QueryProvider]
+
+  @spec action_provider() :: module()
+  def action_provider, do: Cadence.Applications.Comms.ActionProvider
+
+  defp query_provider(surface_id) when surface_id in ~w(provider_list provider_new provider_show),
+    do: Cadence.Reads.ApplicationSurfaces.CommsProviders
+
+  defp query_provider(_surface_id), do: Cadence.Reads.ApplicationSurfaces.Comms
 
   @spec definition() :: ApplicationDefinition.t()
   def definition do
@@ -152,6 +195,7 @@ defmodule Cadence.Applications.Comms do
       installable_scopes: [:mission],
       resource_contract: %Cadence.Applications.ResourceContract{},
       lifecycle_contract: %Cadence.Applications.LifecycleContract{},
+      actions: Enum.map(@provider_actions, &action_definition/1),
       surfaces: Enum.map(@surface_specs, &surface_definition/1)
     }
   end
@@ -171,7 +215,7 @@ defmodule Cadence.Applications.Comms do
         fallback_parent_path: Map.get(spec, :fallback_parent_path)
       },
       data_contract: %{query_id: "cadence.comms." <> spec.id, version: @identity.surface_version},
-      actions: [],
+      actions: surface_actions(spec.id),
       refresh: :static,
       renderer: {:trusted, "cadence.comms." <> spec.id}
     }
@@ -181,4 +225,25 @@ defmodule Cadence.Applications.Comms do
     do: %{schema_id: schema, version: @identity.surface_version}
 
   defp subject_contract(_spec), do: nil
+
+  defp surface_actions(surface_id) do
+    @provider_actions
+    |> Enum.filter(&(&1.surface == surface_id))
+    |> Enum.map(& &1.id)
+  end
+
+  defp action_definition(spec) do
+    %ActionDefinition{
+      action_id: spec.id,
+      version: @identity.application_version,
+      intent: if(spec.id == "create_provider", do: :configuration, else: :operation),
+      scope: :mission,
+      input_contract: %{schema_id: "cadence.comms.#{spec.id}.input", version: 1},
+      result_contract: %{schema_id: "cadence.comms.#{spec.id}.result", version: 1},
+      required_permission: "operate_mission",
+      effect: spec.effect,
+      execution: :immediate,
+      concurrency: %{strategy: :expected_version}
+    }
+  end
 end

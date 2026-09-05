@@ -1,134 +1,136 @@
 <script setup lang="ts">
-import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
+import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
-import { onMounted, ref, shallowRef } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
+import type { Component } from "vue";
 import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
-import { isCommsOverviewPresentation } from "./comms-overview";
+import CommsProviderList from "./CommsProviderList.vue";
+import CommsProviderNew from "./CommsProviderNew.vue";
+import CommsProviderShow from "./CommsProviderShow.vue";
 
-type SurfaceId =
-  | "overview"
-  | "validation"
-  | "transports"
-  | "transport"
-  | "routing"
-  | "routing_detail"
-  | "ground_stations"
-  | "ground_station";
+const props = defineProps<FullPageSurfaceProps>();
 
-type SurfacePayload = {
-  navigation: {
-    fallback_href: string;
-    breadcrumbs: Array<{ label: string; href: string | null }>;
-  };
-  data: Record<string, unknown>;
+const surfaceComponents: Record<string, Component> = {
+  overview: CommsCanonicalSurface,
+  validation: CommsCanonicalSurface,
+  transports: CommsCanonicalSurface,
+  transport: CommsCanonicalSurface,
+  routing: CommsCanonicalSurface,
+  routing_detail: CommsCanonicalSurface,
+  ground_stations: CommsCanonicalSurface,
+  ground_station: CommsCanonicalSurface,
+  provider_list: CommsProviderList,
+  provider_new: CommsProviderNew,
+  provider_show: CommsProviderShow,
 };
 
-const props = withDefaults(defineProps<FederatedApplicationProps & { surfaceId?: SurfaceId }>(), {
-  surfaceId: undefined,
-});
-
-const surfaceId = ref<SurfaceId>(props.surfaceId ?? "overview");
-const payload = shallowRef<SurfacePayload>();
+const pageProps = shallowRef<Record<string, unknown>>();
 const loading = ref(true);
 const error = ref<string>();
+const actionPending = ref(false);
 let loadGeneration = 0;
 
-onMounted(() => {
-  surfaceId.value = props.surfaceId ?? surfaceFromHost();
-  void loadSurface();
-});
+const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
+
+onMounted(loadSurface);
 
 async function loadSurface(): Promise<void> {
   const generation = ++loadGeneration;
   loading.value = true;
   error.value = undefined;
-  payload.value = undefined;
+  pageProps.value = undefined;
 
   try {
+    if (!selectedComponent.value) throw new Error("The selected Comms surface has no renderer.");
+
     const response = await props.bridge.query<unknown>({
-      queryId: `cadence.comms.${surfaceId.value}`,
-      version: 1,
+      queryId: props.surface.dataContract.id,
+      version: props.surface.dataContract.version,
       context: props.context,
     });
     if (generation !== loadGeneration) return;
-    payload.value = unwrapSurfaceResponse(response, surfaceId.value);
+    pageProps.value = pagePropsFor(response);
   } catch (reason) {
     if (generation !== loadGeneration) return;
-    error.value = reason instanceof Error ? reason.message : "The communications surface failed.";
+    error.value = reason instanceof Error ? reason.message : "The Comms surface query failed.";
   } finally {
     if (generation === loadGeneration) loading.value = false;
   }
 }
 
-function surfaceFromHost(): SurfaceId {
-  const root = document.getElementById("cadence-federation-root");
-  const candidate = root?.dataset.surfaceId;
-  if (isSurfaceId(candidate)) return candidate;
+async function executeAction(actionId: string, input: unknown = {}): Promise<void> {
+  if (!props.surface.actions.includes(actionId)) {
+    error.value = `The ${actionId} action is not declared for this Comms surface.`;
+    return;
+  }
 
-  const pathname = window.location.pathname;
-  if (pathname.includes("ground-stations"))
-    return pathname.endsWith("/ground-stations") ? "ground_stations" : "ground_station";
-  if (pathname.includes("transports"))
-    return pathname.endsWith("/transports") ? "transports" : "transport";
-  if (pathname.includes("routing"))
-    return pathname.endsWith("/routing") ? "routing" : "routing_detail";
-  if (pathname.endsWith("/validation")) return "validation";
-  return "overview";
+  if (actionPending.value) return;
+  actionPending.value = true;
+  error.value = undefined;
+
+  try {
+    await props.bridge.execute({
+      applicationKey: props.application.applicationKey,
+      applicationVersion: props.application.applicationVersion,
+      actionId,
+      input,
+      context: props.context,
+    });
+    await loadSurface();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
+  } finally {
+    actionPending.value = false;
+  }
 }
 
-function isSurfaceId(value: string | undefined): value is SurfaceId {
-  return [
-    "overview",
-    "validation",
-    "transports",
-    "transport",
-    "routing",
-    "routing_detail",
-    "ground_stations",
-    "ground_station",
-  ].includes(value ?? "");
+function providerActionInput(): Record<string, string> {
+  const provider = pageProps.value?.provider;
+  if (isRecord(provider) && typeof provider.provider_id === "string") {
+    return { provider_id: provider.provider_id };
+  }
+  throw new Error("The provider action payload is missing provider_id.");
 }
 
-function unwrapSurfaceResponse(value: unknown, requestedSurface: SurfaceId): SurfacePayload {
-  if (
-    requestedSurface === "overview" &&
-    isRecord(value) &&
-    value.queryVersion === 1 &&
-    isCommsOverviewPresentation(value.presentation)
-  ) {
-    return {
-      navigation: {
-        fallback_href: `/missions/${props.context.missionId}/comms`,
-        breadcrumbs: [
-          { label: props.context.missionName, href: `/missions/${props.context.missionId}` },
-          { label: "Comms", href: null },
-        ],
-      },
-      data: value.presentation as unknown as Record<string, unknown>,
-    };
+function pagePropsFor(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error("The Comms surface response is invalid.");
+
+  const data = isRecord(value.trusted_surface)
+    ? isRecord(value.trusted_surface.data)
+      ? value.trusted_surface.data
+      : value.trusted_surface
+    : isRecord(value.data)
+      ? value.data
+      : value;
+  const navigation = isRecord(value.navigation) ? value.navigation : undefined;
+
+  if (!navigation || !isValidNavigation(navigation)) {
+    throw new Error("The Comms surface navigation is invalid.");
   }
 
-  if (!isRecord(value) || !isRecord(value.navigation) || !isRecord(value.data)) {
-    throw new Error("The communications surface response is invalid.");
+  if (props.surface.surfaceId === "provider_list") {
+    if (!isRecord(data.presentation)) {
+      throw new Error("The Comms provider list response is invalid.");
+    }
+    return { presentation: data.presentation };
   }
 
-  const breadcrumbs = value.navigation.breadcrumbs;
-  const fallbackHref = value.navigation.fallback_href;
-  if (!Array.isArray(breadcrumbs) || typeof fallbackHref !== "string") {
-    throw new Error("The communications surface navigation is invalid.");
-  }
-  const safeBreadcrumbs = breadcrumbs.filter(validBreadcrumb);
-  if (safeBreadcrumbs.length !== breadcrumbs.length) {
-    throw new Error("The communications surface navigation is invalid.");
+  if (props.surface.surfaceId === "provider_new" || props.surface.surfaceId === "provider_show") {
+    return data;
   }
 
-  return {
-    navigation: { fallback_href: fallbackHref, breadcrumbs: safeBreadcrumbs },
-    data: value.data,
-  };
+  return { surfaceId: props.surface.surfaceId, payload: { navigation, data } };
 }
 
-function validBreadcrumb(value: unknown): value is { label: string; href: string | null } {
+function isValidNavigation(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.fallback_href === "string" &&
+    Array.isArray(value.breadcrumbs) &&
+    value.breadcrumbs.every(validBreadcrumb)
+  );
+}
+
+function validBreadcrumb(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.label === "string" &&
@@ -157,12 +159,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       title="Communications surface unavailable"
       :description="error"
       tone="error"
-      aria-live="polite"
+      aria-live="assertive"
     >
       <template #action>
         <CButton id="retry-comms-application" size="sm" @click="loadSurface">Retry query</CButton>
       </template>
     </CStatePanel>
-    <CommsCanonicalSurface v-else-if="payload" :surface-id="surfaceId" :payload="payload" />
+    <div v-else-if="selectedComponent && pageProps" :data-surface-id="props.surface.surfaceId">
+      <component
+        :is="selectedComponent"
+        v-bind="pageProps"
+        @save="executeAction('create_provider', $event)"
+        @validate-provider="executeAction('validate_provider', providerActionInput())"
+        @sync-provider="executeAction('sync_provider', providerActionInput())"
+        @archive-provider="executeAction('archive_provider', providerActionInput())"
+      />
+    </div>
   </div>
 </template>

@@ -8,7 +8,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
-  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
+  @comms_surfaces ~w(overview validation transports transport routing routing_detail ground_stations ground_station provider_list provider_new provider_show)
 
   test "serializes tagged organization, user, and admin scope documents without mission ids" do
     scope = %Scope{organization_id: "org-1", actor_kind: :user, user: %{id: "user-1"}}
@@ -174,11 +174,11 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
   end
 
-  test "uses native semantic fallbacks when the installed Comms surfaces have no release" do
+  test "admits the canonical Comms release and retains native semantic fallbacks" do
     {scope, %{mission: mission} = route_context} = installed_comms_context()
 
     for surface_id <- @comms_surfaces do
-      assert {:error, :unknown_application_release} =
+      assert {:ok, %{release: release}} =
                ApplicationHostCatalog.admit_application(
                  scope,
                  route_context,
@@ -186,15 +186,18 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                  surface_id,
                  now: @now
                )
+
+      assert release.remote_name == "cadence_comms"
+      assert release.exposed_module == "./Application"
     end
 
-    assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
+    assert {:ok, "/missions/#{mission.mission_id}/applications/comms/overview/federated"} ==
              ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
 
     assert {:ok, workspace_href} =
              ApplicationHostCatalog.workspace_href(scope, route_context, "comms", now: @now)
 
-    refute workspace_href =~ "/federated"
+    assert workspace_href =~ "/federated"
 
     assert {:ok, "/missions/#{mission.mission_id}/comms"} ==
              ApplicationHostCatalog.fallback_href(route_context, "comms", "overview")

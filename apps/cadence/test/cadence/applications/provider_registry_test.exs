@@ -177,6 +177,15 @@ defmodule Cadence.Applications.ProviderRegistryTest do
 
     assert Map.has_key?(providers, {"comms", "cadence.comms.overview"})
 
+    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_list"}) ==
+             Cadence.Reads.ApplicationSurfaces.CommsProviders
+
+    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_new"}) ==
+             Cadence.Reads.ApplicationSurfaces.CommsProviders
+
+    assert Map.fetch!(providers, {"comms", "cadence.comms.provider_show"}) ==
+             Cadence.Reads.ApplicationSurfaces.CommsProviders
+
     declared_keys =
       for definition <- definitions,
           surface <- definition.surfaces,

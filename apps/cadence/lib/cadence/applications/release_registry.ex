@@ -2,6 +2,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
   @moduledoc "Generic core registry for application-owned frontend release contributions."
 
   alias Cadence.Applications.{
+    Comms,
     LegacyCommsOverview,
     MissionCatalog,
     OpsConsole,
@@ -12,6 +13,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   @max_contributions 64
   @contributors [
+    Comms,
     LegacyCommsOverview,
     MissionCatalog,
     Spacecraft,

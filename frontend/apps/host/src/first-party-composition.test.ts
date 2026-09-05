@@ -18,6 +18,8 @@ const context = {
 function applicationFor(
   contract: (typeof APPROVED_FIRST_PARTY_APPLICATIONS)[number],
 ): CatalogApplication {
+  const exposedModule =
+    contract.applicationKey === "comms_overview" ? "./LegacyApplication" : "./Application";
   const surface = {
     surfaceId: "overview",
     version: 1,
@@ -27,7 +29,7 @@ function applicationFor(
     navigation: { label: "Overview", order: 1 },
     dataContract: { id: `cadence.${contract.applicationKey}.overview`, version: 1 },
     actions: [],
-    renderer: { kind: "federated-vue" as const, exposedModule: "./Application" },
+    renderer: { kind: "federated-vue" as const, exposedModule },
   };
 
   return {
@@ -42,7 +44,7 @@ function applicationFor(
       releaseId: `sha256:${"a".repeat(64)}`,
       remoteName: contract.remoteName,
       manifestUrl: `/assets/application-host/${contract.publicationBundle}/mf-manifest.json`,
-      exposedModule: "./Application",
+      exposedModule,
     },
   };
 }

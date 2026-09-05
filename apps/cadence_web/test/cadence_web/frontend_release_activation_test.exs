@@ -188,7 +188,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         application: %{"id" => "comms_overview", "version" => 1},
         package: %{"id" => "cadence.comms_overview", "version" => 1},
         surface: %{"id" => "overview", "version" => 1},
-        remote_name: "cadence_comms_overview"
+        remote_name: "cadence_comms",
+        exposed_module: "./LegacyApplication"
       )
 
     {_document, _payload, initial_telemetry} =
@@ -223,7 +224,8 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         application: %{"id" => "comms_overview", "version" => 1},
         package: %{"id" => "cadence.comms_overview", "version" => 1},
         surface: %{"id" => "overview", "version" => 1},
-        remote_name: "cadence_comms_overview"
+        remote_name: "cadence_comms",
+        exposed_module: "./LegacyApplication"
       )
 
     {_document, _payload, promoted_telemetry} =
@@ -263,7 +265,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert Enum.map(entries, fn {key, release} ->
              {key, release.remote_name, release.exposed_module, release.release_id}
            end) == [
-             {{"comms_overview", 1, "overview", 1}, "cadence_comms_overview", "./Application",
+             {{"comms_overview", 1, "overview", 1}, "cadence_comms", "./LegacyApplication",
               promoted_comms["releaseId"]},
              {{"telemetry_decom", 1, "packet_bindings", 1}, "cadence_telemetry_decom",
               "./Application", promoted_telemetry["releaseId"]}
@@ -2022,8 +2024,14 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         end
       end)
 
-    case Keyword.fetch(opts, :remote_name) do
-      {:ok, value} -> Map.put(release, "remoteName", value)
+    release =
+      case Keyword.fetch(opts, :remote_name) do
+        {:ok, value} -> Map.put(release, "remoteName", value)
+        :error -> release
+      end
+
+    case Keyword.fetch(opts, :exposed_module) do
+      {:ok, value} -> Map.put(release, "exposedModule", value)
       :error -> release
     end
   end

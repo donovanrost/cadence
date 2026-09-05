@@ -131,18 +131,21 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              "navigation" => %{"label" => "Overview", "order" => 10},
              "dataContract" => %{"id" => "cadence.comms.overview", "version" => 1},
              "actions" => [],
-             "renderer" => %{"kind" => "federated-vue", "exposedModule" => "./Application"}
+             "renderer" => %{
+               "kind" => "federated-vue",
+               "exposedModule" => "./LegacyApplication"
+             }
            }
 
     release = application["release"]
     assert release["federation"] == "module_federation"
-    assert release["remoteName"] == "cadence_comms_overview"
-    assert release["exposedModule"] == "./Application"
+    assert release["remoteName"] == "cadence_comms"
+    assert release["exposedModule"] == "./LegacyApplication"
     assert release["manifestUrl"] =~ ~r{\Ahttps?://}
 
     assert String.ends_with?(
              release["manifestUrl"],
-             "/assets/application-host/comms-overview/mf-manifest.json"
+             "/assets/application-host/comms/mf-manifest.json"
            )
 
     refute Jason.encode!(catalog) =~ "user_session_token"
@@ -260,7 +263,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert %{"code" => "unsupported_query"} = json_response(rejected, 404)
   end
 
-  test "an installed first-class application without a release is absent from the federated catalog" do
+  test "an installed first-class Comms application is present with its canonical release" do
     {member_conn, _organization, mission, scope} = signed_in_scope_and_mission()
     host_context = HostContext.mission(mission.mission_id)
 
@@ -269,7 +272,13 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     {_catalog_conn, catalog} = fetch_catalog(member_conn, mission)
 
-    refute Enum.any?(catalog["applications"], &(&1["applicationKey"] == "comms"))
+    assert application = Enum.find(catalog["applications"], &(&1["applicationKey"] == "comms"))
+    assert application["package"] == %{"packageId" => "cadence.comms", "version" => 1}
+    assert application["release"]["remoteName"] == "cadence_comms"
+    assert application["release"]["exposedModule"] == "./Application"
+
+    assert application["release"]["manifestUrl"] =~
+             "/assets/application-host/comms/mf-manifest.json"
   end
 
   test "JSON bridge requests require the catalog CSRF token and opaque host session", %{

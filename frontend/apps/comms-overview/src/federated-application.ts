@@ -4,6 +4,7 @@ import {
   FEDERATED_APPLICATION_MANIFEST_SCHEMA,
   type FederatedSurfaceDefinition,
 } from "@cadence/plugin-sdk";
+import CommsApplication from "./CommsApplication.vue";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
 
 export const legacyManifest = defineApplicationManifest({
@@ -37,7 +38,7 @@ export const legacyManifest = defineApplicationManifest({
       navigation: { label: "Overview", order: 10 },
       dataContract: { id: "cadence.comms.overview", version: 1 },
       actions: [],
-      renderer: { kind: "federated-vue", exposedModule: "./Application" },
+      renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
     },
   ],
 });
@@ -66,36 +67,59 @@ export const canonicalManifest = defineApplicationManifest({
   surfaces: [
     canonicalSurface("overview", "Overview", "overview", "cadence.comms.overview", 10),
     canonicalSurface("validation", "Validation", "activity", "cadence.comms.validation", 20),
-    canonicalSurface("transports", "Transports", "configuration", "cadence.comms.transports", 30),
-    canonicalSurface("transport", "Transport", "configuration", "cadence.comms.transport", 40),
-    canonicalSurface("routing", "Routing", "configuration", "cadence.comms.routing", 50),
+    canonicalSurface("transports", "Transports", "collection", "cadence.comms.transports", 30),
+    canonicalSurface("transport", "Transport", "subject_detail", "cadence.comms.transport", 40),
+    canonicalSurface("routing", "Routing", "collection", "cadence.comms.routing", 50),
     canonicalSurface(
       "routing_detail",
       "Routing Rule",
-      "configuration",
+      "subject_detail",
       "cadence.comms.routing_detail",
       60,
     ),
     canonicalSurface(
       "ground_stations",
       "Ground Stations",
-      "configuration",
+      "collection",
       "cadence.comms.ground_stations",
       70,
     ),
     canonicalSurface(
       "ground_station",
       "Ground Station",
-      "configuration",
+      "subject_detail",
       "cadence.comms.ground_station",
       80,
+    ),
+    canonicalSurface(
+      "provider_list",
+      "Providers",
+      "collection",
+      "cadence.comms.provider_list",
+      90,
+    ),
+    canonicalSurface(
+      "provider_new",
+      "New Provider",
+      "configuration",
+      "cadence.comms.provider_new",
+      100,
+      ["create_provider"],
+    ),
+    canonicalSurface(
+      "provider_show",
+      "Provider",
+      "subject_detail",
+      "cadence.comms.provider_show",
+      110,
+      ["validate_provider", "sync_provider", "archive_provider"],
     ),
   ],
 });
 
-export const manifest = legacyManifest;
+export const manifest = canonicalManifest;
 export { CommsOverviewApplication as legacyApplication };
-export default CommsOverviewApplication;
+export default CommsApplication;
 
 function canonicalSurface(
   surfaceId: string,
@@ -103,6 +127,7 @@ function canonicalSurface(
   purpose: FederatedSurfaceDefinition["purpose"],
   queryId: string,
   order: number,
+  actions: string[] = [],
 ): FederatedSurfaceDefinition {
   return {
     surfaceId,
@@ -112,7 +137,7 @@ function canonicalSurface(
     placement: "application_workspace",
     navigation: { label, order },
     dataContract: { id: queryId, version: 1 },
-    actions: [],
+    actions,
     renderer: { kind: "federated-vue", exposedModule: "./Application" },
   };
 }

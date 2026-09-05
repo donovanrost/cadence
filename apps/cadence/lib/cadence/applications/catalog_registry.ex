@@ -4,6 +4,7 @@ defmodule Cadence.Applications.CatalogRegistry do
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogContribution,
+    Comms,
     JSONBoundary,
     LegacyCommsOverview,
     MissionCatalog,
@@ -14,6 +15,7 @@ defmodule Cadence.Applications.CatalogRegistry do
 
   @max_contributions 64
   @contributors [
+    Comms,
     LegacyCommsOverview,
     MissionCatalog,
     Spacecraft,
