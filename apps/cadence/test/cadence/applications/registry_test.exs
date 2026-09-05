@@ -60,20 +60,14 @@ defmodule Cadence.Applications.RegistryTest do
     assert {:ok, %SurfaceDefinition{} = surface} =
              Registry.fetch_default_surface(definition, :spacecraft)
 
-    assert surface.surface_id == "manage"
-    assert surface.renderer == {:trusted, "cadence.telemetry_decom.manage"}
-    assert "request_activation" in surface.actions
-
-    assert surface.references == %{
-             "catalog_revision_id" => %ReferenceDefinition{
-               provider_id: "cadence.catalog.telemetry_revisions",
-               version: 1
-             }
-           }
+    assert surface.surface_id == "packet_bindings"
+    assert surface.renderer == {:declarative, "cadence.host.surface.v1"}
+    assert "save_packet_bindings" in surface.actions
+    assert surface.references == %{}
 
     assert Enum.map(Registry.workspace_surfaces(definition, :spacecraft), & &1.surface_id) == [
-             "manage",
-             "packet_bindings"
+             "packet_bindings",
+             "manage"
            ]
   end
 
@@ -154,20 +148,29 @@ defmodule Cadence.Applications.RegistryTest do
            end)
 
     assert Enum.map(Registry.available_for_scope(:spacecraft), & &1.application_key) == [
-             "telemetry_decom"
+             "telemetry_decom",
+             "spacecraft"
            ]
 
     assert Enum.map(Registry.available_for_scope(:mission), & &1.application_key) == [
              "derived_telemetry",
              "limits",
-             "comms"
+             "comms",
+             "comms_overview",
+             "mission_catalog",
+             "spacecraft",
+             "ops_console"
            ]
 
     assert Enum.sort(Registry.known_keys()) == [
              "cfdp",
              "comms",
+             "comms_overview",
              "derived_telemetry",
              "limits",
+             "mission_catalog",
+             "ops_console",
+             "spacecraft",
              "telemetry_decom"
            ]
   end

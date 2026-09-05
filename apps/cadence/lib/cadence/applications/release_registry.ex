@@ -5,8 +5,8 @@ defmodule Cadence.Applications.ReleaseRegistry do
     LegacyCommsOverview,
     MissionCatalog,
     OpsConsole,
-    Spacecraft,
     ReleaseContribution,
+    Spacecraft,
     TelemetryDecomCatalogContribution
   }
 

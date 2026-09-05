@@ -254,9 +254,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   def validate do
     with :ok <- OrganizationAdminQuery.validate(),
          :ok <- OrganizationAdminAction.validate(),
-         :ok <- validate_surface_ids(),
-         :ok <- validate_queries_and_actions() do
-      :ok
+         :ok <- validate_surface_ids() do
+      validate_queries_and_actions()
     end
   end
 

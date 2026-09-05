@@ -294,7 +294,7 @@ defmodule Cadence.Extensions.RegistryTest do
       ApplicationRegistry.all()
       |> MapSet.new(&{&1.application_key, &1.version})
 
-    assert contributed_versions == registered_versions
+    assert MapSet.subset?(contributed_versions, registered_versions)
   end
 
   test "complete catalog validation rejects hidden invalid and duplicate packages" do

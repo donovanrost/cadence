@@ -1,7 +1,12 @@
 defmodule Cadence.Applications.CommsApplicationTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Applications.{ApplicationDefinition, Comms, ReleaseContribution}
+  alias Cadence.Applications.{
+    ApplicationDefinition,
+    Comms,
+    LegacyCommsOverview,
+    ReleaseContribution
+  }
 
   test "publishes the complete mission-scoped Comms surface contract" do
     assert Comms.identity() == %{
@@ -63,7 +68,7 @@ defmodule Cadence.Applications.CommsApplicationTest do
   end
 
   test "leaves the legacy overview identity available as a separate contract" do
-    legacy = Cadence.Applications.LegacyCommsOverview.identity()
+    legacy = LegacyCommsOverview.identity()
 
     assert legacy.application_key == "comms_overview"
     assert legacy.package_id == "cadence.comms_overview"
