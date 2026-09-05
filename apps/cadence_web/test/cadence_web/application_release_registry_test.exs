@@ -166,7 +166,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     accepted = ApplicationReleaseRegistry.snapshot(now: "2026-09-02T00:00:00Z")
     assert {:ok, %{source: :database, entries: entries}} = accepted
-    assert length(entries) == 2
+    assert length(entries) == 6
 
     accepted_control =
       Repo.query!("""

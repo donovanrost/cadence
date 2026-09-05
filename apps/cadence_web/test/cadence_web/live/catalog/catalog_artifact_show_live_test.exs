@@ -58,7 +58,7 @@ defmodule CadenceWeb.CatalogArtifactShowLiveTest do
              "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => Map.put(query_params, "mission_id", mission.mission_id)
+             "query_params" => query_params
            }
   end
 end

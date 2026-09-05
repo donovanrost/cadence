@@ -28,6 +28,7 @@ import {
   runScenario,
   toOrdinarySerializableResult,
   waitForPageNavigation,
+  waitForLatestRequestTerminal,
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
 
@@ -635,6 +636,51 @@ test("public request failure observations cannot clear private diagnostic failur
   assert.equal(diagnostics.requestFailures.length, 1);
   diagnostics.requestFailures.splice(0);
   assertDirty(diagnostics, "cleared public request failure");
+  diagnostics.dispose();
+});
+
+test("orphan ExtraInfo metadata is not a request, but bound records must terminate", () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+
+  client.emit("Network.responseReceivedExtraInfo", {
+    requestId: "orphan-extra-info",
+    statusCode: 200,
+    headers: {},
+  });
+  assert.doesNotThrow(() => diagnostics.assertClean("orphan ExtraInfo metadata"));
+
+  const boundUrl = `${origin}/assets/application-host/host/host.js`;
+  client.emit("Network.requestWillBeSent", {
+    requestId: "bound-extra-info",
+    request: { url: boundUrl, method: "GET", headers: {} },
+    type: "Script",
+  });
+  client.emit("Network.responseReceivedExtraInfo", {
+    requestId: "bound-extra-info",
+    statusCode: 200,
+    headers: {},
+  });
+  assertDirty(diagnostics, "request-bound ExtraInfo before completion");
+  client.emit("Network.loadingFinished", { requestId: "bound-extra-info" });
+  assert.doesNotThrow(() => diagnostics.assertClean("request-bound ExtraInfo completion"));
+
+  const lateBoundUrl = `${origin}/api/cadence/application-host/v1/catalog`;
+  client.emit("Network.responseReceivedExtraInfo", {
+    requestId: "late-bound-extra-info",
+    statusCode: 200,
+    headers: {},
+  });
+  assert.doesNotThrow(() => diagnostics.assertClean("late orphan ExtraInfo metadata"));
+  client.emit("Network.requestWillBeSent", {
+    requestId: "late-bound-extra-info",
+    request: { url: lateBoundUrl, method: "GET", headers: {} },
+    type: "Fetch",
+  });
+  assertDirty(diagnostics, "late-bound ExtraInfo before completion");
+  client.emit("Network.loadingFinished", { requestId: "late-bound-extra-info" });
+  assert.doesNotThrow(() => diagnostics.assertClean("late-bound ExtraInfo completion"));
+
   diagnostics.dispose();
 });
 
@@ -2689,6 +2735,33 @@ test("the cache-enabled federation browser gate never disables Chrome cache", as
   assert.equal(source.includes("Network.setCacheDisabled"), false);
 });
 
+test("the Ops representative browser gate pins the predecessor directory page selector", async () => {
+  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
+  const opsConfigStart = source.indexOf('applicationKey: "ops_console"');
+  const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
+  assert.ok(opsConfigStart >= 0 && opsConfigEnd > opsConfigStart);
+  const opsConfig = source.slice(opsConfigStart, opsConfigEnd);
+  assert.equal(
+    opsConfig.includes("document.querySelector('#ops-dashboards-page')"),
+    true,
+  );
+  assert.equal(opsConfig.includes("#ops-dashboard-directory-page"), false);
+});
+
+test("the shared host body is read on the first load and reused by later 304 checks", async () => {
+  const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
+  const organizationStart = source.indexOf('applicationKey: "organization_admin"');
+  const missionStart = source.indexOf('applicationKey: "mission_catalog"', organizationStart);
+  assert.ok(organizationStart >= 0 && missionStart > organizationStart);
+  assert.match(source.slice(organizationStart, missionStart), /readPublishedHostBody: true/);
+
+  const commsStart = source.indexOf('queryId: "cadence.comms.overview"');
+  const commsEnd = source.indexOf("});", commsStart);
+  assert.ok(commsStart >= 0 && commsEnd > commsStart);
+  assert.doesNotMatch(source.slice(commsStart, commsEnd), /readPublishedHostBody/);
+  assert.match(source, /\[200, 304\]\.includes\(hostRecord\.response\.status\)/);
+});
+
 test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
   const pathname = "/api/query";
   const initial = record({ url: `${origin}${pathname}`, requestId: "query-1", startedAtMs: 10 });
@@ -3095,6 +3168,48 @@ test("waitForResponse selects the newest completed response in the requested gen
   const result = await waitForResponse(diagnostics, () => true, "duplicate query", { generation });
   assert.equal(result.requestId, "query-newest");
   assert.deepEqual(seenOptions, [{ generation }]);
+});
+
+test("latest terminal request waiting cannot be masked by an earlier same-URL completion", async () => {
+  const client = makeDiagnosticClient();
+  const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
+  const url = `${origin}/assets/application-host/host/host.js`;
+
+  emitExpectedActionRequest(client, "host-completed", url);
+  emitActionResponse(client, "host-completed", url, 200);
+  client.emit("Network.loadingFinished", { requestId: "host-completed" });
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "host-outstanding",
+    request: { url, method: "GET", headers: {} },
+    type: "Script",
+  });
+  emitActionResponse(client, "host-outstanding", url, 200);
+
+  const terminal = waitForLatestRequestTerminal(diagnostics, (record) => record.url === url, "host bundle", {
+    timeout: 500,
+  });
+  setTimeout(() => client.emit("Network.loadingFinished", { requestId: "host-outstanding" }), 20);
+  assert.equal((await terminal).requestId, "host-outstanding");
+
+  client.emit("Network.requestWillBeSent", {
+    requestId: "host-failed",
+    request: { url, method: "GET", headers: {} },
+    type: "Script",
+  });
+  emitActionResponse(client, "host-failed", url, 503);
+  client.emit("Network.loadingFailed", {
+    requestId: "host-failed",
+    errorText: "net::ERR_HTTP_RESPONSE_CODE_FAILURE",
+  });
+  await assert.rejects(
+    waitForLatestRequestTerminal(diagnostics, (record) => record.url === url, "host bundle", {
+      timeout: 500,
+    }),
+    /host bundle request host-failed failed:/,
+  );
+
+  diagnostics.dispose();
 });
 
 test("navigation completion discards queued prior-page events and requires the exact loader", async () => {

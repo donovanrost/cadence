@@ -25,7 +25,7 @@ defmodule CadenceWeb.MissionNewLive do
         surface_id="mission_new"
         host_scope="organization"
         organization_id={@current_scope.organization.organization_id}
-        query_params={%{organization_id: @current_scope.organization.organization_id}}
+        query_params={%{}}
         v-ssr={false}
         class="space-y-6 max-w-xl"
       />

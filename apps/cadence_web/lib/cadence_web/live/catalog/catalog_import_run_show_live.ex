@@ -24,7 +24,7 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
           surface_id="catalog_import_run_show"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
-          query_params={%{mission_id: @current_mission.mission_id, import_run_id: @run.import_run_id}}
+          query_params={%{import_run_id: @run.import_run_id}}
           v-ssr={false}
         />
       </div>

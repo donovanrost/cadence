@@ -126,15 +126,18 @@ defmodule Cadence.Applications.Registry do
   def fetch_surface(%ApplicationDefinition{} = definition, scope, surface_id)
       when is_binary(surface_id) do
     with :ok <- ApplicationDefinition.validate(definition) do
-      case Enum.find(workspace_surfaces(definition, scope), &(&1.surface_id == surface_id)) do
-        %SurfaceDefinition{} = surface -> {:ok, surface}
-        nil -> {:error, :unknown_surface}
-      end
+      surface_result(Enum.find(definition.surfaces, &matches_surface?(&1, scope, surface_id)))
     end
   end
 
   def fetch_surface(%ApplicationDefinition{}, _scope, _surface_id),
     do: {:error, :unknown_surface}
+
+  defp matches_surface?(%SurfaceDefinition{} = surface, scope, surface_id),
+    do: surface.scope == scope and surface.surface_id == surface_id
+
+  defp surface_result(%SurfaceDefinition{} = surface), do: {:ok, surface}
+  defp surface_result(nil), do: {:error, :unknown_surface}
 
   @spec workspace_surfaces(ApplicationDefinition.t(), SurfaceDefinition.scope()) ::
           [SurfaceDefinition.t()]

@@ -296,7 +296,7 @@ defmodule CadenceWeb.ApplicationHostController do
           host_scope: Atom.to_string(route_context.host_context.placement),
           application_key: application_key,
           surface_id: surface_id,
-          catalog_url: catalog_url(route_context),
+          catalog_url: catalog_url(route_context, application_key, surface_id),
           fallback_href: fallback_href
         )
 
@@ -715,12 +715,15 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp catalog_url(
-         %{host_context: %HostContext{placement: placement} = host_context} = route_context
+         %{host_context: %HostContext{placement: placement} = host_context} = route_context,
+         application_key,
+         surface_id
        )
-       when placement in [:organization, :user, :admin] do
+       when placement in [:organization, :user, :admin] and is_binary(application_key) and
+              is_binary(surface_id) do
     base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
 
-    query =
+    scope_query =
       case placement do
         :organization ->
           %{"scope" => "organization", "organization_id" => host_context.organization_id}
@@ -732,11 +735,21 @@ defmodule CadenceWeb.ApplicationHostController do
           %{"scope" => "admin"}
       end
 
+    query =
+      scope_query
+      |> Map.put("application_key", application_key)
+      |> Map.put("surface_id", surface_id)
+
     base <> "?" <> URI.encode_query(query)
   end
 
-  defp catalog_url(route_context),
-    do: ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
+  defp catalog_url(route_context, application_key, surface_id)
+       when is_binary(application_key) and is_binary(surface_id) do
+    base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
+    query = URI.encode_query(%{"application_key" => application_key, "surface_id" => surface_id})
+
+    base <> "?" <> query
+  end
 
   defp catalog_problem(conn, :unknown_application_release) do
     problem(

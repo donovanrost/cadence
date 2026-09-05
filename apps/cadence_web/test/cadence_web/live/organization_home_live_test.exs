@@ -31,7 +31,7 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
              "surface_id" => "organization_home",
              "host_scope" => "organization",
              "organization_id" => organization.organization_id,
-             "query_params" => %{"organization_id" => organization.organization_id}
+             "query_params" => %{}
            }
   end
 

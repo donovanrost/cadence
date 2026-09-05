@@ -23,6 +23,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   alias Cadence.Extensions.{ApplicationContribution, ExtensionPackage}
   alias Cadence.Ids
   alias Cadence.Missions.Mission
+  alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Spacecraft
   alias CadenceWeb.ApplicationReleaseRegistry
 
@@ -143,35 +144,22 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          release_snapshot
        ) do
     admission =
-      case ApplicationInstallations.fetch_installed(
-             current_scope,
-             route_context.host_context,
-             application_key
-           ) do
-        {:ok, installation} ->
-          registered_application(
-            application_key,
-            installation,
-            route_context.host_context,
-            surface_id,
-            release_snapshot
-          )
-
-        {:error, :application_not_installed} ->
-          if compatibility_only_application?(application_key) do
-            contributed_application_admission(
-              current_scope,
-              application_key,
-              route_context,
-              surface_id,
-              release_snapshot
-            )
-          else
-            {:error, :application_not_installed}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
+      if installation_exempt_application?(application_key, route_context) do
+        contributed_application_admission(
+          current_scope,
+          application_key,
+          route_context,
+          surface_id,
+          release_snapshot
+        )
+      else
+        admit_installed_application(
+          current_scope,
+          route_context,
+          application_key,
+          surface_id,
+          release_snapshot
+        )
       end
 
     case admission do
@@ -180,6 +168,57 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp admit_installed_application(
+         current_scope,
+         %{host_context: host_context} = route_context,
+         application_key,
+         surface_id,
+         release_snapshot
+       ) do
+    case ApplicationInstallations.fetch_installed(current_scope, host_context, application_key) do
+      {:ok, installation} ->
+        registered_application(
+          application_key,
+          installation,
+          host_context,
+          surface_id,
+          release_snapshot
+        )
+
+      {:error, :application_not_installed} ->
+        admit_missing_application(
+          current_scope,
+          route_context,
+          application_key,
+          surface_id,
+          release_snapshot
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp admit_missing_application(
+         current_scope,
+         route_context,
+         application_key,
+         surface_id,
+         release_snapshot
+       ) do
+    if compatibility_only_application?(application_key) do
+      contributed_application_admission(
+        current_scope,
+        application_key,
+        route_context,
+        surface_id,
+        release_snapshot
+      )
+    else
+      {:error, :application_not_installed}
     end
   end
 
@@ -540,9 +579,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
        ) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- CatalogRegistry.validate(),
-         contributions <-
-           CatalogRegistry.all()
-           |> Enum.reject(&registered_application_contribution?/1),
+         contributions <- catalog_contributions_for_placement(route_context),
          true <- length(contributions) <= @max_catalog_applications do
       collect_contributed_applications(
         contributions,
@@ -556,6 +593,32 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       {:error, reason} -> {:error, reason}
       _invalid -> {:error, :application_catalog_unavailable}
     end
+  end
+
+  defp catalog_contributions_for_placement(%{
+         host_context: %HostContext{placement: placement}
+       }) do
+    CatalogRegistry.all()
+    |> Enum.filter(fn contribution ->
+      not registered_application_contribution?(contribution) or
+        installation_exempt_contribution?(contribution, placement)
+    end)
+  end
+
+  defp installation_exempt_contribution?(
+         %CatalogContribution{definition: %{application_key: application_key}},
+         placement
+       ) do
+    ApplicationSurfaces.installation_exempt?(application_key, placement)
+  end
+
+  defp installation_exempt_contribution?(_contribution, _placement), do: false
+
+  defp installation_exempt_application?(
+         application_key,
+         %{host_context: %HostContext{placement: placement}}
+       ) do
+    ApplicationSurfaces.installation_exempt?(application_key, placement)
   end
 
   defp collect_contributed_applications(

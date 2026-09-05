@@ -21,7 +21,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
         surface_id="transport_new"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{mission_id: @current_mission.mission_id}}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

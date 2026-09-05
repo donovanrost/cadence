@@ -17,7 +17,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
         surface_id="organization_home"
         host_scope="organization"
         organization_id={@current_scope.organization.organization_id}
-        query_params={%{organization_id: @current_scope.organization.organization_id}}
+        query_params={%{}}
         v-ssr={false}
       />
     </Layouts.app>

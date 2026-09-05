@@ -49,7 +49,10 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     assert Enum.map(applications, & &1.application_key) == [
              "derived_telemetry",
              "limits",
-             "comms"
+             "comms",
+             "mission_catalog",
+             "ops_console",
+             "spacecraft"
            ]
 
     assert Enum.all?(applications, fn application ->

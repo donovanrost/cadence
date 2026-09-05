@@ -22,7 +22,7 @@ defmodule CadenceWeb.CommsProviderShowLive do
         surface_id="provider_show"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{mission_id: @current_mission.mission_id, provider_id: @provider_id}}
+        query_params={%{provider_id: @provider_id}}
         v-ssr={false}
         class="contents"
       />

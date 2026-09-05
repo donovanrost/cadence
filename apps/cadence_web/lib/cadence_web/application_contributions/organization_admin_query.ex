@@ -219,7 +219,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
          surface_id
        )
        when is_binary(organization_id) do
-    with :ok <- Policy.authorize(scope, :read_organization, %{organization_id: organization_id}),
+    with :ok <- authorize_organization_surface(scope, organization_id, surface_id),
          {:ok, surface} <- fetch_surface_scope(surface_id) do
       if surface == :organization, do: :ok, else: {:error, :unsupported_application_host_context}
     end
@@ -248,6 +248,14 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
 
   defp validate_context(_scope, _host_context, _surface_id),
     do: {:error, :scope_mismatch}
+
+  defp authorize_organization_surface(scope, organization_id, "organization_home") do
+    Policy.authorize(scope, :operate_organization, %{organization_id: organization_id})
+  end
+
+  defp authorize_organization_surface(scope, organization_id, _surface_id) do
+    Policy.authorize(scope, :read_organization, %{organization_id: organization_id})
+  end
 
   defp fetch_surface_scope(surface_id) do
     case Enum.find(@query_contracts, &(&1.surface_id == surface_id)) do

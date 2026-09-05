@@ -16,8 +16,8 @@ defmodule Mix.Tasks.Cadence.Extensions.CheckTest do
     Check.run([])
 
     assert_received {:mix_shell, :info, [summary]}
-    assert summary =~ "Extension host integrity: 10 packages"
-    assert summary =~ "5 applications (4 available)"
+    assert summary =~ "Extension host integrity: 13 packages"
+    assert summary =~ "8 applications (7 available)"
     assert summary =~ "5 capabilities"
     assert summary =~ "1 transport kind"
     assert summary =~ "1 provider connector"

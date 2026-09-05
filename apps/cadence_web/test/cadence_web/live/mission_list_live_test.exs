@@ -31,7 +31,7 @@ defmodule CadenceWeb.MissionListLiveTest do
              "surface_id" => "mission_list",
              "host_scope" => "organization",
              "organization_id" => organization.organization_id,
-             "query_params" => %{"organization_id" => organization.organization_id}
+             "query_params" => %{}
            }
   end
 
