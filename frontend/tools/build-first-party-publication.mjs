@@ -5,7 +5,9 @@ import { discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
 const frontendRoot = resolve(import.meta.dirname, "..");
 
 export async function buildFirstPartyPublication() {
-  const { host, remotes } = await discoverFirstPartyRemotes(frontendRoot);
+  const { host, remotes } = await discoverFirstPartyRemotes(frontendRoot, {
+    requireApproved: true,
+  });
   const packages = [host, ...remotes];
 
   for (const { packageName } of packages) {

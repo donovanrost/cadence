@@ -109,6 +109,7 @@ async function validateHostPublication(root) {
 export async function validateProductionPublication(root = publicationRoot) {
   const { remotes: publicationBundles } = await discoverFirstPartyRemotes(
     join(repositoryRoot, "frontend"),
+    { requireApproved: true },
   );
   const stats = await lstat(root).catch(() => fail(`publication root is unavailable: ${root}`));
   if (stats.isSymbolicLink()) fail("publication root must not be a symlink");

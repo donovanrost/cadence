@@ -2,6 +2,7 @@ import {
   assertFrontendApplicationCatalog,
   type FrontendApplicationCatalog,
 } from "@cadence/plugin-sdk";
+import { assertKnownFirstPartyIdentity } from "./first-party-composition";
 
 export interface CatalogRequest {
   release?: "current" | "previous";
@@ -28,5 +29,6 @@ export async function loadFrontendApplicationCatalog(
 
   const catalog: unknown = await response.json();
   assertFrontendApplicationCatalog(catalog);
+  catalog.applications.forEach(assertKnownFirstPartyIdentity);
   return catalog;
 }

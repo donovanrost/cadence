@@ -3,6 +3,7 @@ import {
   type CatalogApplication,
   type FrontendApplicationCatalog,
 } from "@cadence/plugin-sdk";
+import { assertKnownFirstPartyIdentity } from "./first-party-composition";
 
 export interface PhoenixHostConfig {
   applicationKey: string;
@@ -43,6 +44,7 @@ export async function loadPhoenixApplicationCatalog(
 
   const catalog: unknown = await response.json();
   assertFrontendApplicationCatalog(catalog);
+  catalog.applications.forEach(assertKnownFirstPartyIdentity);
 
   const context = catalog.session.context;
   const expectedScope = config.spacecraftId === undefined ? "mission" : "spacecraft";

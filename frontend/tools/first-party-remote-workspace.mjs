@@ -6,13 +6,41 @@ const PACKAGE_NAME_PATTERN = /^@cadence\/[a-z][a-z0-9-]*$/;
 const REMOTE_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 const BUNDLE_PATTERN = /^[a-z][a-z0-9-]*$/;
 
+export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
+  {
+    directoryName: "organization-admin",
+    bundle: "organization-admin",
+    remoteName: "cadence_organization_admin",
+  },
+  {
+    directoryName: "mission-catalog",
+    bundle: "mission-catalog",
+    remoteName: "cadence_mission_catalog",
+  },
+  { directoryName: "spacecraft", bundle: "spacecraft", remoteName: "cadence_spacecraft" },
+  {
+    directoryName: "telemetry-decom",
+    bundle: "telemetry-decom",
+    remoteName: "cadence_telemetry_decom",
+  },
+  {
+    directoryName: "comms-overview",
+    bundle: "comms-overview",
+    remoteName: "cadence_comms_overview",
+  },
+  { directoryName: "ops-console", bundle: "ops-console", remoteName: "cadence_ops_console" },
+]);
+
 /**
  * Discovers publication-capable first-party apps from their own build and
  * federation config. A package is admitted only when it declares the Phoenix
  * build script and both generated-output identities; unknown output remains a
  * release-check failure rather than an implicit publication.
  */
-export async function discoverFirstPartyRemotes(frontendRoot = DEFAULT_FRONTEND_ROOT) {
+export async function discoverFirstPartyRemotes(
+  frontendRoot = DEFAULT_FRONTEND_ROOT,
+  { requireApproved = frontendRoot === DEFAULT_FRONTEND_ROOT } = {},
+) {
   const appsRoot = join(frontendRoot, "apps");
   const entries = await readdir(appsRoot, { withFileTypes: true });
   const remotes = [];
@@ -67,7 +95,24 @@ export async function discoverFirstPartyRemotes(frontendRoot = DEFAULT_FRONTEND_
     }
   }
 
-  return { host, remotes: remoteEntries };
+  const result = { host, remotes: remoteEntries };
+  if (requireApproved) assertApprovedFirstPartyRemoteCoverage(result);
+  return result;
+}
+
+export function assertApprovedFirstPartyRemoteCoverage({ remotes }) {
+  const byBundle = new Map(remotes.map((remote) => [remote.bundle, remote]));
+  const missing = APPROVED_FIRST_PARTY_REMOTES.filter(
+    ({ bundle, remoteName }) =>
+      byBundle.get(bundle)?.remoteName !== remoteName,
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `The first-party frontend workspace is missing approved remotes: ${missing
+        .map(({ directoryName }) => directoryName)
+        .join(", ")}.`,
+    );
+  }
 }
 
 async function readText(path) {
