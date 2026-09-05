@@ -242,6 +242,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
          %{
            application_key: application_key,
            application_version: application_version,
+           surface_id: surface_id,
+           surface_version: surface_version,
            params: params
          },
          _admission,
@@ -252,6 +254,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
        application_key: application_key,
        application_version: application_version,
        action_id: action_id,
+       surface_id: surface_id,
+       surface_version: surface_version,
        params: params,
        idempotency_key: nil
      }}
