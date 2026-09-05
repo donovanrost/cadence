@@ -1,85 +1,83 @@
 <script setup lang="ts">
-import ActivityTimelineRow from "./ActivityTimelineRow.vue"
-import DashboardActivityControls from "./DashboardActivityControls.vue"
-import SelectedActivityEventSummary from "./SelectedActivityEventSummary.vue"
+import ActivityTimelineRow from "./ActivityTimelineRow.vue";
+import DashboardActivityControls from "./DashboardActivityControls.vue";
+import SelectedActivityEventSummary from "./SelectedActivityEventSummary.vue";
 
-type Attributes = Record<string, string>
-type ClassValue = string | string[]
+type Attributes = Record<string, string>;
+type ClassValue = string | string[];
 type ControlsPresentation = InstanceType<
   typeof DashboardActivityControls
->["$props"]["presentation"]
+>["$props"]["presentation"];
 type SelectedActivityPresentation = InstanceType<
   typeof SelectedActivityEventSummary
->["$props"]["presentation"]
-type RowPresentation = InstanceType<
-  typeof ActivityTimelineRow
->["$props"]["presentation"]
+>["$props"]["presentation"];
+type RowPresentation = InstanceType<typeof ActivityTimelineRow>["$props"]["presentation"];
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type ComparisonReviewActionPresentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   header: {
-    class: string
-    content_class: string
-    title: TextPresentation
-    message: TextPresentation
+    class: string;
+    content_class: string;
+    title: TextPresentation;
+    message: TextPresentation;
     status: {
-      class: ClassValue
-      text: string
-      attrs: Attributes
-    }
-  }
+      class: ClassValue;
+      text: string;
+      attrs: Attributes;
+    };
+  };
   fields: {
-    visible: boolean
-    class: string
+    visible: boolean;
+    class: string;
     rows: Array<{
-      key: string
-      order: number
-      label: TextPresentation
-      value: TextPresentation & {attrs: Attributes}
-    }>
-  }
-}
+      key: string;
+      order: number;
+      label: TextPresentation;
+      value: TextPresentation & { attrs: Attributes };
+    }>;
+  };
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
-  controls: ControlsPresentation
-  selected_activity: SelectedActivityPresentation | null
-  comparison_review_action: ComparisonReviewActionPresentation | null
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
+  controls: ControlsPresentation;
+  selected_activity: SelectedActivityPresentation | null;
+  comparison_review_action: ComparisonReviewActionPresentation | null;
   list: {
-    id: string
-    class: string
-    attrs: Attributes
+    id: string;
+    class: string;
+    attrs: Attributes;
     rows: Array<{
-      key: string
-      order: number
-      presentation: RowPresentation
-    }>
-  }
-  queue_message: (TextPresentation & {attrs: Attributes}) | null
+      key: string;
+      order: number;
+      presentation: RowPresentation;
+    }>;
+  };
+  queue_message: (TextPresentation & { attrs: Attributes }) | null;
   empty_states: Array<
     TextPresentation & {
-      key: string
-      order: number
-      visible: boolean
-      attrs: Attributes
+      key: string;
+      order: number;
+      visible: boolean;
+      attrs: Attributes;
     }
-  >
-}
+  >;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -120,10 +118,7 @@ defineProps<{presentation: Presentation}>()
         v-if="presentation.comparison_review_action.fields.visible"
         :class="presentation.comparison_review_action.fields.class"
       >
-        <template
-          v-for="row in presentation.comparison_review_action.fields.rows"
-          :key="row.key"
-        >
+        <template v-for="row in presentation.comparison_review_action.fields.rows" :key="row.key">
           <dt :class="row.label.class">{{ row.label.text }}</dt>
           <dd :class="row.value.class" v-bind="row.value.attrs">
             {{ row.value.text }}
@@ -153,11 +148,7 @@ defineProps<{presentation: Presentation}>()
     </p>
 
     <template v-for="emptyState in presentation.empty_states" :key="emptyState.key">
-      <p
-        v-if="emptyState.visible"
-        :class="emptyState.class"
-        v-bind="emptyState.attrs"
-      >
+      <p v-if="emptyState.visible" :class="emptyState.class" v-bind="emptyState.attrs">
         {{ emptyState.text }}
       </p>
     </template>

@@ -1,28 +1,28 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import {computed, reactive, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import { computed, reactive, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type FormField = {
-  id: string
-  name: string
-  type: "datetime-local" | "number" | "select" | "text" | "textarea"
-  label: string
-  required: boolean
-  value: string
-  options?: Option[]
-  min?: string
-  placeholder?: string
-  maxlength?: string
-}
+  id: string;
+  name: string;
+  type: "datetime-local" | "number" | "select" | "text" | "textarea";
+  label: string;
+  required: boolean;
+  value: string;
+  options?: Option[];
+  min?: string;
+  placeholder?: string;
+  maxlength?: string;
+};
 
 type FieldName =
   | "spacecraft_id"
@@ -40,87 +40,87 @@ type FieldName =
   | "excluded_providers"
   | "allowed_stations"
   | "excluded_stations"
-  | "rationale"
+  | "rationale";
 
-type ContactRequirementValues = Record<FieldName, string>
+type ContactRequirementValues = Record<FieldName, string>;
 
 type Page = {
-  id: string
-  eyebrow: string
-  heading: string
-  description: string
-}
+  id: string;
+  eyebrow: string;
+  heading: string;
+  description: string;
+};
 
 type JourneySection = {
-  id: string
-  step: string
-  title: string
-  copy: string
-}
+  id: string;
+  step: string;
+  title: string;
+  copy: string;
+};
 
 type ProgressiveSection = {
-  id: string
-  visible: boolean
-  visible_for: string[]
-}
+  id: string;
+  visible: boolean;
+  visible_for: string[];
+};
 
 type Journey = {
-  outcome: JourneySection
-  horizon: JourneySection
+  outcome: JourneySection;
+  horizon: JourneySection;
   advanced: {
-    id: string
-    title: string
-    copy: string
-  }
-  rationale: {id: string}
+    id: string;
+    title: string;
+    copy: string;
+  };
+  rationale: { id: string };
   progressive: {
-    minimum_data_volume: ProgressiveSection
-    minimum_duration: ProgressiveSection
-  }
-}
+    minimum_data_volume: ProgressiveSection;
+    minimum_duration: ProgressiveSection;
+  };
+};
 
 type ContactRequirementForm = {
-  id: string
-  fields: Record<FieldName, FormField>
+  id: string;
+  fields: Record<FieldName, FormField>;
   error: {
-    id: string
-    message: string
-  } | null
-}
+    id: string;
+    message: string;
+  } | null;
+};
 
 type Actions = {
   back: {
-    id: string
-    label: string
-    href: string
-    icon: string
-  }
+    id: string;
+    label: string;
+    href: string;
+    icon: string;
+  };
   cancel: {
-    id: string
-    label: string
-    href: string
-  }
+    id: string;
+    label: string;
+    href: string;
+  };
   submit: {
-    id: string
-    label: string
-  }
-}
+    id: string;
+    label: string;
+  };
+};
 
 type ContactRequirementPayload = {
-  contact_requirement: ContactRequirementValues
-}
+  contact_requirement: ContactRequirementValues;
+};
 
 const props = defineProps<{
-  page: Page
-  journey: Journey
-  form: ContactRequirementForm
-  actions: Actions
-}>()
+  page: Page;
+  journey: Journey;
+  form: ContactRequirementForm;
+  actions: Actions;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: ContactRequirementPayload]
-  save: [payload: ContactRequirementPayload]
-}>()
+  validate: [payload: ContactRequirementPayload];
+  save: [payload: ContactRequirementPayload];
+}>();
 
 const fieldNames: FieldName[] = [
   "spacecraft_id",
@@ -138,8 +138,8 @@ const fieldNames: FieldName[] = [
   "excluded_providers",
   "allowed_stations",
   "excluded_stations",
-  "rationale"
-]
+  "rationale",
+];
 
 const valuesFromForm = (form: ContactRequirementForm): ContactRequirementValues => ({
   spacecraft_id: form.fields.spacecraft_id.value,
@@ -157,11 +157,11 @@ const valuesFromForm = (form: ContactRequirementForm): ContactRequirementValues 
   excluded_providers: form.fields.excluded_providers.value,
   allowed_stations: form.fields.allowed_stations.value,
   excluded_stations: form.fields.excluded_stations.value,
-  rationale: form.fields.rationale.value
-})
+  rationale: form.fields.rationale.value,
+});
 
-const contactRequirement = reactive<ContactRequirementValues>(valuesFromForm(props.form))
-const pendingValidations: ContactRequirementValues[] = []
+const contactRequirement = reactive<ContactRequirementValues>(valuesFromForm(props.form));
+const pendingValidations: ContactRequirementValues[] = [];
 
 const values = (): ContactRequirementValues => ({
   spacecraft_id: contactRequirement.spacecraft_id,
@@ -179,52 +179,52 @@ const values = (): ContactRequirementValues => ({
   excluded_providers: contactRequirement.excluded_providers,
   allowed_stations: contactRequirement.allowed_stations,
   excluded_stations: contactRequirement.excluded_stations,
-  rationale: contactRequirement.rationale
-})
+  rationale: contactRequirement.rationale,
+});
 
 const sameValues = (left: ContactRequirementValues, right: ContactRequirementValues) =>
-  fieldNames.every((field) => left[field] === right[field])
+  fieldNames.every((field) => left[field] === right[field]);
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = valuesFromForm(serverForm)
+    const serverValues = valuesFromForm(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
-    const latestPending = pendingValidations[pendingValidations.length - 1]
+      sameValues(sent, serverValues),
+    );
+    const latestPending = pendingValidations[pendingValidations.length - 1];
     const hasNewerTyping =
       acknowledgedIndex >= 0
         ? acknowledgedIndex < pendingValidations.length - 1
-        : latestPending !== undefined && !sameValues(latestPending, serverValues)
+        : latestPending !== undefined && !sameValues(latestPending, serverValues);
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(contactRequirement, serverValues)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(contactRequirement, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
-const payload = (): ContactRequirementPayload => ({contact_requirement: values()})
+const payload = (): ContactRequirementPayload => ({ contact_requirement: values() });
 
 const validate = () => {
-  const currentValues = values()
-  pendingValidations.push(currentValues)
-  emit("validate", {contact_requirement: currentValues})
-}
+  const currentValues = values();
+  pendingValidations.push(currentValues);
+  emit("validate", { contact_requirement: currentValues });
+};
 
-const save = () => emit("save", payload())
+const save = () => emit("save", payload());
 
 const progressiveVisible = (section: ProgressiveSection) => {
-  const serverSuccessMeasure = props.form.fields.success_measure.value
+  const serverSuccessMeasure = props.form.fields.success_measure.value;
 
   return contactRequirement.success_measure === serverSuccessMeasure
     ? section.visible
-    : section.visible_for.includes(contactRequirement.success_measure)
-}
+    : section.visible_for.includes(contactRequirement.success_measure);
+};
 
 const activeError = computed(() =>
-  sameValues(values(), valuesFromForm(props.form)) ? props.form.error : null
-)
+  sameValues(values(), valuesFromForm(props.form)) ? props.form.error : null,
+);
 </script>
 
 <template>
@@ -253,7 +253,11 @@ const activeError = computed(() =>
 
     <div class="mx-auto max-w-5xl p-5 lg:p-7">
       <form :id="form.id" class="space-y-5" @submit.prevent="save">
-        <CadencePanel :id="journey.outcome.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-5 py-3">
+        <CadencePanel
+          :id="journey.outcome.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-5 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ journey.outcome.step }} / {{ journey.outcome.title }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.outcome.copy }}</p>
@@ -277,7 +281,9 @@ const activeError = computed(() =>
                   v-for="option in form.fields.spacecraft_id.options ?? []"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
 
@@ -299,7 +305,9 @@ const activeError = computed(() =>
                   v-for="option in form.fields.contact_intent.options ?? []"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
 
@@ -321,7 +329,9 @@ const activeError = computed(() =>
                   v-for="option in form.fields.success_measure.options ?? []"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
 
@@ -343,13 +353,19 @@ const activeError = computed(() =>
                   v-for="option in form.fields.priority.options ?? []"
                   :key="option.value"
                   :value="option.value"
-                >{{ option.label }}</option>
+                >
+                  {{ option.label }}
+                </option>
               </select>
             </CadenceField>
           </div>
         </CadencePanel>
 
-        <CadencePanel :id="journey.horizon.id" class="border border-base-300 bg-base-200/20" header-class="border-b border-base-300 px-5 py-3">
+        <CadencePanel
+          :id="journey.horizon.id"
+          class="border border-base-300 bg-base-200/20"
+          header-class="border-b border-base-300 px-5 py-3"
+        >
           <template #header>
             <p class="hud-label">{{ journey.horizon.step }} / {{ journey.horizon.title }}</p>
             <p class="mt-1 text-sm text-base-content/55">{{ journey.horizon.copy }}</p>
@@ -369,7 +385,7 @@ const activeError = computed(() =>
                 :required="form.fields.earliest_start.required"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -386,7 +402,7 @@ const activeError = computed(() =>
                 :required="form.fields.latest_end.required"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <div
@@ -408,7 +424,7 @@ const activeError = computed(() =>
                   :min="form.fields.minimum_data_volume_bytes.min"
                   class="w-full input"
                   @input="validate"
-                >
+                />
               </CadenceField>
             </div>
 
@@ -431,7 +447,7 @@ const activeError = computed(() =>
                   :min="form.fields.minimum_duration_seconds.min"
                   class="w-full input"
                   @input="validate"
-                >
+                />
               </CadenceField>
             </div>
 
@@ -450,7 +466,7 @@ const activeError = computed(() =>
                 :min="form.fields.preferred_duration_seconds.min"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -468,7 +484,7 @@ const activeError = computed(() =>
                 :min="form.fields.contact_count.min"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -486,12 +502,15 @@ const activeError = computed(() =>
                 :min="form.fields.minimum_separation_seconds.min"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
           </div>
         </CadencePanel>
 
-        <CadenceDetailsFrame :id="journey.advanced.id" class="border border-base-300 bg-base-200/20">
+        <CadenceDetailsFrame
+          :id="journey.advanced.id"
+          class="border border-base-300 bg-base-200/20"
+        >
           <summary class="cursor-pointer px-5 py-4 text-sm font-semibold">
             {{ journey.advanced.title }}
             <span class="ml-2 font-normal text-base-content/45">{{ journey.advanced.copy }}</span>
@@ -512,7 +531,7 @@ const activeError = computed(() =>
                 :placeholder="form.fields.allowed_providers.placeholder"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -530,7 +549,7 @@ const activeError = computed(() =>
                 :placeholder="form.fields.excluded_providers.placeholder"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -548,7 +567,7 @@ const activeError = computed(() =>
                 :placeholder="form.fields.allowed_stations.placeholder"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
 
             <CadenceField
@@ -566,15 +585,12 @@ const activeError = computed(() =>
                 :placeholder="form.fields.excluded_stations.placeholder"
                 class="w-full input"
                 @input="validate"
-              >
+              />
             </CadenceField>
           </div>
         </CadenceDetailsFrame>
 
-        <section
-          :id="journey.rationale.id"
-          class="border border-base-300 bg-base-200/20 p-5"
-        >
+        <section :id="journey.rationale.id" class="border border-base-300 bg-base-200/20 p-5">
           <CadenceField
             :control-id="form.fields.rationale.id"
             wrapper-class="fieldset mb-3"
@@ -602,7 +618,8 @@ const activeError = computed(() =>
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="btn btn-ghost btn-sm"
-            >{{ actions.cancel.label }}</a>
+              >{{ actions.cancel.label }}</a
+            >
             <button
               :id="actions.submit.id"
               type="submit"

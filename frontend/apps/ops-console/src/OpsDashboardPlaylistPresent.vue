@@ -1,57 +1,57 @@
 <script setup lang="ts">
 type FreshnessSignal = {
-  id: string
-  visible: boolean
-  icon: string
-  copy: string
-}
+  id: string;
+  visible: boolean;
+  icon: string;
+  copy: string;
+};
 
 type PlaylistPosition = {
-  id: string
-  current: number
-  total: number
-}
+  id: string;
+  current: number;
+  total: number;
+};
 
 type NextAction = {
-  id: string
-  label: string
-}
+  id: string;
+  label: string;
+};
 
 type UnavailableState = {
-  id: string
-  state: string
-  icon: string
-  title: string
-  copy: string
-}
+  id: string;
+  state: string;
+  icon: string;
+  title: string;
+  copy: string;
+};
 
 type Page = {
-  id: string
-  wallboard_mode: boolean
-  mode_label: string
-  playlist_name: string
-  freshness_signal: FreshnessSignal
-  position: PlaylistPosition
-  next_action: NextAction
-  unavailable: UnavailableState
-}
+  id: string;
+  wallboard_mode: boolean;
+  mode_label: string;
+  playlist_name: string;
+  freshness_signal: FreshnessSignal;
+  position: PlaylistPosition;
+  next_action: NextAction;
+  unavailable: UnavailableState;
+};
 
 type CurrentDashboard = {
-  dashboard_id: string
-  name: string
-  available: boolean
-  path: string
-  frame_id: string
-}
+  dashboard_id: string;
+  name: string;
+  available: boolean;
+  path: string;
+  frame_id: string;
+};
 
 defineProps<{
-  page: Page
-  current_dashboard: CurrentDashboard
-}>()
+  page: Page;
+  current_dashboard: CurrentDashboard;
+}>();
 
 const emit = defineEmits<{
-  "next-dashboard": []
-}>()
+  "next-dashboard": [];
+}>();
 </script>
 
 <template>

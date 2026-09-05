@@ -1,87 +1,87 @@
 <script setup lang="ts">
-import UtcClock from "./UtcClock.vue"
-import NotificationsBell from "./NotificationsBell.vue"
-import UserMenu from "./UserMenu.vue"
+import UtcClock from "./UtcClock.vue";
+import NotificationsBell from "./NotificationsBell.vue";
+import UserMenu from "./UserMenu.vue";
 
-type Attributes = Record<string, string>
-type TextValue = string | number | boolean | null
+type Attributes = Record<string, string>;
+type TextValue = string | number | boolean | null;
 
 type TextPresentation = {
-  class: string
-  text: TextValue
-}
+  class: string;
+  text: TextValue;
+};
 
 type PosturePresentation =
   | {
-      kind: "critical" | "warning"
-      id: string
-      root_class: string
-      class: string
-      dot_class: string
-      count: TextPresentation
-      label: TextPresentation
+      kind: "critical" | "warning";
+      id: string;
+      root_class: string;
+      class: string;
+      dot_class: string;
+      count: TextPresentation;
+      label: TextPresentation;
     }
   | {
-      kind: "nominal"
-      id: string
-      root_class: string
-      class: string
-      dot_class: string
-      label: string
+      kind: "nominal";
+      id: string;
+      root_class: string;
+      class: string;
+      dot_class: string;
+      label: string;
     }
   | {
-      kind: "unavailable"
-      id: string
-      root_class: string
-      class: string
-      label: string
-    }
+      kind: "unavailable";
+      id: string;
+      root_class: string;
+      class: string;
+      label: string;
+    };
 
 type NotificationsBellPresentation = InstanceType<
   typeof NotificationsBell
->["$props"]["presentation"]
-type UserMenuPresentation = InstanceType<typeof UserMenu>["$props"]["presentation"]
+>["$props"]["presentation"];
+type UserMenuPresentation = InstanceType<typeof UserMenu>["$props"]["presentation"];
 
 type NotificationsBellComposition = {
-  component: "NotificationsBell"
-  id: string
-  class: string
-  presentation: NotificationsBellPresentation
-}
+  component: "NotificationsBell";
+  id: string;
+  class: string;
+  presentation: NotificationsBellPresentation;
+};
 
 type UserMenuComposition = {
-  component: "UserMenu"
-  id: string
-  class: string
-  presentation: UserMenuPresentation
-}
+  component: "UserMenu";
+  id: string;
+  class: string;
+  presentation: UserMenuPresentation;
+};
 
 type ConnectionIndicator = {
-  id: string
-  class: string
-  title: string
-  attrs: Attributes
-}
+  id: string;
+  class: string;
+  title: string;
+  attrs: Attributes;
+};
 
 type Presentation = {
-  header: {class: string}
+  header: { class: string };
   mission: {
-    class: string
-    attrs: Attributes
-    icon_class: string
-    name: TextPresentation
-    slug: TextPresentation
-  }
-  posture: PosturePresentation
-  clock: {component: "UtcClock"; id: string; class: string}
-  connection: {ok: ConnectionIndicator; lost: ConnectionIndicator}
+    class: string;
+    attrs: Attributes;
+    icon_class: string;
+    name: TextPresentation;
+    slug: TextPresentation;
+  };
+  posture: PosturePresentation;
+  clock: { component: "UtcClock"; id: string; class: string };
+  connection: { ok: ConnectionIndicator; lost: ConnectionIndicator };
   account: null | {
-    notifications_bell: NotificationsBellComposition | null
-    user_menu: UserMenuComposition | null
-  }
-}
+    notifications_bell: NotificationsBellComposition | null;
+    user_menu: UserMenuComposition | null;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -101,10 +101,7 @@ defineProps<{presentation: Presentation}>()
         <span :class="presentation.posture.count.class">{{ presentation.posture.count.text }}</span>
         <span :class="presentation.posture.label.class">{{ presentation.posture.label.text }}</span>
       </span>
-      <span
-        v-else-if="presentation.posture.kind === 'nominal'"
-        :class="presentation.posture.class"
-      >
+      <span v-else-if="presentation.posture.kind === 'nominal'" :class="presentation.posture.class">
         <span :class="presentation.posture.dot_class"></span>
         {{ presentation.posture.label }}
       </span>

@@ -1,167 +1,167 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceCard from "./ui/components/CadenceCard.vue"
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import StatusBadge from "./StatusBadge.vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import StatusBadge from "./StatusBadge.vue";
 
-type StatusTone = "info" | "ready" | "attention" | "blocked"
+type StatusTone = "info" | "ready" | "attention" | "blocked";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Navigation = {
-  breadcrumbs: Breadcrumb[]
-}
+  breadcrumbs: Breadcrumb[];
+};
 
 type SummaryTile = {
-  id: string
-  label: string
-  value: string | number
-}
+  id: string;
+  label: string;
+  value: string | number;
+};
 
 type Provider = {
-  page_id: string
-  display_name: string
-  provider_id: string
+  page_id: string;
+  display_name: string;
+  provider_id: string;
   simulated_badge: {
-    id: string
-    label: string
-  }
-  version: string
-  summary_tiles: SummaryTile[]
-}
+    id: string;
+    label: string;
+  };
+  version: string;
+  summary_tiles: SummaryTile[];
+};
 
 type Action = {
-  id: string
-  label: string
-  disabled: boolean
-}
+  id: string;
+  label: string;
+  disabled: boolean;
+};
 
 type Actions = {
-  validate: Action
-  sync: Action
-  archive: Action & {confirm: string}
-}
+  validate: Action;
+  sync: Action;
+  archive: Action & { confirm: string };
+};
 
 type ProfileSection = {
-  id: string
-  heading: string
-  subtitle: string
-  empty: boolean
-  empty_copy: string
-  table_id: string
-  table_body_id: string
-  columns: string[]
-}
+  id: string;
+  heading: string;
+  subtitle: string;
+  empty: boolean;
+  empty_copy: string;
+  table_id: string;
+  table_body_id: string;
+  columns: string[];
+};
 
 type Profiles = {
-  service: ProfileSection
-  delivery: ProfileSection
-}
+  service: ProfileSection;
+  delivery: ProfileSection;
+};
 
 type Status = {
-  tone: StatusTone
-  label: string
-}
+  tone: StatusTone;
+  label: string;
+};
 
 type ServiceProfile = {
-  __dom_id: string
-  id: string
-  display_name: string
-  service_kind: string
-  direction: string
-  data_families: string
-  status: Status
-}
+  __dom_id: string;
+  id: string;
+  display_name: string;
+  service_kind: string;
+  direction: string;
+  data_families: string;
+  status: Status;
+};
 
 type DeliveryProfile = {
-  __dom_id: string
-  id: string
-  display_name: string
-  operator_summary: string
-  delivery_kind: string
-  direction: string
-  status: Status
-}
+  __dom_id: string;
+  id: string;
+  display_name: string;
+  operator_summary: string;
+  delivery_kind: string;
+  direction: string;
+  status: Status;
+};
 
 type Detail = {
-  label: string
-  value: string
-  mono: boolean
-}
+  label: string;
+  value: string;
+  mono: boolean;
+};
 
 type DetailCard = {
-  id: string
-  title: string
-  rows: Detail[]
-}
+  id: string;
+  title: string;
+  rows: Detail[];
+};
 
 type Capabilities = {
-  id: string
-  title: string
-  empty: boolean
-  empty_copy: string
+  id: string;
+  title: string;
+  empty: boolean;
+  empty_copy: string;
   items: Array<{
-    label: string
-    status: Status
-  }>
-}
+    label: string;
+    status: Status;
+  }>;
+};
 
 type Details = {
-  configuration: DetailCard
-  delivery_policy: DetailCard
-  capabilities: Capabilities
+  configuration: DetailCard;
+  delivery_policy: DetailCard;
+  capabilities: Capabilities;
   version_history: {
-    id: string
-    title: string
-    stream_id: string
-  }
-}
+    id: string;
+    title: string;
+    stream_id: string;
+  };
+};
 
 type Diagnostics = {
-  id: string
-  label: string
-  json_id: string
-  rows: Detail[]
-  json: string
-}
+  id: string;
+  label: string;
+  json_id: string;
+  rows: Detail[];
+  json: string;
+};
 
 type ProviderVersion = {
-  __dom_id: string
-  version: number
-  lifecycle_state: string
-}
+  __dom_id: string;
+  version: number;
+  lifecycle_state: string;
+};
 
 const props = defineProps<{
-  navigation: Navigation
-  provider: Provider
-  actions: Actions
-  profiles: Profiles
-  details: Details
-  diagnostics: Diagnostics
-  service_profiles: ServiceProfile[]
-  delivery_profiles: DeliveryProfile[]
-  provider_versions: ProviderVersion[]
-}>()
+  navigation: Navigation;
+  provider: Provider;
+  actions: Actions;
+  profiles: Profiles;
+  details: Details;
+  diagnostics: Diagnostics;
+  service_profiles: ServiceProfile[];
+  delivery_profiles: DeliveryProfile[];
+  provider_versions: ProviderVersion[];
+}>();
 
 const emit = defineEmits<{
-  "validate-provider": []
-  "sync-provider": []
-  "archive-provider": []
-}>()
+  "validate-provider": [];
+  "sync-provider": [];
+  "archive-provider": [];
+}>();
 
 const archiveProvider = () => {
-  if (window.confirm(props.actions.archive.confirm)) emit("archive-provider")
-}
+  if (window.confirm(props.actions.archive.confirm)) emit("archive-provider");
+};
 </script>
 
 <template>
@@ -184,7 +184,8 @@ const archiveProvider = () => {
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
 
@@ -194,7 +195,8 @@ const archiveProvider = () => {
               <span
                 :id="provider.simulated_badge.id"
                 class="inline-flex rounded-full bg-info/20 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-info"
-              >{{ provider.simulated_badge.label }}</span>
+                >{{ provider.simulated_badge.label }}</span
+              >
               <span class="ml-2 font-mono text-xs text-base-content/60">
                 {{ provider.version }}
               </span>
@@ -241,11 +243,7 @@ const archiveProvider = () => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <CadenceStatTile
-        v-for="summary in provider.summary_tiles"
-        :id="summary.id"
-        :key="summary.id"
-      >
+      <CadenceStatTile v-for="summary in provider.summary_tiles" :id="summary.id" :key="summary.id">
         <template #label>{{ summary.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ summary.value }}</p>
       </CadenceStatTile>
@@ -360,63 +358,68 @@ const archiveProvider = () => {
           class="card bg-base-200 border border-base-300"
           body-class="card-body p-6"
         >
-            <p class="hud-label">{{ card.title }}</p>
-            <div class="mt-3 divide-y divide-base-300">
+          <p class="hud-label">{{ card.title }}</p>
+          <div class="mt-3 divide-y divide-base-300">
+            <CadenceDataRow
+              v-for="row in card.rows"
+              :key="row.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="row.label"
+            >
+              <span :class="['hud-data-value', row.mono && 'font-mono text-sm']">
+                {{ row.value }}
+              </span>
+            </CadenceDataRow>
+          </div>
+        </CadenceCard>
+
+        <CadenceCard
+          :id="details.capabilities.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ details.capabilities.title }}</p>
+          <div class="mt-3 space-y-2">
+            <div v-if="details.capabilities.empty" class="text-sm text-base-content/60">
+              {{ details.capabilities.empty_copy }}
+            </div>
+            <div
+              v-for="capability in details.capabilities.items"
+              :key="capability.label"
+              class="flex items-center justify-between gap-3 text-sm"
+            >
+              <span>{{ capability.label }}</span>
+              <StatusBadge :status="capability.status.tone" :label="capability.status.label" />
+            </div>
+          </div>
+        </CadenceCard>
+
+        <CadenceCard
+          :id="details.version_history.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ details.version_history.title }}</p>
+          <div
+            :id="details.version_history.stream_id"
+            phx-update="stream"
+            class="mt-3 divide-y divide-base-300"
+          >
+            <div
+              v-for="version in provider_versions"
+              :id="version.__dom_id"
+              :key="version.__dom_id"
+            >
               <CadenceDataRow
-                v-for="row in card.rows"
-                :key="row.label"
                 row-class="hud-data-row"
                 label-class="hud-data-label"
-                :label="row.label"
+                :label="`v${version.version}`"
               >
-                <span :class="['hud-data-value', row.mono && 'font-mono text-sm']">
-                  {{ row.value }}
-                </span>
+                <span class="hud-data-value">{{ version.lifecycle_state }}</span>
               </CadenceDataRow>
             </div>
-        </CadenceCard>
-
-        <CadenceCard :id="details.capabilities.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-            <p class="hud-label">{{ details.capabilities.title }}</p>
-            <div class="mt-3 space-y-2">
-              <div v-if="details.capabilities.empty" class="text-sm text-base-content/60">
-                {{ details.capabilities.empty_copy }}
-              </div>
-              <div
-                v-for="capability in details.capabilities.items"
-                :key="capability.label"
-                class="flex items-center justify-between gap-3 text-sm"
-              >
-                <span>{{ capability.label }}</span>
-                <StatusBadge
-                  :status="capability.status.tone"
-                  :label="capability.status.label"
-                />
-              </div>
-            </div>
-        </CadenceCard>
-
-        <CadenceCard :id="details.version_history.id" class="card bg-base-200 border border-base-300" body-class="card-body p-6">
-            <p class="hud-label">{{ details.version_history.title }}</p>
-            <div
-              :id="details.version_history.stream_id"
-              phx-update="stream"
-              class="mt-3 divide-y divide-base-300"
-            >
-              <div
-                v-for="version in provider_versions"
-                :id="version.__dom_id"
-                :key="version.__dom_id"
-              >
-                <CadenceDataRow
-                  row-class="hud-data-row"
-                  label-class="hud-data-label"
-                  :label="`v${version.version}`"
-                >
-                  <span class="hud-data-value">{{ version.lifecycle_state }}</span>
-                </CadenceDataRow>
-              </div>
-            </div>
+          </div>
         </CadenceCard>
       </aside>
     </div>
@@ -445,7 +448,7 @@ const archiveProvider = () => {
         <pre
           :id="diagnostics.json_id"
           class="max-h-80 overflow-auto border border-base-300 bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
-        >{{ diagnostics.json }}</pre>
+          >{{ diagnostics.json }}</pre>
       </div>
     </CadenceDetailsFrame>
   </div>

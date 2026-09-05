@@ -1,89 +1,85 @@
 <script setup lang="ts">
-import ClipboardButton from "./ClipboardButton.vue"
-import ComparisonReviewActivityDetails from "./ComparisonReviewActivityDetails.vue"
-import HealthSnapshotActivity from "./HealthSnapshotActivity.vue"
+import ClipboardButton from "./ClipboardButton.vue";
+import ComparisonReviewActivityDetails from "./ComparisonReviewActivityDetails.vue";
+import HealthSnapshotActivity from "./HealthSnapshotActivity.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string | string[]
-  text: string
-}
+  class: string | string[];
+  text: string;
+};
 
 type BadgePresentation = TextPresentation & {
-  attrs: Attributes
-  visible?: boolean
-}
+  attrs: Attributes;
+  visible?: boolean;
+};
 
 type ChildPresentation = {
-  id: string
-  class: string
-  attrs: Attributes
-  presentation: Record<string, unknown>
-}
+  id: string;
+  class: string;
+  attrs: Attributes;
+  presentation: Record<string, unknown>;
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string[]
-    attrs: Attributes
-  }
+    id: string;
+    class: string[];
+    attrs: Attributes;
+  };
   header: {
-    class: string
-    title: TextPresentation
-    version: TextPresentation
-    selected_badge: BadgePresentation
-    readiness_badge: BadgePresentation | null
-    remediation_badge: BadgePresentation
+    class: string;
+    title: TextPresentation;
+    version: TextPresentation;
+    selected_badge: BadgePresentation;
+    readiness_badge: BadgePresentation | null;
+    remediation_badge: BadgePresentation;
     remediation_actions: Array<
       BadgePresentation & {
-        key: string
-        order: number
+        key: string;
+        order: number;
       }
-    >
-  }
+    >;
+  };
   fields: {
-    class: string
+    class: string;
     rows: Array<{
-      key: string
-      order: number
-      label: TextPresentation
-      value: TextPresentation & { attrs: Attributes }
-    }>
-  }
+      key: string;
+      order: number;
+      label: TextPresentation;
+      value: TextPresentation & { attrs: Attributes };
+    }>;
+  };
   actions: {
-    class: string
+    class: string;
     select: {
-      id: string
-      type: "button"
-      class: string
-      attrs: Attributes
-      icon: { name: string; class: string }
-      text: string
-    }
+      id: string;
+      type: "button";
+      class: string;
+      attrs: Attributes;
+      icon: { name: string; class: string };
+      text: string;
+    };
     copy_host: {
-      id: string
-      class: string
-      attrs: Attributes
-    }
-    copy_props: Record<string, unknown>
-  }
+      id: string;
+      class: string;
+      attrs: Attributes;
+    };
+    copy_props: Record<string, unknown>;
+  };
   comparison_review: {
-    request: ChildPresentation | null
-    resolution: ChildPresentation | null
-  }
-  health_snapshot: ChildPresentation | null
-}
+    request: ChildPresentation | null;
+    resolution: ChildPresentation | null;
+  };
+  health_snapshot: ChildPresentation | null;
+};
 
-defineProps<{ presentation: Presentation }>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
-  <li
-    :id="presentation.root.id"
-    :class="presentation.root.class"
-    v-bind="presentation.root.attrs"
-  >
+  <li :id="presentation.root.id" :class="presentation.root.class" v-bind="presentation.root.attrs">
     <div :class="presentation.header.class">
       <span :class="presentation.header.title.class">
         {{ presentation.header.title.text }}
@@ -139,10 +135,7 @@ defineProps<{ presentation: Presentation }>()
         v-bind="presentation.actions.select.attrs"
       >
         <span
-          :class="[
-            presentation.actions.select.icon.name,
-            presentation.actions.select.icon.class,
-          ]"
+          :class="[presentation.actions.select.icon.name, presentation.actions.select.icon.class]"
         ></span>
         {{ presentation.actions.select.text }}
       </button>
@@ -181,9 +174,7 @@ defineProps<{ presentation: Presentation }>()
       :class="presentation.health_snapshot.class"
       v-bind="presentation.health_snapshot.attrs"
     >
-      <HealthSnapshotActivity
-        :presentation="presentation.health_snapshot.presentation"
-      />
+      <HealthSnapshotActivity :presentation="presentation.health_snapshot.presentation" />
     </div>
   </li>
 </template>

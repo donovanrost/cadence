@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import {Toggle} from "reka-ui"
-import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
+import { Toggle } from "reka-ui";
+import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(
   defineProps<{
-    pressed: boolean
-    disabled?: boolean
+    pressed: boolean;
+    disabled?: boolean;
   }>(),
-  {disabled: false},
-)
+  { disabled: false },
+);
 
 const emit = defineEmits<{
-  "request-change": [pressed: boolean]
-}>()
+  "request-change": [pressed: boolean];
+}>();
 </script>
 
 <template>

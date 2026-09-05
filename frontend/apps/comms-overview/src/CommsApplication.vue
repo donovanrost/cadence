@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { FederatedApplicationProps } from "@cadence/plugin-sdk"
-import { CButton, CStatePanel } from "@cadence/ui"
-import { onMounted, ref, shallowRef } from "vue"
-import CommsCanonicalSurface from "./CommsCanonicalSurface.vue"
-import { isCommsOverviewPresentation } from "./comms-overview"
+import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
+import { CButton, CStatePanel } from "@cadence/ui";
+import { onMounted, ref, shallowRef } from "vue";
+import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
+import { isCommsOverviewPresentation } from "./comms-overview";
 
 type SurfaceId =
   | "overview"
@@ -13,69 +13,80 @@ type SurfaceId =
   | "routing"
   | "routing_detail"
   | "ground_stations"
-  | "ground_station"
+  | "ground_station";
 
 type SurfacePayload = {
   navigation: {
-    fallback_href: string
-    breadcrumbs: Array<{ label: string; href: string | null }>
-  }
-  data: Record<string, unknown>
-}
+    fallback_href: string;
+    breadcrumbs: Array<{ label: string; href: string | null }>;
+  };
+  data: Record<string, unknown>;
+};
 
-const props = withDefaults(
-  defineProps<FederatedApplicationProps & { surfaceId?: SurfaceId }>(),
-  { surfaceId: undefined },
-)
+const props = withDefaults(defineProps<FederatedApplicationProps & { surfaceId?: SurfaceId }>(), {
+  surfaceId: undefined,
+});
 
-const surfaceId = ref<SurfaceId>(props.surfaceId ?? "overview")
-const payload = shallowRef<SurfacePayload>()
-const loading = ref(true)
-const error = ref<string>()
-let loadGeneration = 0
+const surfaceId = ref<SurfaceId>(props.surfaceId ?? "overview");
+const payload = shallowRef<SurfacePayload>();
+const loading = ref(true);
+const error = ref<string>();
+let loadGeneration = 0;
 
 onMounted(() => {
-  surfaceId.value = props.surfaceId ?? surfaceFromHost()
-  void loadSurface()
-})
+  surfaceId.value = props.surfaceId ?? surfaceFromHost();
+  void loadSurface();
+});
 
 async function loadSurface(): Promise<void> {
-  const generation = ++loadGeneration
-  loading.value = true
-  error.value = undefined
-  payload.value = undefined
+  const generation = ++loadGeneration;
+  loading.value = true;
+  error.value = undefined;
+  payload.value = undefined;
 
   try {
     const response = await props.bridge.query<unknown>({
       queryId: `cadence.comms.${surfaceId.value}`,
       version: 1,
       context: props.context,
-    })
-    if (generation !== loadGeneration) return
-    payload.value = unwrapSurfaceResponse(response, surfaceId.value)
+    });
+    if (generation !== loadGeneration) return;
+    payload.value = unwrapSurfaceResponse(response, surfaceId.value);
   } catch (reason) {
-    if (generation !== loadGeneration) return
-    error.value = reason instanceof Error ? reason.message : "The communications surface failed."
+    if (generation !== loadGeneration) return;
+    error.value = reason instanceof Error ? reason.message : "The communications surface failed.";
   } finally {
-    if (generation === loadGeneration) loading.value = false
+    if (generation === loadGeneration) loading.value = false;
   }
 }
 
 function surfaceFromHost(): SurfaceId {
-  const root = document.getElementById("cadence-federation-root")
-  const candidate = root?.dataset.surfaceId
-  if (isSurfaceId(candidate)) return candidate
+  const root = document.getElementById("cadence-federation-root");
+  const candidate = root?.dataset.surfaceId;
+  if (isSurfaceId(candidate)) return candidate;
 
-  const pathname = window.location.pathname
-  if (pathname.includes("ground-stations")) return pathname.endsWith("/ground-stations") ? "ground_stations" : "ground_station"
-  if (pathname.includes("transports")) return pathname.endsWith("/transports") ? "transports" : "transport"
-  if (pathname.includes("routing")) return pathname.endsWith("/routing") ? "routing" : "routing_detail"
-  if (pathname.endsWith("/validation")) return "validation"
-  return "overview"
+  const pathname = window.location.pathname;
+  if (pathname.includes("ground-stations"))
+    return pathname.endsWith("/ground-stations") ? "ground_stations" : "ground_station";
+  if (pathname.includes("transports"))
+    return pathname.endsWith("/transports") ? "transports" : "transport";
+  if (pathname.includes("routing"))
+    return pathname.endsWith("/routing") ? "routing" : "routing_detail";
+  if (pathname.endsWith("/validation")) return "validation";
+  return "overview";
 }
 
 function isSurfaceId(value: string | undefined): value is SurfaceId {
-  return ["overview", "validation", "transports", "transport", "routing", "routing_detail", "ground_stations", "ground_station"].includes(value ?? "")
+  return [
+    "overview",
+    "validation",
+    "transports",
+    "transport",
+    "routing",
+    "routing_detail",
+    "ground_stations",
+    "ground_station",
+  ].includes(value ?? "");
 }
 
 function unwrapSurfaceResponse(value: unknown, requestedSurface: SurfaceId): SurfacePayload {
@@ -93,36 +104,40 @@ function unwrapSurfaceResponse(value: unknown, requestedSurface: SurfaceId): Sur
           { label: "Comms", href: null },
         ],
       },
-      data: value.presentation,
-    }
+      data: value.presentation as unknown as Record<string, unknown>,
+    };
   }
 
   if (!isRecord(value) || !isRecord(value.navigation) || !isRecord(value.data)) {
-    throw new Error("The communications surface response is invalid.")
+    throw new Error("The communications surface response is invalid.");
   }
 
-  const breadcrumbs = value.navigation.breadcrumbs
-  const fallbackHref = value.navigation.fallback_href
+  const breadcrumbs = value.navigation.breadcrumbs;
+  const fallbackHref = value.navigation.fallback_href;
   if (!Array.isArray(breadcrumbs) || typeof fallbackHref !== "string") {
-    throw new Error("The communications surface navigation is invalid.")
+    throw new Error("The communications surface navigation is invalid.");
   }
-  const safeBreadcrumbs = breadcrumbs.filter(validBreadcrumb)
+  const safeBreadcrumbs = breadcrumbs.filter(validBreadcrumb);
   if (safeBreadcrumbs.length !== breadcrumbs.length) {
-    throw new Error("The communications surface navigation is invalid.")
+    throw new Error("The communications surface navigation is invalid.");
   }
 
   return {
     navigation: { fallback_href: fallbackHref, breadcrumbs: safeBreadcrumbs },
     data: value.data,
-  }
+  };
 }
 
 function validBreadcrumb(value: unknown): value is { label: string; href: string | null } {
-  return isRecord(value) && typeof value.label === "string" && (value.href === null || typeof value.href === "string")
+  return (
+    isRecord(value) &&
+    typeof value.label === "string" &&
+    (value.href === null || typeof value.href === "string")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 </script>
 
@@ -148,10 +163,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         <CButton id="retry-comms-application" size="sm" @click="loadSurface">Retry query</CButton>
       </template>
     </CStatePanel>
-    <CommsCanonicalSurface
-      v-else-if="payload"
-      :surface-id="surfaceId"
-      :payload="payload"
-    />
+    <CommsCanonicalSurface v-else-if="payload" :surface-id="surfaceId" :payload="payload" />
   </div>
 </template>

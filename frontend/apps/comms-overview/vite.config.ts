@@ -284,6 +284,63 @@ function generatedImportLiterals(source: string) {
   return literals;
 }
 
+function compactGeneratedHostInitializationSource(
+  source: string,
+  { normalizeGeneratedOwnerTemplate = false } = {},
+) {
+  let compacted = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === "'" || character === '"' || character === "`") {
+      const literal = readJavaScriptLiteral(source, index);
+      if (!literal) return null;
+      if (
+        normalizeGeneratedOwnerTemplate &&
+        character === "`" &&
+        literal.value === federationConfig.name
+      ) {
+        compacted += "`<remote>`";
+      } else {
+        compacted += source.slice(index, literal.end);
+      }
+      index = literal.end - 1;
+      continue;
+    }
+    if (!/\s/.test(character)) compacted += character;
+  }
+  return compacted;
+}
+
+function countOccurrences(source: string, value: string) {
+  let count = 0;
+  let offset = 0;
+  while (true) {
+    const match = source.indexOf(value, offset);
+    if (match === -1) return count;
+    count += 1;
+    offset = match + value.length;
+  }
+}
+
+function normalizeGeneratedHostInitializationRuntime(source: string) {
+  const runtimePairs = [
+    ["),[])).init()", "),__VITE_PRELOAD__,import.meta.url)).init()"],
+    ["}},[]),", "}},__VITE_PRELOAD__,import.meta.url),"],
+  ];
+
+  let normalized = source;
+  for (const [current, canonical] of runtimePairs) {
+    const currentCount = countOccurrences(normalized, current);
+    const canonicalCount = countOccurrences(normalized, canonical);
+    if (currentCount === 1 && canonicalCount === 0) {
+      normalized = normalized.replace(current, canonical);
+    } else if (currentCount !== 0 || canonicalCount !== 1) {
+      return null;
+    }
+  }
+  return normalized;
+}
+
 function canonicalHostInitializationSource(source: string) {
   if (typeof source !== "string") return null;
   const expectedRemoteName = federationConfig.name;
@@ -327,27 +384,33 @@ function canonicalHostInitializationSource(source: string) {
     }
   }
   if (preloadCount !== 1 || sharedCount !== 1) return null;
-  return edits
+  const normalizedSource = edits
     .sort((left, right) => right.start - left.start)
     .reduce(
       (canonical, edit) =>
         `${canonical.slice(0, edit.start)}${edit.replacement}${canonical.slice(edit.end)}`,
       source,
     );
+  const compacted = compactGeneratedHostInitializationSource(normalizedSource, {
+    normalizeGeneratedOwnerTemplate: /\bas\s+hostInitPromise\b/.test(normalizedSource),
+  });
+  if (compacted === null) return null;
+  return normalizeGeneratedHostInitializationRuntime(compacted);
 }
 
 function hasHostInitializationShape(fileName: string, item: ReleaseBundleItem) {
+  if (typeof item.code !== "string") return false;
+  const hasNamedHostInitializationExports =
+    /export\s*\{(?=[^}]*\bhostInitPromise\b)(?=[^}]*\binitHost\b)[^}]*\}/s.test(item.code) ||
+    /export\{[^}]*ashostInitPromise[^}]*asinitHost[^}]*\}/.test(item.code);
   return (
     exactHostInitializationPath.test(fileName) &&
     item.type === "chunk" &&
     item.isEntry === false &&
     (item.name === "hostInit" || item.name === basename(fileName, ".js")) &&
-    typeof item.code === "string" &&
     item.code.includes("__mf_module_cache__") &&
     item.code.includes("loadShare") &&
-    /export\s*\{(?=[^}]*\bhostInitPromise\b)(?=[^}]*\binitHost\b)[^}]*\}/s.test(
-      item.code,
-    )
+    hasNamedHostInitializationExports
   );
 }
 
@@ -371,17 +434,12 @@ function isAuthoritativeHostInitializationChunk(
 
 function bundleReferenceMatches(owner: string, reference: string, target: string) {
   const normalized = reference.replaceAll("\\", "/");
-  return [
-    normalized,
-    posix.normalize(posix.join(posix.dirname(owner), normalized)),
-  ].includes(target);
+  return [normalized, posix.normalize(posix.join(posix.dirname(owner), normalized))].includes(
+    target,
+  );
 }
 
-function bundleItemReferencesTarget(
-  owner: string,
-  item: ReleaseBundleItem,
-  target: string,
-) {
+function bundleItemReferencesTarget(owner: string, item: ReleaseBundleItem, target: string) {
   for (const field of [
     "imports",
     "dynamicImports",
@@ -416,8 +474,8 @@ function releaseOutputPlugin() {
       const structuralHostInitializationLookalikes = Object.entries(bundle).filter(
         ([fileName, item]) => hasHostInitializationShape(fileName, item),
       );
-      const authoritativeHostInitialization = Object.entries(bundle).filter(
-        ([fileName, item]) => isAuthoritativeHostInitializationChunk(fileName, item),
+      const authoritativeHostInitialization = Object.entries(bundle).filter(([fileName, item]) =>
+        isAuthoritativeHostInitializationChunk(fileName, item),
       );
       if (authoritativeHostInitialization.length === 0) {
         throw new Error("release cleanup requires one authoritative host initialization chunk");
@@ -490,9 +548,7 @@ function releaseOutputPlugin() {
         throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
       }
       delete bundle[fileName];
-      stats.buildOutput = stats.buildOutput.filter(
-        (output) => output.fileName !== fileName,
-      );
+      stats.buildOutput = stats.buildOutput.filter((output) => output.fileName !== fileName);
       statsAsset.source = JSON.stringify(stats);
     },
   };

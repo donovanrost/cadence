@@ -1,12 +1,5 @@
 <script lang="ts">
-import {
-  Fragment,
-  cloneVNode,
-  defineComponent,
-  h,
-  isVNode,
-  type VNodeChild,
-} from "vue";
+import { Fragment, cloneVNode, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
 const frameClass = "flex items-end justify-between gap-4";
 const actionsClass = "flex items-center gap-2";
@@ -14,23 +7,19 @@ const actionsClass = "flex items-center gap-2";
 const flattenSlotChildren = (
   children: VNodeChild[],
   inheritedKey: string | number | symbol | null = null,
-  keyPath: number[] = []
+  keyPath: number[] = [],
 ): VNodeChild[] =>
   children.flatMap((child, index) => {
     if (Array.isArray(child)) {
       return flattenSlotChildren(child, inheritedKey, [...keyPath, index]);
     }
 
-    if (
-      isVNode(child) &&
-      child.type === Fragment &&
-      Array.isArray(child.children)
-    ) {
+    if (isVNode(child) && child.type === Fragment && Array.isArray(child.children)) {
       const fragmentKey = child.key ?? inheritedKey;
       return flattenSlotChildren(
         child.children,
         fragmentKey,
-        child.key === null ? [...keyPath, index] : []
+        child.key === null ? [...keyPath, index] : [],
       );
     }
 
@@ -52,11 +41,7 @@ export default defineComponent({
     return () =>
       h("div", { ...attrs, class: [frameClass, attrs.class] }, [
         h("div", null, flattenSlotChildren(slots.content?.() ?? [])),
-        h(
-          "div",
-          { class: actionsClass },
-          flattenSlotChildren(slots.actions?.() ?? [])
-        ),
+        h("div", { class: actionsClass }, flattenSlotChildren(slots.actions?.() ?? [])),
       ]);
   },
 });

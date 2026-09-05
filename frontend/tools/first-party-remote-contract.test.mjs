@@ -2,14 +2,23 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { join } from "node:path";
-import { APPROVED_FIRST_PARTY_REMOTES, discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
+import {
+  APPROVED_FIRST_PARTY_REMOTES,
+  discoverFirstPartyRemotes,
+} from "./first-party-remote-workspace.mjs";
 
 const frontendRoot = join(import.meta.dirname, "..");
 const expectedApplications = new Map([
-  ["organization-admin", { applicationKey: "organization_admin", packageId: "cadence.organization_admin" }],
+  [
+    "organization-admin",
+    { applicationKey: "organization_admin", packageId: "cadence.organization_admin" },
+  ],
   ["mission-catalog", { applicationKey: "mission_catalog", packageId: "cadence.mission-catalog" }],
   ["spacecraft", { applicationKey: "spacecraft", packageId: "cadence.spacecraft" }],
-  ["telemetry-decom", { applicationKey: "telemetry_decom", packageId: "cadence.telemetry-applications" }],
+  [
+    "telemetry-decom",
+    { applicationKey: "telemetry_decom", packageId: "cadence.telemetry-applications" },
+  ],
   ["comms-overview", { applicationKey: "comms_overview", packageId: "cadence.comms_overview" }],
   ["ops-console", { applicationKey: "ops_console", packageId: "cadence.ops_console" }],
 ]);
@@ -39,14 +48,23 @@ test("the six approved first-party remotes have complete manifest and federation
 
     assert.equal(typeof packageJson.name, "string");
     assert.equal(typeof packageJson.scripts?.["build:phoenix"], "string");
-    assert.match(federation, new RegExp(`name:\\s*["']cadence_${directoryName.replaceAll("-", "_")}["']`));
+    assert.match(
+      federation,
+      new RegExp(`name:\\s*["']cadence_${directoryName.replaceAll("-", "_")}["']`),
+    );
     assert.match(federation, /exposes:\s*\{[\s\S]*["']\.\/Application["']\s*:/);
     assert.match(federatedApplication, /defineApplicationManifest/);
     assert.match(federatedApplication, /FEDERATED_APPLICATION_MANIFEST_SCHEMA/);
     assert.match(federatedApplication, /APPLICATION_HOST_CONTRACT/);
-    assert.match(federatedApplication, new RegExp(`applicationKey:\\s*["']${expected.applicationKey}["']`));
+    assert.match(
+      federatedApplication,
+      new RegExp(`applicationKey:\\s*["']${expected.applicationKey}["']`),
+    );
     assert.match(federatedApplication, new RegExp(`packageId:\\s*["']${expected.packageId}["']`));
-    assert.match(federatedApplication, /placement:\s*["'](?:application_workspace|ops_workspace)["']/);
+    assert.match(
+      federatedApplication,
+      /placement:\s*["'](?:application_workspace|ops_workspace)["']/,
+    );
     assert.match(federatedApplication, /renderer:\s*\{[\s\S]*exposedModule:/);
   }
 });

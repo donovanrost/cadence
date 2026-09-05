@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
 
 type FilterKey =
   | "dashboard_id"
@@ -15,122 +15,122 @@ type FilterKey =
   | "boundary"
   | "context_reason"
   | "replay_run_id"
-  | "affected_placement_id"
+  | "affected_placement_id";
 
-type FilterValues = Record<FilterKey, string>
+type FilterValues = Record<FilterKey, string>;
 
 type FilterField = {
-  key: FilterKey
-  id: string
-  name: string
-  label: string
-  placeholder: string
-}
+  key: FilterKey;
+  id: string;
+  name: string;
+  label: string;
+  placeholder: string;
+};
 
 type Summary = {
-  decision_count: number
-  status_summary: string
-  refresh_summary: string
-  source_summary: string
-  selected_decision_state: "none" | "missing" | "visible" | "outside_results"
+  decision_count: number;
+  status_summary: string;
+  refresh_summary: string;
+  source_summary: string;
+  selected_decision_state: "none" | "missing" | "visible" | "outside_results";
   empty_state: {
-    id: string
-    copy: string
-  }
+    id: string;
+    copy: string;
+  };
   stats: Array<{
-    id: string
-    label: string
-    value: number
-  }>
-}
+    id: string;
+    label: string;
+    value: number;
+  }>;
+};
 
 type DecisionRow = {
-  __dom_id: string
-  id: string
-  key: string
-  dashboard: string
-  mission: string
-  source: string
-  boundary: string
-  status: string
-  context: string
-  replay_run: string
-  refresh: string
-  artifacts: string
-  affected_count: string
-  affected_placements: string
-  affected_impact: string
-  observed: string
+  __dom_id: string;
+  id: string;
+  key: string;
+  dashboard: string;
+  mission: string;
+  source: string;
+  boundary: string;
+  status: string;
+  context: string;
+  replay_run: string;
+  refresh: string;
+  artifacts: string;
+  affected_count: string;
+  affected_placements: string;
+  affected_impact: string;
+  observed: string;
   inspect_action: {
-    id: string
-    href: string
-    selected: boolean
-  }
-}
+    id: string;
+    href: string;
+    selected: boolean;
+  };
+};
 
 type DetailFact = {
-  key: string
-  label: string
-  value: string
-}
+  key: string;
+  label: string;
+  value: string;
+};
 
 type DetailPair = {
-  key: string
-  label: string
-  value: string
-}
+  key: string;
+  label: string;
+  value: string;
+};
 
 type DecisionDetail = {
-  id: string
-  subtitle: string
+  id: string;
+  subtitle: string;
   close_action: {
-    id: string
-    href: string
-  }
+    id: string;
+    href: string;
+  };
   evidence: {
-    id: string
-    decision_key: string
-    source: string
+    id: string;
+    decision_key: string;
+    source: string;
     groups: Array<{
-      key: string
-      label: string
-      facts: DetailFact[]
-    }>
-  }
+      key: string;
+      label: string;
+      facts: DetailFact[];
+    }>;
+  };
   sections: Array<{
-    id: string
-    key: string
-    label: string
-    empty_copy: string
-    pairs: DetailPair[]
-  }>
-}
+    id: string;
+    key: string;
+    label: string;
+    empty_copy: string;
+    pairs: DetailPair[];
+  }>;
+};
 
 const props = defineProps<{
-  summary: Summary
+  summary: Summary;
   filters: {
-    values: FilterValues
-    fields: FilterField[]
-    clear_href: string
-  }
-  decisions: DecisionRow[]
+    values: FilterValues;
+    fields: FilterField[];
+    clear_href: string;
+  };
+  decisions: DecisionRow[];
   selection: {
-    state: "none" | "missing" | "visible" | "outside_results"
-    decision_key: string | null
-    missing: boolean
-    outside_results: boolean
-    context_href: string | null
-    detail: DecisionDetail | null
-  }
+    state: "none" | "missing" | "visible" | "outside_results";
+    decision_key: string | null;
+    missing: boolean;
+    outside_results: boolean;
+    context_href: string | null;
+    detail: DecisionDetail | null;
+  };
   navigation: {
-    admin_href: string
-  }
-}>()
+    admin_href: string;
+  };
+}>();
 
 const emit = defineEmits<{
-  refresh: []
-  filter_decisions: [payload: {runtime_decision_filters: FilterValues}]
-}>()
+  refresh: [];
+  filter_decisions: [payload: { runtime_decision_filters: FilterValues }];
+}>();
 
 const filterKeys: FilterKey[] = [
   "dashboard_id",
@@ -138,8 +138,8 @@ const filterKeys: FilterKey[] = [
   "boundary",
   "context_reason",
   "replay_run_id",
-  "affected_placement_id"
-]
+  "affected_placement_id",
+];
 
 const normalizeFilters = (values: Partial<Record<FilterKey, unknown>>): FilterValues => ({
   dashboard_id: String(values.dashboard_id ?? ""),
@@ -147,41 +147,41 @@ const normalizeFilters = (values: Partial<Record<FilterKey, unknown>>): FilterVa
   boundary: String(values.boundary ?? ""),
   context_reason: String(values.context_reason ?? ""),
   replay_run_id: String(values.replay_run_id ?? ""),
-  affected_placement_id: String(values.affected_placement_id ?? "")
-})
+  affected_placement_id: String(values.affected_placement_id ?? ""),
+});
 
-const filterValues = reactive<FilterValues>(normalizeFilters(props.filters.values))
-const pendingFilterPatches: FilterValues[] = []
+const filterValues = reactive<FilterValues>(normalizeFilters(props.filters.values));
+const pendingFilterPatches: FilterValues[] = [];
 const sameFilters = (left: FilterValues, right: FilterValues) =>
-  filterKeys.every(key => left[key] === right[key])
+  filterKeys.every((key) => left[key] === right[key]);
 
 watch(
   () => props.filters.values,
-  serverValues => {
-    const normalizedServerValues = normalizeFilters(serverValues)
-    const acknowledgedIndex = pendingFilterPatches.findIndex(sent =>
-      sameFilters(sent, normalizedServerValues)
-    )
+  (serverValues) => {
+    const normalizedServerValues = normalizeFilters(serverValues);
+    const acknowledgedIndex = pendingFilterPatches.findIndex((sent) =>
+      sameFilters(sent, normalizedServerValues),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingFilterPatches.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingFilterPatches.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingFilterPatches.splice(0, acknowledgedIndex + 1)
-    if (!hasNewerTyping) Object.assign(filterValues, normalizedServerValues)
+    if (acknowledgedIndex >= 0) pendingFilterPatches.splice(0, acknowledgedIndex + 1);
+    if (!hasNewerTyping) Object.assign(filterValues, normalizedServerValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const emitFilters = () => {
-  const normalized = normalizeFilters(filterValues)
-  pendingFilterPatches.push({...normalized})
-  emit("filter_decisions", {runtime_decision_filters: normalized})
-}
+  const normalized = normalizeFilters(filterValues);
+  pendingFilterPatches.push({ ...normalized });
+  emit("filter_decisions", { runtime_decision_filters: normalized });
+};
 
 const updateFilter = (key: FilterKey, event: Event) => {
-  const input = event.target as HTMLInputElement
-  filterValues[key] = String(input.value ?? "")
-  emitFilters()
-}
+  const input = event.target as HTMLInputElement;
+  filterValues[key] = String(input.value ?? "");
+  emitFilters();
+};
 </script>
 
 <template>
@@ -209,7 +209,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="hover:text-primary transition-colors"
-            >Platform Admin</a>
+              >Platform Admin</a
+            >
             <span class="text-base-content/20" aria-hidden="true">/</span>
             <span class="text-primary/90">Runtime Diagnostics</span>
           </CadenceBreadcrumbs>
@@ -220,7 +221,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
             </span>
           </CadencePageTitle>
           <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            Process-local runtime health for support workflows, including dashboard invalidation decisions emitted by open dashboards.
+            Process-local runtime health for support workflows, including dashboard invalidation
+            decisions emitted by open dashboards.
           </p>
         </template>
         <template #actions>
@@ -237,11 +239,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
     </CadencePageHeaderFrame>
 
     <div class="grid gap-3 md:grid-cols-4">
-      <CadenceStatTile
-        v-for="stat in summary.stats"
-        :id="stat.id"
-        :key="stat.id"
-      >
+      <CadenceStatTile v-for="stat in summary.stats" :id="stat.id" :key="stat.id">
         <template #label>{{ stat.label }}</template>
         <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
       </CadenceStatTile>
@@ -255,7 +253,8 @@ const updateFilter = (key: FilterKey, event: Event) => {
         <div>
           <h2 class="text-base font-semibold text-base-content">Decision Filters</h2>
           <p class="mt-1 text-xs text-base-content/70">
-            Filter durable decision history and runtime-health fallback rows by dashboard, mission, invalidation boundary, context reason, or impacted placement.
+            Filter durable decision history and runtime-health fallback rows by dashboard, mission,
+            invalidation boundary, context reason, or impacted placement.
           </p>
         </div>
       </template>
@@ -280,11 +279,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
             />
           </div>
           <div class="flex items-end gap-2 md:col-span-2 xl:col-span-6">
-            <button
-              id="admin-runtime-apply-filters"
-              type="submit"
-              class="btn btn-secondary btn-sm"
-            >
+            <button id="admin-runtime-apply-filters" type="submit" class="btn btn-secondary btn-sm">
               <span class="hero-funnel h-4 w-4" aria-hidden="true"></span> Apply
             </button>
             <a
@@ -404,7 +399,7 @@ const updateFilter = (key: FilterKey, event: Event) => {
                   :aria-current="decision.inspect_action.selected ? 'true' : undefined"
                   :class="[
                     'btn btn-xs',
-                    decision.inspect_action.selected ? 'btn-secondary' : 'btn-ghost'
+                    decision.inspect_action.selected ? 'btn-secondary' : 'btn-ghost',
                   ]"
                 >
                   <span class="hero-magnifying-glass h-3.5 w-3.5" aria-hidden="true"></span>
@@ -496,10 +491,9 @@ const updateFilter = (key: FilterKey, event: Event) => {
                 :label="fact.label"
               >
                 <span class="hud-data-value">
-                  <span
-                    class="break-all"
-                    :data-runtime-decision-detail-field="fact.key"
-                  >{{ fact.value }}</span>
+                  <span class="break-all" :data-runtime-decision-detail-field="fact.key">{{
+                    fact.value
+                  }}</span>
                 </span>
               </CadenceDataRow>
             </div>

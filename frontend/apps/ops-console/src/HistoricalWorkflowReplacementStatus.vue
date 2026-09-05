@@ -1,136 +1,146 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type ButtonPresentation = {
-  id: string
-  type: "button" | "submit"
-  class: string
-  attrs: Attributes
-}
+  id: string;
+  type: "button" | "submit";
+  class: string;
+  attrs: Attributes;
+};
 
 type ActionButtonPresentation = ButtonPresentation & {
-  text: string
-  icon: IconPresentation
-}
+  text: string;
+  icon: IconPresentation;
+};
 
 type RemainingWorkEntryPresentation = {
-  key: string
-  class: string
-  attrs: Attributes
+  key: string;
+  class: string;
+  attrs: Attributes;
   header: {
-    class: string
-    replacement_run: TextPresentation
-    status: TextPresentation
-  }
+    class: string;
+    replacement_run: TextPresentation;
+    status: TextPresentation;
+  };
   work_details: {
-    class: string
-    values: TextPresentation[]
-  }
-  job_details: {
-    visible: true
-    class: string
-    values: TextPresentation[]
-  } | HiddenPresentation
-  actions: ActionButtonPresentation[]
-}
+    class: string;
+    values: TextPresentation[];
+  };
+  job_details:
+    | {
+        visible: true;
+        class: string;
+        values: TextPresentation[];
+      }
+    | HiddenPresentation;
+  actions: ActionButtonPresentation[];
+};
 
 type HiddenPresentation = {
-  visible: false
-}
+  visible: false;
+};
 
-type JobSummaryPresentation = {
-  visible: true
-  key: string
-  id: string
-  class: string
-  attrs: Attributes
-  header: {
-    class: string
-    label: TextPresentation
-    count: TextPresentation
-  }
-  summary: TextPresentation
-} | (HiddenPresentation & {key: string})
-
-type CompletionFormPresentation = {
-  visible: true
-  id: string | null
-  class: string
-  attrs: Attributes
-  hidden_fields: Array<{
-    key: string
-    attrs: Attributes
-  }>
-  button: ButtonPresentation & {
-    label: {
-      class: string
-      text: string
-      icon: IconPresentation
+type JobSummaryPresentation =
+  | {
+      visible: true;
+      key: string;
+      id: string;
+      class: string;
+      attrs: Attributes;
+      header: {
+        class: string;
+        label: TextPresentation;
+        count: TextPresentation;
+      };
+      summary: TextPresentation;
     }
-    count: TextPresentation
-  }
-} | HiddenPresentation
+  | (HiddenPresentation & { key: string });
 
-type RemainingWorkPresentation = {
-  visible: true
-  id: string
-  class: string
-  attrs: Attributes
-  header: {
-    class: string
-    label: TextPresentation
-    count: TextPresentation
-  }
-  items: {
-    class: string
-    entries: RemainingWorkEntryPresentation[]
-  }
-  job_summaries: JobSummaryPresentation[]
-  retry_button: (ButtonPresentation & {
-    visible: true
-    label: {
-      class: string
-      text: string
-      icon: IconPresentation
+type CompletionFormPresentation =
+  | {
+      visible: true;
+      id: string | null;
+      class: string;
+      attrs: Attributes;
+      hidden_fields: Array<{
+        key: string;
+        attrs: Attributes;
+      }>;
+      button: ButtonPresentation & {
+        label: {
+          class: string;
+          text: string;
+          icon: IconPresentation;
+        };
+        count: TextPresentation;
+      };
     }
-    count: TextPresentation
-  }) | HiddenPresentation
-} | HiddenPresentation
+  | HiddenPresentation;
+
+type RemainingWorkPresentation =
+  | {
+      visible: true;
+      id: string;
+      class: string;
+      attrs: Attributes;
+      header: {
+        class: string;
+        label: TextPresentation;
+        count: TextPresentation;
+      };
+      items: {
+        class: string;
+        entries: RemainingWorkEntryPresentation[];
+      };
+      job_summaries: JobSummaryPresentation[];
+      retry_button:
+        | (ButtonPresentation & {
+            visible: true;
+            label: {
+              class: string;
+              text: string;
+              icon: IconPresentation;
+            };
+            count: TextPresentation;
+          })
+        | HiddenPresentation;
+    }
+  | HiddenPresentation;
 
 type Presentation = {
-  remaining_work: RemainingWorkPresentation
+  remaining_work: RemainingWorkPresentation;
   closure_readiness: {
-    id: string
-    class: string
-    attrs: Attributes
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      status: TextPresentation
-    }
+      class: string;
+      label: TextPresentation;
+      status: TextPresentation;
+    };
     details: {
-      class: string
+      class: string;
       rows: Array<{
-        key: string
-        label: TextPresentation
-        value: TextPresentation
-      }>
-    }
-    completion_form: CompletionFormPresentation
-  }
-}
+        key: string;
+        label: TextPresentation;
+        value: TextPresentation;
+      }>;
+    };
+    completion_form: CompletionFormPresentation;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -265,7 +275,7 @@ defineProps<{presentation: Presentation}>()
         v-for="field in presentation.closure_readiness.completion_form.hidden_fields"
         :key="field.key"
         v-bind="field.attrs"
-      >
+      />
       <button
         :id="presentation.closure_readiness.completion_form.button.id"
         :type="presentation.closure_readiness.completion_form.button.type"

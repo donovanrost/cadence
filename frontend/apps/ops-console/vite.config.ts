@@ -40,6 +40,9 @@ export default defineConfig(({ mode }) => {
           }
         : {}),
     },
+    test: {
+      environment: "happy-dom",
+    },
     plugins: lazyPlugins(() => [vue(), federation(federationConfig)]),
   };
 });

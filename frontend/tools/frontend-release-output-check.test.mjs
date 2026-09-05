@@ -19,7 +19,8 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const checkerPath = resolve(import.meta.dirname, "frontend-release-output-check.mjs");
 const execFileAsync = promisify(execFile);
-const legitimateHostInitializationSource = "import{t as e}from\"./vite-preload-helper-C2lBtS7w.js\";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}},globalThis[t].share||={},globalThis[t].remote||={};var n=globalThis[t];for(let e of Object.keys(n.share))if(e.startsWith(`default:`)){let t=e.slice(8);n.share[t]===void 0&&(n.share[t]=n.share[e])}else if(!e.includes(`:`)){let t=`default:`+e;n.share[t]===void 0&&(n.share[t]=n.share[e])}var r;async function i(){return r||=(async()=>{let t=(e,t,n,r)=>{let i=(Array.isArray(r)?r[0]:r)||`default`,a=t||!n?e:e+`@`+n,o={canonical:i+`:`+a};return i===\"default\"&&(o.aliases=[a]),o},r=(e,t)=>{let n=e[t.canonical];if(n!==void 0)return n;let r=t.aliases||[];for(let n of r){if(!Object.prototype.hasOwnProperty.call(e,n))continue;let r=e[n];if(r!==void 0)return e[t.canonical]=r,r}},i=Symbol.for(`module-federation.shared-cache-listeners`),a=Symbol.for(`module-federation.shared-cache-owners`),o=e=>{let t=e[a];return t===void 0&&(t=Object.create(null),Object.defineProperty(e,a,{value:t,enumerable:!1,configurable:!1,writable:!1})),t},s=(e,t)=>{var n;return(n=e[a])==null?void 0:n[t.canonical]},c=(e,t,n,r)=>{var s;e[t.canonical]=n;let c=t.aliases||[];for(let t of c)Object.defineProperty(e,t,{value:n,enumerable:!0,configurable:!0,writable:!0});let l=e[a];r===void 0?l&&delete l[t.canonical]:o(e)[t.canonical]=r;let u=(s=e[i])==null?void 0:s[t.canonical];if(u)for(let e of u)e(n);return n},l=await(await e(()=>import(`../remoteEntry.js`),[])).init(),{usedShared:u}=await e(async()=>{let{usedShared:e}=await import(`./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-CKx0RqLR.js`);return{usedShared:e}},[]),d=e=>{let t=e;for(let e=0;e<5;e++){let e=t==null?void 0:t.default;if(!e||typeof e!=`object`||Object.keys(e).length===0)break;let n=Object.keys(t).filter(e=>e!==\"default\").map(e=>t[e]);if(n.length>0&&n.some(e=>e!==void 0))break;t=e}return t};for(let e of[`vue`]){var f;let i=u[e];if(!i||i.materialize===!1||i.treeShaking)continue;let a=t(e,(f=i.shareConfig)==null?void 0:f.singleton,i.version,i.scope);(r(n.share,a)===void 0||s(n.share,a)===void 0)&&await l.loadShare(e,{customShareInfo:{shareConfig:i.shareConfig}}).then(async e=>{let t=typeof e==`function`?e():e,r=d(await Promise.resolve(t));c(n.share,a,r,`cadence_comms_overview`)})}return l})(),r}r=i();export{r as hostInitPromise,i as initHost};";
+const legitimateHostInitializationSource =
+  'import{t as e}from"./vite-preload-helper-C2lBtS7w.js";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}},globalThis[t].share||={},globalThis[t].remote||={};var n=globalThis[t];for(let e of Object.keys(n.share))if(e.startsWith(`default:`)){let t=e.slice(8);n.share[t]===void 0&&(n.share[t]=n.share[e])}else if(!e.includes(`:`)){let t=`default:`+e;n.share[t]===void 0&&(n.share[t]=n.share[e])}var r;async function i(){return r||=(async()=>{let t=(e,t,n,r)=>{let i=(Array.isArray(r)?r[0]:r)||`default`,a=t||!n?e:e+`@`+n,o={canonical:i+`:`+a};return i==="default"&&(o.aliases=[a]),o},r=(e,t)=>{let n=e[t.canonical];if(n!==void 0)return n;let r=t.aliases||[];for(let n of r){if(!Object.prototype.hasOwnProperty.call(e,n))continue;let r=e[n];if(r!==void 0)return e[t.canonical]=r,r}},i=Symbol.for(`module-federation.shared-cache-listeners`),a=Symbol.for(`module-federation.shared-cache-owners`),o=e=>{let t=e[a];return t===void 0&&(t=Object.create(null),Object.defineProperty(e,a,{value:t,enumerable:!1,configurable:!1,writable:!1})),t},s=(e,t)=>{var n;return(n=e[a])==null?void 0:n[t.canonical]},c=(e,t,n,r)=>{var s;e[t.canonical]=n;let c=t.aliases||[];for(let t of c)Object.defineProperty(e,t,{value:n,enumerable:!0,configurable:!0,writable:!0});let l=e[a];r===void 0?l&&delete l[t.canonical]:o(e)[t.canonical]=r;let u=(s=e[i])==null?void 0:s[t.canonical];if(u)for(let e of u)e(n);return n},l=await(await e(()=>import(`../remoteEntry.js`),[])).init(),{usedShared:u}=await e(async()=>{let{usedShared:e}=await import(`./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-CKx0RqLR.js`);return{usedShared:e}},[]),d=e=>{let t=e;for(let e=0;e<5;e++){let e=t==null?void 0:t.default;if(!e||typeof e!=`object`||Object.keys(e).length===0)break;let n=Object.keys(t).filter(e=>e!=="default").map(e=>t[e]);if(n.length>0&&n.some(e=>e!==void 0))break;t=e}return t};for(let e of[`vue`]){var f;let i=u[e];if(!i||i.materialize===!1||i.treeShaking)continue;let a=t(e,(f=i.shareConfig)==null?void 0:f.singleton,i.version,i.scope);(r(n.share,a)===void 0||s(n.share,a)===void 0)&&await l.loadShare(e,{customShareInfo:{shareConfig:i.shareConfig}}).then(async e=>{let t=typeof e==`function`?e():e,r=d(await Promise.resolve(t));c(n.share,a,r,`cadence_comms_overview`)})}return l})(),r}r=i();export{r as hostInitPromise,i as initHost};';
 
 async function makeFixture(baseDirectory = tmpdir()) {
   const root = await mkdtemp(join(baseDirectory, "cadence-frontend-release-check-"));
@@ -147,8 +148,7 @@ async function addHostInitializationFixture(
 ) {
   const hostPath = "assets/hostInit-ABCDEFGH.js";
   const helperPath = `assets/vite-preload-helper-${helperHash}.js`;
-  const sharedImportMapPath =
-    `assets/_virtual_mf-localSharedImportMap___mfe_internal__${remoteName}__mf_owner__1-${sharedImportHash}.js`;
+  const sharedImportMapPath = `assets/_virtual_mf-localSharedImportMap___mfe_internal__${remoteName}__mf_owner__1-${sharedImportHash}.js`;
   await writeFile(join(root, hostPath), source);
   await writeFile(join(root, helperPath), "export const preload = true;\n");
   await writeFile(join(root, sharedImportMapPath), "export const usedShared = {};\n");
@@ -325,7 +325,13 @@ void test("rejects local-reference normalization collisions and Windows or POSIX
   const files = new Set(["remoteEntry.js", "assets/Latest.js"]);
   const outputRoot = "/tmp/cadence-release-reference-fixture";
   assert.doesNotThrow(() =>
-    assertLocalReference("./assets/Latest.js", "remoteEntry.js", files, "fixture import", outputRoot),
+    assertLocalReference(
+      "./assets/Latest.js",
+      "remoteEntry.js",
+      files,
+      "fixture import",
+      outputRoot,
+    ),
   );
 
   for (const reference of [
@@ -402,9 +408,7 @@ void test("binds federation byte metadata to the exact admitted file bytes", asy
     const statsPath = join(root, "mf-stats.json");
     const stats = JSON.parse(await readFile(statsPath, "utf8"));
     for (const output of stats.buildOutput) {
-      output.size = (
-        await readFile(join(root, ...output.fileName.split("/")))
-      ).byteLength;
+      output.size = (await readFile(join(root, ...output.fileName.split("/")))).byteLength;
     }
     await writeFile(statsPath, JSON.stringify(stats));
 
@@ -443,12 +447,8 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
     const statsPath = join(root, "mf-stats.json");
     const stats = JSON.parse(await readFile(statsPath, "utf8"));
     const hostInitPath = "assets/hostInit-ABCDEFGH.js";
-    const hostInitSource =
-      "globalThis.hostInitPromise = true; export const initHost = true;\n";
-    await writeFile(
-      join(root, hostInitPath),
-      hostInitSource,
-    );
+    const hostInitSource = "globalThis.hostInitPromise = true; export const initHost = true;\n";
+    await writeFile(join(root, hostInitPath), hostInitSource);
     stats.id = "fixture_remote";
     stats.name = "fixture_remote";
     stats.metaData = {
@@ -474,10 +474,7 @@ void test("rejects extra empty or nested output directories", async () => {
 
   await withFixture(async (root) => {
     await mkdir(join(root, "assets", "nested"));
-    await writeFile(
-      join(root, "assets", "nested", "asset.js"),
-      "export const nested = true;\n",
-    );
+    await writeFile(join(root, "assets", "nested", "asset.js"), "export const nested = true;\n");
     await expectCheckFailure(root, "fixture_remote", /unexpected or nested directory/);
   });
 });
@@ -486,7 +483,7 @@ void test("rejects near-miss generated host-init structural spoofs", async () =>
   const hostInitPath = "assets/hostInit-ABCDEFGH.js";
   const sources = [
     'import{t as e}from"./vite-preload-helper-ABCDEFGH.js";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}};globalThis.attacker=true;export{t as hostInitPromise,t as initHost};\n',
-    '/* FEDERATION_ALLOW_NEW_FUNCTION */ globalThis.hostInitPromise=true;export const initHost=true;\n',
+    "/* FEDERATION_ALLOW_NEW_FUNCTION */ globalThis.hostInitPromise=true;export const initHost=true;\n",
     'import{t as e}from"./vite-preload-helper-ABCDEFGH.js";var t=`__mf_module_cache__`;globalThis[t]||={share:{},remote:{}};export{t as hostInitPromise};\n',
   ];
 
@@ -586,53 +583,47 @@ void test("canonicalizes deployment paths and rejects cross-publication escapes"
       join(root, "assets", "quoted.js"),
       `const publication = "\\x2Fassets\\/application-host\\u002Ftelemetry-decom\\u{2F}remoteEntry.js";\n`,
     );
-    await expectCheckFailure(
-      root,
-      "fixture_remote",
-      /unexpected deployment path|deployment path/,
-      { allowedDeploymentPath: "comms-overview" },
-    );
+    await expectCheckFailure(root, "fixture_remote", /unexpected deployment path|deployment path/, {
+      allowedDeploymentPath: "comms-overview",
+    });
   });
 });
 
-void test(
-  "requires generated dynamic-import exceptions to have stats provenance and graph authority",
-  async () => {
-    const attackerShape =
-      'const FEDERATION_ALLOW_NEW_FUNCTION = true;\nconst loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n';
-    await withFixture(async (root) => {
-      await writeFile(join(root, "remoteEntry.js"), attackerShape);
-      await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
-    });
+void test("requires generated dynamic-import exceptions to have stats provenance and graph authority", async () => {
+  const attackerShape =
+    "const FEDERATION_ALLOW_NEW_FUNCTION = true;\nconst loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n";
+  await withFixture(async (root) => {
+    await writeFile(join(root, "remoteEntry.js"), attackerShape);
+    await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+  });
 
-    await withFixture(async (root) => {
-      const generatedPath = "assets/dist-ABCDEFGH.js";
-      const generatedSource =
-        "const loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n";
-      await writeFile(join(root, generatedPath), generatedSource);
-      const manifestPath = join(root, "mf-manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.exposes[0].assets.js.async.push(generatedPath);
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      const statsPath = join(root, "mf-stats.json");
-      const stats = JSON.parse(await readFile(statsPath, "utf8"));
-      stats.id = "fixture_remote";
-      stats.name = "fixture_remote";
-      stats.metaData = {
-        name: "fixture_remote",
-        remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
-      };
-      stats.buildOutput.push({
-        fileName: generatedPath,
-        type: "chunk",
-        isEntry: false,
-        size: Buffer.byteLength(generatedSource),
-      });
-      await writeFile(statsPath, JSON.stringify(stats));
-      await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+  await withFixture(async (root) => {
+    const generatedPath = "assets/dist-ABCDEFGH.js";
+    const generatedSource =
+      "const loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n";
+    await writeFile(join(root, generatedPath), generatedSource);
+    const manifestPath = join(root, "mf-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.exposes[0].assets.js.async.push(generatedPath);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const statsPath = join(root, "mf-stats.json");
+    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    stats.id = "fixture_remote";
+    stats.name = "fixture_remote";
+    stats.metaData = {
+      name: "fixture_remote",
+      remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
+    };
+    stats.buildOutput.push({
+      fileName: generatedPath,
+      type: "chunk",
+      isEntry: false,
+      size: Buffer.byteLength(generatedSource),
     });
-  },
-);
+    await writeFile(statsPath, JSON.stringify(stats));
+    await expectCheckFailure(root, "fixture_remote", /unresolved dynamic local import/);
+  });
+});
 
 void test("rejects forbidden names, renamed forbidden chunks, source maps, and stale output", async () => {
   await withFixture(async (root) => {

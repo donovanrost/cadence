@@ -1,12 +1,15 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.node.json",
+  "include": ["vite.config.*", "module-federation.config.ts"],
   "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "strict": true
-  },
-  "include": ["vite.config.ts", "vite.phoenix.config.ts", "module-federation.config.ts"]
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true
+  }
 }

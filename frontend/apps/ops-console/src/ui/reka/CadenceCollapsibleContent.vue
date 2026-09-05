@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import {CollapsibleContent} from "reka-ui"
-import {inject, type Ref} from "vue"
-import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
+import { CollapsibleContent } from "reka-ui";
+import { inject, type Ref } from "vue";
+import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
-const collapsible = inject<{contentId: Readonly<Ref<string>>}>("cadence-collapsible")
-if (!collapsible) throw new Error("CadenceCollapsibleContent requires CadenceCollapsible")
+const collapsible = inject<{ contentId: Readonly<Ref<string>> }>("cadence-collapsible");
+if (!collapsible) throw new Error("CadenceCollapsibleContent requires CadenceCollapsible");
 </script>
 
 <template>

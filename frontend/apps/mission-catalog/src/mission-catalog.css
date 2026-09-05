@@ -79,7 +79,10 @@ body {
   font-size: 0.78rem;
   text-align: left;
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
 }
 
 .mission-catalog-surface-nav button span {

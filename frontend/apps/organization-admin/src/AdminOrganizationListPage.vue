@@ -1,58 +1,58 @@
 <script setup lang="ts">
-import AdminOrganizationList from "./AdminOrganizationList.vue"
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue"
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue"
+import AdminOrganizationList from "./AdminOrganizationList.vue";
+import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
+import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
 import type {
   CompactPageHeaderPresentation,
   ElementPresentation,
   EmptyStatePresentation,
   TextPresentation,
-} from "./ui/components/page_shell"
+} from "./ui/components/page_shell";
 
 type OrganizationRow = {
-  id: string
-  display_name: string
-  slug: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  slug: string;
+  href: string;
+};
 
 type BreadcrumbItem = {
-  separator: TextPresentation | null
-  kind: "link" | "current"
-  content: TextPresentation
-}
+  separator: TextPresentation | null;
+  kind: "link" | "current";
+  content: TextPresentation;
+};
 
 type AdminOrganizationListPresentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    root: ElementPresentation
-    layout: ElementPresentation
-    content: ElementPresentation
+    root: ElementPresentation;
+    layout: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      root: ElementPresentation
-      items: BreadcrumbItem[]
-    }
-    title: TextPresentation
-    actions: ElementPresentation
-    create_action: TextPresentation
-  }
+      root: ElementPresentation;
+      items: BreadcrumbItem[];
+    };
+    title: TextPresentation;
+    actions: ElementPresentation;
+    create_action: TextPresentation;
+  };
   empty_state: {
-    root: ElementPresentation
-    title: TextPresentation
-    description: TextPresentation
-    action_container: ElementPresentation
-    action: TextPresentation
-    action_icon: ElementPresentation
-  } | null
+    root: ElementPresentation;
+    title: TextPresentation;
+    description: TextPresentation;
+    action_container: ElementPresentation;
+    action: TextPresentation;
+    action_icon: ElementPresentation;
+  } | null;
   card: {
-    root: ElementPresentation
-    body: ElementPresentation
-    child: ElementPresentation
-    rows: OrganizationRow[]
-  } | null
-}
+    root: ElementPresentation;
+    body: ElementPresentation;
+    child: ElementPresentation;
+    rows: OrganizationRow[];
+  } | null;
+};
 
-const props = defineProps<{presentation: AdminOrganizationListPresentation}>()
+const props = defineProps<{ presentation: AdminOrganizationListPresentation }>();
 
 const headerPresentation = (
   header: AdminOrganizationListPresentation["header"],
@@ -71,7 +71,7 @@ const headerPresentation = (
   },
   title: header.title,
   actions: header.actions,
-})
+});
 
 const emptyStatePresentation = (
   emptyState: NonNullable<AdminOrganizationListPresentation["empty_state"]>,
@@ -84,7 +84,7 @@ const emptyStatePresentation = (
     ...emptyState.action,
     icon: emptyState.action_icon,
   },
-})
+});
 </script>
 
 <template>

@@ -1,162 +1,162 @@
 <script setup lang="ts">
-import CadenceToggle from "./ui/reka/CadenceToggle.vue"
-import WidgetFormCallout from "./WidgetFormCallout.vue"
-import WidgetFormField from "./ui/components/WidgetFormField.vue"
-import type {CalloutPresentation, IconPresentation} from "./widget_form_callout"
+import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import WidgetFormCallout from "./WidgetFormCallout.vue";
+import WidgetFormField from "./ui/components/WidgetFormField.vue";
+import type { CalloutPresentation, IconPresentation } from "./widget_form_callout";
 import type {
   Attributes,
   FieldPresentation,
-  TextPresentation
-} from "./ui/components/widget_form_field"
+  TextPresentation,
+} from "./ui/components/widget_form_field";
 
 type ButtonPresentation = {
-  key?: string
-  id?: string
-  type: "button" | "submit"
-  class: string
-  attrs: Attributes
-  text: string
-  icon?: IconPresentation | null
-}
+  key?: string;
+  id?: string;
+  type: "button" | "submit";
+  class: string;
+  attrs: Attributes;
+  text: string;
+  icon?: IconPresentation | null;
+};
 
 type PointOptionPresentation = {
-  key: string
-  type: "button"
-  class: string
-  attrs: Attributes
-  icon: IconPresentation | null
-  point_id: string
-  unit: TextPresentation | null
-  description: TextPresentation | null
-}
+  key: string;
+  type: "button";
+  class: string;
+  attrs: Attributes;
+  icon: IconPresentation | null;
+  point_id: string;
+  unit: TextPresentation | null;
+  description: TextPresentation | null;
+};
 
 type ObservableOptionPresentation = {
-  key: string
-  type: "button"
-  class: string
-  attrs: Attributes
-  icon: IconPresentation | null
-  observable_id: string
-  unit: TextPresentation | null
-  name: string
-  scope_badges: string[]
-}
+  key: string;
+  type: "button";
+  class: string;
+  attrs: Attributes;
+  icon: IconPresentation | null;
+  observable_id: string;
+  unit: TextPresentation | null;
+  name: string;
+  scope_badges: string[];
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-    param: string
-    params: Record<string, string>
-  }
-  fields: FieldPresentation[]
+    id: string;
+    class: string;
+    attrs: Attributes;
+    param: string;
+    params: Record<string, string>;
+  };
+  fields: FieldPresentation[];
   point_widget: null | {
-    hidden_fields: Array<{attrs: Attributes}>
-    binding_fields: FieldPresentation[]
-    scope_override: null | CalloutPresentation
-    fixed_fields: FieldPresentation[]
+    hidden_fields: Array<{ attrs: Attributes }>;
+    binding_fields: FieldPresentation[];
+    scope_override: null | CalloutPresentation;
+    fixed_fields: FieldPresentation[];
     repeat: null | {
-      id: string
-      class: string
+      id: string;
+      class: string;
       guidance: {
-        class: string
-        icon: IconPresentation
-        text: string
-      }
-      fields: FieldPresentation[]
-    }
+        class: string;
+        icon: IconPresentation;
+        text: string;
+      };
+      fields: FieldPresentation[];
+    };
     point_picker: null | {
-      class: string
-      legend: string
+      class: string;
+      legend: string;
       empty: null | {
-        class: string
-        before_link: string
+        class: string;
+        before_link: string;
         link: {
-          href: string
-          class: string
-          text: string
-          attrs: Attributes
-        }
-        after_link: string
-      }
+          href: string;
+          class: string;
+          text: string;
+          attrs: Attributes;
+        };
+        after_link: string;
+      };
       selected_point: null | {
-        class: string
-        point: TextPresentation
-        unit: TextPresentation | null
-      }
+        class: string;
+        point: TextPresentation;
+        unit: TextPresentation | null;
+      };
       selected_points: null | {
-        class: string
-        attrs: Attributes
-        buttons: ButtonPresentation[]
-      }
-      search: FieldPresentation | null
+        class: string;
+        attrs: Attributes;
+        buttons: ButtonPresentation[];
+      };
+      search: FieldPresentation | null;
       list: null | {
-        class: string
-        options: PointOptionPresentation[]
-        empty: boolean
-        empty_class: string
-        empty_text: string
-      }
-    }
+        class: string;
+        options: PointOptionPresentation[];
+        empty: boolean;
+        empty_class: string;
+        empty_text: string;
+      };
+    };
     operational_observable_picker: null | {
-      class: string
-      attrs: Attributes
-      legend: string
-      empty: TextPresentation | null
-      capability_warning: CalloutPresentation | null
+      class: string;
+      attrs: Attributes;
+      legend: string;
+      empty: TextPresentation | null;
+      capability_warning: CalloutPresentation | null;
       selected: null | {
-        class: string
-        attrs: Attributes
-        buttons: ButtonPresentation[]
-      }
-      scope_warning: CalloutPresentation | null
-      search: FieldPresentation | null
+        class: string;
+        attrs: Attributes;
+        buttons: ButtonPresentation[];
+      };
+      scope_warning: CalloutPresentation | null;
+      search: FieldPresentation | null;
       list: null | {
-        class: string
+        class: string;
         groups: Array<{
-          key: string
-          attrs: Attributes
-          label: TextPresentation & {attrs: Attributes}
-          options: ObservableOptionPresentation[]
-        }>
-        empty: boolean
-        empty_class: string
-        empty_text: string
-      }
-    }
-    trailing_fields: FieldPresentation[]
+          key: string;
+          attrs: Attributes;
+          label: TextPresentation & { attrs: Attributes };
+          options: ObservableOptionPresentation[];
+        }>;
+        empty: boolean;
+        empty_class: string;
+        empty_text: string;
+      };
+    };
+    trailing_fields: FieldPresentation[];
     chart_options: null | {
-      id: string
-      class: string
-      label: TextPresentation
-      select_grid_class: string
-      select_fields: FieldPresentation[]
-      checkbox_grid_class: string
-      checkbox_fields: FieldPresentation[]
-    }
-  }
-  non_point_help: TextPresentation | null
-  error: TextPresentation | null
+      id: string;
+      class: string;
+      label: TextPresentation;
+      select_grid_class: string;
+      select_fields: FieldPresentation[];
+      checkbox_grid_class: string;
+      checkbox_fields: FieldPresentation[];
+    };
+  };
+  non_point_help: TextPresentation | null;
+  error: TextPresentation | null;
   binding_preview: null | {
-    id: string
-    class: string
-    attrs: Attributes
-    content_class: string
-    icon: IconPresentation
-    body_class: string
-    title: TextPresentation
-    message: TextPresentation
-    summary: TextPresentation
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+    content_class: string;
+    icon: IconPresentation;
+    body_class: string;
+    title: TextPresentation;
+    message: TextPresentation;
+    summary: TextPresentation;
+  };
   actions: {
-    class: string
-    preview: ButtonPresentation
-    submit: ButtonPresentation
-  }
-}
+    class: string;
+    preview: ButtonPresentation;
+    submit: ButtonPresentation;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -165,18 +165,14 @@ defineProps<{presentation: Presentation}>()
     :class="presentation.root.class"
     v-bind="presentation.root.attrs"
   >
-    <WidgetFormField
-      v-for="field in presentation.fields"
-      :key="field.key"
-      :field="field"
-    />
+    <WidgetFormField v-for="field in presentation.fields" :key="field.key" :field="field" />
 
     <template v-if="presentation.point_widget">
       <input
         v-for="(field, index) in presentation.point_widget.hidden_fields"
         :key="`scope-hidden-${index}`"
         v-bind="field.attrs"
-      >
+      />
 
       <WidgetFormField
         v-for="field in presentation.point_widget.binding_fields"
@@ -204,7 +200,7 @@ defineProps<{presentation: Presentation}>()
           <span
             :class="[
               presentation.point_widget.repeat.guidance.icon.name,
-              presentation.point_widget.repeat.guidance.icon.class
+              presentation.point_widget.repeat.guidance.icon.class,
             ]"
           ></span>
           <p>{{ presentation.point_widget.repeat.guidance.text }}</p>
@@ -231,7 +227,8 @@ defineProps<{presentation: Presentation}>()
             :href="presentation.point_widget.point_picker.empty.link.href"
             :class="presentation.point_widget.point_picker.empty.link.class"
             v-bind="presentation.point_widget.point_picker.empty.link.attrs"
-          >{{ presentation.point_widget.point_picker.empty.link.text }}</a>
+            >{{ presentation.point_widget.point_picker.empty.link.text }}</a
+          >
           {{ presentation.point_widget.point_picker.empty.after_link }}
         </p>
 
@@ -245,7 +242,8 @@ defineProps<{presentation: Presentation}>()
           <span
             v-if="presentation.point_widget.point_picker.selected_point.unit"
             :class="presentation.point_widget.point_picker.selected_point.unit.class"
-          >{{ presentation.point_widget.point_picker.selected_point.unit.text }}</span>
+            >{{ presentation.point_widget.point_picker.selected_point.unit.text }}</span
+          >
         </div>
 
         <div
@@ -278,14 +276,8 @@ defineProps<{presentation: Presentation}>()
             v-for="option in presentation.point_widget.point_picker.list.options"
             :key="option.key"
           >
-            <CadenceToggle
-              :pressed="option.attrs['aria-pressed'] === 'true'"
-            >
-              <button
-                :type="option.type"
-                :class="option.class"
-                v-bind="option.attrs"
-              >
+            <CadenceToggle :pressed="option.attrs['aria-pressed'] === 'true'">
+              <button :type="option.type" :class="option.class" v-bind="option.attrs">
                 <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
                 <span class="font-mono">{{ option.point_id }}</span>
                 <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
@@ -331,7 +323,8 @@ defineProps<{presentation: Presentation}>()
           v-bind="presentation.point_widget.operational_observable_picker.selected.attrs"
         >
           <button
-            v-for="button in presentation.point_widget.operational_observable_picker.selected.buttons"
+            v-for="button in presentation.point_widget.operational_observable_picker.selected
+              .buttons"
             :key="button.key"
             :type="button.type"
             :class="button.class"
@@ -370,21 +363,20 @@ defineProps<{presentation: Presentation}>()
                   :pressed="option.attrs['aria-pressed'] === 'true'"
                   :disabled="option.attrs.disabled !== undefined"
                 >
-                  <button
-                    :type="option.type"
-                    :class="option.class"
-                    v-bind="option.attrs"
-                  >
+                  <button :type="option.type" :class="option.class" v-bind="option.attrs">
                     <span v-if="option.icon" :class="[option.icon.name, option.icon.class]"></span>
                     <span class="font-mono">{{ option.observable_id }}</span>
-                    <span v-if="option.unit" :class="option.unit.class">{{ option.unit.text }}</span>
+                    <span v-if="option.unit" :class="option.unit.class">{{
+                      option.unit.text
+                    }}</span>
                     <span class="ml-2 text-base-content/60">{{ option.name }}</span>
                     <span class="ml-auto flex flex-wrap justify-end gap-1">
                       <span
                         v-for="scope in option.scope_badges"
                         :key="scope"
                         class="badge badge-ghost badge-xs whitespace-nowrap"
-                      >{{ scope }}</span>
+                        >{{ scope }}</span
+                      >
                     </span>
                   </button>
                 </CadenceToggle>
@@ -447,10 +439,7 @@ defineProps<{presentation: Presentation}>()
     >
       <div :class="presentation.binding_preview.content_class">
         <span
-          :class="[
-            presentation.binding_preview.icon.name,
-            presentation.binding_preview.icon.class
-          ]"
+          :class="[presentation.binding_preview.icon.name, presentation.binding_preview.icon.class]"
         ></span>
         <div :class="presentation.binding_preview.body_class">
           <p :class="presentation.binding_preview.title.class">
@@ -475,10 +464,7 @@ defineProps<{presentation: Presentation}>()
       >
         <span
           v-if="presentation.actions.preview.icon"
-          :class="[
-            presentation.actions.preview.icon.name,
-            presentation.actions.preview.icon.class
-          ]"
+          :class="[presentation.actions.preview.icon.name, presentation.actions.preview.icon.class]"
         ></span>
         {{ presentation.actions.preview.text }}
       </button>

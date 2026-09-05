@@ -1,69 +1,69 @@
 <script setup lang="ts">
-type DataAttrs = Record<string, string | null>
+type DataAttrs = Record<string, string | null>;
 
 type TextPresentation = {
-  text: string
-  class: string
-}
+  text: string;
+  class: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type RootPresentation = {
-  id: string | null
-  class: string
-  attrs: DataAttrs
-}
+  id: string | null;
+  class: string;
+  attrs: DataAttrs;
+};
 
 type SummaryField = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation & {attrs: DataAttrs}
-}
+  key: string;
+  label: TextPresentation;
+  value: TextPresentation & { attrs: DataAttrs };
+};
 
 type SummaryPresentation = {
-  kind: "summary"
-  root: RootPresentation
-  heading: TextPresentation
-  headline: TextPresentation
-  fields_class: string
-  fields: SummaryField[]
-}
+  kind: "summary";
+  root: RootPresentation;
+  heading: TextPresentation;
+  headline: TextPresentation;
+  fields_class: string;
+  fields: SummaryField[];
+};
 
 type CollectionField = TextPresentation & {
-  key: string
-  attrs: DataAttrs
-}
+  key: string;
+  attrs: DataAttrs;
+};
 
 type CollectionItem = {
-  key: string
-  type: "button"
-  class: string
-  attrs: DataAttrs
-  evidence_attrs: DataAttrs
-  render_attrs: DataAttrs
+  key: string;
+  type: "button";
+  class: string;
+  attrs: DataAttrs;
+  evidence_attrs: DataAttrs;
+  render_attrs: DataAttrs;
   primary: {
-    class: string
-    icon: IconPresentation
-    text: TextPresentation
-  }
-  fields: CollectionField[]
-}
+    class: string;
+    icon: IconPresentation;
+    text: TextPresentation;
+  };
+  fields: CollectionField[];
+};
 
 type CollectionPresentation = {
-  kind: "drilldowns" | "capability_postures" | "dependency_causes"
-  root: RootPresentation
-  heading: TextPresentation
+  kind: "drilldowns" | "capability_postures" | "dependency_causes";
+  root: RootPresentation;
+  heading: TextPresentation;
   items_container: {
-    id: string | null
-    class: string
-  }
-  items: CollectionItem[]
-}
+    id: string | null;
+    class: string;
+  };
+  items: CollectionItem[];
+};
 
-defineProps<{presentation: SummaryPresentation | CollectionPresentation}>()
+defineProps<{ presentation: SummaryPresentation | CollectionPresentation }>();
 </script>
 
 <template>
@@ -78,10 +78,7 @@ defineProps<{presentation: SummaryPresentation | CollectionPresentation}>()
     <dl :class="presentation.fields_class">
       <template v-for="field in presentation.fields" :key="field.key">
         <dt :class="field.label.class">{{ field.label.text }}</dt>
-        <dd
-          :class="field.value.class"
-          v-bind="field.value.attrs"
-        >{{ field.value.text }}</dd>
+        <dd :class="field.value.class" v-bind="field.value.attrs">{{ field.value.text }}</dd>
       </template>
     </dl>
   </section>
@@ -93,10 +90,7 @@ defineProps<{presentation: SummaryPresentation | CollectionPresentation}>()
     v-bind="presentation.root.attrs"
   >
     <h3 :class="presentation.heading.class">{{ presentation.heading.text }}</h3>
-    <div
-      :id="presentation.items_container.id"
-      :class="presentation.items_container.class"
-    >
+    <div :id="presentation.items_container.id" :class="presentation.items_container.class">
       <button
         v-for="item in presentation.items"
         :key="item.key"
@@ -113,7 +107,8 @@ defineProps<{presentation: SummaryPresentation | CollectionPresentation}>()
           :key="field.key"
           :class="field.class"
           v-bind="field.attrs"
-        >{{ field.text }}</span>
+          >{{ field.text }}</span
+        >
       </button>
     </div>
   </section>

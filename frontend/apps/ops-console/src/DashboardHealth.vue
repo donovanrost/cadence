@@ -1,18 +1,14 @@
 <script setup>
-import ClipboardButton from "./ClipboardButton.vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import ClipboardButton from "./ClipboardButton.vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>
-  <div
-    :id="presentation.root.id"
-    :class="presentation.root.class"
-    v-bind="presentation.root.attrs"
-  >
+  <div :id="presentation.root.id" :class="presentation.root.class" v-bind="presentation.root.attrs">
     <span :class="presentation.label.class">{{ presentation.label.text }}</span>
     <span :class="presentation.status.class">{{ presentation.status.text }}</span>
     <span :class="presentation.summary.class">{{ presentation.summary.text }}</span>
@@ -28,9 +24,7 @@ defineProps({
         :aria-label="presentation.evidence.aria_label"
         v-bind="presentation.evidence.attrs"
       >
-        <span
-          :class="[presentation.evidence.icon.name, presentation.evidence.icon.class]"
-        ></span>
+        <span :class="[presentation.evidence.icon.name, presentation.evidence.icon.class]"></span>
       </button>
       <button
         :id="presentation.capture.id"
@@ -40,9 +34,7 @@ defineProps({
         :aria-label="presentation.capture.aria_label"
         v-bind="presentation.capture.attrs"
       >
-        <span
-          :class="[presentation.capture.icon.name, presentation.capture.icon.class]"
-        ></span>
+        <span :class="[presentation.capture.icon.name, presentation.capture.icon.class]"></span>
       </button>
       <CadencePopover
         v-for="group in presentation.groups"
@@ -56,7 +48,7 @@ defineProps({
         :side-offset="8"
         :collision-padding="16"
       >
-        <template #trigger="{open}">
+        <template #trigger="{ open }">
           <button
             :id="group.overlay.trigger.id"
             :type="group.overlay.trigger.type"
@@ -68,11 +60,7 @@ defineProps({
                 : group.overlay.trigger.aria_expanded.closed
             "
           >
-            <span
-              :class="group.badge.class"
-              :title="group.badge.title"
-              v-bind="group.badge.attrs"
-            >
+            <span :class="group.badge.class" :title="group.badge.title" v-bind="group.badge.attrs">
               <span :class="[group.badge.icon.name, group.badge.icon.class]"></span>
               <span>{{ group.badge.label }}</span>
               <span :class="group.badge.count_class">{{ group.badge.count }}</span>
@@ -80,7 +68,7 @@ defineProps({
           </button>
         </template>
 
-        <template #content="{open}">
+        <template #content="{ open }">
           <section
             :id="group.overlay.panel.id"
             :class="group.overlay.panel.class"

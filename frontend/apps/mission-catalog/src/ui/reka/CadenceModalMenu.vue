@@ -4,24 +4,24 @@ import {
   DropdownMenuPortal,
   DropdownMenuRoot,
   DropdownMenuTrigger,
-} from "reka-ui"
-import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
+} from "reka-ui";
+import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
-  side?: "top" | "right" | "bottom" | "left"
-  align?: "start" | "center" | "end"
-  sideOffset?: number
-}>()
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
+  sideOffset?: number;
+}>();
 
 const emit = defineEmits<{
-  "update:open": [open: boolean]
-}>()
+  "update:open": [open: boolean];
+}>();
 </script>
 
 <template>
-  <DropdownMenuRoot v-slot="{open}" @update:open="emit('update:open', $event)">
+  <DropdownMenuRoot v-slot="{ open }" @update:open="emit('update:open', $event)">
     <DropdownMenuTrigger as-child>
       <CadencePrimitiveChild contract-name="CadenceModalMenu trigger" :enforce-attrs="[]">
         <slot name="trigger" :open="open"></slot>

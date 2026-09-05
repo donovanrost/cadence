@@ -313,14 +313,7 @@ async function outputFiles(directory, outputRoot) {
   return paths;
 }
 
-export function assertLocalReference(
-  reference,
-  origin,
-  files,
-  label,
-  outputRoot,
-  options = {},
-) {
+export function assertLocalReference(reference, origin, files, label, outputRoot, options = {}) {
   const value = reference.trim();
   if (value === "") return;
   if (/^\$\{[^}]+\}$/.test(value)) {
@@ -518,13 +511,7 @@ function assertStatsMetadata(
   if (value === null || typeof value !== "object") return;
   if (seen.has(value)) fail(`${trail} contains a cyclic metadata value`);
   seen.add(value);
-  const byteBoundTarget = metadataByteBoundTarget(
-    value,
-    trail,
-    files,
-    outputRoot,
-    pathContext,
-  );
+  const byteBoundTarget = metadataByteBoundTarget(value, trail, files, outputRoot, pathContext);
   for (const field of byteBoundMetadataFields) {
     if (!Object.hasOwn(value, field)) continue;
     if (!byteBoundTarget) {
@@ -581,8 +568,7 @@ function hasFederationStatsProvenance(stats, expectedRemoteName) {
   );
 }
 
-const generatedHostInitializationPathPattern =
-  /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+const generatedHostInitializationPathPattern = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
 const generatedHostInitializationFacadeDigests = new Set([
   "659a49802317843ef974469cbc220aaa3e0107493934928e68905c0d6bf60496",
   "007bf60ccae9f5ed5dead1143e01c5151fdc63c4d399871ed8144343885d9d01",
@@ -634,7 +620,8 @@ function isAuthoritativeGeneratedHostInitializationArtifact(
   }
   if (
     record.facadeModuleId !== undefined &&
-    (typeof record.facadeModuleId !== "string" || !/hostAutoInit|hostInit/i.test(record.facadeModuleId))
+    (typeof record.facadeModuleId !== "string" ||
+      !/hostAutoInit|hostInit/i.test(record.facadeModuleId))
   ) {
     return false;
   }
@@ -680,13 +667,7 @@ function isAuthoritativeGeneratedFederationRuntimeArtifact(
   );
 }
 
-async function assertStats(
-  stats,
-  expectedRemoteName,
-  files,
-  outputRoot,
-  byteLengthForPath,
-) {
+async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLengthForPath) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
@@ -958,9 +939,7 @@ function isGeneratedEmptyFederationCssUrl(tokens, index) {
   if (
     callbackShape.some(([tokenIndex, expected]) => {
       const token = tokens[tokenIndex];
-      return expected === "word"
-        ? token?.kind !== "word"
-        : token?.value !== expected;
+      return expected === "word" ? token?.kind !== "word" : token?.value !== expected;
     })
   ) {
     return false;
@@ -1195,8 +1174,7 @@ function workerCallAt(tokens, index) {
     token?.kind === "word" &&
     workerConstructorNames.has(token.value) &&
     next?.value === "(" &&
-    (tokens[index - 1]?.value !== "." ||
-      globalWorkerOwners.has(tokens[index - 2]?.value))
+    (tokens[index - 1]?.value !== "." || globalWorkerOwners.has(tokens[index - 2]?.value))
   ) {
     return { argument: index + 2 };
   }
@@ -1215,8 +1193,7 @@ function workerCallAt(tokens, index) {
     next?.value === "(" &&
     tokens[index - 1]?.value === "." &&
     (isServiceWorkerExpressionEnd(tokens, index - 2) ||
-      (tokens[index - 2]?.value === "?" &&
-        isServiceWorkerExpressionEnd(tokens, index - 3)))
+      (tokens[index - 2]?.value === "?" && isServiceWorkerExpressionEnd(tokens, index - 3)))
   ) {
     return { argument: index + 2 };
   }
@@ -1411,10 +1388,7 @@ export function assertImportReferences(
         continue;
       }
       if (next?.value === "(") {
-        if (
-          staticReferenceToken(tokens[index + 2]) &&
-          tokens[index + 3]?.value === ")"
-        ) {
+        if (staticReferenceToken(tokens[index + 2]) && tokens[index + 3]?.value === ")") {
           const target = assertLocalReference(
             tokens[index + 2].value,
             origin,
@@ -1458,10 +1432,7 @@ export function assertImportReferences(
       } else if (
         argument?.value === "new" &&
         urlCallAt(tokens, workerCall.argument) &&
-        isStaticImportMetaUrlCall(
-          tokens,
-          urlCallAt(tokens, workerCall.argument).argument,
-        )
+        isStaticImportMetaUrlCall(tokens, urlCallAt(tokens, workerCall.argument).argument)
       ) {
         const urlCall = urlCallAt(tokens, workerCall.argument);
         const target = assertLocalReference(
@@ -1495,12 +1466,12 @@ export function assertImportReferences(
 
     if (urlCall) {
       if (
-        (generatedModuleFederation &&
-          (isGeneratedEmptyFederationCssUrl(tokens, urlCall.start) ||
-            isGeneratedVitePreloadUrl(tokens, urlCall.start) ||
-            isGeneratedVitePreloadHelperUrl(tokens, urlCall.start) ||
-            isGeneratedViteDynamicAssetUrl(tokens, urlCall.start) ||
-            isGeneratedRuntimeUrl(tokens, urlCall.start)))
+        generatedModuleFederation &&
+        (isGeneratedEmptyFederationCssUrl(tokens, urlCall.start) ||
+          isGeneratedVitePreloadUrl(tokens, urlCall.start) ||
+          isGeneratedVitePreloadHelperUrl(tokens, urlCall.start) ||
+          isGeneratedViteDynamicAssetUrl(tokens, urlCall.start) ||
+          isGeneratedRuntimeUrl(tokens, urlCall.start))
       ) {
         continue;
       }
@@ -1860,14 +1831,14 @@ export async function validateFederationOutput(
     ? snapshotOutputFiles(artifactSnapshot, outputRoot)
     : {
         paths: await outputFiles(outputRoot, outputRoot),
-        readBytes: async (name) =>
-          readFile(join(outputRoot, ...name.split("/"))).catch(() => null),
+        readBytes: async (name) => readFile(join(outputRoot, ...name.split("/"))).catch(() => null),
         byteLengthForPath: async (name) =>
           (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.byteLength ??
           null,
         readText: async (name) =>
-          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.toString("utf8") ??
-          null,
+          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.toString(
+            "utf8",
+          ) ?? null,
       };
   const paths = snapshot.paths;
   if (paths.length === 0) fail("output is empty");
@@ -1913,12 +1884,7 @@ export async function validateFederationOutput(
       generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
     const authoritativeGeneratedDynamicImport =
       generatedModuleFederation &&
-      isAuthoritativeGeneratedFederationRuntimeArtifact(
-        name,
-        source,
-        stats,
-        expectedRemoteName,
-      );
+      isAuthoritativeGeneratedFederationRuntimeArtifact(name, source, stats, expectedRemoteName);
     if (/\.(?:js|mjs|cjs)$/i.test(name)) {
       assertImportReferences(source, name, files, outputRoot, discovered, {
         generatedModuleFederation,
@@ -1952,17 +1918,14 @@ export async function validateFederationOutput(
           expectedRemoteName,
         )
       ) {
-        fail(`federation stats references ${JSON.stringify(reference)} missing from manifest closure`);
+        fail(
+          `federation stats references ${JSON.stringify(reference)} missing from manifest closure`,
+        );
       }
       const discovered = new Set();
-      assertImportReferences(
-        source,
-        reference,
-        files,
-        outputRoot,
-        discovered,
-        { authoritativeHostInitialization: true },
-      );
+      assertImportReferences(source, reference, files, outputRoot, discovered, {
+        authoritativeHostInitialization: true,
+      });
       for (const target of discovered) {
         if (!manifestClosure.has(target)) {
           fail(

@@ -197,12 +197,20 @@ describe("Comms Overview federated adapter", () => {
       "ground_stations",
       "ground_station",
     ]);
-    expect(canonicalManifest.surfaces.every(({ dataContract }) => dataContract.version === 1)).toBe(true);
+    expect(canonicalManifest.surfaces.every(({ dataContract }) => dataContract.version === 1)).toBe(
+      true,
+    );
   });
 
   it("publishes the exact mission-scoped first-party identity", () => {
-    expect(legacyManifest.package).toMatchObject({ packageId: "cadence.comms_overview", version: 1 });
-    expect(legacyManifest.application).toMatchObject({ applicationKey: "comms_overview", version: 1 });
+    expect(legacyManifest.package).toMatchObject({
+      packageId: "cadence.comms_overview",
+      version: 1,
+    });
+    expect(legacyManifest.application).toMatchObject({
+      applicationKey: "comms_overview",
+      version: 1,
+    });
     expect(legacyManifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest).toBe(legacyManifest);
     expect(legacyManifest.surfaces).toEqual([

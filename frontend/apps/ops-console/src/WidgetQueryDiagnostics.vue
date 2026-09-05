@@ -1,59 +1,59 @@
 <script setup lang="ts">
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type RowPresentation = {
-  key: string
-  order: number
-  label: TextPresentation & {attrs: Attrs}
-  value: TextPresentation & {attrs: Attrs}
-}
+  key: string;
+  order: number;
+  label: TextPresentation & { attrs: Attrs };
+  value: TextPresentation & { attrs: Attrs };
+};
 
 type WidgetQueryDiagnosticsPresentation = {
-  component_id: string
-  overlay: {id: string; class: string; attrs: Attrs}
+  component_id: string;
+  overlay: { id: string; class: string; attrs: Attrs };
   trigger: {
-    id: string
-    type: string
-    class: string
-    attrs: Attrs
-    content: {class: string; attrs: Attrs; icon: IconPresentation}
-  }
-  panel: {id: string; class: string; hidden: boolean; attrs: Attrs}
+    id: string;
+    type: string;
+    class: string;
+    attrs: Attrs;
+    content: { class: string; attrs: Attrs; icon: IconPresentation };
+  };
+  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
   body: {
-    class: string
-    heading: TextPresentation
-    rows_class: string
-    rows: RowPresentation[]
+    class: string;
+    heading: TextPresentation;
+    rows_class: string;
+    rows: RowPresentation[];
     evidence_button: {
-      type: string
-      class: string
-      attrs: Attrs
-      icon: IconPresentation
-      text: string
-    }
-  }
-}
+      type: string;
+      class: string;
+      attrs: Attrs;
+      icon: IconPresentation;
+      text: string;
+    };
+  };
+};
 
-const props = defineProps<{presentation: WidgetQueryDiagnosticsPresentation}>()
+const props = defineProps<{ presentation: WidgetQueryDiagnosticsPresentation }>();
 
 const panelAttrs = computed(() => {
-  const attrs = {...props.presentation.panel.attrs}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -63,7 +63,7 @@ const panelAttrs = computed(() => {
     :class="props.presentation.overlay.class"
     v-bind="props.presentation.overlay.attrs"
   >
-    <template #trigger="{open}">
+    <template #trigger="{ open }">
       <button
         :id="props.presentation.trigger.id"
         :type="props.presentation.trigger.type"
@@ -85,7 +85,7 @@ const panelAttrs = computed(() => {
       </button>
     </template>
 
-    <template #content="{open}">
+    <template #content="{ open }">
       <section
         :id="props.presentation.panel.id"
         :class="props.presentation.panel.class"

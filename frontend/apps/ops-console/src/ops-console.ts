@@ -17,16 +17,20 @@ export function unwrapOpsConsoleResponse(
   value: unknown,
   components: Record<string, Component>,
 ): OpsConsolePresentation {
-  if (!isRecord(value) || value.queryVersion !== OPS_QUERY_VERSION || !isRecord(value.presentation)) {
+  if (
+    !isRecord(value) ||
+    value.queryVersion !== OPS_QUERY_VERSION ||
+    !isRecord(value.presentation)
+  ) {
     throw new Error("The Ops Console response is invalid.");
   }
 
-  const {component, props} = value.presentation;
+  const { component, props } = value.presentation;
   if (typeof component !== "string" || !components[component] || !isRecord(props)) {
     throw new Error("The Ops Console presentation component is invalid.");
   }
 
-  return {component, props};
+  return { component, props };
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

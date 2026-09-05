@@ -225,9 +225,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: lazyPlugins(() => [
       vue(),
       federation(
-        releaseBuild
-          ? { ...releaseFederationConfig, publicPath: "auto" }
-          : federationConfig,
+        releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
       ),
       ...(releaseBuild ? [releaseOutputPlugin()] : []),
     ]),

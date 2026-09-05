@@ -1,58 +1,58 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceCard from "./ui/components/CadenceCard.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
-import StatusBadge from "./StatusBadge.vue"
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
+import StatusBadge from "./StatusBadge.vue";
 
-type StatusTone = "ready" | "attention" | "blocked" | "info"
+type StatusTone = "ready" | "attention" | "blocked" | "info";
 
 type Status = {
-  tone: StatusTone
-  label: string
-}
+  tone: StatusTone;
+  label: string;
+};
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Finding = {
-  id: string | null
-  title: string
-  body: string
-  action_label: string | null
-  action_href: string | null
-  status: Status
-}
+  id: string | null;
+  title: string;
+  body: string;
+  action_label: string | null;
+  action_href: string | null;
+  status: Status;
+};
 
 type FindingGroup = {
-  id: string
-  title: string
-  description: string
-  findings: Finding[]
-}
+  id: string;
+  title: string;
+  description: string;
+  findings: Finding[];
+};
 
 type Validation = {
-  id: string
-  title: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-  finding_count_suffix: string
-  status: Status
-  empty: boolean
+  id: string;
+  title: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+  finding_count_suffix: string;
+  status: Status;
+  empty: boolean;
   empty_state: {
-    id: string
-    title: string
-    description: string
-  }
-  findings_id: string
-  finding_groups: FindingGroup[]
-}
+    id: string;
+    title: string;
+    description: string;
+  };
+  findings_id: string;
+  finding_groups: FindingGroup[];
+};
 
-defineProps<{validation: Validation}>()
+defineProps<{ validation: Validation }>();
 </script>
 
 <template>
@@ -75,7 +75,8 @@ defineProps<{validation: Validation}>()
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
 
@@ -101,12 +102,12 @@ defineProps<{validation: Validation}>()
       class="card bg-base-200 border border-base-300"
       body-class="card-body p-6"
     >
-        <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
-          <p class="hud-label">{{ validation.empty_state.title }}</p>
-          <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
-            {{ validation.empty_state.description }}
-          </p>
-        </div>
+      <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
+        <p class="hud-label">{{ validation.empty_state.title }}</p>
+        <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
+          {{ validation.empty_state.description }}
+        </p>
+      </div>
     </CadenceCard>
 
     <div v-else :id="validation.findings_id" class="space-y-5">
@@ -141,7 +142,8 @@ defineProps<{validation: Validation}>()
                     data-phx-link="redirect"
                     data-phx-link-state="push"
                     class="btn btn-primary btn-xs mt-3"
-                  >{{ finding.action_label }}</a>
+                    >{{ finding.action_label }}</a
+                  >
                 </div>
                 <StatusBadge :status="finding.status.tone" :label="finding.status.label" />
               </div>

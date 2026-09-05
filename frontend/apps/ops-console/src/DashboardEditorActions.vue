@@ -1,22 +1,22 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type ChildPresentation = {
-  key: string
-  tag: string
-  attrs: Attributes
-  text: string
-}
+  key: string;
+  tag: string;
+  attrs: Attributes;
+  text: string;
+};
 
 type ElementPresentation = ChildPresentation & {
-  children: ChildPresentation[]
-}
+  children: ChildPresentation[];
+};
 
 type DashboardEditorActionsPresentation = {
-  elements: ElementPresentation[]
-}
+  elements: ElementPresentation[];
+};
 
-defineProps<{presentation: DashboardEditorActionsPresentation}>()
+defineProps<{ presentation: DashboardEditorActionsPresentation }>();
 </script>
 
 <template>
@@ -31,7 +31,8 @@ defineProps<{presentation: DashboardEditorActionsPresentation}>()
       v-for="child in element.children"
       :key="child.key"
       v-bind="child.attrs"
-    >{{ child.text }}</component>
+      >{{ child.text }}</component
+    >
     {{ element.text }}
   </component>
 </template>

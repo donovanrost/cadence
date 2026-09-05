@@ -1,51 +1,51 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type Field = {
-  key: string
-  label: string
-  label_class: string
-  value: string
-  value_class: string
-  attributes: Attributes
-}
+  key: string;
+  label: string;
+  label_class: string;
+  value: string;
+  value_class: string;
+  attributes: Attributes;
+};
 
 type Summary = {
   section: {
-    id: string
-    class: string
-    attributes: Attributes
-  }
+    id: string;
+    class: string;
+    attributes: Attributes;
+  };
   heading: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   headline: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   fields: {
-    class: string
-    rows: Field[]
-  }
+    class: string;
+    rows: Field[];
+  };
   blocker: null | {
-    id: string
-    class: string
-    rows: Field[]
-  }
+    id: string;
+    class: string;
+    rows: Field[];
+  };
   admin_action: null | {
-    href: string
-    class: string
-    attributes: Attributes
+    href: string;
+    class: string;
+    attributes: Attributes;
     icon: {
-      class: string
-      attributes: Attributes
-    }
-    label: string
-  }
-}
+      class: string;
+      attributes: Attributes;
+    };
+    label: string;
+  };
+};
 
-defineProps<{summary: Summary}>()
+defineProps<{ summary: Summary }>();
 </script>
 
 <template>

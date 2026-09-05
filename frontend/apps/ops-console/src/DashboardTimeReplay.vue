@@ -1,60 +1,60 @@
 <script setup lang="ts">
-import CadenceField from "./ui/components/CadenceField.vue"
+import CadenceField from "./ui/components/CadenceField.vue";
 
-type AttrValue = string | boolean | null
-type Attrs = Record<string, AttrValue>
+type AttrValue = string | boolean | null;
+type Attrs = Record<string, AttrValue>;
 
 type HiddenField = {
-  wrapper_class: string
-  attrs: Attrs
-}
+  wrapper_class: string;
+  attrs: Attrs;
+};
 
 type SelectOption = {
-  label: string
-  value: string
-  selected: boolean
-  disabled: boolean
-  title: string | null
-}
+  label: string;
+  value: string;
+  selected: boolean;
+  disabled: boolean;
+  title: string | null;
+};
 
 type SelectField = {
-  wrapper_class: string
+  wrapper_class: string;
   label: {
-    class: string
-    text: string
-  }
-  attrs: Attrs
-  options: SelectOption[]
-}
+    class: string;
+    text: string;
+  };
+  attrs: Attrs;
+  options: SelectOption[];
+};
 
 type Badge = {
-  attrs: Attrs
-  text: string
-}
+  attrs: Attrs;
+  text: string;
+};
 
 type WarningBadge = Badge & {
-  icon_class: string
-}
+  icon_class: string;
+};
 
 type ReplayPresentation = {
-  root: {attrs: Attrs}
+  root: { attrs: Attrs };
   heading: {
-    attrs: Attrs
-    text: string
-  }
+    attrs: Attrs;
+    text: string;
+  };
   body: {
-    class: string
+    class: string;
     form: {
-      attrs: Attrs
-      hidden_fields: HiddenField[]
-      replay_run: SelectField
-    }
-    clock: Badge | null
-  }
-  warning: WarningBadge | null
-}
+      attrs: Attrs;
+      hidden_fields: HiddenField[];
+      replay_run: SelectField;
+    };
+    clock: Badge | null;
+  };
+  warning: WarningBadge | null;
+};
 
-defineProps<{presentation: ReplayPresentation}>()
+defineProps<{ presentation: ReplayPresentation }>();
 </script>
 
 <template>
@@ -71,24 +71,24 @@ defineProps<{presentation: ReplayPresentation}>()
             <input v-bind="field.attrs" />
           </label>
         </div>
-          <CadenceField
-            :wrapper-class="presentation.body.form.replay_run.wrapper_class"
-            :label="presentation.body.form.replay_run.label.text"
-            :label-class="presentation.body.form.replay_run.label.class"
-          >
-            <select v-bind="presentation.body.form.replay_run.attrs">
-              <option
-                v-for="(option, index) in presentation.body.form.replay_run.options"
-                :key="`${option.value}-${index}`"
-                :value="option.value"
-                :selected="option.selected"
-                :disabled="option.disabled"
-                :title="option.title"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </CadenceField>
+        <CadenceField
+          :wrapper-class="presentation.body.form.replay_run.wrapper_class"
+          :label="presentation.body.form.replay_run.label.text"
+          :label-class="presentation.body.form.replay_run.label.class"
+        >
+          <select v-bind="presentation.body.form.replay_run.attrs">
+            <option
+              v-for="(option, index) in presentation.body.form.replay_run.options"
+              :key="`${option.value}-${index}`"
+              :value="option.value"
+              :selected="option.selected"
+              :disabled="option.disabled"
+              :title="option.title"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </CadenceField>
       </form>
       <span v-if="presentation.body.clock" v-bind="presentation.body.clock.attrs">
         {{ presentation.body.clock.text }}

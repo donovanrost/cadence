@@ -3,10 +3,7 @@ import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
 import { onBeforeUnmount, onMounted, provide, ref, shallowRef } from "vue";
 import { OPS_COMPONENTS } from "./ops-components";
-import {
-  OPS_EVENT_BRIDGE,
-  type OpsEventPayload,
-} from "./ops-events";
+import { OPS_EVENT_BRIDGE, type OpsEventPayload } from "./ops-events";
 import {
   OPS_QUERY_ID,
   OPS_QUERY_VERSION,
@@ -55,7 +52,9 @@ async function loadConsole(): Promise<void> {
   }
 }
 
-async function onOpsEvent(event: CustomEvent<{eventName: string; payload: OpsEventPayload}>): Promise<void> {
+async function onOpsEvent(
+  event: CustomEvent<{ eventName: string; payload: OpsEventPayload }>,
+): Promise<void> {
   const eventName = event.detail?.eventName;
   if (!eventName || actionPending.value) return;
 

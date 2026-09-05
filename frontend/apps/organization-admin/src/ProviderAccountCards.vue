@@ -1,28 +1,28 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
+import StatusBadge from "./StatusBadge.vue";
 
 type ProviderAccountCard = {
-  id: string
-  display_name: string
-  provider_account_id: string
-  status: "info" | "ready" | "attention" | "blocked"
-  status_label: string
-  provider: string
-  config: string
-  credential: string
-  events: string
-  endpoint: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  provider_account_id: string;
+  status: "info" | "ready" | "attention" | "blocked";
+  status_label: string;
+  provider: string;
+  config: string;
+  credential: string;
+  events: string;
+  endpoint: string;
+  href: string;
+};
 
-const props = defineProps<{card: ProviderAccountCard}>()
+const props = defineProps<{ card: ProviderAccountCard }>();
 
 const metrics = [
   ["Provider", "provider"],
   ["Config", "config"],
   ["Credential", "credential"],
-  ["Events", "events"]
-] as const
+  ["Events", "events"],
+] as const;
 </script>
 
 <template>
@@ -46,7 +46,7 @@ const metrics = [
     </div>
 
     <div class="grid grid-cols-2 gap-px bg-base-300 sm:grid-cols-4">
-      <div v-for="([label, key]) in metrics" :key="key" class="bg-base-200 px-4 py-3">
+      <div v-for="[label, key] in metrics" :key="key" class="bg-base-200 px-4 py-3">
         <p class="hud-label">{{ label }}</p>
         <p class="mt-1 truncate font-mono text-sm">{{ props.card[key] }}</p>
       </div>

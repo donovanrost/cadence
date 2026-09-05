@@ -1,99 +1,99 @@
 <script setup lang="ts">
-import {onMounted, reactive, ref, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
+import { onMounted, reactive, ref, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
 
 type Organization = {
-  organization_id: string
-  display_name: string
-  slug: string
-}
+  organization_id: string;
+  display_name: string;
+  slug: string;
+};
 
 type Navigation = {
-  platform_admin_href: string
-  organizations_href: string
-  invite_href: string
-  open_organization_action: string
-}
+  platform_admin_href: string;
+  organizations_href: string;
+  invite_href: string;
+  open_organization_action: string;
+};
 
 type Member = {
-  id: string
-  display_name: string
-  email: string
-  role: string
-  role_label: string
-}
+  id: string;
+  display_name: string;
+  email: string;
+  role: string;
+  role_label: string;
+};
 
 type Invitation = {
-  id: string
-  invitation_id: string
-  email: string
-  role: string
-  role_label: string
-  grant_platform_admin: boolean
-  expires_on: string
-}
+  id: string;
+  invitation_id: string;
+  email: string;
+  role: string;
+  role_label: string;
+  grant_platform_admin: boolean;
+  expires_on: string;
+};
 
 type ServiceIdentity = {
-  id: string
-  service_identity_id: string
-  display_name: string
-  token_hint: string | null
-  lifecycle_state: string
-  lifecycle_state_label: string
-}
+  id: string;
+  service_identity_id: string;
+  display_name: string;
+  token_hint: string | null;
+  lifecycle_state: string;
+  lifecycle_state_label: string;
+};
 
 type ServiceIdentityForm = {
-  display_name: string
-  service_identity_id: string
-}
+  display_name: string;
+  service_identity_id: string;
+};
 
 type IssuedServiceToken = {
-  service_identity_id: string
-  display_name: string
-  api_token: string
-}
+  service_identity_id: string;
+  display_name: string;
+  api_token: string;
+};
 
 const props = defineProps<{
-  organization: Organization
-  navigation: Navigation
-  members: Member[]
-  invitations: Invitation[]
-  service_identities: ServiceIdentity[]
-  service_identity_form: ServiceIdentityForm
-  issued_service_token: IssuedServiceToken | null
-}>()
+  organization: Organization;
+  navigation: Navigation;
+  members: Member[];
+  invitations: Invitation[];
+  service_identities: ServiceIdentity[];
+  service_identity_form: ServiceIdentityForm;
+  issued_service_token: IssuedServiceToken | null;
+}>();
 
 const emit = defineEmits<{
-  "issue-service-identity": [payload: {service_identity: ServiceIdentityForm}]
-  "dismiss-service-token": []
-}>()
+  "issue-service-identity": [payload: { service_identity: ServiceIdentityForm }];
+  "dismiss-service-token": [];
+}>();
 
-const csrfToken = ref("")
-const serviceIdentityForm = reactive<ServiceIdentityForm>({...props.service_identity_form})
+const csrfToken = ref("");
+const serviceIdentityForm = reactive<ServiceIdentityForm>({ ...props.service_identity_form });
 
 watch(
   () => props.service_identity_form,
   (values) => Object.assign(serviceIdentityForm, values),
-  {deep: true}
-)
+  { deep: true },
+);
 
 onMounted(() => {
   csrfToken.value =
-    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ""
-})
+    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? "";
+});
 
 const issueServiceIdentity = () => {
   emit("issue-service-identity", {
     service_identity: {
       display_name: serviceIdentityForm.display_name,
-      service_identity_id: serviceIdentityForm.service_identity_id
-    }
-  })
-}
+      service_identity_id: serviceIdentityForm.service_identity_id,
+    },
+  });
+};
 </script>
 
 <template>
@@ -105,14 +105,16 @@ const issueServiceIdentity = () => {
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="transition-colors hover:text-primary"
-        >Platform Admin</a>
+          >Platform Admin</a
+        >
         <span class="text-base-content/20" aria-hidden="true">/</span>
         <a
           :href="navigation.organizations_href"
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="transition-colors hover:text-primary"
-        >Organizations</a>
+          >Organizations</a
+        >
         <span class="text-base-content/20" aria-hidden="true">/</span>
         <span class="text-primary/90">{{ organization.display_name }}</span>
       </CadenceBreadcrumbs>
@@ -131,13 +133,9 @@ const issueServiceIdentity = () => {
             :action="navigation.open_organization_action"
             method="post"
           >
-            <input type="hidden" name="_csrf_token" :value="csrfToken">
-            <input type="hidden" name="_method" value="put">
-            <input
-              type="hidden"
-              name="organization_id"
-              :value="organization.organization_id"
-            >
+            <input type="hidden" name="_csrf_token" :value="csrfToken" />
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="organization_id" :value="organization.organization_id" />
             <button type="submit" class="btn btn-secondary btn-sm">Open organization</button>
           </form>
           <a
@@ -146,7 +144,8 @@ const issueServiceIdentity = () => {
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="btn btn-primary btn-sm"
-          >Invite User</a>
+            >Invite User</a
+          >
         </div>
       </div>
     </CadencePageHeaderFrame>
@@ -184,7 +183,8 @@ const issueServiceIdentity = () => {
                   <span
                     :data-membership-role="member.role"
                     class="bg-base-300 px-2 py-1 font-mono text-[0.65rem] uppercase tracking-wide"
-                  >{{ member.role_label }}</span>
+                    >{{ member.role_label }}</span
+                  >
                 </td>
               </tr>
             </tbody>
@@ -204,7 +204,9 @@ const issueServiceIdentity = () => {
           v-if="invitations.length === 0"
           id="organization-invitations-empty"
           class="text-sm text-base-content/60"
-        >No pending invitations.</p>
+        >
+          No pending invitations.
+        </p>
 
         <div v-else class="space-y-2">
           <article
@@ -230,7 +232,11 @@ const issueServiceIdentity = () => {
       </section>
     </div>
 
-    <section id="admin-service-identities" class="space-y-3" aria-labelledby="service-identities-title">
+    <section
+      id="admin-service-identities"
+      class="space-y-3"
+      aria-labelledby="service-identities-title"
+    >
       <div>
         <h2 id="service-identities-title" class="text-lg font-semibold">Service identities</h2>
         <p class="mt-1 max-w-2xl text-sm text-base-content/70">
@@ -256,7 +262,9 @@ const issueServiceIdentity = () => {
             type="button"
             class="btn btn-secondary btn-sm"
             @click="emit('dismiss-service-token')"
-          >Done</button>
+          >
+            Done
+          </button>
         </div>
       </div>
 
@@ -283,7 +291,8 @@ const issueServiceIdentity = () => {
                 <span
                   :data-service-identity-state="identity.lifecycle_state"
                   class="font-mono text-[0.65rem] uppercase tracking-wide text-success"
-                >{{ identity.lifecycle_state_label }}</span>
+                  >{{ identity.lifecycle_state_label }}</span
+                >
               </td>
             </CadenceHoverTableRow>
           </tbody>
@@ -295,34 +304,34 @@ const issueServiceIdentity = () => {
         class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end"
         @submit.prevent="issueServiceIdentity"
       >
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            label="Display name"
-            label-class="hud-label mb-1.5 block"
-          >
-            <input
-              id="service_identity_display_name"
-              v-model="serviceIdentityForm.display_name"
-              name="service_identity[display_name]"
-              type="text"
-              class="input w-full"
-              required
-            >
-          </CadenceField>
-          <CadenceField
-            wrapper-class="fieldset mb-3"
-            label="ID (optional)"
-            label-class="hud-label mb-1.5 block"
-          >
-            <input
-              id="service_identity_service_identity_id"
-              v-model="serviceIdentityForm.service_identity_id"
-              name="service_identity[service_identity_id]"
-              type="text"
-              class="input w-full"
-              placeholder="Generated when blank"
-            >
-          </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          label="Display name"
+          label-class="hud-label mb-1.5 block"
+        >
+          <input
+            id="service_identity_display_name"
+            v-model="serviceIdentityForm.display_name"
+            name="service_identity[display_name]"
+            type="text"
+            class="input w-full"
+            required
+          />
+        </CadenceField>
+        <CadenceField
+          wrapper-class="fieldset mb-3"
+          label="ID (optional)"
+          label-class="hud-label mb-1.5 block"
+        >
+          <input
+            id="service_identity_service_identity_id"
+            v-model="serviceIdentityForm.service_identity_id"
+            name="service_identity[service_identity_id]"
+            type="text"
+            class="input w-full"
+            placeholder="Generated when blank"
+          />
+        </CadenceField>
         <button type="submit" class="btn btn-primary btn-sm mb-3">Issue credential</button>
       </form>
     </section>

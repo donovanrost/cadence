@@ -1,24 +1,24 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type ElementPresentation = {
-  key: string
-  tag: string
-  class: string
-  attrs: Attributes
-  text: string
-}
+  key: string;
+  tag: string;
+  class: string;
+  attrs: Attributes;
+  text: string;
+};
 
 type DashboardComparisonTogglePresentation = {
   root: {
-    tag: string
-    class: string
-    attrs: Attributes
-  }
-  children: ElementPresentation[]
-}
+    tag: string;
+    class: string;
+    attrs: Attributes;
+  };
+  children: ElementPresentation[];
+};
 
-defineProps<{presentation: DashboardComparisonTogglePresentation}>()
+defineProps<{ presentation: DashboardComparisonTogglePresentation }>();
 </script>
 
 <template>
@@ -33,6 +33,7 @@ defineProps<{presentation: DashboardComparisonTogglePresentation}>()
       :key="child.key"
       :class="child.class"
       v-bind="child.attrs"
-    >{{ child.text }}</component>
+      >{{ child.text }}</component
+    >
   </component>
 </template>

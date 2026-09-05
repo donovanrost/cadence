@@ -127,7 +127,10 @@ void test("emits only the federation release graph into clean external directori
       assert.equal(await pathExists(join(canonicalOutput, required)), true, required);
     }
     const manifest = JSON.parse(await readFile(join(canonicalOutput, "mf-manifest.json"), "utf8"));
-    assert.deepEqual(manifest.exposes.map(({ path }) => path), ["./Application"]);
+    assert.deepEqual(
+      manifest.exposes.map(({ path }) => path),
+      ["./Application"],
+    );
     const stats = JSON.parse(await readFile(join(canonicalOutput, "mf-stats.json"), "utf8"));
     assert.equal(Object.hasOwn(stats, "assetAnalysis"), false);
     assert.equal(await pathExists(join(canonicalOutput, "index.html")), false);
@@ -135,10 +138,13 @@ void test("emits only the federation release graph into clean external directori
 
     const emittedPaths = await outputFiles(canonicalOutput);
     assert.equal(
-    emittedPaths.some((path) => /(?:^|\/)index-[^/]+\.js$/.test(path)),
+      emittedPaths.some((path) => /(?:^|\/)index-[^/]+\.js$/.test(path)),
       false,
     );
-    assert.equal(emittedPaths.some((path) => path.includes("failure-application")), false);
+    assert.equal(
+      emittedPaths.some((path) => path.includes("failure-application")),
+      false,
+    );
     for (const path of emittedPaths) {
       const bytes = await readFile(path);
       assert.equal(
@@ -270,7 +276,7 @@ void test("rejects canonical env/CLI mismatch and repository overlap before writ
     });
     assert.equal(await pathExists(cliOutput), false);
 
-  const repositoryChild = join(repositoryRoot, ".spacecraft-release-rejected");
+    const repositoryChild = join(repositoryRoot, ".spacecraft-release-rejected");
     await assertRejectedProbe({
       argumentsList: ["--outDir", repositoryChild],
       environment: { [outputEnvironmentName]: repositoryChild },
@@ -280,7 +286,7 @@ void test("rejects canonical env/CLI mismatch and repository overlap before writ
 
     const repositoryAliasRoot = join(root, "repository-alias");
     await symlink(repositoryRoot, repositoryAliasRoot, "dir");
-  const symlinkChild = join(repositoryAliasRoot, ".spacecraft-release-symlink-rejected");
+    const symlinkChild = join(repositoryAliasRoot, ".spacecraft-release-symlink-rejected");
     await assertRejectedProbe({
       argumentsList: ["--outDir", symlinkChild],
       environment: { [outputEnvironmentName]: symlinkChild },

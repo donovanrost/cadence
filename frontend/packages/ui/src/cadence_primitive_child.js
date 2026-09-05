@@ -85,7 +85,7 @@ export const CadencePrimitiveChild = defineComponent({
       const enforcedAttrs = Object.fromEntries(
         props.enforceAttrs.map((name) => [name, attrs[name]]),
       );
-      const childProps = { ...(child.props ?? {}) };
+      const childProps = { ...child.props };
       delete childProps.ref;
       const mergedProps = mergeProps(attrs, childProps, enforcedAttrs);
       children[childIndex] = cloneVNode({ ...child, props: {} }, mergedProps);

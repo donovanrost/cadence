@@ -114,10 +114,7 @@ const sharedImportHash = "DaZluorV";
 const hostInitializationHash = "CVVfVIas";
 const hostInitializationPath = `assets/hostInit-${hostInitializationHash}.js`;
 const hostInitializationSource = generatedHostInitializationCanonicalSource
-  .replace(
-    "./vite-preload-helper-<hash>.js",
-    `./vite-preload-helper-${preloadHelperHash}.js`,
-  )
+  .replace("./vite-preload-helper-<hash>.js", `./vite-preload-helper-${preloadHelperHash}.js`)
   .replace(
     "./_virtual_mf-localSharedImportMap___mfe_internal__<remote>__mf_owner__1-<hash>.js",
     `./_virtual_mf-localSharedImportMap___mfe_internal__cadence_comms_overview__mf_owner__1-${sharedImportHash}.js`,
@@ -126,9 +123,7 @@ const canonicalHostInitializationSource = generatedHostInitializationCanonicalSo
 
 void test("pins the evidence-derived canonical host-init source to its real digest", () => {
   assert.equal(
-    nodeCreateHash("sha256")
-      .update(canonicalHostInitializationSource, "utf8")
-      .digest("hex"),
+    nodeCreateHash("sha256").update(canonicalHostInitializationSource, "utf8").digest("hex"),
     generatedHostInitializationDigest,
   );
 });
@@ -163,7 +158,10 @@ async function releaseOutputPlugin() {
   return releaseOutputPluginPromise;
 }
 
-function hostInitializationBundle({ facadeModuleId = exactHostInitializationFacadeId, source = hostInitializationSource } = {}) {
+function hostInitializationBundle({
+  facadeModuleId = exactHostInitializationFacadeId,
+  source = hostInitializationSource,
+} = {}) {
   const size = new TextEncoder().encode(source).byteLength;
   return {
     [hostInitializationPath]: {
@@ -261,13 +259,7 @@ void test("requires release builds to use the build command and an absolute conf
   await withTemporaryDirectory(async (root) => {
     const output = join(root, "release");
     const served = await runVite(
-      [
-        "dev",
-        "--config",
-        resolve(appRoot, "vite.config.ts"),
-        "--mode",
-        "release",
-      ],
+      ["dev", "--config", resolve(appRoot, "vite.config.ts"), "--mode", "release"],
       { CADENCE_RELEASE_OUTPUT_DIR: output },
     );
     assert.notEqual(served.code, 0);
@@ -325,7 +317,10 @@ void test("covers host-init cleanup adversarial authority cases", async () => {
     ["omitted or forged facade", /item\.facadeModuleId !== exactHostInitializationFacadeId/],
     ["multiple authoritative candidates", /authoritativeHostInitialization\.length > 1/],
     ["semantic source mutation", /generatedHostInitializationSourceDigests\.has/],
-    ["legitimate generated output", /delete bundle\[fileName\][\s\S]*output\.fileName !== fileName/],
+    [
+      "legitimate generated output",
+      /delete bundle\[fileName\][\s\S]*output\.fileName !== fileName/,
+    ],
   ];
 
   for (const [caseName, assertion] of cases) {
@@ -404,7 +399,7 @@ void test("rejects multiple authoritative host-init candidates", async () => {
 
 void test("rejects semantic whitespace mutations in string and template literals", async () => {
   const plugin = await releaseOutputPlugin();
-  const stringLiteral = String.raw`\"default\"`;
+  const stringLiteral = '"default"';
   const mutations = [
     [
       "template literal",
@@ -452,5 +447,8 @@ void test("removes only the exact legitimate generated host-init entry", async (
     stats.buildOutput.some((output) => output.fileName === hostInitializationPath),
     false,
   );
-  assert.equal(stats.buildOutput.some((output) => output.fileName === "remoteEntry.js"), true);
+  assert.equal(
+    stats.buildOutput.some((output) => output.fileName === "remoteEntry.js"),
+    true,
+  );
 });

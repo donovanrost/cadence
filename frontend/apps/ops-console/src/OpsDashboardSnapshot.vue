@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
 
 type DefinitionItem = {
-  label: string
-  value: number | string
-}
+  label: string;
+  value: number | string;
+};
 
 type DashboardSnapshot = {
-  id: string
-  eyebrow: string
-  name: string
+  id: string;
+  eyebrow: string;
+  name: string;
   policy: {
-    id: string
-    text: string
-  }
-  warning: string
+    id: string;
+    text: string;
+  };
+  warning: string;
   definition: {
-    id: string
-    items: DefinitionItem[]
-  }
+    id: string;
+    items: DefinitionItem[];
+  };
   action: {
-    id: string
-    label: string
-    href: string
-  }
-}
+    id: string;
+    label: string;
+    href: string;
+  };
+};
 
-defineProps<{snapshot: DashboardSnapshot}>()
+defineProps<{ snapshot: DashboardSnapshot }>();
 </script>
 
 <template>

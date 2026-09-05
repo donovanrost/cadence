@@ -1,33 +1,33 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type IconPresentation = {
-  name: string
-  class: string
-  text: string
-}
+  name: string;
+  class: string;
+  text: string;
+};
 
 type ElementPresentation = {
-  tag: string
-  class: string
-  attrs: Attributes
-}
+  tag: string;
+  class: string;
+  attrs: Attributes;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type DashboardComparisonInspectorHeaderPresentation = {
-  root: ElementPresentation
-  leading: ElementPresentation & {icon: IconPresentation}
+  root: ElementPresentation;
+  leading: ElementPresentation & { icon: IconPresentation };
   copy: ElementPresentation & {
-    title: TextPresentation
-    subtitle: TextPresentation
-  }
-  close: ElementPresentation & {icon: IconPresentation}
-}
+    title: TextPresentation;
+    subtitle: TextPresentation;
+  };
+  close: ElementPresentation & { icon: IconPresentation };
+};
 
-defineProps<{presentation: DashboardComparisonInspectorHeaderPresentation}>()
+defineProps<{ presentation: DashboardComparisonInspectorHeaderPresentation }>();
 </script>
 
 <template>
@@ -54,12 +54,14 @@ defineProps<{presentation: DashboardComparisonInspectorHeaderPresentation}>()
         :is="presentation.copy.title.tag"
         :class="presentation.copy.title.class"
         v-bind="presentation.copy.title.attrs"
-      >{{ presentation.copy.title.text }}</component>
+        >{{ presentation.copy.title.text }}</component
+      >
       <component
         :is="presentation.copy.subtitle.tag"
         :class="presentation.copy.subtitle.class"
         v-bind="presentation.copy.subtitle.attrs"
-      >{{ presentation.copy.subtitle.text }}</component>
+        >{{ presentation.copy.subtitle.text }}</component
+      >
     </component>
     <component
       :is="presentation.close.tag"

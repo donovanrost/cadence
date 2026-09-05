@@ -1,36 +1,36 @@
 <script setup lang="ts">
-import CommsTransportList from "./CommsTransportList.vue"
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue"
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue"
+import CommsTransportList from "./CommsTransportList.vue";
+import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
+import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
 import type {
   Attrs,
   ElementPresentation,
   EmptyStatePresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./ui/components/page_shell"
+} from "./ui/components/page_shell";
 
-type CommsTransportListProps = InstanceType<typeof CommsTransportList>["$props"]
+type CommsTransportListProps = InstanceType<typeof CommsTransportList>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: PageHeaderPresentation & {
     actions: ElementPresentation & {
-      new_transport: PageHeaderAction
-    }
-  }
-  empty_state: EmptyStatePresentation | null
+      new_transport: PageHeaderAction;
+    };
+  };
+  empty_state: EmptyStatePresentation | null;
   card: {
-    attrs: Attrs
-    body: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
     list_component: {
-      attrs: Attrs
-      props: CommsTransportListProps
-    }
-  } | null
-}
+      attrs: Attrs;
+      props: CommsTransportListProps;
+    };
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

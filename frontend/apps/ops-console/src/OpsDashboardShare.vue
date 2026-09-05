@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
 
 type RuntimeContextEntry = {
-  key: string
-  value: string
-}
+  key: string;
+  value: string;
+};
 
 type DashboardShare = {
-  id: string
-  eyebrow: string
-  title: string
+  id: string;
+  eyebrow: string;
+  title: string;
   restriction: {
-    prefix: string
-    visibility_id: string
-    visibility: string
-    suffix: string
-  }
+    prefix: string;
+    visibility_id: string;
+    visibility: string;
+    suffix: string;
+  };
   context: {
-    id: string
-    entries: RuntimeContextEntry[]
-  }
+    id: string;
+    entries: RuntimeContextEntry[];
+  };
   action: {
-    id: string
-    label: string
-    href: string
-  }
-}
+    id: string;
+    label: string;
+    href: string;
+  };
+};
 
-defineProps<{share: DashboardShare}>()
+defineProps<{ share: DashboardShare }>();
 </script>
 
 <template>

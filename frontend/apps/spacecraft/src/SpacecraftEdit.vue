@@ -1,138 +1,138 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
 
 type Breadcrumb = {
-  id: string
-  label: string
-  href: string | null
-}
+  id: string;
+  label: string;
+  href: string | null;
+};
 
 type SpacecraftPage = {
-  id: string
-  heading: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  heading: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type Section = {
-  id: string
-  number: string
-  title: string
-}
+  id: string;
+  number: string;
+  title: string;
+};
 
 type TextField = {
-  id: string
-  name: string
-  type: "text"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "text";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type SelectField = {
-  id: string
-  name: string
-  type: "select"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "select";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type SpacecraftForm = {
-  id: string
+  id: string;
   sections: {
-    identity: Section
-    profile: Section
-  }
+    identity: Section;
+    profile: Section;
+  };
   fields: {
-    display_name: TextField
-    scid: TextField
-    spacecraft_type_id: SelectField
-  }
+    display_name: TextField;
+    scid: TextField;
+    spacecraft_type_id: SelectField;
+  };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
 type ProfileOptions = {
-  options: {label: string; value: string}[]
-}
+  options: { label: string; value: string }[];
+};
 
 type SpacecraftValues = {
-  display_name: string
-  scid: string
-  spacecraft_type_id: string
-}
+  display_name: string;
+  scid: string;
+  spacecraft_type_id: string;
+};
 
 type SpacecraftPayload = {
-  spacecraft: SpacecraftValues
-}
+  spacecraft: SpacecraftValues;
+};
 
 const props = defineProps<{
-  page: SpacecraftPage
-  form: SpacecraftForm
-  profile_options: ProfileOptions
-}>()
+  page: SpacecraftPage;
+  form: SpacecraftForm;
+  profile_options: ProfileOptions;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: SpacecraftPayload]
-  save: [payload: SpacecraftPayload]
-}>()
+  validate: [payload: SpacecraftPayload];
+  save: [payload: SpacecraftPayload];
+}>();
 
 const formValues = (form: SpacecraftForm): SpacecraftValues => ({
   display_name: form.fields.display_name.value,
   scid: form.fields.scid.value,
-  spacecraft_type_id: form.fields.spacecraft_type_id.value
-})
+  spacecraft_type_id: form.fields.spacecraft_type_id.value,
+});
 
-const spacecraft = reactive<SpacecraftValues>(formValues(props.form))
-const pendingValidations: SpacecraftValues[] = []
+const spacecraft = reactive<SpacecraftValues>(formValues(props.form));
+const pendingValidations: SpacecraftValues[] = [];
 
 const values = (): SpacecraftValues => ({
   display_name: spacecraft.display_name,
   scid: spacecraft.scid,
-  spacecraft_type_id: spacecraft.spacecraft_type_id
-})
+  spacecraft_type_id: spacecraft.spacecraft_type_id,
+});
 
 const sameValues = (left: SpacecraftValues, right: SpacecraftValues) =>
   left.display_name === right.display_name &&
   left.scid === right.scid &&
-  left.spacecraft_type_id === right.spacecraft_type_id
+  left.spacecraft_type_id === right.spacecraft_type_id;
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm)
+    const serverValues = formValues(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
     const hasNewerTyping =
       pendingValidations.length > 0 &&
-      (acknowledgedIndex < 0 || acknowledgedIndex < pendingValidations.length - 1)
+      (acknowledgedIndex < 0 || acknowledgedIndex < pendingValidations.length - 1);
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(spacecraft, serverValues)
+    if (!hasNewerTyping) Object.assign(spacecraft, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validate = () => {
-  const currentValues = values()
-  pendingValidations.push(currentValues)
-  emit("validate", {spacecraft: currentValues})
-}
+  const currentValues = values();
+  pendingValidations.push(currentValues);
+  emit("validate", { spacecraft: currentValues });
+};
 
-const save = () => emit("save", {spacecraft: values()})
+const save = () => emit("save", { spacecraft: values() });
 </script>
 
 <template>
@@ -141,16 +141,9 @@ const save = () => emit("save", {spacecraft: values()})
       <div>
         <div>
           <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.breadcrumbs"
-              :key="breadcrumb.id"
-            >
+            <template v-for="(breadcrumb, index) in page.breadcrumbs" :key="breadcrumb.id">
               <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span
-                v-if="breadcrumb.href === null"
-                :id="breadcrumb.id"
-                class="text-primary/90"
-              >
+              <span v-if="breadcrumb.href === null" :id="breadcrumb.id" class="text-primary/90">
                 {{ breadcrumb.label }}
               </span>
               <a
@@ -160,7 +153,8 @@ const save = () => emit("save", {spacecraft: values()})
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -196,7 +190,7 @@ const save = () => emit("save", {spacecraft: values()})
             :required="form.fields.display_name.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -213,7 +207,7 @@ const save = () => emit("save", {spacecraft: values()})
             :required="form.fields.scid.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -245,7 +239,9 @@ const save = () => emit("save", {spacecraft: values()})
               v-for="option in profile_options.options"
               :key="`${option.value}-${option.label}`"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
       </CadenceFormSectionFrame>
@@ -260,7 +256,8 @@ const save = () => emit("save", {spacecraft: values()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceNarrowFormPageFrame>

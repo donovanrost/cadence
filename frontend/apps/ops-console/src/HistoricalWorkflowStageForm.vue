@@ -1,67 +1,63 @@
 <script setup lang="ts">
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue"
+import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type CompactInputPresentation = {
-  wrapper_attrs: Attributes
+  wrapper_attrs: Attributes;
   label: {
-    attrs: Attributes
-    text: string
-  }
-  input_attrs: Attributes
-  errors: string[]
-}
+    attrs: Attributes;
+    text: string;
+  };
+  input_attrs: Attributes;
+  errors: string[];
+};
 
 type Presentation = {
   root: {
-    attrs: Attributes
-  }
+    attrs: Attributes;
+  };
   hidden_fields: Array<{
-    attrs: Attributes
-  }>
-  reason: CompactInputPresentation
+    attrs: Attributes;
+  }>;
+  reason: CompactInputPresentation;
   source_fields: {
-    attrs: Attributes
-    fields: CompactInputPresentation[]
-  }
+    attrs: Attributes;
+    fields: CompactInputPresentation[];
+  };
   confirmation: {
-    attrs: Attributes
-    input_attrs: Attributes
+    attrs: Attributes;
+    input_attrs: Attributes;
     label: {
-      attrs: Attributes
-      text: string
-    }
-  }
+      attrs: Attributes;
+      text: string;
+    };
+  };
   actions: {
-    attrs: Attributes
+    attrs: Attributes;
     items: Array<{
-      attrs: Attributes
+      attrs: Attributes;
       icon: {
-        attrs: Attributes
-      }
-      label: string
-    }>
-  }
-}
+        attrs: Attributes;
+      };
+      label: string;
+    }>;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
   <form v-bind="presentation.root.attrs">
-    <input
-      v-for="field in presentation.hidden_fields"
-      :key="field.attrs.id"
-      v-bind="field.attrs"
-    >
+    <input v-for="field in presentation.hidden_fields" :key="field.attrs.id" v-bind="field.attrs" />
 
     <div v-bind="presentation.reason.wrapper_attrs">
       <label>
         <span v-bind="presentation.reason.label.attrs">
           {{ presentation.reason.label.text }}
         </span>
-        <input v-bind="presentation.reason.input_attrs">
+        <input v-bind="presentation.reason.input_attrs" />
       </label>
       <CadenceValidationMessage
         v-for="(error, index) in presentation.reason.errors"
@@ -79,7 +75,7 @@ defineProps<{presentation: Presentation}>()
       >
         <label>
           <span v-bind="field.label.attrs">{{ field.label.text }}</span>
-          <input v-bind="field.input_attrs">
+          <input v-bind="field.input_attrs" />
         </label>
         <CadenceValidationMessage
           v-for="(error, index) in field.errors"
@@ -91,7 +87,7 @@ defineProps<{presentation: Presentation}>()
     </div>
 
     <label v-bind="presentation.confirmation.attrs">
-      <input v-bind="presentation.confirmation.input_attrs">
+      <input v-bind="presentation.confirmation.input_attrs" />
       <span v-bind="presentation.confirmation.label.attrs">
         {{ presentation.confirmation.label.text }}
       </span>

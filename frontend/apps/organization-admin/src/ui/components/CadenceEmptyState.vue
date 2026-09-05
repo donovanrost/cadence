@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import CadenceEmptyStateFrame from "./CadenceEmptyStateFrame.vue"
-import type {EmptyStatePresentation} from "./page_shell"
+import CadenceEmptyStateFrame from "./CadenceEmptyStateFrame.vue";
+import type { EmptyStatePresentation } from "./page_shell";
 
-const props = defineProps<{emptyState: EmptyStatePresentation}>()
+const props = defineProps<{ emptyState: EmptyStatePresentation }>();
 </script>
 
 <template>

@@ -1,7 +1,7 @@
 import {
   APPLICATION_HOST_CONTRACT,
   defineApplicationManifest,
-  FEDERATED_APPLICATION_MANIFEST_SCHEMA
+  FEDERATED_APPLICATION_MANIFEST_SCHEMA,
 } from "@cadence/plugin-sdk";
 import OrganizationAdminApplication from "./OrganizationAdminApplication.vue";
 import { SURFACE_CONTRACTS } from "./organization-admin-contract";
@@ -13,20 +13,21 @@ export const manifest = defineApplicationManifest({
   package: {
     packageId: "cadence.organization_admin",
     version: 1,
-    trust: "first_party"
+    trust: "first_party",
   },
   compatibility: {
     cadenceApplicationContract: 1,
     cadenceSurfaceContract: 1,
     cadenceFederatedRendererContract: 1,
-    cadenceThemeContract: 1
+    cadenceThemeContract: 1,
   },
   application: {
     applicationKey: "organization_admin",
     version: 1,
     displayName: "Organization Administration",
-    description: "Manage organization identity, provider access, notifications, and platform administration.",
-    installableScopes: ["organization"]
+    description:
+      "Manage organization identity, provider access, notifications, and platform administration.",
+    installableScopes: ["organization"],
   },
   surfaces: SURFACE_CONTRACTS.map((surface, index) => ({
     surfaceId: surface.surfaceId,
@@ -37,8 +38,8 @@ export const manifest = defineApplicationManifest({
     navigation: { label: surface.surfaceId.replaceAll("_", " "), order: (index + 1) * 10 },
     dataContract: surface.query,
     actions: surface.actions,
-    renderer: { kind: "federated-vue" as const, exposedModule: `./${surface.component}` }
-  }))
+    renderer: { kind: "federated-vue" as const, exposedModule: `./${surface.component}` },
+  })),
 });
 
 export { exposedComponents };

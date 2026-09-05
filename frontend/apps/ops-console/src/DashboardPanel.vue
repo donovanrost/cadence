@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import RenameDashboardForm from "./RenameDashboardForm.vue"
-import DashboardSectionManager from "./DashboardSectionManager.vue"
-import HistoricalWorkflowRequestForm from "./HistoricalWorkflowRequestForm.vue"
-import DataLinkInspectorPanel from "./DataLinkInspectorPanel.vue"
-import EvidenceInspectorPanel from "./EvidenceInspectorPanel.vue"
-import WidgetInspectPanel from "./WidgetInspectPanel.vue"
-import RuntimeDiagnosticsPanel from "./RuntimeDiagnosticsPanel.vue"
-import VersionHistoryPanel from "./VersionHistoryPanel.vue"
-import WidgetForm from "./WidgetForm.vue"
+import RenameDashboardForm from "./RenameDashboardForm.vue";
+import DashboardSectionManager from "./DashboardSectionManager.vue";
+import HistoricalWorkflowRequestForm from "./HistoricalWorkflowRequestForm.vue";
+import DataLinkInspectorPanel from "./DataLinkInspectorPanel.vue";
+import EvidenceInspectorPanel from "./EvidenceInspectorPanel.vue";
+import WidgetInspectPanel from "./WidgetInspectPanel.vue";
+import RuntimeDiagnosticsPanel from "./RuntimeDiagnosticsPanel.vue";
+import VersionHistoryPanel from "./VersionHistoryPanel.vue";
+import WidgetForm from "./WidgetForm.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type WrapperPresentation = {
-  attrs: Attributes
-}
+  attrs: Attributes;
+};
 
 type DirectChildPresentation<Kind extends string, ChildPresentation> = {
-  kind: Kind
-  outer_wrapper: null
-  wrapper: WrapperPresentation
-  presentation: ChildPresentation
-}
+  kind: Kind;
+  outer_wrapper: null;
+  wrapper: WrapperPresentation;
+  presentation: ChildPresentation;
+};
 
 type OuterWrappedChildPresentation<Kind extends string, ChildPresentation> = {
-  kind: Kind
-  outer_wrapper: WrapperPresentation
-  wrapper: WrapperPresentation
-  presentation: ChildPresentation
-}
+  kind: Kind;
+  outer_wrapper: WrapperPresentation;
+  wrapper: WrapperPresentation;
+  presentation: ChildPresentation;
+};
 
 type ChildPresentation =
   | DirectChildPresentation<
@@ -65,24 +65,24 @@ type ChildPresentation =
   | DirectChildPresentation<
       "widget_form",
       InstanceType<typeof WidgetForm>["$props"]["presentation"]
-    >
+    >;
 
 type Presentation = {
   sheet: {
-    layer: WrapperPresentation
-    root: WrapperPresentation
+    layer: WrapperPresentation;
+    root: WrapperPresentation;
     header: WrapperPresentation & {
-      title: WrapperPresentation & {text: string}
+      title: WrapperPresentation & { text: string };
       close: WrapperPresentation & {
-        icon: WrapperPresentation
-      }
-    }
-    body: WrapperPresentation
-  }
-  child: ChildPresentation
-}
+        icon: WrapperPresentation;
+      };
+    };
+    body: WrapperPresentation;
+  };
+  child: ChildPresentation;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

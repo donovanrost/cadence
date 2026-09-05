@@ -1,58 +1,58 @@
 <script setup lang="ts">
-import SpacecraftApplications from "./SpacecraftApplications.vue"
+import SpacecraftApplications from "./SpacecraftApplications.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
 type ApplicationEvent = {
-  key: string
-}
+  key: string;
+};
 
-type SpacecraftApplicationsProps = InstanceType<typeof SpacecraftApplications>["$props"]
+type SpacecraftApplicationsProps = InstanceType<typeof SpacecraftApplications>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: Attrs
-      items: BreadcrumbItem[]
-    }
-    title: TextPresentation
-    subtitle: TextPresentation
+      attrs: Attrs;
+      items: BreadcrumbItem[];
+    };
+    title: TextPresentation;
+    subtitle: TextPresentation;
     actions: {
-      attrs: Attrs
-      readiness: TextPresentation
-    }
-  }
-  component: ElementPresentation
-  profile: SpacecraftApplicationsProps["profile"]
-  applications: SpacecraftApplicationsProps["applications"]
-}
+      attrs: Attrs;
+      readiness: TextPresentation;
+    };
+  };
+  component: ElementPresentation;
+  profile: SpacecraftApplicationsProps["profile"];
+  applications: SpacecraftApplicationsProps["applications"];
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 
 const emit = defineEmits<{
-  install: [payload: ApplicationEvent]
-  disable: [payload: ApplicationEvent]
-  uninstall: [payload: ApplicationEvent]
-}>()
+  install: [payload: ApplicationEvent];
+  disable: [payload: ApplicationEvent];
+  uninstall: [payload: ApplicationEvent];
+}>();
 </script>
 
 <template>
@@ -61,10 +61,7 @@ const emit = defineEmits<{
       <div v-bind="props.presentation.header.body.attrs">
         <div v-bind="props.presentation.header.content.attrs">
           <nav v-bind="props.presentation.header.breadcrumbs.attrs">
-            <template
-              v-for="item in props.presentation.header.breadcrumbs.items"
-              :key="item.key"
-            >
+            <template v-for="item in props.presentation.header.breadcrumbs.items" :key="item.key">
               <span v-if="item.separator" v-bind="item.separator.attrs">
                 {{ item.separator.text }}
               </span>

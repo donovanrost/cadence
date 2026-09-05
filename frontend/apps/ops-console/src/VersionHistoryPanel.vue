@@ -1,27 +1,25 @@
 <script setup lang="ts">
-import ActivityTimeline from "./ActivityTimeline.vue"
-import VersionHistorySummary from "./VersionHistorySummary.vue"
+import ActivityTimeline from "./ActivityTimeline.vue";
+import VersionHistorySummary from "./VersionHistorySummary.vue";
 
-type Attributes = Record<string, string>
-type ActivityTimelinePresentation = InstanceType<
-  typeof ActivityTimeline
->["$props"]["presentation"]
+type Attributes = Record<string, string>;
+type ActivityTimelinePresentation = InstanceType<typeof ActivityTimeline>["$props"]["presentation"];
 type VersionHistorySummaryPresentation = InstanceType<
   typeof VersionHistorySummary
->["$props"]["presentation"]
+>["$props"]["presentation"];
 
 type ChildPresentation<T> = {
-  root: {attrs: Attributes}
-  presentation: T
-}
+  root: { attrs: Attributes };
+  presentation: T;
+};
 
 type Presentation = {
-  root: {attrs: Attributes}
-  version_history_summary: ChildPresentation<VersionHistorySummaryPresentation>
-  activity_timeline: ChildPresentation<ActivityTimelinePresentation>
-}
+  root: { attrs: Attributes };
+  version_history_summary: ChildPresentation<VersionHistorySummaryPresentation>;
+  activity_timeline: ChildPresentation<ActivityTimelinePresentation>;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

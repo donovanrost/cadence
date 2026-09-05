@@ -1,7 +1,7 @@
-import { flushPromises, mount } from "@vue/test-utils"
-import { describe, expect, it, vi } from "vite-plus/test"
-import type { HostBridge, MissionHostContext } from "@cadence/plugin-sdk"
-import CommsApplication from "./CommsApplication.vue"
+import { flushPromises, mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vite-plus/test";
+import type { HostBridge, HostQueryRequest, MissionHostContext } from "@cadence/plugin-sdk";
+import CommsApplication from "./CommsApplication.vue";
 
 const context: MissionHostContext = {
   scope: "mission",
@@ -11,7 +11,7 @@ const context: MissionHostContext = {
   spacecraftId: null,
   spacecraftName: null,
   actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
-}
+};
 
 const surfaceIds = [
   "overview",
@@ -22,54 +22,60 @@ const surfaceIds = [
   "routing_detail",
   "ground_stations",
   "ground_station",
-] as const
+] as const;
 
 describe("Comms canonical federated application", () => {
   it.each(surfaceIds)("queries and renders the %s surface through Phoenix", async (surfaceId) => {
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue(surfacePayload(surfaceId))
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload(surfaceId));
     const wrapper = mount(CommsApplication, {
       props: { context, bridge: bridgeFor(query), surfaceId },
-    })
+    });
 
-    await flushPromises()
+    await flushPromises();
 
     expect(query).toHaveBeenCalledWith({
       queryId: `cadence.comms.${surfaceId}`,
       version: 1,
       context,
-    })
-    expect(wrapper.find("#comms-application-error").exists()).toBe(false)
-    expect(wrapper.find(".space-y-6").exists()).toBe(true)
-    wrapper.unmount()
-  })
+    });
+    expect(wrapper.find("#comms-application-error").exists()).toBe(false);
+    expect(wrapper.find(".space-y-6").exists()).toBe(true);
+    wrapper.unmount();
+  });
 
   it("contains malformed surface responses and retries the approved query", async () => {
     const query = vi
-      .fn<HostBridge["query"]>()
+      .fn<TestQuery>()
       .mockResolvedValueOnce({ navigation: {}, data: {} })
-      .mockResolvedValueOnce(surfacePayload("validation"))
+      .mockResolvedValueOnce(surfacePayload("validation"));
     const wrapper = mount(CommsApplication, {
       props: { context, bridge: bridgeFor(query), surfaceId: "validation" },
-    })
+    });
 
-    await flushPromises()
-    expect(wrapper.find("#comms-application-error").exists()).toBe(true)
+    await flushPromises();
+    expect(wrapper.find("#comms-application-error").exists()).toBe(true);
 
-    await wrapper.get("#retry-comms-application").trigger("click")
-    await flushPromises()
+    await wrapper.get("#retry-comms-application").trigger("click");
+    await flushPromises();
 
-    expect(query).toHaveBeenCalledTimes(2)
-    expect(wrapper.find("#comms-application-error").exists()).toBe(false)
-    wrapper.unmount()
-  })
-})
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(wrapper.find("#comms-application-error").exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
 
-function bridgeFor(query: HostBridge["query"]): HostBridge {
-  return { query, execute: vi.fn(), subscribe: vi.fn() }
+type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
+
+function bridgeFor(query: TestQuery): HostBridge {
+  return {
+    query: async <TResult>(request: HostQueryRequest) => (await query(request)) as TResult,
+    execute: vi.fn(),
+    subscribe: vi.fn(),
+  };
 }
 
 function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
-  if (surfaceId === "overview") return overviewPayload()
+  if (surfaceId === "overview") return overviewPayload();
 
   return {
     navigation: {
@@ -89,7 +95,7 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
       finding_groups: [],
       status: "ready",
     },
-  }
+  };
 }
 
 function overviewPayload() {
@@ -139,11 +145,14 @@ function overviewPayload() {
           description: "Checks on saved configuration.",
           status: { tone: "ready", label: "No Findings" },
           empty: true,
-          empty_state: { title: "All clear", description: "The saved configuration is consistent." },
+          empty_state: {
+            title: "All clear",
+            description: "The saved configuration is consistent.",
+          },
           findings_id: "comms-validation-findings",
           finding_groups: [],
         },
       },
     },
-  }
+  };
 }

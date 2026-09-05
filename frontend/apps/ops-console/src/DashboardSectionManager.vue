@@ -1,57 +1,57 @@
 <script setup lang="ts">
-import DashboardSectionList from "./DashboardSectionList.vue"
+import DashboardSectionList from "./DashboardSectionList.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  attrs: Attributes
-  text: string
-}
+  attrs: Attributes;
+  text: string;
+};
 
 type StandardFieldPresentation = {
-  wrapper: {attrs: Attributes}
-  label: TextPresentation
-  control: {attrs: Attributes}
-  errors: TextPresentation[]
-}
+  wrapper: { attrs: Attributes };
+  label: TextPresentation;
+  control: { attrs: Attributes };
+  errors: TextPresentation[];
+};
 
 type CheckboxFieldPresentation = {
-  wrapper: {attrs: Attributes}
-  label: {attrs: Attributes}
-  hidden_control: {attrs: Attributes}
-  control: {attrs: Attributes}
+  wrapper: { attrs: Attributes };
+  label: { attrs: Attributes };
+  hidden_control: { attrs: Attributes };
+  control: { attrs: Attributes };
   text: {
-    wrapper: {attrs: Attributes}
-    label: TextPresentation
-  }
-}
+    wrapper: { attrs: Attributes };
+    label: TextPresentation;
+  };
+};
 
 type Presentation = {
-  root: {attrs: Attributes}
-  section_list: Record<string, unknown>
+  root: { attrs: Attributes };
+  section_list: Record<string, unknown>;
   form: {
     root: {
-      attrs: Attributes
-      param: string
-      params: Record<string, string>
-    }
-    section_id: {attrs: Attributes}
-    heading: TextPresentation
-    title: StandardFieldPresentation
+      attrs: Attributes;
+      param: string;
+      params: Record<string, string>;
+    };
+    section_id: { attrs: Attributes };
+    heading: TextPresentation;
+    title: StandardFieldPresentation;
     description: StandardFieldPresentation & {
-      control: {attrs: Attributes; text: string}
-    }
-    collapsed_by_default: CheckboxFieldPresentation
-    error: TextPresentation | null
+      control: { attrs: Attributes; text: string };
+    };
+    collapsed_by_default: CheckboxFieldPresentation;
+    error: TextPresentation | null;
     actions: {
-      attrs: Attributes
-      save: TextPresentation
-      cancel: TextPresentation & {visible: boolean}
-    }
-  }
-}
+      attrs: Attributes;
+      save: TextPresentation;
+      cancel: TextPresentation & { visible: boolean };
+    };
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -59,7 +59,7 @@ defineProps<{presentation: Presentation}>()
     <DashboardSectionList :presentation="presentation.section_list" />
 
     <form v-bind="presentation.form.root.attrs">
-      <input v-bind="presentation.form.section_id.attrs">
+      <input v-bind="presentation.form.section_id.attrs" />
       <p v-bind="presentation.form.heading.attrs">{{ presentation.form.heading.text }}</p>
 
       <div v-bind="presentation.form.title.wrapper.attrs">
@@ -67,13 +67,15 @@ defineProps<{presentation: Presentation}>()
           <span v-bind="presentation.form.title.label.attrs">
             {{ presentation.form.title.label.text }}
           </span>
-          <input v-bind="presentation.form.title.control.attrs">
+          <input v-bind="presentation.form.title.control.attrs" />
         </label>
         <p
           v-for="(error, index) in presentation.form.title.errors"
           :key="`title-error-${index}`"
           v-bind="error.attrs"
-        >{{ error.text }}</p>
+        >
+          {{ error.text }}
+        </p>
       </div>
 
       <div v-bind="presentation.form.description.wrapper.attrs">
@@ -81,19 +83,23 @@ defineProps<{presentation: Presentation}>()
           <span v-bind="presentation.form.description.label.attrs">
             {{ presentation.form.description.label.text }}
           </span>
-          <textarea v-bind="presentation.form.description.control.attrs">{{ presentation.form.description.control.text }}</textarea>
+          <textarea v-bind="presentation.form.description.control.attrs">{{
+            presentation.form.description.control.text
+          }}</textarea>
         </label>
         <p
           v-for="(error, index) in presentation.form.description.errors"
           :key="`description-error-${index}`"
           v-bind="error.attrs"
-        >{{ error.text }}</p>
+        >
+          {{ error.text }}
+        </p>
       </div>
 
       <div v-bind="presentation.form.collapsed_by_default.wrapper.attrs">
         <label v-bind="presentation.form.collapsed_by_default.label.attrs">
-          <input v-bind="presentation.form.collapsed_by_default.hidden_control.attrs">
-          <input v-bind="presentation.form.collapsed_by_default.control.attrs">
+          <input v-bind="presentation.form.collapsed_by_default.hidden_control.attrs" />
+          <input v-bind="presentation.form.collapsed_by_default.control.attrs" />
           <span v-bind="presentation.form.collapsed_by_default.text.wrapper.attrs">
             <span v-bind="presentation.form.collapsed_by_default.text.label.attrs">
               {{ presentation.form.collapsed_by_default.text.label.text }}
@@ -113,7 +119,9 @@ defineProps<{presentation: Presentation}>()
         <button
           v-if="presentation.form.actions.cancel.visible"
           v-bind="presentation.form.actions.cancel.attrs"
-        >{{ presentation.form.actions.cancel.text }}</button>
+        >
+          {{ presentation.form.actions.cancel.text }}
+        </button>
       </div>
     </form>
   </div>

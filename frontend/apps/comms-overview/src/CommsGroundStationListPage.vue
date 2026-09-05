@@ -1,44 +1,44 @@
 <script setup lang="ts">
-import CommsGroundStationList from "./CommsGroundStationList.vue"
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue"
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue"
+import CommsGroundStationList from "./CommsGroundStationList.vue";
+import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
+import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
 import type {
   Attrs,
   ElementPresentation,
   EmptyStatePresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./ui/components/page_shell"
+} from "./ui/components/page_shell";
 
-type GroundStationListProps = InstanceType<typeof CommsGroundStationList>["$props"]
+type GroundStationListProps = InstanceType<typeof CommsGroundStationList>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: PageHeaderPresentation & {
     actions: ElementPresentation & {
-      new_ground_station: PageHeaderAction
-    }
-  }
-  empty_state: EmptyStatePresentation | null
+      new_ground_station: PageHeaderAction;
+    };
+  };
+  empty_state: EmptyStatePresentation | null;
   card: {
-    attrs: Attrs
-    body: ElementPresentation
+    attrs: Attrs;
+    body: ElementPresentation;
     list_component: {
-      attrs: Attrs
+      attrs: Attrs;
       props: {
-        rows: GroundStationListProps["rows"]
-        search: GroundStationListProps["search"]
-        sort: GroundStationListProps["sort"]
-        sort_dir: GroundStationListProps["sort_dir"]
-        page: GroundStationListProps["page"]
-        page_size: GroundStationListProps["page_size"]
-        total_count: GroundStationListProps["total_count"]
-      }
-    }
-  } | null
-}
+        rows: GroundStationListProps["rows"];
+        search: GroundStationListProps["search"];
+        sort: GroundStationListProps["sort"];
+        sort_dir: GroundStationListProps["sort_dir"];
+        page: GroundStationListProps["page"];
+        page_size: GroundStationListProps["page_size"];
+        total_count: GroundStationListProps["total_count"];
+      };
+    };
+  } | null;
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

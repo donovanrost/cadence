@@ -1,55 +1,53 @@
 <script setup>
-import {onMounted} from "vue"
-import {useOpsEvent} from "./ops-events"
+import { onMounted } from "vue";
+import { useOpsEvent } from "./ops-events";
 
-const STORAGE_KEY = "cadence:dashboard-time-recents"
-const MAX_RECENTS = 4
+const STORAGE_KEY = "cadence:dashboard-time-recents";
+const MAX_RECENTS = 4;
 
 const props = defineProps({
-  ranges: {type: Array, default: () => []}
-})
+  ranges: { type: Array, default: () => [] },
+});
 
-const emit = defineEmits(["recents-loaded", "select-range"])
+const emit = defineEmits(["recents-loaded", "select-range"]);
 
 const readRecents = () => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY))
-    if (!Array.isArray(parsed)) return []
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!Array.isArray(parsed)) return [];
 
     return parsed
       .filter((range) => range && typeof range.from === "string" && typeof range.to === "string")
-      .slice(0, MAX_RECENTS)
+      .slice(0, MAX_RECENTS);
   } catch (_error) {
-    return []
+    return [];
   }
-}
+};
 
-const pushRecents = (ranges) => emit("recents-loaded", {ranges})
+const pushRecents = (ranges) => emit("recents-loaded", { ranges });
 
-const storeRecent = ({from, to}) => {
-  if (typeof from !== "string" || typeof to !== "string") return
+const storeRecent = ({ from, to }) => {
+  if (typeof from !== "string" || typeof to !== "string") return;
 
-  const deduped = readRecents().filter(
-    (range) => range.from !== from || range.to !== to
-  )
-  const recents = [{from, to}, ...deduped].slice(0, MAX_RECENTS)
+  const deduped = readRecents().filter((range) => range.from !== from || range.to !== to);
+  const recents = [{ from, to }, ...deduped].slice(0, MAX_RECENTS);
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(recents))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(recents));
   } catch (_error) {
     // Storage may be unavailable (private browsing quota); the current
     // LiveView session still receives the updated list.
   }
 
-  pushRecents(recents)
-}
+  pushRecents(recents);
+};
 
 const selectRange = (range) => {
-  emit("select-range", {from: range.from, to: range.to})
-}
+  emit("select-range", { from: range.from, to: range.to });
+};
 
-useOpsEvent("cadence:store-time-recent", payload => storeRecent(payload))
-onMounted(() => pushRecents(readRecents()))
+useOpsEvent("cadence:store-time-recent", (payload) => storeRecent(payload));
+onMounted(() => pushRecents(readRecents()));
 </script>
 
 <template>

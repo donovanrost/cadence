@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import {PopoverContent, PopoverRoot, PopoverTrigger} from "reka-ui"
-import {nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue"
+import { PopoverContent, PopoverRoot, PopoverTrigger } from "reka-ui";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   announceCadencePopoverOpened,
   focusCurrentPopoverTrigger,
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
-} from "./popover_compatibility.js"
+} from "./popover_compatibility.js";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
-type PopoverIdentity = string | null | undefined
+type PopoverIdentity = string | null | undefined;
 
 const props = withDefaults(
   defineProps<{
-    identity: PopoverIdentity
-    side?: "top" | "right" | "bottom" | "left"
-    align?: "start" | "center" | "end"
-    sideOffset?: number
-    collisionPadding?: number
-    prioritizePosition?: boolean
+    identity: PopoverIdentity;
+    side?: "top" | "right" | "bottom" | "left";
+    align?: "start" | "center" | "end";
+    sideOffset?: number;
+    collisionPadding?: number;
+    prioritizePosition?: boolean;
   }>(),
   {
     side: "bottom",
@@ -28,106 +28,94 @@ const props = withDefaults(
     collisionPadding: 16,
     prioritizePosition: true,
   },
-)
+);
 
-const root = ref<HTMLElement | null>(null)
-const open = ref(false)
-let suppressCloseAutoFocus = false
-let suppressEscapeDismiss = false
-let removeLegacyOverlayListener: (() => void) | null = null
+const root = ref<HTMLElement | null>(null);
+const open = ref(false);
+let suppressCloseAutoFocus = false;
+let suppressEscapeDismiss = false;
+let removeLegacyOverlayListener: (() => void) | null = null;
 
 const closeWithoutFocus = () => {
-  if (!open.value) return
-  suppressCloseAutoFocus = true
-  open.value = false
-}
+  if (!open.value) return;
+  suppressCloseAutoFocus = true;
+  open.value = false;
+};
 
 const updateOpen = async (nextOpen: boolean) => {
-  if (nextOpen && (!props.identity || !root.value)) return
+  if (nextOpen && (!props.identity || !root.value)) return;
 
   if (!nextOpen && suppressEscapeDismiss) {
-    suppressEscapeDismiss = false
-    open.value = true
-    return
+    suppressEscapeDismiss = false;
+    open.value = true;
+    return;
   }
 
-  open.value = nextOpen
-  if (!nextOpen) return
+  open.value = nextOpen;
+  if (!nextOpen) return;
 
-  await nextTick()
+  await nextTick();
   if (!open.value || !root.value || root.value.id !== props.identity) {
-    closeWithoutFocus()
-    return
+    closeWithoutFocus();
+    return;
   }
 
-  announceCadencePopoverOpened(window, root.value)
-}
+  announceCadencePopoverOpened(window, root.value);
+};
 
 const restoreCurrentTriggerFocus = async () => {
-  await nextTick()
-  const currentRoot = root.value
-  if (!currentRoot) return
-  if (currentRoot.id !== props.identity) return
+  await nextTick();
+  const currentRoot = root.value;
+  if (!currentRoot) return;
+  if (currentRoot.id !== props.identity) return;
 
-  focusCurrentPopoverTrigger(currentRoot)
-}
+  focusCurrentPopoverTrigger(currentRoot);
+};
 
 const handleCloseAutoFocus = (event: Event) => {
-  const restoreFocus = !suppressCloseAutoFocus
-  event.preventDefault()
-  suppressCloseAutoFocus = false
-  if (restoreFocus) void restoreCurrentTriggerFocus()
-}
+  const restoreFocus = !suppressCloseAutoFocus;
+  event.preventDefault();
+  suppressCloseAutoFocus = false;
+  if (restoreFocus) void restoreCurrentTriggerFocus();
+};
 
 const handleInteractOutside = (event: Event) => {
-  const trigger = root.value?.querySelector<HTMLElement>(":scope > [data-overlay-trigger]")
-  if (event.target instanceof Node && trigger?.contains(event.target)) return
-  event.preventDefault()
-  closeWithoutFocus()
-}
+  const trigger = root.value?.querySelector<HTMLElement>(":scope > [data-overlay-trigger]");
+  if (event.target instanceof Node && trigger?.contains(event.target)) return;
+  event.preventDefault();
+  closeWithoutFocus();
+};
 
 const handleEscapeKeyDown = (event: Event) => {
-  if (root.value?.querySelector("[data-overlay-open]")) suppressEscapeDismiss = true
-}
+  if (root.value?.querySelector("[data-overlay-open]")) suppressEscapeDismiss = true;
+};
 
 watch(
   () => props.identity,
   (nextIdentity, previousIdentity) => {
     if (!preservesPopoverOpenState(open.value, previousIdentity, nextIdentity)) {
-      closeWithoutFocus()
+      closeWithoutFocus();
     }
   },
-)
+);
 
 onMounted(() => {
-  if (!root.value) return
-  removeLegacyOverlayListener = subscribeToLegacyOverlayOpen(
-    window,
-    root.value,
-    closeWithoutFocus,
-  )
-})
+  if (!root.value) return;
+  removeLegacyOverlayListener = subscribeToLegacyOverlayOpen(window, root.value, closeWithoutFocus);
+});
 
 onBeforeUnmount(() => {
-  suppressCloseAutoFocus = true
-  suppressEscapeDismiss = false
-  open.value = false
-  removeLegacyOverlayListener?.()
-  removeLegacyOverlayListener = null
-})
+  suppressCloseAutoFocus = true;
+  suppressEscapeDismiss = false;
+  open.value = false;
+  removeLegacyOverlayListener?.();
+  removeLegacyOverlayListener = null;
+});
 </script>
 
 <template>
-  <div
-    ref="root"
-    v-bind="$attrs"
-    :data-overlay-open="open ? '' : undefined"
-  >
-    <PopoverRoot
-      :open="open"
-      :modal="false"
-      @update:open="updateOpen"
-    >
+  <div ref="root" v-bind="$attrs" :data-overlay-open="open ? '' : undefined">
+    <PopoverRoot :open="open" :modal="false" @update:open="updateOpen">
       <PopoverTrigger as-child>
         <slot name="trigger" :open="open"></slot>
       </PopoverTrigger>

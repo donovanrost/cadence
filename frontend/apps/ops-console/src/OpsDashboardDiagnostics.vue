@@ -1,96 +1,96 @@
 <script setup lang="ts">
-import ClipboardButton from "./ClipboardButton.vue"
+import ClipboardButton from "./ClipboardButton.vue";
 
-type RawAttrs = Record<string, string>
+type RawAttrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: RawAttrs
-}
+  attrs: RawAttrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string | number
-}
+  text: string | number;
+};
 
 type LinkPresentation = TextPresentation & {
-  key?: string
-}
+  key?: string;
+};
 
 type DiagnosticRow = {
-  id: string
-  __dom_id: string
-  attrs: RawAttrs
-  header: ElementPresentation
-  title: TextPresentation
-  status: TextPresentation
-  identity: TextPresentation
-}
+  id: string;
+  __dom_id: string;
+  attrs: RawAttrs;
+  header: ElementPresentation;
+  title: TextPresentation;
+  status: TextPresentation;
+  identity: TextPresentation;
+};
 
 type SelectedDiagnostic = {
   header: {
-    attrs: RawAttrs
-    content: ElementPresentation
-    label: TextPresentation
-    title: TextPresentation
-    identity: TextPresentation
+    attrs: RawAttrs;
+    content: ElementPresentation;
+    label: TextPresentation;
+    title: TextPresentation;
+    identity: TextPresentation;
     copy: {
-      component: "ClipboardButton"
-      host: ElementPresentation
-      props: InstanceType<typeof ClipboardButton>["$props"]
-    }
-  }
+      component: "ClipboardButton";
+      host: ElementPresentation;
+      props: InstanceType<typeof ClipboardButton>["$props"];
+    };
+  };
   details: ElementPresentation & {
     items: Array<{
-      key: string
-      attrs: RawAttrs
-      label: TextPresentation
-      value: TextPresentation
-    }>
-  }
+      key: string;
+      attrs: RawAttrs;
+      label: TextPresentation;
+      value: TextPresentation;
+    }>;
+  };
   drilldowns: ElementPresentation & {
-    links: LinkPresentation[]
-  }
-}
+    links: LinkPresentation[];
+  };
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: RawAttrs
-    inner: ElementPresentation
-    content: ElementPresentation
-    eyebrow: TextPresentation
-    heading: TextPresentation
-    copy: TextPresentation
-    viewer: LinkPresentation
-  }
-  content: ElementPresentation
+    attrs: RawAttrs;
+    inner: ElementPresentation;
+    content: ElementPresentation;
+    eyebrow: TextPresentation;
+    heading: TextPresentation;
+    copy: TextPresentation;
+    viewer: LinkPresentation;
+  };
+  content: ElementPresentation;
   collections: ElementPresentation & {
     items: Array<{
-      key: string
-      attrs: RawAttrs
-      label: string
-      count: TextPresentation
-    }>
-  }
-  workspace: ElementPresentation
+      key: string;
+      attrs: RawAttrs;
+      label: string;
+      count: TextPresentation;
+    }>;
+  };
+  workspace: ElementPresentation;
   master: ElementPresentation & {
     header: ElementPresentation & {
-      label: TextPresentation
-      count: TextPresentation
-    }
+      label: TextPresentation;
+      count: TextPresentation;
+    };
     stream: ElementPresentation & {
-      empty: TextPresentation
-    }
-  }
+      empty: TextPresentation;
+    };
+  };
   detail: ElementPresentation & {
-    selected: SelectedDiagnostic | null
-    empty: TextPresentation | null
-  }
-}
+    selected: SelectedDiagnostic | null;
+    empty: TextPresentation | null;
+  };
+};
 
 const props = defineProps<{
-  presentation: Presentation
-  diagnostic_rows: DiagnosticRow[]
-}>()
+  presentation: Presentation;
+  diagnostic_rows: DiagnosticRow[];
+}>();
 </script>
 
 <template>
@@ -170,9 +170,7 @@ const props = defineProps<{
                 </p>
               </div>
               <div v-bind="props.presentation.detail.selected.header.copy.host.attrs">
-                <ClipboardButton
-                  v-bind="props.presentation.detail.selected.header.copy.props"
-                />
+                <ClipboardButton v-bind="props.presentation.detail.selected.header.copy.props" />
               </div>
             </div>
 

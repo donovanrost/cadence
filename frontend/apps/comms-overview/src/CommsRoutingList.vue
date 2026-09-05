@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
 
 type RoutingRuleRow = {
-  id: string
-  display_name: string
-  spacecraft_name: string
-  purpose_label: string
-  direction: string
-  transport_name: string
-  role: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  spacecraft_name: string;
+  purpose_label: string;
+  direction: string;
+  transport_name: string;
+  role: string;
+  href: string;
+};
 
-defineProps<{rows: RoutingRuleRow[]}>()
+defineProps<{ rows: RoutingRuleRow[] }>();
 </script>
 
 <template>
@@ -29,18 +29,15 @@ defineProps<{rows: RoutingRuleRow[]}>()
       </tr>
     </thead>
     <tbody id="routing-rules">
-      <CadenceHoverTableRow
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-      >
+      <CadenceHoverTableRow v-for="row in rows" :id="row.id" :key="row.id">
         <td class="font-medium">
           <a
             :href="row.href"
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="text-primary hover:underline"
-          >{{ row.display_name }}</a>
+            >{{ row.display_name }}</a
+          >
         </td>
         <td>{{ row.spacecraft_name }}</td>
         <td>{{ row.purpose_label }}</td>

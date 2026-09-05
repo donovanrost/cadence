@@ -1,96 +1,96 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue"
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue"
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
+import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Page = {
-  id: string
-  title: string
-  subtitle: string
-  breadcrumbs: Breadcrumb[]
-}
+  id: string;
+  title: string;
+  subtitle: string;
+  breadcrumbs: Breadcrumb[];
+};
 
 type FormSection = {
-  number: string
-  title: string
-}
+  number: string;
+  title: string;
+};
 
 type FormField = {
-  id: string
-  name: string
-  type: "text" | "select"
-  label: string
-  required: boolean
-  value: string
-}
+  id: string;
+  name: string;
+  type: "text" | "select";
+  label: string;
+  required: boolean;
+  value: string;
+};
 
 type RoutingRuleForm = {
-  id: string
+  id: string;
   sections: {
-    intent: FormSection
-    transport: FormSection
-    policy: FormSection
-  }
+    intent: FormSection;
+    transport: FormSection;
+    policy: FormSection;
+  };
   fields: {
-    display_name: FormField
-    purpose_label: FormField
-    spacecraft_id: FormField
-    transport_ref: FormField
-    direction: FormField
-    role: FormField
-  }
+    display_name: FormField;
+    purpose_label: FormField;
+    spacecraft_id: FormField;
+    transport_ref: FormField;
+    direction: FormField;
+    role: FormField;
+  };
   actions: {
-    submit: {id: string; label: string}
-    cancel: {id: string; label: string; href: string}
-  }
-}
+    submit: { id: string; label: string };
+    cancel: { id: string; label: string; href: string };
+  };
+};
 
 type SelectOption = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type RoutingRuleOptions = {
-  spacecraft: SelectOption[]
-  transports: SelectOption[]
-  directions: SelectOption[]
-  roles: SelectOption[]
-}
+  spacecraft: SelectOption[];
+  transports: SelectOption[];
+  directions: SelectOption[];
+  roles: SelectOption[];
+};
 
 type RoutingRuleValues = {
-  display_name: string
-  purpose_label: string
-  spacecraft_id: string
-  transport_ref: string
-  direction: string
-  role: string
-}
+  display_name: string;
+  purpose_label: string;
+  spacecraft_id: string;
+  transport_ref: string;
+  direction: string;
+  role: string;
+};
 
 type RoutingRulePayload = {
-  routing_rule: RoutingRuleValues
-}
+  routing_rule: RoutingRuleValues;
+};
 
 const props = defineProps<{
-  page: Page
-  form: RoutingRuleForm
-  options: RoutingRuleOptions
-}>()
+  page: Page;
+  form: RoutingRuleForm;
+  options: RoutingRuleOptions;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: RoutingRulePayload]
-  save: [payload: RoutingRulePayload]
-}>()
+  validate: [payload: RoutingRulePayload];
+  save: [payload: RoutingRulePayload];
+}>();
 
 const formValues = (form: RoutingRuleForm): RoutingRuleValues => ({
   display_name: form.fields.display_name.value,
@@ -98,13 +98,13 @@ const formValues = (form: RoutingRuleForm): RoutingRuleValues => ({
   spacecraft_id: form.fields.spacecraft_id.value,
   transport_ref: form.fields.transport_ref.value,
   direction: form.fields.direction.value,
-  role: form.fields.role.value
-})
+  role: form.fields.role.value,
+});
 
-const values = reactive<RoutingRuleValues>(formValues(props.form))
-const pendingValidations: RoutingRuleValues[] = []
-const supersededValidations: RoutingRuleValues[] = []
-let acceptedServerValues = formValues(props.form)
+const values = reactive<RoutingRuleValues>(formValues(props.form));
+const pendingValidations: RoutingRuleValues[] = [];
+const supersededValidations: RoutingRuleValues[] = [];
+let acceptedServerValues = formValues(props.form);
 
 const sameValues = (left: RoutingRuleValues, right: RoutingRuleValues) =>
   left.display_name === right.display_name &&
@@ -112,48 +112,48 @@ const sameValues = (left: RoutingRuleValues, right: RoutingRuleValues) =>
   left.spacecraft_id === right.spacecraft_id &&
   left.transport_ref === right.transport_ref &&
   left.direction === right.direction &&
-  left.role === right.role
+  left.role === right.role;
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm)
+    const serverValues = formValues(serverForm);
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
 
     if (acknowledgedIndex >= 0) {
-      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex))
+      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex));
 
-      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1
-      pendingValidations.splice(0, acknowledgedIndex + 1)
-      acceptedServerValues = serverValues
+      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1;
+      pendingValidations.splice(0, acknowledgedIndex + 1);
+      acceptedServerValues = serverValues;
 
       if (!hasNewerTyping && sameValues(values, serverValues)) {
-        Object.assign(values, serverValues)
+        Object.assign(values, serverValues);
       }
 
-      return
+      return;
     }
 
     const supersededIndex = supersededValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
 
     if (supersededIndex >= 0) {
-      supersededValidations.splice(supersededIndex, 1)
-      return
+      supersededValidations.splice(supersededIndex, 1);
+      return;
     }
 
-    if (sameValues(serverValues, acceptedServerValues)) return
+    if (sameValues(serverValues, acceptedServerValues)) return;
 
     if (pendingValidations.length === 0 && sameValues(values, acceptedServerValues)) {
-      Object.assign(values, serverValues)
-      acceptedServerValues = serverValues
+      Object.assign(values, serverValues);
+      acceptedServerValues = serverValues;
     }
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const routingRuleValues = (): RoutingRuleValues => ({
   display_name: values.display_name,
@@ -161,16 +161,16 @@ const routingRuleValues = (): RoutingRuleValues => ({
   spacecraft_id: values.spacecraft_id,
   transport_ref: values.transport_ref,
   direction: values.direction,
-  role: values.role
-})
+  role: values.role,
+});
 
 const validate = () => {
-  const routingRule = routingRuleValues()
-  pendingValidations.push(routingRule)
-  emit("validate", {routing_rule: routingRule})
-}
+  const routingRule = routingRuleValues();
+  pendingValidations.push(routingRule);
+  emit("validate", { routing_rule: routingRule });
+};
 
-const save = () => emit("save", {routing_rule: routingRuleValues()})
+const save = () => emit("save", { routing_rule: routingRuleValues() });
 </script>
 
 <template>
@@ -193,7 +193,8 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
                 data-phx-link="redirect"
                 data-phx-link-state="push"
                 class="hover:text-primary transition-colors"
-              >{{ breadcrumb.label }}</a>
+                >{{ breadcrumb.label }}</a
+              >
             </template>
           </CadenceBreadcrumbs>
           <CadencePageTitle>
@@ -229,7 +230,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             :required="form.fields.display_name.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
 
         <CadenceField
@@ -246,7 +247,7 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             :required="form.fields.purpose_label.required"
             class="w-full input"
             @input="validate"
-          >
+          />
         </CadenceField>
       </CadenceFormSectionFrame>
 
@@ -278,7 +279,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
               v-for="option in options.spacecraft"
               :key="`${option.value}-${option.label}`"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
 
@@ -300,7 +303,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
               v-for="option in options.transports"
               :key="`${option.value}-${option.label}`"
               :value="option.value"
-            >{{ option.label }}</option>
+            >
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
       </CadenceFormSectionFrame>
@@ -329,11 +334,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             class="w-full select"
             @change="validate"
           >
-            <option
-              v-for="option in options.directions"
-              :key="option.value"
-              :value="option.value"
-            >{{ option.label }}</option>
+            <option v-for="option in options.directions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
 
@@ -351,11 +354,9 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
             class="w-full select"
             @change="validate"
           >
-            <option
-              v-for="option in options.roles"
-              :key="option.value"
-              :value="option.value"
-            >{{ option.label }}</option>
+            <option v-for="option in options.roles" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
           </select>
         </CadenceField>
       </CadenceFormSectionFrame>
@@ -370,7 +371,8 @@ const save = () => emit("save", {routing_rule: routingRuleValues()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ form.actions.cancel.label }}</a>
+          >{{ form.actions.cancel.label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceFormPageFrame>

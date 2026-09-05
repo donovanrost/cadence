@@ -1,76 +1,76 @@
 <script setup lang="ts">
-import {reactive, watch} from "vue"
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue"
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue"
-import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
+import { reactive, watch } from "vue";
+import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
+import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
 
 type Breadcrumb = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type Page = {
-  title: string
-  breadcrumbs: Breadcrumb[]
-  submit_label: string
-  cancel_label: string
-  cancel_href: string
-}
+  title: string;
+  breadcrumbs: Breadcrumb[];
+  submit_label: string;
+  cancel_label: string;
+  cancel_href: string;
+};
 
 type OrganizationForm = {
-  display_name: string
-  slug: string
-}
+  display_name: string;
+  slug: string;
+};
 
 type OrganizationPayload = {
-  organization: OrganizationForm
-}
+  organization: OrganizationForm;
+};
 
 const props = defineProps<{
-  page: Page
-  form: OrganizationForm
-}>()
+  page: Page;
+  form: OrganizationForm;
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: OrganizationPayload]
-  save: [payload: OrganizationPayload]
-}>()
+  validate: [payload: OrganizationPayload];
+  save: [payload: OrganizationPayload];
+}>();
 
-const organization = reactive<OrganizationForm>({...props.form})
-const pendingValidations: OrganizationForm[] = []
+const organization = reactive<OrganizationForm>({ ...props.form });
+const pendingValidations: OrganizationForm[] = [];
 
 const values = (): OrganizationForm => ({
   display_name: organization.display_name,
-  slug: organization.slug
-})
+  slug: organization.slug,
+});
 
 const sameValues = (left: OrganizationForm, right: OrganizationForm) =>
-  left.display_name === right.display_name && left.slug === right.slug
+  left.display_name === right.display_name && left.slug === right.slug;
 
 watch(
   () => props.form,
   (serverValues) => {
     const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues)
-    )
+      sameValues(sent, serverValues),
+    );
     const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1
+      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
 
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1)
+    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
 
-    if (!hasNewerTyping) Object.assign(organization, serverValues)
+    if (!hasNewerTyping) Object.assign(organization, serverValues);
   },
-  {deep: true}
-)
+  { deep: true },
+);
 
 const validate = () => {
-  const formValues = values()
-  pendingValidations.push(formValues)
-  emit("validate", {organization: formValues})
-}
+  const formValues = values();
+  pendingValidations.push(formValues);
+  emit("validate", { organization: formValues });
+};
 
-const save = () => emit("save", {organization: values()})
+const save = () => emit("save", { organization: values() });
 </script>
 
 <template>
@@ -92,7 +92,8 @@ const save = () => emit("save", {organization: values()})
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="transition-colors hover:text-primary"
-            >{{ breadcrumb.label }}</a>
+              >{{ breadcrumb.label }}</a
+            >
           </template>
         </CadenceBreadcrumbs>
         <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
@@ -103,9 +104,7 @@ const save = () => emit("save", {organization: values()})
 
     <form id="org-form" class="space-y-4" @submit.prevent="save">
       <div class="fieldset mb-3">
-        <label for="organization_display_name" class="hud-label mb-1.5 block">
-          Display Name
-        </label>
+        <label for="organization_display_name" class="hud-label mb-1.5 block"> Display Name </label>
         <input
           id="organization_display_name"
           v-model="organization.display_name"
@@ -114,7 +113,7 @@ const save = () => emit("save", {organization: values()})
           required
           class="w-full input"
           @input="validate"
-        >
+        />
       </div>
 
       <div class="fieldset mb-3">
@@ -127,7 +126,7 @@ const save = () => emit("save", {organization: values()})
           required
           class="w-full input"
           @input="validate"
-        >
+        />
       </div>
 
       <CadenceFormActions wrapper-class="flex items-center gap-3 border-t border-base-300/60 pt-5">
@@ -137,7 +136,8 @@ const save = () => emit("save", {organization: values()})
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost"
-        >{{ page.cancel_label }}</a>
+          >{{ page.cancel_label }}</a
+        >
       </CadenceFormActions>
     </form>
   </CadenceNarrowFormPageFrame>

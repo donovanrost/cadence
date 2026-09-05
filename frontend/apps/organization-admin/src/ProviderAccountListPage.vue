@@ -1,68 +1,68 @@
 <script setup lang="ts">
-import ProviderAccountCards from "./ProviderAccountCards.vue"
+import ProviderAccountCards from "./ProviderAccountCards.vue";
 
-type RawAttrs = Record<string, string>
+type RawAttrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: RawAttrs
-}
+  attrs: RawAttrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
 type ProviderAccountCard = InstanceType<typeof ProviderAccountCards>["$props"]["card"] & {
-  __dom_id: string
-}
+  __dom_id: string;
+};
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: RawAttrs
-    body: ElementPresentation
-    content: ElementPresentation
+    attrs: RawAttrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
     breadcrumbs: {
-      attrs: RawAttrs
-      items: BreadcrumbItem[]
-    }
+      attrs: RawAttrs;
+      items: BreadcrumbItem[];
+    };
     title: TextPresentation & {
-      suffix: TextPresentation
-    }
-    subtitle: TextPresentation
+      suffix: TextPresentation;
+    };
+    subtitle: TextPresentation;
     actions: {
-      attrs: RawAttrs
+      attrs: RawAttrs;
       new_account: TextPresentation & {
-        icon: ElementPresentation
-      }
-    }
-  }
+        icon: ElementPresentation;
+      };
+    };
+  };
   empty_state: {
-    attrs: RawAttrs
-    icon: ElementPresentation
-    title: TextPresentation
-    description: TextPresentation
-    action_container: ElementPresentation
+    attrs: RawAttrs;
+    icon: ElementPresentation;
+    title: TextPresentation;
+    description: TextPresentation;
+    action_container: ElementPresentation;
     action: TextPresentation & {
-      icon: ElementPresentation
-    }
-  } | null
+      icon: ElementPresentation;
+    };
+  } | null;
   stream: {
-    attrs: RawAttrs
-    empty_marker: ElementPresentation
-  }
-}
+    attrs: RawAttrs;
+    empty_marker: ElementPresentation;
+  };
+};
 
 const props = defineProps<{
-  presentation: Presentation
-  provider_accounts: ProviderAccountCard[]
-}>()
+  presentation: Presentation;
+  provider_accounts: ProviderAccountCard[];
+}>();
 </script>
 
 <template>
@@ -118,11 +118,7 @@ const props = defineProps<{
 
     <div v-bind="props.presentation.stream.attrs">
       <div v-bind="props.presentation.stream.empty_marker.attrs"></div>
-      <div
-        v-for="card in props.provider_accounts"
-        :id="card.__dom_id"
-        :key="card.__dom_id"
-      >
+      <div v-for="card in props.provider_accounts" :id="card.__dom_id" :key="card.__dom_id">
         <div :id="`${card.__dom_id}-component`">
           <ProviderAccountCards :card="card" />
         </div>

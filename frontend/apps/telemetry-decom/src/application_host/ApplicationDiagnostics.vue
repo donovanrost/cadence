@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import StatusBadge from "../StatusBadge.vue"
-import CadenceDiagnosticsSectionFrame from "../ui/components/CadenceDiagnosticsSectionFrame.vue"
-import type {DiagnosticSeverity, Diagnostics} from "./presentation_types"
+import StatusBadge from "../StatusBadge.vue";
+import CadenceDiagnosticsSectionFrame from "../ui/components/CadenceDiagnosticsSectionFrame.vue";
+import type { DiagnosticSeverity, Diagnostics } from "./presentation_types";
 
-defineProps<{diagnostics: Diagnostics}>()
+defineProps<{ diagnostics: Diagnostics }>();
 
 const diagnosticHeaderIcons: Record<DiagnosticSeverity, string> = {
   error: "hero-exclamation-triangle",
   warning: "hero-exclamation-circle",
-  info: "hero-information-circle"
-}
+  info: "hero-information-circle",
+};
 
 const diagnosticHeaderIconClasses: Record<DiagnosticSeverity, string> = {
   error: "border-error/35 bg-error/10 text-error",
   warning: "border-warning/35 bg-warning/10 text-warning",
-  info: "border-info/35 bg-info/10 text-info"
-}
+  info: "border-info/35 bg-info/10 text-info",
+};
 
 const diagnosticRailClasses: Record<DiagnosticSeverity, string> = {
   error: "bg-error",
   warning: "bg-warning",
-  info: "bg-info"
-}
+  info: "bg-info",
+};
 
 const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
   error: "hero-x-circle text-error",
   warning: "hero-exclamation-circle text-warning",
-  info: "hero-information-circle text-info"
-}
+  info: "hero-information-circle text-info",
+};
 </script>
 
 <template>
@@ -59,15 +59,18 @@ const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
             {{ diagnostics.count_label }}
           </span>
         </div>
-        <p
-          v-if="diagnostics.description"
-          class="mt-1 text-sm text-base-content/65"
-        >{{ diagnostics.description }}</p>
+        <p v-if="diagnostics.description" class="mt-1 text-sm text-base-content/65">
+          {{ diagnostics.description }}
+        </p>
       </div>
       <StatusBadge
-        :status="diagnostics.severity === 'error'
-          ? 'blocked'
-          : diagnostics.severity === 'warning' ? 'attention' : 'info'"
+        :status="
+          diagnostics.severity === 'error'
+            ? 'blocked'
+            : diagnostics.severity === 'warning'
+              ? 'attention'
+              : 'info'
+        "
         :label="diagnostics.label"
       />
     </template>
@@ -95,7 +98,8 @@ const diagnosticItemIcons: Record<DiagnosticSeverity, string> = {
           <span
             v-if="item.value"
             class="max-w-56 truncate font-mono text-xs text-base-content/65"
-          >{{ item.value }}</span>
+            >{{ item.value }}</span
+          >
           <span
             class="size-4 shrink-0"
             :class="diagnosticItemIcons[item.severity]"

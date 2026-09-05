@@ -1,26 +1,26 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type ElementPresentation = {
-  tag: string
-  class: string
-  attrs: Attributes
-  body: string
-}
+  tag: string;
+  class: string;
+  attrs: Attributes;
+  body: string;
+};
 
 type Presentation = {
-  root: Omit<ElementPresentation, "body">
-  title: ElementPresentation
+  root: Omit<ElementPresentation, "body">;
+  title: ElementPresentation;
   rows: Omit<ElementPresentation, "body"> & {
     items: Array<{
-      key: number
-      label: ElementPresentation
-      value: ElementPresentation
-    }>
-  }
-}
+      key: number;
+      label: ElementPresentation;
+      value: ElementPresentation;
+    }>;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

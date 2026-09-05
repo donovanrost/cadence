@@ -235,10 +235,7 @@ function withLoadDeadline<T>(
     };
 
     controller.signal.addEventListener("abort", onAbort, { once: true });
-    operation.then(
-      finishResolve,
-      finishReject,
-    );
+    operation.then(finishResolve, finishReject);
   });
 }
 

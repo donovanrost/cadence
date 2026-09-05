@@ -1,263 +1,265 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceField from "./ui/components/CadenceField.vue"
-import {reactive, watch} from "vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceField from "./ui/components/CadenceField.vue";
+import { reactive, watch } from "vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
 type Option = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 type FormValues = {
-  spacecraft_id: string
-  route_key: string
-  starts_at: string
-  ends_at: string
-}
+  spacecraft_id: string;
+  route_key: string;
+  starts_at: string;
+  ends_at: string;
+};
 
 type SelectField = {
-  id: string
-  name: string
-  type: "select"
-  label: string
-  options: Option[]
-}
+  id: string;
+  name: string;
+  type: "select";
+  label: string;
+  options: Option[];
+};
 
 type DateTimeField = {
-  id: string
-  name: string
-  type: "datetime-local"
-  label: string
-}
+  id: string;
+  name: string;
+  type: "datetime-local";
+  label: string;
+};
 
 type ActionState = {
-  busy: boolean
-  disabled: boolean
-}
+  busy: boolean;
+  disabled: boolean;
+};
 
 type ContactRecord = {
-  __dom_id: string
-  id: string
-  kind: "scheduled" | "realized"
-  state: string
+  __dom_id: string;
+  id: string;
+  kind: "scheduled" | "realized";
+  state: string;
   status: {
-    label: string
-    class: string
-  }
-  record_kind_label: string
+    label: string;
+    class: string;
+  };
+  record_kind_label: string;
   window: {
-    starts_at: string
-    ends_at: string
-  }
-  intent: string
-  source_endpoints: string
+    starts_at: string;
+    ends_at: string;
+  };
+  intent: string;
+  source_endpoints: string;
   inspect_action: {
-    id: string
-    label: string
-    icon: string
-    href: string
-  }
+    id: string;
+    label: string;
+    icon: string;
+    href: string;
+  };
   telemetry_handoff: {
-    owner: string
-    window_available: boolean
-  }
-}
+    owner: string;
+    window_available: boolean;
+  };
+};
 
 type Opportunity = {
-  __dom_id: string
-  id: string
-  provider: string
+  __dom_id: string;
+  id: string;
+  provider: string;
   window: {
-    starts_at: string
-    ends_at: string
-  }
-  service_summary: string
-  delivery: string
-  antenna: string
-  cost: number | string | null
+    starts_at: string;
+    ends_at: string;
+  };
+  service_summary: string;
+  delivery: string;
+  antenna: string;
+  cost: number | string | null;
   reserve_action: {
-    id: string
-    label: string
-    busy_label: string
-    busy: boolean
-    disabled: boolean
-    payload: {token: string}
-  }
-}
+    id: string;
+    label: string;
+    busy_label: string;
+    busy: boolean;
+    disabled: boolean;
+    payload: { token: string };
+  };
+};
 
 type Observation = {
-  id: string
-  label: string
-  value: string | number | null
-}
+  id: string;
+  label: string;
+  value: string | number | null;
+};
 
 type ReservationReference = {
-  id: string
-  label: string
-  display: string | null
-  version: string | number | null
-}
+  id: string;
+  label: string;
+  display: string | null;
+  version: string | number | null;
+};
 
 type Reservation = {
-  __dom_id: string
-  id: string
-  state: string
+  __dom_id: string;
+  id: string;
+  state: string;
   status: {
-    label: string
-    class: string
-  }
-  provider_status: string
+    label: string;
+    class: string;
+  };
+  provider_status: string;
   window: {
-    starts_at: string
-    ends_at: string
-  }
+    starts_at: string;
+    ends_at: string;
+  };
   cancel_action: {
-    id: string
-    label: string
-    confirm: string
-    busy: boolean
-    disabled: boolean
-    payload: {"reservation-id": string}
-  } | null
+    id: string;
+    label: string;
+    confirm: string;
+    busy: boolean;
+    disabled: boolean;
+    payload: { "reservation-id": string };
+  } | null;
   detail_action: {
-    id: string
-    label: string
-    icon: string
-    href: string
-  }
-  observations: Observation[]
-  provider: ReservationReference
-  transport: ReservationReference
-  service: ReservationReference
-  delivery: ReservationReference
-  uncertain: boolean
-  configuration_failure: boolean
+    id: string;
+    label: string;
+    icon: string;
+    href: string;
+  };
+  observations: Observation[];
+  provider: ReservationReference;
+  transport: ReservationReference;
+  service: ReservationReference;
+  delivery: ReservationReference;
+  uncertain: boolean;
+  configuration_failure: boolean;
   diagnostics: {
-    id: string
-    title: string
-    rows: Array<{label: string; value: string}>
-  } | null
-}
+    id: string;
+    title: string;
+    rows: Array<{ label: string; value: string }>;
+  } | null;
+};
 
 const props = defineProps<{
   page: {
-    id: string
+    id: string;
     header: {
-      eyebrow: string
-      title: string
-      description: string
-      scope: {label: string; value: string}
-      contact_count: {id: string; label: string; value: number}
-      reservation_count: {id: string; label: string; value: number}
-    }
+      eyebrow: string;
+      title: string;
+      description: string;
+      scope: { label: string; value: string };
+      contact_count: { id: string; label: string; value: number };
+      reservation_count: { id: string; label: string; value: number };
+    };
     contact_ledger: {
-      id: string
-      eyebrow: string
-      title: string
-      description: string
-      timeline_action: {id: string; label: string; icon: string; href: string}
-      rows_id: string
-      empty: {id: string; icon: string; copy: string; visible: boolean}
-    }
-    opportunity_search: {eyebrow: string; description: string; icon: string}
+      id: string;
+      eyebrow: string;
+      title: string;
+      description: string;
+      timeline_action: { id: string; label: string; icon: string; href: string };
+      rows_id: string;
+      empty: { id: string; icon: string; copy: string; visible: boolean };
+    };
+    opportunity_search: { eyebrow: string; description: string; icon: string };
     opportunities: {
-      eyebrow: string
-      description: string
-      count: {id: string; value: number}
-      rows_id: string
-      empty: {id: string; icon: string; copy: string; visible: boolean}
-    }
+      eyebrow: string;
+      description: string;
+      count: { id: string; value: number };
+      rows_id: string;
+      empty: { id: string; icon: string; copy: string; visible: boolean };
+    };
     reservations: {
-      eyebrow: string
-      description: string
-      rows_id: string
-      empty: {id: string; icon: string; copy: string; visible: boolean}
-    }
-  }
+      eyebrow: string;
+      description: string;
+      rows_id: string;
+      empty: { id: string; icon: string; copy: string; visible: boolean };
+    };
+  };
   search: {
-    id: string
-    values: FormValues
+    id: string;
+    values: FormValues;
     fields: {
-      spacecraft: SelectField
-      route: SelectField
-      starts_at: DateTimeField
-      ends_at: DateTimeField
-    }
+      spacecraft: SelectField;
+      route: SelectField;
+      starts_at: DateTimeField;
+      ends_at: DateTimeField;
+    };
     submit: {
-      id: string
-      label: string
-      busy: boolean
-      disabled: boolean
-    }
-    error: {id: string; message: string} | null
-  }
+      id: string;
+      label: string;
+      busy: boolean;
+      disabled: boolean;
+    };
+    error: { id: string; message: string } | null;
+  };
   readiness: {
-    id: string
-    title: string
-    findings: Array<{message: string}>
-    action: {label: string; icon: string; href: string}
-  } | null
+    id: string;
+    title: string;
+    findings: Array<{ message: string }>;
+    action: { label: string; icon: string; href: string };
+  } | null;
   busy: {
-    keys: string[]
-    actions: Record<string, ActionState>
-  }
-  contact_records: ContactRecord[]
-  opportunities: Opportunity[]
-  provider_reservations: Reservation[]
-}>()
+    keys: string[];
+    actions: Record<string, ActionState>;
+  };
+  contact_records: ContactRecord[];
+  opportunities: Opportunity[];
+  provider_reservations: Reservation[];
+}>();
 
 const emit = defineEmits<{
-  validate: [payload: {contact_search: FormValues}]
-  search: [payload: {contact_search: FormValues}]
-  reserve: [payload: {token: string}]
-  cancel: [payload: {"reservation-id": string}]
-}>()
+  validate: [payload: { contact_search: FormValues }];
+  search: [payload: { contact_search: FormValues }];
+  reserve: [payload: { token: string }];
+  cancel: [payload: { "reservation-id": string }];
+}>();
 
-const formValues = reactive<FormValues>({...props.search.values})
+const formValues = reactive<FormValues>({ ...props.search.values });
 
 watch(
   () => props.search.values,
-  values => Object.assign(formValues, values),
-  {deep: true}
-)
+  (values) => Object.assign(formValues, values),
+  { deep: true },
+);
 
 const updateField = (field: keyof FormValues, event: Event) => {
-  formValues[field] = (event.target as HTMLInputElement | HTMLSelectElement).value
-  emit("validate", {contact_search: {...formValues}})
-}
+  formValues[field] = (event.target as HTMLInputElement | HTMLSelectElement).value;
+  emit("validate", { contact_search: { ...formValues } });
+};
 
 const submitSearch = () => {
-  emit("search", {contact_search: {...formValues}})
-}
+  emit("search", { contact_search: { ...formValues } });
+};
 
 const actionState = (id: string, fallback: ActionState): ActionState => {
-  return props.busy.actions[id] ?? fallback
-}
+  return props.busy.actions[id] ?? fallback;
+};
 
 const reserve = (opportunity: Opportunity) => {
-  const state = actionState(opportunity.id, opportunity.reserve_action)
-  if (!state.disabled) emit("reserve", opportunity.reserve_action.payload)
-}
+  const state = actionState(opportunity.id, opportunity.reserve_action);
+  if (!state.disabled) emit("reserve", opportunity.reserve_action.payload);
+};
 
 const cancel = (reservation: Reservation) => {
-  if (!reservation.cancel_action) return
+  if (!reservation.cancel_action) return;
 
-  const state = actionState(reservation.id, reservation.cancel_action)
-  if (state.disabled) return
+  const state = actionState(reservation.id, reservation.cancel_action);
+  if (state.disabled) return;
 
   if (window.confirm(reservation.cancel_action.confirm)) {
-    emit("cancel", reservation.cancel_action.payload)
+    emit("cancel", reservation.cancel_action.payload);
   }
-}
+};
 </script>
 
 <template>
   <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div
+        class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between"
+      >
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
             {{ page.header.eyebrow }}
@@ -316,10 +318,7 @@ const cancel = (reservation: Reservation) => {
           </a>
         </template>
         <div :id="page.contact_ledger.rows_id">
-          <div
-            :id="page.contact_ledger.empty.id"
-            class="hidden only:block px-4 py-12 text-center"
-          >
+          <div :id="page.contact_ledger.empty.id" class="hidden only:block px-4 py-12 text-center">
             <span
               :class="[page.contact_ledger.empty.icon, 'mx-auto h-6 w-6 text-base-content/30']"
             ></span>
@@ -336,7 +335,9 @@ const cancel = (reservation: Reservation) => {
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <span :class="record.status.class">{{ record.status.label }}</span>
-                <span class="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-base-content/45">
+                <span
+                  class="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-base-content/45"
+                >
                   {{ record.record_kind_label }}
                 </span>
               </div>
@@ -379,7 +380,10 @@ const cancel = (reservation: Reservation) => {
 
       <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)]">
         <div class="min-w-0 space-y-5">
-          <CadencePanel class="border border-base-300 bg-base-200/35 shadow-sm" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <CadencePanel
+            class="border border-base-300 bg-base-200/35 shadow-sm"
+            header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"
+          >
             <template #header>
               <div>
                 <p class="hud-label">{{ page.opportunity_search.eyebrow }}</p>
@@ -395,79 +399,79 @@ const cancel = (reservation: Reservation) => {
               class="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4"
               @submit.prevent="submitSearch"
             >
-                <CadenceField
-                  wrapper-class="fieldset mb-3"
-                  :label="search.fields.spacecraft.label"
-                  label-class="hud-label block mb-1.5"
+              <CadenceField
+                wrapper-class="fieldset mb-3"
+                :label="search.fields.spacecraft.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <select
+                  :id="search.fields.spacecraft.id"
+                  :name="search.fields.spacecraft.name"
+                  :value="formValues.spacecraft_id"
+                  class="w-full select"
+                  @change="updateField('spacecraft_id', $event)"
                 >
-                  <select
-                    :id="search.fields.spacecraft.id"
-                    :name="search.fields.spacecraft.name"
-                    :value="formValues.spacecraft_id"
-                    class="w-full select"
-                    @change="updateField('spacecraft_id', $event)"
+                  <option
+                    v-for="option in search.fields.spacecraft.options"
+                    :key="option.value"
+                    :value="option.value"
                   >
-                    <option
-                      v-for="option in search.fields.spacecraft.options"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </CadenceField>
+                    {{ option.label }}
+                  </option>
+                </select>
+              </CadenceField>
 
-                <CadenceField
-                  wrapper-class="fieldset mb-3"
-                  :label="search.fields.route.label"
-                  label-class="hud-label block mb-1.5"
+              <CadenceField
+                wrapper-class="fieldset mb-3"
+                :label="search.fields.route.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <select
+                  :id="search.fields.route.id"
+                  :name="search.fields.route.name"
+                  :value="formValues.route_key"
+                  class="w-full select"
+                  @change="updateField('route_key', $event)"
                 >
-                  <select
-                    :id="search.fields.route.id"
-                    :name="search.fields.route.name"
-                    :value="formValues.route_key"
-                    class="w-full select"
-                    @change="updateField('route_key', $event)"
+                  <option
+                    v-for="option in search.fields.route.options"
+                    :key="option.value"
+                    :value="option.value"
                   >
-                    <option
-                      v-for="option in search.fields.route.options"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </CadenceField>
+                    {{ option.label }}
+                  </option>
+                </select>
+              </CadenceField>
 
-                <CadenceField
-                  wrapper-class="fieldset mb-3"
-                  :label="search.fields.starts_at.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="search.fields.starts_at.id"
-                    :name="search.fields.starts_at.name"
-                    type="datetime-local"
-                    :value="formValues.starts_at"
-                    class="w-full input"
-                    @change="updateField('starts_at', $event)"
-                  >
-                </CadenceField>
+              <CadenceField
+                wrapper-class="fieldset mb-3"
+                :label="search.fields.starts_at.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="search.fields.starts_at.id"
+                  :name="search.fields.starts_at.name"
+                  type="datetime-local"
+                  :value="formValues.starts_at"
+                  class="w-full input"
+                  @change="updateField('starts_at', $event)"
+                />
+              </CadenceField>
 
-                <CadenceField
-                  wrapper-class="fieldset mb-3"
-                  :label="search.fields.ends_at.label"
-                  label-class="hud-label block mb-1.5"
-                >
-                  <input
-                    :id="search.fields.ends_at.id"
-                    :name="search.fields.ends_at.name"
-                    type="datetime-local"
-                    :value="formValues.ends_at"
-                    class="w-full input"
-                    @change="updateField('ends_at', $event)"
-                  >
-                </CadenceField>
+              <CadenceField
+                wrapper-class="fieldset mb-3"
+                :label="search.fields.ends_at.label"
+                label-class="hud-label block mb-1.5"
+              >
+                <input
+                  :id="search.fields.ends_at.id"
+                  :name="search.fields.ends_at.name"
+                  type="datetime-local"
+                  :value="formValues.ends_at"
+                  class="w-full input"
+                  @change="updateField('ends_at', $event)"
+                />
+              </CadenceField>
 
               <div class="flex items-center gap-3 md:col-span-2 xl:col-span-4">
                 <button
@@ -491,7 +495,10 @@ const cancel = (reservation: Reservation) => {
             >
               <p class="text-sm font-semibold text-warning">{{ readiness.title }}</p>
               <div class="mt-2 space-y-1 text-xs text-base-content/60">
-                <p v-for="(finding, index) in readiness.findings" :key="`${index}-${finding.message}`">
+                <p
+                  v-for="(finding, index) in readiness.findings"
+                  :key="`${index}-${finding.message}`"
+                >
                   {{ finding.message }}
                 </p>
               </div>
@@ -507,7 +514,10 @@ const cancel = (reservation: Reservation) => {
             </div>
           </CadencePanel>
 
-          <CadencePanel class="border border-base-300 bg-base-200/20" header-class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <CadencePanel
+            class="border border-base-300 bg-base-200/20"
+            header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"
+          >
             <template #header>
               <div>
                 <p class="hud-label">{{ page.opportunities.eyebrow }}</p>
@@ -538,8 +548,12 @@ const cancel = (reservation: Reservation) => {
               >
                 <div class="min-w-0">
                   <div class="mb-1 flex items-center gap-2">
-                    <span class="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_8px_currentColor]"></span>
-                    <span class="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-base-content/50">
+                    <span
+                      class="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_8px_currentColor]"
+                    ></span>
+                    <span
+                      class="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-base-content/50"
+                    >
                       {{ opportunity.provider }}
                     </span>
                   </div>
@@ -568,25 +582,26 @@ const cancel = (reservation: Reservation) => {
                   class="btn btn-primary btn-sm w-full font-mono text-[0.7rem] uppercase tracking-wider disabled:opacity-50"
                   @click="reserve(opportunity)"
                 >
-                  {{ actionState(opportunity.id, opportunity.reserve_action).busy
-                    ? opportunity.reserve_action.busy_label
-                    : opportunity.reserve_action.label }}
+                  {{
+                    actionState(opportunity.id, opportunity.reserve_action).busy
+                      ? opportunity.reserve_action.busy_label
+                      : opportunity.reserve_action.label
+                  }}
                 </button>
               </article>
             </div>
           </CadencePanel>
         </div>
 
-        <aside class="min-w-0 border border-base-300 bg-base-200/25 lg:sticky lg:top-0 lg:self-start">
+        <aside
+          class="min-w-0 border border-base-300 bg-base-200/25 lg:sticky lg:top-0 lg:self-start"
+        >
           <div class="border-b border-base-300 px-4 py-3">
             <p class="hud-label">{{ page.reservations.eyebrow }}</p>
             <p class="mt-1 text-sm text-base-content/60">{{ page.reservations.description }}</p>
           </div>
           <div :id="page.reservations.rows_id">
-            <div
-              :id="page.reservations.empty.id"
-              class="hidden only:block px-4 py-12 text-center"
-            >
+            <div :id="page.reservations.empty.id" class="hidden only:block px-4 py-12 text-center">
               <span
                 :class="[page.reservations.empty.icon, 'mx-auto h-6 w-6 text-base-content/30']"
               ></span>
@@ -602,7 +617,9 @@ const cancel = (reservation: Reservation) => {
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
                     <span :class="reservation.status.class">{{ reservation.status.label }}</span>
-                    <span class="font-mono text-[0.62rem] uppercase tracking-wider text-base-content/45">
+                    <span
+                      class="font-mono text-[0.62rem] uppercase tracking-wider text-base-content/45"
+                    >
                       {{ reservation.provider_status }}
                     </span>
                   </div>
@@ -638,7 +655,9 @@ const cancel = (reservation: Reservation) => {
                 <span :class="[reservation.detail_action.icon, 'h-3 w-3']"></span>
               </a>
 
-              <div class="mt-3 grid grid-cols-3 gap-px border border-base-300/60 bg-base-300/60 text-xs">
+              <div
+                class="mt-3 grid grid-cols-3 gap-px border border-base-300/60 bg-base-300/60 text-xs"
+              >
                 <div
                   v-for="observation in reservation.observations"
                   :id="observation.id"
@@ -646,7 +665,9 @@ const cancel = (reservation: Reservation) => {
                   class="bg-base-200/70 px-3 py-2"
                 >
                   <p class="hud-label">{{ observation.label }}</p>
-                  <p class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70">
+                  <p
+                    class="mt-1 font-mono text-[0.68rem] font-semibold uppercase text-base-content/70"
+                  >
                     {{ observation.value }}
                   </p>
                 </div>
@@ -654,7 +675,12 @@ const cancel = (reservation: Reservation) => {
 
               <div class="mt-3 grid gap-3 border-t border-base-300/60 pt-3 text-xs sm:grid-cols-2">
                 <div
-                  v-for="reference in [reservation.provider, reservation.transport, reservation.service, reservation.delivery]"
+                  v-for="reference in [
+                    reservation.provider,
+                    reservation.transport,
+                    reservation.service,
+                    reservation.delivery,
+                  ]"
                   :id="reference.id"
                   :key="reference.id"
                 >
@@ -689,12 +715,14 @@ const cancel = (reservation: Reservation) => {
                 :id="reservation.diagnostics.id"
                 class="mt-3 border-t border-base-300/60 pt-3"
               >
-                <summary class="cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.16em] text-base-content/45 hover:text-primary">
+                <summary
+                  class="cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.16em] text-base-content/45 hover:text-primary"
+                >
                   {{ reservation.diagnostics.title }}
                 </summary>
                 <dl class="mt-3 grid gap-2 font-mono text-[0.65rem] text-base-content/55">
                   <div v-for="row in reservation.diagnostics.rows" :key="row.label">
-                    <dt class="inline text-base-content/35">{{ row.label }} </dt>
+                    <dt class="inline text-base-content/35">{{ row.label }}</dt>
                     <dd class="inline">{{ row.value }}</dd>
                   </div>
                 </dl>

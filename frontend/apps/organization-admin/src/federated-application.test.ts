@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { manifest } from "./federated-application";
 import OrganizationAdminApplication from "./OrganizationAdminApplication.vue";
 
@@ -21,15 +21,15 @@ describe("organization admin federated application", () => {
         "./AdminOrganizationListPage",
         "./AdminOrganizationNew",
         "./AdminOrganizationShow",
-        "./AdminOrganizationInvite"
-      ])
+        "./AdminOrganizationInvite",
+      ]),
     );
   });
 
   it("exports an application wrapper for host-selected surfaces", () => {
     expect(OrganizationAdminApplication).toBeDefined();
-    expect(manifest.surfaces.find((surface) => surface.surfaceId === "notifications")?.actions).toEqual(
-      ["accept_invitation", "mark_notification_read"]
-    );
+    expect(
+      manifest.surfaces.find((surface) => surface.surfaceId === "notifications")?.actions,
+    ).toEqual(["accept_invitation", "mark_notification_read"]);
   });
 });

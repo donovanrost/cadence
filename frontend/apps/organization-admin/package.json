@@ -10,7 +10,7 @@
     "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
     "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node ../../tools/frontend-release-output-check.mjs --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\" --remoteName cadence_organization_admin",
     "preview": "vp preview --host 127.0.0.1 --port 4178 --strictPort",
-    "test": "node --test contract-static.test.mjs && vp test --run"
+    "test": "node --test contract-static.test.mjs && vp test --run --exclude contract-static.test.mjs"
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",

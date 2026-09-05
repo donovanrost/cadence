@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
 
 type MissionRow = {
-  id: string
-  display_name: string
-  slug: string
-  spacecraft_count: number
-  status: "info" | "ready" | "attention"
-  status_label: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  slug: string;
+  spacecraft_count: number;
+  status: "info" | "ready" | "attention";
+  status_label: string;
+  href: string;
+};
 
-defineProps<{rows: MissionRow[]}>()
-
+defineProps<{ rows: MissionRow[] }>();
 </script>
 
 <template>
@@ -39,7 +38,8 @@ defineProps<{rows: MissionRow[]}>()
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="text-primary hover:underline"
-          >{{ row.display_name }}</a>
+            >{{ row.display_name }}</a
+          >
         </td>
         <td class="font-mono text-sm text-primary/80">{{ row.slug }}</td>
         <td class="text-right font-mono text-sm">{{ row.spacecraft_count }}</td>

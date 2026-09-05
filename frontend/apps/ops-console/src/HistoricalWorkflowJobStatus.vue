@@ -1,113 +1,109 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type ButtonPresentation = {
-  id: string
-  type: "button"
-  class: string
-  text: string
-  icon: IconPresentation
-  attrs: Attributes
-}
+  id: string;
+  type: "button";
+  class: string;
+  text: string;
+  icon: IconPresentation;
+  attrs: Attributes;
+};
 
 type PatchLinkPresentation = {
-  key?: string
-  href: string | null
-  navigation_kind: "patch"
-  class: string
-  text: string
-  attrs: Attributes
-}
+  key?: string;
+  href: string | null;
+  navigation_kind: "patch";
+  class: string;
+  text: string;
+  attrs: Attributes;
+};
 
 type ReviewLinkPresentation = PatchLinkPresentation & {
-  icon: IconPresentation
-}
+  icon: IconPresentation;
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   header: {
-    class: string
-    label: TextPresentation
-    status: TextPresentation
-  }
+    class: string;
+    label: TextPresentation;
+    status: TextPresentation;
+  };
   guidance: {
-    id: string
-    class: string
-    attrs: Attributes
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      next_action: TextPresentation
-    }
-    guidance: TextPresentation
-    policy_state: TextPresentation & {visible: boolean}
-    available_when: TextPresentation & {visible: boolean}
-  }
+      class: string;
+      label: TextPresentation;
+      next_action: TextPresentation;
+    };
+    guidance: TextPresentation;
+    policy_state: TextPresentation & { visible: boolean };
+    available_when: TextPresentation & { visible: boolean };
+  };
   review_origin: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-    }
-    review_link: ReviewLinkPresentation
+      class: string;
+      label: TextPresentation;
+    };
+    review_link: ReviewLinkPresentation;
     placements: {
-      visible: boolean
-      class: string
-      attrs: Attributes
-      links: PatchLinkPresentation[]
-    }
-  }
+      visible: boolean;
+      class: string;
+      attrs: Attributes;
+      links: PatchLinkPresentation[];
+    };
+  };
   details: {
-    class: string
+    class: string;
     rows: Array<{
-      key: string
-      label: TextPresentation
-      value: TextPresentation
-    }>
-  }
-  retry_button: ButtonPresentation & {visible: boolean}
+      key: string;
+      label: TextPresentation;
+      value: TextPresentation;
+    }>;
+  };
+  retry_button: ButtonPresentation & { visible: boolean };
   stale_actions: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
-    buttons: ButtonPresentation[]
-  }
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
+    buttons: ButtonPresentation[];
+  };
   missing_actions: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
-    buttons: ButtonPresentation[]
-  }
-}
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
+    buttons: ButtonPresentation[];
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
-  <div
-    :id="presentation.root.id"
-    :class="presentation.root.class"
-    v-bind="presentation.root.attrs"
-  >
+  <div :id="presentation.root.id" :class="presentation.root.class" v-bind="presentation.root.attrs">
     <div :class="presentation.header.class">
       <span :class="presentation.header.label.class">{{ presentation.header.label.text }}</span>
       <span :class="presentation.header.status.class">{{ presentation.header.status.text }}</span>

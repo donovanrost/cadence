@@ -1,229 +1,229 @@
 <script setup lang="ts">
-import HistoricalWorkflowReplacementStatus from "./HistoricalWorkflowReplacementStatus.vue"
+import HistoricalWorkflowReplacementStatus from "./HistoricalWorkflowReplacementStatus.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type IconPresentation = {
-  name: string
-  class: string
-}
+  name: string;
+  class: string;
+};
 
 type DetailRowPresentation = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation
-}
+  key: string;
+  label: TextPresentation;
+  value: TextPresentation;
+};
 
 type DetailListPresentation = {
-  class: string
-  rows: DetailRowPresentation[]
-}
+  class: string;
+  rows: DetailRowPresentation[];
+};
 
 type ItemPresentation = {
-  key: string
-  class: string
-  text: string
-  attrs: Attributes
-}
+  key: string;
+  class: string;
+  text: string;
+  attrs: Attributes;
+};
 
 type PatchLinkPresentation = {
-  key?: string
-  href: string | null
-  class: string
-  text: string
-  icon?: IconPresentation
-  attrs: Attributes
-}
+  key?: string;
+  href: string | null;
+  class: string;
+  text: string;
+  icon?: IconPresentation;
+  attrs: Attributes;
+};
 
 type ActionButtonPresentation = {
-  visible: boolean
-  id: string
-  type: "button"
-  class: string
-  text: string
-  icon: IconPresentation
-  attrs: Attributes
-}
+  visible: boolean;
+  id: string;
+  type: "button";
+  class: string;
+  text: string;
+  icon: IconPresentation;
+  attrs: Attributes;
+};
 
 type SubmitButtonPresentation = {
-  id: string
-  type: "submit"
-  class: string
-  attrs: Attributes
-  label: TextPresentation & {icon: IconPresentation}
-  count: TextPresentation
-}
+  id: string;
+  type: "submit";
+  class: string;
+  attrs: Attributes;
+  label: TextPresentation & { icon: IconPresentation };
+  count: TextPresentation;
+};
 
 type AdvancementFormPresentation = {
-  visible: boolean
-  id: string | null
-  class: string
-  attrs: Attributes
+  visible: boolean;
+  id: string | null;
+  class: string;
+  attrs: Attributes;
   hidden_fields: Array<{
-    key: string
-    attrs: Attributes
-  }>
+    key: string;
+    attrs: Attributes;
+  }>;
   header: {
-    class: string
-    label: TextPresentation
-    count: TextPresentation
-  }
-  preview: TextPresentation
-  button: SubmitButtonPresentation
-}
+    class: string;
+    label: TextPresentation;
+    count: TextPresentation;
+  };
+  preview: TextPresentation;
+  button: SubmitButtonPresentation;
+};
 
 type ReplacementStatusPresentation = NonNullable<
   InstanceType<typeof HistoricalWorkflowReplacementStatus>["$props"]["presentation"]
->
+>;
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   header: {
-    class: string
-    label: TextPresentation
-    state: TextPresentation
-  }
+    class: string;
+    label: TextPresentation;
+    state: TextPresentation;
+  };
   job_progress: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      progress: TextPresentation
-    }
+      class: string;
+      label: TextPresentation;
+      progress: TextPresentation;
+    };
     items: {
-      class: string
-      entries: ItemPresentation[]
-    }
-  }
+      class: string;
+      entries: ItemPresentation[];
+    };
+  };
   execution_audit: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      count: TextPresentation
-    }
+      class: string;
+      label: TextPresentation;
+      count: TextPresentation;
+    };
     items: {
-      class: string
+      class: string;
       entries: Array<{
-        key: string
-        class: string
-        attrs: Attributes
+        key: string;
+        class: string;
+        attrs: Attributes;
         header: {
-          class: string
-          label: TextPresentation
-          count: TextPresentation
-        }
-        detail: TextPresentation & {visible: boolean}
-      }>
-    }
-  }
+          class: string;
+          label: TextPresentation;
+          count: TextPresentation;
+        };
+        detail: TextPresentation & { visible: boolean };
+      }>;
+    };
+  };
   review_origin: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-    }
-    review_link: PatchLinkPresentation & {icon: IconPresentation}
+      class: string;
+      label: TextPresentation;
+    };
+    review_link: PatchLinkPresentation & { icon: IconPresentation };
     placements: {
-      visible: boolean
-      class: string
-      attrs: Attributes
-      links: PatchLinkPresentation[]
-    }
-  }
-  details: DetailListPresentation
+      visible: boolean;
+      class: string;
+      attrs: Attributes;
+      links: PatchLinkPresentation[];
+    };
+  };
+  details: DetailListPresentation;
   recovery: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      resolved: TextPresentation
-    }
+      class: string;
+      label: TextPresentation;
+      resolved: TextPresentation;
+    };
     review_origin: {
-      visible: boolean
-      id: string
-      class: string
-      attrs: Attributes
-      label: TextPresentation
-      review_link: PatchLinkPresentation & {icon: IconPresentation}
-    }
+      visible: boolean;
+      id: string;
+      class: string;
+      attrs: Attributes;
+      label: TextPresentation;
+      review_link: PatchLinkPresentation & { icon: IconPresentation };
+    };
     guidance: {
-      id: string
-      class: string
-      attrs: Attributes
+      id: string;
+      class: string;
+      attrs: Attributes;
       header: {
-        class: string
-        label: TextPresentation
-        next_action: TextPresentation
-      }
-      guidance: TextPresentation
-      retry_state: TextPresentation & {visible: boolean}
-      available_when: TextPresentation & {visible: boolean}
-    }
+        class: string;
+        label: TextPresentation;
+        next_action: TextPresentation;
+      };
+      guidance: TextPresentation;
+      retry_state: TextPresentation & { visible: boolean };
+      available_when: TextPresentation & { visible: boolean };
+    };
     failed_item_handoffs: {
-      visible: boolean
-      id: string
-      class: string
-      attrs: Attributes
+      visible: boolean;
+      id: string;
+      class: string;
+      attrs: Attributes;
       header: {
-        class: string
-        label: TextPresentation
-        count: TextPresentation
-      }
+        class: string;
+        label: TextPresentation;
+        count: TextPresentation;
+      };
       links: {
-        class: string
-        entries: Array<PatchLinkPresentation & {key: string; icon: IconPresentation}>
-      }
-    }
+        class: string;
+        entries: Array<PatchLinkPresentation & { key: string; icon: IconPresentation }>;
+      };
+    };
     execution_plan: {
-      id: string
-      class: string
-      attrs: Attributes
+      id: string;
+      class: string;
+      attrs: Attributes;
       header: {
-        class: string
-        label: TextPresentation
-        retry_count: TextPresentation
-      }
-      details: DetailListPresentation
-      replacement_status: ReplacementStatusPresentation
-      retry_button: ActionButtonPresentation
-      advancement_form: AdvancementFormPresentation
-    }
-    details: DetailListPresentation
+        class: string;
+        label: TextPresentation;
+        retry_count: TextPresentation;
+      };
+      details: DetailListPresentation;
+      replacement_status: ReplacementStatusPresentation;
+      retry_button: ActionButtonPresentation;
+      advancement_form: AdvancementFormPresentation;
+    };
+    details: DetailListPresentation;
     item_groups: Array<{
-      key: string
-      visible: boolean
-      class: string
-      attrs: Attributes
-      label: TextPresentation
-      items: ItemPresentation[]
-    }>
-    guidance_note: TextPresentation
-  }
-}
+      key: string;
+      visible: boolean;
+      class: string;
+      attrs: Attributes;
+      label: TextPresentation;
+      items: ItemPresentation[];
+    }>;
+    guidance_note: TextPresentation;
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
@@ -484,7 +484,7 @@ defineProps<{presentation: Presentation}>()
             v-for="field in presentation.recovery.execution_plan.advancement_form.hidden_fields"
             :key="field.key"
             v-bind="field.attrs"
-          >
+          />
           <div :class="presentation.recovery.execution_plan.advancement_form.header.class">
             <span :class="presentation.recovery.execution_plan.advancement_form.header.label.class">
               {{ presentation.recovery.execution_plan.advancement_form.header.label.text }}
@@ -528,12 +528,7 @@ defineProps<{presentation: Presentation}>()
       <template v-for="group in presentation.recovery.item_groups" :key="group.key">
         <div v-if="group.visible" :class="group.class" v-bind="group.attrs">
           <span :class="group.label.class">{{ group.label.text }}</span>
-          <div
-            v-for="item in group.items"
-            :key="item.key"
-            :class="item.class"
-            v-bind="item.attrs"
-          >
+          <div v-for="item in group.items" :key="item.key" :class="item.class" v-bind="item.attrs">
             {{ item.text }}
           </div>
         </div>

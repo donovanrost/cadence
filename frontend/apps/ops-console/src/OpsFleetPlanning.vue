@@ -1,141 +1,143 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue"
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue"
-import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
+import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
 
-type ControlTone = "warning" | "muted" | "quiet"
-type CoverageTone = "warning" | "quiet"
+type ControlTone = "warning" | "muted" | "quiet";
+type CoverageTone = "warning" | "quiet";
 
 type HeaderAction = {
-  id: string
-  icon: string
-  label: string
-}
+  id: string;
+  icon: string;
+  label: string;
+};
 
 type NavigationAction = HeaderAction & {
-  href: string
-}
+  href: string;
+};
 
 type FleetRun = {
-  id: string
-  __dom_id: string
-  fleet_planning_run_id: string
-  href: string
+  id: string;
+  __dom_id: string;
+  fleet_planning_run_id: string;
+  href: string;
   lifecycle: {
-    state: string
-    label: string
-    tone: "error" | "warning" | "primary" | "muted"
-    class: string
-  }
+    state: string;
+    label: string;
+    tone: "error" | "warning" | "primary" | "muted";
+    class: string;
+  };
   trigger: {
-    kind: string
-    label: string
-  }
+    kind: string;
+    label: string;
+  };
   horizon: {
-    label: string
-    start: string
-    end: string
-    value: string
-  }
+    label: string;
+    start: string;
+    end: string;
+    value: string;
+  };
   phase: {
-    state: string
-    width_class: string
-  }
+    state: string;
+    width_class: string;
+  };
   coverage: {
-    label: string
-    value: string
-    shortfall: boolean
-    tone: CoverageTone
-  }
-  open_icon: string
-}
+    label: string;
+    value: string;
+    shortfall: boolean;
+    tone: CoverageTone;
+  };
+  open_icon: string;
+};
 
 defineProps<{
   page: {
-    id: string
+    id: string;
     header: {
-      eyebrow: string
-      title: string
-      copy: string
-    }
-  }
+      eyebrow: string;
+      title: string;
+      copy: string;
+    };
+  };
   actions: {
-    refresh: HeaderAction
-    policy: NavigationAction
-    new_run: NavigationAction
-  }
+    refresh: HeaderAction;
+    policy: NavigationAction;
+    new_run: NavigationAction;
+  };
   control_metrics: Array<{
-    id: string
-    label: string
-    value: string
-    detail: string
-    tone: ControlTone
-  }>
+    id: string;
+    label: string;
+    value: string;
+    detail: string;
+    tone: ControlTone;
+  }>;
   stopped_policy: {
-    id: string
-    eyebrow: string
-    title: string
-    copy: string
+    id: string;
+    eyebrow: string;
+    title: string;
+    copy: string;
     action: {
-      id: string
-      href: string
-      label: string
-    }
-  } | null
+      id: string;
+      href: string;
+      label: string;
+    };
+  } | null;
   ledger: {
-    eyebrow: string
-    copy: string
-    count: number
-    count_label: string
-    runs_id: string
-    stream_empty_id: string
+    eyebrow: string;
+    copy: string;
+    count: number;
+    count_label: string;
+    runs_id: string;
+    stream_empty_id: string;
     empty: {
-      id: string
-      icon: string
-      title: string
-      copy: string
-    } | null
-  }
+      id: string;
+      icon: string;
+      title: string;
+      copy: string;
+    } | null;
+  };
   journey: {
-    id: string
-    eyebrow: string
+    id: string;
+    eyebrow: string;
     steps: Array<{
-      id: string
-      number: string
-      label: string
-      detail: string
-    }>
-  }
+      id: string;
+      number: string;
+      label: string;
+      detail: string;
+    }>;
+  };
   recurring_demand: {
-    id: string
-    eyebrow: string
-    copy: string
-    action: NavigationAction
-  }
-  fleet_runs: FleetRun[]
-}>()
+    id: string;
+    eyebrow: string;
+    copy: string;
+    action: NavigationAction;
+  };
+  fleet_runs: FleetRun[];
+}>();
 
 const emit = defineEmits<{
-  "refresh-planning": []
-}>()
+  "refresh-planning": [];
+}>();
 
 const controlToneClasses: Record<ControlTone, string> = {
   warning: "text-warning",
   muted: "text-base-content/45",
-  quiet: "text-base-content/85"
-}
+  quiet: "text-base-content/85",
+};
 
 const coverageToneClasses: Record<CoverageTone, string> = {
   warning: "text-warning",
-  quiet: "text-base-content/75"
-}
+  quiet: "text-base-content/75",
+};
 </script>
 
 <template>
   <CadenceOpsViewport :id="page.id">
     <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-[100rem] flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div
+        class="mx-auto flex max-w-[100rem] flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
+      >
         <div>
           <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
             {{ page.header.eyebrow }}
@@ -185,19 +187,9 @@ const coverageToneClasses: Record<CoverageTone, string> = {
         class="grid border border-base-300 bg-base-200/20 md:grid-cols-4"
         header-class="border-b border-base-300 px-4 py-4 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
       >
-        <template
-          v-for="metric in control_metrics"
-          :id="metric.id"
-          :key="metric.id"
-          #header
-        >
+        <template v-for="metric in control_metrics" :id="metric.id" :key="metric.id" #header>
           <p class="hud-label">{{ metric.label }}</p>
-          <p
-            :class="[
-              'mt-1 font-mono text-lg font-semibold',
-              controlToneClasses[metric.tone]
-            ]"
-          >
+          <p :class="['mt-1 font-mono text-lg font-semibold', controlToneClasses[metric.tone]]">
             {{ metric.value }}
           </p>
           <p class="mt-0.5 text-xs text-base-content/45">{{ metric.detail }}</p>
@@ -242,11 +234,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
             <span class="font-mono text-xs text-base-content/45">{{ ledger.count_label }}</span>
           </template>
 
-          <div
-            v-if="ledger.empty"
-            :id="ledger.empty.id"
-            class="px-6 py-16 text-center"
-          >
+          <div v-if="ledger.empty" :id="ledger.empty.id" class="px-6 py-16 text-center">
             <span :class="[ledger.empty.icon, 'mx-auto h-8 w-8 text-primary/35']"></span>
             <h2 class="mt-4 text-base font-semibold">{{ ledger.empty.title }}</h2>
             <p class="mx-auto mt-2 max-w-xl text-sm text-base-content/55">
@@ -289,20 +277,12 @@ const coverageToneClasses: Record<CoverageTone, string> = {
               </div>
               <div>
                 <p class="hud-label">{{ run.coverage.label }}</p>
-                <p
-                  :class="[
-                    'mt-1 text-sm font-semibold',
-                    coverageToneClasses[run.coverage.tone]
-                  ]"
-                >
+                <p :class="['mt-1 text-sm font-semibold', coverageToneClasses[run.coverage.tone]]">
                   {{ run.coverage.value }}
                 </p>
               </div>
               <span
-                :class="[
-                  run.open_icon,
-                  'h-4 w-4 text-base-content/30 group-hover:text-primary'
-                ]"
+                :class="[run.open_icon, 'h-4 w-4 text-base-content/30 group-hover:text-primary']"
               ></span>
             </a>
           </div>
@@ -335,10 +315,7 @@ const coverageToneClasses: Record<CoverageTone, string> = {
             </ol>
           </CadencePanel>
 
-          <section
-            :id="recurring_demand.id"
-            class="border border-base-300 bg-base-200/15 p-4"
-          >
+          <section :id="recurring_demand.id" class="border border-base-300 bg-base-200/15 p-4">
             <p class="hud-label">{{ recurring_demand.eyebrow }}</p>
             <p class="mt-2 text-sm text-base-content/55">
               {{ recurring_demand.copy }}

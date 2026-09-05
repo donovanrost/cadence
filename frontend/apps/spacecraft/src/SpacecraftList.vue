@@ -1,88 +1,88 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue"
-import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue"
-import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue"
-import CadencePanel from "./ui/components/CadencePanel.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue"
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue";
+import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue";
+import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
+import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
+import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
+import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
 
-type Status = "ready" | "attention"
+type Status = "ready" | "attention";
 
 type SummaryTile = {
-  id: string
-  label: string
-  value: number
-  href: string
-  active: boolean
-  warning: boolean
-}
+  id: string;
+  label: string;
+  value: number;
+  href: string;
+  active: boolean;
+  warning: boolean;
+};
 
 type SpacecraftRow = {
-  id: string
-  actions_id: string
-  display_name: string
-  scid_label: string
-  scid_missing: boolean
-  profile_label: string
-  status: Status
-  status_label: string
-  href: string
-  identity_href: string
-}
+  id: string;
+  actions_id: string;
+  display_name: string;
+  scid_label: string;
+  scid_missing: boolean;
+  profile_label: string;
+  status: Status;
+  status_label: string;
+  href: string;
+  identity_href: string;
+};
 
 type Roster = {
-  fleet_empty: boolean
-  subtitle: string
-  new_spacecraft_href: string
-  search: string
-  sort_by: "display_name" | "scid"
-  sort_dir: "asc" | "desc"
-  filtered_empty: boolean
-  page: number
-  page_size: number
-  total_count: number
-  pagination_visible: boolean
-  range_label: string
-  previous_page: number
-  next_page: number
-  previous_disabled: boolean
-  next_disabled: boolean
-  rows: SpacecraftRow[]
-}
+  fleet_empty: boolean;
+  subtitle: string;
+  new_spacecraft_href: string;
+  search: string;
+  sort_by: "display_name" | "scid";
+  sort_dir: "asc" | "desc";
+  filtered_empty: boolean;
+  page: number;
+  page_size: number;
+  total_count: number;
+  pagination_visible: boolean;
+  range_label: string;
+  previous_page: number;
+  next_page: number;
+  previous_disabled: boolean;
+  next_disabled: boolean;
+  rows: SpacecraftRow[];
+};
 
 type FleetEntry = {
-  label: string
-  href: string | null
-}
+  label: string;
+  href: string | null;
+};
 
 type ProfileRow = {
-  id: string
-  display_name: string
-  href: string
-  fleet_entries: FleetEntry[]
-  protocols: string
-  applications: string
-  status: Status
-  status_label: string
-}
+  id: string;
+  display_name: string;
+  href: string;
+  fleet_entries: FleetEntry[];
+  protocols: string;
+  applications: string;
+  status: Status;
+  status_label: string;
+};
 
 type Profiles = {
-  empty: boolean
-  truncated: boolean
-  subtitle: string
-  new_profile_href: string
-  all_profiles_href: string
-  rows: ProfileRow[]
-}
+  empty: boolean;
+  truncated: boolean;
+  subtitle: string;
+  new_profile_href: string;
+  all_profiles_href: string;
+  rows: ProfileRow[];
+};
 
 defineProps<{
-  summary_tiles: SummaryTile[]
-  roster: Roster
-  profiles: Profiles
-}>()
+  summary_tiles: SummaryTile[];
+  roster: Roster;
+  profiles: Profiles;
+}>();
 </script>
 
 <template>
@@ -98,10 +98,8 @@ defineProps<{
         :aria-current="tile.active ? 'true' : undefined"
         class="block border bg-base-200 px-3 py-2 transition-colors"
         :class="[
-          tile.active
-            ? 'border-primary/60'
-            : 'border-base-300 hover:border-primary/40',
-          tile.warning && 'border-l-2 border-l-warning/60'
+          tile.active ? 'border-primary/60' : 'border-base-300 hover:border-primary/40',
+          tile.warning && 'border-l-2 border-l-warning/60',
         ]"
       >
         <p class="hud-label" :class="tile.active && 'text-primary!'">{{ tile.label }}</p>
@@ -134,9 +132,7 @@ defineProps<{
       <div class="card-body" :class="roster.fleet_empty ? 'p-6' : 'p-0'">
         <CadenceEmptyStateFrame v-if="roster.fleet_empty">
           <template #title>No spacecraft yet</template>
-          <template #description>
-            Register the first spacecraft for this mission.
-          </template>
+          <template #description> Register the first spacecraft for this mission. </template>
           <template #action>
             <a
               :href="roster.new_spacecraft_href"
@@ -179,7 +175,9 @@ defineProps<{
               <tr>
                 <th
                   class="hud-label"
-                  :aria-sort="roster.sort_by === 'display_name' ? `${roster.sort_dir}ending` : undefined"
+                  :aria-sort="
+                    roster.sort_by === 'display_name' ? `${roster.sort_dir}ending` : undefined
+                  "
                 >
                   <button
                     type="button"
@@ -219,21 +217,20 @@ defineProps<{
               </tr>
             </thead>
             <tbody id="spacecraft-vehicles">
-              <CadenceHoverTableRow
-                v-for="row in roster.rows"
-                :id="row.id"
-                :key="row.id"
-              >
+              <CadenceHoverTableRow v-for="row in roster.rows" :id="row.id" :key="row.id">
                 <td class="font-medium">
                   <a
                     :href="row.href"
                     data-phx-link="redirect"
                     data-phx-link-state="push"
                     class="text-primary hover:underline"
-                  >{{ row.display_name }}</a>
+                    >{{ row.display_name }}</a
+                  >
                 </td>
                 <td class="font-mono text-sm">
-                  <span :class="row.scid_missing ? 'text-base-content/50 italic' : 'text-base-content'">
+                  <span
+                    :class="row.scid_missing ? 'text-base-content/50 italic' : 'text-base-content'"
+                  >
                     {{ row.scid_label }}
                   </span>
                 </td>
@@ -244,7 +241,7 @@ defineProps<{
                 <td class="text-right">
                   <div :id="row.actions_id">
                     <CadenceModalMenu side="bottom" align="end" :side-offset="4">
-                      <template #trigger="{open}">
+                      <template #trigger="{ open }">
                         <button
                           :id="`${row.actions_id}-trigger`"
                           class="btn btn-ghost btn-xs"
@@ -255,7 +252,7 @@ defineProps<{
                           <span class="hero-ellipsis-vertical h-5 w-5"></span>
                         </button>
                       </template>
-                      <template #content="{open}">
+                      <template #content="{ open }">
                         <div
                           :id="`${row.actions_id}-menu`"
                           :aria-labelledby="`${row.actions_id}-trigger`"
@@ -267,7 +264,8 @@ defineProps<{
                               data-phx-link="redirect"
                               data-phx-link-state="push"
                               class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
-                            >View</a>
+                              >View</a
+                            >
                           </CadenceMenuItem>
                           <CadenceMenuItem :active="open">
                             <a
@@ -275,7 +273,8 @@ defineProps<{
                               data-phx-link="redirect"
                               data-phx-link-state="push"
                               class="block cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-base-200"
-                            >Identity</a>
+                              >Identity</a
+                            >
                           </CadenceMenuItem>
                         </div>
                       </template>
@@ -286,10 +285,7 @@ defineProps<{
             </tbody>
           </CadenceTableFrame>
 
-          <p
-            v-if="roster.filtered_empty"
-            class="py-6 text-center text-sm text-base-content/70"
-          >
+          <p v-if="roster.filtered_empty" class="py-6 text-center text-sm text-base-content/70">
             No spacecraft match the current search or filter.
           </p>
 
@@ -305,14 +301,18 @@ defineProps<{
                 phx-click="paginate"
                 :phx-value-page="roster.previous_page"
                 :disabled="roster.previous_disabled"
-              >Prev</button>
+              >
+                Prev
+              </button>
               <button
                 type="button"
                 class="btn btn-ghost btn-xs"
                 phx-click="paginate"
                 :phx-value-page="roster.next_page"
                 :disabled="roster.next_disabled"
-              >Next</button>
+              >
+                Next
+              </button>
             </div>
           </CadencePaginationFrame>
         </template>
@@ -372,18 +372,15 @@ defineProps<{
               </tr>
             </thead>
             <tbody id="spacecraft-profile-previews">
-              <CadenceHoverTableRow
-                v-for="row in profiles.rows"
-                :id="row.id"
-                :key="row.id"
-              >
+              <CadenceHoverTableRow v-for="row in profiles.rows" :id="row.id" :key="row.id">
                 <td class="font-medium">
                   <a
                     :href="row.href"
                     data-phx-link="redirect"
                     data-phx-link-state="push"
                     class="text-primary hover:underline"
-                  >{{ row.display_name }}</a>
+                    >{{ row.display_name }}</a
+                  >
                 </td>
                 <td class="font-mono text-sm text-base-content/70">
                   <template v-if="row.fleet_entries.length === 0">
@@ -398,12 +395,15 @@ defineProps<{
                         data-phx-link="patch"
                         data-phx-link-state="push"
                         class="text-warning hover:underline"
-                      >{{ entry.label }}</a>
+                        >{{ entry.label }}</a
+                      >
                       <span v-else>{{ entry.label }}</span>
                     </template>
                   </template>
                 </td>
-                <td class="font-mono text-sm uppercase text-base-content/70">{{ row.protocols }}</td>
+                <td class="font-mono text-sm uppercase text-base-content/70">
+                  {{ row.protocols }}
+                </td>
                 <td class="text-sm text-base-content/70">{{ row.applications }}</td>
                 <td>
                   <StatusBadge :status="row.status" :label="row.status_label" />
@@ -418,7 +418,8 @@ defineProps<{
               data-phx-link="redirect"
               data-phx-link-state="push"
               class="btn btn-ghost btn-sm"
-            >View all profiles</a>
+              >View all profiles</a
+            >
           </div>
         </template>
       </div>

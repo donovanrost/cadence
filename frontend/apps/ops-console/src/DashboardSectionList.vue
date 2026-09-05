@@ -1,7 +1,7 @@
 <script setup>
 defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 </script>
 
 <template>
@@ -10,19 +10,12 @@ defineProps({
       {{ presentation.empty.text }}
     </p>
 
-    <article
-      v-for="section in presentation.sections"
-      :key="section.key"
-      v-bind="section.attrs"
-    >
+    <article v-for="section in presentation.sections" :key="section.key" v-bind="section.attrs">
       <div v-bind="section.layout.attrs">
         <span v-bind="section.icon.attrs"></span>
         <div v-bind="section.content.attrs">
           <p v-bind="section.content.title.attrs">{{ section.content.title.text }}</p>
-          <p
-            v-if="section.content.description.visible"
-            v-bind="section.content.description.attrs"
-          >
+          <p v-if="section.content.description.visible" v-bind="section.content.description.attrs">
             {{ section.content.description.text }}
           </p>
           <span v-bind="section.content.default_state.attrs">
@@ -30,11 +23,7 @@ defineProps({
           </span>
         </div>
         <div v-bind="section.actions.attrs">
-          <button
-            v-for="button in section.actions.buttons"
-            :key="button.key"
-            v-bind="button.attrs"
-          >
+          <button v-for="button in section.actions.buttons" :key="button.key" v-bind="button.attrs">
             <span v-bind="button.icon.attrs"></span>
           </button>
         </div>

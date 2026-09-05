@@ -1,68 +1,64 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type TextPresentation = {
-  class: string
-  text: string
-}
+  class: string;
+  text: string;
+};
 
 type DetailRowPresentation = {
-  key: string
-  label: TextPresentation
-  value: TextPresentation
-}
+  key: string;
+  label: TextPresentation;
+  value: TextPresentation;
+};
 
 type HandoffLinkPresentation = {
-  key: string
-  href: string
-  navigation_kind: "patch"
-  class: string
-  text: string
-  attrs: Attributes
-}
+  key: string;
+  href: string;
+  navigation_kind: "patch";
+  class: string;
+  text: string;
+  attrs: Attributes;
+};
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   header: {
-    class: string
-    label: TextPresentation
-    status: TextPresentation
-  }
-  message: TextPresentation
+    class: string;
+    label: TextPresentation;
+    status: TextPresentation;
+  };
+  message: TextPresentation;
   details: {
-    class: string
-    rows: DetailRowPresentation[]
-  }
+    class: string;
+    rows: DetailRowPresentation[];
+  };
   handoffs: {
-    visible: boolean
-    id: string
-    class: string
-    attrs: Attributes
+    visible: boolean;
+    id: string;
+    class: string;
+    attrs: Attributes;
     header: {
-      class: string
-      label: TextPresentation
-      count: TextPresentation
-    }
+      class: string;
+      label: TextPresentation;
+      count: TextPresentation;
+    };
     links_container: {
-      class: string
-    }
-    links: HandoffLinkPresentation[]
-  }
-}
+      class: string;
+    };
+    links: HandoffLinkPresentation[];
+  };
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
-  <div
-    :id="presentation.root.id"
-    :class="presentation.root.class"
-    v-bind="presentation.root.attrs"
-  >
+  <div :id="presentation.root.id" :class="presentation.root.class" v-bind="presentation.root.attrs">
     <div :class="presentation.header.class">
       <span :class="presentation.header.label.class">{{ presentation.header.label.text }}</span>
       <span :class="presentation.header.status.class">{{ presentation.header.status.text }}</span>

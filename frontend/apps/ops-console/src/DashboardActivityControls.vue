@@ -1,48 +1,48 @@
 <script setup lang="ts">
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type HeaderItem = {
-  key: string
-  order: number
-  tag: "h3" | "span" | "button"
-  visible: boolean
-  id: string | null
-  type: string | null
-  class: string
-  attrs: Attributes
-  text: string
-}
+  key: string;
+  order: number;
+  tag: "h3" | "span" | "button";
+  visible: boolean;
+  id: string | null;
+  type: string | null;
+  class: string;
+  attrs: Attributes;
+  text: string;
+};
 
 type Filter = {
-  key: string
-  order: number
-  tag: "button"
-  id: string
-  type: "button"
-  class: string
-  attrs: Attributes
-  text: string
-}
+  key: string;
+  order: number;
+  tag: "button";
+  id: string;
+  type: "button";
+  class: string;
+  attrs: Attributes;
+  text: string;
+};
 
 type DashboardActivityControlsPresentation = {
   header: {
-    class: string
-    leading_class: string
-    items: HeaderItem[]
+    class: string;
+    leading_class: string;
+    items: HeaderItem[];
     count: {
-      class: string
-      text: string
-    }
-  }
+      class: string;
+      text: string;
+    };
+  };
   controls: {
-    id: string
-    class: string
-    attrs: Attributes
-    filters: Filter[]
-  }
-}
+    id: string;
+    class: string;
+    attrs: Attributes;
+    filters: Filter[];
+  };
+};
 
-defineProps<{presentation: DashboardActivityControlsPresentation}>()
+defineProps<{ presentation: DashboardActivityControlsPresentation }>();
 </script>
 
 <template>
@@ -56,7 +56,8 @@ defineProps<{presentation: DashboardActivityControlsPresentation}>()
           :type="item.type"
           :class="item.class"
           v-bind="item.attrs"
-        >{{ item.text }}</component>
+          >{{ item.text }}</component
+        >
       </template>
     </div>
     <span :class="presentation.header.count.class">{{ presentation.header.count.text }}</span>
@@ -74,6 +75,7 @@ defineProps<{presentation: DashboardActivityControlsPresentation}>()
       :type="filter.type"
       :class="filter.class"
       v-bind="filter.attrs"
-    >{{ filter.text }}</component>
+      >{{ filter.text }}</component
+    >
   </div>
 </template>

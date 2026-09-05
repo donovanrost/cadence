@@ -1,44 +1,44 @@
 <script setup lang="ts">
-import SpacecraftList from "./SpacecraftList.vue"
+import SpacecraftList from "./SpacecraftList.vue";
 
-type Attrs = Record<string, string>
+type Attrs = Record<string, string>;
 
 type ElementPresentation = {
-  attrs: Attrs
-}
+  attrs: Attrs;
+};
 
 type TextPresentation = ElementPresentation & {
-  text: string
-}
+  text: string;
+};
 
 type BreadcrumbItem = {
-  key: string
-  separator: TextPresentation | null
-  link: TextPresentation | null
-  current: TextPresentation | null
-}
+  key: string;
+  separator: TextPresentation | null;
+  link: TextPresentation | null;
+  current: TextPresentation | null;
+};
 
-type SpacecraftListProps = InstanceType<typeof SpacecraftList>["$props"]
+type SpacecraftListProps = InstanceType<typeof SpacecraftList>["$props"];
 
 type Presentation = {
-  root: ElementPresentation
+  root: ElementPresentation;
   header: {
-    attrs: Attrs
-    body: ElementPresentation
-    content: ElementPresentation
-    title: TextPresentation
-    subtitle: TextPresentation
-  }
+    attrs: Attrs;
+    body: ElementPresentation;
+    content: ElementPresentation;
+    title: TextPresentation;
+    subtitle: TextPresentation;
+  };
   breadcrumbs: {
-    attrs: Attrs
-    items: BreadcrumbItem[]
-  }
-  summary_tiles: SpacecraftListProps["summary_tiles"]
-  roster: SpacecraftListProps["roster"]
-  profiles: SpacecraftListProps["profiles"]
-}
+    attrs: Attrs;
+    items: BreadcrumbItem[];
+  };
+  summary_tiles: SpacecraftListProps["summary_tiles"];
+  roster: SpacecraftListProps["roster"];
+  profiles: SpacecraftListProps["profiles"];
+};
 
-const props = defineProps<{presentation: Presentation}>()
+const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

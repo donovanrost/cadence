@@ -1,75 +1,75 @@
 <script setup lang="ts">
-import {computed} from "vue"
+import { computed } from "vue";
 
-import DashboardAbsoluteRangePane from "./DashboardAbsoluteRangePane.vue"
-import DashboardQuickRangeList from "./DashboardQuickRangeList.vue"
-import DashboardSelectedDatumActions from "./DashboardSelectedDatumActions.vue"
-import DashboardTimeReplay from "./DashboardTimeReplay.vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import DashboardAbsoluteRangePane from "./DashboardAbsoluteRangePane.vue";
+import DashboardQuickRangeList from "./DashboardQuickRangeList.vue";
+import DashboardSelectedDatumActions from "./DashboardSelectedDatumActions.vue";
+import DashboardTimeReplay from "./DashboardTimeReplay.vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
-type AttrValue = string | boolean | null
-type Attrs = Record<string, AttrValue>
+type AttrValue = string | boolean | null;
+type Attrs = Record<string, AttrValue>;
 
 type ButtonPresentation = {
-  attrs: Attrs
-  icon_class: string
-}
+  attrs: Attrs;
+  icon_class: string;
+};
 
 type DashboardTimePickerPresentation = {
-  shift_back: ButtonPresentation | false
+  shift_back: ButtonPresentation | false;
   overlay: {
-    root: {attrs: Attrs}
+    root: { attrs: Attrs };
     trigger: {
-      attrs: Attrs
-      live_indicator: {attrs: Attrs}
-      active_range: {attrs: Attrs; text: string}
-      icon_class: string
-    }
+      attrs: Attrs;
+      live_indicator: { attrs: Attrs };
+      active_range: { attrs: Attrs; text: string };
+      icon_class: string;
+    };
     panel: {
-      attrs: Attrs
+      attrs: Attrs;
       header: {
-        class: string
-        icon_class: string
-        title: {class: string; text: string}
-        description: {class: string; text: string}
-      }
+        class: string;
+        icon_class: string;
+        title: { class: string; text: string };
+        description: { class: string; text: string };
+      };
       body: {
-        class: string
-        controls: {attrs: Attrs}
-      }
-    }
-  }
+        class: string;
+        controls: { attrs: Attrs };
+      };
+    };
+  };
   time_picker: {
-    class: string
-    absolute_range_host: {attrs: Attrs}
-    absolute_range: Record<string, unknown>
-    quick_ranges_host: {attrs: Attrs}
-    quick_ranges: Record<string, unknown>
-  }
-  replay_host: {attrs: Attrs}
-  replay: Record<string, unknown>
-  selected_datum_host: {attrs: Attrs}
-  selected_datum: Record<string, unknown>
-  shift_forward: ButtonPresentation | false
-  zoom_out: ButtonPresentation | false
-}
+    class: string;
+    absolute_range_host: { attrs: Attrs };
+    absolute_range: Record<string, unknown>;
+    quick_ranges_host: { attrs: Attrs };
+    quick_ranges: Record<string, unknown>;
+  };
+  replay_host: { attrs: Attrs };
+  replay: Record<string, unknown>;
+  selected_datum_host: { attrs: Attrs };
+  selected_datum: Record<string, unknown>;
+  shift_forward: ButtonPresentation | false;
+  zoom_out: ButtonPresentation | false;
+};
 
-const props = defineProps<{presentation: DashboardTimePickerPresentation}>()
-const emit = defineEmits(["recents-loaded", "select-range"])
+const props = defineProps<{ presentation: DashboardTimePickerPresentation }>();
+const emit = defineEmits(["recents-loaded", "select-range"]);
 
-const forwardRecentsLoaded = (payload: unknown) => emit("recents-loaded", payload)
-const forwardSelectRange = (payload: unknown) => emit("select-range", payload)
+const forwardRecentsLoaded = (payload: unknown) => emit("recents-loaded", payload);
+const forwardSelectRange = (payload: unknown) => emit("select-range", payload);
 
 const overlayIdentity = computed(() => {
-  const identity = props.presentation.overlay.root.attrs.id
-  return typeof identity === "string" ? identity : null
-})
+  const identity = props.presentation.overlay.root.attrs.id;
+  return typeof identity === "string" ? identity : null;
+});
 
 const panelAttrs = computed(() => {
-  const attrs = {...props.presentation.overlay.panel.attrs}
-  delete attrs.hidden
-  return attrs
-})
+  const attrs = { ...props.presentation.overlay.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+});
 </script>
 
 <template>
@@ -84,11 +84,8 @@ const panelAttrs = computed(() => {
     :collision-padding="16"
     v-bind="props.presentation.overlay.root.attrs"
   >
-    <template #trigger="{open}">
-      <button
-        v-bind="props.presentation.overlay.trigger.attrs"
-        :aria-expanded="String(open)"
-      >
+    <template #trigger="{ open }">
+      <button v-bind="props.presentation.overlay.trigger.attrs" :aria-expanded="String(open)">
         <span v-bind="props.presentation.overlay.trigger.live_indicator.attrs"></span>
         <span v-bind="props.presentation.overlay.trigger.active_range.attrs">
           {{ props.presentation.overlay.trigger.active_range.text }}
@@ -97,11 +94,8 @@ const panelAttrs = computed(() => {
       </button>
     </template>
 
-    <template #content="{open}">
-      <section
-        v-bind="panelAttrs"
-        :hidden="!open"
-      >
+    <template #content="{ open }">
+      <section v-bind="panelAttrs" :hidden="!open">
         <div :class="props.presentation.overlay.panel.header.class">
           <span :class="props.presentation.overlay.panel.header.icon_class"></span>
           <div>
@@ -125,7 +119,9 @@ const panelAttrs = computed(() => {
                 />
               </div>
               <div v-bind="props.presentation.time_picker.quick_ranges_host.attrs">
-                <DashboardQuickRangeList :presentation="props.presentation.time_picker.quick_ranges" />
+                <DashboardQuickRangeList
+                  :presentation="props.presentation.time_picker.quick_ranges"
+                />
               </div>
             </div>
             <div v-bind="props.presentation.replay_host.attrs">

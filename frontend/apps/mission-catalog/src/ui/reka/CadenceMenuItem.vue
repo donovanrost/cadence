@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import {DropdownMenuItem} from "reka-ui"
-import {CadencePrimitiveChild} from "./cadence_primitive_child.js"
+import { DropdownMenuItem } from "reka-ui";
+import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
 
-defineOptions({inheritAttrs: false})
+defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(
   defineProps<{
-    active: boolean
-    disabled?: boolean
+    active: boolean;
+    disabled?: boolean;
   }>(),
-  {disabled: false},
-)
+  { disabled: false },
+);
 
 const emit = defineEmits<{
-  select: [event: Event]
-}>()
+  select: [event: Event];
+}>();
 </script>
 
 <template>

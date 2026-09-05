@@ -1,43 +1,43 @@
 <script setup lang="ts">
-import HistoricalWorkflowActionExplanations from "./HistoricalWorkflowActionExplanations.vue"
-import HistoricalWorkflowCorrectionForm from "./HistoricalWorkflowCorrectionForm.vue"
-import HistoricalWorkflowGroupForm from "./HistoricalWorkflowGroupForm.vue"
-import HistoricalWorkflowGroupStatus from "./HistoricalWorkflowGroupStatus.vue"
-import HistoricalWorkflowJobStatus from "./HistoricalWorkflowJobStatus.vue"
-import HistoricalWorkflowLatestAction from "./HistoricalWorkflowLatestAction.vue"
-import HistoricalWorkflowStageForm from "./HistoricalWorkflowStageForm.vue"
+import HistoricalWorkflowActionExplanations from "./HistoricalWorkflowActionExplanations.vue";
+import HistoricalWorkflowCorrectionForm from "./HistoricalWorkflowCorrectionForm.vue";
+import HistoricalWorkflowGroupForm from "./HistoricalWorkflowGroupForm.vue";
+import HistoricalWorkflowGroupStatus from "./HistoricalWorkflowGroupStatus.vue";
+import HistoricalWorkflowJobStatus from "./HistoricalWorkflowJobStatus.vue";
+import HistoricalWorkflowLatestAction from "./HistoricalWorkflowLatestAction.vue";
+import HistoricalWorkflowStageForm from "./HistoricalWorkflowStageForm.vue";
 
-type Attributes = Record<string, string>
-type ChildPresentation = Record<string, unknown>
+type Attributes = Record<string, string>;
+type ChildPresentation = Record<string, unknown>;
 
 type Presentation = {
   root: {
-    id: string
-    class: string
-    attrs: Attributes
-  }
+    id: string;
+    class: string;
+    attrs: Attributes;
+  };
   heading: {
-    class: string
-    text: string
-  }
+    class: string;
+    text: string;
+  };
   action_outcome: null | {
     root: {
-      id: string
-      class: string
-      attrs: Attributes
-    }
-    message: string | null
-  }
-  latest_action: ChildPresentation | null
-  action_explanations: ChildPresentation | null
-  group_status: ChildPresentation | null
-  job_status: ChildPresentation | null
-  correction_form: ChildPresentation | null
-  stage_form: ChildPresentation
-  group_form: ChildPresentation | null
-}
+      id: string;
+      class: string;
+      attrs: Attributes;
+    };
+    message: string | null;
+  };
+  latest_action: ChildPresentation | null;
+  action_explanations: ChildPresentation | null;
+  group_status: ChildPresentation | null;
+  job_status: ChildPresentation | null;
+  correction_form: ChildPresentation | null;
+  stage_form: ChildPresentation;
+  group_form: ChildPresentation | null;
+};
 
-defineProps<{presentation: Presentation}>()
+defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>

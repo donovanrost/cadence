@@ -16,6 +16,7 @@
     "@cadence/design-tokens": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
+    "reka-ui": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {

@@ -1,103 +1,103 @@
 <script setup lang="ts">
-import ChartDataManagementStrip from "./ChartDataManagementStrip.vue"
-import TelemetryChart from "./TelemetryChart.vue"
+import ChartDataManagementStrip from "./ChartDataManagementStrip.vue";
+import TelemetryChart from "./TelemetryChart.vue";
 
-type Attributes = Record<string, string>
+type Attributes = Record<string, string>;
 
 type ChartDataManagementPresentation = {
-  component_id: string
+  component_id: string;
   presentation: {
-    root: {class: string; attrs: Attributes}
+    root: { class: string; attrs: Attributes };
     comparison: {
-      class: string
-      attrs: Attributes
-      text: string
-    } | null
+      class: string;
+      attrs: Attributes;
+      text: string;
+    } | null;
     badges: Array<{
-      key: string
-      tag: "button" | "span"
-      class: string
-      attrs: Attributes
-      text: string
-    }>
-  }
-}
+      key: string;
+      tag: "button" | "span";
+      class: string;
+      attrs: Attributes;
+      text: string;
+    }>;
+  };
+};
 
 type ValueTilePresentation = {
-  kind: "value_tile"
-  component_id: string
-  host: {class: string}
+  kind: "value_tile";
+  component_id: string;
+  host: { class: string };
   value: {
-    container_class: string
-    text: string
-    class: string
-    attrs: Attributes
-    unit: {text: string; class: string} | null
-  }
-  timestamp: {text: string; class: string}
-  comparison: {text: string; class: string; attrs: Attributes} | null
-}
+    container_class: string;
+    text: string;
+    class: string;
+    attrs: Attributes;
+    unit: { text: string; class: string } | null;
+  };
+  timestamp: { text: string; class: string };
+  comparison: { text: string; class: string; attrs: Attributes } | null;
+};
 
 type TimeSeriesPresentation = {
-  kind: "time_series"
-  component_id: string
-  host: {class: string}
-  stage: {class: string; attrs: Attributes}
-  data_management: ChartDataManagementPresentation | null
+  kind: "time_series";
+  component_id: string;
+  host: { class: string };
+  stage: { class: string; attrs: Attributes };
+  data_management: ChartDataManagementPresentation | null;
   chart: {
-    component_id: string
-    class: string
-    props: Record<string, unknown>
-  }
-}
+    component_id: string;
+    class: string;
+    props: Record<string, unknown>;
+  };
+};
 
 type SeverityBadgePresentation = {
-  class: string
-  dot_class: string
-  count: number
-  count_class: string
-  label: string
-  label_class: string
-}
+  class: string;
+  dot_class: string;
+  count: number;
+  count_class: string;
+  label: string;
+  label_class: string;
+};
 
 type ConstellationHealthPresentation = {
-  kind: "constellation_health"
-  component_id: string
-  host: {class: string}
-  badges: {class: string; items: SeverityBadgePresentation[]}
+  kind: "constellation_health";
+  component_id: string;
+  host: { class: string };
+  badges: { class: string; items: SeverityBadgePresentation[] };
   spacecraft: {
-    class: string
-    attrs: Attributes
-    items: Array<{key: string; class: string; attrs: Attributes}>
-  }
-}
+    class: string;
+    attrs: Attributes;
+    items: Array<{ key: string; class: string; attrs: Attributes }>;
+  };
+};
 
 type WidgetPointPresentation =
   | ValueTilePresentation
   | TimeSeriesPresentation
-  | ConstellationHealthPresentation
+  | ConstellationHealthPresentation;
 
-defineProps<{presentation: WidgetPointPresentation}>()
+defineProps<{ presentation: WidgetPointPresentation }>();
 </script>
 
 <template>
   <template v-if="presentation.kind === 'value_tile'">
     <div :class="presentation.value.container_class">
-      <span
-        :class="presentation.value.class"
-        v-bind="presentation.value.attrs"
-      >{{ presentation.value.text }}</span>
-      <span
-        v-if="presentation.value.unit"
-        :class="presentation.value.unit.class"
-      >{{ presentation.value.unit.text }}</span>
+      <span :class="presentation.value.class" v-bind="presentation.value.attrs">{{
+        presentation.value.text
+      }}</span>
+      <span v-if="presentation.value.unit" :class="presentation.value.unit.class">{{
+        presentation.value.unit.text
+      }}</span>
     </div>
     <p :class="presentation.timestamp.class">{{ presentation.timestamp.text }}</p>
     <p
       v-if="presentation.comparison"
       :class="presentation.comparison.class"
       v-bind="presentation.comparison.attrs"
-    >{{ presentation.comparison.text }}</p>
+    >
+      {{ presentation.comparison.text }}
+    </p>
   </template>
 
   <div
@@ -110,14 +110,9 @@ defineProps<{presentation: WidgetPointPresentation}>()
       :id="presentation.data_management.component_id"
       class="contents"
     >
-      <ChartDataManagementStrip
-        :presentation="presentation.data_management.presentation"
-      />
+      <ChartDataManagementStrip :presentation="presentation.data_management.presentation" />
     </div>
-    <div
-      :id="presentation.chart.component_id"
-      :class="presentation.chart.class"
-    >
+    <div :id="presentation.chart.component_id" :class="presentation.chart.class">
       <TelemetryChart v-bind="presentation.chart.props" />
     </div>
   </div>
@@ -134,10 +129,7 @@ defineProps<{presentation: WidgetPointPresentation}>()
         <span :class="badge.label_class">{{ badge.label }}</span>
       </span>
     </div>
-    <div
-      :class="presentation.spacecraft.class"
-      v-bind="presentation.spacecraft.attrs"
-    >
+    <div :class="presentation.spacecraft.class" v-bind="presentation.spacecraft.attrs">
       <span
         v-for="entry in presentation.spacecraft.items"
         :key="entry.key"

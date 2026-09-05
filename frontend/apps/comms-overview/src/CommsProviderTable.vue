@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import StatusBadge from "./StatusBadge.vue"
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue"
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue"
+import StatusBadge from "./StatusBadge.vue";
+import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
 
 type ProviderRow = {
-  id: string
-  display_name: string
-  provider_type: string
-  server_url: string
-  status: "ready" | "attention" | "blocked"
-  status_label: string
-  account_binding: string
-  grant_binding: string
-  last_synced_at: string
-  version: string
-  href: string
-}
+  id: string;
+  display_name: string;
+  provider_type: string;
+  server_url: string;
+  status: "ready" | "attention" | "blocked";
+  status_label: string;
+  account_binding: string;
+  grant_binding: string;
+  last_synced_at: string;
+  version: string;
+  href: string;
+};
 
-defineProps<{rows: ProviderRow[]}>()
-
+defineProps<{ rows: ProviderRow[] }>();
 </script>
 
 <template>
@@ -35,18 +34,15 @@ defineProps<{rows: ProviderRow[]}>()
       </tr>
     </thead>
     <tbody id="mission-providers-table-body">
-      <CadenceHoverTableRow
-        v-for="row in rows"
-        :id="row.id"
-        :key="row.id"
-      >
+      <CadenceHoverTableRow v-for="row in rows" :id="row.id" :key="row.id">
         <td class="font-medium">
           <a
             :href="row.href"
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="text-primary hover:underline"
-          >{{ row.display_name }}</a>
+            >{{ row.display_name }}</a
+          >
           <span class="ml-2 font-mono text-[0.65rem] uppercase tracking-wide text-info">
             {{ row.provider_type }}
           </span>

@@ -1,53 +1,43 @@
 <script setup>
-import {computed} from "vue"
-import CadencePopover from "./ui/reka/CadencePopover.vue"
+import { computed } from "vue";
+import CadencePopover from "./ui/reka/CadencePopover.vue";
 
 const props = defineProps({
-  presentation: {type: Object, required: true}
-})
+  presentation: { type: Object, required: true },
+});
 
 const overlayIdentity = (overlay) => {
-  const identity = overlay?.root.attrs.id
-  return typeof identity === "string" ? identity : null
-}
+  const identity = overlay?.root.attrs.id;
+  return typeof identity === "string" ? identity : null;
+};
 
 const overlayPanelAttrs = (overlay) => {
-  const attrs = {...(overlay?.panel.attrs || {})}
-  delete attrs.hidden
-  return attrs
-}
+  const attrs = { ...overlay?.panel.attrs };
+  delete attrs.hidden;
+  return attrs;
+};
 
-const savedPresetsIdentity = computed(() =>
-  overlayIdentity(props.presentation.saved_presets),
-)
+const savedPresetsIdentity = computed(() => overlayIdentity(props.presentation.saved_presets));
 
-const savedPresetsPanelAttrs = computed(() =>
-  overlayPanelAttrs(props.presentation.saved_presets),
-)
+const savedPresetsPanelAttrs = computed(() => overlayPanelAttrs(props.presentation.saved_presets));
 
-const detailsIdentity = computed(() =>
-  overlayIdentity(props.presentation.details),
-)
+const detailsIdentity = computed(() => overlayIdentity(props.presentation.details));
 
-const detailsPanelAttrs = computed(() =>
-  overlayPanelAttrs(props.presentation.details),
-)
+const detailsPanelAttrs = computed(() => overlayPanelAttrs(props.presentation.details));
 </script>
 
 <template>
   <div v-bind="presentation.root.attrs">
     <span v-bind="presentation.label.attrs">{{ presentation.label.text }}</span>
     <span v-bind="presentation.summary.attrs">{{ presentation.summary.text }}</span>
-    <span
-      v-for="badge in presentation.badges"
-      :key="badge.key"
-      v-bind="badge.attrs"
-    >{{ badge.text }}</span>
+    <span v-for="badge in presentation.badges" :key="badge.key" v-bind="badge.attrs">{{
+      badge.text
+    }}</span>
 
     <slot name="open-findings-copy"></slot>
 
     <form v-if="presentation.review_form" v-bind="presentation.review_form.root.attrs">
-      <input v-bind="presentation.review_form.payload.attrs">
+      <input v-bind="presentation.review_form.payload.attrs" />
       <button v-bind="presentation.review_form.button.attrs">
         <span
           :class="[
@@ -64,7 +54,7 @@ const detailsPanelAttrs = computed(() =>
     <form v-if="presentation.preset_form" v-bind="presentation.preset_form.root.attrs">
       <div v-bind="presentation.preset_form.field.wrapper.attrs">
         <label v-bind="presentation.preset_form.field.label.attrs">
-          <input v-bind="presentation.preset_form.field.input.attrs">
+          <input v-bind="presentation.preset_form.field.input.attrs" />
         </label>
       </div>
       <button v-bind="presentation.preset_form.button.attrs">
@@ -87,11 +77,8 @@ const detailsPanelAttrs = computed(() =>
       :collision-padding="16"
       v-bind="presentation.saved_presets.root.attrs"
     >
-      <template #trigger="{open}">
-        <button
-          v-bind="presentation.saved_presets.trigger.attrs"
-          :aria-expanded="String(open)"
-        >
+      <template #trigger="{ open }">
+        <button v-bind="presentation.saved_presets.trigger.attrs" :aria-expanded="String(open)">
           <span :class="presentation.saved_presets.trigger.content.class">
             <span
               :class="[
@@ -107,11 +94,8 @@ const detailsPanelAttrs = computed(() =>
         </button>
       </template>
 
-      <template #content="{open}">
-        <section
-          v-bind="savedPresetsPanelAttrs"
-          :hidden="!open"
-        >
+      <template #content="{ open }">
+        <section v-bind="savedPresetsPanelAttrs" :hidden="!open">
           <div v-bind="presentation.saved_presets.body.attrs">
             <div
               v-for="item in presentation.saved_presets.body.items"
@@ -152,11 +136,8 @@ const detailsPanelAttrs = computed(() =>
       :collision-padding="16"
       v-bind="presentation.details.root.attrs"
     >
-      <template #trigger="{open}">
-        <button
-          v-bind="presentation.details.trigger.attrs"
-          :aria-expanded="String(open)"
-        >
+      <template #trigger="{ open }">
+        <button v-bind="presentation.details.trigger.attrs" :aria-expanded="String(open)">
           <span :class="presentation.details.trigger.content.class">
             <span
               :class="[
@@ -169,11 +150,8 @@ const detailsPanelAttrs = computed(() =>
         </button>
       </template>
 
-      <template #content="{open}">
-        <section
-          v-bind="detailsPanelAttrs"
-          :hidden="!open"
-        >
+      <template #content="{ open }">
+        <section v-bind="detailsPanelAttrs" :hidden="!open">
           <div v-bind="presentation.details.body.attrs">
             <div
               v-for="group in presentation.details.body.workflow_groups"
