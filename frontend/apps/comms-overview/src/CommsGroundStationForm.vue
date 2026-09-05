@@ -90,7 +90,6 @@ const formValues = (form: GroundStationForm): GroundStationValues => ({
 });
 
 const groundStation = reactive<GroundStationValues>(formValues(props.form));
-const pendingValidations: GroundStationValues[] = [];
 
 const values = (): GroundStationValues => ({
   ground_station_id: groundStation.ground_station_id,
@@ -100,34 +99,16 @@ const values = (): GroundStationValues => ({
   metadata_json: groundStation.metadata_json,
 });
 
-const sameValues = (left: GroundStationValues, right: GroundStationValues) =>
-  left.ground_station_id === right.ground_station_id &&
-  left.display_name === right.display_name &&
-  left.provider === right.provider &&
-  left.region === right.region &&
-  left.metadata_json === right.metadata_json;
-
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm);
-    const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues),
-    );
-    const hasNewerTyping =
-      pendingValidations.length > 0 &&
-      (acknowledgedIndex < 0 || acknowledgedIndex < pendingValidations.length - 1);
-
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
-
-    if (!hasNewerTyping) Object.assign(groundStation, serverValues);
+    Object.assign(groundStation, formValues(serverForm));
   },
   { deep: true },
 );
 
 const validate = () => {
   const currentValues = values();
-  pendingValidations.push(currentValues);
   emit("validate", { ground_station: currentValues });
 };
 

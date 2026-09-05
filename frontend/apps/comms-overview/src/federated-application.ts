@@ -114,6 +114,38 @@ export const canonicalManifest = defineApplicationManifest({
       110,
       ["validate_provider", "sync_provider", "archive_provider"],
     ),
+    canonicalSurface(
+      "transport_new",
+      "New Transport",
+      "configuration",
+      "cadence.comms.transport_new",
+      120,
+      ["validate", "save"],
+    ),
+    canonicalSurface(
+      "routing_new",
+      "New Routing Rule",
+      "configuration",
+      "cadence.comms.routing_new",
+      130,
+      ["validate", "save"],
+    ),
+    canonicalSurface(
+      "ground_station_new",
+      "New Ground Station",
+      "configuration",
+      "cadence.comms.ground_station_new",
+      140,
+      ["validate", "save"],
+    ),
+    canonicalSurface(
+      "ground_station_edit",
+      "Edit Ground Station",
+      "configuration",
+      "cadence.comms.ground_station_edit",
+      150,
+      ["validate", "save"],
+    ),
   ],
 });
 

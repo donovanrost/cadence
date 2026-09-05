@@ -7,6 +7,9 @@ import CommsCanonicalSurface from "./CommsCanonicalSurface.vue";
 import CommsProviderList from "./CommsProviderList.vue";
 import CommsProviderNew from "./CommsProviderNew.vue";
 import CommsProviderShow from "./CommsProviderShow.vue";
+import CommsTransportNew from "./CommsTransportNew.vue";
+import CommsRoutingNew from "./CommsRoutingNew.vue";
+import CommsGroundStationForm from "./CommsGroundStationForm.vue";
 
 const props = defineProps<FullPageSurfaceProps>();
 
@@ -22,6 +25,10 @@ const surfaceComponents: Record<string, Component> = {
   provider_list: CommsProviderList,
   provider_new: CommsProviderNew,
   provider_show: CommsProviderShow,
+  transport_new: CommsTransportNew,
+  routing_new: CommsRoutingNew,
+  ground_station_new: CommsGroundStationForm,
+  ground_station_edit: CommsGroundStationForm,
 };
 
 const pageProps = shallowRef<Record<string, unknown>>();
@@ -69,19 +76,41 @@ async function executeAction(actionId: string, input: unknown = {}): Promise<voi
   error.value = undefined;
 
   try {
-    await props.bridge.execute({
+    const receipt = await props.bridge.execute({
       applicationKey: props.application.applicationKey,
       applicationVersion: props.application.applicationVersion,
       actionId,
       input,
       context: props.context,
     });
+
+    if (actionId === "save") {
+      const href = actionResultHref(receipt);
+      if (href) {
+        window.location.assign(href);
+        return;
+      }
+    }
+
+    if (actionId === "validate") return;
     await loadSurface();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : `The ${actionId} action failed.`;
   } finally {
     actionPending.value = false;
   }
+}
+
+function saveActionId(): string {
+  return props.surface.surfaceId === "provider_new" ? "create_provider" : "save";
+}
+
+function actionResultHref(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const result = isRecord(value.result) ? value.result : value;
+  const navigation = isRecord(result.navigation) ? result.navigation : undefined;
+  const href = navigation?.href ?? result.redirect ?? result.href;
+  return typeof href === "string" && href.startsWith("/missions/") ? href : null;
 }
 
 function providerActionInput(): Record<string, string> {
@@ -116,6 +145,14 @@ function pagePropsFor(value: unknown): Record<string, unknown> {
   }
 
   if (props.surface.surfaceId === "provider_new" || props.surface.surfaceId === "provider_show") {
+    return data;
+  }
+
+  if (
+    ["transport_new", "routing_new", "ground_station_new", "ground_station_edit"].includes(
+      props.surface.surfaceId,
+    )
+  ) {
     return data;
   }
 
@@ -169,7 +206,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       <component
         :is="selectedComponent"
         v-bind="pageProps"
-        @save="executeAction('create_provider', $event)"
+        @save="executeAction(saveActionId(), $event)"
+        @validate="executeAction('validate', $event)"
         @validate-provider="executeAction('validate_provider', providerActionInput())"
         @sync-provider="executeAction('sync_provider', providerActionInput())"
         @archive-provider="executeAction('archive_provider', providerActionInput())"

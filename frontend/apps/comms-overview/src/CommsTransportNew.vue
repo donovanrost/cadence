@@ -194,22 +194,11 @@ const formValues = (form: TransportForm): Record<string, FormValue> =>
   ]);
 
 const values = reactive<Record<string, FormValue>>(formValues(props.form));
-const pendingValidations: TransportValues[] = [];
-const supersededValidations: TransportValues[] = [];
-let acceptedServerValues = formValues(props.form);
 
 const normalizedValue = (value: FormValue | undefined): string => {
   if (value === undefined || value === null) return "";
   return String(value);
 };
-
-const sameFormValues = (left: Record<string, FormValue>, right: Record<string, FormValue>) => {
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  return [...keys].every((key) => normalizedValue(left[key]) === normalizedValue(right[key]));
-};
-
-const acknowledges = (sent: TransportValues, server: Record<string, FormValue>) =>
-  Object.entries(sent).every(([key, value]) => normalizedValue(server[key]) === value);
 
 const replaceValues = (serverValues: Record<string, FormValue>) => {
   for (const key of Object.keys(values)) {
@@ -222,35 +211,7 @@ const replaceValues = (serverValues: Record<string, FormValue>) => {
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm);
-    const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      acknowledges(sent, serverValues),
-    );
-
-    if (acknowledgedIndex >= 0) {
-      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex));
-      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1;
-      pendingValidations.splice(0, acknowledgedIndex + 1);
-      acceptedServerValues = serverValues;
-
-      if (!hasNewerTyping) replaceValues(serverValues);
-      return;
-    }
-
-    const supersededIndex = supersededValidations.findIndex((sent) =>
-      acknowledges(sent, serverValues),
-    );
-
-    if (supersededIndex >= 0) {
-      supersededValidations.splice(supersededIndex, 1);
-      return;
-    }
-
-    if (sameFormValues(serverValues, acceptedServerValues)) return;
-
-    pendingValidations.splice(0);
-    replaceValues(serverValues);
-    acceptedServerValues = serverValues;
+    replaceValues(formValues(serverForm));
   },
   { deep: true },
 );
@@ -294,7 +255,6 @@ const validate = (
   visibleConfigurationKeys: Set<string> | null = null,
 ) => {
   const transport = transportValues(fieldsOrigin, visibleConfigurationKeys);
-  pendingValidations.push(transport);
   emit("validate", { transport });
 };
 

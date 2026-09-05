@@ -135,7 +135,7 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
         id="comms-ground-station-form-component"
         v-component="FederatedFullPageSurface"
         application_key="comms"
-        surface_id="ground_station"
+        surface_id={if(@mode == :new, do: "ground_station_new", else: "ground_station_edit")}
           host_scope="mission"
           mission_id={@current_mission.mission_id}
           query_params={if @ground_station, do: %{mission_id: @current_mission.mission_id, ground_station_id: @ground_station.ground_station_id}, else: %{mission_id: @current_mission.mission_id}}
