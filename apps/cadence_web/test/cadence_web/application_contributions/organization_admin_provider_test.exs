@@ -2,7 +2,15 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Accounts.User
-  alias Cadence.Applications.{ActionDispatcher, ActionRequest, HostContext, SurfaceQueryRequest}
+
+  alias Cadence.Applications.{
+    ActionContractLedger,
+    ActionDispatcher,
+    ActionRequest,
+    HostContext,
+    SurfaceQueryRequest
+  }
+
   alias Cadence.Applications.Registry
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces
@@ -73,6 +81,23 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                "spacecraft",
                "telemetry_decom"
              ]
+  end
+
+  test "closes the complete five-application action ledger and preserves host-owned classification" do
+    assert :ok = ActionContractLedger.validate()
+
+    ledgers = ActionContractLedger.ledgers()
+    assert length(ledgers.declared) == 60
+    assert ledgers.declared == ledgers.provider
+    assert ledgers.declared == ledgers.registry
+
+    assert OrganizationAdminAction.host_owned?("notifications", "accept_invitation")
+    assert OrganizationAdminAction.host_owned?("admin_organization_show", "open_organization")
+
+    refute OrganizationAdminAction.host_owned?(
+             "provider_account_new",
+             "register_provider_account"
+           )
   end
 
   test "loads executable organization, user, and admin presentations", %{

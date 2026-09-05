@@ -90,31 +90,15 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
         reimport(scope, host_context, params)
 
       _other ->
-        {:error, :unsupported_application_action}
+        {:error, :invalid_application_action_request}
     end
   end
 
   defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :invalid_application_action_request}
 
-  defp ensure_surface_binding(%ActionRequest{
-         application_key: @application_key,
-         application_version: 1,
-         surface_id: surface_id,
-         surface_version: surface_version,
-         action_id: action_id
-       }) do
-    with :ok <- validate_bindings(@surface_action_bindings),
-         true <- {surface_id, surface_version, action_id} in @surface_action_bindings do
-      :ok
-    else
-      false -> {:error, :unsupported_application_action}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp ensure_surface_binding(%ActionRequest{}),
-    do: {:error, :unsupported_application_action}
+  defp ensure_surface_binding(%ActionRequest{} = request),
+    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
 
   defp validate_mission(%{"mission" => params}) when is_map(params) do
     with {:ok, display_name} <- required_text(params, "display_name"),

@@ -371,16 +371,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
   defp execute_action(_scope, _host_context, _request),
     do: {:error, failure("unsupported_action", "The organization action is not implemented.")}
 
-  defp ensure_surface_binding(%ActionRequest{
-         surface_id: surface_id,
-         surface_version: surface_version,
-         action_id: action_id
-       }) do
-    case fetch(surface_id, action_id, surface_version) do
-      {:ok, _contract} -> :ok
-      {:error, :unknown_action} -> {:error, :unsupported_application_action}
-    end
-  end
+  defp ensure_surface_binding(%ActionRequest{} = request),
+    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
 
   defp provider_account_action(scope, "rotate_provider_credential", account_id, _params) do
     with {:ok, _account, version} <-

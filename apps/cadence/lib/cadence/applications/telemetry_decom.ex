@@ -25,8 +25,15 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Applications.{MissionBindingComposer, MissionBindingContribution}
 
   alias Cadence.Applications.{
+    ActionDefinition,
     PacketBindingConfiguration,
     PacketBindings,
+    ApplicationDefinition,
+    LifecycleContract,
+    ResourceClaimDefinition,
+    ResourceContract,
+    StatusPlacement,
+    SurfaceDefinition,
     SurfaceQueryContribution
   }
 
@@ -45,6 +52,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
+  alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled
@@ -66,6 +74,108 @@ defmodule Cadence.Applications.TelemetryDecom do
         provider: Cadence.Reads.ApplicationSurfaces.PacketBindings
       }
     ]
+  end
+
+  @doc "Returns the authoritative Phoenix-owned application definition."
+  @spec definition() :: ApplicationDefinition.t()
+  def definition do
+    %ApplicationDefinition{
+      application_key: @application_key,
+      version: 1,
+      display_name: "Telemetry Decom",
+      description: "Bind packet fields and decode selected inputs into named telemetry points.",
+      trust: :first_party,
+      availability: :available,
+      installable_scopes: [:spacecraft],
+      configuration_contract: %{
+        schema_id: "cadence.telemetry_decom.configuration",
+        version: 1
+      },
+      resource_contract: %ResourceContract{
+        claims: [
+          %ResourceClaimDefinition{
+            claim_type: :packet_apid,
+            scope: :spacecraft,
+            mode: :shared,
+            description:
+              "Packet APIDs used to select shared packet-model inputs for this spacecraft application."
+          }
+        ]
+      },
+      lifecycle_contract: %LifecycleContract{
+        actions: ["save_configuration", "request_activation", "disable"]
+      },
+      status_query_id: "cadence.telemetry_decom.status",
+      status_placements: [
+        %StatusPlacement{
+          placement: :comms_validation,
+          scope: :spacecraft,
+          required?: true
+        }
+      ],
+      preflight_query_id: "cadence.telemetry_decom.activation_preflight",
+      actions: [
+        %ActionDefinition{
+          action_id: "save_packet_bindings",
+          version: 1,
+          intent: :configuration,
+          scope: :spacecraft,
+          input_contract: %{
+            schema_id: "cadence.packet_bindings.selection_input",
+            version: 1
+          },
+          result_contract: %{
+            schema_id: "cadence.packet_bindings.configuration",
+            version: 1
+          },
+          required_permission: "operate_mission",
+          effect: :durable,
+          execution: :immediate,
+          concurrency: %{strategy: :expected_version}
+        }
+      ],
+      capability_contributions: [
+        %{kind: :semantic_handler, family_key: :definition_bound_telemetry}
+      ],
+      surfaces: [
+        %SurfaceDefinition{
+          surface_id: "manage",
+          version: 1,
+          purpose: :configuration,
+          scope: :spacecraft,
+          placement: :application_workspace,
+          navigation: %{label: "Manage", order: 30},
+          data_contract: %{
+            query_id: "cadence.telemetry_decom.manage",
+            version: 1
+          },
+          references: %{
+            "catalog_revision_id" => %ReferenceDefinition{
+              provider_id: "cadence.catalog.telemetry_revisions",
+              version: 1
+            }
+          },
+          actions: ["save_configuration", "request_activation", "disable"],
+          refresh: :after_action,
+          renderer: {:trusted, "cadence.telemetry_decom.manage"}
+        },
+        %SurfaceDefinition{
+          surface_id: "packet_bindings",
+          version: 1,
+          purpose: :configuration,
+          scope: :spacecraft,
+          placement: :application_workspace,
+          navigation: %{label: "Packet bindings", order: 20},
+          data_contract: %{
+            query_id: "cadence.packet_bindings.manage",
+            version: 1
+          },
+          actions: ["save_packet_bindings"],
+          refresh: :after_action,
+          renderer: {:declarative, "cadence.host.surface.v1"}
+        }
+      ]
+    }
   end
 
   @spec configure(binary(), binary(), binary(), map() | keyword()) ::
