@@ -1,7 +1,13 @@
 defmodule Cadence.Applications.Comms do
   @moduledoc "The single source of truth for the first-party Comms application contract."
 
-  alias Cadence.Applications.{ApplicationDefinition, SurfaceDefinition, SurfaceQueryContribution}
+  alias Cadence.Applications.{
+    ApplicationDefinition,
+    CatalogContribution,
+    ReleaseContribution,
+    SurfaceDefinition,
+    SurfaceQueryContribution
+  }
 
   @identity %{
     application_key: "comms",
@@ -76,6 +82,34 @@ defmodule Cadence.Applications.Comms do
 
   @spec identity() :: map()
   def identity, do: @identity
+
+  @spec release_contributions() :: [ReleaseContribution.t()]
+  def release_contributions do
+    Enum.map(@surface_specs, fn spec ->
+      %ReleaseContribution{
+        application_key: @identity.application_key,
+        application_version: @identity.application_version,
+        surface_id: spec.id,
+        surface_version: @identity.surface_version,
+        federation: :module_federation,
+        release_id: @identity.release_id,
+        remote_name: @identity.remote_name,
+        manifest_path: @identity.manifest_path,
+        exposed_module: @identity.exposed_module
+      }
+    end)
+  end
+
+  @spec catalog_contributions() :: [CatalogContribution.t()]
+  def catalog_contributions do
+    [
+      %CatalogContribution{
+        definition: definition(),
+        package_id: @identity.package_id,
+        package_version: @identity.package_version
+      }
+    ]
+  end
 
   @spec surface_ids() :: [binary()]
   def surface_ids, do: Enum.map(@surface_specs, & &1.id)
