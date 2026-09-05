@@ -2,10 +2,12 @@ defmodule Cadence.Applications.MissionCatalog do
   @moduledoc "Domain-owned application and frontend release contributions for missions and catalogs."
 
   alias Cadence.Applications.{
+    ActionDefinition,
     ApplicationDefinition,
     CatalogContribution,
     ReleaseContribution,
-    SurfaceDefinition
+    SurfaceDefinition,
+    SurfaceQueryContribution
   }
 
   @package_id "cadence.mission-catalog"
@@ -14,6 +16,81 @@ defmodule Cadence.Applications.MissionCatalog do
   @application_version 1
   @remote_name "cadence_mission_catalog"
   @manifest_path "/assets/application-host/mission-catalog/mf-manifest.json"
+
+  @action_specs %{
+    "validate" => %ActionDefinition{
+      action_id: "validate",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :none,
+      execution: :immediate
+    },
+    "save" => %ActionDefinition{
+      action_id: "save",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :durable,
+      execution: :immediate
+    },
+    "toggle-revision-form" => %ActionDefinition{
+      action_id: "toggle-revision-form",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :none,
+      execution: :immediate
+    },
+    "cancel-upload" => %ActionDefinition{
+      action_id: "cancel-upload",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :none,
+      execution: :immediate
+    },
+    "reimport" => %ActionDefinition{
+      action_id: "reimport",
+      version: 1,
+      intent: :maintenance,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :durable,
+      execution: :asynchronous
+    },
+    "install" => %ActionDefinition{
+      action_id: "install",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :durable,
+      execution: :immediate
+    },
+    "disable" => %ActionDefinition{
+      action_id: "disable",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :durable,
+      execution: :immediate
+    },
+    "uninstall" => %ActionDefinition{
+      action_id: "uninstall",
+      version: 1,
+      intent: :configuration,
+      scope: :mission,
+      required_permission: "operate_mission",
+      effect: :durable,
+      execution: :immediate
+    }
+  }
 
   @surface_specs [
     %{
@@ -118,12 +195,46 @@ defmodule Cadence.Applications.MissionCatalog do
     }
   ]
 
+  @surface_actions %{
+    "mission_new" => ["validate", "save"],
+    "mission_applications" => ["install", "disable", "uninstall"],
+    "catalog_database_new" => ["validate", "save", "cancel-upload"],
+    "catalog_database_show" => ["toggle-revision-form", "validate", "save", "cancel-upload"],
+    "catalog_artifact_show" => ["reimport"]
+  }
+
+  @detail_subjects %{
+    "catalog_database_show" => "catalog_database_id",
+    "catalog_revision_show" => "catalog_revision_id",
+    "catalog_artifact_show" => "artifact_id",
+    "catalog_import_run_show" => "import_run_id"
+  }
+
   @spec package_identity() :: %{package_id: binary(), package_version: pos_integer()}
   def package_identity, do: %{package_id: @package_id, package_version: @package_version}
 
   @spec application_identity() :: %{application_key: binary(), application_version: pos_integer()}
   def application_identity,
     do: %{application_key: @application_key, application_version: @application_version}
+
+  @spec application_key() :: binary()
+  def application_key, do: @application_key
+
+  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
+  def surface_query_contributions do
+    Enum.map(@surface_specs, fn spec ->
+      %SurfaceQueryContribution{
+        application_key: @application_key,
+        application_version: @application_version,
+        query_id: spec.query_id,
+        query_version: 1,
+        provider: Cadence.Reads.ApplicationSurfaces.MissionCatalog
+      }
+    end)
+  end
+
+  @spec action_provider() :: module()
+  def action_provider, do: Cadence.Applications.MissionCatalog.ActionProvider
 
   @spec catalog_contributions() :: [CatalogContribution.t()]
   def catalog_contributions do
@@ -163,6 +274,7 @@ defmodule Cadence.Applications.MissionCatalog do
       trust: :first_party,
       availability: :available,
       installable_scopes: [:organization, :mission],
+      actions: Map.values(@action_specs),
       surfaces: Enum.map(@surface_specs, &surface/1)
     }
   end
@@ -179,10 +291,18 @@ defmodule Cadence.Applications.MissionCatalog do
         order: spec.order,
         fallback_path: spec.fallback_path
       },
+      subject_contract: subject_contract(spec.id),
       data_contract: %{query_id: spec.query_id, version: 1},
-      actions: [],
-      refresh: :static,
+      actions: Map.get(@surface_actions, spec.id, []),
+      refresh: if(Map.has_key?(@surface_actions, spec.id), do: :after_action, else: :static),
       renderer: {:trusted, "cadence.mission_catalog.#{spec.id}"}
     }
+  end
+
+  defp subject_contract(surface_id) do
+    case Map.fetch(@detail_subjects, surface_id) do
+      {:ok, subject} -> %{schema_id: "cadence.mission_catalog.#{subject}.subject", version: 1}
+      :error -> nil
+    end
   end
 end

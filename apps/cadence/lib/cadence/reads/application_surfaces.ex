@@ -90,13 +90,9 @@ defmodule Cadence.Reads.ApplicationSurfaces do
        ) do
     with {:ok, definition} <- Registry.fetch_available(application_key, application_version),
          :ok <- ensure_declared_surface(definition, surface, host_context),
-         :ok <- authorize_surface(current_scope, host_context),
+         :ok <- authorize_surface(current_scope, host_context, surface),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
-             current_scope,
-             host_context,
-             application_key
-           ),
+           fetch_surface_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
          {:ok, provider} <- fetch_provider(application_key, query_id) do
@@ -182,12 +178,52 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     if declared?, do: :ok, else: {:error, :undeclared_application_surface}
   end
 
-  defp authorize_surface(current_scope, host_context) do
+  defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :organization, organization_id: organization_id},
+         %SurfaceDefinition{scope: :organization}
+       )
+       when is_binary(organization_id) do
+    Policy.authorize(current_scope, :operate_organization, %{organization_id: organization_id})
+  end
+
+  defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %SurfaceDefinition{scope: :mission}
+       )
+       when is_binary(mission_id) do
     Policy.authorize(current_scope, :operate_mission, %{
       organization_id: current_scope.organization_id,
-      mission_id: host_context.mission_id
+      mission_id: mission_id
     })
   end
+
+  defp authorize_surface(_current_scope, _host_context, _surface),
+    do: {:error, :unsupported_application_host_context}
+
+  defp fetch_surface_installation(
+         current_scope,
+         %HostContext{placement: :organization} = host_context,
+         application_key
+       ) do
+    if organization_installation_exempt?(application_key) do
+      {:ok, nil}
+    else
+      ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
+    end
+  end
+
+  defp fetch_surface_installation(current_scope, host_context, application_key) do
+    ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
+  end
+
+  @doc false
+  @spec organization_installation_exempt?(binary()) :: boolean()
+  def organization_installation_exempt?("mission_catalog"), do: true
+  def organization_installation_exempt?(_application_key), do: false
+
+  defp ensure_installation_version(nil, _requested_version), do: :ok
 
   defp ensure_installation_version(
          %ApplicationInstallation{application_version: version},

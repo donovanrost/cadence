@@ -146,11 +146,7 @@ defmodule Cadence.Applications.ActionDispatcher do
          {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
          :ok <- authorize_action(current_scope, host_context, required_permission),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
-             current_scope,
-             host_context,
-             request.application_key
-           ),
+           fetch_action_installation(current_scope, host_context, request),
          :ok <- ensure_installation_version(installation, request.application_version),
          :ok <- ensure_expected_configuration_version(installation, request),
          :ok <-
@@ -194,12 +190,43 @@ defmodule Cadence.Applications.ActionDispatcher do
       mission_id: host_context.mission_id
     }
 
-    case required_permission do
-      "operate_mission" -> Policy.authorize(current_scope, :operate_mission, params)
-      "request_activation" -> Policy.authorize(current_scope, :request_activation, params)
-      _other -> {:error, :unsupported_application_permission}
+    case {host_context.placement, required_permission} do
+      {:organization, "operate_mission"} ->
+        Policy.authorize(current_scope, :operate_organization, %{
+          organization_id: current_scope.organization_id
+        })
+
+      {_placement, "operate_mission"} ->
+        Policy.authorize(current_scope, :operate_mission, params)
+
+      {_placement, "request_activation"} ->
+        Policy.authorize(current_scope, :request_activation, params)
+
+      _other ->
+        {:error, :unsupported_application_permission}
     end
   end
+
+  defp fetch_action_installation(
+         current_scope,
+         %HostContext{placement: :organization} = host_context,
+         %ActionRequest{application_key: application_key} = request
+       ) do
+    if organization_installation_exempt?(request) do
+      {:ok, nil}
+    else
+      ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
+    end
+  end
+
+  defp fetch_action_installation(current_scope, host_context, request) do
+    ApplicationInstallations.fetch_installed(current_scope, host_context, request.application_key)
+  end
+
+  defp organization_installation_exempt?(%ActionRequest{application_key: "mission_catalog"}),
+    do: true
+
+  defp organization_installation_exempt?(%ActionRequest{}), do: false
 
   defp fetch_provider(application_key, registered_providers) do
     case ActionProviderRegistry.fetch(application_key, registered_providers) do
@@ -241,8 +268,16 @@ defmodule Cadence.Applications.ActionDispatcher do
        ),
        do: :ok
 
+  defp ensure_installation_version(nil, _requested_version), do: :ok
+
   defp ensure_installation_version(%ApplicationInstallation{}, _requested_version),
     do: {:error, :application_installation_version_mismatch}
+
+  defp ensure_expected_configuration_version(
+         nil,
+         %ActionRequest{expected_configuration_version: nil}
+       ),
+       do: :ok
 
   defp ensure_expected_configuration_version(
          %ApplicationInstallation{},
@@ -281,14 +316,37 @@ defmodule Cadence.Applications.ActionDispatcher do
          current_scope,
          host_context,
          %ActionRequest{action_id: "disable", application_key: application_key},
-         _provider,
+         provider,
          _result,
-         _installation
+         installation
        ) do
-    ApplicationInstallations.disable(current_scope, host_context, application_key)
+    if lifecycle_handled_by_provider?(provider),
+      do: {:ok, installation},
+      else: ApplicationInstallations.disable(current_scope, host_context, application_key)
   end
 
   defp record_installation_outcome(
+         current_scope,
+         host_context,
+         %ActionRequest{} = request,
+         provider,
+         result,
+         installation
+       ) do
+    if lifecycle_handled_by_provider?(provider) and request.action_id in ["install", "uninstall"],
+      do: {:ok, installation},
+      else:
+        record_configuration_outcome(
+          current_scope,
+          host_context,
+          request,
+          provider,
+          result,
+          installation
+        )
+  end
+
+  defp record_configuration_outcome(
          current_scope,
          host_context,
          %ActionRequest{application_key: application_key} = request,
@@ -318,6 +376,11 @@ defmodule Cadence.Applications.ActionDispatcher do
     else
       {:ok, installation}
     end
+  end
+
+  defp lifecycle_handled_by_provider?(provider) do
+    function_exported?(provider, :handles_lifecycle_actions?, 0) and
+      provider.handles_lifecycle_actions?()
   end
 
   defp action_provider_failure do
