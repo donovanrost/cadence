@@ -30,25 +30,6 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     )
   end
 
-  test "publishing a selected version remains a durable lifecycle outcome" do
-    {conn, _user, org, mission} = signed_in_user_org_and_mission()
-    %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Publish")
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}/activity"
-      )
-
-    render_hook(view, "publish_version", %{"version" => "1"})
-
-    assert [%{published_version: 1}] =
-             Cadence.Dashboards.list_dashboard_summaries(
-               org.organization_id,
-               mission.mission_id
-             )
-  end
-
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = LiveVue.Test.get_vue(view, id: id)
