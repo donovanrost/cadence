@@ -150,21 +150,20 @@ describe("the generic federated application loader", () => {
 
   it("bounds a late runtime result and never returns it after the deadline", async () => {
     let resolveLoad: ((value: unknown) => void) | undefined;
-    const runtime: FederatedRuntime = {
-      load: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            resolveLoad = resolve;
-          }),
-      ),
-    };
+    const load = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const runtime: FederatedRuntime = { load };
 
     const pending = loadFederatedApplication(application, runtime, { timeoutMs: 10 });
     await expect(pending).rejects.toThrow("Approved release 2026.08.22.1 could not be loaded.");
 
     resolveLoad?.({ manifest, default: { name: "LateRemote" } });
     await Promise.resolve();
-    expect(runtime.load).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when a catalog release uses an unregistered transport", async () => {

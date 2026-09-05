@@ -108,7 +108,10 @@ const dispatch = (
   if (!action) return;
   if (action.confirmation && !window.confirm(action.confirmation.prompt)) return;
 
-  emit(event, { key: application.application_key });
+  const payload = { key: application.application_key };
+  if (event === "install") emit("install", payload);
+  if (event === "disable") emit("disable", payload);
+  if (event === "uninstall") emit("uninstall", payload);
 };
 </script>
 
