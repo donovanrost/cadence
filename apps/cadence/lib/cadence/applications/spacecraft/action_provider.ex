@@ -3,12 +3,13 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
 
   @behaviour Cadence.Applications.ActionProvider
 
+  alias Cadence.Applications.ActionContractLedger
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext, TelemetryDecom}
   alias Cadence.Auth.Scope
   alias Cadence.Missions
   alias Cadence.Spacecraft, as: SpacecraftAsset
-  alias Cadence.SpacecraftType, as: SpacecraftProfile
   alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftType, as: SpacecraftProfile
   alias Cadence.SpacecraftTypeStore
 
   @surface_action_bindings [
@@ -95,9 +96,8 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
          %HostContext{placement: :mission, mission_id: mission_id},
          %ActionRequest{action_id: "save", params: params}
        ) do
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, result} <- save_mission_form(organization_id, mission_id, params) do
-      {:ok, result}
+    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
+      save_mission_form(organization_id, mission_id, params)
     end
   end
 
@@ -173,7 +173,7 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
     do: {:error, :application_action_scope_required}
 
   defp ensure_surface_binding(%ActionRequest{} = request),
-    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
+    do: ActionContractLedger.admit(request, __MODULE__)
 
   @impl true
   def result(%SpacecraftAsset{} = spacecraft),
@@ -264,18 +264,20 @@ defmodule Cadence.Applications.Spacecraft.ActionProvider do
 
   defp validate_form(params) do
     case nested(params, "spacecraft") do
-      attrs when is_map(attrs) ->
-        with {:ok, _name} <- required_text(attrs, "display_name", "Display Name"), do: :ok
-
-      _other ->
-        case nested(params, "spacecraft_type") do
-          attrs when is_map(attrs) ->
-            with {:ok, _name} <- required_text(attrs, "display_name", "Display Name"), do: :ok
-
-          _other ->
-            {:error, invalid_form("spacecraft")}
-        end
+      attrs when is_map(attrs) -> validate_display_name(attrs)
+      _other -> validate_profile_form(params)
     end
+  end
+
+  defp validate_profile_form(params) do
+    case nested(params, "spacecraft_type") do
+      attrs when is_map(attrs) -> validate_display_name(attrs)
+      _other -> {:error, invalid_form("spacecraft")}
+    end
+  end
+
+  defp validate_display_name(attrs) do
+    with {:ok, _name} <- required_text(attrs, "display_name", "Display Name"), do: :ok
   end
 
   defp frame_parameters(attrs) do

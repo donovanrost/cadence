@@ -8,8 +8,8 @@ defmodule Cadence.Applications.ActionDispatcher do
   """
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ActionContractLedger,
+    ActionDefinition,
     ActionFailure,
     ActionRequest,
     ApplicationDefinition,
@@ -271,37 +271,37 @@ defmodule Cadence.Applications.ActionDispatcher do
       {_placement, "request_activation"} ->
         Policy.authorize(current_scope, :request_activation, params)
 
-      {_placement, "manage_provider_accounts"} ->
-        Policy.authorize(current_scope, :manage_provider_accounts, %{
-          organization_id: organization_id_for(host_context, current_scope)
-        })
+      {_placement, permission}
+      when permission in ["manage_provider_accounts", "manage_service_identities"] ->
+        authorize_organization_permission(current_scope, host_context, permission)
 
-      {_placement, "manage_service_identities"} ->
-        Policy.authorize(current_scope, :manage_service_identities, %{
-          organization_id: organization_id_for(host_context, current_scope)
-        })
-
-      {_placement, "read_notifications"} ->
+      {_placement, permission} when permission in ["read_notifications", "accept_invitation"] ->
         authorize_user_context(current_scope, host_context)
 
-      {_placement, "accept_invitation"} ->
-        authorize_user_context(current_scope, host_context)
-
-      {_placement, "view_runtime"} ->
-        authorize_admin_context(current_scope, host_context)
-
-      {_placement, "manage_organizations"} ->
-        authorize_admin_context(current_scope, host_context)
-
-      {_placement, "dismiss_service_token"} ->
-        authorize_admin_context(current_scope, host_context)
-
-      {_placement, "open_organization"} ->
+      {_placement, permission}
+      when permission in [
+             "view_runtime",
+             "manage_organizations",
+             "dismiss_service_token",
+             "open_organization"
+           ] ->
         authorize_admin_context(current_scope, host_context)
 
       _other ->
         {:error, :unsupported_application_permission}
     end
+  end
+
+  defp authorize_organization_permission(current_scope, host_context, "manage_provider_accounts") do
+    Policy.authorize(current_scope, :manage_provider_accounts, %{
+      organization_id: organization_id_for(host_context, current_scope)
+    })
+  end
+
+  defp authorize_organization_permission(current_scope, host_context, "manage_service_identities") do
+    Policy.authorize(current_scope, :manage_service_identities, %{
+      organization_id: organization_id_for(host_context, current_scope)
+    })
   end
 
   defp organization_id_for(

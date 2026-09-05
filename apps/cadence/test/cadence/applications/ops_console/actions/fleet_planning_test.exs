@@ -3,8 +3,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanningTest do
 
   alias Cadence.Accounts.{OrganizationMembership, User}
   alias Cadence.Applications.{ActionRequest, HostContext}
-  alias Cadence.Auth.Scope
   alias Cadence.Applications.OpsConsole.Actions.FleetPlanning
+  alias Cadence.Auth.Scope
 
   @organization_id "org-ops-fleet-actions"
   @mission_id "mission-ops-fleet-actions"

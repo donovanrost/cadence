@@ -1,7 +1,13 @@
 defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{HostContext, Registry, SurfaceQueryRequest}
+  alias Cadence.Applications.{
+    ApplicationInstallations,
+    HostContext,
+    Registry,
+    SurfaceQueryRequest
+  }
+
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Reads.ApplicationSurfaces.MissionCatalog, as: MissionCatalogProvider
@@ -72,7 +78,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
     end
 
     assert {:error, :application_installation_scope_required} =
-             Cadence.Applications.ApplicationInstallations.fetch_installed(
+             ApplicationInstallations.fetch_installed(
                scope,
                HostContext.organization(@organization_id),
                "third_party"

@@ -13,9 +13,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
     ServiceProfile
   }
 
+  alias Cadence.Ids
   alias Cadence.Management.Providers
   alias Cadence.Missions
-  alias Cadence.Ids
 
   @application_key "comms"
   @application_version 1

@@ -8,10 +8,12 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviders.AdminOr
 
   @spec props(binary()) :: map() | {:error, term()}
   def props(org_id) when is_binary(org_id) do
-    with {:ok, organization} <- Cadence.Organizations.fetch_organization(org_id) do
-      {:ok, %{page: page_dto(organization), form: form_dto(default_invite_params())}}
-    else
-      {:error, _reason} -> {:error, :organization_not_found}
+    case Cadence.Organizations.fetch_organization(org_id) do
+      {:ok, organization} ->
+        {:ok, %{page: page_dto(organization), form: form_dto(default_invite_params())}}
+
+      {:error, _reason} ->
+        {:error, :organization_not_found}
     end
   end
 

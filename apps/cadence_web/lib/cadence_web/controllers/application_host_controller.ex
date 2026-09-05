@@ -366,53 +366,53 @@ defmodule CadenceWeb.ApplicationHostController do
   defp fetch_generic_route_context(%Scope{} = current_scope, params) do
     case requested_scope(params) do
       "organization" ->
-        with organization_id when is_binary(organization_id) <- current_scope.organization_id do
-          requested_organization_id = Map.get(params, "organization_id")
-
-          if generic_scope_ids_match?(params, :organization, organization_id) and
-               (is_nil(requested_organization_id) or requested_organization_id == organization_id) do
-            {:ok,
-             %{
-               host_context: HostContext.organization(organization_id),
-               mission: nil,
-               spacecraft: nil
-             }}
-          else
-            {:error, :scope_mismatch}
-          end
-        else
-          _missing -> {:error, :scope_mismatch}
-        end
+        fetch_organization_route_context(current_scope, params)
 
       "user" ->
-        with :user <- current_scope.actor_kind,
-             %{user_id: user_id} <- current_scope.user do
-          requested_user_id = Map.get(params, "user_id")
-
-          if generic_scope_ids_match?(params, :user, user_id) and
-               (is_nil(requested_user_id) or requested_user_id == user_id) do
-            {:ok,
-             %{
-               host_context: HostContext.user(user_id),
-               mission: nil,
-               spacecraft: nil
-             }}
-          else
-            {:error, :scope_mismatch}
-          end
-        else
-          _not_user -> {:error, :authenticated_user_required}
-        end
+        fetch_user_route_context(current_scope, params)
 
       "admin" ->
-        if Scope.admin_mode?(current_scope) and generic_scope_ids_match?(params, :admin, nil) do
-          {:ok, %{host_context: HostContext.admin(), mission: nil, spacecraft: nil}}
-        else
-          {:error, :forbidden}
-        end
+        fetch_admin_route_context(current_scope, params)
 
       _other ->
         {:error, :scope_mismatch}
+    end
+  end
+
+  defp fetch_organization_route_context(%Scope{organization_id: organization_id}, params)
+       when is_binary(organization_id) do
+    requested_organization_id = Map.get(params, "organization_id")
+
+    if generic_scope_ids_match?(params, :organization, organization_id) and
+         (is_nil(requested_organization_id) or requested_organization_id == organization_id) do
+      {:ok,
+       %{host_context: HostContext.organization(organization_id), mission: nil, spacecraft: nil}}
+    else
+      {:error, :scope_mismatch}
+    end
+  end
+
+  defp fetch_organization_route_context(%Scope{}, _params), do: {:error, :scope_mismatch}
+
+  defp fetch_user_route_context(%Scope{actor_kind: :user, user: %{user_id: user_id}}, params) do
+    requested_user_id = Map.get(params, "user_id")
+
+    if generic_scope_ids_match?(params, :user, user_id) and
+         (is_nil(requested_user_id) or requested_user_id == user_id) do
+      {:ok, %{host_context: HostContext.user(user_id), mission: nil, spacecraft: nil}}
+    else
+      {:error, :scope_mismatch}
+    end
+  end
+
+  defp fetch_user_route_context(%Scope{}, _params),
+    do: {:error, :authenticated_user_required}
+
+  defp fetch_admin_route_context(%Scope{} = current_scope, params) do
+    if Scope.admin_mode?(current_scope) and generic_scope_ids_match?(params, :admin, nil) do
+      {:ok, %{host_context: HostContext.admin(), mission: nil, spacecraft: nil}}
+    else
+      {:error, :forbidden}
     end
   end
 

@@ -3,6 +3,7 @@ defmodule Cadence.Applications.Comms.ActionProvider do
 
   @behaviour Cadence.Applications.ActionProvider
 
+  alias Cadence.Applications.ActionContractLedger
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Auth.Scope
 
@@ -143,7 +144,7 @@ defmodule Cadence.Applications.Comms.ActionProvider do
 
   @impl true
   def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
-    with :ok <- Cadence.Applications.ActionContractLedger.admit(request, __MODULE__) do
+    with :ok <- ActionContractLedger.admit(request, __MODULE__) do
       execute_action(scope, host_context, request)
     end
   end

@@ -454,17 +454,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
          name,
          description
        ) do
-    with {:ok, source_dashboard_id} <- required_identity(params, "source_dashboard_id"),
-         {:ok, document} <-
-           Dashboards.clone_document(
-             organization_id,
-             mission_id,
-             source_dashboard_id,
-             name: name,
-             description: description,
-             actor_id: current_user_id_or_nil(scope)
-           ) do
-      {:ok, document}
+    with {:ok, source_dashboard_id} <- required_identity(params, "source_dashboard_id") do
+      Dashboards.clone_document(
+        organization_id,
+        mission_id,
+        source_dashboard_id,
+        name: name,
+        description: description,
+        actor_id: current_user_id_or_nil(scope)
+      )
     end
   end
 
@@ -479,17 +477,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
          description
        ) do
     with {:ok, document_json} <-
-           required_json_text(dashboard, "document_json", "Dashboard JSON is required."),
-         {:ok, document} <-
-           Dashboards.import_document(
-             organization_id,
-             mission_id,
-             document_json,
-             name: name,
-             description: description,
-             actor_id: current_user_id_or_nil(scope)
-           ) do
-      {:ok, document}
+           required_json_text(dashboard, "document_json", "Dashboard JSON is required.") do
+      Dashboards.import_document(
+        organization_id,
+        mission_id,
+        document_json,
+        name: name,
+        description: description,
+        actor_id: current_user_id_or_nil(scope)
+      )
     end
   end
 
@@ -850,9 +846,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
   end
 
   defp required_identity(map, field) do
-    with {:ok, value} <- identity_value(Map.get(map, field)) do
-      {:ok, value}
-    end
+    identity_value(Map.get(map, field))
   end
 
   defp identity_param(map, primary, alternate) do
@@ -901,26 +895,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.DashboardWorkflows do
   end
 
   defp json_object(map, field, message) do
-    with {:ok, value} <- required_json_text(map, field, message),
-         {:ok, decoded} <- decode_object(value, message) do
-      {:ok, decoded}
+    with {:ok, value} <- required_json_text(map, field, message) do
+      decode_object(value, message)
     end
   end
 
-  defp decode_object(value, message) do
-    if is_binary(value) do
-      case Jason.decode(value) do
-        {:ok, decoded} when is_map(decoded) ->
-          case JSONBoundary.validate(decoded) do
-            :ok -> {:ok, decoded}
-            {:error, _reason} -> {:error, invalid_input(nil, message)}
-          end
+  defp decode_object(value, message) when is_binary(value) do
+    case Jason.decode(value) do
+      {:ok, decoded} when is_map(decoded) -> validate_decoded_object(decoded, message)
+      _invalid -> {:error, invalid_input(nil, message)}
+    end
+  end
 
-        _invalid ->
-          {:error, invalid_input(nil, message)}
-      end
-    else
-      {:error, invalid_input(nil, message)}
+  defp validate_decoded_object(decoded, message) do
+    case JSONBoundary.validate(decoded) do
+      :ok -> {:ok, decoded}
+      {:error, _reason} -> {:error, invalid_input(nil, message)}
     end
   end
 

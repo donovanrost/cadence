@@ -4,20 +4,24 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
   alias Cadence.Accounts.User
 
   alias Cadence.Applications.{
-    ActionFailure,
     ActionContractLedger,
     ActionDispatcher,
+    ActionFailure,
+    ActionProviderRegistry,
     ActionRequest,
+    ApplicationInstallations,
     HostContext,
     SurfaceQueryRequest
   }
 
   alias Cadence.Applications.Registry
   alias Cadence.Auth.Scope
+  alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Reads.ApplicationSurfaces
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
   alias CadenceWeb.ApplicationContributions.{OrganizationAdmin, OrganizationAdminAction}
-  alias CadenceWeb.ApplicationContributions.OrganizationAdminQuery
   alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
+  alias CadenceWeb.ApplicationContributions.OrganizationAdminQuery
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -64,15 +68,15 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
            end)
 
     assert {:ok, OrganizationAdminQuery} =
-             Cadence.Reads.ApplicationSurfaces.ProviderRegistry.fetch(
+             SurfaceProviderRegistry.fetch(
                "organization_admin",
                "cadence.organization.home"
              )
 
     assert {:ok, OrganizationAdminAction} =
-             Cadence.Applications.ActionProviderRegistry.fetch("organization_admin")
+             ActionProviderRegistry.fetch("organization_admin")
 
-    assert Map.keys(Cadence.Applications.ActionProviderRegistry.providers()) |> Enum.sort() ==
+    assert Map.keys(ActionProviderRegistry.providers()) |> Enum.sort() ==
              [
                "comms",
                "derived_telemetry",
@@ -424,7 +428,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
     end
 
     assert {:error, :application_installation_scope_required} =
-             Cadence.Applications.ApplicationInstallations.fetch_installed(
+             ApplicationInstallations.fetch_installed(
                organization_scope,
                HostContext.organization(organization.organization_id),
                "third_party"
@@ -651,7 +655,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
     now = ~U[2026-07-15 20:00:00.000000Z]
 
     {:ok, credential} =
-      Cadence.GroundNetworks.ProviderCredentials.create(
+      ProviderCredentials.create(
         organization.organization_id,
         account_id,
         %{
@@ -665,7 +669,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
       )
 
     {:ok, account, version} =
-      Cadence.GroundNetworks.ProviderAccounts.create_for_system(
+      ProviderAccounts.create_for_system(
         organization.organization_id,
         %{
           provider_account_id: account_id,

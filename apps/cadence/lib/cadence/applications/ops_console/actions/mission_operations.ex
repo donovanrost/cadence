@@ -70,9 +70,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
          :ok <- JSONBoundary.validate(request.params),
          :ok <- validate_action_params(surface_id, request.action_id, request.params),
          :ok <- validate_context_params(scope, host_context, request.params),
-         :ok <- authorize(scope, host_context, surface_id, request.action_id),
-         {:ok, result} <- dispatch(scope, host_context, surface_id, request) do
-      {:ok, result}
+         :ok <- authorize(scope, host_context, surface_id, request.action_id) do
+      dispatch(scope, host_context, surface_id, request)
     end
   end
 
@@ -122,9 +121,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   end
 
   defp validate_context_params(scope, %HostContext{mission_id: mission_id}, params) do
-    with :ok <- matching_param(params, "organization_id", scope.organization_id),
-         :ok <- matching_param(params, "mission_id", mission_id) do
-      :ok
+    with :ok <- matching_param(params, "organization_id", scope.organization_id) do
+      matching_param(params, "mission_id", mission_id)
     end
   end
 
@@ -151,26 +149,23 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp validate_action_params(surface_id, "transition-group", params)
        when surface_id in @data_operation_surfaces do
     with :ok <- exact_keys(params, ["group-id", "stage"]),
-         :ok <- required_text(params, "group-id"),
-         :ok <- member_text(params, "stage", ~w(approved rejected started completed failed)) do
-      :ok
+         :ok <- required_text(params, "group-id") do
+      member_text(params, "stage", ~w(approved rejected started completed failed))
     end
   end
 
   defp validate_action_params(surface_id, "retry-group", params)
        when surface_id in @data_operation_surfaces do
-    with :ok <- exact_keys(params, ["group-id"]),
-         :ok <- required_text(params, "group-id") do
-      :ok
+    with :ok <- exact_keys(params, ["group-id"]) do
+      required_text(params, "group-id")
     end
   end
 
   defp validate_action_params(surface_id, "request-correction", params)
        when surface_id in @data_operation_surfaces do
     with :ok <- exact_keys(params, ["group-id", "event-id"]),
-         :ok <- required_text(params, "group-id"),
-         :ok <- required_text(params, "event-id") do
-      :ok
+         :ok <- required_text(params, "group-id") do
+      required_text(params, "event-id")
     end
   end
 
@@ -179,9 +174,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
          {:ok, decision_params} <-
            nested_map(params, "activation_decision", ["request_id", "reason"]),
          :ok <- required_text(decision_params, "request_id"),
-         :ok <- required_text(decision_params, "reason"),
-         :ok <- member_text(params, "decision", ["approved", "rejected"]) do
-      :ok
+         :ok <- required_text(decision_params, "reason") do
+      member_text(params, "decision", ["approved", "rejected"])
     end
   end
 
@@ -189,9 +183,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     do: {:error, :unsupported_application_action}
 
   defp validate_workflow_values(params) do
-    with {:ok, values} <- nested_map(params, "historical_workflow_request", @workflow_keys),
-         :ok <- string_values(values) do
-      :ok
+    with {:ok, values} <- nested_map(params, "historical_workflow_request", @workflow_keys) do
+      string_values(values)
     end
   end
 
@@ -243,16 +236,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
                 "retry-group",
                 "request-correction"
               ] do
-    with :ok <- organization_admin(scope),
-         :ok <- Policy.authorize(scope, :operate_mission, mission_context(scope, mission_id)) do
-      :ok
+    with :ok <- organization_admin(scope) do
+      Policy.authorize(scope, :operate_mission, mission_context(scope, mission_id))
     end
   end
 
   defp authorize(scope, %HostContext{mission_id: mission_id}, "activation_requests", "decide") do
-    with :ok <- organization_admin(scope),
-         :ok <- Policy.authorize(scope, :approve_activation, mission_context(scope, mission_id)) do
-      :ok
+    with :ok <- organization_admin(scope) do
+      Policy.authorize(scope, :approve_activation, mission_context(scope, mission_id))
     end
   end
 
@@ -277,9 +268,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     reason = decision_params["reason"]
 
     with {:ok, request} <- ManagementActivations.fetch(scope, request_id),
-         :ok <- bind_record(scope, mission_id, request.organization_id, request.mission_id),
-         result <- decide_activation(scope, request_id, reason, params["decision"]) do
-      result
+         :ok <- bind_record(scope, mission_id, request.organization_id, request.mission_id) do
+      decide_activation(scope, request_id, reason, params["decision"])
     end
   end
 

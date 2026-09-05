@@ -1095,7 +1095,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           else: {:error, :authenticated_user_required}
 
       :admin ->
-        if Cadence.Auth.Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
     end
   end
 

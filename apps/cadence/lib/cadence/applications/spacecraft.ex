@@ -16,6 +16,9 @@ defmodule Cadence.Applications.Spacecraft do
     SurfaceQueryContribution
   }
 
+  alias Cadence.Applications.Spacecraft.ActionProvider
+  alias Cadence.Reads.ApplicationSurfaces.Spacecraft, as: SpacecraftSurface
+
   @identity %{
     application_key: "spacecraft",
     package_id: "cadence.spacecraft",
@@ -173,10 +176,10 @@ defmodule Cadence.Applications.Spacecraft do
   @doc "Returns the query contributions owned by the Spacecraft application lane."
   @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
   def surface_query_contributions,
-    do: Cadence.Reads.ApplicationSurfaces.Spacecraft.contributions()
+    do: SpacecraftSurface.contributions()
 
   @doc "Returns the action provider for Spacecraft-owned remote actions."
-  def action_provider, do: Cadence.Applications.Spacecraft.ActionProvider
+  def action_provider, do: ActionProvider
 
   @doc "Returns one release contribution for every exposed federated surface."
   def release_contributions do

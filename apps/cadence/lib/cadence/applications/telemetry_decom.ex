@@ -26,10 +26,10 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   alias Cadence.Applications.{
     ActionDefinition,
-    PacketBindingConfiguration,
-    PacketBindings,
     ApplicationDefinition,
     LifecycleContract,
+    PacketBindingConfiguration,
+    PacketBindings,
     ResourceClaimDefinition,
     ResourceContract,
     StatusPlacement,
@@ -42,6 +42,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
+  alias Cadence.Extensions.Presentation.ReferenceDefinition
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
   alias Cadence.MissionModels
@@ -52,7 +53,6 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled

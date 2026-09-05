@@ -4,13 +4,31 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   @behaviour Cadence.Reads.ApplicationSurfaces.SurfaceQueryProvider
 
   alias Cadence.Applications.{HostContext, JSONBoundary, SurfaceQueryRequest}
-  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
+  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Reads.Alarms
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
+  alias Cadence.Reads.Commands
+  alias Cadence.Reads.MissionTimeline
 
   @application_key "ops_console"
   @application_version 1
   @surface_version 1
+  @subject_param_keys %{
+    "contact_requirement_show" => "contact_requirement_id",
+    "contact_plan_show" => "contact_plan_id",
+    "contact_detail" => "provider_reservation_id",
+    "contact_record" => "contact_id",
+    "dashboard_settings" => "dashboard_id",
+    "dashboard_show" => "dashboard_id",
+    "dashboard_editor" => "dashboard_id",
+    "dashboard_activity" => "dashboard_id",
+    "dashboard_share" => "share_id",
+    "dashboard_snapshot" => "snapshot_id",
+    "dashboard_diagnostics" => "dashboard_id",
+    "dashboard_playlist_present" => "playlist_id",
+    "fleet_planning_run" => "fleet_planning_run_id"
+  }
 
   @impl true
   def application_key, do: @application_key
@@ -128,23 +146,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp validate_subject_param(surface_id, params) do
-    key =
-      case surface_id do
-        "contact_requirement_show" -> "contact_requirement_id"
-        "contact_plan_show" -> "contact_plan_id"
-        "contact_detail" -> "provider_reservation_id"
-        "contact_record" -> "contact_id"
-        "dashboard_settings" -> "dashboard_id"
-        "dashboard_show" -> "dashboard_id"
-        "dashboard_editor" -> "dashboard_id"
-        "dashboard_activity" -> "dashboard_id"
-        "dashboard_share" -> "share_id"
-        "dashboard_snapshot" -> "snapshot_id"
-        "dashboard_diagnostics" -> "dashboard_id"
-        "dashboard_playlist_present" -> "playlist_id"
-        "fleet_planning_run" -> "fleet_planning_run_id"
-        _other -> nil
-      end
+    key = Map.get(@subject_param_keys, surface_id)
 
     if is_nil(key) or valid_text?(Map.get(params, key)),
       do: :ok,
@@ -352,127 +354,111 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     id = "ops-#{surface_id}-page"
     page = page(id, title(surface_id), mission, params)
 
-    props =
-      case surface_id do
-        "contact_requirement_list" ->
-          %{"page" => page, "requirements" => []}
-
-        "contact_requirement_new" ->
-          %{
-            "page" => page,
-            "journey" => journey(),
-            "form" =>
-              form("contact-requirement-form", "Declare requirement", [
-                "spacecraft_id",
-                "contact_intent",
-                "earliest_start",
-                "latest_end",
-                "success_measure",
-                "minimum_duration_seconds",
-                "preferred_duration_seconds",
-                "minimum_separation_seconds",
-                "minimum_data_volume_bytes",
-                "contact_count",
-                "priority",
-                "rationale",
-                "allowed_providers",
-                "excluded_providers",
-                "allowed_stations",
-                "excluded_stations"
-              ]),
-            "actions" => form_actions()
-          }
-
-        "contact_requirement_show" ->
-          %{
-            "page" => page,
-            "requirement_versions" => [],
-            "planning_searches" => [],
-            "opportunities" => []
-          }
-
-        "contact_requirement_template" ->
-          requirement_template_props(page)
-
-        "contact_schedule" ->
-          schedule_props(page)
-
-        "contact_plan_show" ->
-          plan_props(page)
-
-        "contact_detail" ->
-          %{"page" => page, "provider_changes" => [], "provider_audit_entries" => []}
-
-        "contact_record" ->
-          %{"record" => record_props(page, params["contact_id"])}
-
-        "dashboard_directory" ->
-          %{
-            "page" => page,
-            "filters" => filters("dashboard-directory-filters", ["query", "status"]),
-            "dashboard_directory" => []
-          }
-
-        "dashboard_new" ->
-          %{"page" => page, "form" => dashboard_form()}
-
-        "dashboard_library" ->
-          library_props(page)
-
-        "dashboard_playlists" ->
-          %{
-            "page" => page,
-            "form" => playlist_form(),
-            "options" => [],
-            "dashboard_playlists" => []
-          }
-
-        "dashboard_playlist_present" ->
-          %{
-            "page" => Map.put(page, "wallboard_mode", true),
-            "current_dashboard" => current_dashboard()
-          }
-
-        "dashboard_settings" ->
-          settings_props(page)
-
-        "dashboard_share" ->
-          %{"share" => share_props(page, params["share_id"])}
-
-        "dashboard_snapshot" ->
-          %{"snapshot" => snapshot_props(page, params["snapshot_id"])}
-
-        "dashboard_diagnostics" ->
-          %{"presentation" => diagnostics_presentation(page), "diagnostic_rows" => []}
-
-        "fleet_planning" ->
-          planning_props(page)
-
-        "fleet_planning_new" ->
-          fleet_new_props(page)
-
-        "fleet_planning_policy" ->
-          fleet_policy_props(page)
-
-        "fleet_planning_run" ->
-          fleet_run_props(page, params["fleet_planning_run_id"])
-
-        "activation_requests" ->
-          activation_props(page)
-
-        "telemetry_explore" ->
-          telemetry_props(page, params)
-
-        "data_operations" ->
-          data_operations_props(page)
-      end
+    props = generic_props(surface_id, page, params)
 
     envelope(component_name(surface_id), props)
   end
 
+  defp generic_props("contact_requirement_list", page, _params),
+    do: %{"page" => page, "requirements" => []}
+
+  defp generic_props("contact_requirement_new", page, _params),
+    do: %{
+      "page" => page,
+      "journey" => journey(),
+      "form" =>
+        form("contact-requirement-form", "Declare requirement", [
+          "spacecraft_id",
+          "contact_intent",
+          "earliest_start",
+          "latest_end",
+          "success_measure",
+          "minimum_duration_seconds",
+          "preferred_duration_seconds",
+          "minimum_separation_seconds",
+          "minimum_data_volume_bytes",
+          "contact_count",
+          "priority",
+          "rationale",
+          "allowed_providers",
+          "excluded_providers",
+          "allowed_stations",
+          "excluded_stations"
+        ]),
+      "actions" => form_actions()
+    }
+
+  defp generic_props("contact_requirement_show", page, _params),
+    do: %{
+      "page" => page,
+      "requirement_versions" => [],
+      "planning_searches" => [],
+      "opportunities" => []
+    }
+
+  defp generic_props("contact_requirement_template", page, _params),
+    do: requirement_template_props(page)
+
+  defp generic_props("contact_schedule", page, _params), do: schedule_props(page)
+  defp generic_props("contact_plan_show", page, _params), do: plan_props(page)
+
+  defp generic_props("contact_detail", page, _params),
+    do: %{"page" => page, "provider_changes" => [], "provider_audit_entries" => []}
+
+  defp generic_props("contact_record", page, params),
+    do: %{"record" => record_props(page, params["contact_id"])}
+
+  defp generic_props("dashboard_directory", page, _params),
+    do: %{
+      "page" => page,
+      "filters" => filters("dashboard-directory-filters", ["query", "status"]),
+      "dashboard_directory" => []
+    }
+
+  defp generic_props("dashboard_new", page, _params),
+    do: %{"page" => page, "form" => dashboard_form()}
+
+  defp generic_props("dashboard_library", page, _params), do: library_props(page)
+
+  defp generic_props("dashboard_playlists", page, _params),
+    do: %{
+      "page" => page,
+      "form" => playlist_form(),
+      "options" => [],
+      "dashboard_playlists" => []
+    }
+
+  defp generic_props("dashboard_playlist_present", page, _params),
+    do: %{
+      "page" => Map.put(page, "wallboard_mode", true),
+      "current_dashboard" => current_dashboard()
+    }
+
+  defp generic_props("dashboard_settings", page, _params), do: settings_props(page)
+
+  defp generic_props("dashboard_share", page, params),
+    do: %{"share" => share_props(page, params["share_id"])}
+
+  defp generic_props("dashboard_snapshot", page, params),
+    do: %{"snapshot" => snapshot_props(page, params["snapshot_id"])}
+
+  defp generic_props("dashboard_diagnostics", page, _params),
+    do: %{"presentation" => diagnostics_presentation(page), "diagnostic_rows" => []}
+
+  defp generic_props("fleet_planning", page, _params), do: planning_props(page)
+  defp generic_props("fleet_planning_new", page, _params), do: fleet_new_props(page)
+  defp generic_props("fleet_planning_policy", page, _params), do: fleet_policy_props(page)
+
+  defp generic_props("fleet_planning_run", page, params),
+    do: fleet_run_props(page, params["fleet_planning_run_id"])
+
+  defp generic_props("activation_requests", page, _params), do: activation_props(page)
+  defp generic_props("telemetry_explore", page, params), do: telemetry_props(page, params)
+  defp generic_props("data_operations", page, _params), do: data_operations_props(page)
+
   defp alarms(scope, mission, params) do
     snapshot =
-      Cadence.Reads.Alarms.snapshot(scope.organization_id, mission.mission_id, filters: params)
+      Alarms.snapshot(scope.organization_id, mission.mission_id, filters: params)
 
     rows = Enum.map(snapshot.rows, &alarm_row/1)
 
@@ -498,9 +484,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp timeline(scope, mission, params) do
     events =
-      Cadence.Reads.MissionTimeline.list_for_mission(scope.organization_id, mission.mission_id,
-        limit: 100
-      )
+      MissionTimeline.list_for_mission(scope.organization_id, mission.mission_id, limit: 100)
 
     envelope("OpsTimeline", %{
       "presentation" => timeline_presentation(mission, params),
@@ -510,7 +494,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp commands(scope, mission, params) do
     snapshot =
-      Cadence.Reads.Commands.snapshot(scope.organization_id, mission.mission_id, filters: params)
+      Commands.snapshot(scope.organization_id, mission.mission_id, filters: params)
 
     envelope("OpsCommands", %{
       "page" => page("ops-commands-page", "Commands", mission, params),

@@ -252,11 +252,18 @@ defmodule Cadence.Applications.ActionContractLedger do
   defp valid_binding?(
          {application_key, application_version, surface_id, surface_version, action_id}
        ) do
-    is_binary(application_key) and application_key != "" and
-      is_integer(application_version) and application_version > 0 and
-      is_binary(surface_id) and surface_id != "" and
-      is_integer(surface_version) and surface_version > 0 and
-      is_binary(action_id) and action_id != ""
+    Enum.all?([
+      is_binary(application_key),
+      application_key != "",
+      is_integer(application_version),
+      application_version > 0,
+      is_binary(surface_id),
+      surface_id != "",
+      is_integer(surface_version),
+      surface_version > 0,
+      is_binary(action_id),
+      action_id != ""
+    ])
   end
 
   defp valid_binding?(_binding), do: false
