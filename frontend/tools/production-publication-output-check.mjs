@@ -7,18 +7,14 @@ import {
   assertImportReferences,
   validateFederationOutput,
 } from "./frontend-release-output-check.mjs";
+import { discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
 
 const publicationRoot = resolve(
   import.meta.dirname,
   "../../apps/cadence_web/priv/static/assets/application-host",
 );
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const publicationBundles = [
-  ["comms-overview", "cadence_comms_overview"],
-  ["telemetry-decom", "cadence_telemetry_decom"],
-];
 const hostFiles = new Set(["host.js", "plugin-host.css"]);
-const publicationEntries = new Set(["host", ...publicationBundles.map(([bundle]) => bundle)]);
 const authoritativeHostJavascriptDigest =
   "a9eb2eed5aac504a6d83799d03ead5e47062cac89c89ceeab9f92361dce41076";
 
@@ -34,7 +30,9 @@ async function outputFiles(directory, outputRoot) {
     if (entry.isDirectory()) {
       const nested = await outputFiles(path, outputRoot);
       if (nested.length === 0) {
-        fail(`empty or nested publication directory ${relative(outputRoot, path).split(sep).join("/")}`);
+        fail(
+          `empty or nested publication directory ${relative(outputRoot, path).split(sep).join("/")}`,
+        );
       }
       files.push(...nested);
     } else if (entry.isFile()) files.push(path);
@@ -79,8 +77,7 @@ function isAuthoritativeHostJavascript(name, source, files) {
     name === "host.js" &&
     files.size === hostFiles.size &&
     [...hostFiles].every((file) => files.has(file)) &&
-    createHash("sha256").update(source, "utf8").digest("hex") ===
-      authoritativeHostJavascriptDigest
+    createHash("sha256").update(source, "utf8").digest("hex") === authoritativeHostJavascriptDigest
   );
 }
 
@@ -110,11 +107,15 @@ async function validateHostPublication(root) {
 }
 
 export async function validateProductionPublication(root = publicationRoot) {
+  const { remotes: publicationBundles } = await discoverFirstPartyRemotes(
+    join(repositoryRoot, "frontend"),
+  );
   const stats = await lstat(root).catch(() => fail(`publication root is unavailable: ${root}`));
   if (stats.isSymbolicLink()) fail("publication root must not be a symlink");
   if (!stats.isDirectory()) fail("publication root must be a directory");
 
   const entries = await readdir(root, { withFileTypes: true });
+  const publicationEntries = new Set(["host", ...publicationBundles.map(({ bundle }) => bundle)]);
   const entryNames = new Set(entries.map((entry) => entry.name));
   if (
     entryNames.size !== publicationEntries.size ||
@@ -126,7 +127,7 @@ export async function validateProductionPublication(root = publicationRoot) {
 
   const host = await validateHostPublication(join(root, "host"));
   const remotes = [];
-  for (const [bundle, remoteName] of publicationBundles) {
+  for (const { bundle, remoteName } of publicationBundles) {
     remotes.push(
       await validateFederationOutput(join(root, bundle), remoteName, {
         repositoryRootInput: repositoryRoot,

@@ -2,7 +2,7 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {getHooks} from "live_vue"
-import liveVueApp from "../vue"
+import liveVueApp from "../vue.ts"
 import {createLiveToastHook} from "../../deps/live_toast"
 
 const Hooks = {

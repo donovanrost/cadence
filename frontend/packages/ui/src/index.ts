@@ -7,3 +7,75 @@ export { default as CStatusSymbol } from "./CStatusSymbol.vue";
 export type { StatusSymbolRole } from "./status-symbol";
 export { default as CTextField } from "./CTextField.vue";
 export { default as CTooltip } from "./CTooltip.vue";
+
+// Cadence presentation primitives. These exports are the canonical shared UI
+// surface for first-party remotes; the Phoenix asset copies remain temporary
+// compatibility shims until each domain remote switches import paths.
+export { default as CadenceBadge } from "./CadenceBadge.vue";
+export { default as CadenceBreadcrumbs } from "./CadenceBreadcrumbs.vue";
+export { default as CadenceButton } from "./CadenceButton.vue";
+export { default as CadenceCard } from "./CadenceCard.vue";
+export { default as CadenceCompactPageHeaderBodyFrame } from "./CadenceCompactPageHeaderBodyFrame.vue";
+export { default as CadenceDashboardSettingsSectionFrame } from "./CadenceDashboardSettingsSectionFrame.vue";
+export { default as CadenceDataRow } from "./CadenceDataRow.vue";
+export { default as CadenceDefinitionListPanel } from "./CadenceDefinitionListPanel.vue";
+export { default as CadenceDetailsFrame } from "./CadenceDetailsFrame.vue";
+export { default as CadenceDiagnosticsSectionFrame } from "./CadenceDiagnosticsSectionFrame.vue";
+export { default as CadenceEmptyState } from "./CadenceEmptyState.vue";
+export { default as CadenceEmptyStateFrame } from "./CadenceEmptyStateFrame.vue";
+export { default as CadenceField } from "./CadenceField.vue";
+export { default as CadenceFormActions } from "./CadenceFormActions.vue";
+export { default as CadenceFormPageFrame } from "./CadenceFormPageFrame.vue";
+export { default as CadenceFormSectionFrame } from "./CadenceFormSectionFrame.vue";
+export { default as CadenceFormSectionHeader } from "./CadenceFormSectionHeader.vue";
+export { default as CadenceHoverTableRow } from "./CadenceHoverTableRow.vue";
+export { default as CadenceInlineWarning } from "./CadenceInlineWarning.vue";
+export { default as CadenceListToolbarFrame } from "./CadenceListToolbarFrame.vue";
+export { default as CadenceNarrowFormPageFrame } from "./CadenceNarrowFormPageFrame.vue";
+export { default as CadenceNoticeFrame } from "./CadenceNoticeFrame.vue";
+export { default as CadenceOpsListBodyFrame } from "./CadenceOpsListBodyFrame.vue";
+export { default as CadenceOpsListFrame } from "./CadenceOpsListFrame.vue";
+export { default as CadenceOpsPageBodyFrame } from "./CadenceOpsPageBodyFrame.vue";
+export { default as CadenceOpsViewport } from "./CadenceOpsViewport.vue";
+export { default as CadencePageHeader } from "./CadencePageHeader.vue";
+export { default as CadencePageHeaderFrame } from "./CadencePageHeaderFrame.vue";
+export { default as CadencePageTitle } from "./CadencePageTitle.vue";
+export { default as CadencePaginationFrame } from "./CadencePaginationFrame.vue";
+export { default as CadencePanel } from "./CadencePanel.vue";
+export { default as CadencePresentationNode } from "./CadencePresentationNode.vue";
+export { default as CadenceStatTile } from "./CadenceStatTile.vue";
+export { default as CadenceTableFrame } from "./CadenceTableFrame.vue";
+export { default as CadenceValidationMessage } from "./CadenceValidationMessage.vue";
+export { default as WidgetFormField } from "./WidgetFormField.vue";
+
+export { default as AccountDropdownMenu } from "./AccountDropdownMenu.vue";
+export { default as CadenceCollapsible } from "./CadenceCollapsible.vue";
+export { default as CadenceCollapsibleContent } from "./CadenceCollapsibleContent.vue";
+export { default as CadenceCollapsibleTrigger } from "./CadenceCollapsibleTrigger.vue";
+export { default as CadenceMenu } from "./CadenceMenu.vue";
+export { default as CadenceMenuItem } from "./CadenceMenuItem.vue";
+export { default as CadenceModalMenu } from "./CadenceModalMenu.vue";
+export { default as CadencePopover } from "./CadencePopover.vue";
+export { default as CadenceToggle } from "./CadenceToggle.vue";
+export { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+export {
+  CADENCE_OVERLAY_OPENED_EVENT,
+  announceCadencePopoverOpened,
+  focusCurrentPopoverTrigger,
+  preservesPopoverOpenState,
+  subscribeToLegacyOverlayOpen,
+} from "./popover_compatibility.js";
+
+export type {
+  Attrs,
+  BreadcrumbItem,
+  BreadcrumbsPresentation,
+  CompactPageHeaderPresentation,
+  ElementPresentation,
+  EmptyStatePresentation,
+  PageHeaderAction,
+  PageHeaderPresentation,
+  TextPresentation,
+} from "./page_shell";
+export type { PresentationNode } from "./presentation_types";
+export type { Attributes, FieldPresentation, OptionPresentation } from "./widget_form_field";
