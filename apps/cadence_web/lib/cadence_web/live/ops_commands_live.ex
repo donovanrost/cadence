@@ -30,7 +30,7 @@ defmodule CadenceWeb.OpsCommandsLive do
         surface_id="commands"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{}}
+        query_params={@federated_query_params}
         v-ssr={false}
         class="contents"
       />

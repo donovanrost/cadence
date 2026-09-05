@@ -35,6 +35,23 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     assert_surface(view, "ops-commands-component", "commands", mission, %{})
   end
 
+  test "Commands forward their bounded URL query state to the federated surface" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/commands?status=queued&target=sc-1&query=deploy&focus_command_id=cmd-1&ignored=stale"
+      )
+
+    assert_surface(view, "ops-commands-component", "commands", mission, %{
+      "status" => "queued",
+      "target" => "sc-1",
+      "query" => "deploy",
+      "focus_command_id" => "cmd-1"
+    })
+  end
+
   test "legacy Explore bookmarks retain their complete query string" do
     {conn, mission} = signed_in()
 

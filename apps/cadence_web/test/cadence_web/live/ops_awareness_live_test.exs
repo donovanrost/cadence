@@ -17,7 +17,24 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/alarms?state=nominal&ignored=stale")
 
-    assert_surface(view, "ops-alarms-component", "alarms", mission, %{})
+    assert_surface(view, "ops-alarms-component", "alarms", mission, %{"state" => "nominal"})
+  end
+
+  test "alarms forward their bounded URL query state to the federated surface" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/alarms?severity=critical&state=active&spacecraft_id=sc-1&query=thermal&ignored=stale"
+      )
+
+    assert_surface(view, "ops-alarms-component", "alarms", mission, %{
+      "severity" => "critical",
+      "state" => "active",
+      "spacecraft_id" => "sc-1",
+      "query" => "thermal"
+    })
   end
 
   test "alarms remain authentication scoped" do

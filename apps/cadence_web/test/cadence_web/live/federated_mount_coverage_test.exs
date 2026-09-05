@@ -164,7 +164,7 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
 
     assert sources["data_sources"] =~ "data_source_registration"
     assert sources["data_sources"] =~ "data_source_settings"
-    assert sources["data_sources"] =~ "surface_id={surface_id}"
+    assert sources["data_sources"] =~ "surface_id={@surface_id}"
     assert sources["data_operations"] =~ "data_operations_manage"
     assert sources["data_operations"] =~ "surface_id={if(@data_operations_admin?"
 
