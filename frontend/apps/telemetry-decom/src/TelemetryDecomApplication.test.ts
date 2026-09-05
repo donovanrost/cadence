@@ -1,10 +1,40 @@
 import "./env.d.ts";
 
 import { flushPromises, mount } from "@vue/test-utils";
-import type { CatalogApplication, HostBridge, HostContext } from "@cadence/plugin-sdk";
+import {
+  assertReleaseMatchesModule,
+  type CatalogApplication,
+  type HostBridge,
+  type HostContext,
+} from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
 import TelemetryDecomApplication from "./TelemetryDecomApplication.vue";
 import { manifest } from "./federated-application";
+
+const phoenixSurfaceContracts = {
+  manage: {
+    surfaceId: "manage",
+    version: 1,
+    purpose: "configuration",
+    scope: "spacecraft",
+    placement: "application_workspace",
+    navigation: { label: "Manage", order: 30 },
+    dataContract: { id: "cadence.telemetry_decom.manage", version: 1 },
+    actions: ["save_configuration", "request_activation", "disable"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+  packet_bindings: {
+    surfaceId: "packet_bindings",
+    version: 1,
+    purpose: "configuration",
+    scope: "spacecraft",
+    placement: "application_workspace",
+    navigation: { label: "Packet bindings", order: 20 },
+    dataContract: { id: "cadence.packet_bindings.manage", version: 1 },
+    actions: ["save_packet_bindings"],
+    renderer: { kind: "federated-vue", exposedModule: "./Application" },
+  },
+} as const;
 
 const context: HostContext = {
   scope: "spacecraft",
@@ -34,7 +64,38 @@ function applicationFor(surfaceId: string): CatalogApplication {
   };
 }
 
+function phoenixApplicationFor(
+  surfaceId: keyof typeof phoenixSurfaceContracts,
+): CatalogApplication {
+  return {
+    applicationKey: "telemetry_decom",
+    applicationVersion: 1,
+    displayName: "Telemetry Decom",
+    description: "Bind packet fields and decode selected inputs into named telemetry points.",
+    package: { packageId: "cadence.telemetry-applications", version: 1 },
+    surface: phoenixSurfaceContracts[surfaceId],
+    release: {
+      federation: "module_federation",
+      releaseId: "telemetry-decom-v1",
+      remoteName: "cadence_telemetry_decom",
+      manifestUrl: "/assets/application-host/telemetry-decom/mf-manifest.json",
+      exposedModule: "./Application",
+    },
+  };
+}
+
 describe("Telemetry Decom federated application adapter", () => {
+  it("matches every Phoenix-approved exported surface before mount", () => {
+    for (const surfaceId of ["manage", "packet_bindings"] as const) {
+      expect(() =>
+        assertReleaseMatchesModule(phoenixApplicationFor(surfaceId), {
+          manifest,
+          default: TelemetryDecomApplication,
+        }),
+      ).not.toThrow();
+    }
+  });
+
   it("mounts both published surfaces and uses each declared query", async () => {
     for (const surface of manifest.surfaces) {
       const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});

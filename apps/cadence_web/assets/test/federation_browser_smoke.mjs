@@ -3595,7 +3595,11 @@ function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expect
   assert.equal(application.surface.surfaceId, surfaceId);
   assert.equal(application.surface.version, 1);
   assert.equal(application.release.federation, "module_federation");
-  assert.equal(application.release.exposedModule, "./Application");
+  assert.equal(
+    application.release.exposedModule,
+    application.surface.renderer.exposedModule,
+    `${applicationKey} catalog surface and release exposed modules diverged`,
+  );
   if (expectedReleaseId !== undefined) {
     assert.equal(application.release.releaseId, expectedReleaseId, `${applicationKey} catalog release changed`);
   }
@@ -3725,7 +3729,7 @@ async function assertRemoteSurface({
 
   const staticRemotePrefix =
     applicationKey === "comms_overview"
-      ? "/assets/application-host/comms-overview/"
+      ? "/assets/application-host/comms/"
       : "/assets/application-host/telemetry-decom/";
   const staticFallback = diagnostics.completed(
     (record) => {

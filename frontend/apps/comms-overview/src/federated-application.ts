@@ -25,7 +25,7 @@ export const legacyManifest = defineApplicationManifest({
     applicationKey: "comms_overview",
     version: 1,
     displayName: "Communications Overview",
-    description: "Review mission communications transport readiness and setup findings.",
+    description: "Review the saved communications setup for a mission.",
     installableScopes: ["mission"],
   },
   surfaces: [

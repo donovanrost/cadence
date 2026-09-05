@@ -1,6 +1,12 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FullPageSurfaceProps, HostBridge, MissionHostContext } from "@cadence/plugin-sdk";
+import {
+  assertReleaseMatchesModule,
+  type CatalogApplication,
+  type FullPageSurfaceProps,
+  type HostBridge,
+  type MissionHostContext,
+} from "@cadence/plugin-sdk";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
 import CanonicalApplication, {
   canonicalManifest,
@@ -68,13 +74,23 @@ const presentationResponse: CommsOverviewResponse = {
   },
 };
 
-const application = {
+const application: CatalogApplication = {
   applicationKey: "comms_overview",
   applicationVersion: 1,
   displayName: "Communications Overview",
-  description: "Mission communications overview.",
+  description: "Review the saved communications setup for a mission.",
   package: { packageId: "cadence.comms_overview", version: 1 },
-  surface: legacyManifest.surfaces[0],
+  surface: {
+    surfaceId: "overview",
+    version: 1,
+    purpose: "overview",
+    scope: "mission",
+    placement: "application_workspace",
+    navigation: { label: "Overview", order: 10 },
+    dataContract: { id: "cadence.comms.overview", version: 1 },
+    actions: [],
+    renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
+  },
   release: {
     federation: "module_federation" as const,
     releaseId: "comms-overview-v1",
@@ -399,5 +415,14 @@ describe("Comms Overview federated adapter", () => {
         renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
       }),
     ]);
+  });
+
+  it("matches the Phoenix-approved legacy host contract before mount", () => {
+    expect(() =>
+      assertReleaseMatchesModule(application, {
+        manifest: legacyManifest,
+        default: LegacyApplication,
+      }),
+    ).not.toThrow();
   });
 });
