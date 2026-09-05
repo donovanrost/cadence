@@ -3,6 +3,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
 
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
   alias Cadence.Auth.Scope
+  alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
 
   @action_contracts [
     %{
@@ -193,7 +194,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          params: params
        }) do
     values = input_map(params, "provider_account")
-    {:ok, %{patch: %{form: CadenceWeb.ProviderAccountNewLive.federated_form(values)}}}
+    {:ok, %{patch: %{form: Providers.ProviderAccountNew.form(values)}}}
   end
 
   defp execute_action(scope, _host_context, %ActionRequest{
@@ -201,7 +202,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          params: params
        }) do
     with {:ok, values} <- required_input_map(params, "provider_account"),
-         {:ok, result} <- CadenceWeb.ProviderAccountNewLive.federated_create(scope, values) do
+         {:ok, result} <- Providers.ProviderAccountNew.create(scope, values) do
       {:ok, result}
     end
   end
@@ -213,8 +214,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
     with {:ok, provider_account_id} <- required_param(params, "provider_account_id"),
          {:ok, _account} <-
            Cadence.GroundNetworks.ProviderAccounts.validate(scope, provider_account_id),
-         {:ok, props} <-
-           CadenceWeb.ProviderAccountShowLive.federated_props(scope, provider_account_id) do
+         {:ok, props} <- Providers.ProviderAccountShow.props(scope, provider_account_id) do
       {:ok, %{patch: props}}
     end
   end
@@ -228,8 +228,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
             ] do
     with {:ok, provider_account_id} <- required_param(params, "provider_account_id"),
          {:ok, _result} <- provider_account_action(scope, action_id, provider_account_id, params),
-         {:ok, props} <-
-           CadenceWeb.ProviderAccountShowLive.federated_props(scope, provider_account_id) do
+         {:ok, props} <- Providers.ProviderAccountShow.props(scope, provider_account_id) do
       {:ok, %{patch: props}}
     end
   end
@@ -268,7 +267,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          true <- notification.user_id == scope.user.user_id,
          {:ok, _updated} <-
            Cadence.Notifications.mark_notification_read(notification_id, scope.user.user_id) do
-      {:ok, %{patch: %{presentation: CadenceWeb.NotificationsLive.federated_presentation(scope)}}}
+      {:ok, %{patch: %{presentation: Providers.Notifications.presentation(scope)}}}
     else
       false -> {:error, failure("forbidden", "That notification is not available to this user.")}
       {:error, reason} -> {:error, reason}
@@ -279,7 +278,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          action_id: "refresh_runtime",
          params: params
        }),
-       do: {:ok, %{patch: CadenceWeb.AdminRuntimeLive.federated_props(params)}}
+       do: {:ok, %{patch: Providers.AdminRuntime.props(params)}}
 
   defp execute_action(_scope, _host_context, %ActionRequest{
          action_id: "filter_runtime_decisions",
@@ -288,10 +287,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
        do:
          {:ok,
           %{
-            patch:
-              CadenceWeb.AdminRuntimeLive.federated_props(
-                input_map(params, "runtime_decision_filters")
-              )
+            patch: Providers.AdminRuntime.props(input_map(params, "runtime_decision_filters"))
           }}
 
   defp execute_action(_scope, _host_context, %ActionRequest{
@@ -302,10 +298,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          {:ok,
           %{
             patch: %{
-              form:
-                CadenceWeb.AdminOrganizationNewLive.federated_form(
-                  input_map(params, "organization")
-                )
+              form: Providers.AdminOrganizationNew.form(input_map(params, "organization"))
             }
           }}
 
@@ -318,10 +311,11 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
     slug = normalize_text(value(values, "slug"))
 
     if is_binary(display_name) and is_binary(slug) do
-      case Cadence.Organizations.persist_organization(
-             Cadence.Organizations.Organization.new(%{display_name: display_name, slug: slug})
-           ) do
-        {:ok, _organization} -> {:ok, %{navigate: "/admin/organizations"}}
+      case Providers.AdminOrganizationNew.create(%{
+             "display_name" => display_name,
+             "slug" => slug
+           }) do
+        {:ok, result} -> {:ok, result}
         {:error, reason} -> {:error, reason}
       end
     else
@@ -335,7 +329,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
        }) do
     with {:ok, organization_id} <- required_param(params, "organization_id"),
          {:ok, result} <-
-           CadenceWeb.AdminOrganizationShowLive.federated_issue_service_identity(
+           Providers.AdminOrganizationShow.issue_service_identity(
              organization_id,
              input_map(params, "service_identity")
            ) do
@@ -351,8 +345,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
          {:ok,
           %{
             patch: %{
-              form:
-                CadenceWeb.AdminOrganizationInviteLive.federated_form(input_map(params, "invite"))
+              form: Providers.AdminOrganizationInvite.form(input_map(params, "invite"))
             }
           }}
 
@@ -362,8 +355,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
        }) do
     with {:ok, organization_id} <- required_param(params, "organization_id"),
          {:ok, values} <- required_input_map(params, "invite"),
-         {:ok, result} <-
-           CadenceWeb.AdminOrganizationInviteLive.federated_create(scope, organization_id, values) do
+         {:ok, result} <- Providers.AdminOrganizationInvite.create(scope, organization_id, values) do
       {:ok, result}
     end
   end
@@ -405,15 +397,17 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminAction do
   defp provider_account_action(scope, "grant_provider_account_mission", account_id, params) do
     grant = input_map(params, "grant")
 
-    Cadence.GroundNetworks.ProviderAccountGrants.grant(
-      scope,
-      value(grant, "mission_id"),
-      account_id,
-      %{
-        restrictions: grant_restrictions(grant),
-        grant_reason: optional_text(value(grant, "grant_reason"))
-      }
-    )
+    with {:ok, mission_id} <- required_param(grant, "mission_id") do
+      Cadence.GroundNetworks.ProviderAccountGrants.grant(
+        scope,
+        mission_id,
+        account_id,
+        %{
+          restrictions: grant_restrictions(grant),
+          grant_reason: optional_text(value(grant, "grant_reason"))
+        }
+      )
+    end
   end
 
   defp provider_account_action(scope, "revoke_provider_account_mission", _account_id, params) do

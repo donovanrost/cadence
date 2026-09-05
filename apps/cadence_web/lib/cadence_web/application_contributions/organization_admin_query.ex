@@ -3,6 +3,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
 
   alias Cadence.Applications.{HostContext, SurfaceQueryContribution, SurfaceQueryRequest}
   alias Cadence.Auth.{Policy, Scope}
+  alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
 
   @query_contracts [
     %{
@@ -113,12 +114,12 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
 
   defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
     with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
-      {:ok, %{presentation: CadenceWeb.OrganizationHomeLive.federated_presentation(organization)}}
+      {:ok, %{presentation: Providers.OrganizationHome.presentation(organization)}}
     end
   end
 
   defp surface_data(scope, %HostContext{placement: :organization}, "provider_accounts", _params),
-    do: CadenceWeb.ProviderAccountListLive.federated_props(scope)
+    do: Providers.ProviderAccountList.props(scope)
 
   defp surface_data(
          _scope,
@@ -126,7 +127,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
          "provider_account_new",
          _params
        ),
-       do: {:ok, CadenceWeb.ProviderAccountNewLive.federated_props()}
+       do: {:ok, Providers.ProviderAccountNew.props()}
 
   defp surface_data(
          scope,
@@ -135,12 +136,12 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
          params
        ) do
     with {:ok, provider_account_id} <- required_param(params, "provider_account_id") do
-      CadenceWeb.ProviderAccountShowLive.federated_props(scope, provider_account_id)
+      Providers.ProviderAccountShow.props(scope, provider_account_id)
     end
   end
 
   defp surface_data(scope, %HostContext{placement: :user}, "notifications", _params),
-    do: {:ok, %{presentation: CadenceWeb.NotificationsLive.federated_presentation(scope)}}
+    do: {:ok, %{presentation: Providers.Notifications.presentation(scope)}}
 
   defp surface_data(
          %Scope{user: %{user_id: user_id}},
@@ -162,26 +163,32 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminQuery do
   end
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_home", _params),
-    do: {:ok, CadenceWeb.AdminHomeLive.federated_props()}
+    do: {:ok, Providers.AdminHome.props()}
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_runtime", params),
-    do: {:ok, CadenceWeb.AdminRuntimeLive.federated_props(params)}
+    do: {:ok, Providers.AdminRuntime.props(params)}
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organizations", _params),
-    do: {:ok, CadenceWeb.AdminOrganizationListLive.federated_props()}
+    do: {:ok, Providers.AdminOrganizationList.props()}
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_new", _params),
-    do: {:ok, CadenceWeb.AdminOrganizationNewLive.federated_props()}
+    do: {:ok, Providers.AdminOrganizationNew.props()}
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_show", params) do
     with {:ok, organization_id} <- required_param(params, "organization_id") do
-      CadenceWeb.AdminOrganizationShowLive.federated_props(organization_id)
+      case Providers.AdminOrganizationShow.props(organization_id) do
+        {:ok, props} -> {:ok, props}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_organization_invite", params) do
     with {:ok, organization_id} <- required_param(params, "organization_id") do
-      CadenceWeb.AdminOrganizationInviteLive.federated_props(organization_id)
+      case Providers.AdminOrganizationInvite.props(organization_id) do
+        {:ok, props} -> {:ok, props}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
