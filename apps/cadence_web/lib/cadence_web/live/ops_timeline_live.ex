@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsTimelineLive do
 
   alias Cadence.MissionEvents.Entry
   alias Cadence.Reads.MissionTimeline
-  alias Phoenix.LiveView.JS
 
   @query_keys ~w(
     event_id category kind severity spacecraft_id scope_kind scope_id from to source_dashboard_id

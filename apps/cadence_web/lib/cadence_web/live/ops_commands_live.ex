@@ -5,7 +5,6 @@ defmodule CadenceWeb.OpsCommandsLive do
 
   alias Cadence.Reads.Commands
   alias CadenceWeb.OpsContextSnapshot
-  alias Phoenix.LiveView.JS
 
   @filter_keys ~w(status target query focus_command_id)
 

@@ -4,7 +4,6 @@ defmodule CadenceWeb.OpsContactScheduleLive do
   use CadenceWeb, :live_view
 
   alias CadenceWeb.OpsContactScheduleLive.{LiveDeps, OpportunityToken}
-  alias Phoenix.LiveView.JS
 
   @nonterminal_states [:requesting, :pending, :confirmed, :active, :unknown, :canceling]
 
@@ -293,171 +292,6 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       />
     </Layouts.app>
     """
-  end
-
-  defp page_dto(
-         mission,
-         contact_record_count,
-         opportunity_count,
-         reservation_count,
-         opportunities_empty?
-       ) do
-    %{
-      id: "ops-contacts-page",
-      header: %{
-        eyebrow: "Mission operations / contact control",
-        title: "Contacts",
-        description:
-          "Inspect scheduled and realized mission contacts, then plan provider capacity without mixing contact state into telemetry charts.",
-        scope: %{label: "Scope", value: "Mission contact truth"},
-        contact_count: %{
-          id: "contact-record-count",
-          label: "Contacts",
-          value: contact_record_count
-        },
-        reservation_count: %{
-          id: "provider-reservation-count",
-          label: "Reservations",
-          value: reservation_count
-        }
-      },
-      contact_ledger: %{
-        id: "mission-contact-ledger",
-        eyebrow: "Canonical contact ledger",
-        title: "Scheduled and realized mission contacts",
-        description:
-          "Open a record for lifecycle evidence or hand its exact window to Telemetry Explore.",
-        timeline_action: %{
-          id: "contacts-open-timeline",
-          label: "Mission Timeline",
-          icon: "hero-clock",
-          href: ~p"/missions/#{mission.mission_id}/ops/timeline?#{%{category: "operations"}}"
-        },
-        rows_id: "contact-records",
-        empty: %{
-          id: "contact-records-empty",
-          icon: "hero-signal-slash",
-          copy: "No scheduled or realized contacts for this mission.",
-          visible: contact_record_count == 0
-        }
-      },
-      opportunity_search: %{
-        eyebrow: "01 / Opportunity search",
-        description: "All times are coordinated universal time.",
-        icon: "hero-signal"
-      },
-      opportunities: %{
-        eyebrow: "02 / Provider opportunities",
-        description: "Select a provider-owned window to create a durable reservation attempt.",
-        count: %{id: "contact-opportunity-count", value: opportunity_count},
-        rows_id: "contact-opportunities",
-        empty: %{
-          id: "contact-opportunities-empty",
-          icon: "hero-magnifying-glass",
-          copy: "Search a UTC window to load provider opportunities.",
-          visible: opportunities_empty?
-        }
-      },
-      reservations: %{
-        eyebrow: "03 / Reservation ledger",
-        description: "Provider truth and Cadence contact state remain visible independently.",
-        rows_id: "provider-reservations",
-        empty: %{
-          id: "provider-reservations-empty",
-          icon: "hero-calendar-days",
-          copy: "No provider reservations for this mission.",
-          visible: reservation_count == 0
-        }
-      }
-    }
-  end
-
-  defp search_dto(search_form, spacecraft, ready_routes, searching?, search_error) do
-    values =
-      Map.take(search_form.params, ["spacecraft_id", "route_key", "starts_at", "ends_at"])
-
-    %{
-      id: "contact-opportunity-search-form",
-      values: values,
-      fields: %{
-        spacecraft:
-          select_field_dto(
-            "contact-spacecraft",
-            "contact_search[spacecraft_id]",
-            "Spacecraft",
-            spacecraft_options(spacecraft)
-          ),
-        route:
-          select_field_dto(
-            "contact-route",
-            "contact_search[route_key]",
-            "Downlink route / provider",
-            route_options(ready_routes)
-          ),
-        starts_at:
-          datetime_field_dto(
-            "contact-window-start",
-            "contact_search[starts_at]",
-            "Window starts (UTC)"
-          ),
-        ends_at:
-          datetime_field_dto(
-            "contact-window-end",
-            "contact_search[ends_at]",
-            "Window ends (UTC)"
-          )
-      },
-      submit: %{
-        id: "search-contact-opportunities",
-        label: if(searching?, do: "Searching provider", else: "Search opportunities"),
-        busy: searching?,
-        disabled: searching? or ready_routes == []
-      },
-      error:
-        if(search_error,
-          do: %{id: "contact-search-error", message: search_error},
-          else: nil
-        )
-    }
-  end
-
-  defp select_field_dto(id, name, label, options) do
-    %{
-      id: id,
-      name: name,
-      type: "select",
-      label: label,
-      options:
-        Enum.map(options, fn {option_label, value} -> %{label: option_label, value: value} end)
-    }
-  end
-
-  defp datetime_field_dto(id, name, label) do
-    %{id: id, name: name, type: "datetime-local", label: label}
-  end
-
-  defp readiness_dto(_mission, ready_routes, _findings) when ready_routes != [], do: nil
-
-  defp readiness_dto(mission, _ready_routes, findings) do
-    %{
-      id: "contact-readiness-empty",
-      title: "No provider-ready downlink route",
-      findings: Enum.map(findings, &%{message: &1.message}),
-      action: %{
-        label: "Review Comms routing",
-        icon: "hero-arrow-right",
-        href: ~p"/missions/#{mission.mission_id}/comms/routing"
-      }
-    }
-  end
-
-  defp busy_dto(reservation_busy) do
-    keys = reservation_busy |> MapSet.to_list() |> Enum.sort()
-
-    %{
-      keys: keys,
-      actions: Map.new(keys, &{&1, %{busy: true, disabled: true}})
-    }
   end
 
   defp contact_record_dto(row, mission_id) do
@@ -952,17 +786,6 @@ defmodule CadenceWeb.OpsContactScheduleLive do
 
   defp clear_busy(socket, key) do
     assign(socket, :reservation_busy, MapSet.delete(socket.assigns.reservation_busy, key))
-  end
-
-  defp spacecraft_options(spacecraft) do
-    Enum.map(spacecraft, &{&1.display_name, &1.spacecraft_id})
-  end
-
-  defp route_options(routes) do
-    Enum.map(routes, fn route ->
-      {"#{route.provider_display_name} / #{route.delivery_operator_summary} / #{route.route_display_name}",
-       route.route_key}
-    end)
   end
 
   defp resolve_live_deps(socket) do

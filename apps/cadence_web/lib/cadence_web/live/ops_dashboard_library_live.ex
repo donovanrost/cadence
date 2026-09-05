@@ -3,7 +3,6 @@ defmodule CadenceWeb.OpsDashboardLibraryLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Dashboards.Management
-  alias Phoenix.LiveView.JS
 
   @default_widget_json Jason.encode!(
                          %{

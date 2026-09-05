@@ -10,8 +10,6 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
     FleetPlanningRuns
   }
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(_params, _session, socket) do
     socket =

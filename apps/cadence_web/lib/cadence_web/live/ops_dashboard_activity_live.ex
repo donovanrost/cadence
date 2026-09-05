@@ -6,8 +6,7 @@ defmodule CadenceWeb.OpsDashboardActivityLive do
   alias CadenceWeb.DashboardAuthorAuth
 
   alias CadenceWeb.OpsDashboardShowLive.{
-    PublishReadinessModel,
-    PublishValidationComponents
+    PublishReadinessModel
   }
 
   @impl true

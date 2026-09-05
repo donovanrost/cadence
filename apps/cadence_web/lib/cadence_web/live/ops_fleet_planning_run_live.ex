@@ -13,8 +13,6 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
     Planner
   }
 
-  alias Phoenix.LiveView.JS
-
   @phases [:queued, :materializing, :searching, :optimizing, :materializing_plan, :finished]
 
   @impl true
@@ -121,182 +119,6 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
       />
     </Layouts.app>
     """
-  end
-
-  defp run_page_dto(
-         mission,
-         run,
-         plan,
-         decision_count,
-         commitment_count,
-         locked_count,
-         exception_count,
-         automation_action_count
-       ) do
-    %{
-      id: "ops-fleet-planning-run-page",
-      back: %{
-        href: ~p"/missions/#{mission.mission_id}/ops/planning",
-        icon: "hero-arrow-left",
-        label: "Fleet planning"
-      },
-      header: %{
-        lifecycle: %{
-          state: Atom.to_string(run.lifecycle_state),
-          label: humanize(run.lifecycle_state),
-          class: run_state_class(run.lifecycle_state)
-        },
-        algorithm: "#{run.trigger_kind} · #{run.algorithm_key} v#{run.algorithm_version}",
-        title: "Fleet horizon evidence",
-        run_id: run.fleet_planning_run_id,
-        refresh: %{
-          id: "refresh-fleet-planning-run",
-          icon: "hero-arrow-path",
-          label: "Refresh",
-          payload: %{}
-        },
-        candidate_plan: candidate_plan_action_dto(mission.mission_id, plan)
-      },
-      phase_strip: %{
-        id: "fleet-run-phase-strip",
-        phases:
-          @phases
-          |> Enum.with_index(1)
-          |> Enum.map(fn {phase, index} -> phase_dto(phase, index, run.phase) end)
-      },
-      horizon: %{
-        id: "fleet-run-horizon-rail",
-        label: "Mission horizon rail",
-        range: "#{format_time(run.horizon_start)} → #{format_time(run.horizon_end)}",
-        counts: "#{commitment_count} selected · #{locked_count} locked",
-        list_id: "fleet-horizon-commitments",
-        empty: %{
-          id: "fleet-horizon-commitments-empty",
-          copy: "No selected provider windows."
-        }
-      },
-      coverage: %{
-        id: "fleet-coverage-matrix",
-        columns: ["Spacecraft / Requirement", "Input", "Coverage", "Stage 4"],
-        list_id: "fleet-requirement-rows",
-        empty: %{id: "fleet-requirement-rows-empty", copy: "No Requirement inputs."}
-      },
-      decision_inspector: %{
-        id: "fleet-decision-inspector",
-        label: "Decision inspector",
-        copy: "One durable rationale for every considered opportunity.",
-        count: decision_count,
-        list_id: "fleet-decisions",
-        empty: %{
-          id: "fleet-decisions-empty",
-          copy: "Decisions appear after optimization."
-        }
-      },
-      exception_queue: %{
-        visible: exception_count > 0,
-        id: "fleet-exception-queue",
-        label: "Exception queue · #{exception_count}",
-        list_id: "fleet-exceptions",
-        empty_id: "fleet-exceptions-empty"
-      },
-      resource_pressure: %{
-        id: "fleet-resource-pressure",
-        label: "Provider resource pressure",
-        list_id: "fleet-resource-pressure-rows",
-        empty: %{
-          id: "fleet-resource-pressure-empty",
-          copy: "Resource pressure appears after optimization."
-        }
-      },
-      automation: %{
-        visible: automation_action_count > 0,
-        label: "Automation evidence",
-        list_id: "fleet-automation-actions",
-        empty_id: "fleet-automation-actions-empty"
-      },
-      failure: failure_dto(run.failure_document)
-    }
-  end
-
-  defp candidate_plan_action_dto(_mission_id, nil), do: nil
-
-  defp candidate_plan_action_dto(mission_id, plan) do
-    %{
-      id: "fleet-run-candidate-plan-link",
-      href: ~p"/missions/#{mission_id}/ops/plans/#{plan.contact_plan_id}",
-      label: "Open candidate Plan",
-      icon: "hero-arrow-right"
-    }
-  end
-
-  defp phase_dto(phase, index, current) do
-    %{
-      index: String.pad_leading(Integer.to_string(index), 2, "0"),
-      state: Atom.to_string(phase),
-      label: humanize(phase),
-      complete: phase_index(phase) < phase_index(current),
-      current: phase == current
-    }
-  end
-
-  defp failure_dto(failure) when map_size(failure) == 0, do: nil
-
-  defp failure_dto(failure) do
-    %{
-      id: "fleet-run-failure",
-      label: "Stopped safely",
-      reason: humanize(failure["reason_code"] || failure["code"]),
-      phase: failure["phase"]
-    }
-  end
-
-  defp repair_form_dto(_form, false, _run), do: nil
-
-  defp repair_form_dto(form, true, run) do
-    %{
-      panel_id: "fleet-repair-panel",
-      id: "fleet-repair-form",
-      sync_key: run.fleet_planning_run_id,
-      label: "Repair without compensation",
-      copy:
-        "Successful and uncertain commitments remain locked. Only unmet capacity is searched and selected again.",
-      fields: %{
-        horizon_start:
-          repair_field_dto(
-            form,
-            :horizon_start,
-            "fleet-repair-horizon-start",
-            "Repair starts (UTC)"
-          ),
-        horizon_end:
-          repair_field_dto(
-            form,
-            :horizon_end,
-            "fleet-repair-horizon-end",
-            "Repair ends (UTC)"
-          )
-      },
-      submit: %{id: "start-fleet-repair", label: "Start repair run"}
-    }
-  end
-
-  defp repair_field_dto(form, field, id, label) do
-    %{
-      id: id,
-      name: "repair[#{field}]",
-      type: "datetime-local",
-      label: label,
-      required: true,
-      value: form_string_value(form, field)
-    }
-  end
-
-  defp form_string_value(form, field) do
-    case Map.get(form.params, Atom.to_string(field)) do
-      value when is_binary(value) -> value
-      nil -> ""
-      value -> to_string(value)
-    end
   end
 
   defp load_run(socket) do
@@ -583,7 +405,6 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
     min(100, max(4, round(100 * peak / max(capacity, 1))))
   end
 
-  defp phase_index(phase), do: Enum.find_index(@phases, &(&1 == phase)) || 0
   defp duration(snapshot), do: DateTime.diff(snapshot.ends_at, snapshot.starts_at, :second)
   defp later(left, right), do: if(DateTime.after?(left, right), do: left, else: right)
   defp earlier(left, right), do: if(DateTime.before?(left, right), do: left, else: right)
@@ -597,22 +418,6 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
   end
 
   defp parse_datetime(_value), do: {:error, :fleet_repair_horizon_invalid}
-
-  defp run_state_class(:failed),
-    do:
-      "border border-error/40 bg-error/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-error"
-
-  defp run_state_class(:partial),
-    do:
-      "border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-warning"
-
-  defp run_state_class(state) when state in [:queued, :running],
-    do:
-      "border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-primary"
-
-  defp run_state_class(_state),
-    do:
-      "border border-base-300 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-base-content/60"
 
   defp decision_class(:locked),
     do:
