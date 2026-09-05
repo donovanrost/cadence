@@ -328,14 +328,14 @@ const rendererOverrides = new Map([
     "CadenceWeb.OpsDataSourcesLive",
     {
       target: "CadenceWeb.OpsDataSourcesLive.Page",
-      delegation: /def render\(assigns\), do: Page\.render\(assigns\)/,
+      delegation: /def render\(assigns\), do: CadenceWeb\.OpsDataSourcesLive\.Page\.render\(assigns\)/,
     },
   ],
   [
     "CadenceWeb.OpsTelemetryExploreLive",
     {
       target: "CadenceWeb.OpsTelemetryExploreComponents",
-      delegation: /def render\(assigns\), do: OpsTelemetryExploreComponents\.page\(assigns\)/,
+      delegation: /def render\(assigns\), do: CadenceWeb\.OpsTelemetryExploreComponents\.page\(assigns\)/,
     },
   ],
 ])
