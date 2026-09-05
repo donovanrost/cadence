@@ -80,7 +80,10 @@ defmodule CadenceWeb.SpacecraftListLive do
       <.vue
         id="spacecraft-list-component"
         v-component="FederatedFullPageSurface"
-        presentation={@presentation}
+        application_key="spacecraft"
+        surface_id="list"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

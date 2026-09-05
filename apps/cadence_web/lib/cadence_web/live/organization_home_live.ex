@@ -22,8 +22,11 @@ defmodule CadenceWeb.OrganizationHomeLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="organization-home-component"
-        v-component="OrganizationHome"
-        presentation={@presentation}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="organization_home"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
       />
     </Layouts.app>

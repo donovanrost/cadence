@@ -65,9 +65,11 @@ defmodule CadenceWeb.ProviderAccountListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="provider-account-list-page-component"
-        v-component="ProviderAccountListPage"
-        presentation={@presentation}
-        provider_accounts={@streams.provider_accounts}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="provider_accounts"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
         class="contents"
       />

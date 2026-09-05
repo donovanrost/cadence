@@ -160,72 +160,8 @@
       "reason": "Catalog table remains a nested compatibility component."
     },
     {
-      "component": "CatalogImportRunShow",
-      "reason": "Import-run status lifecycle remains Phoenix-owned until a released surface is admitted."
-    },
-    {
-      "component": "CommsValidation",
-      "reason": "Validation actions remain Phoenix-owned until a matching released surface is admitted."
-    },
-    {
-      "component": "SpacecraftTypeListPage",
-      "reason": "Spacecraft profile compatibility page remains Phoenix-owned until a matching release is admitted."
-    },
-    {
-      "component": "SpacecraftTypeNew",
-      "reason": "Spacecraft profile validation and actions remain Phoenix-owned until a matching release is admitted."
-    },
-    {
-      "component": "SpacecraftTypeShow",
-      "reason": "Spacecraft profile detail lifecycle remains Phoenix-owned until a matching release is admitted."
-    },
-    {
       "component": "LiveVuePocPage",
       "reason": "Developer-only LiveVue proof page is not an authenticated domain surface."
-    },
-    {
-      "component": "AdminHome",
-      "reason": "Platform-admin transition remains in the authenticated Phoenix admin compatibility surface."
-    },
-    {
-      "component": "AdminRuntime",
-      "reason": "Platform-admin runtime actions remain Phoenix-owned until an admin-scope host surface is admitted."
-    },
-    {
-      "component": "AdminOrganizationListPage",
-      "reason": "Platform-admin organization lifecycle remains Phoenix-owned until an admin-scope host surface is admitted."
-    },
-    {
-      "component": "AdminOrganizationNew",
-      "reason": "Platform-admin organization validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "AdminOrganizationShow",
-      "reason": "Platform-admin organization detail lifecycle remains Phoenix-owned."
-    },
-    {
-      "component": "AdminOrganizationInvite",
-      "reason": "Platform-admin invitation validation and actions remain Phoenix-owned."
-    },
-    {
-      "component": "NotificationsPage",
-      "reason": "User-scope notifications have no mission context required by the current host bootstrap."
-    },
-    {
-      "component": "OrganizationHome",
-      "reason": "Organization-scope home has no mission context required by the current host bootstrap."
-    },
-    {
-      "component": "ProviderAccountListPage",
-      "reason": "Organization-scope provider accounts have no mission context required by the current host bootstrap."
-    },
-    {
-      "component": "ProviderAccountNew",
-      "reason": "Organization-scope provider validation has no mission context required by the current host bootstrap."
-    },
-    {
-      "component": "ProviderAccountShow",
-      "reason": "Organization-scope provider detail has no mission context required by the current host bootstrap."
     },
     {
       "component": "ActivityTimeline",

@@ -2,8 +2,6 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(%{"org_id" => org_id}, _session, socket) do
     case Cadence.Organizations.fetch_organization(org_id) do
@@ -78,11 +76,10 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="admin-organization-invite-component"
-        v-component="AdminOrganizationInvite"
-        page={@page}
-        form={@form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="admin_organization_invite"
+        host_scope="admin"
         v-ssr={false}
       />
     </Layouts.app>

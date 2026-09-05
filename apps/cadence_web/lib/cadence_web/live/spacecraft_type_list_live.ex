@@ -40,8 +40,11 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-type-list-page-component"
-        v-component="SpacecraftTypeListPage"
-        presentation={@presentation}
+        v-component="FederatedFullPageSurface"
+        application_key="spacecraft"
+        surface_id="profile_list"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

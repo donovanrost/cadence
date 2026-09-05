@@ -3,7 +3,6 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Auth.ServiceIdentity
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"org_id" => org_id}, _session, socket) do
@@ -82,16 +81,10 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
       <div id="admin-organization-show-page">
         <.vue
           id="admin-organization-show-component"
-          v-component="AdminOrganizationShow"
-          organization={@organization}
-          navigation={@navigation}
-          members={@members}
-          invitations={@invitations}
-          service_identities={@service_identities}
-          service_identity_form={@service_identity_form}
-          issued_service_token={@issued_service_token}
-          v-on:issue-service-identity={JS.push("issue-service-identity")}
-          v-on:dismiss-service-token={JS.push("dismiss-service-token")}
+          v-component="FederatedFullPageSurface"
+          application_key="organization_admin"
+          surface_id="admin_organization_show"
+          host_scope="admin"
           v-ssr={false}
         />
       </div>

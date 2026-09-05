@@ -1,6 +1,5 @@
 defmodule CadenceWeb.CommsGroundStationShowLive do
   alias Cadence.Comms.GroundStationStore
-  alias Phoenix.LiveView.JS
 
   @moduledoc false
   use CadenceWeb, :live_view
@@ -63,10 +62,10 @@ defmodule CadenceWeb.CommsGroundStationShowLive do
         <.vue
           id="comms-ground-station-show-component"
           v-component="FederatedFullPageSurface"
-          navigation={@navigation}
-          ground_station={@ground_station_details}
-          actions={@actions}
-          v-on:archive={JS.push("archive")}
+          application_key="comms"
+          surface_id="ground_station"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

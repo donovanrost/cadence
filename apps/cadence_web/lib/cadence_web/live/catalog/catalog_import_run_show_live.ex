@@ -55,12 +55,10 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
         <.vue
           id="catalog-import-run-show-component"
           v-component="FederatedFullPageSurface"
-          navigation={@navigation}
-          status={@status}
-          run_details={@run_details}
-          mission_model={@mission_model}
-          diagnostic_groups={@diagnostic_groups}
-          failure_reason={@failure_reason}
+          application_key="mission_catalog"
+          surface_id="catalog_import_run_show"
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
           v-ssr={false}
         />
       </div>

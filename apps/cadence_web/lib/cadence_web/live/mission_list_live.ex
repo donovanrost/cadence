@@ -23,7 +23,10 @@ defmodule CadenceWeb.MissionListLive do
       <.vue
         id="mission-list-component"
         v-component="FederatedFullPageSurface"
-        presentation={@mission_list_presentation}
+        application_key="mission_catalog"
+        surface_id="mission_list"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
       />
     </Layouts.app>

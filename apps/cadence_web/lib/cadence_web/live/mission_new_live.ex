@@ -7,7 +7,6 @@ defmodule CadenceWeb.MissionNewLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Missions.Mission
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -84,10 +83,10 @@ defmodule CadenceWeb.MissionNewLive do
       <.vue
         id="mission-new-component"
         v-component="FederatedFullPageSurface"
-        page={@mission_page}
-        form={@mission_form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="mission_catalog"
+        surface_id="mission_new"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
         class="space-y-6 max-w-xl"
       />

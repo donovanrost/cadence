@@ -3,7 +3,6 @@ defmodule CadenceWeb.AdminRuntimeLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Projections.DashboardRuntimeInvalidations, as: DashboardRuntimeInvalidations
-  alias Phoenix.LiveView.JS
 
   @decision_limit 100
   @filter_keys [
@@ -64,14 +63,10 @@ defmodule CadenceWeb.AdminRuntimeLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="admin-runtime-component"
-        v-component="AdminRuntime"
-        summary={@runtime_summary}
-        filters={@runtime_filters}
-        decisions={@streams.decisions}
-        selection={@runtime_selection}
-        navigation={@runtime_navigation}
-        v-on:refresh={JS.push("refresh")}
-        v-on:filter_decisions={JS.push("filter_decisions")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="admin_runtime"
+        host_scope="admin"
         v-ssr={false}
         class="contents"
       />

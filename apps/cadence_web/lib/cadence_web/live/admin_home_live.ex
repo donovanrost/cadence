@@ -21,11 +21,10 @@ defmodule CadenceWeb.AdminHomeLive do
       <div id="admin-home-page">
         <.vue
           id="admin-home-component"
-          v-component="AdminHome"
-          organization_count={@org_count}
-          user_count={@user_count}
-          presentation={@presentation}
-          navigation={@navigation}
+          v-component="FederatedFullPageSurface"
+          application_key="organization_admin"
+          surface_id="admin_home"
+          host_scope="admin"
           v-ssr={false}
         />
       </div>

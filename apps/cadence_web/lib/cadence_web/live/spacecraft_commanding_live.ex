@@ -23,9 +23,11 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
       <.vue
         id="spacecraft-commanding-component"
         v-component="FederatedFullPageSurface"
-        page={@commanding_page}
-        panels={@command_panels}
-        readiness={@readiness_impact}
+        application_key="spacecraft"
+        surface_id="commanding"
+        host_scope="spacecraft"
+        mission_id={@current_mission.mission_id}
+        spacecraft_id={@current_spacecraft.spacecraft_id}
         v-ssr={false}
       />
     </Layouts.app>

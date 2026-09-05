@@ -8,7 +8,6 @@ defmodule CadenceWeb.CommsTransportNewLive do
   alias Cadence.Management.Providers
   alias Cadence.Management.Transports
   alias Phoenix.HTML.Form
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -69,10 +68,10 @@ defmodule CadenceWeb.CommsTransportNewLive do
       <.vue
         id="comms-transport-new-component"
         v-component="FederatedFullPageSurface"
-        page={transport_page_dto(@current_mission, @return_to)}
-        form={transport_form_dto(assigns)}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="comms"
+        surface_id="transport"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

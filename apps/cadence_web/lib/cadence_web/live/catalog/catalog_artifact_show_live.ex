@@ -6,7 +6,6 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.Events
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(%{"artifact_id" => artifact_id}, _session, socket) do
@@ -95,8 +94,10 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
       <.vue
         id="catalog-artifact-show-page-component"
         v-component="FederatedFullPageSurface"
-        presentation={@catalog_artifact_show_presentation}
-        v-on:reimport={JS.push("reimport")}
+        application_key="mission_catalog"
+        surface_id="catalog_artifact_show"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
         v-ssr={false}
         class="contents"
       />

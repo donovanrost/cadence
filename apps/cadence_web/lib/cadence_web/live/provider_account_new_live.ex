@@ -7,7 +7,6 @@ defmodule CadenceWeb.ProviderAccountNewLive do
   alias Cadence.Extensions.Presentation.{ConfigurationDefinition, FieldDefinition}
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Ids
-  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do
@@ -71,11 +70,11 @@ defmodule CadenceWeb.ProviderAccountNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="provider-account-new-component"
-        v-component="ProviderAccountNew"
-        page={@provider_account_page}
-        form={@provider_account_form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        v-component="FederatedFullPageSurface"
+        application_key="organization_admin"
+        surface_id="provider_account_new"
+        host_scope="organization"
+        organization_id={@current_scope.organization.organization_id}
         v-ssr={false}
         class="max-w-3xl space-y-6"
       />
