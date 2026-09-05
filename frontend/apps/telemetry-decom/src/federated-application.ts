@@ -23,7 +23,7 @@ export const manifest = defineApplicationManifest({
     applicationKey: "telemetry_decom",
     version: 1,
     displayName: "Telemetry Decom",
-    description: "Choose the packet inputs decoded for an installed spacecraft.",
+    description: "Bind packet fields and decode selected inputs into named telemetry points.",
     installableScopes: ["spacecraft"],
   },
   surfaces: [
@@ -33,7 +33,7 @@ export const manifest = defineApplicationManifest({
       purpose: "configuration",
       scope: "spacecraft",
       placement: "application_workspace",
-      navigation: { label: "Manage", order: 10 },
+      navigation: { label: "Manage", order: 30 },
       dataContract: { id: "cadence.telemetry_decom.manage", version: 1 },
       actions: ["save_configuration", "request_activation", "disable"],
       renderer: { kind: "federated-vue", exposedModule: "./Application" },
