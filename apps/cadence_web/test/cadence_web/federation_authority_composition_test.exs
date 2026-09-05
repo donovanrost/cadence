@@ -2,6 +2,7 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.{CatalogRegistry, ReleaseContribution, ReleaseRegistry}
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
   alias CadenceWeb.ApplicationContributions.OrganizationAdmin
 
   @canonical_keys ~w(
@@ -40,5 +41,25 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     assert Enum.sort(release_keys) == Enum.sort(catalog_surface_ids)
 
     assert length(OrganizationAdmin.surfaces()) == 12
+  end
+
+  test "composes the exact core and optional web query contribution ledger" do
+    contributions = SurfaceProviderRegistry.contributions()
+
+    assert length(contributions) == 89
+
+    assert contributions
+           |> Enum.frequencies_by(& &1.application_key) == %{
+             "comms" => 15,
+             "spacecraft" => 12,
+             "mission_catalog" => 10,
+             "telemetry_decom" => 1,
+             "derived_telemetry" => 1,
+             "limits" => 2,
+             "ops_console" => 36,
+             "organization_admin" => 12
+           }
+
+    assert Enum.count(contributions, &(&1.application_key == "organization_admin")) == 12
   end
 end

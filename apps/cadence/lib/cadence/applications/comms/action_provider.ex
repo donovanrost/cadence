@@ -1,10 +1,6 @@
 defmodule Cadence.Applications.Comms.ActionProvider do
   @moduledoc "Typed action adapter for mission Comms provider operations."
 
-  # ActionRequest currently has no surface_id field.  The optional lookup below
-  # is deliberately fail-closed when that field is composed into the host: it
-  # then binds the shared validate/save IDs to the declared form surface.
-
   @behaviour Cadence.Applications.ActionProvider
 
   alias Cadence.Applications.{ActionRequest, HostContext}
@@ -26,6 +22,7 @@ defmodule Cadence.Applications.Comms.ActionProvider do
   alias Cadence.Missions
 
   @application_key "comms"
+  @form_surfaces ~w(transport_new routing_new ground_station_new ground_station_edit)
 
   @impl true
   def application_key, do: @application_key
@@ -37,11 +34,14 @@ defmodule Cadence.Applications.Comms.ActionProvider do
           application_key: @application_key,
           application_version: 1,
           action_id: "validate",
+          surface_id: surface_id,
+          surface_version: 1,
           params: params
-        } = request
-      ) do
+        }
+      )
+      when surface_id in @form_surfaces and is_map(params) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         :ok <- validate_form(params, request_surface_id(request)) do
+         :ok <- validate_form(params, surface_id) do
       {:ok, %{"valid" => true}}
     end
   end
@@ -53,11 +53,14 @@ defmodule Cadence.Applications.Comms.ActionProvider do
           application_key: @application_key,
           application_version: 1,
           action_id: "save",
+          surface_id: surface_id,
+          surface_version: 1,
           params: params
-        } = request
-      ) do
+        }
+      )
+      when surface_id in @form_surfaces and is_map(params) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
-      save_form(scope, mission_id, params, request_surface_id(request))
+      save_form(scope, mission_id, params, surface_id)
     end
   end
 
@@ -148,10 +151,9 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp save_form(scope, mission_id, %{"transport" => params}, surface_id)
-       when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "transport_new"),
-         {:ok, display_name} <- required_text(params, "display_name"),
+  defp save_form(scope, mission_id, %{"transport" => params} = payload, "transport_new")
+       when is_map(params) and map_size(payload) == 1 do
+    with {:ok, display_name} <- required_text(params, "display_name"),
          {:ok, transport} <- build_transport(scope, mission_id, params, display_name),
          {:ok, saved} <- Transports.persist_transport(scope.organization_id, transport) do
       href = "/missions/#{mission_id}/comms/transports/#{saved.transport_id}"
@@ -159,10 +161,9 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp save_form(scope, mission_id, %{"routing_rule" => params}, surface_id)
-       when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "routing_new"),
-         {:ok, display_name} <- required_text(params, "display_name"),
+  defp save_form(scope, mission_id, %{"routing_rule" => params} = payload, "routing_new")
+       when is_map(params) and map_size(payload) == 1 do
+    with {:ok, display_name} <- required_text(params, "display_name"),
          {:ok, purpose_label} <- required_text(params, "purpose_label"),
          {:ok, spacecraft_id} <- required_text(params, "spacecraft_id"),
          {:ok, transport_ref} <- transport_ref(params),
@@ -189,10 +190,10 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp save_form(scope, mission_id, %{"ground_station" => params}, surface_id)
-       when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "ground_station_form"),
-         {:ok, attrs} <- ground_station_attrs(params) do
+  defp save_form(scope, mission_id, %{"ground_station" => params} = payload, surface_id)
+       when surface_id in ["ground_station_new", "ground_station_edit"] and
+              is_map(params) and map_size(payload) == 1 do
+    with {:ok, attrs} <- ground_station_attrs(params) do
       save_ground_station(scope, mission_id, attrs, surface_id)
     end
   end
@@ -233,9 +234,6 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp save_ground_station(scope, mission_id, attrs, nil),
-    do: save_ground_station_legacy(scope, mission_id, attrs)
-
   defp persist_ground_station(scope, mission_id, attrs) do
     with {:ok, saved} <-
            GroundStationStore.persist_ground_station(
@@ -247,61 +245,28 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp save_ground_station_legacy(scope, mission_id, %{ground_station_id: id} = attrs) do
-    case Cadence.Comms.GroundStationStore.fetch_ground_station(
-           scope.organization_id,
-           mission_id,
-           id
-         ) do
-      {:ok, _current} ->
-        with {:ok, saved} <-
-               GroundStationStore.update_ground_station(
-                 scope.organization_id,
-                 mission_id,
-                 id,
-                 Map.delete(attrs, :ground_station_id)
-               ) do
-          href = "/missions/#{mission_id}/comms/ground-stations/#{saved.ground_station_id}"
-          {:ok, navigation_result("groundStationId", saved.ground_station_id, href)}
-        end
-
-      {:error, :ground_station_not_found} ->
-        persist_ground_station(scope, mission_id, attrs)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp surface_payload_type(nil, _expected), do: :ok
-  defp surface_payload_type("transport_new", "transport_new"), do: :ok
-  defp surface_payload_type("routing_new", "routing_new"), do: :ok
-
-  defp surface_payload_type(surface_id, "ground_station_form")
-       when surface_id in ["ground_station_new", "ground_station_edit"],
-       do: :ok
-
-  defp surface_payload_type(_surface_id, _expected), do: {:error, :invalid_application_request}
-
   defp validate_form(params, surface_id) do
     validate_form_for_surface(params, surface_id)
   end
 
-  defp request_surface_id(%ActionRequest{} = request),
-    do: Map.get(Map.from_struct(request), :surface_id)
-
-  defp validate_form_for_surface(%{"transport" => params}, surface_id) when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "transport_new"),
-         {:ok, _display_name} <- required_text(params, "display_name"),
+  defp validate_form_for_surface(
+         %{"transport" => params} = payload,
+         "transport_new"
+       )
+       when is_map(params) and map_size(payload) == 1 do
+    with {:ok, _display_name} <- required_text(params, "display_name"),
          {:ok, _kind} <-
            ExtensionCatalog.fetch_transport_kind(Map.get(params, "transport_kind", "tcp_socket")) do
       :ok
     end
   end
 
-  defp validate_form_for_surface(%{"routing_rule" => params}, surface_id) when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "routing_new"),
-         {:ok, _display_name} <- required_text(params, "display_name"),
+  defp validate_form_for_surface(
+         %{"routing_rule" => params} = payload,
+         "routing_new"
+       )
+       when is_map(params) and map_size(payload) == 1 do
+    with {:ok, _display_name} <- required_text(params, "display_name"),
          {:ok, _purpose} <- required_text(params, "purpose_label"),
          {:ok, _spacecraft} <- required_text(params, "spacecraft_id"),
          {:ok, _transport} <- transport_ref(params),
@@ -312,10 +277,13 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  defp validate_form_for_surface(%{"ground_station" => params}, surface_id)
-       when is_map(params) do
-    with :ok <- surface_payload_type(surface_id, "ground_station_form"),
-         {:ok, _attrs} <- ground_station_attrs(params) do
+  defp validate_form_for_surface(
+         %{"ground_station" => params} = payload,
+         surface_id
+       )
+       when surface_id in ["ground_station_new", "ground_station_edit"] and
+              is_map(params) and map_size(payload) == 1 do
+    with {:ok, _attrs} <- ground_station_attrs(params) do
       :ok
     end
   end

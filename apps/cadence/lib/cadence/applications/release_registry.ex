@@ -11,7 +11,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
     TelemetryDecomCatalogContribution
   }
 
-  @max_contributions 64
+  @max_contributions 128
   @contributors [
     Comms,
     LegacyCommsOverview,

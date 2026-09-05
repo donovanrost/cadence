@@ -468,9 +468,6 @@ defmodule Cadence.Applications.CommsApplicationTest do
 
     assert "transport_new" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
     assert "ground_station_edit" in Enum.map(Comms.definition().surfaces, & &1.surface_id)
-
-    # The provider reads ActionRequest.surface_id when the host composes it.
-    # Cross-surface action isolation requires that shared host composition.
   end
 
   defp surface_contract(surface) do
