@@ -140,12 +140,11 @@ defmodule CadenceWeb.OpsDashboardListLive do
       <.vue
         id="ops-dashboard-directory-component"
         v-component="FederatedFullPageSurface"
-        page={@dashboard_directory_page}
-        filters={@dashboard_directory_filters}
-        dashboard_directory={@streams.dashboard_directory}
-        v-on:filter_dashboards={JS.push("filter_dashboards")}
-        v-on:toggle_dashboard_star={JS.push("toggle_dashboard_star")}
-        v-on:restore_dashboard={JS.push("restore_dashboard")}
+        application_key="ops_console"
+        surface_id="dashboard_directory"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

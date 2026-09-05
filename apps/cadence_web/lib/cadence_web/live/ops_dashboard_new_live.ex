@@ -50,10 +50,11 @@ defmodule CadenceWeb.OpsDashboardNewLive do
       <.vue
         id="ops-dashboard-new-component"
         v-component="FederatedFullPageSurface"
-        page={@dashboard_page}
-        form={@dashboard_form}
-        v-on:validate={JS.push("validate")}
-        v-on:save={JS.push("save")}
+        application_key="ops_console"
+        surface_id="dashboard_new"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

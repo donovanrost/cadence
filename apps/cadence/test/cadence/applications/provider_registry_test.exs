@@ -173,6 +173,23 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     definitions = Registry.all()
     providers = SurfaceProviderRegistry.providers()
 
+    expected_contribution_counts = %{
+      "comms" => 11,
+      "spacecraft" => 12,
+      "mission_catalog" => 10,
+      "telemetry_decom" => 1,
+      "derived_telemetry" => 1,
+      "limits" => 2,
+      "ops_console" => 30
+    }
+
+    assert length(SurfaceProviderRegistry.contributions()) == 67
+    assert map_size(providers) == 67
+
+    assert providers
+           |> Map.keys()
+           |> Enum.frequencies_by(&elem(&1, 0)) == expected_contribution_counts
+
     assert :ok = SurfaceProviderRegistry.validate(definitions, providers)
 
     assert Map.has_key?(providers, {"comms", "cadence.comms.overview"})

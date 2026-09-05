@@ -268,27 +268,11 @@ defmodule CadenceWeb.OpsDataOperationsLive do
       <.vue
         id="ops-data-operations-component"
         v-component="FederatedFullPageSurface"
-        page={page_dto(
-          @current_mission,
-          @data_operations_admin?,
-          admin_eligible?(@current_scope),
-          @selected_group_id,
-          @operation_groups_empty?
-        )}
-        request_form={request_form_dto(@request_form, @request_error)}
-        selected_group={selected_group_dto(
-          @selected_group,
-          @current_mission,
-          @data_operations_admin?
-        )}
-        data_operation_groups={@streams.data_operation_groups}
-        v-on:validate-request={JS.push("validate_request")}
-        v-on:record-historical-workflow-request={
-          JS.push("record_historical_workflow_request")
-        }
-        v-on:transition-group={JS.push("transition_group")}
-        v-on:retry-group={JS.push("retry_group")}
-        v-on:request-correction={JS.push("request_correction")}
+        application_key="ops_console"
+        surface_id="data_operations"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

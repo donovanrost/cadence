@@ -16,6 +16,7 @@ defmodule CadenceWeb.OpsDashboardShareLive do
          socket
          |> assign(:page_title, "Shared Dashboard")
          |> assign(:ops_nav_item, :dashboards)
+         |> assign(:share_id, share_id)
          |> assign(:active_dashboard_id, share.dashboard_id)
          |> assign(:dashboard_share, share)
          |> assign(:dashboard_path, dashboard_path)
@@ -36,7 +37,11 @@ defmodule CadenceWeb.OpsDashboardShareLive do
       <.vue
         id="ops-dashboard-share-component"
         v-component="FederatedFullPageSurface"
-        share={@dashboard_share_props}
+        application_key="ops_console"
+        surface_id="dashboard_share"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"share_id" => @share_id}}
         v-ssr={false}
         class="h-full"
       />

@@ -111,26 +111,11 @@ defmodule CadenceWeb.OpsFleetPlanningRunLive do
       <.vue
         id="ops-fleet-planning-run-component"
         v-component="FederatedFullPageSurface"
-        page={run_page_dto(
-          @current_mission,
-          @run,
-          @plan,
-          @decision_count,
-          @commitment_count,
-          @locked_count,
-          @exception_count,
-          @automation_action_count
-        )}
-        repair_form={repair_form_dto(@repair_form, @repairable?, @run)}
-        planning={@planning?}
-        requirement_rows={@streams.requirement_rows}
-        exceptions={@streams.exceptions}
-        decisions={@streams.decisions}
-        horizon_commitments={@streams.horizon_commitments}
-        resource_pressure={@streams.resource_pressure}
-        automation_actions={@streams.automation_actions}
-        v-on:refresh-fleet-run={JS.push("refresh-fleet-run")}
-        v-on:repair-fleet-run={JS.push("repair-fleet-run")}
+        application_key="ops_console"
+        surface_id="fleet_planning_run"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"fleet_planning_run_id" => @fleet_planning_run_id}}
         v-ssr={false}
         class="contents"
       />

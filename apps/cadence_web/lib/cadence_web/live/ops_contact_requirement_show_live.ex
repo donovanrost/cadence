@@ -139,13 +139,11 @@ defmodule CadenceWeb.OpsContactRequirementShowLive do
       <.vue
         id="ops-contact-requirement-show-component"
         v-component="FederatedFullPageSurface"
-        page={@contact_requirement_show_page}
-        requirement_versions={@streams.requirement_versions}
-        planning_searches={@streams.planning_searches}
-        opportunities={@streams.opportunities}
-        v-on:plan={JS.push("plan")}
-        v-on:toggle-opportunity={JS.push("toggle-opportunity")}
-        v-on:create-plan={JS.push("create-plan")}
+        application_key="ops_console"
+        surface_id="contact_requirement_show"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"contact_requirement_id" => @contact_requirement_id}}
         v-ssr={false}
         class="contents"
       />

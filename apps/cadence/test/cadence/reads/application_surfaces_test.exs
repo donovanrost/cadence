@@ -158,18 +158,19 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
            ]
   end
 
-  test "fails closed when contributed query providers exceed the registry cap" do
+  test "accepts the composed query registry at 128 contributions and fails closed at 129" do
     contributions =
-      Enum.map(1..65, fn index ->
+      Enum.map(1..129, fn index ->
         %SurfaceQueryContribution{
-          application_key: "synthetic_#{index}",
+          application_key: "synthetic_alpha",
           application_version: 1,
-          query_id: "synthetic.read.#{index}",
+          query_id: "synthetic.alpha.#{index}",
           query_version: 1,
           provider: Cadence.TestSurfaceQueryProviders.Alpha
         }
       end)
 
+    assert map_size(ProviderRegistry.providers(Enum.take(contributions, 128))) == 128
     assert ProviderRegistry.providers(contributions) == %{}
   end
 

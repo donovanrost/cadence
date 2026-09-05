@@ -89,20 +89,11 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
       <.vue
         id="ops-contact-requirement-template-component"
         v-component="FederatedFullPageSurface"
-        page={page_dto(@current_mission)}
-        ledger={ledger_dto(@template_count, @template_empty?)}
-        authorization={authorization_dto(@organization_admin?)}
-        template_form={template_form_dto(
-          @form,
-          @spacecraft_options,
-          @organization_admin?
-        )}
-        templates={@streams.templates}
-        v-on:validate-template={JS.push("validate-template")}
-        v-on:create-template={JS.push("create-template")}
-        v-on:pause-template={JS.push("pause-template")}
-        v-on:activate-template={JS.push("activate-template")}
-        v-on:close-template={JS.push("close-template")}
+        application_key="ops_console"
+        surface_id="contact_requirement_template"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

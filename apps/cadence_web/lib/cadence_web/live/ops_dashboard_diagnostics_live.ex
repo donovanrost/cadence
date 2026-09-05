@@ -64,9 +64,11 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLive do
       <.vue
         id="ops-dashboard-diagnostics-page-component"
         v-component="FederatedFullPageSurface"
-        presentation={@presentation}
-        diagnostic_rows={@streams.diagnostic_rows}
-        v-diff={false}
+        application_key="ops_console"
+        surface_id="dashboard_diagnostics"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"dashboard_id" => @dashboard_id}}
         v-ssr={false}
         class="contents"
       />

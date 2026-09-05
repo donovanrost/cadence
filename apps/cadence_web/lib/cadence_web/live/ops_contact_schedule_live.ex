@@ -283,29 +283,11 @@ defmodule CadenceWeb.OpsContactScheduleLive do
       <.vue
         id="ops-contact-schedule-component"
         v-component="FederatedFullPageSurface"
-        page={page_dto(
-          @current_mission,
-          @contact_record_count,
-          @opportunity_count,
-          @reservation_count,
-          @opportunities_empty?
-        )}
-        search={search_dto(
-          @search_form,
-          @spacecraft,
-          @ready_routes,
-          @searching?,
-          @search_error
-        )}
-        readiness={readiness_dto(@current_mission, @ready_routes, @readiness_findings)}
-        busy={busy_dto(@reservation_busy)}
-        contact_records={@streams.contact_records}
-        opportunities={@streams.opportunities}
-        provider_reservations={@streams.provider_reservations}
-        v-on:validate={JS.push("validate")}
-        v-on:search={JS.push("search")}
-        v-on:reserve={JS.push("reserve")}
-        v-on:cancel={JS.push("cancel")}
+        application_key="ops_console"
+        surface_id="contact_schedule"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

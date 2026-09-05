@@ -20,6 +20,7 @@ defmodule CadenceWeb.OpsContactRecordLive do
          socket
          |> assign(:page_title, "Contact #{canonical_id}")
          |> assign(:ops_nav_item, :contacts)
+         |> assign(:contact_id, contact_id)
          |> assign(
            :contact_record,
            contact_record_dto(
@@ -48,7 +49,11 @@ defmodule CadenceWeb.OpsContactRecordLive do
       <.vue
         id="ops-contact-record-component"
         v-component="FederatedFullPageSurface"
-        record={@contact_record}
+        application_key="ops_console"
+        surface_id="contact_record"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"contact_id" => @contact_id}}
         v-ssr={false}
         class="contents"
       />

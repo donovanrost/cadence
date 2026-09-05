@@ -16,7 +16,8 @@ defmodule Cadence.Applications.ActionProviderRegistry do
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,
     Cadence.Applications.Limits,
-    Cadence.Applications.MissionCatalog
+    Cadence.Applications.MissionCatalog,
+    Cadence.Applications.OpsConsole
   ]
 
   @spec providers() :: %{optional(binary()) => module()}

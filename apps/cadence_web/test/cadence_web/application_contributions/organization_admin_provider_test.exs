@@ -68,6 +68,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                "derived_telemetry",
                "limits",
                "mission_catalog",
+               "ops_console",
                "organization_admin",
                "spacecraft",
                "telemetry_decom"

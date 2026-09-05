@@ -48,12 +48,13 @@ describe("first-party federated application manifests", () => {
   });
 
   it("accepts collection surfaces used by server application definitions", () => {
-    expect(() =>
-      defineApplicationManifest({
-        ...manifest,
-        surfaces: [{ ...manifest.surfaces[0], purpose: "collection" }],
-      }),
-    ).not.toThrow();
+    const collectionManifest = {
+      ...manifest,
+      surfaces: [{ ...manifest.surfaces[0]!, purpose: "collection" as const }],
+    };
+
+    expect(() => defineApplicationManifest(collectionManifest)).not.toThrow();
+    expect(() => assertCompatibleManifest(collectionManifest)).not.toThrow();
   });
 
   it("rejects third-party code at the trusted renderer boundary", () => {

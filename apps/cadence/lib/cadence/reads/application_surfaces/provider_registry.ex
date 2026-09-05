@@ -8,7 +8,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
     SurfaceQueryRequest
   }
 
-  @max_contributions 64
+  @max_contributions 128
   @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
 
   @compile {:no_warn_undefined,
@@ -26,7 +26,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
              Cadence.Applications.MissionCatalog,
              Cadence.Applications.TelemetryDecom,
              Cadence.Applications.DerivedTelemetry,
-             Cadence.Applications.Limits
+             Cadence.Applications.Limits,
+             Cadence.Applications.OpsConsole
            ] ++ optional_contributors()
          ) do
       {:ok, contributions} -> contributions

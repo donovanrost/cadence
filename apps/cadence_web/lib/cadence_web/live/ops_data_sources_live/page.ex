@@ -55,23 +55,11 @@ defmodule CadenceWeb.OpsDataSourcesLive.Page do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-data-sources-component"
-        v-component="FederatedFullPageSurface"
-        page={@ops_data_sources_page}
-        v-on:open-register-source={JS.push("open_register_source")}
-        v-on:cancel-register-source={JS.push("cancel_register_source")}
-        v-on:register-source={JS.push("register_source")}
-        v-on:open-change-binding={JS.push("open_change_binding")}
-        v-on:cancel-change-binding={JS.push("cancel_change_binding")}
-        v-on:change-binding={JS.push("change_binding")}
-        v-on:disable-source={JS.push("disable_source")}
-        v-on:enable-source={JS.push("enable_source")}
-        v-on:reconcile-tsdb-backend={JS.push("reconcile_tsdb_backend")}
-        v-on:deprovision-tsdb-backend={JS.push("deprovision_tsdb_backend")}
-        v-on:provision-tsdb-backend={JS.push("provision_tsdb_backend")}
-        v-on:probe-source={JS.push("probe_source")}
-        v-on:rotate-source-credential={JS.push("rotate_source_credential")}
-        v-on:retry-deployment-run={JS.push("retry_deployment_run")}
-        v-on:requeue-deployment-run={JS.push("requeue_deployment_run")}
+        application_key="ops_console"
+        surface_id="data_sources"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

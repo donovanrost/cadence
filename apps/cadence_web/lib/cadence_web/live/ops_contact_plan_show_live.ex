@@ -114,16 +114,11 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
       <.vue
         id="ops-contact-plan-show-component"
         v-component="FederatedFullPageSurface"
-        page={@contact_plan_show_page}
-        submission_form={@contact_plan_submission_form}
-        admin_controls={@contact_plan_admin_controls}
-        selected_opportunities={@streams.selected_opportunities}
-        execution_items={@streams.execution_items}
-        approvals={@streams.approvals}
-        v-on:submit-plan={JS.push("submit-plan")}
-        v-on:approve-plan={JS.push("approve-plan")}
-        v-on:reject-plan={JS.push("reject-plan")}
-        v-on:execute-plan={JS.push("execute-plan")}
+        application_key="ops_console"
+        surface_id="contact_plan_show"
+        host_scope="mission"
+        mission_id={@current_mission.mission_id}
+        query_params={%{"contact_plan_id" => @contact_plan_id}}
         v-ssr={false}
         class="contents"
       />
