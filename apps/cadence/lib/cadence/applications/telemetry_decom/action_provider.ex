@@ -129,26 +129,10 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   end
 
   defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
-    do: {:error, :unsupported_application_action}
+    do: {:error, :application_action_scope_required}
 
-  defp ensure_surface_binding(%ActionRequest{
-         application_key: "telemetry_decom",
-         application_version: 1,
-         surface_id: surface_id,
-         surface_version: surface_version,
-         action_id: action_id
-       }) do
-    with :ok <- validate_bindings(@surface_action_bindings),
-         true <- {surface_id, surface_version, action_id} in @surface_action_bindings do
-      :ok
-    else
-      false -> {:error, :unsupported_application_action}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp ensure_surface_binding(%ActionRequest{}),
-    do: {:error, :unsupported_application_action}
+  defp ensure_surface_binding(%ActionRequest{} = request),
+    do: Cadence.Applications.ActionContractLedger.admit(request, __MODULE__)
 
   @impl true
   def configuration_reference(

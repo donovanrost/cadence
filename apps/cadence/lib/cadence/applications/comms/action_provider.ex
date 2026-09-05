@@ -23,59 +23,99 @@ defmodule Cadence.Applications.Comms.ActionProvider do
 
   @application_key "comms"
   @form_surfaces ~w(transport_new routing_new ground_station_new ground_station_edit)
+  @surface_action_bindings [
+    {"provider_new", 1, "create_provider"},
+    {"provider_show", 1, "validate_provider"},
+    {"provider_show", 1, "sync_provider"},
+    {"provider_show", 1, "archive_provider"},
+    {"transport_new", 1, "validate"},
+    {"transport_new", 1, "save"},
+    {"routing_new", 1, "validate"},
+    {"routing_new", 1, "save"},
+    {"ground_station_new", 1, "validate"},
+    {"ground_station_new", 1, "save"},
+    {"ground_station_edit", 1, "validate"},
+    {"ground_station_edit", 1, "save"}
+  ]
 
   @impl true
   def application_key, do: @application_key
 
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{
-          application_key: @application_key,
-          application_version: 1,
-          action_id: "validate",
-          surface_id: surface_id,
-          surface_version: 1,
-          params: params
-        }
-      )
-      when surface_id in @form_surfaces and is_map(params) do
+  @doc "Returns the frozen provider-owned surface/action binding ledger."
+  @spec surface_action_bindings() :: [{binary(), pos_integer(), binary()}]
+  def surface_action_bindings, do: @surface_action_bindings
+
+  @doc "Validates that every binding row is unique and well formed."
+  @spec validate_bindings(list()) :: :ok | {:error, atom()}
+  def validate_bindings(bindings) when is_list(bindings) do
+    valid? =
+      Enum.all?(bindings, fn
+        {surface_id, surface_version, action_id} ->
+          is_binary(surface_id) and surface_id != "" and
+            is_integer(surface_version) and surface_version > 0 and
+            is_binary(action_id) and action_id != ""
+
+        _other ->
+          false
+      end)
+
+    cond do
+      not valid? -> {:error, :invalid_action_bindings}
+      length(bindings) != length(Enum.uniq(bindings)) -> {:error, :duplicate_action_bindings}
+      true -> :ok
+    end
+  end
+
+  def validate_bindings(_bindings), do: {:error, :invalid_action_bindings}
+
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{
+           application_key: @application_key,
+           application_version: 1,
+           action_id: "validate",
+           surface_id: surface_id,
+           surface_version: 1,
+           params: params
+         }
+       )
+       when surface_id in @form_surfaces and is_map(params) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
          :ok <- validate_form(params, surface_id) do
       {:ok, %{"valid" => true}}
     end
   end
 
-  def execute(
-        %Scope{organization_id: organization_id} = scope,
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{
-          application_key: @application_key,
-          application_version: 1,
-          action_id: "save",
-          surface_id: surface_id,
-          surface_version: 1,
-          params: params
-        }
-      )
-      when surface_id in @form_surfaces and is_map(params) do
+  defp execute_action(
+         %Scope{organization_id: organization_id} = scope,
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{
+           application_key: @application_key,
+           application_version: 1,
+           action_id: "save",
+           surface_id: surface_id,
+           surface_version: 1,
+           params: params
+         }
+       )
+       when surface_id in @form_surfaces and is_map(params) do
     with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id) do
       save_form(scope, mission_id, params, surface_id)
     end
   end
 
-  @impl true
-  def execute(
-        %Scope{} = scope,
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{
-          application_key: @application_key,
-          application_version: 1,
-          action_id: action_id,
-          params: params
-        }
-      )
-      when action_id in ["validate_provider", "sync_provider", "archive_provider"] do
+  defp execute_action(
+         %Scope{} = scope,
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{
+           application_key: @application_key,
+           application_version: 1,
+           action_id: action_id,
+           params: params
+         }
+       )
+       when action_id in ["validate_provider", "sync_provider", "archive_provider"] do
     with {:ok, provider_id} <- required_id(params, "provider_id") do
       case action_id do
         "validate_provider" -> ControlProviders.validate_current(scope, mission_id, provider_id)
@@ -85,20 +125,30 @@ defmodule Cadence.Applications.Comms.ActionProvider do
     end
   end
 
-  def execute(
-        %Scope{} = scope,
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{
-          application_key: @application_key,
-          application_version: 1,
-          action_id: "create_provider",
-          params: params
-        }
-      ) do
+  defp execute_action(
+         %Scope{} = scope,
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %ActionRequest{
+           application_key: @application_key,
+           application_version: 1,
+           action_id: "create_provider",
+           params: params
+         }
+       ) do
     create_provider(scope, mission_id, provider_params(params))
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
+  defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
+    do: {:error, :application_action_scope_required}
+
+  @impl true
+  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
+    with :ok <- Cadence.Applications.ActionContractLedger.admit(request, __MODULE__) do
+      execute_action(scope, host_context, request)
+    end
+  end
+
+  def execute(_scope, _host_context, _request),
     do: {:error, :unsupported_application_action}
 
   @impl true

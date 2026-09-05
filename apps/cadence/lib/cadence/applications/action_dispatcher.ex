@@ -9,6 +9,7 @@ defmodule Cadence.Applications.ActionDispatcher do
 
   alias Cadence.Applications.{
     ActionDefinition,
+    ActionContractLedger,
     ActionFailure,
     ActionRequest,
     ApplicationDefinition,
@@ -26,8 +27,18 @@ defmodule Cadence.Applications.ActionDispatcher do
 
   @spec validate_providers() ::
           :ok | {:error, :invalid_application_action_provider_registry}
-  def validate_providers,
-    do: validate_providers(Registry.all(), ActionProviderRegistry.providers())
+  def validate_providers do
+    with :ok <- validate_providers(Registry.all(), ActionProviderRegistry.providers()),
+         :ok <- ActionContractLedger.validate() do
+      :ok
+    else
+      {:error, :invalid_application_action_contract_ledger} ->
+        {:error, :invalid_application_action_provider_registry}
+
+      {:error, _reason} ->
+        {:error, :invalid_application_action_provider_registry}
+    end
+  end
 
   @doc false
   @spec validate_providers([ApplicationDefinition.t()], map()) ::

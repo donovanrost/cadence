@@ -94,7 +94,9 @@ defmodule Cadence.Applications.RegistryTest do
              "create_provider",
              "validate_provider",
              "sync_provider",
-             "archive_provider"
+             "archive_provider",
+             "validate",
+             "save"
            ]
 
     assert Enum.map(Registry.workspace_surfaces(definition, :mission), fn surface ->
@@ -121,7 +123,15 @@ defmodule Cadence.Applications.RegistryTest do
              {"provider_new", %{query_id: "cadence.comms.provider_new", version: 1},
               {:trusted, "cadence.comms.provider_new"}},
              {"provider_show", %{query_id: "cadence.comms.provider_show", version: 1},
-              {:trusted, "cadence.comms.provider_show"}}
+              {:trusted, "cadence.comms.provider_show"}},
+             {"transport_new", %{query_id: "cadence.comms.transport_new", version: 1},
+              {:trusted, "cadence.comms.transport_new"}},
+             {"routing_new", %{query_id: "cadence.comms.routing_new", version: 1},
+              {:trusted, "cadence.comms.routing_new"}},
+             {"ground_station_new", %{query_id: "cadence.comms.ground_station_new", version: 1},
+              {:trusted, "cadence.comms.ground_station_new"}},
+             {"ground_station_edit", %{query_id: "cadence.comms.ground_station_edit", version: 1},
+              {:trusted, "cadence.comms.ground_station_edit"}}
            ]
 
     assert {:ok, transport} = Registry.fetch_surface(definition, :mission, "transport")
