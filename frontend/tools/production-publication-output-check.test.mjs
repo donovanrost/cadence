@@ -54,10 +54,17 @@ async function publicationFixture() {
   await mkdir(join(root, "host"), { recursive: true });
   await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
   await writeFile(join(root, "host", "plugin-host.css"), ".host { color: blue; }\n");
-  await mkdir(join(root, "comms-overview"));
-  await mkdir(join(root, "telemetry-decom"));
-  await writeRemote(join(root, "comms-overview"), "cadence_comms_overview");
-  await writeRemote(join(root, "telemetry-decom"), "cadence_telemetry_decom");
+  for (const [bundle, remoteName] of [
+    ["organization-admin", "cadence_organization_admin"],
+    ["mission-catalog", "cadence_mission_catalog"],
+    ["spacecraft", "cadence_spacecraft"],
+    ["telemetry-decom", "cadence_telemetry_decom"],
+    ["comms-overview", "cadence_comms_overview"],
+    ["ops-console", "cadence_ops_console"],
+  ]) {
+    await mkdir(join(root, bundle));
+    await writeRemote(join(root, bundle), remoteName);
+  }
   return root;
 }
 
@@ -66,7 +73,7 @@ void test("requires an exact host and allowed-remote publication root inventory"
   try {
     const result = await validateProductionPublication(root);
     assert.equal(result.host.fileCount, 2);
-    assert.equal(result.remotes.length, 2);
+    assert.equal(result.remotes.length, 6);
 
     await writeFile(
       join(root, "host", "host.js"),

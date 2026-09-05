@@ -3,7 +3,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverFirstPartyRemotes } from "./first-party-remote-workspace.mjs";
+import {
+  APPROVED_FIRST_PARTY_REMOTES,
+  discoverFirstPartyRemotes,
+} from "./first-party-remote-workspace.mjs";
 
 async function workspaceFixture() {
   const root = await mkdtemp(join(tmpdir(), "cadence-first-party-workspace-"));
@@ -67,4 +70,19 @@ void test("rejects a publication app without a generated federation identity", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+void test("requires every named first-party remote in the real workspace", async () => {
+  const result = await discoverFirstPartyRemotes(join(import.meta.dirname, ".."), {
+    requireApproved: true,
+  });
+
+  assert.deepEqual(
+    result.remotes
+      .map(({ bundle, remoteName }) => ({ bundle, remoteName }))
+      .sort((left, right) => left.bundle.localeCompare(right.bundle)),
+    APPROVED_FIRST_PARTY_REMOTES.map(({ bundle, remoteName }) => ({ bundle, remoteName })).sort(
+      (left, right) => left.bundle.localeCompare(right.bundle),
+    ),
+  );
 });

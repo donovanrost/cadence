@@ -9,6 +9,7 @@ import { CButton } from "@cadence/ui";
 import { onBeforeUnmount, onErrorCaptured, shallowRef, watch } from "vue";
 import type { Component } from "vue";
 import FullPageSurface from "./FullPageSurface.vue";
+import { createHostContributionBootstrap } from "./first-party-composition";
 import { loadFederatedApplication } from "./remote-loader";
 import { fullPageSurfaceProps } from "@cadence/plugin-sdk";
 
@@ -27,6 +28,7 @@ const component = shallowRef<Component>();
 const error = shallowRef<{ message: string; referenceId: string }>();
 let loadGeneration = 0;
 let loadController: AbortController | undefined;
+const contributionBootstrap = createHostContributionBootstrap();
 
 watch(() => props.application, loadApplication, { immediate: true });
 
@@ -56,8 +58,9 @@ async function loadApplication(): Promise<void> {
       signal: controller.signal,
     });
     if (generation !== loadGeneration || controller.signal.aborted) return;
-    component.value = remote.default;
-    emit("ready", remote.manifest);
+    const contribution = contributionBootstrap.register(props.application, remote);
+    component.value = contribution.default;
+    emit("ready", contribution.manifest);
   } catch (reason) {
     if (generation !== loadGeneration || controller.signal.aborted) return;
     error.value = failureFor("The approved application release could not be loaded.");
