@@ -122,18 +122,11 @@ const fleetRun = reactive<FleetRunValues>(
     : { horizon_start: "", horizon_end: "", include_recurring: false },
 );
 
-const pendingValidations: FleetRunValues[] = [];
-
 const values = (): FleetRunValues => ({
   horizon_start: fleetRun.horizon_start,
   horizon_end: fleetRun.horizon_end,
   include_recurring: fleetRun.include_recurring,
 });
-
-const sameValues = (left: FleetRunValues, right: FleetRunValues) =>
-  left.horizon_start === right.horizon_start &&
-  left.horizon_end === right.horizon_end &&
-  left.include_recurring === right.include_recurring;
 
 watch(
   () => props.form,
@@ -141,21 +134,13 @@ watch(
     if (!serverForm) return;
 
     const serverValues = valuesFromForm(serverForm);
-    const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues),
-    );
-    const hasNewerTyping =
-      acknowledgedIndex >= 0 && acknowledgedIndex < pendingValidations.length - 1;
-
-    if (acknowledgedIndex >= 0) pendingValidations.splice(0, acknowledgedIndex + 1);
-    if (!hasNewerTyping) Object.assign(fleetRun, serverValues);
+    Object.assign(fleetRun, serverValues);
   },
   { deep: true },
 );
 
 const validateFleetRun = () => {
   const formValues = values();
-  pendingValidations.push(formValues);
   emit("validate-fleet-run", { fleet_run: formValues });
 };
 
