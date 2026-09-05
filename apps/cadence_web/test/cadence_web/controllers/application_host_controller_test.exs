@@ -384,8 +384,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         %{
           "applicationKey" => "comms_overview",
           "applicationVersion" => 1,
+          "surfaceId" => "overview",
+          "surfaceVersion" => 1,
           "actionId" => "anything",
-          "input" => %{},
+          "params" => %{},
           "scope" => valid_scope
         },
         :actions
@@ -449,8 +451,10 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         %{
           "applicationKey" => "comms_overview",
           "applicationVersion" => 1,
+          "surfaceId" => "overview",
+          "surfaceVersion" => 1,
           "actionId" => "anything",
-          "input" => %{},
+          "params" => %{},
           "scope" => valid_scope
         },
         :actions

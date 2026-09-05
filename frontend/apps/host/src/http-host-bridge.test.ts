@@ -231,6 +231,31 @@ describe("the HTTP host bridge", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("rejects a caller-supplied surface identity that differs from the selected application", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        receiptId: "receipt-1",
+        completedAt: "2026-08-22T20:00:00.000Z",
+        result: {},
+      }),
+    );
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    await expect(
+      bridge.execute({
+        ...actionRequest(),
+        surfaceId: "other-surface",
+        surfaceVersion: 1,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "unsupported_action",
+    } satisfies Partial<HostBridgeError>);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("uses an idempotency key for every host action", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _request?: RequestInit) =>
       Response.json({
@@ -263,7 +288,7 @@ describe("the HTTP host bridge", () => {
       surfaceId: "packet_bindings",
       surfaceVersion: 1,
       actionId: "save_packet_bindings",
-      input: { expectedConfigurationVersion: 7, selectedApids: [100] },
+      params: { expectedConfigurationVersion: 7, selectedApids: [100] },
       scope: {
         organizationId: "org-1",
         missionId: "mission-1",
@@ -341,6 +366,20 @@ describe("the HTTP host bridge", () => {
       if (body.length > 0) expect((error as HostBridgeError).message).not.toContain(body);
       expect(fetcher).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("rejects a successful action response that is not a typed receipt", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({ result: { accepted: true } }, { status: 200 }),
+    );
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+    });
+
+    await expect(bridge.execute(actionRequest("invalid-receipt"))).rejects.toMatchObject({
+      status: 200,
+      code: "invalid_response",
+    } satisfies Partial<HostBridgeError>);
   });
 
   it("preserves non-success status for malformed query and action error responses", async () => {

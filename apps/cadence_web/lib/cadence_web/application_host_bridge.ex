@@ -183,7 +183,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
   defp action_request(params, idempotency_key) do
     with {:ok, application_key} <- required_text(params, "applicationKey"),
          {:ok, application_version} <- positive_integer(params, "applicationVersion"),
-         {:ok, {surface_id, surface_version}} <- optional_surface(params),
+         {:ok, surface_id} <- required_text(params, "surfaceId"),
+         {:ok, surface_version} <- positive_integer(params, "surfaceVersion"),
          {:ok, action_id} <- required_text(params, "actionId"),
          {:ok, action_version} <- action_version(params),
          {:ok, action_params} <- action_params(params) do
@@ -275,23 +276,6 @@ defmodule CadenceWeb.ApplicationHostBridge do
       "operationVersion" => action.version,
       "params" => params
     }
-  end
-
-  defp optional_surface(params) do
-    case {Map.get(params, "surfaceId"), Map.get(params, "surfaceVersion")} do
-      {nil, nil} ->
-        {:ok, {nil, nil}}
-
-      {surface_id, surface_version}
-      when is_binary(surface_id) and surface_id != "" and is_integer(surface_version) ->
-        with {:ok, surface_id} <- required_text(%{"surfaceId" => surface_id}, "surfaceId"),
-             {:ok, surface_version} <- positive_integer_value(surface_version) do
-          {:ok, {surface_id, surface_version}}
-        end
-
-      _invalid ->
-        {:error, :invalid_application_request}
-    end
   end
 
   defp admit_surface(current_scope, route_context, request, opts) do

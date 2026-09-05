@@ -88,7 +88,13 @@ export function assertReleaseMatchesModule(
   application: CatalogApplication,
   remote: unknown,
 ): asserts remote is FederatedApplicationModule {
-  if (!isRecord(remote) || !("manifest" in remote) || !("default" in remote)) {
+  if (
+    !isRecord(remote) ||
+    !("manifest" in remote) ||
+    !("default" in remote) ||
+    (typeof remote.default !== "function" &&
+      (typeof remote.default !== "object" || remote.default === null))
+  ) {
     throw new Error("The federated release did not expose an application module.");
   }
 
@@ -101,18 +107,31 @@ export function assertReleaseMatchesModule(
   if (
     manifest.application.applicationKey !== application.applicationKey ||
     manifest.application.version !== application.applicationVersion ||
+    manifest.application.displayName !== application.displayName ||
+    manifest.application.description !== application.description ||
+    !manifest.application.installableScopes.includes(application.surface.scope) ||
     manifest.package.packageId !== application.package.packageId ||
     manifest.package.version !== application.package.version ||
     !surface ||
     surface.version !== application.surface.version ||
+    surface.purpose !== application.surface.purpose ||
+    surface.scope !== application.surface.scope ||
+    surface.placement !== application.surface.placement ||
+    surface.navigation.label !== application.surface.navigation.label ||
+    surface.navigation.order !== application.surface.navigation.order ||
     surface.dataContract.id !== application.surface.dataContract.id ||
     surface.dataContract.version !== application.surface.dataContract.version ||
+    !sameValues(surface.actions, application.surface.actions) ||
     surface.renderer.exposedModule !== application.release.exposedModule
   ) {
     throw new Error(
       `Release ${application.release.releaseId} does not match the host-approved application contract.`,
     );
   }
+}
+
+function sameValues(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function validCatalogApplication(value: unknown): value is CatalogApplication {
