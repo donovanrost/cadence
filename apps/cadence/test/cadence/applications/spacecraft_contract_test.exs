@@ -28,6 +28,7 @@ defmodule Cadence.Applications.SpacecraftContractTest do
   test "domain contributions match the exact spacecraft remote manifest identity" do
     assert Spacecraft.identity() == %{
              application_key: "spacecraft",
+             application_version: 1,
              package_id: "cadence.spacecraft",
              package_version: 1,
              remote_name: "cadence_spacecraft",

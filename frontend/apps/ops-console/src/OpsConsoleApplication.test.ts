@@ -30,6 +30,113 @@ const response = {
   },
 };
 
+const dashboardResponse = {
+  queryVersion: 1,
+  presentation: {
+    component: "OpsDashboardDirectory",
+    props: {
+      page: {
+        id: "ops-dashboards-page",
+        header: {
+          eyebrow: "Observe / Dashboards",
+          heading: "Dashboard Directory",
+          copy:
+            "Find mission telemetry workspaces without crowding the navigation rail. Stars and recents are personal; dashboard definitions and tags remain mission shared.",
+          count: { id: "dashboard-directory-count", value: 1, suffix: "matching" },
+          author_actions: [
+            {
+              id: "dashboard-directory-new",
+              label: "New Dashboard",
+              icon: "hero-plus",
+              icon_class: "h-4 w-4",
+              href: "/missions/mission-1/ops/dashboards/new",
+              class: "btn btn-primary btn-sm",
+            },
+          ],
+        },
+        list: {
+          id: "dashboard-directory-list",
+          empty: {
+            id: "dashboard-directory-empty",
+            icon: "hero-magnifying-glass",
+            heading: "No matching dashboards",
+            copy:
+              "Change the search, tag, or lifecycle filter. The filter state is preserved in the URL.",
+          },
+        },
+      },
+      filters: {
+        id: "dashboard-directory-filter-form",
+        values: { query: "", lifecycle: "active", tag: "all", sort: "updated" },
+        fields: {
+          query: {
+            id: "directory_query",
+            name: "directory[query]",
+            type: "search",
+            label: "Search",
+            placeholder: "Name, description, or tag",
+            debounce_ms: 250,
+          },
+          lifecycle: {
+            id: "directory_lifecycle",
+            name: "directory[lifecycle]",
+            type: "select",
+            label: "Lifecycle",
+            options: [
+              { label: "Active", value: "active" },
+              { label: "Archived", value: "archived" },
+              { label: "All", value: "all" },
+            ],
+          },
+          tag: {
+            id: "directory_tag",
+            name: "directory[tag]",
+            type: "select",
+            label: "Tag",
+            options: [{ label: "All tags", value: "all" }],
+          },
+          sort: {
+            id: "directory_sort",
+            name: "directory[sort]",
+            type: "select",
+            label: "Sort",
+            options: [
+              { label: "Recently updated", value: "updated" },
+              { label: "Name", value: "name" },
+              { label: "Widget count", value: "widgets" },
+            ],
+          },
+        },
+      },
+      dashboard_directory: [
+        {
+          id: "dashboard-1",
+          __dom_id: "dashboard-dashboard-1",
+          dashboard_id: "dashboard-1",
+          name: "Firebird overview",
+          description: "Mission overview dashboard",
+          tags: ["flight"],
+          lifecycle: { state: "active", class: "badge-success" },
+          starred: false,
+          open: { id: "dashboard-directory-open-dashboard-1", href: "#" },
+          star: {
+            id: "dashboard-directory-star-dashboard-1",
+            payload: { "dashboard-id": "dashboard-1", starred: "true" },
+            aria_label: "Star Firebird overview",
+            aria_pressed: "false",
+            disabled: false,
+            title: null,
+            icon: "hero-star",
+          },
+          widget_version_label: "2 widgets · v1",
+          clone: null,
+          restore: null,
+        },
+      ],
+    },
+  },
+};
+
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
@@ -425,6 +532,24 @@ describe("Ops Console federated application", () => {
     });
     expect(wrapper.find("#ops-console-application").exists()).toBe(true);
     expect(wrapper.text()).toContain("Firebird");
+    wrapper.unmount();
+  });
+
+  it("renders the backend-shaped dashboard directory DTO without optional props", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory")!;
+    const baseProps = propsFor(query);
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.find("#ops-dashboards-page").exists()).toBe(true);
+    expect(wrapper.find("#dashboard-directory-count").text()).toContain("1 matching");
+    expect(wrapper.find("#dashboard-directory-new").exists()).toBe(true);
+    expect(wrapper.find("#dashboard-dashboard-1").exists()).toBe(true);
+    expect(wrapper.find("[data-dashboard-directory-id='dashboard-1']").exists()).toBe(true);
     wrapper.unmount();
   });
 

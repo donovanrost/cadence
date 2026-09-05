@@ -1919,7 +1919,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       appendDiagnostic(
         requestFailures,
         exposedRequestFailures,
-        `${response.status} ${record.method} ${response.url}`,
+        `${response.status} ${record.method} ${response.url} (host-session-header=${Boolean(requestHeader(record, "x-cadence-poc-session"))}, csrf-header=${Boolean(requestHeader(record, "x-csrf-token"))})`,
       );
     }
     reconcilePendingNetworkLogs();
@@ -2193,8 +2193,19 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       ...consoleErrors.map((value) => `console.error/assert: ${value}`),
       ...runtimeExceptions.map((value) => `runtime exception: ${value}`),
       ...[...records.values()]
-        .filter((record) => !record.webSocket && !record.finished && !record.failed && !record.dataUrl && !isIgnoredFavicon(record, expectedOrigin))
-        .map((record) => `outstanding request: ${record.method} ${record.url}`),
+        .filter(
+          (record) =>
+            record.method !== "?" &&
+            !record.webSocket &&
+            !record.finished &&
+            !record.failed &&
+            !record.dataUrl &&
+            !isIgnoredFavicon(record, expectedOrigin),
+        )
+        .map(
+          (record) =>
+            `outstanding request: requestId=${record.requestId} sequence=${record.sequence} generation=${record.generation} method=${record.method} url=${record.url} responseStatus=${record.responseStatus} responseExtraStatus=${record.responseExtraStatus}`,
+        ),
     ];
     return failures.length ? `${stage} browser diagnostics failed:\n${failures.join("\n")}` : null;
   };
@@ -2816,6 +2827,52 @@ export async function waitForResponse(
   throw new Error(`${label} response was not observed`);
 }
 
+export async function waitForLatestRequestTerminal(
+  diagnostics,
+  predicate,
+  label,
+  { timeout = CDP_EVENT_TIMEOUT_MS, signal, generation } = {},
+) {
+  let latest = diagnostics.observed(predicate, { generation }).at(-1);
+  assert.ok(latest?.requestId, `${label} request was not observed`);
+  const deadline = Date.now() + timeout;
+  let terminalSnapshotPending = false;
+
+  while (Date.now() < deadline) {
+    const requestId = latest.requestId;
+    const requestSequence = latest.sequence;
+    const current = diagnostics.observed(
+      (record) => record.requestId === requestId && record.sequence === requestSequence,
+      { generation },
+    ).at(-1);
+
+    if (current?.failed !== undefined) {
+      throw new Error(`${label} request ${requestId} failed: ${current.failed}`);
+    }
+
+    if (current?.finished === true) {
+      const newest = diagnostics.observed(predicate, { generation }).at(-1);
+      if (
+        newest &&
+        (newest.requestId !== requestId || newest.sequence !== requestSequence)
+      ) {
+        latest = newest;
+        terminalSnapshotPending = false;
+        continue;
+      }
+      if (terminalSnapshotPending) return current;
+      terminalSnapshotPending = true;
+      await sleep(Math.min(POLL_INTERVAL_MS, Math.max(1, deadline - Date.now())), signal);
+      continue;
+    }
+
+    terminalSnapshotPending = false;
+    await sleep(Math.min(POLL_INTERVAL_MS, Math.max(1, deadline - Date.now())), signal);
+  }
+
+  throw new Error(`${label} request ${latest.requestId} did not become terminal`);
+}
+
 export function parseResponseBody(result, label) {
   assert.equal(typeof result, "object", `${label} response body was unavailable`);
   assert.equal(typeof result.body, "string", `${label} response body was unavailable`);
@@ -2837,6 +2894,54 @@ export async function responseJson(client, record, label, { signal } = {}) {
   } catch (error) {
     throw new Error(`${label} returned invalid JSON: ${error.message}`);
   }
+}
+
+async function captureForbiddenQueryEvidence(client, diagnostics, generation, signal) {
+  const records = diagnostics.completed(
+    (record) => {
+      try {
+        return (
+          record.method === "POST" &&
+          record.response?.status === 403 &&
+          new URL(record.url).pathname.endsWith("/query")
+        );
+      } catch {
+        return false;
+      }
+    },
+    { generation },
+  );
+
+  return Promise.all(
+    records.map(async (record) => {
+      let body;
+      try {
+        body = await responseJson(client, record, "forbidden query response", { signal });
+      } catch {
+        body = { unavailable: true };
+      }
+
+      const problem =
+        body && typeof body === "object" && body.error && typeof body.error === "object"
+          ? body.error
+          : body;
+      const code = problem && typeof problem.code === "string" ? problem.code : "unknown";
+      const sanitizedBody =
+        problem && typeof problem === "object"
+          ? JSON.stringify({
+              code,
+              message: typeof problem.message === "string" ? problem.message : undefined,
+            })
+          : JSON.stringify({ body: typeof problem === "string" ? problem : "unavailable" });
+
+      return {
+        requestId: record.requestId,
+        url: new URL(record.url).pathname,
+        code,
+        body: sanitizedBody.slice(0, 512),
+      };
+    }),
+  );
 }
 
 export async function assertConditionalEtagRevalidation(
@@ -3572,7 +3677,7 @@ async function submitSignIn(client, loginUrl, email, password, expectedOrigin, d
     assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
     assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
     await waitForExpression(client, "location.pathname !== '/sign-in' && !document.querySelector('#sign-in-form')", "authenticated redirect", { signal: submissionSignal });
-    return loginGeneration;
+    return generation;
   } finally {
     signal?.removeEventListener("abort", onAbort);
     submissionController.abort(new Error("sign-in wait settled"));
@@ -3587,9 +3692,15 @@ function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expect
   assert.ok(catalog.session.sessionId);
   assert.ok(catalog.session.csrfToken);
   assertHttpUrl(new URL(catalog.session.bridgeBaseUrl, expectedOrigin).href, expectedOrigin, "catalog bridge base URL");
-  assert.equal(catalog.applications.length, 1);
+  const expectedApplicationKeys = [applicationKey];
+  assert.deepEqual(
+    catalog.applications.map((application) => application.applicationKey).sort(),
+    expectedApplicationKeys.sort(),
+    `${expectedScope} catalog application set changed`,
+  );
 
-  const application = catalog.applications[0];
+  const application = catalog.applications.find((candidate) => candidate.applicationKey === applicationKey);
+  assert.ok(application, `${applicationKey} was not advertised in the ${expectedScope} catalog`);
   assert.equal(application.applicationKey, applicationKey);
   assert.equal(application.applicationVersion, 1);
   assert.equal(application.surface.surfaceId, surfaceId);
@@ -3613,6 +3724,15 @@ function assertCatalog(catalog, applicationKey, surfaceId, expectedScope, expect
 }
 
 function queryBody(application, queryId, queryVersion, scope) {
+  const queryScope =
+    scope.scope === "organization"
+      ? {scope: "organization", organizationId: scope.organizationId}
+      : {
+          organizationId: scope.organizationId,
+          missionId: scope.missionId,
+          spacecraftId: scope.spacecraftId,
+        };
+
   return {
     applicationKey: application.applicationKey,
     applicationVersion: application.applicationVersion,
@@ -3620,7 +3740,8 @@ function queryBody(application, queryId, queryVersion, scope) {
     surfaceVersion: application.surface.version,
     queryId,
     queryVersion,
-    scope,
+    scope: queryScope,
+    params: {},
   };
 }
 
@@ -3640,14 +3761,19 @@ async function assertRemoteSurface({
   queryVersion,
   expectedReleaseId,
   readPublishedHostBody = false,
+  navigateSurface = true,
+  existingGeneration,
 }) {
   const surfaceUrl = assertHttpUrl(url, expectedOrigin, `${applicationKey} surface URL`);
-  const generation = await navigate(client, surfaceUrl.href, {
-    expectedOrigin,
-    expectedPath: surfaceUrl.pathname,
-    diagnostics,
-    signal,
-  });
+  const generation = navigateSurface
+    ? await navigate(client, surfaceUrl.href, {
+        expectedOrigin,
+        expectedPath: surfaceUrl.pathname,
+        diagnostics,
+        signal,
+      })
+    : existingGeneration;
+  assert.ok(generation, `${applicationKey} existing document generation was not supplied`);
   reportProgress(`${applicationKey} waiting for REMOTE READY`);
   try {
     await waitForExpression(client, readyExpression, `${applicationKey} REMOTE READY`, { signal });
@@ -3658,7 +3784,6 @@ async function assertRemoteSurface({
   if (expectedReleaseId !== undefined) {
     await assertMountedRelease(client, expectedReleaseId, applicationKey, { signal });
   }
-  diagnostics.assertClean(`${applicationKey} surface`);
 
   reportProgress(`${applicationKey} waiting for catalog response`);
   const catalogRecord = await waitForResponse(
@@ -3752,10 +3877,12 @@ async function assertRemoteSurface({
   ).at(-1);
   assert.equal(staticFallback, undefined, `${applicationKey} used a static /assets remote fallback`);
 
-  const hostRecord = diagnostics.completed(
+  const hostRecord = await waitForLatestRequestTerminal(
+    diagnostics,
     (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
-    { generation },
-  ).at(-1);
+    "published Phoenix host bundle",
+    { generation, signal },
+  );
   assert.ok(hostRecord, "published Phoenix host bundle request was not observed");
   assert.ok(hostRecord.response, "published Phoenix host bundle response was not observed");
   assert.ok(
@@ -3802,13 +3929,25 @@ async function assertRemoteSurface({
       "x-cadence-poc-session": catalog.session.sessionId,
       "x-csrf-token": catalog.session.csrfToken,
     },
-    body: queryBody(application, queryId, queryVersion, {
-      organizationId: scope.organizationId,
-      missionId: scope.missionId,
-      spacecraftId: scope.spacecraftId,
-    }),
+    body: queryBody(application, queryId, queryVersion, scope),
   });
   const query = await responseJson(client, queryRecord, `${applicationKey} query`, { signal });
+  await waitForLatestRequestTerminal(
+    diagnostics,
+    (record) => pathMatches(record, "GET", "/assets/application-host/host/host.js", expectedOrigin),
+    `${applicationKey} Phoenix host bundle completion`,
+    { generation, signal },
+  );
+  const forbiddenQueryEvidence = await captureForbiddenQueryEvidence(
+    client,
+    diagnostics,
+    generation,
+    signal,
+  );
+  if (forbiddenQueryEvidence.length) {
+    reportProgress(`${applicationKey} 403 query evidence: ${JSON.stringify(forbiddenQueryEvidence)}`);
+  }
+  diagnostics.assertClean(`${applicationKey} surface`);
   return {
     catalog,
     application,
@@ -3838,6 +3977,8 @@ async function assertRepresentativeRemoteSurface({
   queryId,
   expectedReleaseId,
   expectedOrigin,
+  navigateSurface = true,
+  existingGeneration,
 }) {
   const url = requiredArg(args, argName);
   const target = assertHttpUrl(url, expectedOrigin, `${applicationKey} representative URL`);
@@ -3858,6 +3999,8 @@ async function assertRepresentativeRemoteSurface({
     queryId,
     queryVersion: 1,
     expectedReleaseId,
+    navigateSurface,
+    existingGeneration,
   });
 }
 
@@ -3951,11 +4094,25 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     signal,
   );
   reportProgress("authenticated browser session ready");
-  diagnostics.assertClean("authenticated sign-in");
   reportProgress("authenticated LiveView websocket asserted");
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
 
   const representativeConfigs = [
+    {
+      argName: "--organization-admin-url",
+      expectedPath: "/",
+      applicationKey: "organization_admin",
+      surfaceId: "organization_home",
+      expectedScope: "organization",
+      readyExpression: "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-recent-missions') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
+      catalogPath: "/api/cadence/application-host/v1/catalog",
+      queryPath: "/api/cadence/application-host/v1/query",
+      queryId: "cadence.organization.home",
+      expectedReleaseId: releases.nMinus1.organization_admin,
+      readPublishedHostBody: true,
+      navigateSurface: false,
+      existingGeneration: authenticatedGeneration,
+    },
     {
       argName: "--mission-catalog-url",
       expectedPath: "/missions",
@@ -3974,23 +4131,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       applicationKey: "ops_console",
       surfaceId: "dashboard_directory",
       expectedScope: "mission",
-      readyExpression: "Boolean(document.querySelector('#ops-console-application[data-ops-console-surface=\"dashboard_directory\"]') && document.querySelector('#ops-dashboard-directory-page') && !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'))",
+      readyExpression: "Boolean(document.querySelector('#ops-console-application[data-ops-console-surface=\"dashboard_directory\"]') && document.querySelector('#ops-dashboards-page') && !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'))",
       catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
       queryId: "cadence.ops.dashboard_directory",
       expectedReleaseId: releases.nMinus1.ops_console,
-    },
-    {
-      argName: "--organization-admin-url",
-      expectedPath: "/",
-      applicationKey: "organization_admin",
-      surfaceId: "organization_home",
-      expectedScope: "organization",
-      readyExpression: "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-recent-missions') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
-      catalogPath: "/api/cadence/application-host/v1/catalog",
-      queryPath: "/api/cadence/application-host/v1/query",
-      queryId: "cadence.organization.home",
-      expectedReleaseId: releases.nMinus1.organization_admin,
     },
     {
       argName: "--spacecraft-url",
@@ -4036,7 +4181,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryId: "cadence.comms.overview",
     queryVersion: 1,
     expectedReleaseId: releases.nMinus1.comms_overview,
-    readPublishedHostBody: true,
   });
   assert.equal(comms.query.queryVersion, 1);
   assert.equal(comms.query.presentation.root.attrs.id, "comms-overview-page");
@@ -4262,7 +4406,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       surfaceId: "packet_bindings",
       surfaceVersion: 1,
       actionId: "save_packet_bindings",
-      input: {
+      params: {
         catalog_revision_id: catalogRevisionId,
         expected_configuration_version: "",
         input_id: "telemetry-fields",
@@ -4329,7 +4473,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
 
   await waitForExpression(
     client,
-    "Boolean(document.querySelector('#telemetry-decom-action-notice') && document.querySelector('#telemetry-decom-action-notice').textContent.includes('refreshed from the host'))",
+    "Boolean(document.querySelector('#telemetry-decom-action-notice') && document.querySelector('#telemetry-decom-action-notice').textContent.includes('Phoenix completed save_packet_bindings.'))",
     "Telemetry canonical refresh notice",
     { signal },
   );

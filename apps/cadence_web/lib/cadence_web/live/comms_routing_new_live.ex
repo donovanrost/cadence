@@ -21,7 +21,7 @@ defmodule CadenceWeb.CommsRoutingNewLive do
         surface_id="routing_new"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{mission_id: @current_mission.mission_id}}
+        query_params={%{}}
         v-ssr={false}
         class="space-y-6 max-w-2xl"
       />

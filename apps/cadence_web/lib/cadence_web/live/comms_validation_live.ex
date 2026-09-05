@@ -21,7 +21,7 @@ defmodule CadenceWeb.CommsValidationLive do
         surface_id="validation"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{mission_id: @current_mission.mission_id}}
+        query_params={%{}}
         v-ssr={false}
       />
     </Layouts.app>

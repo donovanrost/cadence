@@ -69,11 +69,12 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
 
   test "federated page resolver and host boot are present" do
     vue = File.read!(Path.join(@web_root, "assets/vue.ts"))
+    surface = File.read!(Path.join(@web_root, "assets/vue/federated_full_page_surface.ts"))
     app = File.read!(Path.join(@web_root, "assets/js/app.js"))
 
     assert vue =~ "FederatedFullPageSurface"
     assert vue =~ "createLiveVue"
-    assert vue =~ "data-catalog-url"
+    assert surface =~ "data-catalog-url"
     refute vue =~ "surfaceForPath"
     refute vue =~ "location.pathname"
     assert app =~ "MutationObserver"
@@ -126,18 +127,18 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
 
   test "route-owned ids use bounded query parameters or canonical host props" do
     contracts = [
-      {"catalog/catalog_artifact_show_live.ex", ~w(mission_id artifact_id), []},
-      {"catalog/catalog_database_show_live.ex", ~w(mission_id catalog_database_id), []},
-      {"catalog/catalog_revision_show_live.ex", ~w(mission_id catalog_revision_id), []},
-      {"catalog/catalog_import_run_show_live.ex", ~w(mission_id import_run_id), []},
-      {"provider_account_show_live.ex", ~w(organization_id provider_account_id), []},
+      {"catalog/catalog_artifact_show_live.ex", ~w(artifact_id), []},
+      {"catalog/catalog_database_show_live.ex", ~w(catalog_database_id), []},
+      {"catalog/catalog_revision_show_live.ex", ~w(catalog_revision_id), []},
+      {"catalog/catalog_import_run_show_live.ex", ~w(import_run_id), []},
+      {"provider_account_show_live.ex", ~w(provider_account_id), []},
       {"spacecraft_applications_live.ex", [],
        [
          "mission_id={@current_mission.mission_id}",
          "spacecraft_id={@current_spacecraft.spacecraft_id}"
        ]},
-      {"comms_ground_station_show_live.ex", ~w(mission_id ground_station_id), []},
-      {"comms_routing_show_live.ex", ~w(mission_id routing_rule_id), []}
+      {"comms_ground_station_show_live.ex", ~w(ground_station_id), []},
+      {"comms_routing_show_live.ex", ~w(routing_rule_id), []}
     ]
 
     Enum.each(contracts, fn {relative_path, query_keys, prop_bindings} ->

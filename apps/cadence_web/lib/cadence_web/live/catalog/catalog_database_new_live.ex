@@ -24,7 +24,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
         surface_id="catalog_database_new"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
-          query_params={%{mission_id: @current_mission.mission_id}}
+          query_params={%{}}
           v-ssr={false}
         class="contents"
       />

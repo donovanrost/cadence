@@ -21,7 +21,7 @@ defmodule CadenceWeb.CommsGroundStationListLive do
         surface_id="ground_stations"
         host_scope="mission"
         mission_id={@current_mission.mission_id}
-        query_params={%{mission_id: @current_mission.mission_id}}
+        query_params={%{}}
         v-ssr={false}
         class="contents"
       />

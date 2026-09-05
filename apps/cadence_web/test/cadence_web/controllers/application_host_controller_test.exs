@@ -33,8 +33,14 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert federated_html =~ ~s(data-fallback-href="/missions/#{mission.mission_id}/comms")
     refute federated_html =~ ~s(data-spacecraft-id=)
 
-    assert federated_html =~
-             ~s(data-catalog-url="#{catalog_path(mission.mission_id)}")
+    expected_catalog_url =
+      catalog_path(mission.mission_id) <>
+        "?" <>
+        URI.encode_query(%{"application_key" => "comms_overview", "surface_id" => "overview"})
+
+    document = LazyHTML.from_fragment(federated_html)
+    root = LazyHTML.query(document, "#cadence-federation-root")
+    assert [^expected_catalog_url] = LazyHTML.attribute(root, "data-catalog-url")
 
     refute federated_html =~ ~s(src="/assets/application-host/host/host.js")
 
@@ -68,6 +74,187 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert catalog["session"]["context"]["scope"] == "organization"
     assert catalog["session"]["context"]["organizationId"] == organization.organization_id
     assert catalog["session"]["context"]["missionId"] == nil
+  end
+
+  test "organization-scope root query admits an installation-exempt Mission Catalog surface" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    {catalog_conn, catalog} =
+      member_conn
+      |> get(
+        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
+      )
+      |> then(fn conn -> {conn, json_response(conn, 200)} end)
+
+    response =
+      catalog_conn
+      |> bridge_conn(catalog)
+      |> post_json("/api/cadence/application-host/v1/query", %{
+        "applicationKey" => "mission_catalog",
+        "applicationVersion" => 1,
+        "surfaceId" => "mission_list",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.mission_catalog.mission_list",
+        "queryVersion" => 1,
+        "params" => %{},
+        "scope" => %{
+          "scope" => "organization",
+          "organizationId" => organization.organization_id
+        }
+      })
+
+    assert %{"trusted_surface" => %{"presentation" => presentation}} =
+             json_response(response, 200)
+
+    assert presentation["header"]["title"]["text"] == "Missions"
+  end
+
+  test "organization home catalog and query use the authenticated root surface contract" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    catalog_url =
+      "/api/cadence/application-host/v1/catalog?" <>
+        URI.encode_query(%{
+          "application_key" => "organization_admin",
+          "organization_id" => organization.organization_id,
+          "scope" => "organization",
+          "surface_id" => "organization_home"
+        })
+
+    {catalog_conn, catalog} =
+      member_conn
+      |> get(catalog_url)
+      |> then(fn conn -> {conn, json_response(conn, 200)} end)
+
+    assert [
+             %{
+               "applicationKey" => "organization_admin",
+               "surface" => %{"surfaceId" => "organization_home"}
+             }
+           ] =
+             catalog["applications"]
+
+    response =
+      catalog_conn
+      |> bridge_conn(catalog)
+      |> post_json("/api/cadence/application-host/v1/query", %{
+        "applicationKey" => "organization_admin",
+        "applicationVersion" => 1,
+        "surfaceId" => "organization_home",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.organization.home",
+        "queryVersion" => 1,
+        "params" => %{},
+        "scope" => %{
+          "scope" => "organization",
+          "organizationId" => organization.organization_id
+        }
+      })
+
+    assert %{
+             "trusted_surface" => %{
+               "presentation" => %{"recent_missions" => _}
+             }
+           } = json_response(response, 200)
+  end
+
+  test "organization members cannot query the privileged provider-account surface" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    catalog_url =
+      "/api/cadence/application-host/v1/catalog?" <>
+        URI.encode_query(%{
+          "application_key" => "organization_admin",
+          "organization_id" => organization.organization_id,
+          "scope" => "organization",
+          "surface_id" => "provider_accounts"
+        })
+
+    {catalog_conn, catalog} =
+      member_conn
+      |> get(catalog_url)
+      |> then(fn conn -> {conn, json_response(conn, 200)} end)
+
+    response =
+      catalog_conn
+      |> bridge_conn(catalog)
+      |> post_json("/api/cadence/application-host/v1/query", %{
+        "applicationKey" => "organization_admin",
+        "applicationVersion" => 1,
+        "surfaceId" => "provider_accounts",
+        "surfaceVersion" => 1,
+        "queryId" => "cadence.organization.provider_accounts.list",
+        "queryVersion" => 1,
+        "params" => %{},
+        "scope" => %{
+          "scope" => "organization",
+          "organizationId" => organization.organization_id
+        }
+      })
+
+    assert %{
+             "schema" => "cadence.application-host-problem.v1",
+             "code" => "forbidden"
+           } = json_response(response, 403)
+  end
+
+  test "mission catalog accepts the browser context query on its scoped route" do
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+
+    catalog =
+      member_conn
+      |> get(
+        "/api/cadence/application-host/v1/missions/#{mission.mission_id}/catalog?scope=mission&mission_id=#{mission.mission_id}"
+      )
+      |> json_response(200)
+
+    assert catalog["session"]["context"]["scope"] == "mission"
+    assert catalog["session"]["context"]["missionId"] == mission.mission_id
+  end
+
+  test "legacy federated shells advertise and serve their exact filtered catalog surface" do
+    {member_conn, _organization, mission, _scope} = signed_in_scope_and_mission()
+
+    shell =
+      member_conn
+      |> get("/missions/#{mission.mission_id}/applications/comms_overview/federated")
+      |> html_response(200)
+
+    catalog_url =
+      catalog_path(mission.mission_id) <>
+        "?" <>
+        URI.encode_query(%{"application_key" => "comms_overview", "surface_id" => "overview"})
+
+    document = LazyHTML.from_fragment(shell)
+    root = LazyHTML.query(document, "#cadence-federation-root")
+    assert [^catalog_url] = LazyHTML.attribute(root, "data-catalog-url")
+
+    catalog = member_conn |> get(catalog_url) |> json_response(200)
+
+    assert [%{"applicationKey" => "comms_overview", "surface" => %{"surfaceId" => "overview"}}] =
+             catalog["applications"]
+  end
+
+  test "organization federated shells retain scope ids with exact catalog filters" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    shell =
+      member_conn
+      |> get("/applications/organization_admin/organization_home/federated")
+      |> html_response(200)
+
+    expected_catalog_url =
+      "/api/cadence/application-host/v1/catalog?" <>
+        URI.encode_query(%{
+          "application_key" => "organization_admin",
+          "organization_id" => organization.organization_id,
+          "scope" => "organization",
+          "surface_id" => "organization_home"
+        })
+
+    document = LazyHTML.from_fragment(shell)
+    root = LazyHTML.query(document, "#cadence-federation-root")
+    assert [^expected_catalog_url] = LazyHTML.attribute(root, "data-catalog-url")
   end
 
   test "generic shell fallbacks target the existing mission and spacecraft LiveViews" do

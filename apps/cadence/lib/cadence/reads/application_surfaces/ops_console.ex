@@ -517,17 +517,145 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     })
   end
 
-  defp dashboard_directory(scope, mission, params) do
+  defp dashboard_directory(scope, mission, _params) do
+    dashboard_author? =
+      Policy.authorize(scope, :author_dashboards, %{
+        organization_id: scope.organization_id,
+        mission_id: mission.mission_id
+      }) == :ok
+
     rows =
       scope.organization_id
       |> Cadence.Dashboards.list_dashboard_summaries(mission.mission_id)
-      |> Enum.map(&dashboard_row/1)
+      |> Enum.map(&dashboard_row(&1, mission.mission_id, dashboard_author?))
+
+    tags = rows |> Enum.flat_map(& &1["tags"]) |> Enum.uniq() |> Enum.sort()
 
     envelope("OpsDashboardDirectory", %{
-      "page" => page("ops-dashboard-directory-page", "Dashboards", mission, params),
-      "filters" => filters("dashboard-directory-filters", ["query", "status"]),
+      "page" => directory_page_dto(mission.mission_id, dashboard_author?, length(rows)),
+      "filters" => directory_filters_dto(tags),
       "dashboard_directory" => rows
     })
+  end
+
+  defp directory_page_dto(mission_id, dashboard_author?, count) do
+    %{
+      "id" => "ops-dashboards-page",
+      "header" => %{
+        "eyebrow" => "Observe / Dashboards",
+        "heading" => "Dashboard Directory",
+        "copy" =>
+          "Find mission telemetry workspaces without crowding the navigation rail. Stars and recents are personal; dashboard definitions and tags remain mission shared.",
+        "count" => %{
+          "id" => "dashboard-directory-count",
+          "value" => count,
+          "suffix" => "matching"
+        },
+        "author_actions" => dashboard_author_actions_dto(mission_id, dashboard_author?)
+      },
+      "list" => %{
+        "id" => "dashboard-directory-list",
+        "empty" => %{
+          "id" => "dashboard-directory-empty",
+          "icon" => "hero-magnifying-glass",
+          "heading" => "No matching dashboards",
+          "copy" =>
+            "Change the search, tag, or lifecycle filter. The filter state is preserved in the URL."
+        }
+      }
+    }
+  end
+
+  defp dashboard_author_actions_dto(_mission_id, false), do: []
+
+  defp dashboard_author_actions_dto(mission_id, true) do
+    [
+      %{
+        "id" => "dashboard-directory-new",
+        "label" => "New Dashboard",
+        "href" => "/missions/#{mission_id}/ops/dashboards/new",
+        "icon" => "hero-plus",
+        "icon_class" => "h-4 w-4",
+        "class" => "btn btn-primary btn-sm"
+      },
+      %{
+        "id" => "dashboard-directory-import",
+        "label" => "Import",
+        "icon" => "hero-arrow-down-tray",
+        "icon_class" => "h-4 w-4",
+        "href" => "/missions/#{mission_id}/ops/dashboards/new?mode=import",
+        "class" => "btn btn-outline btn-sm"
+      },
+      %{
+        "id" => "dashboard-directory-library",
+        "label" => "Library",
+        "icon" => "hero-squares-plus",
+        "icon_class" => "h-4 w-4",
+        "href" => "/missions/#{mission_id}/ops/dashboards/library",
+        "class" => "btn btn-ghost btn-sm"
+      },
+      %{
+        "id" => "dashboard-directory-playlists",
+        "label" => "Playlists",
+        "icon" => "hero-play-circle",
+        "icon_class" => "h-4 w-4",
+        "href" => "/missions/#{mission_id}/ops/dashboards/playlists",
+        "class" => "btn btn-ghost btn-sm"
+      }
+    ]
+  end
+
+  defp directory_filters_dto(tags) do
+    %{
+      "id" => "dashboard-directory-filter-form",
+      "values" => %{
+        "query" => "",
+        "lifecycle" => "active",
+        "tag" => "all",
+        "sort" => "updated"
+      },
+      "fields" => %{
+        "query" => %{
+          "id" => "directory_query",
+          "name" => "directory[query]",
+          "type" => "search",
+          "label" => "Search",
+          "placeholder" => "Name, description, or tag",
+          "debounce_ms" => 250
+        },
+        "lifecycle" => %{
+          "id" => "directory_lifecycle",
+          "name" => "directory[lifecycle]",
+          "type" => "select",
+          "label" => "Lifecycle",
+          "options" => [
+            %{"label" => "Active", "value" => "active"},
+            %{"label" => "Archived", "value" => "archived"},
+            %{"label" => "All", "value" => "all"}
+          ]
+        },
+        "tag" => %{
+          "id" => "directory_tag",
+          "name" => "directory[tag]",
+          "type" => "select",
+          "label" => "Tag",
+          "options" =>
+            [%{"label" => "All tags", "value" => "all"}] ++
+              Enum.map(tags, &%{"label" => &1, "value" => &1})
+        },
+        "sort" => %{
+          "id" => "directory_sort",
+          "name" => "directory[sort]",
+          "type" => "select",
+          "label" => "Sort",
+          "options" => [
+            %{"label" => "Recently updated", "value" => "updated"},
+            %{"label" => "Name", "value" => "name"},
+            %{"label" => "Widget count", "value" => "widgets"}
+          ]
+        }
+      }
+    }
   end
 
   defp page(id, title, mission, params),
@@ -1171,18 +1299,92 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "focus" => nil
     }
 
-  defp dashboard_row(summary),
-    do: %{
-      "id" => summary.dashboard_id,
-      "dashboard_id" => summary.dashboard_id,
+  defp dashboard_row(summary, mission_id, dashboard_author?) do
+    dashboard_id = summary.dashboard_id
+
+    %{
+      "id" => dashboard_id,
+      "__dom_id" => "dashboard-#{dashboard_id}",
+      "dashboard_id" => dashboard_id,
       "name" => summary.name,
       "description" => summary.description,
-      "status" => "published",
+      "tags" => List.wrap(Map.get(summary, :tags, [])),
+      "lifecycle" => lifecycle_dto(summary.lifecycle_state),
       "starred" => false,
-      "latest_version" => summary.latest_version,
-      "open" => %{"href" => "#", "id" => "open-#{summary.dashboard_id}", "label" => "Open"},
-      "restore" => nil
+      "open" => dashboard_open_dto(mission_id, summary),
+      "star" => dashboard_star_dto(summary),
+      "widget_version_label" =>
+        "#{summary.widget_count} widgets · v#{summary.latest_version || 1}",
+      "restore" => dashboard_restore_dto(summary)
     }
+    |> maybe_put_clone(mission_id, summary, dashboard_author?)
+  end
+
+  defp lifecycle_dto("active"),
+    do: %{
+      "state" => "active",
+      "class" =>
+        "border px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider border-success/30 text-success"
+    }
+
+  defp lifecycle_dto("archived"),
+    do: %{
+      "state" => "archived",
+      "class" =>
+        "border px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider border-base-content/20 text-base-content/45"
+    }
+
+  defp dashboard_open_dto(mission_id, %{lifecycle_state: "active"} = summary),
+    do: %{
+      "id" => "dashboard-directory-open-#{summary.dashboard_id}",
+      "href" => "/missions/#{mission_id}/ops/dashboards/#{summary.dashboard_id}"
+    }
+
+  defp dashboard_open_dto(_mission_id, _summary), do: nil
+
+  defp dashboard_star_dto(summary),
+    do: %{
+      "id" => "dashboard-directory-star-#{summary.dashboard_id}",
+      "payload" => %{"dashboard-id" => summary.dashboard_id, "starred" => "true"},
+      "aria_label" => "Star #{summary.name}",
+      "aria_pressed" => "false",
+      "disabled" => summary.lifecycle_state == "archived",
+      "title" =>
+        if(summary.lifecycle_state == "archived",
+          do: "Restore this dashboard before starring it",
+          else: nil
+        ),
+      "icon" => "hero-star"
+    }
+
+  defp dashboard_restore_dto(%{lifecycle_state: "archived"} = summary),
+    do: %{
+      "id" => "restore-dashboard-#{summary.dashboard_id}",
+      "label" => "Restore",
+      "icon" => "hero-arrow-uturn-left",
+      "payload" => %{
+        "dashboard-id" => summary.dashboard_id,
+        "expected-version" => to_string(summary.latest_version)
+      },
+      "disabled" => false,
+      "lifecycle_action" => "restore",
+      "action_available" => "available"
+    }
+
+  defp dashboard_restore_dto(_summary), do: nil
+
+  defp maybe_put_clone(row, mission_id, %{lifecycle_state: "active"} = summary, true),
+    do:
+      Map.put(row, "clone", %{
+        "id" => "clone-dashboard-#{summary.dashboard_id}",
+        "label" => "Clone",
+        "icon" => "hero-document-duplicate",
+        "href" =>
+          "/missions/#{mission_id}/ops/dashboards/new?source_dashboard_id=#{summary.dashboard_id}"
+      })
+
+  defp maybe_put_clone(row, _mission_id, _summary, _dashboard_author?),
+    do: Map.put(row, "clone", nil)
 
   defp timeline_presentation(mission, _params),
     do: %{

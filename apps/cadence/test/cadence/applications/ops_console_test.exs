@@ -46,6 +46,27 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end)
   end
 
+  test "resolves non-workspace mission surfaces for filtered host catalogs" do
+    definition = OpsConsole.definition()
+
+    assert Enum.map(
+             Cadence.Applications.Registry.workspace_surfaces(definition, :mission),
+             & &1.surface_id
+           ) == [
+             "workspace"
+           ]
+
+    assert {:ok, surface} =
+             Cadence.Applications.Registry.fetch_surface(
+               definition,
+               :mission,
+               "dashboard_directory"
+             )
+
+    assert surface.placement == :ops_workspace
+    assert surface.surface_id == "dashboard_directory"
+  end
+
   test "keeps query contributions and the action seam domain-owned" do
     assert Enum.map(OpsConsole.surface_query_contributions(), & &1.query_id) ==
              Enum.map(OpsConsole.definition().surfaces, & &1.data_contract.query_id)

@@ -60,6 +60,40 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
     on_exit(fn -> FederationReleaseFixture.cleanup!(release_fixture) end)
     IO.puts("federation release generation activated: #{inspect(release_fixture.release_ids)}")
 
+    mission_route_context = %{
+      host_context: HostContext.mission(context.mission.mission_id),
+      mission: context.mission,
+      spacecraft: nil
+    }
+
+    catalog_opts = [
+      session_id: "fixture-catalog-session",
+      csrf_token: "fixture-catalog-csrf",
+      bridge_base_url: CadenceWeb.ApplicationHostCatalog.bridge_base_path(mission_route_context),
+      manifest_url: fn path -> "https://cdn.example.com" <> path end,
+      now: "2026-09-02T00:03:00Z"
+    ]
+
+    assert {:error, :no_history} =
+             CadenceWeb.ApplicationHostCatalog.build(
+               context.scope,
+               mission_route_context,
+               catalog_opts
+             )
+
+    assert {:ok, mission_catalog} =
+             CadenceWeb.ApplicationHostCatalog.build(
+               context.scope,
+               mission_route_context,
+               catalog_opts ++ [application_key: "ops_console", surface_id: "dashboard_directory"]
+             ),
+           "fixture mission catalog build failed after release activation"
+
+    assert Enum.map(mission_catalog["applications"], & &1["applicationKey"]) == ["ops_console"]
+
+    assert [%{"surface" => %{"surfaceId" => "dashboard_directory"}}] =
+             mission_catalog["applications"]
+
     args = [
       Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),
       "--comms-url",
@@ -166,11 +200,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       })
 
     host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
-    organization_context = HostContext.organization(organization.organization_id)
     mission_context = HostContext.mission(mission.mission_id)
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, organization_context, "mission_catalog")
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, mission_context, "ops_console")
@@ -196,6 +226,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
 
     %{
       user: user,
+      scope: scope,
       mission: mission,
       spacecraft: spacecraft,
       catalog_revision_id: revision.catalog_revision_id,

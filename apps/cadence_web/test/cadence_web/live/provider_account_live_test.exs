@@ -20,7 +20,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
       "provider-account-list-page-component",
       "provider_accounts",
       class: "contents",
-      query_params: %{"organization_id" => organization.organization_id}
+      organization_id: organization.organization_id,
+      query_params: %{}
     )
 
     assert_provider_account_surface(
@@ -29,7 +30,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
       "provider-account-new-component",
       "provider_account_new",
       class: "max-w-3xl space-y-6",
-      query_params: %{"organization_id" => organization.organization_id}
+      organization_id: organization.organization_id,
+      query_params: %{}
     )
 
     provider_account_id = "provider-account-test"
@@ -40,10 +42,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
       "provider-account-show-component",
       "provider_account_show",
       class: "contents",
-      query_params: %{
-        "organization_id" => organization.organization_id,
-        "provider_account_id" => provider_account_id
-      }
+      organization_id: organization.organization_id,
+      query_params: %{"provider_account_id" => provider_account_id}
     )
   end
 
@@ -69,12 +69,13 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     assert vue.handlers == %{}
 
     query_params = Keyword.fetch!(opts, :query_params)
+    organization_id = Keyword.fetch!(opts, :organization_id)
 
     assert vue.props == %{
              "application_key" => "organization_admin",
              "surface_id" => surface_id,
              "host_scope" => "organization",
-             "organization_id" => query_params["organization_id"],
+             "organization_id" => organization_id,
              "query_params" => query_params
            }
   end

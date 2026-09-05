@@ -32,8 +32,8 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
         mission_id={@current_mission.mission_id}
         query_params={
           if @live_action == :new,
-            do: %{mission_id: @current_mission.mission_id},
-            else: %{mission_id: @current_mission.mission_id, ground_station_id: @ground_station_id}
+            do: %{},
+            else: %{ground_station_id: @ground_station_id}
         }
         v-ssr={false}
       />

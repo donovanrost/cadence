@@ -17,7 +17,7 @@ defmodule CadenceWeb.ProviderAccountNewLive do
         surface_id="provider_account_new"
         host_scope="organization"
         organization_id={@current_scope.organization.organization_id}
-        query_params={%{organization_id: @current_scope.organization.organization_id}}
+        query_params={%{}}
         v-ssr={false}
         class="max-w-3xl space-y-6"
       />

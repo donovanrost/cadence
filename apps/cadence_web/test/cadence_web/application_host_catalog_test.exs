@@ -59,6 +59,67 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
     assert catalog["session"]["context"]["spacecraftId"] == nil
   end
 
+  test "includes every organization-installation-exempt first-party application without installing it" do
+    scope = %Scope{actor_kind: :user, organization_id: "org-1"}
+
+    route_context = %{
+      host_context: HostContext.organization("org-1"),
+      mission: nil,
+      spacecraft: nil
+    }
+
+    assert {:ok, catalog} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "catalog-session",
+               csrf_token: "catalog-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
+             )
+
+    assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
+             ["mission_catalog", "organization_admin"]
+
+    for application_key <- ["mission_catalog", "organization_admin"] do
+      assert {:error, :application_installation_scope_required} =
+               ApplicationInstallations.fetch_installed(
+                 scope,
+                 HostContext.organization("org-1"),
+                 application_key
+               )
+    end
+  end
+
+  test "admits each organization-installation-exempt application without an installation row" do
+    scope = %Scope{actor_kind: :user, organization_id: "org-1"}
+
+    route_context = %{
+      host_context: HostContext.organization("org-1"),
+      mission: nil,
+      spacecraft: nil
+    }
+
+    for {application_key, surface_id} <- [
+          {"mission_catalog", "mission_list"},
+          {"organization_admin", "organization_home"}
+        ] do
+      assert {:ok, admission} =
+               ApplicationHostCatalog.admit_application(
+                 scope,
+                 route_context,
+                 application_key,
+                 surface_id,
+                 now: @now
+               )
+
+      assert admission.definition.application_key == application_key
+      assert admission.surface.surface_id == surface_id
+      assert admission.installation == nil
+    end
+  end
+
   test "passes explicit validated time to release lookup boundaries", %{conn: _conn} do
     {scope, route_context} = installed_telemetry_context()
 
@@ -155,6 +216,24 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
 
     assert fallback ==
              "/missions/#{route_context.mission.mission_id}/spacecraft/#{route_context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
+  end
+
+  test "mission catalogs include installed Ops and Spacecraft representatives", %{conn: _conn} do
+    {scope, route_context} = installed_mission_representatives_context()
+
+    assert {:ok, catalog} =
+             ApplicationHostCatalog.build(
+               scope,
+               route_context,
+               session_id: "catalog-session",
+               csrf_token: "catalog-csrf",
+               bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
+               manifest_url: fn path -> "https://example.test" <> path end,
+               now: @now
+             )
+
+    assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
+             ["comms_overview", "ops_console", "spacecraft"]
   end
 
   test "rejects oversized persisted display data before returning a catalog" do
@@ -311,6 +390,31 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
        mission: mission,
        spacecraft: spacecraft
      }}
+  end
+
+  defp installed_mission_representatives_context do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    host_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "ops_console")
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, host_context, "spacecraft")
+
+    {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end
 
   defp installed_comms_context do

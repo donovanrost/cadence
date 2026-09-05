@@ -23,7 +23,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
           surface_id="routing_detail"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
-          query_params={%{mission_id: @current_mission.mission_id, routing_rule_id: @routing_rule_id}}
+          query_params={%{routing_rule_id: @routing_rule_id}}
           v-ssr={false}
         />
       </div>
