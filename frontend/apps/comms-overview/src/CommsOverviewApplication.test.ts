@@ -6,7 +6,7 @@ import type {
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
-import { manifest } from "./federated-application";
+import { canonicalManifest, legacyManifest, manifest } from "./federated-application";
 import { unwrapCommsOverviewResponse, type CommsOverviewResponse } from "./comms-overview";
 
 const context: MissionHostContext = {
@@ -184,11 +184,28 @@ describe("Comms Overview federated adapter", () => {
     expect(() => unwrapCommsOverviewResponse(compatible)).not.toThrow();
   });
 
+  it("publishes all mission Comms surfaces from the canonical remote manifest", () => {
+    expect(canonicalManifest.package).toMatchObject({ packageId: "cadence.comms", version: 1 });
+    expect(canonicalManifest.application).toMatchObject({ applicationKey: "comms", version: 1 });
+    expect(canonicalManifest.surfaces.map(({ surfaceId }) => surfaceId)).toEqual([
+      "overview",
+      "validation",
+      "transports",
+      "transport",
+      "routing",
+      "routing_detail",
+      "ground_stations",
+      "ground_station",
+    ]);
+    expect(canonicalManifest.surfaces.every(({ dataContract }) => dataContract.version === 1)).toBe(true);
+  });
+
   it("publishes the exact mission-scoped first-party identity", () => {
-    expect(manifest.package).toMatchObject({ packageId: "cadence.comms_overview", version: 1 });
-    expect(manifest.application).toMatchObject({ applicationKey: "comms_overview", version: 1 });
-    expect(manifest.application.installableScopes).toEqual(["mission"]);
-    expect(manifest.surfaces).toEqual([
+    expect(legacyManifest.package).toMatchObject({ packageId: "cadence.comms_overview", version: 1 });
+    expect(legacyManifest.application).toMatchObject({ applicationKey: "comms_overview", version: 1 });
+    expect(legacyManifest.application.installableScopes).toEqual(["mission"]);
+    expect(manifest).toBe(legacyManifest);
+    expect(legacyManifest.surfaces).toEqual([
       expect.objectContaining({
         surfaceId: "overview",
         purpose: "overview",

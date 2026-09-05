@@ -2,7 +2,7 @@
 import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
 import { CButton, CStatePanel } from "@cadence/ui";
 import { onMounted, ref, shallowRef } from "vue";
-import CommsOverviewPage from "@cadence/cadence-web-vue/CommsOverviewPage.vue";
+import CommsOverviewPage from "./CommsOverviewPage.vue";
 import {
   COMMS_OVERVIEW_QUERY_ID,
   COMMS_OVERVIEW_QUERY_VERSION,
