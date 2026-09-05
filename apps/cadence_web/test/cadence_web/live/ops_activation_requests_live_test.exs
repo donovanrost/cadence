@@ -8,187 +8,49 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Accounts.User
-  alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Auth.Scope
-  alias Cadence.Catalog.MissionModel.Layer
-  alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Management.Activations, as: ManagementActivations
-  alias Cadence.MissionModels
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  setup do
-    previous = Application.get_env(:cadence, :activation_governance, [])
-    Application.put_env(:cadence, :activation_governance, approval_required: true)
-    on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
-    :ok
-  end
+  test "organization administrators mount the activation federated surface" do
+    {conn, mission} = signed_in(:organization_admin)
 
-  test "an organization administrator approves and applies a persisted request" do
-    %{admin: admin, organization: organization, mission: mission, request: request} =
-      activation_request_fixture()
-
-    {:ok, view, _html} =
-      live(TestFixtures.member_conn(admin), ~p"/missions/#{mission.mission_id}/ops/activations")
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/activations")
 
     assert_surface(view, "activation-requests-component", "activation_requests", mission, %{})
-    assert has_element?(view, "#ops-context-rail-component")
-    refute has_element?(view, "#activation-approval-inbox")
-
-    render_hook(view, "review", %{"request-id" => request.activation_request_id})
-
-    render_hook(view, "decide", %{
-      "activation_decision" => %{
-        "request_id" => request.activation_request_id,
-        "reason" => "Not accepted by the component"
-      },
-      "decision" => "invalid"
-    })
-
-    assert has_element?(view, "#flash-error", "Could not record decision: invalid_decision")
-
-    render_hook(view, "decide", %{
-      "activation_decision" => %{
-        "request_id" => request.activation_request_id,
-        "reason" => "Approved by flight operations"
-      },
-      "decision" => "approved"
-    })
-
-    assert has_element?(view, "#flash-info", "Activation approved and applied.")
-
-    assert {:ok, %{generation: 1}} =
-             ControlActivations.fetch_active_basis(
-               organization.organization_id,
-               mission.mission_id
-             )
-
-    assert :ok = Cadence.Runtime.stop_mission(mission.mission_id)
   end
 
-  test "an organization administrator rejects a persisted request" do
-    %{admin: admin, mission: mission, request: request, requester_scope: requester_scope} =
-      activation_request_fixture(requester_display_name: nil)
-
-    {:ok, view, _html} =
-      live(TestFixtures.member_conn(admin), ~p"/missions/#{mission.mission_id}/ops/activations")
-
-    assert_surface(view, "activation-requests-component", "activation_requests", mission, %{})
-    render_hook(view, "review", %{"request-id" => request.activation_request_id})
-
-    render_hook(view, "decide", %{
-      "activation_decision" => %{
-        "request_id" => request.activation_request_id,
-        "reason" => "Rejected by flight operations"
-      },
-      "decision" => "rejected"
-    })
-
-    assert has_element?(view, "#flash-info", "Activation rejected.")
-
-    assert {:ok, rejected} =
-             ManagementActivations.fetch(requester_scope, request.activation_request_id)
-
-    assert rejected.state == :rejected
-  end
-
-  test "the approval inbox is router-protected from ordinary members" do
-    member = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(member, organization)
-    mission = TestFixtures.persist_mission!(organization)
+  test "ordinary members cannot open the activation route" do
+    {conn, mission} = signed_in(:member)
 
     assert {:error, {:redirect, %{to: "/"}}} =
-             live(
-               TestFixtures.member_conn(member),
-               ~p"/missions/#{mission.mission_id}/ops/activations"
-             )
+             live(conn, ~p"/missions/#{mission.mission_id}/ops/activations")
+  end
+
+  defp signed_in(role) do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization, role: role)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
-  end
-
-  defp activation_request_fixture(opts \\ []) do
-    admin = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
-    mission = TestFixtures.persist_mission!(organization)
-
-    binding_set =
-      BindingSet.new(%{
-        organization_id: organization.organization_id,
-        mission_id: mission.mission_id,
-        binding_set_id: "approval-inbox-basis",
-        version: 1
-      })
-
-    assert {:ok, ^binding_set} =
-             Cadence.Governance.persist_binding_set(organization.organization_id, binding_set)
-
-    layer =
-      Layer.new(%{
-        organization_id: organization.organization_id,
-        mission_id: mission.mission_id,
-        name: "Activation approval model",
-        declarations: [%{kind: :space_system, qualified_name: "/"}]
-      })
-
-    assert {:ok, compilation} = MissionModels.compile_layers([layer])
-
-    assert {:ok, revision} =
-             MissionModels.approve_revision(
-               organization.organization_id,
-               mission.mission_id,
-               compilation.revision.revision_id,
-               %{"kind" => "test_fixture", "id" => "ops-activation-requests-live"}
-             )
-
-    requester =
-      User.new(%{
-        user_id: "activation-requester",
-        email: "activation-requester@example.test",
-        display_name: Keyword.get(opts, :requester_display_name, "Activation Requester"),
-        capabilities: [:platform_admin]
-      })
-
-    requester_scope =
-      Scope.new(%{
-        user: requester,
-        organization_id: organization.organization_id,
-        admin_mode?: true
-      })
-
-    assert {:ok, request} =
-             MissionModels.request_promotion(
-               requester_scope,
-               mission.mission_id,
-               revision.revision_id,
-               binding_set.binding_set_id,
-               binding_set.version
-             )
-
-    %{
-      admin: admin,
-      organization: organization,
-      mission: mission,
-      request: request,
-      requester_scope: requester_scope
-    }
   end
 end

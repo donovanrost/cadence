@@ -8,16 +8,12 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Applications.OpsConsole
   alias CadenceWeb.TestFixtures
+  alias Cadence.Applications.OpsConsole
   alias LiveVue.Test
 
-  test "deployment routes mount the same authenticated source descriptor" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-    mission = TestFixtures.persist_mission!(organization)
-    conn = TestFixtures.member_conn(user)
+  test "deployment routes preserve the source subject contract" do
+    {conn, mission} = signed_in()
 
     {:ok, inventory, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
     assert_surface(inventory, "ops-data-sources-component", "data_sources", mission, %{})
@@ -25,16 +21,12 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
     {:ok, settings, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/deployment-source/settings")
 
-    assert_surface(
-      settings,
-      "ops-data-sources-component",
-      "data_source_settings",
-      mission,
-      %{"data_source_id" => "deployment-source"}
-    )
+    assert_surface(settings, "ops-data-sources-component", "data_source_settings", mission, %{
+      "data_source_id" => "deployment-source"
+    })
   end
 
-  test "deployment descriptor preserves subject scoping and provider ownership" do
+  test "deployment source contracts remain owned by the Ops provider" do
     assert {:ok, %{subject_param: "data_source_id", query_params: ["data_source_id"]}} =
              OpsConsole.surface_query_contract("data_source_settings")
 
@@ -43,21 +35,31 @@ defmodule CadenceWeb.OpsDataSourcesDeploymentLiveTest do
            end)
   end
 
+  defp signed_in do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
+  end
+
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end

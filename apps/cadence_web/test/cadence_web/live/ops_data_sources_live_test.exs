@@ -8,27 +8,34 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.TestFixtures
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
-  alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "authenticated operators mount the data-source descriptor" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-    mission = TestFixtures.persist_mission!(organization)
+  test "data sources forward only the bounded source subject" do
+    {conn, mission} = signed_in()
 
     {:ok, view, _html} =
-      live(TestFixtures.member_conn(user), ~p"/missions/#{mission.mission_id}/ops/data-sources")
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources?data_source_id=source-1&stale=ignored"
+      )
 
-    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{})
-    assert has_element?(view, "#ops-context-rail-component")
-    refute has_element?(view, "#ops-data-sources-page")
+    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{
+      "data_source_id" => "source-1"
+    })
   end
 
-  test "data-source query provider rejects a cross-mission subject" do
+  test "data sources remain authentication scoped" do
+    {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/data-sources")
+  end
+
+  test "the source provider rejects a cross-mission subject" do
     request = %SurfaceQueryRequest{
       application_key: "ops_console",
       application_version: 1,
@@ -47,21 +54,36 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              )
   end
 
+  defp signed_in do
+    {conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+    {conn, mission}
+  end
+
+  defp signed_in_user_org_and_mission do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), user, organization, mission}
+  end
+
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end

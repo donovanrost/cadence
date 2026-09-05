@@ -8,33 +8,26 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.TestFixtures
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
-  alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "capability remediation mounts the authenticated data-source descriptor" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
-    mission = TestFixtures.persist_mission!(organization)
+  test "capability remediation forwards only the source subject" do
+    {conn, mission} = signed_in()
 
     {:ok, view, _html} =
       live(
-        TestFixtures.member_conn(user),
-        ~p"/missions/#{mission.mission_id}/ops/data-sources?#{%{data_source_id: "focus-source", source_empty_reason: "unsupported_source_capability", requested_sampling: "raw_series"}}"
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/data-sources?data_source_id=focus-source&source_empty_reason=unsupported&requested_sampling=raw"
       )
 
-    assert_surface(
-      view,
-      "ops-data-sources-component",
-      "data_sources",
-      mission,
-      %{"data_source_id" => "focus-source"}
-    )
+    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{
+      "data_source_id" => "focus-source"
+    })
   end
 
-  test "source query provider rejects unbounded capability parameters" do
+  test "the source provider rejects unbounded capability parameters" do
     request = %SurfaceQueryRequest{
       application_key: "ops_console",
       application_version: 1,
@@ -53,21 +46,31 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
              )
   end
 
+  defp signed_in do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization, role: :organization_admin)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
+  end
+
   defp assert_surface(view, id, surface_id, mission, query_params) do
     assert has_element?(view, "##{id}.contents")
     vue = Test.get_vue(view, id: id)
+
     assert vue.component == "FederatedFullPageSurface"
     assert vue.id == id
     assert vue.class == "contents"
     assert vue.ssr == false
     assert vue.handlers == %{}
+    assert vue.slots == %{}
 
     assert vue.props == %{
              "application_key" => "ops_console",
+             "surface_id" => surface_id,
              "host_scope" => "mission",
              "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
+             "query_params" => query_params
            }
   end
 end
