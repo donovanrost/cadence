@@ -78,7 +78,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  review: [payload: { "request-id": string }];
   decide: [
     payload: {
       activation_decision: { request_id: string; reason: string };
@@ -87,19 +86,28 @@ const emit = defineEmits<{
   ];
 }>();
 
+const selectedRequest = ref<SelectedRequest | null>(props.selected);
 const rationale = ref(props.form.reason.value);
 
 watch(
-  () => props.selected?.activation_request_id ?? null,
+  () => props.selected,
   (requestId, previousRequestId) => {
     // A new selection owns a fresh server form. Patches for the same selection
     // must not overwrite rationale typed locally after the last server render.
-    if (requestId !== previousRequestId) rationale.value = props.form.reason.value;
+    selectedRequest.value = requestId;
+    if (requestId?.activation_request_id !== previousRequestId?.activation_request_id) {
+      rationale.value = props.form.reason.value;
+    }
   },
 );
 
 const review = (request: ActivationRequest) => {
-  emit("review", { "request-id": request.activation_request_id });
+  selectedRequest.value = {
+    activation_request_id: request.activation_request_id,
+    binding_set_id: request.binding_set_id,
+    binding_set_version: request.binding_set_version,
+  };
+  rationale.value = "";
 };
 
 const decide = (event: SubmitEvent) => {
@@ -109,7 +117,7 @@ const decide = (event: SubmitEvent) => {
 
   emit("decide", {
     activation_decision: {
-      request_id: props.form.request_id.value,
+      request_id: selectedRequest.value?.activation_request_id ?? "",
       reason: rationale.value,
     },
     decision,
@@ -176,7 +184,7 @@ const decide = (event: SubmitEvent) => {
     </CadenceCard>
 
     <CadenceCard
-      v-if="selected"
+      v-if="selectedRequest"
       :id="form.panel_id"
       class="card bg-base-200 border border-base-300"
       body-class="card-body p-6"
@@ -188,7 +196,7 @@ const decide = (event: SubmitEvent) => {
               :id="form.request_id.id"
               :name="form.request_id.name"
               :type="form.request_id.type"
-              :value="form.request_id.value"
+              :value="selectedRequest.activation_request_id"
               class="w-full input"
             />
           </label>

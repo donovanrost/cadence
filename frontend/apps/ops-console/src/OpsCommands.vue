@@ -5,7 +5,7 @@ import CadenceField from "./ui/components/CadenceField.vue";
 import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
 import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue";
 import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue";
-import { onBeforeUnmount, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 type Option = {
   label: string;
@@ -150,64 +150,85 @@ const props = defineProps<{
   commands: Command[];
 }>();
 
-const emit = defineEmits<{
-  filter: [payload: { filters: FilterValues }];
-  reset_filters: [payload: EmptyPayload];
-  follow_command: [payload: FollowPayload];
-  clear_command_focus: [payload: EmptyPayload];
-}>();
-
 const filterValues = reactive<FilterValues>({ ...props.filters.values });
-let queryTimer: ReturnType<typeof setTimeout> | undefined;
+const focusedCommandRequestId = ref(props.focus_banner?.command_request_id ?? null);
 
 watch(
   () => props.filters.values,
   (values) => {
-    if (queryTimer !== undefined) clearTimeout(queryTimer);
-    queryTimer = undefined;
     Object.assign(filterValues, values);
   },
   { deep: true },
 );
 
-onBeforeUnmount(() => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer);
-});
-
-const emitFilters = () => {
-  emit("filter", { filters: { ...filterValues } });
-};
-
 const updateSelect = (key: "status" | "target", event: Event) => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer);
-  queryTimer = undefined;
   filterValues[key] = (event.target as HTMLSelectElement).value;
-  emitFilters();
 };
 
 const updateQuery = (event: Event) => {
   filterValues.query = (event.target as HTMLInputElement).value;
-
-  if (queryTimer !== undefined) clearTimeout(queryTimer);
-  queryTimer = setTimeout(() => {
-    queryTimer = undefined;
-    emitFilters();
-  }, props.filters.fields.query.debounce_ms);
 };
 
 const resetFilters = () => {
-  if (queryTimer !== undefined) clearTimeout(queryTimer);
-  queryTimer = undefined;
-  emit("reset_filters", props.reset.payload);
+  Object.assign(filterValues, props.reset.payload);
+  filterValues.status = "all";
+  filterValues.target = "all";
+  filterValues.query = "";
 };
 
 const followCommand = (command: Command) => {
-  emit("follow_command", command.focus.action.payload);
+  focusedCommandRequestId.value = command.focus.action.payload["command-request-id"];
 };
 
 const clearCommandFocus = () => {
-  if (props.focus_banner) emit("clear_command_focus", props.focus_banner.clear.payload);
+  focusedCommandRequestId.value = null;
 };
+
+const visibleCommands = computed(() => {
+  const status = filterValues.status;
+  const target = filterValues.target;
+  const query = filterValues.query.toLowerCase();
+
+  return props.commands
+    .filter((command) => {
+      const statusMatches = status === "" || status === "all" || command.status.value === status;
+      const targetMatches =
+        target === "" || target === "all" || command.target.display === target;
+      const queryMatches =
+        query === "" ||
+        [
+          command.command_name,
+          command.command_request_id,
+          command.target.display,
+          command.requester.display,
+        ].some((value) => value?.toLowerCase().includes(query));
+
+      return statusMatches && targetMatches && queryMatches;
+    })
+    .map((command) => ({
+      ...command,
+      focus: {
+        ...command.focus,
+        following: command.command_request_id === focusedCommandRequestId.value,
+      },
+    }));
+});
+
+const focusBanner = computed(() => {
+  const commandRequestId = focusedCommandRequestId.value;
+  if (!commandRequestId) return null;
+
+  return props.focus_banner
+    ? { ...props.focus_banner, command_request_id: commandRequestId }
+    : {
+        id: "followed-command-banner",
+        command_request_id: commandRequestId,
+        icon: "hero-eye",
+        prefix: "Following",
+        suffix: "across Ops pages",
+        clear: { id: "clear-command-focus", label: "Stop following", payload: {} },
+      };
+});
 </script>
 
 <template>
@@ -246,24 +267,24 @@ const clearCommandFocus = () => {
 
     <CadenceOpsListBodyFrame>
       <div
-        v-if="focus_banner"
-        :id="focus_banner.id"
-        :data-followed-command="focus_banner.command_request_id"
+          v-if="focusBanner"
+          :id="focusBanner.id"
+          :data-followed-command="focusBanner.command_request_id"
         class="flex items-center gap-3 border-l-2 border-info bg-info/10 px-3 py-2"
       >
-        <span :class="[focus_banner.icon, 'h-4 w-4 text-info']"></span>
+          <span :class="[focusBanner.icon, 'h-4 w-4 text-info']"></span>
         <p class="min-w-0 flex-1 truncate text-sm">
-          {{ focus_banner.prefix }}
-          <span class="font-mono font-semibold">{{ focus_banner.command_request_id }}</span>
-          {{ focus_banner.suffix }}
+          {{ focusBanner.prefix }}
+          <span class="font-mono font-semibold">{{ focusBanner.command_request_id }}</span>
+          {{ focusBanner.suffix }}
         </p>
-        <button
-          :id="focus_banner.clear.id"
+          <button
+            :id="focusBanner.clear.id"
           type="button"
           class="btn btn-ghost btn-xs"
           @click="clearCommandFocus"
         >
-          {{ focus_banner.clear.label }}
+          {{ focusBanner.clear.label }}
         </button>
       </div>
 
@@ -353,7 +374,7 @@ const clearCommandFocus = () => {
             </p>
           </div>
           <article
-            v-for="command in commands"
+            v-for="command in visibleCommands"
             :id="command.__dom_id"
             :key="command.id"
             :data-command-request="command.command_request_id"
