@@ -49,6 +49,27 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert has_element?(view, "#comms-overview-component")
   end
 
+  test "organization-scope host shells retain the authenticated browser gate", %{conn: conn} do
+    assert conn
+           |> get("/applications/organization_admin/organization_home/federated")
+           |> redirected_to() == "/sign-in"
+  end
+
+  test "organization-scope catalog route builds a positive host context without a mission id" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    catalog =
+      member_conn
+      |> get(
+        "/api/cadence/application-host/v1/catalog?scope=organization&organization_id=#{organization.organization_id}"
+      )
+      |> json_response(200)
+
+    assert catalog["session"]["context"]["scope"] == "organization"
+    assert catalog["session"]["context"]["organizationId"] == organization.organization_id
+    assert catalog["session"]["context"]["missionId"] == nil
+  end
+
   test "generic shell fallbacks target the existing mission and spacecraft LiveViews" do
     mission_context = %{host_context: HostContext.mission("mission-1")}
     spacecraft_context = %{host_context: HostContext.spacecraft("mission-1", "spacecraft-1")}

@@ -22,10 +22,7 @@ defmodule CadenceWeb.ApplicationHostController do
   @host_mission_key :application_host_mission_id
 
   @spec federated(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def federated(
-        conn,
-        %{"mission_id" => _mission_id, "application_key" => application_key} = params
-      ) do
+  def federated(conn, %{"application_key" => application_key} = params) do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
@@ -51,8 +48,17 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
+  def organization_federated(conn, params),
+    do: federated(conn, Map.put(params, "host_scope", "organization"))
+
+  def user_federated(conn, params),
+    do: federated(conn, Map.put(params, "host_scope", "user"))
+
+  def admin_federated(conn, params),
+    do: federated(conn, Map.put(params, "host_scope", "admin"))
+
   @spec catalog(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def catalog(conn, %{"mission_id" => _mission_id} = params) do
+  def catalog(conn, params) when is_map(params) do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
@@ -60,11 +66,7 @@ defmodule CadenceWeb.ApplicationHostController do
          {:ok, route_context} <- fetch_route_context(conn, current_scope, params),
          {:ok, catalog} <- build_catalog(conn, current_scope, route_context, params, now) do
       conn
-      |> put_session(
-        @host_context_key,
-        ApplicationHostCatalog.scope_document(current_scope, route_context)
-      )
-      |> put_session(@host_mission_key, route_context.mission.mission_id)
+      |> put_host_session(current_scope, route_context)
       |> put_resp_header("cache-control", "no-store")
       |> json(catalog)
     else
@@ -74,7 +76,7 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   @spec query(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def query(conn, %{"mission_id" => _mission_id} = params) do
+  def query(conn, params) when is_map(params) do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
@@ -127,7 +129,7 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   @spec actions(Plug.Conn.t(), map()) :: Plug.Conn.t()
-  def actions(conn, %{"mission_id" => _mission_id} = params) do
+  def actions(conn, params) when is_map(params) do
     now = request_boundary_now()
 
     with %Scope{} = current_scope <- conn.assigns.current_scope,
@@ -287,7 +289,9 @@ defmodule CadenceWeb.ApplicationHostController do
         render(conn, :federated,
           flash: conn.assigns.flash,
           current_scope: current_scope,
-          mission_id: route_context.mission.mission_id,
+          organization_id: route_context.host_context.organization_id,
+          user_id: route_context.host_context.user_id,
+          mission_id: route_context.host_context.mission_id,
           spacecraft_id: route_context.host_context.spacecraft_id,
           host_scope: Atom.to_string(route_context.host_context.placement),
           application_key: application_key,
@@ -334,12 +338,16 @@ defmodule CadenceWeb.ApplicationHostController do
     |> DateTime.to_iso8601()
   end
 
-  defp fetch_route_context(
-         conn,
-         %Scope{} = current_scope,
-         params
-       ) do
-    fetch_route_context(current_scope, Map.merge(params, conn.path_params))
+  defp fetch_route_context(conn, %Scope{} = current_scope, params) do
+    params = Map.merge(params, conn.path_params)
+
+    case Map.get(params, "mission_id") do
+      mission_id when is_binary(mission_id) ->
+        fetch_route_context(current_scope, params)
+
+      _missing ->
+        fetch_generic_route_context(current_scope, params)
+    end
   end
 
   defp fetch_route_context(
@@ -351,7 +359,62 @@ defmodule CadenceWeb.ApplicationHostController do
     end
   end
 
-  defp fetch_route_context(%Scope{}, _params), do: {:error, :mission_not_found}
+  defp fetch_route_context(%Scope{} = current_scope, params) do
+    fetch_generic_route_context(current_scope, params)
+  end
+
+  defp fetch_generic_route_context(%Scope{} = current_scope, params) do
+    case requested_scope(params) do
+      "organization" ->
+        with organization_id when is_binary(organization_id) <- current_scope.organization_id do
+          requested_organization_id = Map.get(params, "organization_id")
+
+          if generic_scope_ids_match?(params, :organization, organization_id) and
+               (is_nil(requested_organization_id) or requested_organization_id == organization_id) do
+            {:ok,
+             %{
+               host_context: HostContext.organization(organization_id),
+               mission: nil,
+               spacecraft: nil
+             }}
+          else
+            {:error, :scope_mismatch}
+          end
+        else
+          _missing -> {:error, :scope_mismatch}
+        end
+
+      "user" ->
+        with :user <- current_scope.actor_kind,
+             %{id: user_id} <- current_scope.user do
+          requested_user_id = Map.get(params, "user_id")
+
+          if generic_scope_ids_match?(params, :user, user_id) and
+               (is_nil(requested_user_id) or requested_user_id == user_id) do
+            {:ok,
+             %{
+               host_context: HostContext.user(user_id),
+               mission: nil,
+               spacecraft: nil
+             }}
+          else
+            {:error, :scope_mismatch}
+          end
+        else
+          _not_user -> {:error, :authenticated_user_required}
+        end
+
+      "admin" ->
+        if Scope.admin_mode?(current_scope) and generic_scope_ids_match?(params, :admin, nil) do
+          {:ok, %{host_context: HostContext.admin(), mission: nil, spacecraft: nil}}
+        else
+          {:error, :forbidden}
+        end
+
+      _other ->
+        {:error, :scope_mismatch}
+    end
+  end
 
   defp authorize_route_scope(
          %Scope{} = current_scope,
@@ -363,7 +426,21 @@ defmodule CadenceWeb.ApplicationHostController do
     })
   end
 
-  defp authorize_route_scope(_current_scope, _params), do: {:error, :scope_mismatch}
+  defp authorize_route_scope(%Scope{} = current_scope, params) do
+    case requested_scope(params) do
+      "organization" when is_binary(current_scope.organization_id) ->
+        :ok
+
+      "user" when current_scope.actor_kind == :user ->
+        :ok
+
+      "admin" ->
+        if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+
+      _other ->
+        {:error, :scope_mismatch}
+    end
+  end
 
   defp fetch_host_context(%Scope{}, %Mission{} = mission, nil) do
     {:ok,
@@ -416,13 +493,50 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp validate_host_context(conn, current_scope, route_context) do
     expected = ApplicationHostCatalog.scope_document(current_scope, route_context)
+    expected_mission_id = route_context.host_context.mission_id
 
     if get_session(conn, @host_context_key) == expected and
-         get_session(conn, @host_mission_key) == route_context.mission.mission_id do
+         get_session(conn, @host_mission_key) == expected_mission_id do
       :ok
     else
       {:invalid_scope, :host_session_mismatch}
     end
+  end
+
+  defp put_host_session(conn, current_scope, route_context) do
+    conn =
+      put_session(
+        conn,
+        @host_context_key,
+        ApplicationHostCatalog.scope_document(current_scope, route_context)
+      )
+
+    case route_context.host_context.mission_id do
+      mission_id when is_binary(mission_id) -> put_session(conn, @host_mission_key, mission_id)
+      _generic -> delete_session(conn, @host_mission_key)
+    end
+  end
+
+  defp requested_scope(%{"host_scope" => scope}) when is_binary(scope), do: scope
+  defp requested_scope(%{"scope" => scope}) when is_binary(scope), do: scope
+
+  defp requested_scope(%{"scope" => %{"scope" => scope}}) when is_binary(scope),
+    do: scope
+
+  defp requested_scope(_params), do: nil
+
+  defp generic_scope_ids_match?(params, scope, expected_id) do
+    keys = ["organization_id", "user_id", "mission_id", "spacecraft_id"]
+
+    allowed_key =
+      if scope == :organization, do: "organization_id", else: if(scope == :user, do: "user_id")
+
+    Enum.all?(keys, fn key ->
+      value = Map.get(params, key)
+
+      (key == allowed_key and value in [nil, expected_id]) or
+        (key != allowed_key and is_nil(value))
+    end)
   end
 
   defp idempotency_key(conn) do
@@ -598,6 +712,27 @@ defmodule CadenceWeb.ApplicationHostController do
 
   defp bridge_problem(conn, _reason) do
     problem(conn, :unprocessable_entity, "invalid_input", "The application request is invalid.")
+  end
+
+  defp catalog_url(
+         %{host_context: %HostContext{placement: placement} = host_context} = route_context
+       )
+       when placement in [:organization, :user, :admin] do
+    base = ApplicationHostCatalog.bridge_base_path(route_context) <> "/catalog"
+
+    query =
+      case placement do
+        :organization ->
+          %{"scope" => "organization", "organization_id" => host_context.organization_id}
+
+        :user ->
+          %{"scope" => "user", "user_id" => host_context.user_id}
+
+        :admin ->
+          %{"scope" => "admin"}
+      end
+
+    base <> "?" <> URI.encode_query(query)
   end
 
   defp catalog_url(route_context),

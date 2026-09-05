@@ -80,7 +80,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
     :subject_detail,
     :activity
   ]
-  @scopes [:organization, :mission, :spacecraft, :source_endpoint, :transport]
+  @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @placements [:application_workspace, :ops_workspace, :ops_dock, :administration]
   @max_references 32
   @max_actions 32

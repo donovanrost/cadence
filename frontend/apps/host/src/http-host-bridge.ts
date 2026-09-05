@@ -300,20 +300,42 @@ function isRequestControlError(reason: unknown): reason is HostBridgeError {
 }
 
 function scopeFrom(context: HostContext) {
-  return {
-    organizationId: context.organizationId,
-    missionId: context.missionId,
-    spacecraftId: context.spacecraftId,
-  };
+  switch (context.scope) {
+    case "organization":
+      return { scope: context.scope, organizationId: context.organizationId };
+    case "user":
+      return { scope: context.scope, userId: context.userId };
+    case "admin":
+      return { scope: context.scope };
+    case "mission":
+      return {
+        organizationId: context.organizationId,
+        missionId: context.missionId,
+        spacecraftId: context.spacecraftId,
+      };
+    case "spacecraft":
+      return {
+        organizationId: context.organizationId,
+        missionId: context.missionId,
+        spacecraftId: context.spacecraftId,
+      };
+  }
 }
 
 function assertActiveContext(actual: HostContext, expected: HostContext): void {
-  if (
-    actual.scope !== expected.scope ||
-    actual.organizationId !== expected.organizationId ||
-    actual.missionId !== expected.missionId ||
-    actual.spacecraftId !== expected.spacecraftId
-  ) {
+  const sameContext =
+    actual.scope === expected.scope &&
+    (actual.scope === "organization"
+      ? expected.scope === "organization" && actual.organizationId === expected.organizationId
+      : actual.scope === "user"
+        ? expected.scope === "user" && actual.userId === expected.userId
+        : actual.scope === "admin"
+          ? expected.scope === "admin"
+          : (expected.scope === "mission" || expected.scope === "spacecraft") &&
+            actual.missionId === expected.missionId &&
+            actual.spacecraftId === expected.spacecraftId);
+
+  if (!sameContext) {
     throw new HostBridgeError(
       400,
       "invalid_scope",
