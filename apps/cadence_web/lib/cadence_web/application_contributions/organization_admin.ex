@@ -4,9 +4,19 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   alias CadenceWeb.ApplicationContributions.OrganizationAdminAction
   alias CadenceWeb.ApplicationContributions.OrganizationAdminQuery
 
+  alias Cadence.Applications.{
+    ActionDefinition,
+    ApplicationDefinition,
+    CatalogContribution,
+    ReleaseContribution,
+    SurfaceDefinition
+  }
+
   @application_key "organization_admin"
   @remote_name "cadence_organization_admin"
   @version 1
+  @package_id "cadence.organization-admin"
+  @manifest_path "/assets/application-host/organization-admin/mf-manifest.json"
 
   @surface_contracts [
     %{
@@ -158,7 +168,62 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
   @doc "Identity used by the remote and its eventual central composition."
   @spec identity() :: map()
   def identity do
-    %{application_key: @application_key, remote_name: @remote_name, version: @version}
+    %{
+      application_key: @application_key,
+      application_version: @version,
+      version: @version,
+      package_id: @package_id,
+      package_version: @version,
+      remote_name: @remote_name,
+      manifest_path: @manifest_path
+    }
+  end
+
+  @doc "Returns the Phoenix-owned application definition for the organization domain."
+  @spec definition() :: ApplicationDefinition.t()
+  def definition do
+    %ApplicationDefinition{
+      application_key: @application_key,
+      version: @version,
+      display_name: "Organization Administration",
+      description:
+        "Manage organization membership, providers, notifications, and administration.",
+      trust: :first_party,
+      availability: :available,
+      installable_scopes: [:organization],
+      actions: action_definitions(),
+      surfaces: Enum.map(@surface_contracts, &surface_definition/1)
+    }
+  end
+
+  @doc "Returns the catalog contribution for the organization domain."
+  @spec catalog_contributions() :: [CatalogContribution.t()]
+  def catalog_contributions do
+    [
+      %CatalogContribution{
+        definition: definition(),
+        package_id: @package_id,
+        package_version: @version
+      }
+    ]
+  end
+
+  @doc "Returns one immutable release coordinate for every organization surface."
+  @spec release_contributions() :: [ReleaseContribution.t()]
+  def release_contributions do
+    Enum.map(@surface_contracts, fn surface ->
+      %ReleaseContribution{
+        application_key: @application_key,
+        application_version: @version,
+        surface_id: surface.id,
+        surface_version: @version,
+        federation: :module_federation,
+        release_id: "organization-admin-v1",
+        remote_name: @remote_name,
+        manifest_path: @manifest_path,
+        exposed_module: "./#{surface.component}"
+      }
+    end)
   end
 
   @doc "Returns the complete post-auth surface contribution set."
@@ -223,4 +288,59 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
       {:error, :invalid_surface_actions}
     end
   end
+
+  defp action_definitions do
+    @surface_contracts
+    |> Enum.flat_map(& &1.actions)
+    |> Enum.uniq()
+    |> Enum.map(fn action_id ->
+      %ActionDefinition{
+        action_id: action_id,
+        version: @version,
+        intent: :configuration,
+        scope: :organization,
+        input_contract: %{schema_id: "cadence.organization_admin.#{action_id}.input", version: 1},
+        result_contract: %{
+          schema_id: "cadence.organization_admin.#{action_id}.result",
+          version: 1
+        },
+        required_permission: "manage_organization",
+        effect: :durable,
+        execution: :immediate,
+        concurrency: %{strategy: :expected_version}
+      }
+    end)
+  end
+
+  defp surface_definition(surface) do
+    %SurfaceDefinition{
+      surface_id: surface.id,
+      version: @version,
+      purpose: surface_purpose(surface.id),
+      scope: :organization,
+      placement: :application_workspace,
+      navigation: %{label: surface.id, order: surface_order(surface.id)},
+      data_contract: %{query_id: surface.query, version: @version},
+      actions: surface.actions,
+      refresh: :after_action,
+      renderer: {:trusted, "cadence.organization_admin.#{surface.id}"}
+    }
+  end
+
+  defp surface_order(surface_id),
+    do: Enum.find_index(@surface_contracts, &(&1.id == surface_id)) + 1
+
+  defp surface_purpose(surface_id)
+       when surface_id in ["notifications", "notifications_bell", "admin_runtime"],
+       do: :activity
+
+  defp surface_purpose(surface_id)
+       when surface_id in [
+              "provider_account_new",
+              "admin_organization_new",
+              "admin_organization_invite"
+            ],
+       do: :configuration
+
+  defp surface_purpose(_surface_id), do: :overview
 end

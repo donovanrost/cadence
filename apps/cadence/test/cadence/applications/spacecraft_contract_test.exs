@@ -33,8 +33,6 @@ defmodule Cadence.Applications.SpacecraftContractTest do
     assert %ApplicationDefinition{} = definition
     assert :ok = ApplicationDefinition.validate(definition)
     assert definition.application_key == "spacecraft"
-    assert definition.package_id == "cadence.spacecraft"
-    assert definition.package_version == 1
     assert Enum.map(definition.surfaces, & &1.surface_id) == @surface_ids
 
     assert Enum.map(definition.surfaces, & &1.data_contract.query_id) == [
@@ -68,8 +66,6 @@ defmodule Cadence.Applications.SpacecraftContractTest do
     assert Enum.all?(releases, fn contribution ->
              %ReleaseContribution{
                application_key: "spacecraft",
-               package_id: "cadence.spacecraft",
-               package_version: 1,
                release_id: "spacecraft-v1",
                federation: :module_federation,
                remote_name: "cadence_spacecraft",

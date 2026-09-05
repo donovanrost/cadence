@@ -3,15 +3,25 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   alias Cadence.Applications.{
     LegacyCommsOverview,
+    MissionCatalog,
+    OpsConsole,
+    Spacecraft,
     ReleaseContribution,
     TelemetryDecomCatalogContribution
   }
 
   @max_contributions 64
-  @contributors [LegacyCommsOverview, TelemetryDecomCatalogContribution]
+  @contributors [
+    LegacyCommsOverview,
+    MissionCatalog,
+    Spacecraft,
+    TelemetryDecomCatalogContribution,
+    OpsConsole
+  ]
+  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
 
   @spec all() :: [ReleaseContribution.t()]
-  def all, do: all(@contributors)
+  def all, do: all(contributors())
 
   @doc false
   @spec all([module()]) :: [ReleaseContribution.t()]
@@ -28,7 +38,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
   def all(_contributors), do: []
 
   @spec validate() :: :ok | {:error, :invalid_release_contribution_registry}
-  def validate, do: validate(@contributors)
+  def validate, do: validate(contributors())
 
   @doc false
   @spec validate([module()]) :: :ok | {:error, :invalid_release_contribution_registry}
@@ -45,6 +55,10 @@ defmodule Cadence.Applications.ReleaseRegistry do
   end
 
   def validate(_contributors), do: {:error, :invalid_release_contribution_registry}
+
+  defp contributors do
+    @contributors ++ Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+  end
 
   @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
           {:ok, ReleaseContribution.t()} | {:error, :unknown_release_contribution}

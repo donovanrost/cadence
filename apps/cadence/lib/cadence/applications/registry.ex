@@ -17,6 +17,7 @@ defmodule Cadence.Applications.Registry do
   }
 
   alias Cadence.Applications.Comms, as: CommsApplication
+  alias Cadence.Applications.{LegacyCommsOverview, MissionCatalog, OpsConsole, Spacecraft}
 
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
@@ -28,13 +29,26 @@ defmodule Cadence.Applications.Registry do
 
   @spec all() :: [ApplicationDefinition.t()]
   def all,
-    do: [
-      telemetry_decom(),
-      derived_telemetry(),
-      limits(),
-      CommsApplication.definition(),
-      cfdp()
-    ]
+    do:
+      [
+        telemetry_decom(),
+        derived_telemetry(),
+        limits(),
+        CommsApplication.definition(),
+        LegacyCommsOverview.definition(),
+        MissionCatalog.definition(),
+        Spacecraft.definition(),
+        OpsConsole.definition(),
+        cfdp()
+      ] ++ optional_web_definitions()
+
+  defp optional_web_definitions do
+    module = CadenceWeb.ApplicationContributions.OrganizationAdmin
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :definition, 0),
+      do: [module.definition()],
+      else: []
+  end
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do
