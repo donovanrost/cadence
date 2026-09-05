@@ -109,12 +109,13 @@ async function outputFiles(root) {
   return files;
 }
 
-void test("accepts a canonical external release path through the actual Vite CLI", async () => {
+void test("emits only the federation release graph into clean external directories", async () => {
   await withTemporaryDirectory(async (root) => {
     const alias = join(root, "external-alias");
     await symlink(root, alias, "dir");
     const aliasedOutput = join(alias, "nested", "release");
     const canonicalOutput = join(root, "nested", "release");
+    const secondOutput = join(root, "nested", "second-release");
 
     const result = await runVite(releaseArguments("--outDir", canonicalOutput), {
       [outputEnvironmentName]: aliasedOutput,
@@ -122,12 +123,22 @@ void test("accepts a canonical external release path through the actual Vite CLI
 
     assert.equal(result.code, 0, result.stderr);
     assert.equal(await pathExists(canonicalOutput), true);
-    for (const required of ["index.html", "mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
+    for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
       assert.equal(await pathExists(join(canonicalOutput, required)), true, required);
     }
+    const manifest = JSON.parse(await readFile(join(canonicalOutput, "mf-manifest.json"), "utf8"));
+    assert.deepEqual(manifest.exposes.map(({ path }) => path), ["./Application"]);
+    const stats = JSON.parse(await readFile(join(canonicalOutput, "mf-stats.json"), "utf8"));
+    assert.equal(Object.hasOwn(stats, "assetAnalysis"), false);
+    assert.equal(await pathExists(join(canonicalOutput, "index.html")), false);
     assert.equal(await pathExists(join(canonicalOutput, ".vite/manifest.json")), false);
 
     const emittedPaths = await outputFiles(canonicalOutput);
+    assert.equal(
+    emittedPaths.some((path) => /(?:^|\/)index-[^/]+\.js$/.test(path)),
+      false,
+    );
+    assert.equal(emittedPaths.some((path) => path.includes("failure-application")), false);
     for (const path of emittedPaths) {
       const bytes = await readFile(path);
       assert.equal(
@@ -146,6 +157,44 @@ void test("accepts a canonical external release path through the actual Vite CLI
         relative(canonicalOutput, path),
       );
     }
+
+    const secondResult = await runVite(releaseArguments("--outDir", secondOutput), {
+      [outputEnvironmentName]: secondOutput,
+    });
+    assert.equal(secondResult.code, 0, secondResult.stderr);
+    const secondPaths = await outputFiles(secondOutput);
+    assert.deepEqual(
+      emittedPaths.map((path) => relative(canonicalOutput, path)),
+      secondPaths.map((path) => relative(secondOutput, path)),
+    );
+
+    const stalePath = join(secondOutput, "assets", "stale-release.js");
+    await writeFile(stalePath, "export const stale = true;\n");
+    const rebuiltResult = await runVite(releaseArguments("--outDir", secondOutput), {
+      [outputEnvironmentName]: secondOutput,
+    });
+    assert.equal(rebuiltResult.code, 0, rebuiltResult.stderr);
+    assert.equal(await pathExists(stalePath), false, "stale output survived the release rebuild");
+  });
+});
+
+void test("keeps standalone entry behavior outside release mode", async () => {
+  await withTemporaryDirectory(async (root) => {
+    const output = join(root, "standalone");
+    const result = await runVite(
+      [
+        "build",
+        "--config",
+        resolve(appRoot, "vite.config.ts"),
+        "--mode",
+        "development",
+        "--outDir",
+        output,
+      ],
+      {},
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(await pathExists(join(output, "index.html")), true);
   });
 });
 

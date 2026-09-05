@@ -22,6 +22,7 @@ import {
   canonicalJson,
   enumerateArtifacts,
   packageRelease,
+  readPrivateKeySource,
   validateRelativeArtifactPath,
 } from "./frontend-release-package.mjs";
 
@@ -89,24 +90,48 @@ async function temporaryDirectory(prefix = "cadence-release-package-") {
 async function builtRemoteTree() {
   const directory = await temporaryDirectory();
   await mkdir(join(directory, "assets"), { recursive: true });
-  await mkdir(join(directory, "nested"), { recursive: true });
-  await writeFile(
-    join(directory, "mf-manifest.json"),
-    Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8"),
-  );
-  await writeFile(
-    join(directory, "remoteEntry.js"),
-    Buffer.from("export { default } from './assets/app.js';\n", "utf8"),
-  );
-  await writeFile(
-    join(directory, "assets", "app.js"),
-    Buffer.from("export const release = 'phase-c';\n", "utf8"),
-  );
-  await writeFile(
-    join(directory, "nested", "theme.css"),
-    Buffer.from(":root { --phase: c; }\n", "utf8"),
-  );
+  for (const [path, bytes] of Object.entries(packageFixtureFiles())) {
+    await writeFile(join(directory, path), bytes);
+  }
   return directory;
+}
+
+function packageFixtureFiles() {
+  const files = {
+    "assets/app.js": "export const release = 'phase-c';\n",
+    "assets/theme.css": ":root { --phase: c; }\n",
+    "mf-manifest.json": JSON.stringify({
+      id: "cadence_telemetry_decom",
+      name: "cadence_telemetry_decom",
+      metaData: { publicPath: "auto", remoteEntry: { path: "", name: "remoteEntry.js" } },
+      shared: [
+        {
+          name: "vue",
+          assets: { js: { async: [], sync: ["remoteEntry.js"] }, css: { async: [], sync: [] } },
+        },
+      ],
+      exposes: [
+        {
+          name: "./Application",
+          assets: {
+            js: { async: [], sync: ["assets/app.js"] },
+            css: { async: [], sync: ["assets/theme.css"] },
+          },
+        },
+      ],
+    }),
+    "mf-stats.json": JSON.stringify({
+      buildOutput: [
+        { fileName: "assets/app.js" },
+        { fileName: "assets/theme.css" },
+        { fileName: "remoteEntry.js" },
+      ],
+    }),
+    "remoteEntry.js": "export { default } from './assets/app.js';\n",
+  };
+  return Object.fromEntries(
+    Object.entries(files).map(([path, contents]) => [path, Buffer.from(contents, "utf8")]),
+  );
 }
 
 async function runCli(argumentsList, environment = {}) {
@@ -159,6 +184,7 @@ void describe("frontend release packager", () => {
     assert.equal(first.outputDirectory, join(await realpath(outputParent), "first"));
     assert.deepEqual(first.release, second.release);
     assert.deepEqual(first.documentBytes, second.documentBytes);
+    const fixtureFiles = packageFixtureFiles();
     assert.deepEqual(
       first.artifacts.map(({ path, sha256: digest, size, mediaType }) => ({
         path,
@@ -166,38 +192,18 @@ void describe("frontend release packager", () => {
         size,
         mediaType,
       })),
-      [
-        {
-          path: "assets/app.js",
-          sha256: sha256(Buffer.from("export const release = 'phase-c';\n", "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 34,
-          mediaType: "application/javascript",
-        },
-        {
-          path: "mf-manifest.json",
-          sha256: sha256(Buffer.from('{"id":"cadence_telemetry_decom"}', "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 32,
-          mediaType: "application/json",
-        },
-        {
-          path: "nested/theme.css",
-          sha256: sha256(Buffer.from(":root { --phase: c; }\n", "utf8")).slice("sha256:".length),
-          size: 22,
-          mediaType: "text/css",
-        },
-        {
-          path: "remoteEntry.js",
-          sha256: sha256(Buffer.from("export { default } from './assets/app.js';\n", "utf8")).slice(
-            "sha256:".length,
-          ),
-          size: 43,
-          mediaType: "application/javascript",
-        },
-      ],
+      Object.entries(fixtureFiles)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([path, bytes]) => ({
+          path,
+          sha256: sha256(bytes).slice("sha256:".length),
+          size: bytes.byteLength,
+          mediaType: path.endsWith(".js")
+            ? "application/javascript"
+            : path.endsWith(".css")
+              ? "text/css"
+              : "application/json",
+        })),
     );
 
     const logical = { ...first.release };
@@ -352,7 +358,7 @@ void describe("frontend release packager", () => {
     await writeFile(join(directoryManifest, "remoteEntry.js"), "remote");
     await assert.rejects(
       enumerateArtifacts(directoryManifest),
-      /missing required mf-manifest\.json/,
+      /missing required mf-manifest\.json|unexpected or nested directory/,
     );
 
     const symlinkFile = await builtRemoteTree();
@@ -408,6 +414,22 @@ void describe("frontend release packager", () => {
     await assert.rejects(readFile(join(input, "package", "release.json")), /ENOENT/);
   });
 
+  void it("rejects a symlinked private-key path before opening it", async () => {
+    const directory = await temporaryDirectory("cadence-release-key-race-");
+    const keyPath = join(directory, "key.der");
+    const linkPath = join(directory, "key-link.der");
+    const keys = keyPair();
+    await writeFile(keyPath, keys.privateKey.export({ format: "der", type: "pkcs8" }), {
+      mode: 0o600,
+    });
+    await symlink(keyPath, linkPath);
+
+    await assert.rejects(
+      readPrivateKeySource({ privateKeyFile: linkPath }),
+      /regular non-symlink file/,
+    );
+  });
+
   void it("rejects absolute, traversal, backslash, drive, and unnormalized paths", () => {
     for (const path of [
       "/absolute.js",
@@ -450,6 +472,104 @@ void describe("frontend release packager", () => {
           artifactOrigin: TEST_ORIGIN,
         }),
       /application\.id is not a safe identifier/,
+    );
+  });
+
+  void it("rejects artifact bytes whose size or digest does not match the inventory", async () => {
+    const input = await builtRemoteTree();
+    const inventory = await enumerateArtifacts(input);
+    const original = inventory.artifacts.find(({ path }) => path === "assets/app.js");
+    const changedBytes = Buffer.from("export const release = 'phase-d';\n", "utf8");
+    assert.equal(changedBytes.byteLength, original.bytes.byteLength);
+
+    const changedInventory = {
+      ...inventory,
+      artifacts: inventory.artifacts.map((artifact) =>
+        artifact.path === original.path ? { ...artifact, bytes: changedBytes } : artifact,
+      ),
+    };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory: changedInventory,
+          metadata,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /digest does not match bytes/,
+    );
+
+    const mismatchedSizeInventory = {
+      ...inventory,
+      artifacts: inventory.artifacts.map((artifact) =>
+        artifact.path === original.path ? { ...artifact, size: artifact.size + 1 } : artifact,
+      ),
+    };
+    assert.throws(
+      () =>
+        buildReleasePayload({
+          inventory: mismatchedSizeInventory,
+          metadata,
+          artifactOrigin: TEST_ORIGIN,
+        }),
+      /artifact size does not match bytes/,
+    );
+  });
+
+  void it("validates and packages one frozen byte snapshot across a deterministic disk swap", async () => {
+    const input = await builtRemoteTree();
+    const outputParent = await temporaryDirectory("cadence-release-snapshot-output-");
+    const output = join(outputParent, "package");
+    const appPath = join(input, "assets", "app.js");
+    const laterPath = join(input, "assets", "later-added.js");
+    const originalBytes = await readFile(appPath);
+    const swappedBytes = Buffer.from("export const release = 'swapped';\n", "utf8");
+    assert.equal(swappedBytes.byteLength, originalBytes.byteLength);
+
+    const result = await packageRelease({
+      inputDirectory: input,
+      outputDirectory: output,
+      metadata,
+      artifactOrigin: TEST_ORIGIN,
+      keyId: "fixture-release-key",
+      privateKey: keyPair().privateKey,
+      afterSnapshot: async () => {
+        await writeFile(appPath, swappedBytes);
+        await writeFile(laterPath, "export const later = true;\n");
+      },
+    });
+
+    assert.deepEqual(
+      await readFile(join(output, "artifacts", "assets", "app.js")),
+      originalBytes,
+    );
+    assert.deepEqual(
+      result.artifacts.find(({ path }) => path === "assets/app.js").bytes,
+      originalBytes,
+    );
+    assert.deepEqual(await readFile(appPath), swappedBytes);
+    await assert.rejects(
+      readFile(join(output, "artifacts", "assets", "later-added.js")),
+      /ENOENT/,
+    );
+  });
+
+  void it("rejects empty and nested input directories as exact-tree violations", async () => {
+    const empty = await builtRemoteTree();
+    await mkdir(join(empty, "empty-directory"));
+    await assert.rejects(
+      enumerateArtifacts(empty),
+      /unexpected or nested directory empty-directory/,
+    );
+
+    const nested = await builtRemoteTree();
+    await mkdir(join(nested, "assets", "nested"));
+    await writeFile(
+      join(nested, "assets", "nested", "asset.js"),
+      "export const nested = true;\n",
+    );
+    await assert.rejects(
+      enumerateArtifacts(nested),
+      /unexpected or nested directory assets\/nested/,
     );
   });
 

@@ -6,6 +6,19 @@ import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
 const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vue");
+const federatedEntry = resolve(__dirname, "src/federated-application.ts");
+const releaseFederationConfig = {
+  ...federationConfig,
+  exposes: { "./Application": federatedEntry },
+  manifest: {
+    additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
+      if (!Object.hasOwn(stats, "assetAnalysis")) return stats;
+      const publicationStats = { ...stats };
+      delete publicationStats.assetAnalysis;
+      return publicationStats;
+    },
+  },
+};
 const repositoryRoot = realpathSync(resolve(__dirname, "../../.."));
 const releaseOutputEnvironmentName = "CADENCE_RELEASE_OUTPUT_DIR";
 
@@ -204,17 +217,24 @@ export default defineConfig(({ command, mode }) => {
     build: {
       target: "chrome89",
       outDir: outputDirectory ?? `dist/${releaseSlot}`,
-      ...(releaseBuild ? { emptyOutDir: true, manifest: false } : {}),
+      ...(releaseBuild
+        ? {
+            emptyOutDir: true,
+            manifest: false,
+            rollupOptions: { input: federatedEntry },
+          }
+        : {}),
     },
     test: {
       environment: "happy-dom",
     },
     plugins: lazyPlugins(() => [
       vue(),
-      federation({
-        ...federationConfig,
-        ...(releaseBuild ? { publicPath: "auto" } : {}),
-      }),
+      federation(
+        releaseBuild
+          ? { ...releaseFederationConfig, publicPath: "auto" }
+          : federationConfig,
+      ),
       ...(releaseBuild ? [releaseOutputPlugin()] : []),
     ]),
   };

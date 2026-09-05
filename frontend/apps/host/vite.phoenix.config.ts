@@ -26,5 +26,21 @@ export default defineConfig({
       },
     },
   },
-  plugins: lazyPlugins(() => [vue()]),
+  plugins: lazyPlugins(() => [
+    vue(),
+    {
+      name: "cadence-remove-node-origin-fallback",
+      enforce: "post",
+      transform(code, id) {
+        if (!id.endsWith("/phoenix-catalog-client.ts")) return null;
+        const next = code.replace(
+          /return typeof window === "undefined" \? "http:\/\/localhost\/" : window\.location\.origin;/,
+          "return window.location.origin;",
+        );
+        if (next === code)
+          throw new Error("Phoenix production build could not remove its Node origin fallback.");
+        return { code: next, map: null };
+      },
+    },
+  ]),
 });

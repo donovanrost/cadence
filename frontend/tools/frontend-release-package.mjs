@@ -20,6 +20,10 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertReleaseArtifactPath,
+  validateReleaseOutput,
+} from "./frontend-release-output-check.mjs";
 
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(TOOL_DIRECTORY, "../..");
@@ -248,16 +252,45 @@ function mediaTypeForPath(path) {
   return mediaType;
 }
 
-async function readRegularFile(filePath, label) {
+const stableFileMetadata = [
+  "dev",
+  "ino",
+  "mode",
+  "nlink",
+  "uid",
+  "gid",
+  "rdev",
+  "size",
+  "blksize",
+  "blocks",
+  "mtimeNs",
+  "ctimeNs",
+  "birthtimeNs",
+];
+
+function fileMetadata(stats) {
+  return stableFileMetadata.map((key) => [key, stats[key]?.toString() ?? null]);
+}
+
+function assertStableFileMetadata(expected, actual, label) {
+  if (JSON.stringify(fileMetadata(expected)) !== JSON.stringify(fileMetadata(actual))) {
+    fail(`${label} changed while it was read`);
+  }
+}
+
+async function readRegularFile(filePath, label, expectedStats, maxSize = MAX_ARTIFACT_SIZE) {
   const noFollow = fsConstants.O_NOFOLLOW ?? 0;
   let handle;
   try {
     handle = await open(filePath, fsConstants.O_RDONLY | noFollow);
-    const stats = await handle.stat();
+    const stats = await handle.stat({ bigint: true });
+    assertStableFileMetadata(expectedStats, stats, label);
     if (!stats.isFile()) fail(`${label} is not a regular file`);
-    if (stats.size > MAX_ARTIFACT_SIZE) fail(`${label} is too large`);
+    if (stats.size > BigInt(maxSize)) fail(`${label} is too large`);
     const bytes = await handle.readFile();
-    if (bytes.byteLength !== stats.size) fail(`${label} changed while it was read`);
+    if (BigInt(bytes.byteLength) !== stats.size) fail(`${label} changed while it was read`);
+    const afterReadStats = await handle.stat({ bigint: true });
+    assertStableFileMetadata(stats, afterReadStats, label);
     return bytes;
   } catch (error) {
     if (error instanceof ReleasePackagerError) throw error;
@@ -268,13 +301,14 @@ async function readRegularFile(filePath, label) {
 }
 
 async function enumerateArtifacts(inputDirectory) {
-  const inputStats = await lstat(inputDirectory).catch(() =>
+  const inputStats = await lstat(inputDirectory, { bigint: true }).catch(() =>
     fail("input directory does not exist"),
   );
   if (inputStats.isSymbolicLink()) fail("input directory must not be a symlink");
   if (!inputStats.isDirectory()) fail("input path must be a directory");
   const root = await realpath(inputDirectory).catch(() => fail("input directory does not exist"));
-  const rootStats = await lstat(root);
+  const rootStats = await lstat(root, { bigint: true });
+  assertStableFileMetadata(inputStats, rootStats, "input directory");
   if (!rootStats.isDirectory()) fail("input path must be a directory");
 
   const artifacts = [];
@@ -296,20 +330,32 @@ async function enumerateArtifacts(inputDirectory) {
       if (!isWithin(root, absolutePath)) fail(`artifact ${relativePath} escapes the input root`);
       if (entry.isSymbolicLink()) fail(`artifact ${relativePath} is a symlink`);
 
-      const stats = await lstat(absolutePath).catch(() =>
+      const stats = await lstat(absolutePath, { bigint: true }).catch(() =>
         fail(`artifact ${relativePath} disappeared`),
       );
       if (stats.isDirectory()) {
+        if (relativePath !== "assets") {
+          fail(`input tree contains an unexpected or nested directory ${relativePath}`);
+        }
         await visit(absolutePath);
         continue;
       }
       if (!stats.isFile()) fail(`artifact ${relativePath} is not a regular file`);
+      assertReleaseArtifactPath(relativePath);
 
       const resolvedPath = await realpath(absolutePath).catch(() =>
         fail(`artifact ${relativePath} is unreadable`),
       );
       if (!isWithin(root, resolvedPath)) fail(`artifact ${relativePath} escapes the input root`);
-      const bytes = await readRegularFile(absolutePath, `artifact ${relativePath}`);
+      const resolvedStats = await lstat(resolvedPath, { bigint: true }).catch(() =>
+        fail(`artifact ${relativePath} disappeared`),
+      );
+      assertStableFileMetadata(stats, resolvedStats, `artifact ${relativePath}`);
+      const bytes = await readRegularFile(
+        absolutePath,
+        `artifact ${relativePath}`,
+        resolvedStats,
+      );
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (paths.has(relativePath)) fail(`duplicate normalized artifact path ${relativePath}`);
       if (artifacts.length >= MAX_ARTIFACTS) fail("artifact inventory exceeds the count limit");
@@ -336,6 +382,13 @@ async function enumerateArtifacts(inputDirectory) {
   const totalSize = artifacts.reduce((total, artifact) => total + artifact.size, 0);
   if (totalSize > MAX_TOTAL_ARTIFACT_SIZE) fail("artifact inventory exceeds the total byte limit");
   return { root, artifacts };
+}
+
+function freezeArtifactSnapshot(inventory) {
+  const artifacts = inventory.artifacts.map((artifact) =>
+    Object.freeze({ ...artifact, bytes: Buffer.from(artifact.bytes) }),
+  );
+  return Object.freeze({ root: inventory.root, artifacts: Object.freeze(artifacts) });
 }
 
 function validateMetadata(metadata) {
@@ -459,6 +512,15 @@ function buildReleasePayload({ inventory, metadata, artifactOrigin }) {
     }
     if (mediaTypeForPath(path) !== artifact.mediaType) {
       fail(`invalid media type for ${path}`);
+    }
+    if (!Buffer.isBuffer(artifact.bytes)) {
+      fail(`artifact bytes are missing for ${path}`);
+    }
+    if (artifact.bytes.byteLength !== artifact.size) {
+      fail(`artifact size does not match bytes for ${path}`);
+    }
+    if (sha256Digest(artifact.bytes) !== `sha256:${artifact.sha256}`) {
+      fail(`artifact digest does not match bytes for ${path}`);
     }
     return {
       path,
@@ -604,10 +666,19 @@ async function readPrivateKeySource({
     fail("exactly one private key file, file descriptor, or environment value is required");
   }
   if (privateKeyFile !== undefined) {
-    const stats = await lstat(privateKeyFile).catch(() => fail("private key file is unavailable"));
+    const stats = await lstat(privateKeyFile, { bigint: true }).catch(() =>
+      fail("private key file is unavailable"),
+    );
     if (!stats.isFile() || stats.isSymbolicLink())
       fail("private key file must be a regular non-symlink file");
-    const bytes = await readRegularFile(privateKeyFile, "private key file");
+    const resolvedPath = await realpath(privateKeyFile).catch(() =>
+      fail("private key file is unavailable"),
+    );
+    const resolvedStats = await lstat(resolvedPath, { bigint: true }).catch(() =>
+      fail("private key file is unavailable"),
+    );
+    assertStableFileMetadata(stats, resolvedStats, "private key file");
+    const bytes = await readRegularFile(privateKeyFile, "private key file", resolvedStats);
     return privateKeyFromBytes(
       bytes.length === 32 ? bytes : decodePrivateKeyText(bytes.toString("utf8")),
     );
@@ -615,7 +686,7 @@ async function readPrivateKeySource({
   if (privateKeyFd !== undefined) {
     if (!/^\d+$/.test(String(privateKeyFd)) || Number(privateKeyFd) > 1_000_000)
       fail("private key file descriptor is invalid");
-    const bytes = await readFile(`/dev/fd/${Number(privateKeyFd)}`).catch(() =>
+    const bytes = await readFile(Number(privateKeyFd)).catch(() =>
       fail("private key file descriptor is unavailable"),
     );
     return privateKeyFromBytes(
@@ -630,7 +701,14 @@ async function readPrivateKeySource({
 }
 
 async function readJsonFile(filePath, label) {
-  const bytes = await readFile(filePath).catch(() => fail(`${label} is unavailable`));
+  const stats = await lstat(filePath, { bigint: true }).catch(() => fail(`${label} is unavailable`));
+  if (stats.isSymbolicLink() || !stats.isFile()) fail(`${label} must be a regular non-symlink file`);
+  const resolvedPath = await realpath(filePath).catch(() => fail(`${label} is unavailable`));
+  const resolvedStats = await lstat(resolvedPath, { bigint: true }).catch(() =>
+    fail(`${label} is unavailable`),
+  );
+  assertStableFileMetadata(stats, resolvedStats, label);
+  const bytes = await readRegularFile(filePath, label, resolvedStats, MAX_DOCUMENT_BYTES);
   let text;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -787,10 +865,18 @@ export async function buildRelease({
   artifactOrigin,
   keyId,
   privateKey,
+  afterSnapshot,
 }) {
   if (!inputDirectory) fail("input directory is required");
-  const inventory = await enumerateArtifacts(inputDirectory);
+  const inventory = freezeArtifactSnapshot(await enumerateArtifacts(inputDirectory));
+  if (afterSnapshot !== undefined) {
+    if (typeof afterSnapshot !== "function") fail("afterSnapshot must be a function");
+    await afterSnapshot(inventory.root);
+  }
   const release = buildReleasePayload({ inventory, metadata, artifactOrigin });
+  await validateReleaseOutput(inventory.root, release.metadata.remoteName, REPOSITORY_ROOT, {
+    artifactSnapshot: inventory,
+  });
   const signed = createSignedEnvelope({ payloadBytes: release.payloadBytes, keyId, privateKey });
   return {
     inputRoot: inventory.root,
@@ -811,9 +897,17 @@ export async function packageRelease({
   artifactOrigin,
   keyId,
   privateKey,
+  afterSnapshot,
 }) {
   if (!outputDirectory) fail("output directory is required");
-  const built = await buildRelease({ inputDirectory, metadata, artifactOrigin, keyId, privateKey });
+  const built = await buildRelease({
+    inputDirectory,
+    metadata,
+    artifactOrigin,
+    keyId,
+    privateKey,
+    afterSnapshot,
+  });
   const destination = await ensureOutputDestination(outputDirectory, built.inputRoot);
   try {
     await writePackage(destination.path, built.documentBytes, built.artifacts);

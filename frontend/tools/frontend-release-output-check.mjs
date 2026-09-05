@@ -1,13 +1,161 @@
+import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
-import { readFile, readdir, realpath } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+  win32,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const remoteNamePattern = /^[a-z][a-z0-9._-]{0,127}$/;
+const releaseMetadataFiles = new Set(["mf-manifest.json", "mf-stats.json"]);
+const forbiddenArtifactNameSequences = [
+  ["contract", "probe"],
+  ["demo", "auth"],
+  ["demo", "auth", "service"],
+  ["failure", "application"],
+  ["index"],
+  ["main"],
+  ["phoenix", "main"],
+  ["phoenix", "bootstrap"],
+  ["standalone"],
+  ["spec"],
+  ["test"],
+];
+const statsPathKeyPattern =
+  /^(?:asset|assets|chunk|chunks|entry|entries|file|filename|fileName|output|outputs|paths|source|sources)$/i;
+const generatedModuleFederationPathPattern =
+  /^assets\/(?:dist|mf-entry-bootstrap|virtualExposes|virtual_mf|_virtual_mf|vite-preload-helper)-[A-Za-z0-9_.-]+\.js$/;
 
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
+}
+
+export function assertReleaseArtifactPath(path) {
+  assertPathSyntax(path, "release artifact path");
+  const lowerPath = path.toLowerCase();
+
+  if (lowerPath.endsWith(".map")) fail(`source-map artifact ${JSON.stringify(path)} is forbidden`);
+  if (lowerPath.endsWith(".html")) {
+    fail(`standalone HTML artifact ${JSON.stringify(path)} is forbidden`);
+  }
+  assertNoForbiddenPathName(path, "release artifact path");
+  if (!releaseMetadataFiles.has(path) && path !== "remoteEntry.js" && !path.startsWith("assets/")) {
+    fail(`unexpected release artifact ${JSON.stringify(path)}`);
+  }
+}
+
+function decodePathForPolicy(value, label) {
+  if (!value.includes("%")) return value;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    fail(`${label} contains an invalid percent encoding`);
+  }
+  if (decoded.includes("%")) {
+    fail(`${label} contains a doubly encoded or ambiguous path`);
+  }
+  return decoded;
+}
+
+function isAbsoluteLocalPath(value) {
+  return (
+    isAbsolute(value) ||
+    win32.isAbsolute(value) ||
+    /^[A-Za-z]:/.test(value) ||
+    value.startsWith("\\") ||
+    value.startsWith("file:")
+  );
+}
+
+function isExternalReference(value) {
+  return (
+    value.startsWith("//") ||
+    (/^(?:[a-z][a-z\d+.-]*:)/i.test(value) &&
+      !/^[A-Za-z]:[\\/]/.test(value) &&
+      !value.startsWith("file:"))
+  );
+}
+
+function assertPathSyntax(value, label, { allowTraversal = false } = {}) {
+  if (typeof value !== "string" || value.length === 0) fail(`${label} is not a path`);
+  const decoded = decodePathForPolicy(value, label);
+  if (decoded !== value) fail(`${label} contains URL-encoded/percent path syntax`);
+  if (isAbsoluteLocalPath(value)) fail(`${label} must be relative`);
+  if (value.includes("\\") || value.includes("\0")) {
+    fail(`${label} contains a forbidden separator`);
+  }
+  const parts = value.split("/");
+  if (
+    parts.some(
+      (part, index) =>
+        part === "" || (!allowTraversal && part === "..") || (part === "." && index !== 0),
+    )
+  ) {
+    fail(`${label} contains traversal or an empty path component`);
+  }
+}
+
+function pathPolicyTokens(value, label) {
+  const decoded = decodePathForPolicy(value, label).replaceAll("\\", "/");
+  return decoded
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token.toLowerCase());
+}
+
+function hasSequence(tokens, sequence) {
+  return tokens.some((_, index) =>
+    sequence.every((token, offset) => tokens[index + offset] === token),
+  );
+}
+
+function assertNoForbiddenPathName(value, label) {
+  const tokens = pathPolicyTokens(value, label);
+  if (forbiddenArtifactNameSequences.some((sequence) => hasSequence(tokens, sequence))) {
+    fail(`standalone, test, or contract artifact ${JSON.stringify(value)} is forbidden`);
+  }
+}
+
+export function assertNoForbiddenPublicationReferences(source, origin) {
+  const forbiddenReferences = [
+    ["demo-auth service", /\bdemo[-_]?auth(?:[-_]?service)?\b/i],
+    [
+      "contract probe",
+      /(?:\bcontract[-_./\\]|contract%2d|contract%2e|contract%2f|contract%5c)+probe\b|cadence[._-]contract[._-]probe/i,
+    ],
+    [
+      "development URL",
+      /\bhttps?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#"'`),;\s]|$)/i,
+    ],
+    [
+      "Vite client or HMR reference",
+      /(?:import\.meta\.hot|\/[@]vite\/client|vite\/client|hotUpdate|__vite__hot)/i,
+    ],
+    ["source-map reference", /(?:sourceMappingURL|\.map(?:["'`?#),]|$))/i],
+    ["standalone bootstrap reference", /(?:phoenix[-_.]?main|phoenix[-_.]?bootstrap|standalone)/i],
+    [
+      "mutable fallback URL",
+      /\b(?:fallback(?:Url|Href)?|artifactBaseUrl)\b\s*(?:[:=])\s*["'`](?:https?:\/\/|\/)/i,
+    ],
+    [
+      "deployment-specific release reference",
+      /(?:\/releases\/|MF_BUILD_VERSION|process\.env\.NODE_ENV)/i,
+    ],
+  ];
+
+  for (const [label, pattern] of forbiddenReferences) {
+    if (pattern.test(source)) fail(`${origin} contains a forbidden ${label}`);
+  }
 }
 
 export function parseOutputDirectoryArgument(argumentsList) {
@@ -150,6 +298,10 @@ async function outputFiles(directory, outputRoot) {
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
+      const directoryName = relativePath(outputRoot, path);
+      if (directoryName !== "assets") {
+        fail(`output contains an unexpected or nested directory ${directoryName}`);
+      }
       paths.push(...(await outputFiles(path, outputRoot)));
     } else if (entry.isFile()) {
       paths.push(path);
@@ -161,18 +313,35 @@ async function outputFiles(directory, outputRoot) {
   return paths;
 }
 
-export function assertLocalReference(reference, origin, files, label, outputRoot) {
+export function assertLocalReference(
+  reference,
+  origin,
+  files,
+  label,
+  outputRoot,
+  options = {},
+) {
   const value = reference.trim();
-  if (value === "" || /^\$\{[^}]+\}$/.test(value)) return;
-
-  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(value)) return;
-  if (value.startsWith("/")) {
-    fail(`${label} contains an absolute local reference ${JSON.stringify(value)}`);
+  if (value === "") return;
+  if (/^\$\{[^}]+\}$/.test(value)) {
+    fail(`${label} contains a dynamic reference ${JSON.stringify(value)}`);
   }
+
+  if (isExternalReference(value)) return;
 
   const pathPart =
     value.startsWith("?") || value.startsWith("#") ? origin : value.split(/[?#]/, 1)[0];
   if (pathPart === "") return;
+
+  if (isAbsoluteLocalPath(pathPart)) {
+    fail(`${label} contains an absolute local reference ${JSON.stringify(value)}`);
+  }
+  const authoritativeHostInitializationParent =
+    options.authoritativeHostInitialization === true &&
+    /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/.test(origin) &&
+    pathPart === "../remoteEntry.js";
+  if (!authoritativeHostInitializationParent) assertPathSyntax(pathPart, label);
+  assertNoForbiddenPathName(pathPart, label);
 
   const target = resolve(outputRoot, dirname(origin), pathPart);
   const targetRelative = relativePath(outputRoot, target);
@@ -182,14 +351,17 @@ export function assertLocalReference(reference, origin, files, label, outputRoot
   if (!files.has(targetRelative)) {
     fail(`${label} points to missing ${JSON.stringify(targetRelative)}`);
   }
+  return targetRelative;
 }
 
 function assertManifestPath(value, files, label, outputRoot) {
   if (typeof value !== "string" || value.trim() === "") fail(`${label} is not a path`);
-  assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
+  const target = assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
+  if (!target) fail(`${label} must be a local output path`);
+  return target;
 }
 
-function assertAssetLists(value, files, label, outputRoot) {
+function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail(`${label} is not an asset map`);
   }
@@ -202,13 +374,56 @@ function assertAssetLists(value, files, label, outputRoot) {
     for (const phase of ["async", "sync"]) {
       if (!Array.isArray(assets[phase])) fail(`${label}.${kind}.${phase} is not a list`);
       for (const asset of assets[phase]) {
-        assertManifestPath(asset, files, `${label}.${kind}.${phase}`, outputRoot);
+        const target = assertManifestPath(asset, files, `${label}.${kind}.${phase}`, outputRoot);
+        referencedFiles?.add(target);
       }
     }
   }
 }
 
-function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot) {
+const byteBoundMetadataFields = ["size", "byteSize", "byteLength", "bytes"];
+
+async function assertByteBoundMetadata(record, target, trail, byteLengthForPath) {
+  for (const field of byteBoundMetadataFields) {
+    if (!Object.hasOwn(record, field)) continue;
+    const declared = record[field];
+    if (!Number.isSafeInteger(declared) || declared < 0) {
+      fail(`${trail}.${field} is not a non-negative byte length`);
+    }
+    const actual = await byteLengthForPath(target);
+    if (!Number.isSafeInteger(actual) || actual < 0) {
+      fail(`${trail}.${field} cannot read admitted bytes for ${JSON.stringify(target)}`);
+    }
+    if (declared !== actual) {
+      fail(
+        `${trail}.${field} ${declared} does not match ${JSON.stringify(target)} byte length ${actual}`,
+      );
+    }
+  }
+}
+
+function metadataByteBoundTarget(value, trail, files, outputRoot, pathContext) {
+  for (const key of ["fileName", "filename", "assetPath"]) {
+    if (typeof value[key] === "string") {
+      return assertManifestPath(value[key], files, `${trail}.${key}`, outputRoot);
+    }
+  }
+  if (typeof value.path === "string" && value.path !== "" && pathContext) {
+    return assertManifestPath(value.path, files, `${trail}.path`, outputRoot);
+  }
+  if (trail.endsWith(".remoteEntry") && typeof value.name === "string" && value.name !== "") {
+    return assertManifestPath(value.name, files, `${trail}.name`, outputRoot);
+  }
+  return null;
+}
+
+async function assertGeneratedManifest(
+  manifest,
+  expectedRemoteName,
+  files,
+  outputRoot,
+  byteLengthForPath,
+) {
   if (manifest.id !== expectedRemoteName || manifest.name !== expectedRemoteName) {
     fail(`the federation manifest identity is not ${JSON.stringify(expectedRemoteName)}`);
   }
@@ -222,30 +437,316 @@ function assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot
   if (!remoteEntry || remoteEntry.path !== "" || remoteEntry.name !== "remoteEntry.js") {
     fail("manifest remoteEntry is not the relocatable remoteEntry.js");
   }
-  assertManifestPath(remoteEntry.name, files, "manifest remoteEntry.name", outputRoot);
+  const remoteEntryPath = assertManifestPath(
+    remoteEntry.name,
+    files,
+    "manifest remoteEntry.name",
+    outputRoot,
+  );
+  await assertByteBoundMetadata(
+    remoteEntry,
+    remoteEntryPath,
+    "manifest metaData.remoteEntry",
+    byteLengthForPath,
+  );
+  const referencedFiles = new Set([remoteEntryPath]);
 
   if (!Array.isArray(manifest.shared) || manifest.shared.length === 0) {
     fail("manifest shared assets are missing");
   }
   for (const shared of manifest.shared) {
-    assertAssetLists(shared.assets, files, `manifest shared ${shared.name}`, outputRoot);
+    assertAssetLists(
+      shared.assets,
+      files,
+      `manifest shared ${shared.name}`,
+      outputRoot,
+      referencedFiles,
+    );
   }
 
   if (!Array.isArray(manifest.exposes) || manifest.exposes.length === 0) {
     fail("manifest exposes are missing");
   }
   for (const expose of manifest.exposes) {
-    assertAssetLists(expose.assets, files, `manifest expose ${expose.name}`, outputRoot);
+    const exposedModule = expose.path ?? expose.name;
+    if (
+      typeof exposedModule !== "string" ||
+      /(?:contract[-_.]?probe|demo[-_.]?auth|failure|spec|test)/i.test(exposedModule)
+    ) {
+      fail(`manifest exposes a non-publication module ${JSON.stringify(exposedModule)}`);
+    }
+    assertNoForbiddenPathName(exposedModule, "manifest exposed module");
+    assertAssetLists(
+      expose.assets,
+      files,
+      `manifest expose ${expose.name}`,
+      outputRoot,
+      referencedFiles,
+    );
   }
+
+  return referencedFiles;
 }
 
-function assertStats(stats, files, outputRoot) {
+function assertStatsMetadata(
+  value,
+  files,
+  outputRoot,
+  trail,
+  pathContext = false,
+  seen = new Set(),
+  referencedFiles = new Set(),
+  byteBoundRecords = [],
+) {
+  if (typeof value === "string") {
+    if (value.trim() === "") return;
+    const decoded = value.includes("%") ? decodePathForPolicy(value, trail) : value;
+    if (isAbsoluteLocalPath(value) || isAbsoluteLocalPath(decoded)) {
+      fail(`${trail} contains an absolute local path ${JSON.stringify(value)}`);
+    }
+    if (isExternalReference(value)) return;
+    assertNoForbiddenPathName(value, trail);
+    if (
+      pathContext ||
+      value.includes("%") ||
+      (/[/\\]/.test(decoded) && /\.[^/\\]+$/.test(decoded))
+    ) {
+      referencedFiles.add(assertManifestPath(value, files, trail, outputRoot));
+    }
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  if (seen.has(value)) fail(`${trail} contains a cyclic metadata value`);
+  seen.add(value);
+  const byteBoundTarget = metadataByteBoundTarget(
+    value,
+    trail,
+    files,
+    outputRoot,
+    pathContext,
+  );
+  for (const field of byteBoundMetadataFields) {
+    if (!Object.hasOwn(value, field)) continue;
+    if (!byteBoundTarget) {
+      fail(`${trail}.${field} is not bound to an admitted output path`);
+    }
+    byteBoundRecords.push({
+      record: value,
+      target: byteBoundTarget,
+      trail,
+    });
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      assertStatsMetadata(
+        item,
+        files,
+        outputRoot,
+        `${trail}[${index}]`,
+        pathContext,
+        seen,
+        referencedFiles,
+        byteBoundRecords,
+      ),
+    );
+  } else {
+    for (const [key, child] of Object.entries(value)) {
+      assertStatsMetadata(
+        child,
+        files,
+        outputRoot,
+        `${trail}.${key}`,
+        pathContext || statsPathKeyPattern.test(key),
+        seen,
+        referencedFiles,
+        byteBoundRecords,
+      );
+    }
+  }
+  seen.delete(value);
+}
+
+function hasFederationStatsProvenance(stats, expectedRemoteName) {
+  const metadata = stats.metaData;
+  return (
+    stats.id === expectedRemoteName &&
+    stats.name === expectedRemoteName &&
+    metadata &&
+    typeof metadata === "object" &&
+    metadata.name === expectedRemoteName &&
+    metadata.remoteEntry &&
+    metadata.remoteEntry.path === "" &&
+    metadata.remoteEntry.name === "remoteEntry.js" &&
+    metadata.remoteEntry.type === "module"
+  );
+}
+
+const generatedHostInitializationPathPattern =
+  /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+const generatedHostInitializationFacadeDigests = new Set([
+  "659a49802317843ef974469cbc220aaa3e0107493934928e68905c0d6bf60496",
+  "007bf60ccae9f5ed5dead1143e01c5151fdc63c4d399871ed8144343885d9d01",
+]);
+const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
+const generatedFederationRuntimeSourceDigests = new Set([
+  "a38d94f4152a69a3b1b63c8afc9ebfa941681f1c32cda88ed07dc574dbd43a1e",
+  "d6ce1afd105de3fda34eb27703b530dfb32d963a887a5f5297e0e154a4fc22f2",
+]);
+
+function canonicalHostInitializationSource(source, expectedRemoteName) {
+  if (typeof source !== "string" || /(?:^|[^\\])\/(?:\/|\*)/.test(source)) return null;
+  const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expectedSharedImport = new RegExp(
+    `_virtual_mf-localSharedImportMap___mfe_internal__${escapedRemoteName}__mf_owner__1-[A-Za-z0-9_-]{8}\\.js`,
+  );
+  if (!expectedSharedImport.test(source)) return null;
+  return source
+    .replace(/vite-preload-helper-[A-Za-z0-9_-]{8}\.js/g, "vite-preload-helper-<hash>.js")
+    .replace(
+      /(_virtual_mf-localSharedImportMap___mfe_internal__[A-Za-z0-9._-]+__mf_owner__1-)[A-Za-z0-9_-]{8}(\.js)/g,
+      "$1<hash>$2",
+    )
+    .replace(/\s+/g, "");
+}
+
+function isAuthoritativeGeneratedHostInitializationArtifact(
+  name,
+  source,
+  stats,
+  expectedRemoteName,
+) {
+  if (
+    !generatedHostInitializationPathPattern.test(name) ||
+    !hasFederationStatsProvenance(stats, expectedRemoteName)
+  ) {
+    return false;
+  }
+  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (matchingRecords.length !== 1) return false;
+  const [record] = matchingRecords;
+  if (
+    record.type !== "chunk" ||
+    record.isEntry !== false ||
+    !Number.isSafeInteger(record.size) ||
+    record.size < 0
+  ) {
+    return false;
+  }
+  if (
+    record.facadeModuleId !== undefined &&
+    (typeof record.facadeModuleId !== "string" || !/hostAutoInit|hostInit/i.test(record.facadeModuleId))
+  ) {
+    return false;
+  }
+  const canonical = canonicalHostInitializationSource(source, expectedRemoteName);
+  return (
+    canonical !== null &&
+    generatedHostInitializationFacadeDigests.has(
+      createHash("sha256").update(canonical, "utf8").digest("hex"),
+    )
+  );
+}
+
+function isGeneratedModuleFederationArtifactPath(path) {
+  return generatedModuleFederationPathPattern.test(path);
+}
+
+function isAuthoritativeGeneratedFederationRuntimeArtifact(
+  name,
+  source,
+  stats,
+  expectedRemoteName,
+) {
+  if (
+    !generatedFederationRuntimePathPattern.test(name) ||
+    !hasFederationStatsProvenance(stats, expectedRemoteName)
+  ) {
+    return false;
+  }
+  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (matchingRecords.length !== 1) return false;
+  const [record] = matchingRecords;
+  return (
+    record.type === "chunk" &&
+    record.isEntry === false &&
+    Number.isSafeInteger(record.size) &&
+    record.size >= 0 &&
+    typeof source === "string" &&
+    generatedFederationRuntimeSourceDigests.has(
+      createHash("sha256")
+        .update(source.replace(/-[A-Za-z0-9_-]{8}\.js/g, "-<hash>.js"), "utf8")
+        .digest("hex"),
+    )
+  );
+}
+
+async function assertStats(
+  stats,
+  expectedRemoteName,
+  files,
+  outputRoot,
+  byteLengthForPath,
+) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
   }
-  for (const output of stats.buildOutput) {
-    assertManifestPath(output.fileName, files, "federation buildOutput.fileName", outputRoot);
+  if (
+    (stats.id !== undefined && stats.id !== expectedRemoteName) ||
+    (stats.name !== undefined && stats.name !== expectedRemoteName) ||
+    (stats.metaData?.name !== undefined && stats.metaData.name !== expectedRemoteName)
+  ) {
+    fail("federation stats identity is not the expected remote");
   }
+  const referencedFiles = new Set();
+  const buildOutputByPath = new Map();
+  const byteBoundRecords = [];
+  for (const output of stats.buildOutput) {
+    if (!output || typeof output !== "object" || Array.isArray(output)) {
+      fail("federation buildOutput entry is not an object");
+    }
+    const target = assertManifestPath(
+      output.fileName,
+      files,
+      "federation buildOutput.fileName",
+      outputRoot,
+    );
+    if (referencedFiles.has(target)) {
+      fail(`federation stats contains duplicate artifact ${JSON.stringify(target)}`);
+    }
+    referencedFiles.add(target);
+    buildOutputByPath.set(target, output);
+  }
+  assertStatsMetadata(
+    stats,
+    files,
+    outputRoot,
+    "federation stats",
+    false,
+    new Set(),
+    referencedFiles,
+    byteBoundRecords,
+  );
+  for (const { record, target, trail } of byteBoundRecords) {
+    await assertByteBoundMetadata(record, target, trail, byteLengthForPath);
+  }
+  const generatedModuleFederationFiles = new Set();
+  if (hasFederationStatsProvenance(stats, expectedRemoteName)) {
+    for (const [path, output] of buildOutputByPath) {
+      if (
+        isGeneratedModuleFederationArtifactPath(path) &&
+        output.type === "chunk" &&
+        output.isEntry === false &&
+        Number.isSafeInteger(output.size) &&
+        output.size >= 0
+      ) {
+        generatedModuleFederationFiles.add(path);
+      }
+    }
+  }
+  return {
+    references: referencedFiles,
+    generatedModuleFederationFiles,
+  };
 }
 
 export function assertViteManifest(manifest, files, outputRoot) {
@@ -289,7 +790,7 @@ export function assertViteManifest(manifest, files, outputRoot) {
   for (const key of manifestKeys) visitManifestEntry(key, `.vite/manifest.${key}`);
 }
 
-function javascriptTokens(source) {
+function javascriptTokens(source, origin = "JavaScript") {
   const tokens = [];
   let index = 0;
 
@@ -306,7 +807,32 @@ function javascriptTokens(source) {
     }
     if (character === "/" && source[index + 1] === "*") {
       const end = source.indexOf("*/", index + 2);
-      index = end === -1 ? source.length : end + 2;
+      if (end === -1) fail(`${origin} contains an unterminated comment`);
+      index = end + 2;
+      continue;
+    }
+    if (character === "/" && canStartRegex(tokens)) {
+      let inCharacterClass = false;
+      let closed = false;
+      index += 1;
+      while (index < source.length) {
+        const current = source[index];
+        if (current === "\\") {
+          index += 2;
+          continue;
+        }
+        if (current === "[") inCharacterClass = true;
+        if (current === "]") inCharacterClass = false;
+        if (current === "/" && !inCharacterClass) {
+          index += 1;
+          while (/[A-Za-z]/.test(source[index] ?? "")) index += 1;
+          closed = true;
+          break;
+        }
+        index += 1;
+      }
+      if (!closed) fail(`${origin} contains an unterminated regular expression`);
+      tokens.push({ kind: "regex", value: "regex" });
       continue;
     }
     if (character === "'" || character === '"' || character === "`") {
@@ -314,6 +840,7 @@ function javascriptTokens(source) {
       const template = quote === "`";
       let value = "";
       let dynamic = false;
+      let closed = false;
       index += 1;
       while (index < source.length) {
         const current = source[index];
@@ -325,12 +852,20 @@ function javascriptTokens(source) {
         if (template && current === "$" && source[index + 1] === "{") dynamic = true;
         if (current === quote) {
           index += 1;
+          closed = true;
           break;
         }
         value += current;
         index += 1;
       }
-      tokens.push({ kind: template ? "template" : "string", value, dynamic });
+      if (!closed) fail(`${origin} contains an unterminated string or template`);
+      tokens.push({
+        kind: template ? "template" : "string",
+        value,
+        dynamic,
+        dangerousDynamic:
+          dynamic && /\b(?:import|new\s+URL|Worker|SharedWorker|ServiceWorker)\b/i.test(value),
+      });
       continue;
     }
     if (/[A-Za-z_$]/.test(character)) {
@@ -355,8 +890,491 @@ function isMemberProperty(tokens, index) {
   return tokens[index - 1]?.value === ".";
 }
 
-export function assertImportReferences(source, origin, files, outputRoot) {
-  const tokens = javascriptTokens(source);
+const regexControlStatementWords = new Set(["catch", "do", "else", "for", "if", "while"]);
+
+function isControlStatementClose(tokens) {
+  let depth = 0;
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    if (tokens[index]?.value === ")") {
+      depth += 1;
+    } else if (tokens[index]?.value === "(") {
+      depth -= 1;
+      if (depth === 0) {
+        return regexControlStatementWords.has(tokens[index - 1]?.value);
+      }
+    }
+  }
+  return false;
+}
+
+function canStartRegex(tokens) {
+  const previous = tokens.at(-1);
+  return (
+    !previous ||
+    previous.value === "(" ||
+    previous.value === "[" ||
+    previous.value === "{" ||
+    previous.value === "," ||
+    previous.value === ";" ||
+    previous.value === ":" ||
+    previous.value === "?" ||
+    previous.value === "=" ||
+    previous.value === "!" ||
+    previous.value === "&" ||
+    previous.value === "|" ||
+    previous.value === "+" ||
+    previous.value === "-" ||
+    previous.value === "*" ||
+    previous.value === "/" ||
+    previous.value === "%" ||
+    previous.value === "~" ||
+    previous.value === "<" ||
+    previous.value === ">" ||
+    (previous.value === ")" && isControlStatementClose(tokens)) ||
+    previous.value === "return" ||
+    previous.value === "throw" ||
+    previous.value === "case" ||
+    previous.value === "=>"
+  );
+}
+
+function isGeneratedEmptyFederationCssUrl(tokens, index) {
+  const argument = tokens[index + 3];
+  if (argument?.kind !== "word") return false;
+
+  const callbackShape = [
+    [index - 1, "="],
+    [index - 2, "word"],
+    [index - 3, "word"],
+    [index - 4, "{"],
+    [index - 5, ">"],
+    [index - 6, "="],
+    [index - 7, argument.value],
+    [index - 8, "("],
+    [index - 9, "map"],
+    [index - 10, "."],
+    [index - 11, "word"],
+  ];
+  if (
+    callbackShape.some(([tokenIndex, expected]) => {
+      const token = tokens[tokenIndex];
+      return expected === "word"
+        ? token?.kind !== "word"
+        : token?.value !== expected;
+    })
+  ) {
+    return false;
+  }
+
+  const mappedSource = tokens[index - 11].value;
+  for (let cursor = 0; cursor < index - 11; cursor += 1) {
+    if (
+      tokens[cursor]?.value === "let" &&
+      tokens[cursor + 1]?.value === mappedSource &&
+      tokens[cursor + 2]?.value === "=" &&
+      tokens[cursor + 3]?.value === "t" &&
+      tokens[cursor + 4]?.value === "[" &&
+      tokens[cursor + 5]?.value === argument.value &&
+      tokens[cursor + 6]?.value === "]" &&
+      tokens[cursor + 7]?.value === "|" &&
+      tokens[cursor + 8]?.value === "|" &&
+      tokens[cursor + 9]?.value === "[" &&
+      tokens[cursor + 10]?.value === "]"
+    ) {
+      for (let declaration = 0; declaration < cursor; declaration += 1) {
+        if (
+          tokens[declaration]?.value === "var" &&
+          tokens[declaration + 1]?.value === "t" &&
+          tokens[declaration + 2]?.value === "=" &&
+          tokens[declaration + 3]?.value === "{" &&
+          tokens[declaration + 4]?.value === "}"
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function isGeneratedVitePreloadUrl(tokens, index) {
+  const argument = tokens[index + 3];
+  const expected = [
+    [index - 1, ":"],
+    [index - 2, ")"],
+    [index - 3, argument?.value],
+    [index - 4, "("],
+    [index - 5, "resolve"],
+    [index - 6, "."],
+    [index - 7, "meta"],
+    [index - 8, "."],
+    [index - 9, "import"],
+    [index - 10, "?"],
+    [index - 11, "resolve"],
+    [index - 12, "."],
+    [index - 13, "meta"],
+    [index - 14, "."],
+    [index - 15, "import"],
+    [index - 16, "return"],
+    [index - 17, "{"],
+    [index - 18, ")"],
+    [index - 19, argument?.value],
+    [index - 20, "("],
+    [index - 21, "word"],
+    [index - 22, "function"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedVitePreloadHelperUrl(tokens, index) {
+  return (
+    tokens[index - 11]?.value === "var" &&
+    tokens[index - 10]?.kind === "word" &&
+    tokens[index - 9]?.value === "=" &&
+    tokens[index - 8]?.value === "function" &&
+    tokens[index - 7]?.value === "(" &&
+    tokens[index - 6]?.kind === "word" &&
+    tokens[index - 5]?.value === "," &&
+    tokens[index - 4]?.kind === "word" &&
+    tokens[index - 3]?.value === ")" &&
+    tokens[index - 2]?.value === "{" &&
+    tokens[index - 1]?.value === "return" &&
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 5]?.kind === "word" &&
+    tokens[index - 10]?.value === tokens[index + 3]?.value &&
+    tokens[index - 4]?.value === tokens[index + 5]?.value &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 6]?.value === ")" &&
+    tokens[index + 7]?.value === "." &&
+    tokens[index + 8]?.value === "href" &&
+    tokens[index + 9]?.value === "}"
+  );
+}
+
+function isGeneratedFederationRemoteImport(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ">"],
+    [index - 2, "="],
+    [index - 3, ")"],
+    [index - 4, "("],
+    [index - 5, "("],
+    [index - 6, "word"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, ","],
+    [index + 10, "["],
+    [index + 11, "]"],
+    [index + 12, ","],
+    [index + 13, "import"],
+    [index + 14, "."],
+    [index + 15, "meta"],
+    [index + 16, "."],
+    [index + 17, "url"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ">"],
+    [index - 2, "="],
+    [index - 3, ")"],
+    [index - 4, "("],
+    [index - 5, "("],
+    [index - 6, "word"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, ","],
+    [index + 10, "["],
+    [index + 11, "]"],
+    [index + 12, ")"],
+    [index + 13, "."],
+    [index + 14, "catch"],
+    [index + 15, "("],
+    [index + 16, "word"],
+    [index + 17, ")"],
+  ];
+  if (argument?.kind !== "word") return false;
+  return expected.every(([tokenIndex, value]) => {
+    const token = tokens[tokenIndex];
+    return value === "word" ? token?.kind === "word" : token?.value === value;
+  });
+}
+
+function isGeneratedFederationExternalImport(tokens, index) {
+  const argument = tokens[index + 2];
+  const expected = [
+    [index - 1, ":"],
+    [index + 3, ")"],
+    [index + 4, "."],
+    [index + 5, "then"],
+    [index + 6, "("],
+    [index + 7, "word"],
+    [index + 8, ")"],
+    [index + 9, "."],
+    [index + 10, "catch"],
+    [index + 11, "("],
+    [index + 12, "word"],
+    [index + 13, ")"],
+  ];
+  if (argument?.kind !== "word") return false;
+  if (
+    !expected.every(([tokenIndex, value]) => {
+      const token = tokens[tokenIndex];
+      return value === "word" ? token?.kind === "word" : token?.value === value;
+    })
+  ) {
+    return false;
+  }
+  return true;
+}
+
+const workerConstructorNames = new Set(["Worker", "SharedWorker", "ServiceWorker"]);
+
+function isServiceWorkerExpressionEnd(tokens, index) {
+  if (tokens[index]?.value === "serviceWorker") return true;
+  return (
+    tokens[index]?.value === "]" &&
+    staticReferenceToken(tokens[index - 1]) &&
+    tokens[index - 1].value === "serviceWorker" &&
+    tokens[index - 2]?.value === "["
+  );
+}
+
+function workerCallAt(tokens, index) {
+  const token = tokens[index];
+  const next = tokens[index + 1];
+  const globalWorkerOwners = new Set(["globalThis", "self", "window"]);
+  if (
+    token?.kind === "word" &&
+    token.value === "new" &&
+    workerConstructorNames.has(next?.value) &&
+    tokens[index + 2]?.value === "("
+  ) {
+    return { argument: index + 3 };
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "new" &&
+    globalWorkerOwners.has(next?.value) &&
+    tokens[index + 2]?.value === "." &&
+    workerConstructorNames.has(tokens[index + 3]?.value) &&
+    tokens[index + 4]?.value === "("
+  ) {
+    return { argument: index + 5 };
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "new" &&
+    tokens[index + 1]?.value === "(" &&
+    workerConstructorNames.has(tokens[index + 2]?.value) &&
+    tokens[index + 3]?.value === ")" &&
+    tokens[index + 4]?.value === "("
+  ) {
+    return { argument: index + 5 };
+  }
+  if (
+    token?.kind === "word" &&
+    workerConstructorNames.has(token.value) &&
+    next?.value === "(" &&
+    (tokens[index - 1]?.value !== "." ||
+      globalWorkerOwners.has(tokens[index - 2]?.value))
+  ) {
+    return { argument: index + 2 };
+  }
+  if (
+    (token?.kind === "word" || staticReferenceToken(token)) &&
+    workerConstructorNames.has(token.value) &&
+    tokens[index - 1]?.value === "[" &&
+    tokens[index + 1]?.value === "]" &&
+    tokens[index + 2]?.value === "("
+  ) {
+    return { argument: index + 3 };
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "register" &&
+    next?.value === "(" &&
+    tokens[index - 1]?.value === "." &&
+    (isServiceWorkerExpressionEnd(tokens, index - 2) ||
+      (tokens[index - 2]?.value === "?" &&
+        isServiceWorkerExpressionEnd(tokens, index - 3)))
+  ) {
+    return { argument: index + 2 };
+  }
+  if (
+    (token?.kind === "word" || staticReferenceToken(token)) &&
+    token.value === "register" &&
+    tokens[index - 1]?.value === "[" &&
+    tokens[index + 1]?.value === "]" &&
+    tokens[index + 2]?.value === "(" &&
+    isServiceWorkerExpressionEnd(tokens, index - 2)
+  ) {
+    return { argument: index + 3 };
+  }
+  return null;
+}
+
+function urlCallAt(tokens, index) {
+  const token = tokens[index];
+  const next = tokens[index + 1];
+  const globalOwners = new Set(["globalThis", "self", "window"]);
+  if (token?.kind === "word" && token.value === "new") {
+    if (next?.value === "URL" && tokens[index + 2]?.value === "(") {
+      return { start: index, argument: index + 3 };
+    }
+    if (
+      globalOwners.has(next?.value) &&
+      tokens[index + 2]?.value === "." &&
+      tokens[index + 3]?.value === "URL" &&
+      tokens[index + 4]?.value === "("
+    ) {
+      return { start: index, argument: index + 5 };
+    }
+    if (
+      next?.kind === "word" &&
+      tokens[index + 2]?.value === "[" &&
+      staticReferenceToken(tokens[index + 3]) &&
+      tokens[index + 3].value === "URL" &&
+      tokens[index + 4]?.value === "]" &&
+      tokens[index + 5]?.value === "("
+    ) {
+      return { start: index, argument: index + 6 };
+    }
+    if (
+      next?.value === "(" &&
+      tokens[index + 2]?.value === "URL" &&
+      tokens[index + 3]?.value === ")" &&
+      tokens[index + 4]?.value === "("
+    ) {
+      return { start: index, argument: index + 5 };
+    }
+    return null;
+  }
+  if (
+    token?.kind === "word" &&
+    token.value === "URL" &&
+    next?.value === "(" &&
+    ![".", "new"].includes(tokens[index - 1]?.value)
+  ) {
+    return { start: index, argument: index + 2 };
+  }
+  if (
+    token?.kind === "word" &&
+    next?.value === "[" &&
+    staticReferenceToken(tokens[index + 2]) &&
+    tokens[index + 2].value === "URL" &&
+    tokens[index + 3]?.value === "]" &&
+    tokens[index + 4]?.value === "(" &&
+    tokens[index - 1]?.value !== "new"
+  ) {
+    return { start: index, argument: index + 5 };
+  }
+  return null;
+}
+
+function isStaticImportMetaUrlCall(tokens, argumentIndex) {
+  return (
+    staticReferenceToken(tokens[argumentIndex]) &&
+    tokens[argumentIndex + 1]?.value === "," &&
+    tokens[argumentIndex + 2]?.value === "import" &&
+    tokens[argumentIndex + 3]?.value === "." &&
+    tokens[argumentIndex + 4]?.value === "meta" &&
+    tokens[argumentIndex + 5]?.value === "." &&
+    tokens[argumentIndex + 6]?.value === "url" &&
+    tokens[argumentIndex + 7]?.value === ")"
+  );
+}
+
+function isGeneratedViteDynamicAssetUrl(tokens, index) {
+  return (
+    tokens[index + 3]?.kind === "string" &&
+    tokens[index + 4]?.value === "+" &&
+    tokens[index + 5]?.kind === "word" &&
+    tokens[index + 6]?.value === "," &&
+    tokens[index + 7]?.value === "import" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "meta" &&
+    tokens[index + 10]?.value === "." &&
+    tokens[index + 11]?.value === "url" &&
+    tokens[index + 12]?.value === ")"
+  );
+}
+
+function isGeneratedRuntimeUrl(tokens, index) {
+  const directEntry =
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 4]?.value === "," &&
+    tokens[index + 5]?.value === "window" &&
+    tokens[index + 6]?.value === "." &&
+    tokens[index + 7]?.value === "location" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "origin" &&
+    tokens[index + 10]?.value === ")";
+  const memberEntry =
+    tokens[index + 3]?.kind === "word" &&
+    tokens[index + 4]?.value === "." &&
+    tokens[index + 5]?.value === "entry" &&
+    tokens[index + 6]?.value === "," &&
+    tokens[index + 7]?.value === "window" &&
+    tokens[index + 8]?.value === "." &&
+    tokens[index + 9]?.value === "location" &&
+    tokens[index + 10]?.value === "." &&
+    tokens[index + 11]?.value === "origin" &&
+    tokens[index + 12]?.value === ")";
+  return directEntry || memberEntry;
+}
+
+function isGeneratedFederationDynamicTemplate(token) {
+  return (
+    token?.kind === "template" &&
+    token.dynamic === true &&
+    /^\s*(?:System\.)?import\("\$\{[A-Za-z_$][A-Za-z0-9_$]*\}"\)\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\s*$/.test(
+      token.value,
+    )
+  );
+}
+
+export function assertImportReferences(
+  source,
+  origin,
+  files,
+  outputRoot,
+  referencedFiles = new Set(),
+  options = {},
+) {
+  const tokens = javascriptTokens(source, origin);
+  const generatedModuleFederation = options.generatedModuleFederation === true;
+  const authoritativeDynamicImport =
+    options.authoritativeGeneratedDynamicImport === true ||
+    options.authoritativeHostPublication === true;
+  if (
+    tokens.some(
+      (token) =>
+        token.dangerousDynamic &&
+        (!authoritativeDynamicImport || !isGeneratedFederationDynamicTemplate(token)),
+    )
+  ) {
+    fail(`${origin} contains an unresolved dynamic template expression`);
+  }
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     const next = tokens[index + 1];
@@ -367,54 +1385,135 @@ export function assertImportReferences(source, origin, files, outputRoot) {
       !isMemberProperty(tokens, index) &&
       staticReferenceToken(next)
     ) {
-      assertLocalReference(next.value, origin, files, `${origin} import`, outputRoot);
+      const target = assertLocalReference(
+        next.value,
+        origin,
+        files,
+        `${origin} import`,
+        outputRoot,
+        options,
+      );
+      if (target) referencedFiles.add(target);
       continue;
     }
 
     if (token.kind === "word" && token.value === "import" && !isMemberProperty(tokens, index)) {
       if (staticReferenceToken(next)) {
-        assertLocalReference(next.value, origin, files, `${origin} import`, outputRoot);
-        continue;
-      }
-      if (
-        next?.value === "(" &&
-        staticReferenceToken(tokens[index + 2]) &&
-        tokens[index + 3]?.value === ")"
-      ) {
-        assertLocalReference(
-          tokens[index + 2].value,
+        const target = assertLocalReference(
+          next.value,
           origin,
           files,
           `${origin} import`,
           outputRoot,
+          options,
         );
+        if (target) referencedFiles.add(target);
+        continue;
+      }
+      if (next?.value === "(") {
+        if (
+          staticReferenceToken(tokens[index + 2]) &&
+          tokens[index + 3]?.value === ")"
+        ) {
+          const target = assertLocalReference(
+            tokens[index + 2].value,
+            origin,
+            files,
+            `${origin} import`,
+            outputRoot,
+            options,
+          );
+          if (target) referencedFiles.add(target);
+        } else if (
+          authoritativeDynamicImport &&
+          (isGeneratedFederationRemoteImport(tokens, index) ||
+            isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) ||
+            (options.authoritativeHostPublication === true &&
+              isGeneratedFederationExternalImport(tokens, index)))
+        ) {
+          continue;
+        } else {
+          fail(`${origin} contains an unresolved dynamic local import`);
+        }
       }
       continue;
     }
 
-    if (
-      token.kind === "word" &&
-      token.value === "new" &&
-      tokens[index + 1]?.value === "URL" &&
-      tokens[index + 2]?.value === "(" &&
-      staticReferenceToken(tokens[index + 3]) &&
-      tokens[index + 4]?.value === "," &&
-      tokens[index + 5]?.value === "import" &&
-      tokens[index + 6]?.value === "." &&
-      tokens[index + 7]?.value === "meta" &&
-      tokens[index + 8]?.value === "." &&
-      tokens[index + 9]?.value === "url" &&
-      tokens[index + 10]?.value === ")"
-    ) {
-      assertLocalReference(
-        tokens[index + 3].value,
+    const workerCall = workerCallAt(tokens, index);
+    if (workerCall) {
+      const argument = tokens[workerCall.argument];
+      if (
+        staticReferenceToken(argument) &&
+        [")", ","].includes(tokens[workerCall.argument + 1]?.value)
+      ) {
+        const target = assertLocalReference(
+          argument.value,
+          origin,
+          files,
+          `${origin} worker URL`,
+          outputRoot,
+          options,
+        );
+        if (target) referencedFiles.add(target);
+      } else if (
+        argument?.value === "new" &&
+        urlCallAt(tokens, workerCall.argument) &&
+        isStaticImportMetaUrlCall(
+          tokens,
+          urlCallAt(tokens, workerCall.argument).argument,
+        )
+      ) {
+        const urlCall = urlCallAt(tokens, workerCall.argument);
+        const target = assertLocalReference(
+          tokens[urlCall.argument].value,
+          origin,
+          files,
+          `${origin} worker URL`,
+          outputRoot,
+          options,
+        );
+        if (target) referencedFiles.add(target);
+      } else {
+        fail(`${origin} contains an unresolved dynamic worker URL`);
+      }
+      continue;
+    }
+
+    const urlCall = urlCallAt(tokens, index);
+    if (urlCall && isStaticImportMetaUrlCall(tokens, urlCall.argument)) {
+      const target = assertLocalReference(
+        tokens[urlCall.argument].value,
         origin,
         files,
         `${origin} asset URL`,
         outputRoot,
+        options,
       );
+      if (target) referencedFiles.add(target);
+      continue;
+    }
+
+    if (urlCall) {
+      if (
+        (generatedModuleFederation &&
+          (isGeneratedEmptyFederationCssUrl(tokens, urlCall.start) ||
+            isGeneratedVitePreloadUrl(tokens, urlCall.start) ||
+            isGeneratedVitePreloadHelperUrl(tokens, urlCall.start) ||
+            isGeneratedViteDynamicAssetUrl(tokens, urlCall.start) ||
+            isGeneratedRuntimeUrl(tokens, urlCall.start)))
+      ) {
+        continue;
+      }
+      if (
+        staticReferenceToken(tokens[urlCall.argument]) &&
+        isExternalReference(tokens[urlCall.argument].value)
+      ) {
+        continue;
+      }
+      fail(`${origin} contains an unresolved dynamic local asset URL`);
     }
   }
+  return referencedFiles;
 }
 
 function skipCssTrivia(source, start) {
@@ -479,7 +1578,13 @@ function readCssUrlFunction(source, start) {
   return { value, next: index + 1 };
 }
 
-export function assertCssReferences(source, origin, files, outputRoot) {
+export function assertCssReferences(
+  source,
+  origin,
+  files,
+  outputRoot,
+  referencedFiles = new Set(),
+) {
   let index = 0;
   while (index < source.length) {
     if (source[index] === "/" && source[index + 1] === "*") {
@@ -498,13 +1603,27 @@ export function assertCssReferences(source, origin, files, outputRoot) {
         const next = skipCssTrivia(source, atRule.next);
         const url = readCssUrlFunction(source, next);
         if (url) {
-          assertLocalReference(url.value, origin, files, `${origin} CSS import`, outputRoot);
+          const target = assertLocalReference(
+            url.value,
+            origin,
+            files,
+            `${origin} CSS import`,
+            outputRoot,
+          );
+          if (target) referencedFiles.add(target);
           index = url.next;
           continue;
         }
         if (source[next] === "'" || source[next] === '"') {
           const imported = readCssString(source, next);
-          assertLocalReference(imported.value, origin, files, `${origin} CSS import`, outputRoot);
+          const target = assertLocalReference(
+            imported.value,
+            origin,
+            files,
+            `${origin} CSS import`,
+            outputRoot,
+          );
+          if (target) referencedFiles.add(target);
           index = imported.next;
           continue;
         }
@@ -513,13 +1632,21 @@ export function assertCssReferences(source, origin, files, outputRoot) {
 
     const url = readCssUrlFunction(source, index);
     if (url) {
-      assertLocalReference(url.value, origin, files, `${origin} CSS URL`, outputRoot);
+      const target = assertLocalReference(
+        url.value,
+        origin,
+        files,
+        `${origin} CSS URL`,
+        outputRoot,
+      );
+      if (target) referencedFiles.add(target);
       index = url.next;
       continue;
     }
 
     index += 1;
   }
+  return referencedFiles;
 }
 
 function findHtmlTagEnd(source, start) {
@@ -621,59 +1748,289 @@ export function assertHtmlReferences(source, origin, files, outputRoot) {
   }
 }
 
-export async function validateReleaseOutput(
+async function assertOutputDirectory(outputArgument) {
+  const stats = await lstat(outputArgument).catch(() => fail("output directory is unavailable"));
+  if (stats.isSymbolicLink()) fail("output directory must not be a symlink");
+  if (!stats.isDirectory()) fail("output path must be a directory");
+}
+
+function snapshotOutputFiles(snapshot, outputRoot) {
+  if (!snapshot || !Array.isArray(snapshot.artifacts)) {
+    fail("artifact snapshot is invalid");
+  }
+  const byName = new Map();
+  for (const artifact of snapshot.artifacts) {
+    if (!artifact || typeof artifact.path !== "string" || !Buffer.isBuffer(artifact.bytes)) {
+      fail("artifact snapshot entry is invalid");
+    }
+    assertReleaseArtifactPath(artifact.path);
+    if (byName.has(artifact.path)) {
+      fail(`artifact snapshot contains duplicate ${JSON.stringify(artifact.path)}`);
+    }
+    byName.set(artifact.path, artifact);
+  }
+  const names = [...byName.keys()].sort((left, right) => left.localeCompare(right));
+  return {
+    files: new Set(names),
+    names,
+    paths: names.map((name) => join(outputRoot, ...name.split("/"))),
+    readBytes: async (name) => byName.get(name)?.bytes ?? null,
+    byteLengthForPath: async (name) => byName.get(name)?.bytes.byteLength ?? null,
+    readText: async (name) => byName.get(name)?.bytes.toString("utf8") ?? null,
+  };
+}
+
+function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
+  const deploymentMarker = "/assets/application-host";
+  const escapedSlash = String.raw`(?:/|\\/|\\x2f|\\u002f|\\u\{(?:2f|02f|002f|0002f|00002f)\})`;
+  const deploymentPathCharacter = String.raw`(?:${escapedSlash}|[^\s"'\x60),;?}])`;
+  const references = [
+    ...source.matchAll(
+      new RegExp(
+        `${escapedSlash}assets${escapedSlash}application-host${deploymentPathCharacter}*`,
+        "gi",
+      ),
+    ),
+  ].map(([reference]) => decodeDeploymentPathEscapes(reference));
+  if (references.length === 0) return;
+  if (!allowedDeploymentPath) {
+    fail(`${origin} contains a deployment-specific publication path`);
+  }
+
+  assertPathSyntax(allowedDeploymentPath, "allowed deployment path");
+  for (const reference of references) {
+    const deploymentPath = reference.slice(deploymentMarker.length + 1);
+    if (!deploymentPath || deploymentPath.split("/")[0] !== allowedDeploymentPath) {
+      fail(`${origin} contains an unexpected deployment path ${JSON.stringify(reference)}`);
+    }
+    assertPathSyntax(deploymentPath, `${origin} deployment path`);
+    if (deploymentPath.split("/").length < 2) {
+      fail(`${origin} contains an incomplete deployment path ${JSON.stringify(reference)}`);
+    }
+  }
+}
+
+function decodeDeploymentPathEscapes(value) {
+  return value.replace(
+    /\\(?:u\{([0-9a-f]{1,6})\}|u([0-9a-f]{4})|x([0-9a-f]{2})|([/\\]))/gi,
+    (match, bracedCodePoint, unicodeCodePoint, hexCodePoint, escapedCharacter) => {
+      const codePoint = bracedCodePoint
+        ? Number.parseInt(bracedCodePoint, 16)
+        : unicodeCodePoint
+          ? Number.parseInt(unicodeCodePoint, 16)
+          : hexCodePoint
+            ? Number.parseInt(hexCodePoint, 16)
+            : escapedCharacter === "/"
+              ? 0x2f
+              : 0x5c;
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    },
+  );
+}
+
+export async function validateFederationOutput(
   outputArgument,
   expectedRemoteName,
-  repositoryRootInput = repositoryRoot,
+  {
+    repositoryRootInput = repositoryRoot,
+    requireExternal = true,
+    allowedDeploymentPath,
+    artifactSnapshot,
+  } = {},
 ) {
   assertRemoteName(expectedRemoteName, "expected remote name");
   const canonicalRepositoryRoot = await realpath(repositoryRootInput).catch(() =>
     fail("repository root is unavailable"),
   );
+  await assertOutputDirectory(outputArgument);
   const outputRoot = canonicalPathWithMissingTail(outputArgument);
-  assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot);
+  if (requireExternal) assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot);
+  if (artifactSnapshot) {
+    if (typeof artifactSnapshot.root !== "string") fail("artifact snapshot root is invalid");
+    if (canonicalPathWithMissingTail(artifactSnapshot.root) !== outputRoot) {
+      fail("artifact snapshot root does not match the output directory");
+    }
+  }
 
-  const paths = await outputFiles(outputRoot, outputRoot);
+  const snapshot = artifactSnapshot
+    ? snapshotOutputFiles(artifactSnapshot, outputRoot)
+    : {
+        paths: await outputFiles(outputRoot, outputRoot),
+        readBytes: async (name) =>
+          readFile(join(outputRoot, ...name.split("/"))).catch(() => null),
+        byteLengthForPath: async (name) =>
+          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.byteLength ??
+          null,
+        readText: async (name) =>
+          (await readFile(join(outputRoot, ...name.split("/"))).catch(() => null))?.toString("utf8") ??
+          null,
+      };
+  const paths = snapshot.paths;
   if (paths.length === 0) fail("output is empty");
 
-  const files = new Set(paths.map((path) => relativePath(outputRoot, path)));
-  for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js", "index.html"]) {
+  const files = snapshot.files ?? new Set(paths.map((path) => relativePath(outputRoot, path)));
+  for (const path of files) assertReleaseArtifactPath(path);
+  for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
     if (!files.has(required)) fail(`missing required ${required}`);
   }
   if (!paths.some((path) => extname(path) === ".css")) fail("no CSS asset was emitted");
-  if (!paths.some((path) => /\.(?:woff2?|ttf|otf)$/i.test(path))) {
-    fail("no font asset was emitted");
+
+  const manifest = JSON.parse(await snapshot.readText("mf-manifest.json"));
+  const manifestReferences = await assertGeneratedManifest(
+    manifest,
+    expectedRemoteName,
+    files,
+    outputRoot,
+    snapshot.byteLengthForPath,
+  );
+
+  const stats = JSON.parse(await snapshot.readText("mf-stats.json"));
+  const statsResult = await assertStats(
+    stats,
+    expectedRemoteName,
+    files,
+    outputRoot,
+    snapshot.byteLengthForPath,
+  );
+  const statsReferences = statsResult.references;
+  const generatedModuleFederationFiles = statsResult.generatedModuleFederationFiles;
+
+  const manifestClosure = new Set(manifestReferences);
+  const pending = [...manifestClosure];
+  const visited = new Set();
+  while (pending.length > 0) {
+    const name = pending.pop();
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const source = await snapshot.readText(name);
+    if (source === null) fail(`manifest closure cannot read ${JSON.stringify(name)}`);
+    const discovered = new Set();
+    const generatedModuleFederation =
+      generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
+    const authoritativeGeneratedDynamicImport =
+      generatedModuleFederation &&
+      isAuthoritativeGeneratedFederationRuntimeArtifact(
+        name,
+        source,
+        stats,
+        expectedRemoteName,
+      );
+    if (/\.(?:js|mjs|cjs)$/i.test(name)) {
+      assertImportReferences(source, name, files, outputRoot, discovered, {
+        generatedModuleFederation,
+        authoritativeGeneratedDynamicImport,
+      });
+    }
+    if (extname(name).toLowerCase() === ".css") {
+      assertCssReferences(source, name, files, outputRoot, discovered);
+    }
+    for (const reference of discovered) {
+      if (!manifestClosure.has(reference)) {
+        manifestClosure.add(reference);
+        pending.push(reference);
+      }
+    }
   }
 
-  const manifest = JSON.parse(await readFile(join(outputRoot, "mf-manifest.json"), "utf8"));
-  assertGeneratedManifest(manifest, expectedRemoteName, files, outputRoot);
-
-  const stats = JSON.parse(await readFile(join(outputRoot, "mf-stats.json"), "utf8"));
-  assertStats(stats, files, outputRoot);
-
-  const viteManifestPath = join(outputRoot, ".vite/manifest.json");
-  if (files.has(".vite/manifest.json")) {
-    const viteManifest = JSON.parse(await readFile(viteManifestPath, "utf8"));
-    assertViteManifest(viteManifest, files, outputRoot);
+  for (const reference of manifestClosure) {
+    if (!statsReferences.has(reference)) {
+      fail(`manifest references ${JSON.stringify(reference)} missing from federation stats`);
+    }
+  }
+  for (const reference of statsReferences) {
+    if (!manifestClosure.has(reference)) {
+      const source = await snapshot.readText(reference);
+      if (
+        !isAuthoritativeGeneratedHostInitializationArtifact(
+          reference,
+          source,
+          stats,
+          expectedRemoteName,
+        )
+      ) {
+        fail(`federation stats references ${JSON.stringify(reference)} missing from manifest closure`);
+      }
+      const discovered = new Set();
+      assertImportReferences(
+        source,
+        reference,
+        files,
+        outputRoot,
+        discovered,
+        { authoritativeHostInitialization: true },
+      );
+      for (const target of discovered) {
+        if (!manifestClosure.has(target)) {
+          fail(
+            `generated host initialization ${JSON.stringify(reference)} references ${JSON.stringify(target)} outside manifest closure`,
+          );
+        }
+      }
+      manifestClosure.add(reference);
+    }
+  }
+  for (const path of files) {
+    if (releaseMetadataFiles.has(path)) continue;
+    if (!statsReferences.has(path)) {
+      fail(`output contains an unreferenced or stale artifact ${JSON.stringify(path)}`);
+    }
   }
 
   for (const path of paths) {
     const name = relativePath(outputRoot, path);
-    const source = await readFile(path, "utf8").catch(() => null);
+    const source = await snapshot.readText(name);
     if (source === null) continue;
 
-    if (/\.(?:js|mjs|cjs)$/i.test(name)) assertImportReferences(source, name, files, outputRoot);
+    assertNoForbiddenPublicationReferences(source, name);
+    assertDeploymentReferences(source, name, allowedDeploymentPath);
+
+    if (/\.(?:js|mjs|cjs)$/i.test(name)) {
+      const generatedModuleFederation =
+        generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
+      assertImportReferences(source, name, files, outputRoot, new Set(), {
+        generatedModuleFederation,
+        authoritativeGeneratedDynamicImport:
+          generatedModuleFederation &&
+          isAuthoritativeGeneratedFederationRuntimeArtifact(
+            name,
+            source,
+            stats,
+            expectedRemoteName,
+          ),
+        authoritativeHostInitialization:
+          generatedHostInitializationPathPattern.test(name) &&
+          isAuthoritativeGeneratedHostInitializationArtifact(
+            name,
+            source,
+            stats,
+            expectedRemoteName,
+          ),
+      });
+    }
     if (extname(name).toLowerCase() === ".css")
       assertCssReferences(source, name, files, outputRoot);
     if (extname(name).toLowerCase() === ".html")
       assertHtmlReferences(source, name, files, outputRoot);
-
-    if (/\/assets\/application-host\/|\/releases\/|artifactBaseUrl|MF_BUILD_VERSION/.test(source)) {
-      fail(`${name} contains a deployment-specific path or build-version marker`);
-    }
   }
 
   return { outputRoot, fileCount: paths.length };
+}
+
+export async function validateReleaseOutput(
+  outputArgument,
+  expectedRemoteName,
+  repositoryRootInput = repositoryRoot,
+  options = {},
+) {
+  return validateFederationOutput(outputArgument, expectedRemoteName, {
+    repositoryRootInput,
+    requireExternal: true,
+    ...options,
+  });
 }
 
 export async function main(argumentsList = process.argv.slice(2)) {

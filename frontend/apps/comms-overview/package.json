@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vp dev --host 127.0.0.1 --port 4176 --strictPort",
     "build": "vue-tsc -b && vp build",
+    "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
     "build:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && vue-tsc -b && vp build --mode release --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\"",
     "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node ../../tools/frontend-release-output-check.mjs --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\" --remoteName cadence_comms_overview",
     "preview": "vp preview --host 127.0.0.1 --port 4176 --strictPort",
-    "test": "node --test ../../tools/frontend-release-output-check.test.mjs && vp test --run --exclude ../../tools/frontend-release-output-check.test.mjs"
+    "test": "node --test ../../tools/frontend-release-output-check.test.mjs release-build-config.test.mjs && vp test --run --exclude ../../tools/frontend-release-output-check.test.mjs --exclude release-build-config.test.mjs"
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",

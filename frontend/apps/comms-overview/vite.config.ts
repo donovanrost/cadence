@@ -1,11 +1,24 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { defineConfig, lazyPlugins, type ViteUserConfig } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
 const cadenceVueSource = resolve(__dirname, "../../../apps/cadence_web/assets/vue");
+const federatedEntry = resolve(__dirname, "src/federated-application.ts");
+const releaseFederationConfig = {
+  ...federationConfig,
+  hostInitInjectLocation: "entry" as const,
+  manifest: {
+    additionalData: ({ stats }: { stats: Record<string, unknown> }) => {
+      if (!Object.hasOwn(stats, "assetAnalysis")) return stats;
+      const publicationStats = { ...stats };
+      delete publicationStats.assetAnalysis;
+      return publicationStats;
+    },
+  },
+};
 const publicationRoot = resolve(
   __dirname,
   "../../../apps/cadence_web/priv/static/assets/application-host/comms-overview",
@@ -26,6 +39,11 @@ const releaseIdentityEnvironmentNames = [
 function releaseOutputDirectory() {
   const configuredOutput = process.env[releaseOutputEnvironmentName];
   if (!configuredOutput) {
+    throw new Error(
+      `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`,
+    );
+  }
+  if (!isAbsolute(configuredOutput)) {
     throw new Error(
       `${releaseOutputEnvironmentName} must be an absolute output directory outside the repository.`,
     );
@@ -131,8 +149,164 @@ function assertOutputOutsideRepository(outputRoot: string, canonicalRepositoryRo
   }
 }
 
-export default defineConfig(({ mode }) => {
+type ReleaseBundleItem = {
+  code?: string;
+  fileName?: string;
+  facadeModuleId?: string;
+  imports?: string[];
+  dynamicImports?: string[];
+  implicitlyLoadedBefore?: string[];
+  referencedFiles?: string[];
+  isEntry?: boolean;
+  name?: string;
+  source?: string | Uint8Array;
+  type?: string;
+};
+
+const exactHostInitializationPath = /^assets\/hostInit-[A-Za-z0-9_-]{8}\.js$/;
+
+function isGeneratedHostInitializationChunk(
+  fileName: string,
+  item: ReleaseBundleItem,
+): item is ReleaseBundleItem & { code: string } {
+  return (
+    exactHostInitializationPath.test(fileName) &&
+    item.type === "chunk" &&
+    item.isEntry === false &&
+    (item.name === "hostInit" || item.name === basename(fileName, ".js")) &&
+    (item.facadeModuleId === undefined ||
+      /hostAutoInit|hostInit|module-federation/i.test(item.facadeModuleId)) &&
+    typeof item.code === "string" &&
+    item.code.includes("__mf_module_cache__") &&
+    item.code.includes("loadShare") &&
+    /export\s*\{(?=[^}]*\bhostInitPromise\b)(?=[^}]*\binitHost\b)[^}]*\}/s.test(
+      item.code,
+    )
+  );
+}
+
+function bundleReferenceMatches(owner: string, reference: string, target: string) {
+  const normalized = reference.replaceAll("\\", "/");
+  return [
+    normalized,
+    posix.normalize(posix.join(posix.dirname(owner), normalized)),
+  ].includes(target);
+}
+
+function bundleItemReferencesTarget(
+  owner: string,
+  item: ReleaseBundleItem,
+  target: string,
+) {
+  for (const field of [
+    "imports",
+    "dynamicImports",
+    "implicitlyLoadedBefore",
+    "referencedFiles",
+  ] as const) {
+    if (item[field]?.some((reference) => bundleReferenceMatches(owner, reference, target))) {
+      return true;
+    }
+  }
+  if (typeof item.code === "string") {
+    const targetName = basename(target);
+    return (
+      item.code.includes(target) ||
+      item.code.includes(`./${targetName}`) ||
+      item.code.includes(`../${targetName}`)
+    );
+  }
+  return false;
+}
+
+function releaseOutputPlugin() {
+  return {
+    name: "cadence-comms-overview-release-output",
+    enforce: "post",
+    apply: "build",
+    config(config: ViteUserConfig) {
+      config.build ??= {};
+      config.build.manifest = false;
+    },
+    generateBundle(_options: unknown, bundle: Record<string, ReleaseBundleItem>) {
+      const generatedHostInitialization = Object.entries(bundle).filter(([fileName, item]) =>
+        isGeneratedHostInitializationChunk(fileName, item),
+      );
+      const unreferencedHostInitialization = generatedHostInitialization.filter(
+        ([fileName]) =>
+          !Object.entries(bundle).some(
+            ([owner, item]) =>
+              owner !== fileName && bundleItemReferencesTarget(owner, item, fileName),
+          ),
+      );
+      if (unreferencedHostInitialization.length === 0) return;
+
+      const statsAsset = bundle["mf-stats.json"];
+      if (statsAsset?.type !== "asset" || statsAsset.source === undefined) {
+        throw new Error("release cleanup requires the federation stats asset");
+      }
+      const statsText =
+        typeof statsAsset.source === "string"
+          ? statsAsset.source
+          : new TextDecoder().decode(statsAsset.source);
+      const stats = JSON.parse(statsText) as {
+        id?: string;
+        name?: string;
+        metaData?: {
+          name?: string;
+          remoteEntry?: { name?: string; path?: string; type?: string };
+        };
+        buildOutput?: Array<{
+          fileName?: string;
+          isEntry?: boolean;
+          size?: number;
+          type?: string;
+        }>;
+      };
+      if (
+        stats.id !== federationConfig.name ||
+        stats.name !== federationConfig.name ||
+        stats.metaData?.name !== federationConfig.name ||
+        stats.metaData.remoteEntry?.name !== "remoteEntry.js" ||
+        stats.metaData.remoteEntry.path !== "" ||
+        stats.metaData.remoteEntry.type !== "module"
+      ) {
+        throw new Error("release cleanup requires authoritative federation stats provenance");
+      }
+      if (!Array.isArray(stats.buildOutput)) {
+        throw new Error("release cleanup requires federation buildOutput records");
+      }
+
+      const removed = new Set<string>();
+      for (const [fileName, item] of unreferencedHostInitialization) {
+        const matching = stats.buildOutput.filter((output) => output.fileName === fileName);
+        if (matching.length !== 1) {
+          throw new Error(`release cleanup requires one matching stats record for ${fileName}`);
+        }
+        const [record] = matching;
+        if (
+          record.type !== "chunk" ||
+          record.isEntry !== false ||
+          record.size !== new TextEncoder().encode(item.code).byteLength
+        ) {
+          throw new Error(`release cleanup found non-authoritative stats for ${fileName}`);
+        }
+        delete bundle[fileName];
+        removed.add(fileName);
+      }
+      stats.buildOutput = stats.buildOutput.filter(
+        (output) => !removed.has(output.fileName ?? ""),
+      );
+      statsAsset.source = JSON.stringify(stats);
+    },
+  };
+}
+
+export default defineConfig(({ command, mode }) => {
   const releaseBuild = mode === "release";
+  if (releaseBuild && command !== "build") {
+    throw new Error("Release mode requires the Vite build command.");
+  }
   const outputDirectory = releaseBuild ? releaseOutputDirectory() : undefined;
 
   if (
@@ -168,10 +342,20 @@ export default defineConfig(({ mode }) => {
       target: "chrome89",
       outDir: outputDirectory ?? publicationRoot,
       emptyOutDir: true,
+      ...(releaseBuild
+        ? {
+            manifest: false,
+            rollupOptions: { input: federatedEntry },
+          }
+        : {}),
     },
     test: {
       environment: "happy-dom",
     },
-    plugins: lazyPlugins(() => [vue(), federation(federationConfig)]),
+    plugins: lazyPlugins(() => [
+      vue(),
+      federation(releaseBuild ? releaseFederationConfig : federationConfig),
+      ...(releaseBuild ? [releaseOutputPlugin()] : []),
+    ]),
   };
 });
