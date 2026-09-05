@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import OpsDashboardActivity from "./OpsDashboardActivity.vue";
 
+const emit = defineEmits(["publish_version", "restore_version"]);
+
 type Page = {
   id: string;
   header: { eyebrow: string; heading: string; copy: string };
@@ -82,8 +84,10 @@ defineProps<{
             surface="detail"
             :page="page"
             :selected_version_number="selected_version_number"
-            :selected_version_detail="selected_version_detail"
-          />
+          :selected_version_detail="selected_version_detail"
+          @publish_version="emit('publish_version', $event)"
+          @restore_version="emit('restore_version', $event)"
+        />
         </section>
         <OpsDashboardActivity
           surface="activity"

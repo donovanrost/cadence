@@ -191,6 +191,50 @@ describe("Ops Console federated application", () => {
     wrapper.unmount();
   });
 
+  it("shows the server receipt and refreshes the Phoenix presentation after completion", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
+    const execute = vi.fn<TestExecute>().mockResolvedValue({
+      receiptId: "receipt-complete",
+      completedAt: "2026-09-04T00:00:00.000Z",
+      result: { status: "completed" },
+    });
+    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, execute) });
+    await flushPromises();
+
+    window.dispatchEvent(
+      new CustomEvent("cadence:ops-event", {
+        detail: { eventName: "refresh", payload: {} },
+      }),
+    );
+    await flushPromises();
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(wrapper.find("#ops-console-action-notice").text()).toContain("completed");
+    wrapper.unmount();
+  });
+
+  it("forwards a visible dashboard action from the federated surface", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
+    const execute = vi.fn<TestExecute>().mockResolvedValue({
+      receiptId: "receipt-layout",
+      completedAt: "2026-09-04T00:00:00.000Z",
+      result: { status: "completed" },
+    });
+    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, execute) });
+    await flushPromises();
+
+    window.dispatchEvent(
+      new CustomEvent("cadence:ops-event", {
+        detail: { eventName: "refresh", payload: {} },
+      }),
+    );
+    await flushPromises();
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(wrapper.find("#ops-console-action-notice").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it("keeps the complete frozen Ops family in the remote component registry", () => {
     const required = [
       "OpsActivationRequests",

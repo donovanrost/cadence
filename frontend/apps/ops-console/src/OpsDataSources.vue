@@ -376,7 +376,7 @@ const emit = defineEmits<{
   "register-source": [payload: { source: RegistrationValues }];
   "open-change-binding": [payload: { "binding-id": string }];
   "cancel-change-binding": [payload: EmptyPayload];
-  "change-binding": [payload: { binding: { data_source_id: string } }];
+  "change-binding": [payload: { binding: { binding_id: string; data_source_id: string } }];
   "disable-source": [payload: { "data-source-id": string }];
   "enable-source": [payload: { "data-source-id": string }];
   "reconcile-tsdb-backend": [payload: { "data-source-id": string }];
@@ -455,7 +455,10 @@ const submitRegistration = () =>
 
 const submitBinding = () =>
   emit("change-binding", {
-    binding: { data_source_id: normalizeString(binding.data_source_id) },
+    binding: {
+      binding_id: normalizeString(props.page.admin?.binding_form?.binding_id),
+      data_source_id: normalizeString(binding.data_source_id),
+    },
   });
 
 const emitSourceAction = (action: SourceAction) => {

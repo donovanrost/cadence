@@ -1,77 +1,96 @@
 defmodule Cadence.Applications.OpsConsole.ActionProvider do
-  @moduledoc "Fail-closed action provider for the bounded, read-only Ops cohort."
+  @moduledoc "Fail-closed provider for the source-complete federated Ops action cohort."
 
   @behaviour Cadence.Applications.ActionProvider
 
-  alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary, OpsConsole}
-  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Applications.{ActionRequest, JSONBoundary, OpsConsole}
+  alias Cadence.Applications.OpsConsole.Actions
 
   @application_key "ops_console"
+  @application_version 1
+  @surface_version 1
+  @surface_ids ~w(
+    dashboard_editor dashboard_activity data_operations_manage
+    data_source_registration data_source_settings
+  )
+
+  @bindings OpsConsole.surface_action_pairs()
+            |> Enum.filter(fn {surface_id, _action_id} -> surface_id in @surface_ids end)
+
+  @spec bindings() :: [{binary(), binary()}]
+  def bindings, do: @bindings
+
+  @spec validate_bindings() :: :ok | {:error, atom()}
+  def validate_bindings do
+    declared =
+      OpsConsole.surface_action_pairs()
+      |> Enum.filter(fn {surface_id, _action_id} -> surface_id in @surface_ids end)
+
+    cond do
+      length(@bindings) != length(Enum.uniq(@bindings)) -> {:error, :duplicate_binding}
+      @bindings != declared -> {:error, :omitted_or_extra_binding}
+      true -> :ok
+    end
+  end
 
   @impl true
   def application_key, do: @application_key
 
   @impl true
-  def execute(
-        %Scope{organization_id: organization_id} = scope,
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{
-          application_key: @application_key,
-          application_version: 1,
-          action_id: action_id,
-          params: params
-        }
-      )
-      when is_binary(organization_id) and organization_id != "" and is_binary(mission_id) and
-             mission_id != "" and is_binary(action_id) and is_map(params) do
-    with true <- declared?(action_id),
-         :ok <- JSONBoundary.validate(params),
-         :ok <- validate_mission_param(mission_id, params),
-         :ok <-
-           Policy.authorize(scope, :operate_mission, %{
-             organization_id: organization_id,
-             mission_id: mission_id
-           }),
-         :ok <- dispatch(action_id) do
-      {:ok, %{"status" => "accepted", "actionId" => action_id, "missionId" => mission_id}}
-    else
-      false ->
-        {:error, :unsupported_application_action}
-
-      {:error, :ops_console_action_pending_exact_wiring} ->
-        {:error, :ops_console_action_pending_exact_wiring}
-
-      {:error, _reason} ->
-        {:error, :unsupported_application_action}
+  def execute(scope, host_context, %ActionRequest{} = request) do
+    with :ok <- validate_bindings(),
+         :ok <- validate_request(request),
+         :ok <- validate_binding(request.surface_id, request.action_id),
+         {:ok, result} <- dispatch(scope, host_context, request) do
+      {:ok, result}
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
+  def execute(_scope, _host_context, _request),
     do: {:error, :unsupported_application_action}
 
   @impl true
-  def result(value), do: value
-
-  defp declared?(action_id) do
-    OpsConsole.definition().actions
-    |> Enum.any?(&(&1.action_id == action_id))
-  end
-
-  defp validate_mission_param(mission_id, params) do
-    case Map.get(params, "mission_id") do
-      nil -> :ok
-      ^mission_id -> :ok
-      _other -> {:error, :scope_mismatch}
+  def result(value) do
+    case JSONBoundary.safe(value) do
+      {:ok, safe_value} -> safe_value
+      {:error, _reason} -> nil
     end
   end
 
-  defp dispatch(action_id) do
-    case Map.fetch(action_dispatch(), action_id) do
-      {:ok, :wired} -> :ok
-      {:ok, :residual} -> {:error, :ops_console_action_pending_exact_wiring}
-      :error -> {:error, :unsupported_application_action}
+  defp validate_request(%ActionRequest{
+         application_key: @application_key,
+         application_version: @application_version,
+         surface_id: surface_id,
+         surface_version: @surface_version,
+         action_id: action_id,
+         params: params
+       })
+       when is_binary(surface_id) and is_binary(action_id) and is_map(params),
+       do: :ok
+
+  defp validate_request(_request), do: {:error, :unsupported_application_action}
+
+  defp validate_binding(surface_id, action_id) do
+    if {surface_id, action_id} in @bindings,
+      do: :ok,
+      else: {:error, :unsupported_application_action}
+  end
+
+  defp dispatch(scope, host_context, %ActionRequest{surface_id: surface_id} = request) do
+    adapter = adapter_for(surface_id)
+
+    case adapter.execute(scope, host_context, request) do
+      {:ok, value} -> {:ok, adapter.result(value)}
+      {:error, _reason} = error -> error
     end
   end
 
-  defp action_dispatch, do: Map.new(OpsConsole.action_ids(), &{&1, :residual})
+  defp adapter_for(surface_id) when surface_id in ["dashboard_editor", "dashboard_activity"],
+    do: Actions.DashboardDeepActions
+
+  defp adapter_for("data_operations_manage"), do: Actions.MissionOperations
+
+  defp adapter_for(surface_id)
+       when surface_id in ["data_source_registration", "data_source_settings"],
+       do: Actions.DataSources
 end

@@ -2,6 +2,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
   @moduledoc "Phoenix-owned presentation adapter for the deep Ops route cohort."
 
   alias Cadence.Dashboards.Document
+  alias Cadence.Auth.Policy
 
   @spec dashboard(map(), map(), map(), :view | :edit) :: map()
   def dashboard(scope, mission, params, mode) do
@@ -52,9 +53,16 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
 
     selected = selected_version(versions, params["version"])
 
+    author? =
+      Policy.authorize(scope, :author_dashboards, %{
+        organization_id: scope.organization_id,
+        mission_id: mission.mission_id
+      }) == :ok
+
     %{
       "page" => %{
         "id" => "dashboard-activity-page",
+        "dashboard_id" => dashboard_id,
         "header" => %{
           "eyebrow" => "Dashboard / Activity",
           "heading" => document.name || "Dashboard",
@@ -66,7 +74,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
             "id" => "dashboard-activity-editor",
             "label" => "Edit Dashboard",
             "href" => "/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/edit",
-            "visible" => false
+            "visible" => author?
           },
           "viewer" => %{
             "id" => "dashboard-activity-viewer",
@@ -93,7 +101,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
         }
       },
       "selected_version_number" => value(selected, :version),
-      "selected_version_detail" => selected_detail(selected),
+      "selected_version_detail" => selected_detail_or_nil(selected, dashboard_id, author?),
       "dashboard_versions" => Enum.map(versions, &version_dto(&1, mission, dashboard_id)),
       "dashboard_activity" => Enum.map(events, &activity_dto/1)
     }
@@ -228,27 +236,36 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation do
     end
   end
 
-  defp selected_detail(nil), do: nil
+  defp selected_detail_or_nil(nil, _dashboard_id, _author?), do: nil
 
-  defp selected_detail(version) do
+  defp selected_detail_or_nil(version, dashboard_id, author?),
+    do: selected_detail(version, dashboard_id, author?)
+
+  defp selected_detail(version, dashboard_id, author?) do
     document = value(version, :document) || %{}
 
     %{
       "version" => value(version, :version),
       "change_summary" => value(version, :change_summary) || "Dashboard created",
       "actions" => %{
-        "visible" => false,
+        "visible" => author?,
         "restore" => %{
           "id" => "dashboard-activity-restore",
           "label" => "Restore as Draft",
           "disabled" => true,
-          "payload" => %{"version" => to_string(value(version, :version))}
+          "payload" => %{
+            "dashboard_id" => dashboard_id,
+            "version" => to_string(value(version, :version))
+          }
         },
         "publish" => %{
           "id" => "dashboard-activity-publish",
           "label" => "Publish Version",
           "disabled" => true,
-          "payload" => %{"version" => to_string(value(version, :version))}
+          "payload" => %{
+            "dashboard_id" => dashboard_id,
+            "version" => to_string(value(version, :version))
+          }
         }
       },
       "details" => [

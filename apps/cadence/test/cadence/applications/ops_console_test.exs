@@ -35,7 +35,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Enum.map(definition.surfaces, & &1.surface_id)
 
     assert {:residual, residual_count} = OpsConsole.route_action_completion()
-    assert residual_count > 77
+    assert residual_count > 0
   end
 
   test "contributes exact release identity for each surface" do
@@ -108,18 +108,43 @@ defmodule Cadence.Applications.OpsConsoleTest do
     assert OpsConsole.surface_query_contract("data_source_registration") ==
              {:ok, %{subject_param: nil, query_params: []}}
 
-    assert Enum.all?(OpsConsole.deep_route_interaction_ledger(), fn {_surface_id, ledger} ->
-             ledger.host_actions == []
-           end)
+    assert OpsConsole.deep_route_interaction_ledger()["dashboard_show"].host_actions == []
+
+    assert Enum.all?(
+             [
+               "dashboard_editor",
+               "dashboard_activity",
+               "data_operations_manage",
+               "data_source_registration",
+               "data_source_settings"
+             ],
+             fn surface_id ->
+               ledger = OpsConsole.deep_route_interaction_ledger()[surface_id]
+
+               expected =
+                 Enum.filter(OpsConsole.surface_action_pairs(), &match?({^surface_id, _}, &1))
+
+               ledger.host_actions == Enum.map(expected, &elem(&1, 1)) and
+                 ledger.phoenix_events == []
+             end
+           )
+
+    assert OpsConsole.former_liveview_event_contracts()["dashboard_show"] != []
+    assert OpsConsole.former_liveview_event_contracts()["data_source_settings"] != []
 
     assert {:residual, pending_count} = OpsConsole.route_action_completion()
-    assert pending_count > 77
+    assert pending_count > 0
 
     Enum.each(OpsConsole.deep_route_interaction_ledger(), fn {surface_id, ledger} ->
       surface = Enum.find(OpsConsole.definition().surfaces, &(&1.surface_id == surface_id))
 
       assert surface
-      assert MapSet.subset?(MapSet.new(ledger.phoenix_events), MapSet.new(surface.actions))
+      assert MapSet.subset?(MapSet.new(ledger.host_actions), MapSet.new(surface.actions))
+
+      assert MapSet.subset?(
+               MapSet.new(ledger.phoenix_events),
+               MapSet.new(surface.actions)
+             )
     end)
   end
 

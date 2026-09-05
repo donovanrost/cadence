@@ -78,20 +78,43 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
   error.value = undefined;
 
   try {
-    await props.bridge.execute({
+    const receipt = await props.bridge.execute({
       applicationKey: props.application.applicationKey,
       applicationVersion: props.application.applicationVersion,
       actionId,
-      input: isRecord(input) ? input : {},
+      input: actionInput(input),
       context: props.context,
     });
-    actionNotice.value = `Phoenix accepted ${actionId}.`;
-    await loadSurface();
+    const result = isRecord(receipt) && "result" in receipt ? receipt.result : undefined;
+    actionNotice.value = `Phoenix completed ${actionId}${resultStatus(result)}.`;
+
+    if (isRecord(result) && isRecord(result.presentation)) {
+      presentation.value = unwrapOpsConsoleResponse(
+        { queryVersion: 1, presentation: result.presentation },
+        OPS_COMPONENTS,
+      );
+    } else {
+      await loadSurface();
+    }
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "The Ops Console action failed.";
   } finally {
     actionPending.value = false;
   }
+}
+
+function actionInput(input: unknown): Record<string, unknown> {
+  const next = isRecord(input) ? { ...input } : {};
+  const page = isRecord(presentation.value?.props.page) ? presentation.value?.props.page : undefined;
+  const dashboardId = page && typeof page.dashboard_id === "string" ? page.dashboard_id : undefined;
+
+  if (dashboardId && !next.dashboard_id) next.dashboard_id = dashboardId;
+  return next;
+}
+
+function resultStatus(result: unknown): string {
+  if (!isRecord(result) || typeof result.status !== "string") return "";
+  return ` (${result.status})`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
