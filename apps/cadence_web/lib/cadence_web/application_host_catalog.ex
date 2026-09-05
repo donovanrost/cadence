@@ -30,6 +30,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   @application_host_contract "cadence.application-host.v1"
   @catalog_page_size 100
   @max_catalog_applications 100
+  @compatibility_only_application_keys ["comms_overview"]
   @type route_context :: %{
           host_context: HostContext.t(),
           mission: Mission.t(),
@@ -157,13 +158,17 @@ defmodule CadenceWeb.ApplicationHostCatalog do
           )
 
         {:error, :application_not_installed} ->
-          contributed_application_admission(
-            current_scope,
-            application_key,
-            route_context,
-            surface_id,
-            release_snapshot
-          )
+          if compatibility_only_application?(application_key) do
+            contributed_application_admission(
+              current_scope,
+              application_key,
+              route_context,
+              surface_id,
+              release_snapshot
+            )
+          else
+            {:error, :application_not_installed}
+          end
 
         {:error, reason} ->
           {:error, reason}
@@ -470,7 +475,9 @@ defmodule CadenceWeb.ApplicationHostCatalog do
        ) do
     with :ok <- authorize_catalog_access(current_scope, route_context),
          :ok <- CatalogRegistry.validate(),
-         contributions <- CatalogRegistry.all(),
+         contributions <-
+           CatalogRegistry.all()
+           |> Enum.reject(&registered_application_contribution?/1),
          true <- length(contributions) <= @max_catalog_applications do
       collect_contributed_applications(
         contributions,
@@ -797,6 +804,18 @@ defmodule CadenceWeb.ApplicationHostCatalog do
        do: true
 
   defp intentional_application_omission?(_reason), do: false
+
+  defp compatibility_only_application?(application_key) when is_binary(application_key) do
+    application_key in @compatibility_only_application_keys
+  end
+
+  defp compatibility_only_application?(_application_key), do: false
+
+  defp registered_application_contribution?(%CatalogContribution{definition: definition}) do
+    not compatibility_only_application?(definition.application_key)
+  end
+
+  defp registered_application_contribution?(_contribution), do: true
 
   defp package_contributes?(
          %ExtensionPackage{contributions: contributions},

@@ -25,11 +25,14 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
 
     uncovered =
       mounts
-      |> Enum.reject(fn {_path, component} -> component == federated or MapSet.member?(allowed, component) end)
+      |> Enum.reject(fn {_path, component} ->
+        component == federated or MapSet.member?(allowed, component)
+      end)
 
-    assert uncovered == [], fn ->
-      Enum.map_join(uncovered, "\n", fn {path, component} -> "#{path}: #{component}" end)
-    end
+    assert uncovered == [],
+           Enum.map_join(uncovered, "\n", fn {path, component} ->
+             "#{path}: #{component}"
+           end)
   end
 
   test "federated page resolver and host boot are present" do

@@ -8,7 +8,6 @@ defmodule Cadence.Applications.Spacecraft do
   """
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ApplicationDefinition,
     CatalogContribution,
     ReleaseContribution,
@@ -68,7 +67,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft profile",
       order: 50,
       fallback_path: "/missions/:mission_id/spacecraft/profiles/:subject",
-      subject_contract: %{id: "cadence.spacecraft.profile.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.profile.subject", version: 1},
       query_id: "cadence.spacecraft.profile.show"
     },
     %{
@@ -78,7 +77,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft overview",
       order: 10,
       fallback_path: "/missions/:mission_id/spacecraft/:subject",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.show"
     },
     %{
@@ -88,7 +87,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Edit spacecraft",
       order: 20,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/identity",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.edit"
     },
     %{
@@ -98,7 +97,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft readiness",
       order: 30,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/readiness",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.readiness"
     },
     %{
@@ -108,7 +107,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft routing",
       order: 40,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/routing",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.routing"
     },
     %{
@@ -118,7 +117,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft commanding",
       order: 50,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/commanding",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.commanding"
     },
     %{
@@ -128,7 +127,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Spacecraft applications",
       order: 60,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/applications",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.spacecraft.applications"
     },
     %{
@@ -138,7 +137,7 @@ defmodule Cadence.Applications.Spacecraft do
       label: "Telemetry decomposition",
       order: 70,
       fallback_path: "/missions/:mission_id/spacecraft/:subject/applications/telemetry_decom",
-      subject_contract: %{id: "cadence.spacecraft.subject", version: 1},
+      subject_contract: %{schema_id: "cadence.spacecraft.subject", version: 1},
       query_id: "cadence.telemetry_decom.manage"
     }
   ]
@@ -195,6 +194,7 @@ defmodule Cadence.Applications.Spacecraft do
       version: 1,
       scope: spec.scope,
       purpose: spec.purpose,
+      placement: :application_workspace,
       navigation: %{label: spec.label, order: spec.order, fallback_path: spec.fallback_path},
       subject_contract: Map.get(spec, :subject_contract),
       data_contract: %{query_id: spec.query_id, version: 1},
