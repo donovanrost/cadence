@@ -116,26 +116,110 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
     assert Repo.aggregate(ApplicationActionIdempotency, :count, :id) == 0
   end
 
-  test "the active generation is part of logical identity" do
+  test "a changed mission identity is a collision and cannot execute" do
+    assert_identity_collision(%{mission_id: "mission-2"}, request_document(), "mission-key")
+  end
+
+  test "a changed scope kind is a collision and cannot execute" do
+    assert_identity_collision(
+      %{scope_kind: "spacecraft"},
+      request_document(),
+      "scope-kind-key"
+    )
+  end
+
+  test "a changed scope id is a collision and cannot execute" do
+    assert_identity_collision(
+      %{scope_id: "spacecraft-2"},
+      request_document(),
+      "scope-id-key"
+    )
+  end
+
+  test "a changed application key is a collision and cannot execute" do
+    assert_identity_collision(
+      %{application_key: "other_application"},
+      request_document(),
+      "application-key"
+    )
+  end
+
+  test "a changed application version is a collision and cannot execute" do
+    assert_identity_collision(
+      %{application_version: 2},
+      request_document(),
+      "application-version-key"
+    )
+  end
+
+  test "a changed surface id is a collision and cannot execute" do
+    assert_identity_collision(
+      %{surface_id: "configure"},
+      request_document(),
+      "surface-id-key"
+    )
+  end
+
+  test "a changed surface version is a collision and cannot execute" do
+    assert_identity_collision(
+      %{surface_version: 2},
+      request_document(),
+      "surface-version-key"
+    )
+  end
+
+  test "a changed operation is a collision and cannot execute" do
+    assert_identity_collision(
+      %{operation: "delete_definition"},
+      request_document(),
+      "operation-key"
+    )
+  end
+
+  test "a changed operation version is a collision and cannot execute" do
+    assert_identity_collision(
+      %{operation_version: 2},
+      request_document(),
+      "operation-version-key"
+    )
+  end
+
+  test "a changed release identity is a collision and cannot execute" do
+    assert_identity_collision(%{release_id: "release-2"}, request_document(), "release-key")
+  end
+
+  test "a changed generation identity is a collision and cannot execute" do
+    assert_identity_collision(
+      %{generation_id: "generation-2"},
+      request_document(),
+      "generation-key"
+    )
+  end
+
+  test "a changed request is a collision and cannot execute" do
+    assert_identity_collision(%{}, request_document("different"), "request-key")
+  end
+
+  test "distinct authenticated actors can reuse the same raw key" do
     parent = self()
-    key = "generation-separated-key"
-    first_identity = identity("generation-a")
-    second_identity = identity("generation-b")
+    key = "distinct-actor-key"
+    first_identity = identity()
+    second_identity = identity("generation-1", %{actor_id: "user-2"})
 
     assert {:ok, {:executed, _first}} =
-             run(scope(), first_identity, key, request_document(), fn ->
-               send(parent, :generation_a_executed)
-               {:ok, response(200, ~s({"generation":"a"}))}
+             run(scope("user-1"), first_identity, key, request_document(), fn ->
+               send(parent, :first_actor_executed)
+               {:ok, response(200, ~s({"actor":"user-1"}))}
              end)
 
     assert {:ok, {:executed, _second}} =
-             run(scope(), second_identity, key, request_document(), fn ->
-               send(parent, :generation_b_executed)
-               {:ok, response(200, ~s({"generation":"b"}))}
+             run(scope("user-2"), second_identity, key, request_document(), fn ->
+               send(parent, :second_actor_executed)
+               {:ok, response(200, ~s({"actor":"user-2"}))}
              end)
 
-    assert_receive :generation_a_executed
-    assert_receive :generation_b_executed
+    assert_receive :first_actor_executed
+    assert_receive :second_actor_executed
     assert Repo.aggregate(ApplicationActionIdempotency, :count, :id) == 2
   end
 
@@ -259,7 +343,7 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
     assert Repo.one(ApplicationActionIdempotency).response_body == ~s({"ok":true})
   end
 
-  test "the database exposes the complete logical identity uniqueness constraint" do
+  test "the database exposes idempotency-key namespace uniqueness" do
     assert [[index_definition]] =
              Repo.query!("""
              SELECT indexdef
@@ -268,12 +352,15 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
                AND indexname = 'faaid_logical_identity_idx'
              """).rows
 
-    for column <- ~w(
-      organization_id actor_kind actor_id mission_id scope_kind scope_id
-      application_key application_version surface_id surface_version operation
-      operation_version generation_id release_id idempotency_key_digest
-    ) do
+    for column <- ~w(organization_id actor_kind actor_id idempotency_key_digest) do
       assert index_definition =~ column
+    end
+
+    for column <- ~w(
+      mission_id scope_kind scope_id application_key application_version surface_id
+      surface_version operation operation_version generation_id release_id
+    ) do
+      refute index_definition =~ column
     end
   end
 
@@ -291,11 +378,29 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
   defp response(status, body),
     do: %{status: status, content_type: @response_content_type, body: body}
 
+  defp assert_identity_collision(changed_identity, changed_request, key) do
+    parent = self()
+
+    assert {:ok, {:executed, _response}} =
+             run(scope(), identity(), key, request_document(), fn ->
+               {:ok, response(200, ~s({"result":"first"}))}
+             end)
+
+    assert {:error, :idempotency_key_collision} =
+             run(scope(), Map.merge(identity(), changed_identity), key, changed_request, fn ->
+               send(parent, :unexpected_collision_execution)
+               {:ok, response(200, ~s({"result":"must-not-run"}))}
+             end)
+
+    refute_receive :unexpected_collision_execution
+    assert Repo.aggregate(ApplicationActionIdempotency, :count, :id) == 1
+  end
+
   defp scope(actor_id \\ "user-1") do
     %Scope{actor_kind: :user, organization_id: "org-1", user: %{user_id: actor_id}}
   end
 
-  defp identity(generation_id \\ "generation-1") do
+  defp identity(generation_id \\ "generation-1", overrides \\ %{}) do
     %{
       organization_id: "org-1",
       actor_kind: "user",
@@ -312,6 +417,7 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
       generation_id: generation_id,
       release_id: "release-1"
     }
+    |> Map.merge(overrides)
   end
 
   defp request_document(value \\ "same") do

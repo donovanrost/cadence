@@ -20,10 +20,14 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   @primary_key {:id, :id, autogenerate: true}
   @timestamps_opts [type: :utc_datetime_usec]
 
-  @identity_fields [
+  @namespace_fields [
     :organization_id,
     :actor_kind,
     :actor_id,
+    :idempotency_key_digest
+  ]
+
+  @bound_identity_fields [
     :mission_id,
     :scope_kind,
     :scope_id,
@@ -34,9 +38,10 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
     :operation,
     :operation_version,
     :generation_id,
-    :release_id,
-    :idempotency_key_digest
+    :release_id
   ]
+
+  @identity_fields @namespace_fields ++ @bound_identity_fields
 
   @states [:in_progress, :completed, :failed, :indeterminate]
   @json_content_type "application/json; charset=utf-8"
@@ -307,7 +312,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   defp duplicate_claim(identity, key_digest, request_digest, changeset, opts) do
     if duplicate_constraint?(changeset) do
       case Repo.get_by(__MODULE__, duplicate_lookup(identity, key_digest)) do
-        %__MODULE__{} = row -> resolve_duplicate(row, request_digest, opts)
+        %__MODULE__{} = row -> resolve_duplicate(row, identity, request_digest, opts)
         nil -> {:error, {:idempotency_persistence_failure, :claim_row_missing}}
       end
     else
@@ -328,28 +333,52 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
 
   defp duplicate_lookup(identity, key_digest) do
     identity
-    |> Map.take(@identity_fields -- [:idempotency_key_digest])
+    |> Map.take(@namespace_fields -- [:idempotency_key_digest])
     |> Map.put(:idempotency_key_digest, key_digest)
   end
 
-  defp resolve_duplicate(%__MODULE__{request_digest: stored_digest}, request_digest, _opts)
-       when stored_digest != request_digest,
-       do: {:error, :idempotency_key_collision}
+  defp resolve_duplicate(%__MODULE__{} = row, identity, request_digest, opts) do
+    if collision?(row, identity, request_digest) do
+      {:error, :idempotency_key_collision}
+    else
+      resolve_duplicate_state(row, identity, request_digest, opts)
+    end
+  end
 
-  defp resolve_duplicate(%__MODULE__{state: :completed} = row, _request_digest, _opts),
+  defp resolve_duplicate_state(
+         %__MODULE__{state: :completed} = row,
+         _identity,
+         _request_digest,
+         _opts
+       ),
     do: replay_response(row)
 
-  defp resolve_duplicate(%__MODULE__{state: :failed} = row, _request_digest, _opts),
+  defp resolve_duplicate_state(
+         %__MODULE__{state: :failed} = row,
+         _identity,
+         _request_digest,
+         _opts
+       ),
     do: replay_response(row)
 
-  defp resolve_duplicate(%__MODULE__{state: :indeterminate} = row, _request_digest, _opts),
+  defp resolve_duplicate_state(
+         %__MODULE__{state: :indeterminate} = row,
+         _identity,
+         _request_digest,
+         _opts
+       ),
     do: replay_response(row)
 
-  defp resolve_duplicate(%__MODULE__{state: :in_progress} = row, _request_digest, opts) do
+  defp resolve_duplicate_state(
+         %__MODULE__{state: :in_progress} = row,
+         identity,
+         request_digest,
+         opts
+       ) do
     if expired?(row, now(opts)) do
       case terminal_update(row, :indeterminate, indeterminate_response(), opts) do
         {:ok, response} -> {:ok, {:replay, response}}
-        {:error, :claim_lost} -> resolve_after_race(row, opts)
+        {:error, :claim_lost} -> resolve_after_race(row, identity, request_digest, opts)
         {:error, reason} -> {:error, reason}
       end
     else
@@ -357,9 +386,14 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
     end
   end
 
-  defp resolve_after_race(%__MODULE__{} = stale_row, opts) do
+  defp collision?(%__MODULE__{} = row, identity, request_digest) do
+    row.request_digest != request_digest or
+      Map.take(row, @bound_identity_fields) != Map.take(identity, @bound_identity_fields)
+  end
+
+  defp resolve_after_race(%__MODULE__{} = stale_row, identity, request_digest, opts) do
     case Repo.get(__MODULE__, stale_row.id) do
-      %__MODULE__{} = row -> resolve_duplicate(row, row.request_digest, opts)
+      %__MODULE__{} = row -> resolve_duplicate(row, identity, request_digest, opts)
       nil -> {:error, {:idempotency_persistence_failure, :claim_row_missing}}
     end
   end

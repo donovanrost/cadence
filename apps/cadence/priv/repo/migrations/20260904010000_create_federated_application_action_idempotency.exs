@@ -40,17 +40,6 @@ defmodule Cadence.Repo.Migrations.CreateFederatedApplicationActionIdempotency do
           :organization_id,
           :actor_kind,
           :actor_id,
-          :mission_id,
-          :scope_kind,
-          :scope_id,
-          :application_key,
-          :application_version,
-          :surface_id,
-          :surface_version,
-          :operation,
-          :operation_version,
-          :generation_id,
-          :release_id,
           :idempotency_key_digest
         ],
         name: :faaid_logical_identity_idx
