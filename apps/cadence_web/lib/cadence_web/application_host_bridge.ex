@@ -365,6 +365,14 @@ defmodule CadenceWeb.ApplicationHostBridge do
       do: true
 
   def action_scope_compatible?(
+        %ApplicationDefinition{application_key: "spacecraft"},
+        %SurfaceDefinition{surface_id: "edit", scope: :spacecraft},
+        %ActionDefinition{action_id: action_id, scope: :mission}
+      )
+      when action_id in ["validate", "save"],
+      do: true
+
+  def action_scope_compatible?(
         %ApplicationDefinition{},
         %SurfaceDefinition{scope: surface_scope},
         %ActionDefinition{scope: action_scope}

@@ -19,7 +19,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.ProviderRegistry do
            Cadence.Applications.TelemetryDecom,
            Cadence.Applications.DerivedTelemetry,
            Cadence.Applications.Limits,
-           Cadence.Applications.MissionCatalog
+           Cadence.Applications.MissionCatalog,
+           Cadence.Applications.Spacecraft
          ]) do
       {:ok, contributions} -> contributions
       {:error, _reason} -> []
