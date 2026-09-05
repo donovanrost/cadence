@@ -580,6 +580,7 @@ const generatedHostInitializationFacadeDigests = new Set([
   "e4839850d9f45de13722395fecae51bf7c86a0361f8d5647c4cb32b97f5f27ab",
   "6d70f9240150b0d3135ff25e30f80ff1ad1ff16e33a1e9556015f25aac075ae1",
   "4663550f015e9b8c4c2de96c15ba5c4de4a430ea04677a803f0dce41728a6ff1",
+  "6bf0a29a57c509da0be23879fb30cb2701ae4c9610a02161c2f6b707abef739f",
 ]);
 const generatedFederationRuntimePathPattern = /^assets\/dist-[A-Za-z0-9_-]+\.js$/;
 const generatedFederationRuntimeSourceDigests = new Set([
