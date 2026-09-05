@@ -4,7 +4,6 @@ import {
   type FullPageSurfaceProps,
   type HostActionReceipt,
 } from "@cadence/plugin-sdk";
-import { CButton, CStatePanel } from "@cadence/ui";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
 import type { OrganizationAdminSurface } from "./organization-admin-contract";
@@ -168,30 +167,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     :data-organization-admin-surface="props.surface.surfaceId"
     :data-organization-admin-renderer="rendererName"
   >
-    <CStatePanel
+    <section
       v-if="loading"
       id="organization-admin-loading"
-      title="Loading organization surface"
-      description="Requesting the Phoenix-owned organization presentation."
-      tone="loading"
+      class="flex min-h-80 flex-col items-center justify-center border border-base-300 bg-base-200 p-8 text-center"
       aria-live="polite"
-    />
-    <CStatePanel
+    >
+      <div role="status" aria-label="Loading organization surface">
+        <p class="hud-label">Loading organization surface</p>
+        <p class="mx-auto mt-2 max-w-md text-sm text-base-content/70">
+          Requesting the Phoenix-owned organization presentation.
+        </p>
+      </div>
+    </section>
+    <section
       v-else-if="error"
       id="organization-admin-error"
-      title="Organization surface unavailable"
-      :description="error"
-      tone="error"
+      class="border border-error/40 bg-error/10 p-8 text-center"
       aria-live="assertive"
     >
-      <template #action>
-        <CButton id="retry-organization-admin" size="sm" @click="loadSurface">
+      <p class="hud-label text-error">Organization surface unavailable</p>
+      <p class="mx-auto mt-2 max-w-md text-sm text-base-content/70">{{ error }}</p>
+      <div class="mt-5">
+        <button
+          id="retry-organization-admin"
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="loadSurface"
+        >
           Retry query
-        </CButton>
-      </template>
-    </CStatePanel>
+        </button>
+      </div>
+    </section>
     <template v-else-if="renderer && presentation">
-      <aside v-if="actionPending" id="organization-admin-action-loading" role="status">
+      <aside
+        v-if="actionPending"
+        id="organization-admin-action-loading"
+        role="status"
+        aria-live="polite"
+        class="border-l-2 border-info/60 bg-info/10 px-4 py-3 text-sm text-base-content/70"
+      >
         Sending the organization action to Phoenix…
       </aside>
       <aside
@@ -199,6 +214,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         id="organization-admin-action-error"
         role="alert"
         aria-live="assertive"
+        class="border-l-2 border-error/60 bg-error/10 px-4 py-3 text-sm text-base-content/70"
       >
         {{ actionError }}
       </aside>
@@ -209,6 +225,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         aria-live="polite"
         :data-receipt-id="actionReceipt.receiptId"
         :data-completed-at="actionReceipt.completedAt"
+        class="border-l-2 border-success/60 bg-success/10 px-4 py-3 text-sm text-base-content/70"
       >
         {{ actionNotice }} Receipt {{ actionReceipt.receiptId }} completed at
         {{ actionReceipt.completedAt }}.
