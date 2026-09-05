@@ -18,7 +18,11 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
   @publication_paths [
     "assets/application-host/host/host.js",
     "assets/application-host/comms/mf-manifest.json",
-    "assets/application-host/telemetry-decom/mf-manifest.json"
+    "assets/application-host/telemetry-decom/mf-manifest.json",
+    "assets/application-host/mission-catalog/mf-manifest.json",
+    "assets/application-host/ops-console/mf-manifest.json",
+    "assets/application-host/organization-admin/mf-manifest.json",
+    "assets/application-host/spacecraft/mf-manifest.json"
   ]
 
   @spec run(pid()) :: :ok
@@ -62,6 +66,14 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "#{base_url}/missions/#{context.mission.mission_id}/applications/comms_overview/federated",
       "--telemetry-url",
       "#{base_url}/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings/federated",
+      "--mission-catalog-url",
+      "#{base_url}/missions",
+      "--ops-url",
+      "#{base_url}/missions/#{context.mission.mission_id}/ops/dashboards",
+      "--organization-admin-url",
+      "#{base_url}/",
+      "--spacecraft-url",
+      "#{base_url}/missions/#{context.mission.mission_id}/spacecraft",
       "--login-url",
       "#{base_url}/sign-in",
       "--login-email",
@@ -85,7 +97,23 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       "--n-comms-release-id",
       Map.fetch!(release_fixture.release_ids.n, "comms_overview"),
       "--n-telemetry-release-id",
-      Map.fetch!(release_fixture.release_ids.n, "telemetry_decom")
+      Map.fetch!(release_fixture.release_ids.n, "telemetry_decom"),
+      "--n-minus-1-mission-catalog-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "mission_catalog"),
+      "--n-minus-1-ops-console-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "ops_console"),
+      "--n-minus-1-organization-admin-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "organization_admin"),
+      "--n-minus-1-spacecraft-release-id",
+      Map.fetch!(release_fixture.release_ids.n_minus_1, "spacecraft"),
+      "--n-mission-catalog-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "mission_catalog"),
+      "--n-ops-console-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "ops_console"),
+      "--n-organization-admin-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "organization_admin"),
+      "--n-spacecraft-release-id",
+      Map.fetch!(release_fixture.release_ids.n, "spacecraft")
     ]
 
     args =
@@ -138,6 +166,17 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       })
 
     host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
+    organization_context = HostContext.organization(organization.organization_id)
+    mission_context = HostContext.mission(mission.mission_id)
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, organization_context, "mission_catalog")
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, mission_context, "ops_console")
+
+    assert {:ok, _installation} =
+             ApplicationInstallations.install(scope, mission_context, "spacecraft")
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, host_context, "telemetry_decom")
