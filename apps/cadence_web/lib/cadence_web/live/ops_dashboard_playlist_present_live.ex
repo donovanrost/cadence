@@ -55,7 +55,7 @@ defmodule CadenceWeb.OpsDashboardPlaylistPresentLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="dashboard-playlist-present-component"
-        v-component="OpsDashboardPlaylistPresent"
+        v-component="FederatedFullPageSurface"
         page={@playlist_present_page}
         current_dashboard={@current_dashboard_details}
         v-on:next-dashboard={JS.push("next_dashboard")}

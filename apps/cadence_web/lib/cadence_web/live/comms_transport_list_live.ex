@@ -103,7 +103,7 @@ defmodule CadenceWeb.CommsTransportListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-transport-list-page-component"
-        v-component="CommsTransportListPage"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
         class="contents"

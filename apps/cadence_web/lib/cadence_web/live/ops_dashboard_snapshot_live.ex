@@ -35,7 +35,7 @@ defmodule CadenceWeb.OpsDashboardSnapshotLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-snapshot-component"
-        v-component="OpsDashboardSnapshot"
+        v-component="FederatedFullPageSurface"
         snapshot={@dashboard_snapshot_props}
         v-ssr={false}
         class="h-full"

@@ -54,7 +54,7 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
       <div id="catalog-import-run-show-page">
         <.vue
           id="catalog-import-run-show-component"
-          v-component="CatalogImportRunShow"
+          v-component="FederatedFullPageSurface"
           navigation={@navigation}
           status={@status}
           run_details={@run_details}

@@ -139,7 +139,7 @@ defmodule CadenceWeb.OpsDashboardListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-directory-component"
-        v-component="OpsDashboardDirectory"
+        v-component="FederatedFullPageSurface"
         page={@dashboard_directory_page}
         filters={@dashboard_directory_filters}
         dashboard_directory={@streams.dashboard_directory}

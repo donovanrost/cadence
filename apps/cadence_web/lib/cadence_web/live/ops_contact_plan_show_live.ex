@@ -113,7 +113,7 @@ defmodule CadenceWeb.OpsContactPlanShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-plan-show-component"
-        v-component="OpsContactPlanShow"
+        v-component="FederatedFullPageSurface"
         page={@contact_plan_show_page}
         submission_form={@contact_plan_submission_form}
         admin_controls={@contact_plan_admin_controls}

@@ -77,7 +77,7 @@ defmodule CadenceWeb.OpsTimelineLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-timeline-page-component"
-        v-component="OpsTimeline"
+        v-component="FederatedFullPageSurface"
         presentation={@timeline_presentation}
         timeline_events={@streams.timeline_events}
         v-on:apply_timeline_filters={JS.push("apply_timeline_filters")}

@@ -97,7 +97,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-new-component"
-        v-component="SpacecraftNew"
+        v-component="FederatedFullPageSurface"
         page={@spacecraft_page}
         form={@spacecraft_form}
         profile_options={@profile_options}

@@ -86,7 +86,7 @@ defmodule CadenceWeb.CommsRoutingNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-routing-new-component"
-        v-component="CommsRoutingNew"
+        v-component="FederatedFullPageSurface"
         page={@page}
         form={@form}
         options={@options}

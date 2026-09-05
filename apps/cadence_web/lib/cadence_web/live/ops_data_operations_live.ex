@@ -267,7 +267,7 @@ defmodule CadenceWeb.OpsDataOperationsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-data-operations-component"
-        v-component="OpsDataOperations"
+        v-component="FederatedFullPageSurface"
         page={page_dto(
           @current_mission,
           @data_operations_admin?,

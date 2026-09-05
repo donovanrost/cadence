@@ -73,7 +73,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-applications-page-component"
-        v-component="SpacecraftApplicationsPage"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-on:install={JS.push("install_application")}
         v-on:disable={JS.push("disable_application")}

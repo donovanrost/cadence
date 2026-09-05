@@ -23,10 +23,20 @@ liveSocket.connect()
 
 window.liveSocket = liveSocket
 
-const federationRoot = document.querySelector("#cadence-federation-root")
-if (federationRoot) {
+let federationHostLoad
+
+function bootFederationHost() {
+  if (federationHostLoad || !document.querySelector("#cadence-federation-root")) return
+
   const federationHostAsset = "/assets/application-host/host/host.js"
-  void import(/* @vite-ignore */ federationHostAsset).catch((reason) => {
+  federationHostLoad = import(/* @vite-ignore */ federationHostAsset).catch((reason) => {
+    federationHostLoad = undefined
     console.error("Cadence federated host failed to load.", reason)
   })
 }
+
+bootFederationHost()
+new MutationObserver(bootFederationHost).observe(document.body, {
+  childList: true,
+  subtree: true
+})

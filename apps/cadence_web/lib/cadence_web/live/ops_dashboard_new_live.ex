@@ -49,7 +49,7 @@ defmodule CadenceWeb.OpsDashboardNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-dashboard-new-component"
-        v-component="OpsDashboardNew"
+        v-component="FederatedFullPageSurface"
         page={@dashboard_page}
         form={@dashboard_form}
         v-on:validate={JS.push("validate")}

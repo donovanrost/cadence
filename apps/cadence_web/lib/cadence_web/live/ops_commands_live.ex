@@ -95,7 +95,7 @@ defmodule CadenceWeb.OpsCommandsLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-commands-component"
-        v-component="OpsCommands"
+        v-component="FederatedFullPageSurface"
         page={@commands_page}
         summary={@command_summary_dto}
         filters={@command_filters_dto}

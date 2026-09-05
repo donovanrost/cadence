@@ -79,7 +79,7 @@ defmodule CadenceWeb.SpacecraftListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-list-component"
-        v-component="SpacecraftListPage"
+        v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
         class="contents"

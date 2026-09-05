@@ -48,7 +48,7 @@ defmodule CadenceWeb.OpsContactRequirementListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-requirements-component"
-        v-component="OpsContactRequirementList"
+        v-component="FederatedFullPageSurface"
         page={@contact_requirements_page}
         requirements={@streams.requirements}
         v-ssr={false}

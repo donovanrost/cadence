@@ -30,7 +30,7 @@ defmodule CadenceWeb.CommsValidationLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-validation-component"
-        v-component="CommsValidation"
+      v-component="FederatedFullPageSurface"
         validation={@validation}
         v-ssr={false}
       />

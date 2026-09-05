@@ -37,7 +37,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-readiness-component"
-        v-component="SpacecraftReadiness"
+        v-component="FederatedFullPageSurface"
         page={@readiness_page}
         panels={@readiness_panels}
         applications={@readiness_applications}

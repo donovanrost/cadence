@@ -25,7 +25,7 @@ defmodule CadenceWeb.CommsOverviewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-overview-component"
-        v-component="CommsOverviewPage"
+      v-component="FederatedFullPageSurface"
         presentation={@presentation}
         v-ssr={false}
       />

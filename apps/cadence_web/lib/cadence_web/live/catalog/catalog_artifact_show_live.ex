@@ -94,7 +94,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="catalog-artifact-show-page-component"
-        v-component="CatalogArtifactShowPage"
+        v-component="FederatedFullPageSurface"
         presentation={@catalog_artifact_show_presentation}
         v-on:reimport={JS.push("reimport")}
         v-ssr={false}

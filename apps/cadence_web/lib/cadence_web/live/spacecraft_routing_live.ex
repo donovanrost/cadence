@@ -36,7 +36,7 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-routing-page"
-        v-component="SpacecraftRouting"
+        v-component="FederatedFullPageSurface"
         page={@spacecraft_routing}
         v-ssr={false}
       />

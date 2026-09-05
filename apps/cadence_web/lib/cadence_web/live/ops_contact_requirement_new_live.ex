@@ -73,7 +73,7 @@ defmodule CadenceWeb.OpsContactRequirementNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-requirement-new-component"
-        v-component="OpsContactRequirementNew"
+        v-component="FederatedFullPageSurface"
         page={@page}
         journey={@journey}
         form={@contact_requirement_form}

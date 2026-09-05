@@ -88,7 +88,7 @@ defmodule CadenceWeb.OpsContactRequirementTemplateLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-contact-requirement-template-component"
-        v-component="OpsContactRequirementTemplate"
+        v-component="FederatedFullPageSurface"
         page={page_dto(@current_mission)}
         ledger={ledger_dto(@template_count, @template_empty?)}
         authorization={authorization_dto(@organization_admin?)}

@@ -45,7 +45,7 @@ defmodule CadenceWeb.CommsTransportShowLive do
       <div id="comms-transport-show-page">
         <.vue
           id="comms-transport-show-component"
-          v-component="CommsTransportShow"
+          v-component="FederatedFullPageSurface"
           navigation={@navigation}
           transport={@transport_details}
           version_history={@version_history}

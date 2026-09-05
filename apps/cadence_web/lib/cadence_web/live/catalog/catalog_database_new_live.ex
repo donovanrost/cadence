@@ -193,7 +193,7 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
 
       <.vue
         id="catalog-database-new-component"
-        v-component="CatalogDatabaseNew"
+        v-component="FederatedFullPageSurface"
         page={@page}
         form={database_upload_form_dto(@database_form)}
         upload={upload_dto(@uploads.artifact)}

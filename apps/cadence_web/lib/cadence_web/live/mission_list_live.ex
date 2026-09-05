@@ -22,7 +22,7 @@ defmodule CadenceWeb.MissionListLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="mission-list-component"
-        v-component="MissionList"
+        v-component="FederatedFullPageSurface"
         presentation={@mission_list_presentation}
         v-ssr={false}
       />

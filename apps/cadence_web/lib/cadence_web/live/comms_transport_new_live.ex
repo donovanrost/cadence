@@ -68,7 +68,7 @@ defmodule CadenceWeb.CommsTransportNewLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="comms-transport-new-component"
-        v-component="CommsTransportNew"
+        v-component="FederatedFullPageSurface"
         page={transport_page_dto(@current_mission, @return_to)}
         form={transport_form_dto(assigns)}
         v-on:validate={JS.push("validate")}

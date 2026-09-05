@@ -108,7 +108,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="spacecraft-edit-component"
-        v-component="SpacecraftEdit"
+        v-component="FederatedFullPageSurface"
         page={@spacecraft_page}
         form={@spacecraft_form}
         profile_options={@profile_options}

@@ -133,7 +133,7 @@ defmodule CadenceWeb.OpsFleetPlanningPolicyLive do
         <div id={if(@organization_admin?, do: nil, else: "fleet-policy-admin-required")} class="contents">
           <.vue
             id="ops-fleet-planning-policy-component"
-            v-component="OpsFleetPlanningPolicy"
+            v-component="FederatedFullPageSurface"
             page={policy_page_dto(@current_mission, @policy, @policy_version)}
             policy_form={policy_form_dto(@policy_form, @policy, @organization_admin?)}
             approval_form={approval_form_dto(

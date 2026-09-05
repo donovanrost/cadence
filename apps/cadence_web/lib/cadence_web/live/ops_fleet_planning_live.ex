@@ -39,7 +39,7 @@ defmodule CadenceWeb.OpsFleetPlanningLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.vue
         id="ops-fleet-planning-component"
-        v-component="OpsFleetPlanning"
+        v-component="FederatedFullPageSurface"
         page={@planning_page}
         actions={@planning_actions}
         control_metrics={@control_metrics}

@@ -62,7 +62,7 @@ defmodule CadenceWeb.CommsGroundStationShowLive do
       <div id="comms-ground-station-show-page">
         <.vue
           id="comms-ground-station-show-component"
-          v-component="CommsGroundStationShow"
+          v-component="FederatedFullPageSurface"
           navigation={@navigation}
           ground_station={@ground_station_details}
           actions={@actions}
