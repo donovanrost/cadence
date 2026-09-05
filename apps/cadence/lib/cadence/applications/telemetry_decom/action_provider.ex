@@ -15,27 +15,67 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Auth.Scope
 
+  @surface_action_bindings [
+    {"manage", 1, "save_configuration"},
+    {"manage", 1, "request_activation"},
+    {"manage", 1, "disable"},
+    {"packet_bindings", 1, "save_packet_bindings"}
+  ]
+
   @impl true
   def application_key, do: "telemetry_decom"
 
+  @doc "Returns the frozen provider-owned surface/action binding ledger."
+  @spec surface_action_bindings() :: [{binary(), pos_integer(), binary()}]
+  def surface_action_bindings, do: @surface_action_bindings
+
+  @doc "Validates that every binding row is unique and well formed."
+  @spec validate_bindings(list()) :: :ok | {:error, atom()}
+  def validate_bindings(bindings) when is_list(bindings) do
+    valid? =
+      Enum.all?(bindings, fn
+        {surface_id, surface_version, action_id} ->
+          is_binary(surface_id) and surface_id != "" and
+            is_integer(surface_version) and surface_version > 0 and
+            is_binary(action_id) and action_id != ""
+
+        _other ->
+          false
+      end)
+
+    cond do
+      not valid? -> {:error, :invalid_action_bindings}
+      length(bindings) != length(Enum.uniq(bindings)) -> {:error, :duplicate_action_bindings}
+      true -> :ok
+    end
+  end
+
+  def validate_bindings(_bindings), do: {:error, :invalid_action_bindings}
+
   @impl true
-  def execute(
-        %Scope{organization_id: organization_id},
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "save_configuration", params: params}
-      ) do
+  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
+    with :ok <- ensure_surface_binding(request) do
+      execute_action(scope, host_context, request)
+    end
+  end
+
+  defp execute_action(
+         %Scope{organization_id: organization_id},
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "save_configuration", params: params}
+       ) do
     TelemetryDecom.configure(organization_id, mission_id, spacecraft_id, params)
   end
 
-  def execute(
-        %Scope{} = current_scope,
-        %HostContext{placement: :spacecraft} = host_context,
-        %ActionRequest{action_id: "save_packet_bindings", params: params}
-      ) do
+  defp execute_action(
+         %Scope{} = current_scope,
+         %HostContext{placement: :spacecraft} = host_context,
+         %ActionRequest{action_id: "save_packet_bindings", params: params}
+       ) do
     with {:ok, installation} <-
            ApplicationInstallations.fetch_installed(
              current_scope,
@@ -51,27 +91,27 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     end
   end
 
-  def execute(
-        %Scope{} = current_scope,
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        },
-        %ActionRequest{action_id: "request_activation"}
-      ) do
+  defp execute_action(
+         %Scope{} = current_scope,
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         },
+         %ActionRequest{action_id: "request_activation"}
+       ) do
     TelemetryDecom.request_mission_apply(current_scope, mission_id, spacecraft_id)
   end
 
-  def execute(
-        %Scope{organization_id: organization_id} = current_scope,
-        %HostContext{
-          placement: :spacecraft,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id
-        } = host_context,
-        %ActionRequest{action_id: "disable"}
-      ) do
+  defp execute_action(
+         %Scope{organization_id: organization_id} = current_scope,
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         } = host_context,
+         %ActionRequest{action_id: "disable"}
+       ) do
     with {:ok, installation} <-
            ApplicationInstallations.fetch_installed(
              current_scope,
@@ -88,7 +128,26 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
+  defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
+    do: {:error, :unsupported_application_action}
+
+  defp ensure_surface_binding(%ActionRequest{
+         application_key: "telemetry_decom",
+         application_version: 1,
+         surface_id: surface_id,
+         surface_version: surface_version,
+         action_id: action_id
+       }) do
+    with :ok <- validate_bindings(@surface_action_bindings),
+         true <- {surface_id, surface_version, action_id} in @surface_action_bindings do
+      :ok
+    else
+      false -> {:error, :unsupported_application_action}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_surface_binding(%ActionRequest{}),
     do: {:error, :unsupported_application_action}
 
   @impl true
