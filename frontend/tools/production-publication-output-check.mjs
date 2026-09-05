@@ -16,7 +16,7 @@ const publicationRoot = resolve(
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js", "plugin-host.css"]);
 const authoritativeHostJavascriptDigest =
-  "6bf66fa8050d87524ea3c0f8e5744b79ad29928f78179970f95704aefc46c292";
+  "1b0bedad9a0c0af29013368ea4db18a02845a6e401a3fab576252a37c0acfb61";
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);

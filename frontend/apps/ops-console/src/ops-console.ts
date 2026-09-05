@@ -20,7 +20,11 @@ export function unwrapOpsConsoleResponse(
   const candidate =
     isRecord(value) && isRecord(value.trusted_surface) ? value.trusted_surface : value;
 
-  if (!isRecord(candidate) || candidate.queryVersion !== OPS_QUERY_VERSION || !isRecord(candidate.presentation)) {
+  if (
+    !isRecord(candidate) ||
+    candidate.queryVersion !== OPS_QUERY_VERSION ||
+    !isRecord(candidate.presentation)
+  ) {
     throw new Error("The Ops Console response is invalid.");
   }
 

@@ -292,8 +292,8 @@ function sameOriginNavigationFor(receipt: HostActionReceipt<unknown>): string | 
   if (!location?.href) return null;
 
   try {
-    const target = new URL(candidate, location.href);
-    const current = new URL(location.href);
+    const target = new URL(candidate, globalThis.location.href);
+    const current = new URL(globalThis.location.href);
     if (target.origin !== current.origin || target.username || target.password) return null;
     if (target.protocol !== "http:" && target.protocol !== "https:") return null;
     return candidate;

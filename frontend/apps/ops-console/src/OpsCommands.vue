@@ -192,8 +192,7 @@ const visibleCommands = computed(() => {
   return props.commands
     .filter((command) => {
       const statusMatches = status === "" || status === "all" || command.status.value === status;
-      const targetMatches =
-        target === "" || target === "all" || command.target.display === target;
+      const targetMatches = target === "" || target === "all" || command.target.display === target;
       const queryMatches =
         query === "" ||
         [
@@ -267,19 +266,19 @@ const focusBanner = computed(() => {
 
     <CadenceOpsListBodyFrame>
       <div
-          v-if="focusBanner"
-          :id="focusBanner.id"
-          :data-followed-command="focusBanner.command_request_id"
+        v-if="focusBanner"
+        :id="focusBanner.id"
+        :data-followed-command="focusBanner.command_request_id"
         class="flex items-center gap-3 border-l-2 border-info bg-info/10 px-3 py-2"
       >
-          <span :class="[focusBanner.icon, 'h-4 w-4 text-info']"></span>
+        <span :class="[focusBanner.icon, 'h-4 w-4 text-info']"></span>
         <p class="min-w-0 flex-1 truncate text-sm">
           {{ focusBanner.prefix }}
           <span class="font-mono font-semibold">{{ focusBanner.command_request_id }}</span>
           {{ focusBanner.suffix }}
         </p>
-          <button
-            :id="focusBanner.clear.id"
+        <button
+          :id="focusBanner.clear.id"
           type="button"
           class="btn btn-ghost btn-xs"
           @click="clearCommandFocus"

@@ -1,7 +1,14 @@
 import "./env.d.ts";
 
 import { flushPromises, mount } from "@vue/test-utils";
-import type { CatalogApplication, HostBridge, HostContext } from "@cadence/plugin-sdk";
+import type {
+  CatalogApplication,
+  HostActionReceipt,
+  HostActionRequest,
+  HostBridge,
+  HostContext,
+  HostQueryRequest,
+} from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
 import SpacecraftApplication from "./SpacecraftApplication.vue";
 import { manifest } from "./federated-application";
@@ -64,19 +71,31 @@ function applicationFor(surfaceId: string): CatalogApplication {
   };
 }
 
-function bridgeFor(query: HostBridge["query"], execute?: HostBridge["execute"]) {
-  const action = execute ?? vi.fn<HostBridge["execute"]>();
-  if (!execute) {
-    action.mockResolvedValue({
+function queryBridgeMock() {
+  const mock = vi.fn((_request: HostQueryRequest) => Promise.resolve<unknown>({}));
+  const bridge: HostBridge["query"] = async <TResult>(request: HostQueryRequest) =>
+    (await mock(request)) as TResult;
+  return { bridge, mock };
+}
+
+function actionBridgeMock() {
+  const mock = vi.fn((_request: HostActionRequest<unknown>) =>
+    Promise.resolve<HostActionReceipt<unknown>>({
       receiptId: "receipt-1",
       completedAt: "2026-09-04T00:00:00Z",
       result: {},
-    });
-  }
+    }),
+  );
+  const bridge: HostBridge["execute"] = async <_TInput, TResult>(
+    request: HostActionRequest<_TInput>,
+  ) => (await mock(request)) as HostActionReceipt<TResult>;
+  return { bridge, mock };
+}
 
+function bridgeFor(query: HostBridge["query"], execute: HostBridge["execute"]) {
   return {
     query,
-    execute: action,
+    execute,
     subscribe: vi.fn(),
   };
 }
@@ -85,13 +104,13 @@ describe("Spacecraft federated application adapter", () => {
   it("publishes one app-level renderer for every surface and queries its declared contract", async () => {
     for (const surfaceId of surfaceIds) {
       const surface = manifest.surfaces.find((item) => item.surfaceId === surfaceId)!;
-      const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+      const { bridge: query, mock: queryMock } = queryBridgeMock();
       const wrapper = mount(SpacecraftApplication, {
         props: {
           application: applicationFor(surfaceId),
           surface,
           context,
-          bridge: bridgeFor(query),
+          bridge: bridgeFor(query, actionBridgeMock().bridge),
         },
         global: {
           stubs: Object.fromEntries(componentNames.map((name) => [name, { template: "<span />" }])),
@@ -100,7 +119,7 @@ describe("Spacecraft federated application adapter", () => {
 
       await flushPromises();
 
-      expect(query).toHaveBeenCalledWith({
+      expect(queryMock).toHaveBeenCalledWith({
         queryId: surface.dataContract.id,
         version: surface.dataContract.version,
         context,
@@ -112,8 +131,14 @@ describe("Spacecraft federated application adapter", () => {
 
   it("forwards a mounted mutation through the selected surface action contract", async () => {
     const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
-    const bridge = bridgeFor(query);
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockResolvedValue({
+      receiptId: "receipt-1",
+      completedAt: "2026-09-04T00:00:00Z",
+      result: {},
+    });
+    const bridge = bridgeFor(query, execute);
     const wrapper = mount(SpacecraftApplication, {
       props: { application: applicationFor("applications"), surface, context, bridge },
       global: {
@@ -129,7 +154,7 @@ describe("Spacecraft federated application adapter", () => {
     await wrapper.get("#install").trigger("click");
     await flushPromises();
 
-    expect(bridge.execute).toHaveBeenCalledWith({
+    expect(executeMock).toHaveBeenCalledWith({
       applicationKey: "spacecraft",
       applicationVersion: 1,
       surfaceId: "applications",
@@ -138,7 +163,7 @@ describe("Spacecraft federated application adapter", () => {
       input: { key: "telemetry_decom" },
       context,
     });
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(2);
     expect(wrapper.find("#spacecraft-action-notice").attributes("data-receipt-id")).toBe(
       "receipt-1",
     );
@@ -147,8 +172,9 @@ describe("Spacecraft federated application adapter", () => {
 
   it("shows rejected actions without replacing the current surface", async () => {
     const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
-    const execute = vi.fn<HostBridge["execute"]>().mockRejectedValue(new Error("action denied"));
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockRejectedValue(new Error("action denied"));
     const wrapper = mount(SpacecraftApplication, {
       props: {
         application: applicationFor("applications"),
@@ -169,21 +195,18 @@ describe("Spacecraft federated application adapter", () => {
     await flushPromises();
 
     expect(wrapper.find("#spacecraft-action-error").text()).toContain("action denied");
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(queryMock).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 
   it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
     const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
-    const execute = vi
-      .fn<HostBridge["execute"]>()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    const bridge = bridgeFor(query);
-    bridge.execute = execute;
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const bridge = bridgeFor(query, execute);
     const wrapper = mount(SpacecraftApplication, {
       props: { application: applicationFor("applications"), surface, context, bridge },
       global: {
@@ -206,7 +229,7 @@ describe("Spacecraft federated application adapter", () => {
     expect(wrapper.find("#spacecraft-action-notice").attributes("data-receipt-id")).toBe(
       "receipt-2",
     );
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 });

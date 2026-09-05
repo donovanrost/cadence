@@ -89,34 +89,43 @@ describe("tagged host contexts", () => {
   const actor = { displayName: "Mara Vance", permissions: ["applications:view"] };
 
   it.each([
-    ["organization", {
-      scope: "organization",
-      organizationId: "org-1",
-      missionId: null,
-      missionName: null,
-      spacecraftId: null,
-      spacecraftName: null,
-      actor,
-    }],
-    ["user/account", {
-      scope: "user",
-      organizationId: null,
-      userId: "user-1",
-      missionId: null,
-      missionName: null,
-      spacecraftId: null,
-      spacecraftName: null,
-      actor,
-    }],
-    ["admin/global", {
-      scope: "admin",
-      organizationId: null,
-      missionId: null,
-      missionName: null,
-      spacecraftId: null,
-      spacecraftName: null,
-      actor,
-    }],
+    [
+      "organization",
+      {
+        scope: "organization",
+        organizationId: "org-1",
+        missionId: null,
+        missionName: null,
+        spacecraftId: null,
+        spacecraftName: null,
+        actor,
+      },
+    ],
+    [
+      "user/account",
+      {
+        scope: "user",
+        organizationId: null,
+        userId: "user-1",
+        missionId: null,
+        missionName: null,
+        spacecraftId: null,
+        spacecraftName: null,
+        actor,
+      },
+    ],
+    [
+      "admin/global",
+      {
+        scope: "admin",
+        organizationId: null,
+        missionId: null,
+        missionName: null,
+        spacecraftId: null,
+        spacecraftName: null,
+        actor,
+      },
+    ],
   ])("accepts the %s context without a mission identity", (_label, context) => {
     expect(isHostContext(context)).toBe(true);
     expect(() => assertHostContext(context)).not.toThrow();

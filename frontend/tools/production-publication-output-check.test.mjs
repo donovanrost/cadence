@@ -84,6 +84,12 @@ void test("requires an exact host and allowed-remote publication root inventory"
       /unresolved dynamic local import/,
     );
 
+    await writeFile(join(root, "host", "host.js"), "const loaded = new URL(target);\n");
+    await assert.rejects(
+      () => validateProductionPublication(root),
+      /unresolved dynamic local asset URL/,
+    );
+
     await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
     await writeFile(join(root, "index.html"), "<!doctype html>\n");
     await assert.rejects(

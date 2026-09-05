@@ -1,6 +1,13 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { FullPageSurfaceProps, HostBridge, HostContext } from "@cadence/plugin-sdk";
+import type {
+  FullPageSurfaceProps,
+  HostActionReceipt,
+  HostActionRequest,
+  HostBridge,
+  HostContext,
+  HostQueryRequest,
+} from "@cadence/plugin-sdk";
 import OrganizationAdminApplication from "./OrganizationAdminApplication.vue";
 import { manifest } from "./federated-application";
 import { SURFACE_CONTRACTS } from "./organization-admin-contract";
@@ -37,10 +44,33 @@ function propsFor(
     context,
     bridge: {
       query,
-      execute: vi.fn(),
+      execute: actionBridgeMock().bridge,
       subscribe: vi.fn(),
     },
   };
+}
+
+function queryBridgeMock() {
+  const mock = vi.fn((_request: HostQueryRequest) =>
+    Promise.resolve<unknown>({ queryVersion: 1, presentation: {} }),
+  );
+  const bridge: HostBridge["query"] = async <TResult>(request: HostQueryRequest) =>
+    (await mock(request)) as TResult;
+  return { bridge, mock };
+}
+
+function actionBridgeMock() {
+  const mock = vi.fn((_request: HostActionRequest<unknown>) =>
+    Promise.resolve<HostActionReceipt<unknown>>({
+      receiptId: "receipt-1",
+      completedAt: "2026-09-04T00:00:00Z",
+      result: {},
+    }),
+  );
+  const bridge: HostBridge["execute"] = async <_TInput, TResult>(
+    request: HostActionRequest<_TInput>,
+  ) => (await mock(request)) as HostActionReceipt<TResult>;
+  return { bridge, mock };
 }
 
 const rendererStubs = Object.fromEntries(
@@ -57,10 +87,7 @@ describe("Organization Admin federated adapter", () => {
     "selects $surfaceId, queries its declared DTO, and mounts its legacy component",
     async (contract) => {
       const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === contract.surfaceId)!;
-      const query = vi.fn<HostBridge["query"]>().mockResolvedValue({
-        queryVersion: 1,
-        presentation: {},
-      });
+      const { bridge: query, mock: queryMock } = queryBridgeMock();
       const wrapper = mount(OrganizationAdminApplication, {
         props: propsFor(surface, query),
         global: { stubs: rendererStubs },
@@ -68,7 +95,7 @@ describe("Organization Admin federated adapter", () => {
 
       await flushPromises();
 
-      expect(query).toHaveBeenCalledWith({
+      expect(queryMock).toHaveBeenCalledWith({
         queryId: contract.query.id,
         version: contract.query.version,
         context,
@@ -88,10 +115,9 @@ describe("Organization Admin federated adapter", () => {
     const surface = manifest.surfaces.find(
       ({ surfaceId }) => surfaceId === "provider_account_new",
     )!;
-    const query = vi
-      .fn<HostBridge["query"]>()
-      .mockResolvedValue({ queryVersion: 1, presentation: {} });
-    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue({
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockResolvedValue({
       receiptId: "receipt-organization-1",
       completedAt: "2026-09-04T00:00:00Z",
       result: {},
@@ -113,7 +139,7 @@ describe("Organization Admin federated adapter", () => {
     await wrapper.get("#save").trigger("click");
     await flushPromises();
 
-    expect(execute).toHaveBeenCalledWith({
+    expect(executeMock).toHaveBeenCalledWith({
       applicationKey: "organization_admin",
       applicationVersion: 1,
       surfaceId: "provider_account_new",
@@ -122,7 +148,7 @@ describe("Organization Admin federated adapter", () => {
       input: { provider_account: { display_name: "Relay" } },
       context,
     });
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(2);
     expect(wrapper.find("#organization-admin-action-notice").attributes("data-receipt-id")).toBe(
       "receipt-organization-1",
     );
@@ -136,10 +162,9 @@ describe("Organization Admin federated adapter", () => {
     const surface = manifest.surfaces.find(
       ({ surfaceId }) => surfaceId === "admin_organization_show",
     )!;
-    const query = vi
-      .fn<HostBridge["query"]>()
-      .mockResolvedValue({ queryVersion: 1, presentation: {} });
-    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue({
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockResolvedValue({
       receiptId: "receipt-navigation-1",
       completedAt: "2026-09-04T00:00:01Z",
       result: { navigation: { href: "/session/organization" } },
@@ -163,20 +188,16 @@ describe("Organization Admin federated adapter", () => {
     await flushPromises();
     wrapper.unmount();
     expect(assign).toHaveBeenCalledWith("/session/organization");
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(queryMock).toHaveBeenCalledTimes(1);
   });
 
   it("shows rejection and keeps the newest overlapping action state", async () => {
     const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_runtime")!;
-    const query = vi
-      .fn<HostBridge["query"]>()
-      .mockResolvedValue({ queryVersion: 1, presentation: {} });
+    const { bridge: query, mock: queryMock } = queryBridgeMock();
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
-    const execute = vi
-      .fn<HostBridge["execute"]>()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    const { bridge: execute, mock: executeMock } = actionBridgeMock();
+    executeMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const props = propsFor(surface, query);
     props.bridge.execute = execute;
     const wrapper = mount(OrganizationAdminApplication, {
@@ -209,12 +230,11 @@ describe("Organization Admin federated adapter", () => {
     expect(wrapper.find("#organization-admin-action-notice").attributes("data-receipt-id")).toBe(
       "receipt-organization-2",
     );
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(2);
     wrapper.unmount();
 
-    const rejectedExecute = vi
-      .fn<HostBridge["execute"]>()
-      .mockRejectedValue(new Error("forbidden"));
+    const { bridge: rejectedExecute, mock: rejectedExecuteMock } = actionBridgeMock();
+    rejectedExecuteMock.mockRejectedValue(new Error("forbidden"));
     const rejectedProps = propsFor(surface, query);
     rejectedProps.bridge.execute = rejectedExecute;
     const rejected = mount(OrganizationAdminApplication, {

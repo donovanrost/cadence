@@ -89,7 +89,13 @@ export function selectPhoenixApplication(
   catalog: FrontendApplicationCatalog,
   config: Pick<
     PhoenixHostConfig,
-    "applicationKey" | "surfaceId" | "hostScope" | "organizationId" | "userId" | "missionId" | "spacecraftId"
+    | "applicationKey"
+    | "surfaceId"
+    | "hostScope"
+    | "organizationId"
+    | "userId"
+    | "missionId"
+    | "spacecraftId"
   >,
 ): CatalogApplication {
   assertSelectionContext(config);
@@ -197,7 +203,13 @@ function assertPhoenixHostConfig(config: PhoenixHostConfig): void {
 function assertSelectionContext(
   config: Pick<
     PhoenixHostConfig,
-    "applicationKey" | "surfaceId" | "hostScope" | "organizationId" | "userId" | "missionId" | "spacecraftId"
+    | "applicationKey"
+    | "surfaceId"
+    | "hostScope"
+    | "organizationId"
+    | "userId"
+    | "missionId"
+    | "spacecraftId"
   >,
 ): void {
   contextRequest(config);
@@ -206,27 +218,52 @@ function assertSelectionContext(
 function assertContextRequest(context: TaggedPhoenixContextRequest): void {
   switch (context.scope) {
     case "organization":
-      if (!nonEmptyString(context.organizationId) || "userId" in context || "missionId" in context || "spacecraftId" in context) {
+      if (
+        !nonEmptyString(context.organizationId) ||
+        "userId" in context ||
+        "missionId" in context ||
+        "spacecraftId" in context
+      ) {
         throw new Error("The Phoenix host organization context is invalid.");
       }
       return;
     case "user":
-      if (!nonEmptyString(context.userId) || "organizationId" in context || "missionId" in context || "spacecraftId" in context) {
+      if (
+        !nonEmptyString(context.userId) ||
+        "organizationId" in context ||
+        "missionId" in context ||
+        "spacecraftId" in context
+      ) {
         throw new Error("The Phoenix host user context is invalid.");
       }
       return;
     case "admin":
-      if ("organizationId" in context || "userId" in context || "missionId" in context || "spacecraftId" in context) {
+      if (
+        "organizationId" in context ||
+        "userId" in context ||
+        "missionId" in context ||
+        "spacecraftId" in context
+      ) {
         throw new Error("The Phoenix host admin context is invalid.");
       }
       return;
     case "mission":
-      if (!nonEmptyString(context.missionId) || "organizationId" in context || "userId" in context || "spacecraftId" in context) {
+      if (
+        !nonEmptyString(context.missionId) ||
+        "organizationId" in context ||
+        "userId" in context ||
+        "spacecraftId" in context
+      ) {
         throw new Error("The Phoenix host mission context is invalid.");
       }
       return;
     case "spacecraft":
-      if (!nonEmptyString(context.missionId) || !nonEmptyString(context.spacecraftId) || "organizationId" in context || "userId" in context) {
+      if (
+        !nonEmptyString(context.missionId) ||
+        !nonEmptyString(context.spacecraftId) ||
+        "organizationId" in context ||
+        "userId" in context
+      ) {
         throw new Error("The Phoenix host spacecraft context is invalid.");
       }
       return;
@@ -244,12 +281,22 @@ function contextRequest(config: {
 
   switch (scope) {
     case "organization":
-      if (!nonEmptyString(config.organizationId) || config.userId || config.missionId || config.spacecraftId) {
+      if (
+        !nonEmptyString(config.organizationId) ||
+        config.userId ||
+        config.missionId ||
+        config.spacecraftId
+      ) {
         throw new Error("The Phoenix host organization context is invalid.");
       }
       return { scope, organizationId: config.organizationId };
     case "user":
-      if (!nonEmptyString(config.userId) || config.organizationId || config.missionId || config.spacecraftId) {
+      if (
+        !nonEmptyString(config.userId) ||
+        config.organizationId ||
+        config.missionId ||
+        config.spacecraftId
+      ) {
         throw new Error("The Phoenix host user context is invalid.");
       }
       return { scope, userId: config.userId };
@@ -259,12 +306,22 @@ function contextRequest(config: {
       }
       return { scope };
     case "mission":
-      if (!nonEmptyString(config.missionId) || config.organizationId || config.userId || config.spacecraftId) {
+      if (
+        !nonEmptyString(config.missionId) ||
+        config.organizationId ||
+        config.userId ||
+        config.spacecraftId
+      ) {
         throw new Error("The Phoenix host mission context is invalid.");
       }
       return { scope, missionId: config.missionId };
     case "spacecraft":
-      if (!nonEmptyString(config.missionId) || !nonEmptyString(config.spacecraftId) || config.organizationId || config.userId) {
+      if (
+        !nonEmptyString(config.missionId) ||
+        !nonEmptyString(config.spacecraftId) ||
+        config.organizationId ||
+        config.userId
+      ) {
         throw new Error("The Phoenix host spacecraft context is invalid.");
       }
       return { scope, missionId: config.missionId, spacecraftId: config.spacecraftId };
@@ -273,9 +330,10 @@ function contextRequest(config: {
   }
 }
 
-function normalizeContextRequest(
-  context: PhoenixContextRequest | PhoenixHostConfig | string,
-): { legacy: boolean; request: TaggedPhoenixContextRequest } {
+function normalizeContextRequest(context: PhoenixContextRequest | PhoenixHostConfig | string): {
+  legacy: boolean;
+  request: TaggedPhoenixContextRequest;
+} {
   if (typeof context === "string") {
     return { legacy: true, request: { scope: "mission", missionId: context } };
   }

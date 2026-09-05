@@ -1,10 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type {
-  FullPageSurfaceProps,
-  HostBridge,
-  MissionHostContext,
-} from "@cadence/plugin-sdk";
+import type { FullPageSurfaceProps, HostBridge, MissionHostContext } from "@cadence/plugin-sdk";
 import CommsOverviewApplication from "./CommsOverviewApplication.vue";
 import CanonicalApplication, {
   canonicalManifest,

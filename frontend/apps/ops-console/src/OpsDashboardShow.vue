@@ -27,10 +27,7 @@ defineProps<{
         <p class="mt-2 text-sm text-base-content/60">{{ page.header.copy }}</p>
       </div>
     </header>
-    <DashboardEditorGuard
-      v-if="page.mode === 'edit'"
-      :editor_dirty="editor_guard.editor_dirty"
-    />
+    <DashboardEditorGuard v-if="page.mode === 'edit'" :editor_dirty="editor_guard.editor_dirty" />
     <DashboardCanvas :presentation="canvas" @layout_changed="emit('layout_changed', $event)" />
   </main>
 </template>

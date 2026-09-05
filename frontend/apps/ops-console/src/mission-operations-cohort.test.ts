@@ -7,7 +7,7 @@ import telemetrySource from "./OpsTelemetryExplore.vue?raw";
 
 describe("mission operations cohort bindings", () => {
   it("keeps activation review local while retaining the real decision event", () => {
-    expect(activationSource).not.toContain('review: [payload:');
+    expect(activationSource).not.toContain("review: [payload:");
     expect(activationSource).toContain('emit("decide"');
     expect(activationSource).toContain("const selectedRequest = ref");
   });
