@@ -19,6 +19,7 @@ const federatedHtmlModulePath = resolve(controllerRoot, "application_host_html.e
 const federatedControllerPath = resolve(controllerRoot, "application_host_controller.ex")
 const vueRoot = resolve(webRoot, "assets/vue")
 const vueIndexPath = resolve(vueRoot, "index.ts")
+const federatedVuePath = resolve(webRoot, "assets/vue.ts")
 const appPath = resolve(webRoot, "assets/js/app.js")
 const browserTestRoots = [
   resolve(webRoot, "browser_test"),
@@ -120,6 +121,7 @@ admin|/admin/organizations/:org_id/invite|AdminOrganizationInviteLive|invite
 `.trim().split("\n")
 
 const expectedBrowserGets = `
+artifact|/releases/:application_id/:release_id/artifacts/*artifact_path|FrontendReleaseArtifactController|show
 public_page|/invitations/:invitation_token|OrganizationInvitationController|show
 authenticated_page|/admin-mode|AdminModeController|new
 authenticated_page|/no-organization|NoOrganizationController|show
@@ -128,6 +130,12 @@ authenticated_page|/missions/:mission_id/applications/:application_key/federated
 authenticated_page|/missions/:mission_id/applications/:application_key/:surface_id/federated|ApplicationHostController|federated
 authenticated_page|/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/federated|ApplicationHostController|federated
 authenticated_page|/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id/federated|ApplicationHostController|federated
+authenticated_page|/applications/:application_key/federated|ApplicationHostController|organization_federated
+authenticated_page|/applications/:application_key/:surface_id/federated|ApplicationHostController|organization_federated
+authenticated_page|/account/applications/:application_key/federated|ApplicationHostController|user_federated
+authenticated_page|/account/applications/:application_key/:surface_id/federated|ApplicationHostController|user_federated
+authenticated_page|/admin/applications/:application_key/federated|ApplicationHostController|admin_federated
+authenticated_page|/admin/applications/:application_key/:surface_id/federated|ApplicationHostController|admin_federated
 redirect|/missions/:mission_id/ops/telemetry/explore|LegacyOpsRedirectController|telemetry_explore
 download|/missions/:mission_id/ops/dashboards/:dashboard_id/export|DashboardExportController|show
 redirect|/missions/:mission_id/spacecraft/:spacecraft_id/telemetry|LegacyApplicationRedirectController|telemetry_decom
@@ -153,7 +161,7 @@ redirect|/missions/:mission_id/comms/advanced/runtime-identities/new|LegacyComms
 `.trim().split("\n")
 
 assert.equal(expectedLiveRoutes.length, 89)
-assert.equal(expectedBrowserGets.length, 30)
+assert.equal(expectedBrowserGets.length, 37)
 
 const walkFiles = async (directory) => {
   const entries = await readdir(directory, {withFileTypes: true})
@@ -243,6 +251,10 @@ const publicBrowserScope = browserSource.slice(
     '  scope "/", CadenceWeb do\n    pipe_through [:browser, :require_authenticated_scope]',
   ),
 )
+const artifactBrowserScope = browserSource.slice(
+  browserSource.indexOf('  scope "/", CadenceWeb do\n    pipe_through :frontend_release_artifact'),
+  browserSource.indexOf('  scope "/", CadenceWeb do\n    pipe_through :browser'),
+)
 const authenticatedBrowserScope = browserSource.slice(
   browserSource.indexOf(
     '  scope "/", CadenceWeb do\n    pipe_through [:browser, :require_authenticated_scope]',
@@ -255,13 +267,18 @@ for (const entry of expectedBrowserGets) {
     `get\\s+"${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*,\\s*${controller}\\s*,\\s*:${action}`,
     "s",
   )
-  const scope = kind === "public_page" ? publicBrowserScope : authenticatedBrowserScope
+  const scope =
+    kind === "artifact"
+      ? artifactBrowserScope
+      : kind === "public_page"
+        ? publicBrowserScope
+        : authenticatedBrowserScope
   assert.match(scope, declaration, `${path} remains in its audited browser pipeline`)
 }
 
 const apiSource = routerSource.slice(apiStart)
 const apiGets = [...apiSource.matchAll(/\bget\s+"[^"]+"\s*,/g)]
-assert.equal(apiGets.length, 63, "JSON API GET declarations remain outside presentation closure")
+assert.equal(apiGets.length, 64, "JSON API GET declarations remain outside presentation closure")
 assert.match(
   apiSource,
   /scope "\/api", CadenceWeb do\s+pipe_through :api\s+get "\/health", HealthController, :show/s,
@@ -404,7 +421,11 @@ const assertNonSsrHosts = async (template, label) => {
     assert.match(host[1], /v-ssr=\{false\}/, `${label} host is non-SSR`)
     const component = host[1].match(/v-component="([^"]+)"/)?.[1]
     assert.ok(component, `${label} host names a static component`)
-    await access(resolve(vueRoot, `${component}.vue`))
+    if (component === "FederatedFullPageSurface") {
+      await access(federatedVuePath)
+    } else {
+      await access(resolve(vueRoot, `${component}.vue`))
+    }
   }
 }
 
@@ -497,6 +518,7 @@ for (const script of scriptTags) {
 
 const appSource = await readFile(appPath, "utf8")
 const vueIndexSource = await readFile(vueIndexPath, "utf8")
+const federatedVueSource = await readFile(federatedVuePath, "utf8")
 const federatedTemplateSource = await readFile(federatedTemplatePath, "utf8")
 assert.match(appSource, /const Hooks = \{\s*LiveToast: createLiveToastHook\(\)\s*\}/)
 assert.match(appSource, /hooks: \{\.\.\.Hooks, \.\.\.getHooks\(liveVueApp\)\}/)
@@ -507,14 +529,18 @@ assert.doesNotMatch(
 )
 assert.match(
   appSource,
-  /const federationRoot = document\.querySelector\("#cadence-federation-root"\)/,
-  "app.js identifies the opt-in federation root",
+  /let federationHostModuleLoad/,
+  "app.js caches the imported federation host module",
 )
 assert.match(
   appSource,
-  /if \(federationRoot\)\s*\{\s*const federationHostAsset = "\/assets\/application-host\/host\/host\.js"\s*void import\(\/\* @vite-ignore \*\/ federationHostAsset\)/,
-  "app.js runtime-loads the separately published host bundle",
+  /document\.addEventListener\("phx:page-loading-stop", bootFederationHost\)/,
+  "app.js retries host discovery after LiveView navigation",
 )
+assert.match(appSource, /mounted\.unmount\(\)/, "app.js cleans up disconnected host roots")
+assert.match(appSource, /new MutationObserver\(bootFederationHost\)/, "app.js observes LiveView root replacement")
+assert.doesNotMatch(federatedVueSource, /surfaceForPath|location\.pathname/, "Vue does not infer host authority from the URL")
+assert.doesNotMatch(federatedVueSource, /v-on:/, "Vue does not install legacy listener bindings")
 assert.doesNotMatch(appSource, /\bdom\s*:/, "LiveSocket has no global DOM callback object")
 assert.doesNotMatch(
   appSource,

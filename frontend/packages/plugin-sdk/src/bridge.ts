@@ -64,6 +64,24 @@ export type HostContext =
   | MissionHostContext
   | SpacecraftHostContext;
 
+export type HostJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | HostJsonValue[]
+  | { readonly [key: string]: HostJsonValue };
+
+export type HostQueryParams = Readonly<Record<string, HostJsonValue>>;
+
+export const HOST_QUERY_PARAMS_MAX_BYTES = 16_384;
+export const HOST_QUERY_PARAMS_MAX_DEPTH = 4;
+export const HOST_QUERY_PARAMS_MAX_KEYS = 64;
+export const HOST_QUERY_PARAMS_MAX_ARRAY_ITEMS = 32;
+export const HOST_QUERY_PARAMS_MAX_STRING_BYTES = 256;
+
+const forbiddenQueryParamKeys = new Set(["__proto__", "constructor", "prototype"]);
+
 export function assertHostContext(value: unknown): asserts value is HostContext {
   if (!isHostContext(value)) throw new Error("Host context is invalid.");
 }
@@ -124,6 +142,8 @@ export interface HostQueryRequest {
   queryId: string;
   version: number;
   context: HostContext;
+  /** Route parameters are captured by the Phoenix host and cannot be supplied by callers. */
+  readonly params?: never;
 }
 
 export interface HostActionRequest<TInput = unknown> {
@@ -163,6 +183,87 @@ export interface FederatedApplicationProps {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function assertHostQueryParams(value: unknown): asserts value is HostQueryParams {
+  const state = {keys: 0};
+
+  if (!isPlainObject(value)) throw new Error("Host query parameters must be a plain JSON object.");
+  visitQueryValue(value, 0, state, true);
+
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined || utf8ByteLength(serialized) > HOST_QUERY_PARAMS_MAX_BYTES) {
+    throw new Error("Host query parameters exceed the maximum JSON size.");
+  }
+}
+
+export function isHostQueryParams(value: unknown): value is HostQueryParams {
+  try {
+    assertHostQueryParams(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function visitQueryValue(
+  value: unknown,
+  depth: number,
+  state: {keys: number},
+  root = false,
+): void {
+  if (typeof value === "string") {
+    if (utf8ByteLength(value) > HOST_QUERY_PARAMS_MAX_STRING_BYTES) {
+      throw new Error("Host query parameter strings are too large.");
+    }
+    return;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Host query parameters contain an invalid number.");
+    return;
+  }
+
+  if (value === null || typeof value === "boolean") return;
+
+  if (Array.isArray(value)) {
+    if (root) throw new Error("Host query parameters must be a plain JSON object.");
+    if (depth > HOST_QUERY_PARAMS_MAX_DEPTH || value.length > HOST_QUERY_PARAMS_MAX_ARRAY_ITEMS) {
+      throw new Error("Host query parameters exceed the maximum depth or array size.");
+    }
+    value.forEach((item) => visitQueryValue(item, depth + 1, state));
+    return;
+  }
+
+  if (!isPlainObject(value) || depth > HOST_QUERY_PARAMS_MAX_DEPTH) {
+    throw new Error("Host query parameters contain an invalid JSON value.");
+  }
+
+  for (const key of Object.keys(value)) {
+    state.keys += 1;
+    if (state.keys > HOST_QUERY_PARAMS_MAX_KEYS) {
+      throw new Error("Host query parameters contain too many keys.");
+    }
+    if (forbiddenQueryParamKeys.has(key) || utf8ByteLength(key) > HOST_QUERY_PARAMS_MAX_STRING_BYTES) {
+      throw new Error("Host query parameters contain a forbidden or oversized key.");
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error("Host query parameters must contain data properties only.");
+    }
+    visitQueryValue(descriptor.value, depth + 1, state);
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 function validActor(value: unknown): value is HostActor {

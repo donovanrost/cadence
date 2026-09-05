@@ -98,6 +98,7 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
     application.value = nextApplication;
     context.value = nextCatalog.session.context;
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication, {
+      queryParams: props.queryParams,
       onSessionFailure: handleBridgeSessionFailure,
     });
     if (generation !== loadGeneration || controller.signal.aborted) {

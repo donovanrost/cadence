@@ -70,6 +70,7 @@ defmodule CadenceWeb.ProviderAccountListLive do
         surface_id="provider_accounts"
         host_scope="organization"
         organization_id={@current_scope.organization.organization_id}
+        query_params={%{organization_id: @current_scope.organization.organization_id}}
         v-ssr={false}
         class="contents"
       />

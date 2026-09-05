@@ -1,8 +1,10 @@
 import {
+  assertHostQueryParams,
   assertFrontendApplicationCatalog,
   type ApplicationScope,
   type CatalogApplication,
   type FrontendApplicationCatalog,
+  type HostQueryParams,
 } from "@cadence/plugin-sdk";
 import { assertKnownFirstPartyIdentity } from "./first-party-composition";
 
@@ -16,6 +18,7 @@ interface PhoenixHostConfigBase {
   userId?: string;
   missionId?: string;
   spacecraftId?: string;
+  queryParams?: HostQueryParams;
 }
 
 /**
@@ -184,6 +187,8 @@ function assertPhoenixHostConfig(config: PhoenixHostConfig): void {
   if (!nonEmptyString(config.fallbackHref)) {
     throw new Error("The Phoenix host requires a Phoenix fallback href.");
   }
+
+  if (config.queryParams !== undefined) assertHostQueryParams(config.queryParams);
 
   const context = contextRequest(config);
   assertContextRequest(context);

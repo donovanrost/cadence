@@ -136,9 +136,10 @@ defmodule CadenceWeb.CommsGroundStationFormLive do
         v-component="FederatedFullPageSurface"
         application_key="comms"
         surface_id="ground_station"
-        host_scope="mission"
-        mission_id={@current_mission.mission_id}
-        v-ssr={false}
+          host_scope="mission"
+          mission_id={@current_mission.mission_id}
+          query_params={if @ground_station, do: %{mission_id: @current_mission.mission_id, ground_station_id: @ground_station.ground_station_id}, else: %{mission_id: @current_mission.mission_id}}
+          v-ssr={false}
       />
     </Layouts.app>
     """

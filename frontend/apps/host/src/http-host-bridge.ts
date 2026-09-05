@@ -1,4 +1,5 @@
 import type {
+  HostJsonValue,
   CatalogApplication,
   HostActionReceipt,
   HostActionRequest,
@@ -8,7 +9,9 @@ import type {
   HostContext,
   HostQueryRequest,
   HostSessionDescriptor,
+  HostQueryParams,
 } from "@cadence/plugin-sdk";
+import { assertHostQueryParams } from "@cadence/plugin-sdk";
 
 interface HostProblem {
   schema: "cadence.application-host-problem.v1";
@@ -16,10 +19,12 @@ interface HostProblem {
   message: string;
 }
 
-interface BridgeOptions {
+export interface BridgeOptions {
   fetch?: typeof globalThis.fetch;
   requestTimeoutMs?: number;
   onSessionFailure?: (operation: HostActivityEvent["kind"], error: HostBridgeError) => void;
+  /** Captured by Phoenix; never read from an individual remote request. */
+  queryParams?: HostQueryParams;
 }
 
 export type CallerActionRequest<TInput = unknown> = HostActionRequest<TInput> & {
@@ -53,6 +58,7 @@ export function createHttpHostBridge(
   const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const listeners = new Set<HostActivityListener>();
   const inFlightControllers = new Set<AbortController>();
+  const queryParams = snapshotQueryParams(options.queryParams ?? {});
   let active = true;
 
   if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) {
@@ -173,6 +179,7 @@ export function createHttpHostBridge(
             queryId: query.queryId,
             queryVersion: query.version,
             scope: scopeFrom(session.context),
+            params: queryParams,
           }),
         );
       } catch (error) {
@@ -250,6 +257,25 @@ export function createHttpHostBridge(
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+
+function snapshotQueryParams(value: HostQueryParams): HostQueryParams {
+  assertHostQueryParams(value);
+  return freezeQueryValue(value) as HostQueryParams;
+}
+
+function freezeQueryValue(value: HostJsonValue): HostJsonValue {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map((item) => freezeQueryValue(item)));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const copy: Record<string, HostJsonValue> = {};
+    for (const [key, item] of Object.entries(value)) copy[key] = freezeQueryValue(item);
+    return Object.freeze(copy);
+  }
+
+  return value;
+}
 
 function raceWithAbort<TResult>(
   promise: PromiseLike<TResult>,

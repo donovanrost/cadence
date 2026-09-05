@@ -50,6 +50,7 @@ defmodule CadenceWeb.CommsTransportShowLive do
           surface_id="transport"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id}}
           v-ssr={false}
         />
       </div>

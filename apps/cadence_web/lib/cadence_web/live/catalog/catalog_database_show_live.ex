@@ -203,6 +203,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
           surface_id="catalog_database_show"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id, catalog_database_id: @database.catalog_database_id}}
           v-ssr={false}
         />
       </div>

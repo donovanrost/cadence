@@ -85,6 +85,7 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
           surface_id="catalog_revision_show"
           host_scope="mission"
           mission_id={@current_mission.mission_id}
+          query_params={%{mission_id: @current_mission.mission_id, catalog_revision_id: @revision.catalog_revision_id}}
           v-ssr={false}
         />
       </div>

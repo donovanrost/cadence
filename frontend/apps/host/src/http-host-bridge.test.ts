@@ -128,6 +128,7 @@ describe("the HTTP host bridge", () => {
         missionId: "mission-1",
         spacecraftId: "spacecraft-1",
       },
+      params: {},
     });
     const headers = new Headers(request?.headers);
     expect(headers.get("content-type")).toBe("application/json");
@@ -136,6 +137,31 @@ describe("the HTTP host bridge", () => {
     expect(headers.get("idempotency-key")).toBeNull();
     expect(JSON.stringify(body)).not.toContain("Forged operator");
     expect(activity.map(({ status }) => status)).toEqual(["started", "completed"]);
+  });
+
+  it("propagates an immutable server-owned route parameter snapshot", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _request?: RequestInit) =>
+      Response.json({ queryVersion: 1 }),
+    );
+    const routeParams = { mission_id: "mission-1", spacecraft_id: "spacecraft-1" };
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      queryParams: routeParams,
+    });
+    routeParams.mission_id = "forged-after-bootstrap";
+
+    await bridge.query({
+      ...queryRequest(),
+      params: { mission_id: "forged-by-remote" } as never,
+    });
+
+    const request = fetcher.mock.calls[0]?.[1];
+    const serializedBody = request?.body;
+    if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
+    expect(JSON.parse(serializedBody).params).toEqual({
+      mission_id: "mission-1",
+      spacecraft_id: "spacecraft-1",
+    });
   });
 
   it("rejects a request outside the active scope before sending it", async () => {
