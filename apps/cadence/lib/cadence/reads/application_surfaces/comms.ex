@@ -16,8 +16,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   alias Cadence.Comms.{GroundStationStore, RoutingRuleStore, TransportStore}
   alias Cadence.Contacts.{LinkAssignmentStore, PathTemplateStore, ProfileStore}
   alias Cadence.ExtensionCatalog
+  alias Cadence.Extensions.Presentation.{ConfigurationDefinition, FieldDefinition}
   alias Cadence.Ids
   alias Cadence.Listing.Page
+  alias Cadence.Management.Providers
   alias Cadence.Reads.Applications.{Inventory, InventoryItem}
   alias Cadence.Reads.Applications.TelemetryDecomStatus
   alias Cadence.SpacecraftStore
@@ -40,6 +42,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   @min_json_integer -9_007_199_254_740_991
 
   @list_surfaces ~w(transports routing ground_stations)
+  @form_surfaces ~w(transport_new routing_new ground_station_new ground_station_edit)
   @detail_params %{
     "transport" => "transport_id",
     "routing_detail" => "routing_rule_id",
@@ -185,6 +188,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
          :ok <- validate_params(surface_id, params),
          {:ok, mission} <- fetch_mission(organization_id, mission_id),
          :ok <- ensure_mission_scope(mission, organization_id, mission_id),
+         :ok <- validate_mission_param(params, mission.mission_id),
          :ok <- validate_identifiers([mission.mission_id]) do
       dispatch_surface(scope, mission, surface_id, params)
     end
@@ -284,6 +288,653 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     end
   end
 
+  defp dispatch_surface(_scope, mission, "transport_new", _params) do
+    with {:ok, kind_entry} <- ExtensionCatalog.fetch_transport_kind("tcp_socket"),
+         {:ok, data} <-
+           transport_form_data(mission, kind_entry, transport_form_params(kind_entry)) do
+      trusted_payload("transport_new", mission.mission_id, nil, data)
+    end
+  end
+
+  defp dispatch_surface(_scope, mission, "routing_new", params) do
+    with spacecraft <-
+           Cadence.SpacecraftStore.list_spacecraft(
+             mission.organization_id,
+             mission.mission_id
+           ),
+         transports <- TransportStore.list_transports(mission.organization_id, mission.mission_id),
+         {:ok, data} <- routing_form_data(mission, params, spacecraft, transports) do
+      trusted_payload("routing_new", mission.mission_id, nil, data)
+    end
+  end
+
+  defp dispatch_surface(_scope, mission, "ground_station_new", _params) do
+    data = ground_station_form_data(mission, :new, nil, ground_station_form_params())
+    trusted_payload("ground_station_new", mission.mission_id, nil, data)
+  end
+
+  defp dispatch_surface(_scope, mission, "ground_station_edit", params) do
+    with {:ok, station_id} <- subject_id(params, "ground_station_id"),
+         {:ok, station} <-
+           GroundStationStore.fetch_ground_station(
+             mission.organization_id,
+             mission.mission_id,
+             station_id
+           ) do
+      data =
+        ground_station_form_data(mission, :edit, station, ground_station_form_params(station))
+
+      trusted_payload("ground_station_edit", mission.mission_id, station_id, data)
+    else
+      {:error, :ground_station_not_found} -> {:error, :unsupported_application_surface_query}
+      error -> error
+    end
+  end
+
+  defp transport_form_data(mission, kind_entry, params) do
+    providers = Providers.list_providers(mission.organization_id, mission.mission_id)
+    form = transport_form_values(params, kind_entry)
+    configuration = transport_configuration_dto(kind_entry.configuration, form, true)
+    direct_configuration = kind_entry.module.normalize_config(direct_config_params(form))
+
+    {derived_configuration, derived_summary} =
+      case direct_configuration do
+        {:ok, config} -> {config, kind_entry.module.display_summary(config)}
+        {:error, _reason} -> {nil, nil}
+      end
+
+    data = %{
+      "page" =>
+        form_page(
+          mission,
+          "comms-transport-new-page",
+          "New Transport",
+          "Describe a durable byte-moving capability. This setup does not mean a connection is currently open.",
+          "transports",
+          "New Transport"
+        ),
+      "form" => %{
+        "id" => "transport-form",
+        "selected_origin" => "direct",
+        "can_submit" => form["display_name"] not in [nil, ""] and is_map(derived_configuration),
+        "sections" => transport_sections(),
+        "fields" => transport_fields(form, kind_entry, providers),
+        "origin_cards" => [
+          %{
+            "value" => "direct",
+            "label" => "Direct",
+            "description" => "Cadence owns the endpoint, framing, TLS, and reconnect setup."
+          },
+          %{
+            "value" => "provider_managed",
+            "label" => "Ground Station Provider",
+            "description" =>
+              "Cadence derives read-only runtime setup from synchronized provider profiles."
+          }
+        ],
+        "direct_configuration" => configuration,
+        "provider" => transport_provider_dto(mission.mission_id, providers, nil, nil),
+        "provider_derived" => %{
+          "active" => false,
+          "id" => "transport-provider-derived-section",
+          "number" => "05",
+          "title" => "Provider-Derived Runtime",
+          "description" =>
+            "Endpoint, framing, and reliability are provider-owned for this Transport and remain read-only.",
+          "configuration" => %{
+            "id" => "transport-provider-derived-configuration",
+            "rows" => [],
+            "empty_text" => "Select compatible provider profiles to derive runtime configuration."
+          }
+        },
+        "review" => transport_review_dto(form, derived_summary),
+        "actions" => %{
+          "submit" => %{"id" => "create-transport-button", "label" => "Create Transport"},
+          "cancel" => %{
+            "id" => "cancel-transport-link",
+            "label" => "Cancel",
+            "href" => fallback_href(mission.mission_id, "transports")
+          }
+        }
+      }
+    }
+
+    {:ok, data}
+  end
+
+  defp transport_form_params(kind_entry) do
+    Map.merge(
+      %{"display_name" => "", "origin" => "direct", "transport_kind" => kind_entry.form_value},
+      ConfigurationDefinition.default_params(kind_entry.configuration)
+    )
+  end
+
+  defp transport_form_values(params, kind_entry) do
+    Map.merge(transport_form_params(kind_entry), params)
+  end
+
+  defp transport_fields(form, _kind_entry, providers) do
+    fields = %{
+      "display_name" =>
+        transport_field(
+          "display_name",
+          "transport-display-name",
+          "text",
+          "Display Name",
+          form["display_name"],
+          true,
+          nil,
+          []
+        ),
+      "origin" =>
+        transport_field(
+          "origin",
+          "transport-origin",
+          "select",
+          "Configuration Owner",
+          form["origin"],
+          true,
+          nil,
+          [
+            {"Direct — configured in Cadence", "direct"},
+            {"Ground Station Provider", "provider_managed"}
+          ]
+        ),
+      "transport_kind" =>
+        transport_field(
+          "transport_kind",
+          "transport-kind",
+          "select",
+          "Transport Kind",
+          form["transport_kind"],
+          true,
+          nil,
+          transport_kind_options()
+        ),
+      "mission_provider_id" =>
+        transport_field(
+          "mission_provider_id",
+          "transport-provider",
+          "select",
+          "Ground Network Provider",
+          form["mission_provider_id"] || "",
+          true,
+          "Select a validated provider",
+          provider_options(providers)
+        ),
+      "service_profile_id" =>
+        transport_field(
+          "service_profile_id",
+          "transport-service-profile",
+          "select",
+          "Service Profile",
+          form["service_profile_id"] || "",
+          true,
+          "Select service",
+          []
+        ),
+      "delivery_profile_id" =>
+        transport_field(
+          "delivery_profile_id",
+          "transport-delivery-profile",
+          "select",
+          "Delivery Profile",
+          form["delivery_profile_id"] || "",
+          true,
+          "Select delivery",
+          []
+        )
+    }
+
+    Map.put(
+      fields,
+      "transport_kind",
+      Map.put(fields["transport_kind"], "provider_managed_id", "transport-kind-provider-managed")
+    )
+  end
+
+  defp transport_field(key, id, type, label, value, required, placeholder, options) do
+    %{
+      "key" => key,
+      "id" => id,
+      "name" => "transport[#{key}]",
+      "type" => type,
+      "label" => label,
+      "required" => required,
+      "placeholder" => placeholder,
+      "options" => Enum.map(options, &option_dto/1),
+      "value" => value || "",
+      "provider_managed_id" => nil
+    }
+  end
+
+  defp transport_kind_options do
+    ExtensionCatalog.transport_kinds()
+    |> Enum.map(&{&1.label, &1.form_value})
+    |> Enum.sort()
+  end
+
+  defp provider_options(providers) do
+    Enum.map(providers, fn provider ->
+      {"#{provider.display_name} · v#{provider.version}", provider.provider_id,
+       disabled: not provider_ready?(provider)}
+    end)
+  end
+
+  defp transport_sections do
+    %{
+      "identity" => %{
+        "id" => "transport-identity-section",
+        "number" => "01",
+        "title" => "Identity"
+      },
+      "origin" => %{"id" => "transport-origin-section", "number" => "02", "title" => "Origin"},
+      "source" => %{"id" => "transport-source-section", "number" => "03", "title" => "Source"},
+      "provider_capability" => %{
+        "id" => "transport-capability-section",
+        "number" => "04",
+        "title" => "Capability"
+      },
+      "review" => %{"id" => "transport-summary-section", "number" => "06", "title" => "Review"}
+    }
+  end
+
+  defp transport_configuration_dto(%ConfigurationDefinition{} = definition, form, active?) do
+    %{
+      "id" => definition.id,
+      "kind" => "transport_kind",
+      "description" => definition.description,
+      "active" => active?,
+      "sections" =>
+        Enum.map(definition.sections, fn section ->
+          %{
+            "id" => section.id,
+            "fields_id" => "#{section.id}-fields",
+            "number" => section.number,
+            "title" => section.title,
+            "description" => section.description,
+            "fields" =>
+              Enum.map(section.fields, &transport_configuration_field(&1, definition.id, form))
+          }
+        end)
+    }
+  end
+
+  defp transport_configuration_field(%FieldDefinition{} = field, definition_id, form) do
+    key = Atom.to_string(field.field)
+    dom_key = String.replace(key, "_", "-")
+
+    %{
+      "key" => key,
+      "wrapper_id" => "#{definition_id}-field-#{dom_key}",
+      "id" => "#{definition_id}-input-#{dom_key}",
+      "name" => "transport[#{key}]",
+      "type" => if(field.type == :reference, do: "select", else: Atom.to_string(field.type)),
+      "label" => field.label,
+      "required" => field.required,
+      "placeholder" => field.placeholder,
+      "help" => field.help,
+      "step" => field.step,
+      "min" => field.min,
+      "max" => field.max,
+      "default" => field.default,
+      "value" => Map.get(form, key, field.default),
+      "options" => Enum.map(field.options, &option_dto/1),
+      "visible" => visible_configuration_field?(field, form),
+      "visible_when" => visibility_dto(field.visible_when)
+    }
+  end
+
+  defp visible_configuration_field?(%FieldDefinition{visible_when: nil}, _form), do: true
+
+  defp visible_configuration_field?(
+         %FieldDefinition{visible_when: %{field: field, equals: expected}},
+         form
+       ),
+       do: Map.get(form, Atom.to_string(field)) == expected
+
+  defp visibility_dto(nil), do: nil
+
+  defp visibility_dto(%{field: field, equals: expected}),
+    do: %{"field" => Atom.to_string(field), "equals" => to_string(expected)}
+
+  defp direct_config_params(params) do
+    %{
+      "mode" => params["tcp_mode"],
+      "direction_capability" => params["direction_capability"],
+      "host" => params["host"],
+      "port" => params["port"],
+      "framing_mode" => params["framing_mode"],
+      "frame_size" => params["frame_size"],
+      "reconnect_policy" => params["reconnect_policy"],
+      "tls_enabled" => params["tls_enabled"]
+    }
+  end
+
+  defp transport_review_dto(form, summary) do
+    %{
+      "configuration_summary_id" => "transport-configuration-summary",
+      "ownership" => %{
+        "label" => "Ownership",
+        "value" => "Direct",
+        "source" => "Cadence-managed TCP socket"
+      },
+      "readiness" => %{
+        "label" => "Readiness",
+        "status" => if(is_map(summary), do: "ready", else: "attention"),
+        "value" => if(is_map(summary), do: "Ready to save", else: "Incomplete"),
+        "endpoint" => if(is_map(summary), do: summary.endpoint, else: "Endpoint not yet resolved")
+      },
+      "error" => nil,
+      "error_id" => "transport-form-error",
+      "diagnostics" => %{
+        "id" => "transport-admin-diagnostics",
+        "label" => "Administrator Diagnostics",
+        "json_id" => "transport-admin-diagnostics-json",
+        "json" => Jason.encode!(form, pretty: true)
+      }
+    }
+  end
+
+  defp transport_provider_dto(mission_id, providers, selected_provider, selected_delivery) do
+    %{
+      "active" => false,
+      "profile_fields_id" => "transport-provider-profile-fields",
+      "ready_count" => Enum.count(providers, &provider_ready?/1),
+      "selected" =>
+        if(selected_provider,
+          do: %{
+            "display_name" => selected_provider.display_name,
+            "version" => selected_provider.version,
+            "status" => "ready",
+            "status_label" => "Profiles synced"
+          }
+        ),
+      "empty_state" => %{
+        "id" => "transport-provider-empty-state",
+        "visible" => not Enum.any?(providers, &provider_ready?/1),
+        "message" => "No provider has both a healthy validation and synchronized profiles.",
+        "action" => %{
+          "label" => "Review providers",
+          "href" => fallback_href(mission_id, "provider_list")
+        }
+      },
+      "operator_summary" =>
+        if(selected_delivery,
+          do: %{
+            "id" => "transport-provider-operator-summary",
+            "label" => "Operator Summary",
+            "text" => selected_delivery["operator_summary"] || selected_delivery["display_name"],
+            "endpoint" => "Endpoint not yet resolved"
+          }
+        ),
+      "derivation_error" => nil
+    }
+  end
+
+  defp provider_ready?(provider) do
+    match?(%DateTime{}, provider.last_validated_at) and
+      match?(%DateTime{}, provider.last_synced_at) and
+      get_in(provider.metadata, ["control_plane", "status"]) == "healthy"
+  end
+
+  defp routing_form_data(mission, params, spacecraft, transports) do
+    selected_spacecraft = Map.get(params, "spacecraft_id", "")
+
+    form = %{
+      "display_name" => "",
+      "purpose_label" => "Live telemetry",
+      "spacecraft_id" => selected_spacecraft,
+      "transport_ref" => "",
+      "direction" => "inbound",
+      "role" => "primary"
+    }
+
+    {:ok,
+     %{
+       "page" =>
+         form_page(
+           mission,
+           "comms-routing-new-page",
+           "New Routing Rule",
+           "Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later.",
+           "routing",
+           "New Routing Rule"
+         ),
+       "form" => %{
+         "id" => "routing-rule-form",
+         "sections" => %{
+           "intent" => %{"number" => "01", "title" => "Intent"},
+           "transport" => %{"number" => "02", "title" => "Spacecraft And Transport"},
+           "policy" => %{"number" => "03", "title" => "Routing Policy"}
+         },
+         "fields" =>
+           Map.new(
+             [
+               "display_name",
+               "purpose_label",
+               "spacecraft_id",
+               "transport_ref",
+               "direction",
+               "role"
+             ],
+             fn key -> {key, routing_field(key, form[key])} end
+           ),
+         "actions" => %{
+           "submit" => %{"id" => "create-routing-rule-button", "label" => "Create Routing Rule"},
+           "cancel" => %{
+             "id" => "cancel-routing-rule-link",
+             "label" => "Cancel",
+             "href" => fallback_href(mission.mission_id, "routing")
+           }
+         }
+       },
+       "options" => %{
+         "spacecraft" => [
+           %{"label" => "Select spacecraft", "value" => ""}
+           | Enum.map(spacecraft, &%{"label" => &1.display_name, "value" => &1.spacecraft_id})
+         ],
+         "transports" => [
+           %{"label" => "Select transport", "value" => ""}
+           | Enum.map(
+               transports,
+               &%{
+                 "label" => "#{&1.display_name} (v#{&1.version})",
+                 "value" => "#{&1.transport_id}:#{&1.version}"
+               }
+             )
+         ],
+         "directions" =>
+           Enum.map(
+             [
+               {"Inbound", "inbound"},
+               {"Outbound", "outbound"},
+               {"Bidirectional", "bidirectional"}
+             ],
+             &option_dto/1
+           ),
+         "roles" =>
+           Enum.map(
+             [
+               {"Primary", "primary"},
+               {"Candidate", "candidate"},
+               {"Contributing", "contributing"}
+             ],
+             &option_dto/1
+           )
+       }
+     }}
+  end
+
+  defp routing_field(key, value) do
+    type =
+      if key in ["spacecraft_id", "transport_ref", "direction", "role"],
+        do: "select",
+        else: "text"
+
+    %{
+      "id" => "routing_rule_#{key}",
+      "name" => "routing_rule[#{key}]",
+      "type" => type,
+      "label" =>
+        key
+        |> String.replace("_", " ")
+        |> String.split()
+        |> Enum.map_join(" ", &String.capitalize/1),
+      "required" => true,
+      "value" => value
+    }
+  end
+
+  defp ground_station_form_data(mission, mode, station, params) do
+    title = if mode == :new, do: "New Ground Station", else: "Edit Ground Station"
+
+    {:ok,
+     %{
+       "page" =>
+         form_page(
+           mission,
+           "comms-ground-station-form-page",
+           title,
+           "Define a stable mission setup identity for an antenna, site, or provider station.",
+           "ground_stations",
+           title
+         ),
+       "mode" => Atom.to_string(mode),
+       "form" => %{
+         "id" => "ground-station-form",
+         "sections" => %{
+           "identity" => %{
+             "id" => "ground-station-identity-section",
+             "number" => "01",
+             "title" => "Identity"
+           },
+           "network" => %{
+             "id" => "ground-station-network-section",
+             "number" => "02",
+             "title" => "Network Context"
+           },
+           "metadata" => %{
+             "id" => "ground-station-metadata-section",
+             "number" => "03",
+             "title" => "Metadata"
+           }
+         },
+         "fields" => ground_station_fields(params, mode),
+         "actions" => %{
+           "submit" => %{
+             "id" =>
+               if(mode == :new,
+                 do: "create-ground-station-button",
+                 else: "save-ground-station-button"
+               ),
+             "label" => if(mode == :new, do: "Create Ground Station", else: "Save Ground Station")
+           },
+           "cancel" => %{
+             "id" => "cancel-ground-station-link",
+             "label" => "Cancel",
+             "href" =>
+               if(mode == :new,
+                 do: fallback_href(mission.mission_id, "ground_stations"),
+                 else:
+                   fallback_href(mission.mission_id, "ground_station", station.ground_station_id)
+               )
+           }
+         }
+       }
+     }}
+  end
+
+  defp ground_station_form_params do
+    %{
+      "ground_station_id" => "",
+      "display_name" => "",
+      "provider" => "",
+      "region" => "",
+      "metadata_json" => "{}"
+    }
+  end
+
+  defp ground_station_form_params(station) do
+    %{
+      "ground_station_id" => station.ground_station_id,
+      "display_name" => station.display_name,
+      "provider" => station.provider || "",
+      "region" => station.region || "",
+      "metadata_json" => Jason.encode!(station.metadata, pretty: true)
+    }
+  end
+
+  defp ground_station_fields(params, mode) do
+    %{
+      "ground_station_id" =>
+        ground_station_field(
+          "ground_station_id",
+          "Station ID",
+          params["ground_station_id"],
+          mode == :new,
+          mode == :edit,
+          "dss-14"
+        ),
+      "display_name" =>
+        ground_station_field(
+          "display_name",
+          "Display Name",
+          params["display_name"],
+          true,
+          false,
+          nil
+        ),
+      "provider" =>
+        ground_station_field("provider", "Provider", params["provider"], false, false, "DSN"),
+      "region" =>
+        ground_station_field("region", "Region", params["region"], false, false, "goldstone"),
+      "metadata_json" =>
+        ground_station_field(
+          "metadata_json",
+          "Metadata JSON",
+          params["metadata_json"],
+          false,
+          false,
+          ~s({"antenna_diameter_m":70})
+        )
+        |> Map.put("type", "textarea")
+    }
+  end
+
+  defp ground_station_field(key, label, value, required, disabled, placeholder) do
+    %{
+      "id" => "ground_station_#{key}",
+      "name" => "ground_station[#{key}]",
+      "type" => "text",
+      "label" => label,
+      "required" => required,
+      "disabled" => disabled,
+      "placeholder" => placeholder,
+      "value" => value || ""
+    }
+  end
+
+  defp form_page(mission, id, title, subtitle, parent, current) do
+    %{
+      "id" => id,
+      "title" => title,
+      "heading" => title,
+      "subtitle" => subtitle,
+      "breadcrumbs" => [
+        %{"label" => mission.display_name, "href" => "/missions/#{mission.mission_id}"},
+        %{"label" => "Comms", "href" => fallback_href(mission.mission_id, "overview")},
+        %{"label" => surface_label(parent), "href" => fallback_href(mission.mission_id, parent)},
+        %{"label" => current, "href" => nil}
+      ]
+    }
+  end
+
+  defp option_dto({label, value}), do: %{"label" => label, "value" => value, "disabled" => false}
+
+  defp option_dto({label, value, opts}),
+    do: %{"label" => label, "value" => value, "disabled" => Keyword.get(opts, :disabled, false)}
+
   defp dispatch_surface(_scope, _mission, _surface_id, _params),
     do: {:error, :unsupported_application_surface_query}
 
@@ -298,10 +949,19 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
     allowed_keys =
       cond do
         surface_id in @list_surfaces ->
-          MapSet.new(~w(q sort dir page pageSize))
+          MapSet.new(~w(mission_id q sort dir page pageSize))
+
+        surface_id == "routing_new" ->
+          MapSet.new(~w(mission_id spacecraft_id))
+
+        surface_id == "ground_station_edit" ->
+          MapSet.new(~w(mission_id ground_station_id))
+
+        surface_id in @form_surfaces ->
+          MapSet.new(["mission_id"])
 
         Map.has_key?(@detail_params, surface_id) ->
-          MapSet.new([Map.fetch!(@detail_params, surface_id)])
+          MapSet.new(["mission_id", Map.fetch!(@detail_params, surface_id)])
 
         surface_id in Comms.surface_ids() ->
           MapSet.new()
@@ -317,6 +977,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
       not Enum.all?(keys, &is_binary/1) -> {:error, :invalid_application_request}
       MapSet.subset?(MapSet.new(keys), allowed_keys) -> :ok
       true -> {:error, :invalid_application_request}
+    end
+  end
+
+  defp validate_mission_param(params, mission_id) do
+    case Map.get(params, "mission_id") do
+      nil -> :ok
+      ^mission_id -> :ok
+      _other -> {:error, :invalid_application_request}
     end
   end
 
@@ -1524,6 +2192,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   defp surface_label("routing_detail"), do: "Routing Rule"
   defp surface_label("ground_stations"), do: "Ground Stations"
   defp surface_label("ground_station"), do: "Ground Station"
+  defp surface_label("transport_new"), do: "New Transport"
+  defp surface_label("routing_new"), do: "New Routing Rule"
+  defp surface_label("ground_station_new"), do: "New Ground Station"
+  defp surface_label("ground_station_edit"), do: "Edit Ground Station"
+  defp surface_label("provider_list"), do: "Providers"
 
   defp fallback_href(mission_id, surface_id), do: fallback_href(mission_id, surface_id, nil)
 
@@ -1565,6 +2238,24 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
 
   defp fallback_href(mission_id, "ground_station", _subject),
     do: fallback_href(mission_id, "ground_stations", nil)
+
+  defp fallback_href(mission_id, "transport_new", _subject),
+    do: fallback_href(mission_id, "transports") <> "/new"
+
+  defp fallback_href(mission_id, "routing_new", _subject),
+    do: fallback_href(mission_id, "routing") <> "/new"
+
+  defp fallback_href(mission_id, "ground_station_new", _subject),
+    do: fallback_href(mission_id, "ground_stations") <> "/new"
+
+  defp fallback_href(mission_id, "ground_station_edit", subject) when is_binary(subject),
+    do: fallback_href(mission_id, "ground_station", subject) <> "/edit"
+
+  defp fallback_href(mission_id, "ground_station_edit", _subject),
+    do: fallback_href(mission_id, "ground_stations") <> "/new"
+
+  defp fallback_href(mission_id, "provider_list", _subject),
+    do: "/missions/" <> validated_segment(mission_id) <> "/comms/providers"
 
   defp safe_action_href(href, mission_id) when is_binary(href) do
     prefix = "/missions/" <> validated_segment(mission_id) <> "/"

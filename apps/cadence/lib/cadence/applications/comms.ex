@@ -102,6 +102,39 @@ defmodule Cadence.Applications.Comms do
       subject_schema: "cadence.comms.provider.subject",
       fallback_path: "/comms/providers/:subject",
       fallback_parent_path: "/comms/providers"
+    },
+    %{
+      id: "transport_new",
+      purpose: :configuration,
+      label: "New Transport",
+      order: 120,
+      fallback_path: "/comms/transports/new",
+      fallback_parent_path: "/comms/transports"
+    },
+    %{
+      id: "routing_new",
+      purpose: :configuration,
+      label: "New Routing Rule",
+      order: 130,
+      fallback_path: "/comms/routing/new",
+      fallback_parent_path: "/comms/routing"
+    },
+    %{
+      id: "ground_station_new",
+      purpose: :configuration,
+      label: "New Ground Station",
+      order: 140,
+      fallback_path: "/comms/ground-stations/new",
+      fallback_parent_path: "/comms/ground-stations"
+    },
+    %{
+      id: "ground_station_edit",
+      purpose: :configuration,
+      label: "Edit Ground Station",
+      order: 150,
+      subject_schema: "cadence.comms.ground_station.subject",
+      fallback_path: "/comms/ground-stations/:subject/edit",
+      fallback_parent_path: "/comms/ground-stations"
     }
   ]
 
@@ -109,7 +142,17 @@ defmodule Cadence.Applications.Comms do
     %{id: "create_provider", surface: "provider_new", effect: :durable},
     %{id: "validate_provider", surface: "provider_show", effect: :external},
     %{id: "sync_provider", surface: "provider_show", effect: :external},
-    %{id: "archive_provider", surface: "provider_show", effect: :durable}
+    %{id: "archive_provider", surface: "provider_show", effect: :durable},
+    %{
+      id: "validate",
+      surfaces: ~w(transport_new routing_new ground_station_new ground_station_edit),
+      effect: :none
+    },
+    %{
+      id: "save",
+      surfaces: ~w(transport_new routing_new ground_station_new ground_station_edit),
+      effect: :durable
+    }
   ]
 
   @spec identity() :: map()
@@ -228,7 +271,9 @@ defmodule Cadence.Applications.Comms do
 
   defp surface_actions(surface_id) do
     @provider_actions
-    |> Enum.filter(&(&1.surface == surface_id))
+    |> Enum.filter(fn action ->
+      Map.get(action, :surface) == surface_id or surface_id in Map.get(action, :surfaces, [])
+    end)
     |> Enum.map(& &1.id)
   end
 
@@ -236,7 +281,11 @@ defmodule Cadence.Applications.Comms do
     %ActionDefinition{
       action_id: spec.id,
       version: @identity.application_version,
-      intent: if(spec.id == "create_provider", do: :configuration, else: :operation),
+      intent:
+        if(spec.id in ["create_provider", "validate", "save"],
+          do: :configuration,
+          else: :operation
+        ),
       scope: :mission,
       input_contract: %{schema_id: "cadence.comms.#{spec.id}.input", version: 1},
       result_contract: %{schema_id: "cadence.comms.#{spec.id}.result", version: 1},

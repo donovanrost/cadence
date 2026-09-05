@@ -51,6 +51,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
          :ok <- authorize(scope, mission_id),
          {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
          :ok <- ensure_mission_scope(mission, organization_id, mission_id),
+         :ok <- validate_mission_param(params, mission.mission_id),
          :ok <- validate_identifiers([mission_id]) do
       dispatch_surface(scope, mission, surface_id, params)
     end
@@ -138,15 +139,18 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
   end
 
   defp validate_params("provider_show", params) do
-    validate_param_keys(params, MapSet.new(["provider_id"]))
+    validate_param_keys(params, MapSet.new(["mission_id", "provider_id"]))
   end
 
   defp validate_params("provider_new", params) do
-    validate_param_keys(params, MapSet.new(["provider_account_grant_id", "provider_account_id"]))
+    validate_param_keys(
+      params,
+      MapSet.new(["mission_id", "provider_account_grant_id", "provider_account_id"])
+    )
   end
 
   defp validate_params("provider_list", params),
-    do: validate_param_keys(params, MapSet.new())
+    do: validate_param_keys(params, MapSet.new(["mission_id"]))
 
   defp validate_params(_surface_id, _params),
     do: {:error, :unsupported_application_surface_query}
@@ -159,6 +163,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
       not Enum.all?(keys, &is_binary/1) -> {:error, :invalid_application_request}
       MapSet.subset?(MapSet.new(keys), allowed_keys) -> :ok
       true -> {:error, :invalid_application_request}
+    end
+  end
+
+  defp validate_mission_param(params, mission_id) do
+    case Map.get(params, "mission_id") do
+      nil -> :ok
+      ^mission_id -> :ok
+      _other -> {:error, :invalid_application_request}
     end
   end
 

@@ -102,55 +102,11 @@ const formValues = (form: RoutingRuleForm): RoutingRuleValues => ({
 });
 
 const values = reactive<RoutingRuleValues>(formValues(props.form));
-const pendingValidations: RoutingRuleValues[] = [];
-const supersededValidations: RoutingRuleValues[] = [];
-let acceptedServerValues = formValues(props.form);
-
-const sameValues = (left: RoutingRuleValues, right: RoutingRuleValues) =>
-  left.display_name === right.display_name &&
-  left.purpose_label === right.purpose_label &&
-  left.spacecraft_id === right.spacecraft_id &&
-  left.transport_ref === right.transport_ref &&
-  left.direction === right.direction &&
-  left.role === right.role;
 
 watch(
   () => props.form,
   (serverForm) => {
-    const serverValues = formValues(serverForm);
-    const acknowledgedIndex = pendingValidations.findIndex((sent) =>
-      sameValues(sent, serverValues),
-    );
-
-    if (acknowledgedIndex >= 0) {
-      supersededValidations.push(...pendingValidations.slice(0, acknowledgedIndex));
-
-      const hasNewerTyping = acknowledgedIndex < pendingValidations.length - 1;
-      pendingValidations.splice(0, acknowledgedIndex + 1);
-      acceptedServerValues = serverValues;
-
-      if (!hasNewerTyping && sameValues(values, serverValues)) {
-        Object.assign(values, serverValues);
-      }
-
-      return;
-    }
-
-    const supersededIndex = supersededValidations.findIndex((sent) =>
-      sameValues(sent, serverValues),
-    );
-
-    if (supersededIndex >= 0) {
-      supersededValidations.splice(supersededIndex, 1);
-      return;
-    }
-
-    if (sameValues(serverValues, acceptedServerValues)) return;
-
-    if (pendingValidations.length === 0 && sameValues(values, acceptedServerValues)) {
-      Object.assign(values, serverValues);
-      acceptedServerValues = serverValues;
-    }
+    Object.assign(values, formValues(serverForm));
   },
   { deep: true },
 );
@@ -166,7 +122,6 @@ const routingRuleValues = (): RoutingRuleValues => ({
 
 const validate = () => {
   const routingRule = routingRuleValues();
-  pendingValidations.push(routingRule);
   emit("validate", { routing_rule: routingRule });
 };
 
