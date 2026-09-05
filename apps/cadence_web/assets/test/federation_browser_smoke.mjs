@@ -148,6 +148,28 @@ function invokeValidated(operation, label) {
   }
 }
 
+function acquisitionAuthority(value, capture) {
+  if (allowedNativePromise(value)) {
+    try {
+      return Promise.prototype.then.call(value, capture, (error) => {
+        throw error;
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  return new Promise((resolveAcquisition, rejectAcquisition) => {
+    queueMicrotask(() => {
+      try {
+        resolveAcquisition(capture(value));
+      } catch (error) {
+        rejectAcquisition(error);
+      }
+    });
+  });
+}
+
 function safeDataDescriptors(value) {
   if (value === null || typeof value !== "object") return { error: "was not an object" };
   if (nodeTypes.isProxy(value)) return { error: "was a proxy" };
@@ -4545,6 +4567,7 @@ export async function runBrowserGate(
     env = process.env,
     launchChromeImpl = launchChrome,
     createPageImpl = createPage,
+    closePageImpl = closePage,
     createClientImpl = (endpoint) => new CdpClient(endpoint),
     runScenarioImpl = runScenario,
     clientCreationTimeout = CDP_COMMAND_TIMEOUT_MS,
@@ -4560,8 +4583,10 @@ export async function runBrowserGate(
     clientClose: null,
     page: null,
     pageId: undefined,
+    pageEndpoint: undefined,
   };
   const cleanupPromises = new Map();
+  let cleanupStarted = false;
   const runOwnedCleanup = (key, operation, label, timeout = CDP_COMMAND_TIMEOUT_MS) => {
     if (cleanupPromises.has(key)) return cleanupPromises.get(key);
     if (typeof operation !== "function") return undefined;
@@ -4591,33 +4616,76 @@ export async function runBrowserGate(
     });
   };
   const secrets = [];
-  const reportLateClientCreationFailure = (kind, error) => {
+  const LATE_FAILURE_DIAGNOSTIC_LIMIT = 4096;
+  const formatBoundedFailure = (error) => {
     let safeMessage;
     try {
       safeMessage = redactError(error, secrets);
     } catch {
       safeMessage = "failure could not be formatted";
     }
-    reportProgress(`late CDP client ${kind} observed after gate failure: ${safeMessage}`);
+    const boundedMessage = safeMessage.length > LATE_FAILURE_DIAGNOSTIC_LIMIT
+      ? `${safeMessage.slice(0, LATE_FAILURE_DIAGNOSTIC_LIMIT)}...`
+      : safeMessage;
+    return boundedMessage;
+  };
+  const reportLateFailure = (resource, kind, error) => {
+    const boundedMessage = formatBoundedFailure(error);
+    reportProgress(`late ${resource} ${kind} observed after gate failure: ${boundedMessage}`);
+  };
+  const runtimeCleanupKeys = new Map();
+  const pageCleanupKeys = new Map();
+  let runtimeCleanupSequence = 0;
+  let pageCleanupSequence = 0;
+  const triggerRuntimeCleanup = (
+    runtime = state.runtime,
+    close = state.runtimeClose,
+    key = "runtime",
+    kind = "cleanup failure",
+  ) => {
+    if (typeof close !== "function") return;
+    triggerOwnedCleanup(
+      key,
+      () => Reflect.apply(close, runtime, []),
+      "Chrome runtime cleanup",
+      CDP_COMMAND_TIMEOUT_MS,
+      (error) => reportLateFailure("Chrome runtime", kind, error),
+    );
+  };
+  const triggerPageCleanup = (
+    endpoint = state.pageEndpoint,
+    targetId = state.pageId,
+    key = "page",
+    kind = "cleanup failure",
+  ) => {
+    if (!endpoint || !targetId) return;
+    triggerOwnedCleanup(
+      key,
+      () => closePageImpl(endpoint, targetId, { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS }),
+      "CDP page close",
+      PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
+      (error) => reportLateFailure("browser page", kind, error),
+    );
   };
   let diagnostics;
   let diagnosticsDispose;
   const guards = installShutdownGuards({
     onAbort: (reason) => {
       controller.abort(reason);
+      if (state.pageEndpoint && state.pageId) {
+        triggerPageCleanup(state.pageEndpoint, state.pageId, "page", "cleanup failure");
+      }
       if (state.clientClose) {
         triggerOwnedCleanup(
           "client",
           () => Reflect.apply(state.clientClose, state.client, []),
           "CDP client cleanup",
+          CDP_COMMAND_TIMEOUT_MS,
+          (error) => reportLateFailure("CDP client", "cleanup failure", error),
         );
       }
       if (state.runtimeClose) {
-        triggerOwnedCleanup(
-          "runtime",
-          () => Reflect.apply(state.runtimeClose, state.runtime, []),
-          "Chrome runtime cleanup",
-        );
+        triggerRuntimeCleanup(state.runtime, state.runtimeClose, "runtime", "cleanup failure");
       }
     },
   });
@@ -4630,46 +4698,148 @@ export async function runBrowserGate(
     if (secret) secrets.push(secret.password);
 
     reportProgress("launching bounded Chrome process");
-    const captureRuntime = (runtime) => {
-      state.runtime = runtime;
-      state.runtimeClose = safeCallableProperty(runtime, "close", "Chrome runtime");
-      state.runtimeEndpoint = safeDataProperty(runtime, "endpoint", "Chrome runtime");
+    const closeDuplicateRuntime = (runtime) => {
+      let close;
+      try {
+        close = safeCallableProperty(runtime, "close", "Chrome runtime");
+      } catch (error) {
+        reportLateFailure("Chrome runtime", "duplicate capture failure", error);
+        return state.runtime;
+      }
+      let key = runtimeCleanupKeys.get(runtime);
+      if (!key) {
+        key = `runtime-duplicate-${runtimeCleanupSequence++}`;
+        runtimeCleanupKeys.set(runtime, key);
+      }
+      triggerRuntimeCleanup(runtime, close, key, "duplicate cleanup failure");
+      return state.runtime;
     };
-    const launchedRuntime = await raceWithSignalAndTimeout(
+    const captureRuntime = (runtime) => {
+      validateRaceValue(runtime, "launchChrome implementation");
+      if (state.runtime && runtime !== state.runtime) return closeDuplicateRuntime(runtime);
+      if (!state.runtime) {
+        const runtimeClose = safeCallableProperty(runtime, "close", "Chrome runtime");
+        state.runtime = runtime;
+        state.runtimeClose = runtimeClose;
+      }
+      state.runtimeEndpoint = safeDataProperty(runtime, "endpoint", "Chrome runtime");
+      if ((controller.signal.aborted || cleanupStarted) && state.runtimeClose) {
+        triggerRuntimeCleanup(state.runtime, state.runtimeClose, "runtime", "late cleanup failure");
+      }
+      return state.runtime;
+    };
+    const captureRuntimeFromCallback = (runtime) => {
+      try {
+        return captureRuntime(runtime);
+      } catch (error) {
+        if (state.runtimeClose) {
+          triggerRuntimeCleanup(state.runtime, state.runtimeClose, "runtime", "capture failure");
+        }
+        if (!controller.signal.aborted && !cleanupStarted) controller.abort(error);
+        reportLateFailure("Chrome runtime", "capture failure", error);
+        return undefined;
+      }
+    };
+    const launchAuthority = acquisitionAuthority(
       invokeValidated(
         () => launchChromeImpl({
           env,
           signal: controller.signal,
-          onRuntime: captureRuntime,
+          onRuntime: captureRuntimeFromCallback,
         }),
         "launchChrome implementation",
       ),
+      captureRuntime,
+    );
+    launchAuthority.catch((error) => {
+      if (controller.signal.aborted && !state.runtime) {
+        reportLateFailure("Chrome runtime", "creation rejection", error);
+      }
+    });
+    await raceWithSignalAndTimeout(
+      launchAuthority,
       {
         signal: controller.signal,
         milliseconds: CDP_COMMAND_TIMEOUT_MS,
         label: "launchChrome implementation",
       },
     );
-    captureRuntime(launchedRuntime);
     reportProgress("creating browser target");
-    const createdPage = await raceWithSignalAndTimeout(
+    let pageWebSocketDebuggerUrl;
+    const closeDuplicatePage = (target) => {
+      let targetId;
+      try {
+        targetId = safeOptionalDataProperty(target, "id", "browser page");
+      } catch (error) {
+        reportLateFailure("browser page", "duplicate capture failure", error);
+        return state.page;
+      }
+      if (!targetId) {
+        reportLateFailure(
+          "browser page",
+          "duplicate capture failure",
+          new Error("duplicate browser page did not expose an id"),
+        );
+        return state.page;
+      }
+      let key = pageCleanupKeys.get(target);
+      if (!key) {
+        key = `page-duplicate-${pageCleanupSequence++}`;
+        pageCleanupKeys.set(target, key);
+      }
+      triggerPageCleanup(state.runtimeEndpoint, targetId, key, "duplicate cleanup failure");
+      return state.page;
+    };
+    const capturePageTarget = (target) => {
+      validateRaceValue(target, "createPage implementation");
+      if (state.page && target !== state.page) return closeDuplicatePage(target);
+      if (!state.page) {
+        const targetId = safeOptionalDataProperty(target, "id", "browser page");
+        if (targetId !== undefined && typeof targetId !== "string") {
+          throw new TypeError("browser page id was not a string");
+        }
+        state.page = target;
+        state.pageId = targetId;
+        state.pageEndpoint = state.runtimeEndpoint;
+      }
+      try {
+        pageWebSocketDebuggerUrl = safeDataProperty(
+          target,
+          "webSocketDebuggerUrl",
+          "browser page",
+        );
+      } catch (error) {
+        if ((controller.signal.aborted || cleanupStarted) && state.pageEndpoint && state.pageId) {
+          triggerPageCleanup(state.pageEndpoint, state.pageId, "page", "capture failure");
+        }
+        throw error;
+      }
+      if ((controller.signal.aborted || cleanupStarted) && state.pageEndpoint && state.pageId) {
+        triggerPageCleanup(state.pageEndpoint, state.pageId, "page", "late cleanup failure");
+      }
+      return target;
+    };
+    const pageAuthority = acquisitionAuthority(
       invokeValidated(
         () => createPageImpl(state.runtimeEndpoint, "about:blank", { signal: controller.signal }),
         "createPage implementation",
       ),
+      capturePageTarget,
+    );
+    pageAuthority.catch((error) => {
+      if (controller.signal.aborted && !state.page) {
+        reportLateFailure("browser page", "creation rejection", error);
+      }
+    });
+    await raceWithSignalAndTimeout(
+      pageAuthority,
       {
         signal: controller.signal,
         milliseconds: CDP_COMMAND_TIMEOUT_MS,
         label: "createPage implementation",
+        onTimeout: (error) => controller.abort(error),
       },
     );
-    state.page = createdPage;
-    const pageWebSocketDebuggerUrl = safeDataProperty(
-      createdPage,
-      "webSocketDebuggerUrl",
-      "browser page",
-    );
-    state.pageId = safeOptionalDataProperty(createdPage, "id", "browser page");
 
     let clientTarget;
     let clientSend;
@@ -4680,13 +4850,13 @@ export async function runBrowserGate(
       state.client = target;
       state.clientClose = () => Reflect.apply(clientClose, target, []);
 
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || cleanupStarted) {
         triggerOwnedCleanup(
           "client",
           () => Reflect.apply(state.clientClose, state.client, []),
           "CDP client cleanup",
           CDP_COMMAND_TIMEOUT_MS,
-          (error) => reportLateClientCreationFailure("cleanup failure", error),
+          (error) => reportLateFailure("CDP client", "cleanup failure", error),
         );
         return target;
       }
@@ -4730,22 +4900,10 @@ export async function runBrowserGate(
       () => createClientImpl(pageWebSocketDebuggerUrl),
       "createClient implementation",
     );
-    const clientCreationAuthority = allowedNativePromise(clientCreation)
-      ? Promise.prototype.then.call(clientCreation, captureClientTarget, (error) => {
-          throw error;
-        })
-      : new Promise((resolveCreation, rejectCreation) => {
-          queueMicrotask(() => {
-            try {
-              resolveCreation(captureClientTarget(clientCreation));
-            } catch (error) {
-              rejectCreation(error);
-            }
-          });
-        });
+    const clientCreationAuthority = acquisitionAuthority(clientCreation, captureClientTarget);
     clientCreationAuthority.catch((error) => {
-      if (controller.signal.aborted && !state.client) {
-        reportLateClientCreationFailure("creation rejection", error);
+      if ((controller.signal.aborted || cleanupStarted) && !state.client) {
+        reportLateFailure("CDP client", "creation rejection", error);
       }
     });
     await raceWithSignalAndTimeout(clientCreationAuthority, {
@@ -4834,6 +4992,7 @@ export async function runBrowserGate(
     reportProgress("browser gate throwing after run failure");
     throw safe;
   } finally {
+    cleanupStarted = true;
     reportProgress("cleaning up browser process and profile");
     const cleanupErrors = [];
 
@@ -4854,13 +5013,15 @@ export async function runBrowserGate(
       cleanupErrors.push(error);
     }
     try {
-      await runOwnedCleanup(
-        "page",
-        () => closePage(state.runtimeEndpoint, state.pageId, { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS }),
-        "CDP page close",
-        PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
-      );
-      reportProgress("browser target close complete");
+      if (state.pageEndpoint && state.pageId) {
+        await runOwnedCleanup(
+          "page",
+          () => closePageImpl(state.pageEndpoint, state.pageId, { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS }),
+          "CDP page close",
+          PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
+        );
+        reportProgress("browser target close complete");
+      }
     } catch (error) {
       cleanupErrors.push(error);
     }
@@ -4891,11 +5052,7 @@ export async function runBrowserGate(
       const message = redactText(
         cleanupErrors
           .map((error) => {
-            try {
-              return redactError(error, secrets);
-            } catch {
-              return "cleanup failure could not be formatted";
-            }
+            return formatBoundedFailure(error);
           })
           .join("\n"),
         secrets,

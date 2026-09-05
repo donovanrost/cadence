@@ -1235,6 +1235,248 @@ test("timeout and signal cleanup invoke each captured close handle exactly once"
   assert.equal(runtimeCloseCalls, 1);
 });
 
+test("a page target materialized after SIGTERM is closed exactly once", async () => {
+  const runtime = {
+    endpoint: "ws://synthetic-runtime",
+    close: async () => {},
+  };
+  let pageMaterialized = false;
+  let pageCloseRequests = 0;
+  let pageCloseArguments;
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: async () => runtime,
+        createPageImpl: () => new Promise((resolvePage) => {
+          setImmediate(() => process.emit("SIGTERM"));
+          setTimeout(() => {
+            pageMaterialized = true;
+            resolvePage({ id: "late-page", webSocketDebuggerUrl: "ws://synthetic-page" });
+          }, 25);
+        }),
+        closePageImpl: (endpoint, targetId) => {
+          pageCloseRequests += 1;
+          pageCloseArguments = { endpoint, targetId };
+        },
+        createClientImpl: () => { throw new Error("client acquisition must not start"); },
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(pageMaterialized, true);
+    assert.equal(pageCloseRequests, 1);
+    assert.deepEqual(pageCloseArguments, {
+      endpoint: "ws://synthetic-runtime",
+      targetId: "late-page",
+    });
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a runtime delivered asynchronously through onRuntime after SIGTERM is closed exactly once", async () => {
+  let runtimeMaterialized = false;
+  let runtimeCloseCalls = 0;
+  const runtime = {
+    endpoint: "ws://synthetic-runtime",
+    close: async () => { runtimeCloseCalls += 1; },
+  };
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: ({ onRuntime }) => {
+          setImmediate(() => {
+            process.emit("SIGTERM");
+            setTimeout(() => {
+              runtimeMaterialized = true;
+              onRuntime(runtime);
+            }, 25);
+          });
+          return new Promise(() => {});
+        },
+        createPageImpl: () => { throw new Error("page acquisition must not start"); },
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(runtimeMaterialized, true);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("a runtime delivered by the launch promise after SIGTERM is closed exactly once", async () => {
+  let runtimeCloseCalls = 0;
+  const runtime = {
+    endpoint: "ws://synthetic-runtime",
+    close: async () => { runtimeCloseCalls += 1; },
+  };
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: () => {
+          setImmediate(() => process.emit("SIGTERM"));
+          return new Promise((resolveRuntime) => setTimeout(() => resolveRuntime(runtime), 25));
+        },
+        createPageImpl: () => { throw new Error("page acquisition must not start"); },
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    await waitForMilliseconds(60);
+    assert.equal(runtimeCloseCalls, 1);
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("same-turn runtime callback and launch resolution share one cleanup authority", async () => {
+  let runtimeCloseCalls = 0;
+  const runtime = {
+    endpoint: "ws://synthetic-runtime",
+    close: async () => { runtimeCloseCalls += 1; },
+  };
+  const probe = unhandledRejectionProbe();
+  try {
+    await assert.rejects(
+      runBrowserGate(syntheticGateArgs(), {
+        launchChromeImpl: ({ onRuntime }) => {
+          onRuntime(runtime);
+          onRuntime(runtime);
+          process.emit("SIGTERM");
+          return Promise.resolve(runtime);
+        },
+        createPageImpl: () => { throw new Error("page acquisition must not start"); },
+        runScenarioImpl: () => { throw new Error("scenario must not start"); },
+      }),
+      /browser gate received SIGTERM/,
+    );
+    assert.equal(runtimeCloseCalls, 1);
+    await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+    assert.deepEqual(probe.unhandled, []);
+  } finally {
+    probe.dispose();
+  }
+});
+
+test("late runtime close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closeRuntime] of [
+    ["rejection", (calls) => {
+      calls.value += 1;
+      return Promise.reject(new Error("late runtime close rejected"));
+    }],
+    ["throw", (calls) => {
+      calls.value += 1;
+      throw new Error("late runtime close threw");
+    }],
+  ]) {
+    const runtimeCloseCalls = { value: 0 };
+    const probe = unhandledRejectionProbe();
+    try {
+      await assert.rejects(
+        runBrowserGate(syntheticGateArgs(), {
+          launchChromeImpl: ({ onRuntime }) => {
+            setImmediate(() => {
+              process.emit("SIGTERM");
+              setTimeout(() => onRuntime({
+                endpoint: "ws://synthetic-runtime",
+                close: () => closeRuntime(runtimeCloseCalls),
+              }), 25);
+            });
+            return new Promise(() => {});
+          },
+          createPageImpl: () => { throw new Error("page acquisition must not start"); },
+          runScenarioImpl: () => { throw new Error("scenario must not start"); },
+        }),
+        (error) => /browser gate received SIGTERM/.test(error.message),
+        `${kind} primary cause`,
+      );
+      await waitForMilliseconds(60);
+      assert.equal(runtimeCloseCalls.value, 1, `${kind} close was not invoked exactly once`);
+      assert.deepEqual(probe.unhandled, []);
+    } finally {
+      probe.dispose();
+    }
+  }
+});
+
+test("late page close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closePage] of [
+    ["rejection", () => Promise.reject(new Error("late page close rejected"))],
+    ["throw", () => { throw new Error("late page close threw"); }],
+  ]) {
+    let pageCloseCalls = 0;
+    const probe = unhandledRejectionProbe();
+    try {
+      await assert.rejects(
+        runBrowserGate(syntheticGateArgs(), {
+          launchChromeImpl: async () => ({
+            endpoint: "ws://synthetic-runtime",
+            close: async () => {},
+          }),
+          createPageImpl: () => new Promise((resolvePage) => {
+            setImmediate(() => process.emit("SIGTERM"));
+            setTimeout(() => resolvePage({
+              id: "late-page",
+              webSocketDebuggerUrl: "ws://synthetic-page",
+            }), 25);
+          }),
+          closePageImpl: () => {
+            pageCloseCalls += 1;
+            return closePage();
+          },
+          runScenarioImpl: () => { throw new Error("scenario must not start"); },
+        }),
+        (error) => /browser gate received SIGTERM/.test(error.message),
+        `${kind} primary cause`,
+      );
+      await waitForMilliseconds(60);
+      assert.equal(pageCloseCalls, 1, `${kind} close was not invoked exactly once`);
+      assert.deepEqual(probe.unhandled, []);
+    } finally {
+      probe.dispose();
+    }
+  }
+});
+
+test("normal runtime, page, and client acquisition each close exactly once", async () => {
+  const client = makeDiagnosticClient();
+  let clientCloseCalls = 0;
+  client.close = () => { clientCloseCalls += 1; };
+  let pageCloseCalls = 0;
+  let runtimeCloseCalls = 0;
+  const result = await runBrowserGate(syntheticGateArgs(), {
+    launchChromeImpl: async () => ({
+      endpoint: "ws://synthetic-runtime",
+      close: async () => { runtimeCloseCalls += 1; },
+    }),
+    createPageImpl: async () => ({
+      id: "normal-page",
+      webSocketDebuggerUrl: "ws://synthetic-page",
+    }),
+    closePageImpl: (endpoint, targetId) => {
+      pageCloseCalls += 1;
+      assert.equal(endpoint, "ws://synthetic-runtime");
+      assert.equal(targetId, "normal-page");
+    },
+    createClientImpl: () => client,
+    runScenarioImpl: async () => ({ status: "normal" }),
+  });
+  assert.deepEqual(result, { status: "normal" });
+  assert.equal(pageCloseCalls, 1);
+  assert.equal(clientCloseCalls, 1);
+  assert.equal(runtimeCloseCalls, 1);
+});
+
 test("normal native client acquisition remains owned through final cleanup", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
