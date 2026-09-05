@@ -133,7 +133,9 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                %ActionRequest{
                  application_key: "organization_admin",
                  application_version: 1,
-                 action_id: "validate_provider_account_form"
+                 action_id: "validate_provider_account_form",
+                 surface_id: "provider_account_new",
+                 surface_version: 1
                }
              )
 
@@ -144,7 +146,9 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                %ActionRequest{
                  application_key: "organization_admin",
                  application_version: 1,
-                 action_id: "mark_notification_read"
+                 action_id: "mark_notification_read",
+                 surface_id: "notifications",
+                 surface_version: 1
                }
              )
   end
@@ -274,7 +278,9 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                %ActionRequest{
                  application_key: "organization_admin",
                  application_version: 1,
-                 action_id: "refresh_runtime"
+                 action_id: "refresh_runtime",
+                 surface_id: "admin_runtime",
+                 surface_version: 1
                }
              )
 
@@ -285,11 +291,54 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                %ActionRequest{
                  application_key: "organization_admin",
                  application_version: 1,
-                 action_id: "validate_provider_account_form"
+                 action_id: "validate_provider_account_form",
+                 surface_id: "provider_account_new",
+                 surface_version: 1
                }
              )
 
     assert admin_scope.user.user_id != user_scope.user.user_id
+  end
+
+  test "requires the exact provider-owned surface binding before action execution", %{
+    organization: organization,
+    organization_scope: organization_scope
+  } do
+    base = %ActionRequest{
+      application_key: "organization_admin",
+      application_version: 1,
+      action_id: "validate_provider_account_form",
+      surface_id: "provider_account_new",
+      surface_version: 1,
+      params: %{
+        "provider_account" => %{
+          "provider_type" => "simulator",
+          "backend_type" => "env"
+        }
+      }
+    }
+
+    assert {:ok, _result} =
+             OrganizationAdminAction.execute(
+               organization_scope,
+               HostContext.organization(organization.organization_id),
+               base
+             )
+
+    for request <- [
+          %{base | surface_id: nil, surface_version: nil},
+          %{base | surface_version: 2},
+          %{base | action_id: "mark_notification_read", surface_id: "provider_account_new"},
+          %{base | action_id: "accept_invitation", surface_id: "notifications_bell"},
+          %{base | action_id: "register_provider_account", surface_id: "provider_account_show"}
+        ] do
+      assert {:error, :unsupported_application_action} =
+               OrganizationAdminAction.execute(
+                 organization_scope,
+                 HostContext.organization(organization.organization_id),
+                 request
+               )
+    end
   end
 
   test "executes a real Phoenix-owned form validation patch", %{
@@ -304,6 +353,8 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                  application_key: "organization_admin",
                  application_version: 1,
                  action_id: "validate_provider_account_form",
+                 surface_id: "provider_account_new",
+                 surface_version: 1,
                  params: %{
                    "provider_account" => %{
                      "provider_type" => "simulator",
