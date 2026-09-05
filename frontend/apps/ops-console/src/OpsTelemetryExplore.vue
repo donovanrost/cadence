@@ -213,7 +213,7 @@ type Sample = {
   dashboard_href: string | null;
 };
 
-type AddToDashboardValues = {
+type AddToDashboardValues = Partial<FilterValues> & {
   dashboard_id: string;
   widget_type: string;
   title: string;
@@ -256,13 +256,6 @@ const props = defineProps<{
   authoring?: Authoring;
 }>();
 
-const emit = defineEmits<{
-  apply_filters: [payload: { explore: FilterValues }];
-  apply_question: [payload: { question: string }];
-  add_to_dashboard: [payload: { add_to_dashboard: AddToDashboardValues }];
-  clear_selected_sample: [payload: Record<string, never>];
-}>();
-
 const stringValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value === null || value === undefined) return "";
@@ -300,44 +293,16 @@ const addValuesFromServer = (values?: AddToDashboardValues): AddToDashboardValue
   title: stringValue(values?.title),
 });
 
-const sameFilterValues = (left: FilterValues, right: FilterValues) =>
-  Object.keys(left).every(
-    (key) => left[key as keyof FilterValues] === right[key as keyof FilterValues],
-  );
-
-const sameAddValues = (left: AddToDashboardValues, right: AddToDashboardValues) =>
-  left.dashboard_id === right.dashboard_id &&
-  left.widget_type === right.widget_type &&
-  left.title === right.title;
-
 const filterValues = reactive<FilterValues>(filterValuesFromServer(props.filter_form.values));
-let lastFilterServerValues = filterValuesFromServer(props.filter_form.values);
-let pendingFilterSubmission: FilterValues | undefined;
 
 const addToDashboardValues = reactive<AddToDashboardValues>(
   addValuesFromServer(props.authoring?.form.values),
 );
-let lastAddServerValues = props.authoring
-  ? addValuesFromServer(props.authoring.form.values)
-  : undefined;
-let pendingAddSubmission: AddToDashboardValues | undefined;
 
 watch(
   () => props.filter_form.values,
   (serverValues) => {
-    const normalizedServerValues = filterValuesFromServer(serverValues);
-    const currentValues = filterValuesFromServer(filterValues);
-    const currentMatchesPreviousServer = sameFilterValues(currentValues, lastFilterServerValues);
-    const currentMatchesSubmission =
-      pendingFilterSubmission !== undefined &&
-      sameFilterValues(currentValues, pendingFilterSubmission);
-
-    lastFilterServerValues = normalizedServerValues;
-    pendingFilterSubmission = undefined;
-
-    if (currentMatchesPreviousServer || currentMatchesSubmission) {
-      Object.assign(filterValues, normalizedServerValues);
-    }
+    Object.assign(filterValues, filterValuesFromServer(serverValues));
   },
   { deep: true },
 );
@@ -346,46 +311,85 @@ watch(
   () => props.authoring?.form.values,
   (serverValues) => {
     if (serverValues === undefined) {
-      lastAddServerValues = undefined;
-      pendingAddSubmission = undefined;
       Object.assign(addToDashboardValues, addValuesFromServer());
       return;
     }
 
-    const normalizedServerValues = addValuesFromServer(serverValues);
-    const currentValues = addValuesFromServer(addToDashboardValues);
-    const currentMatchesPreviousServer =
-      lastAddServerValues === undefined || sameAddValues(currentValues, lastAddServerValues);
-    const currentMatchesSubmission =
-      pendingAddSubmission !== undefined && sameAddValues(currentValues, pendingAddSubmission);
-
-    lastAddServerValues = normalizedServerValues;
-    pendingAddSubmission = undefined;
-
-    if (currentMatchesPreviousServer || currentMatchesSubmission) {
-      Object.assign(addToDashboardValues, normalizedServerValues);
-    }
+    Object.assign(addToDashboardValues, addValuesFromServer(serverValues));
   },
   { deep: true },
 );
 
 const applyFilters = () => {
   const values = filterValuesFromServer(filterValues);
-  pendingFilterSubmission = values;
-  emit("apply_filters", { explore: values });
+  navigateQuery(values);
 };
 
 const applyQuestion = (question: Question) => {
-  emit("apply_question", { question: stringValue(question.id) });
+  navigateQuery({
+    question: stringValue(question.id),
+    source_dashboard_id: filterValues.source_dashboard_id,
+  });
 };
 
 const addToDashboard = () => {
-  const values = addValuesFromServer(addToDashboardValues);
-  pendingAddSubmission = values;
-  emit("add_to_dashboard", { add_to_dashboard: values });
+  const values = {
+    ...addValuesFromServer(addToDashboardValues),
+    ...filterValuesFromServer(filterValues),
+  };
+
+  const url = new URL(window.location.href);
+  const dashboardPath = url.pathname.replace(
+    /\/ops\/explore$/,
+    `/ops/dashboards/${encodeURIComponent(values.dashboard_id)}/edit`,
+  );
+
+  if (dashboardPath !== url.pathname && values.dashboard_id !== "") {
+    url.pathname = dashboardPath;
+    url.search = new URLSearchParams({
+      candidate_source: "explore",
+      candidate_point_id: values.point_id ?? "",
+      candidate_title: values.title,
+      candidate_widget_type: values.widget_type,
+      candidate_spacecraft_id: values.spacecraft_id ?? "",
+      candidate_realm: values.realm ?? "",
+      candidate_data_view: values.selection_view ?? "",
+      candidate_data_source_id: values.data_source_id ?? "",
+      candidate_source_binding_id: values.source_binding_id ?? "",
+      time_mode: values.time_mode ?? "",
+      time_axis: values.time_axis ?? "",
+      from: values.from ?? "",
+      to: values.to ?? "",
+      replay_run_id: values.replay_run_id ?? "",
+      data_view: values.selection_view ?? "",
+      realm: values.realm ?? "",
+      data_source_id: values.data_source_id ?? "",
+      source_binding_id: values.source_binding_id ?? "",
+      scope_kind: values.scope_kind ?? "",
+      scope_id: values.scope_id ?? "",
+      limit_mode: values.limit_mode ?? "",
+    }).toString();
+    window.location.assign(url.toString());
+  }
 };
 
-const clearSelectedSample = () => emit("clear_selected_sample", {});
+const clearSelectedSample = () => {
+  const { sample_id: _sampleId, selected_time: _selectedTime, source_dashboard_id: _sourceDashboardId, ...values } =
+    filterValuesFromServer(filterValues);
+  navigateQuery(values);
+};
+
+const navigateQuery = (values: Record<string, string>) => {
+  const url = new URL(window.location.href);
+  const query = new URLSearchParams();
+
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== "") query.set(key, value);
+  });
+
+  url.search = query.toString();
+  window.location.assign(url.toString());
+};
 
 const clipboardFeedback = ref<"" | "copied" | "failed">("");
 let clearClipboardTimer: ReturnType<typeof setTimeout> | undefined;
