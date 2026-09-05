@@ -16,7 +16,6 @@ defmodule CadenceWeb.ApplicationHostLive do
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.ApplicationSurfaces
-  alias CadenceWeb.ApplicationSurfaceRegistry
   alias Phoenix.LiveView.JS
 
   alias CadenceWeb.ApplicationSurfaces.{
@@ -142,10 +141,6 @@ defmodule CadenceWeb.ApplicationHostLive do
     TableEvents.change(page, socket, surface_path)
   end
 
-  def handle_event(event, params, %{assigns: %{application_renderer_kind: :trusted}} = socket) do
-    socket.assigns.application_surface_module.handle_event(event, params, socket)
-  end
-
   @impl true
   def handle_params(
         params,
@@ -175,28 +170,10 @@ defmodule CadenceWeb.ApplicationHostLive do
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_info(message, socket) do
-    case socket.assigns do
-      %{application_renderer_kind: :trusted, application_surface_module: surface_module} ->
-        if function_exported?(surface_module, :handle_info, 2) do
-          surface_module.handle_info(message, socket)
-        else
-          {:noreply, socket}
-        end
-
-      _assigns ->
-        {:noreply, socket}
-    end
-  end
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
-  def render(
-        %{application_renderer_kind: :trusted, application_surface_module: surface_module} =
-          assigns
-      ) do
-    rendered_surface = surface_module.render(assigns)
-    assigns = assign(assigns, :rendered_application_surface, rendered_surface)
-
+  def render(%{application_renderer_kind: :federated} = assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div
@@ -205,20 +182,25 @@ defmodule CadenceWeb.ApplicationHostLive do
         data-application-version={@application_definition.version}
         data-application-installation-id={@application_installation.application_installation_id}
         data-surface-id={@application_surface_definition.surface_id}
+        data-surface-version={@application_surface_definition.version}
+        data-renderer="federated"
       >
         <.vue
-          id="application-host-component"
-          v-component="ApplicationHost"
-          host={application_host_dto(assigns)}
-          navigation={surface_navigation_dto(assigns)}
-          declarative_surface={nil}
-          application_surface_rows={[]}
-          application_surface_activity={[]}
-          application_surface_packet_groups={[]}
+          id="application-surface-component"
+          v-component="FederatedFullPageSurface"
+          application_key={@application_definition.application_key}
+          application_version={@application_definition.version}
+          surface_id={@application_surface_definition.surface_id}
+          surface_version={@application_surface_definition.version}
+          host_scope={Atom.to_string(@application_host_context.placement)}
+          organization_id={@application_host_context.organization_id}
+          user_id={@application_host_context.user_id}
+          mission_id={@application_host_context.mission_id}
+          spacecraft_id={@application_host_context.spacecraft_id}
+          query_params={@application_surface_query_params}
           v-ssr={false}
           class="contents"
         />
-        {@rendered_application_surface}
       </div>
     </Layouts.app>
     """
@@ -271,13 +253,8 @@ defmodule CadenceWeb.ApplicationHostLive do
     """
   end
 
-  defp mount_renderer(socket, %SurfaceDefinition{renderer: {:trusted, renderer_id}}) do
-    with {:ok, surface_module} <- ApplicationSurfaceRegistry.fetch(renderer_id) do
-      socket
-      |> assign(:application_renderer_kind, :trusted)
-      |> assign(:application_surface_module, surface_module)
-      |> surface_module.mount()
-    end
+  defp mount_renderer(socket, %SurfaceDefinition{renderer: {:trusted, _renderer_id}}) do
+    {:ok, assign(socket, :application_renderer_kind, :federated)}
   end
 
   defp mount_renderer(
