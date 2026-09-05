@@ -33,54 +33,352 @@ const response = {
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
-    "ops",
+    "contact_requirement_list",
+    "collection",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_requirement_list",
+    [],
+  ],
+  [
+    "contact_requirement_new",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_requirement_new",
+    ["validate", "save"],
+  ],
+  [
+    "contact_requirement_show",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_requirement_show",
+    ["plan", "create-plan"],
+  ],
+  [
+    "contact_requirement_template",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_requirement_template",
+    [
+      "validate-template",
+      "create-template",
+      "pause-template",
+      "activate-template",
+      "close-template",
+    ],
+  ],
+  [
+    "contact_schedule",
     "operations",
     "mission",
     "ops_workspace",
-    "cadence.ops.console",
-    ["validate", "save", "filter", "refresh", "select", "open_data_link", "open_evidence", "set_chart_time_range"],
+    "cadence.ops.contact_schedule",
+    ["validate", "search", "reserve", "cancel"],
   ],
-  ["contact_requirement_list", "collection", "mission", "ops_workspace", "cadence.ops.contact_requirement_list", []],
-  ["contact_requirement_new", "configuration", "mission", "ops_workspace", "cadence.ops.contact_requirement_new", ["validate", "save"]],
-  ["contact_requirement_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_requirement_show", ["plan", "toggle-opportunity", "create-plan"]],
-  ["contact_requirement_template", "configuration", "mission", "ops_workspace", "cadence.ops.contact_requirement_template", ["validate-template", "create-template", "pause-template", "activate-template", "close-template"]],
-  ["contact_schedule", "operations", "mission", "ops_workspace", "cadence.ops.contact_schedule", ["validate", "search", "reserve", "cancel"]],
-  ["contact_plan_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_plan_show", ["submit-plan", "approve-plan", "reject-plan", "execute-plan"]],
-  ["contact_detail", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_detail", ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"]],
-  ["contact_record", "subject_detail", "mission", "ops_workspace", "cadence.ops.contact_record", []],
-  ["dashboard_directory", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_directory", ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]],
-  ["dashboard_show", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_show", []],
-  ["dashboard_editor", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_editor", ["layout_changed", "validate_dashboard_section", "save_dashboard_section", "remove_dashboard_section", "move_dashboard_section", "preview_widget_binding", "validate_widget", "save_widget", "remove_widget", "rename", "archive_dashboard", "publish_dashboard", "publish_dashboard_version", "save_runtime_defaults", "restore_version_as_draft", "save_editor", "review_editor", "discard_editor", "reload_editor"]],
-  ["dashboard_activity", "activity", "mission", "ops_workspace", "cadence.ops.dashboard_activity", ["publish_version", "restore_version"]],
-  ["dashboard_new", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_new", ["validate", "save"]],
-  ["dashboard_library", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_library", ["stage-library-item", "create-library-item", "add-library-version"]],
-  ["dashboard_playlists", "collection", "mission", "ops_workspace", "cadence.ops.dashboard_playlists", ["create-playlist"]],
-  ["dashboard_playlist_present", "operations", "mission", "ops_workspace", "cadence.ops.dashboard_playlist_present", ["next-dashboard"]],
-  ["dashboard_settings", "configuration", "mission", "ops_workspace", "cadence.ops.dashboard_settings", ["validate-settings", "save-settings", "create-share", "revoke-share", "create-snapshot", "archive-dashboard"]],
-  ["dashboard_share", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_share", []],
-  ["dashboard_snapshot", "subject_detail", "mission", "ops_workspace", "cadence.ops.dashboard_snapshot", []],
-  ["dashboard_diagnostics", "activity", "mission", "ops_workspace", "cadence.ops.dashboard_diagnostics", []],
-  ["fleet_planning", "operations", "mission", "ops_workspace", "cadence.ops.fleet_planning", ["refresh-planning"]],
-  ["fleet_planning_new", "configuration", "mission", "ops_workspace", "cadence.ops.fleet_planning_new", ["validate-fleet-run", "create-fleet-run"]],
-  ["fleet_planning_policy", "configuration", "mission", "ops_workspace", "cadence.ops.fleet_planning_policy", ["validate-policy", "save-policy", "approve-policy", "validate-grant", "issue-grant", "revoke-grant"]],
-  ["fleet_planning_run", "subject_detail", "mission", "ops_workspace", "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]],
-  ["activation_requests", "operations", "mission", "ops_workspace", "cadence.ops.activation_requests", ["review", "decide"]],
-  ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", ["filter", "reset_filters", "follow_command", "clear_command_focus"]],
-  ["telemetry_explore", "operations", "mission", "ops_workspace", "cadence.ops.telemetry_explore", ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]],
-  ["data_operations", "operations", "mission", "ops_workspace", "cadence.ops.data_operations", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
-  ["data_operations_manage", "operations", "mission", "ops_workspace", "cadence.ops.data_operations_manage", ["validate-request", "record-historical-workflow-request", "transition-group", "retry-group", "request-correction"]],
-  ["data_sources", "configuration", "mission", "ops_workspace", "cadence.ops.data_sources", ["open-register-source", "cancel-register-source", "register-source", "open-change-binding", "cancel-change-binding", "change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
-  ["data_source_registration", "configuration", "mission", "ops_workspace", "cadence.ops.data_source_registration", ["register-source"]],
-  ["data_source_settings", "configuration", "mission", "ops_workspace", "cadence.ops.data_source_settings", ["change-binding", "disable-source", "enable-source", "reconcile-tsdb-backend", "deprovision-tsdb-backend", "provision-tsdb-backend", "probe-source", "rotate-source-credential", "retry-deployment-run", "requeue-deployment-run"]],
-  ["alarms", "operations", "mission", "ops_workspace", "cadence.ops.alarms", ["filter", "reset_filters"]],
-  ["timeline", "activity", "mission", "ops_workspace", "cadence.ops.timeline", ["apply_timeline_filters", "clear_timeline_selection"]],
+  [
+    "contact_plan_show",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_plan_show",
+    ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
+  ],
+  [
+    "contact_detail",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_detail",
+    ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"],
+  ],
+  [
+    "contact_record",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.contact_record",
+    [],
+  ],
+  [
+    "dashboard_directory",
+    "collection",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_directory",
+    ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"],
+  ],
+  [
+    "dashboard_show",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_show",
+    [],
+  ],
+  [
+    "dashboard_editor",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_editor",
+    [
+      "layout_changed",
+      "validate_dashboard_section",
+      "save_dashboard_section",
+      "remove_dashboard_section",
+      "move_dashboard_section",
+      "preview_widget_binding",
+      "validate_widget",
+      "save_widget",
+      "remove_widget",
+      "rename",
+      "archive_dashboard",
+      "publish_dashboard",
+      "publish_dashboard_version",
+      "save_runtime_defaults",
+      "restore_version_as_draft",
+      "save_editor",
+      "review_editor",
+      "discard_editor",
+      "reload_editor",
+    ],
+  ],
+  [
+    "dashboard_activity",
+    "activity",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_activity",
+    ["publish_version", "restore_version"],
+  ],
+  [
+    "dashboard_new",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_new",
+    ["validate", "save"],
+  ],
+  [
+    "dashboard_library",
+    "collection",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_library",
+    ["stage-library-item", "create-library-item", "add-library-version"],
+  ],
+  [
+    "dashboard_playlists",
+    "collection",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_playlists",
+    ["create-playlist"],
+  ],
+  [
+    "dashboard_playlist_present",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_playlist_present",
+    ["next-dashboard"],
+  ],
+  [
+    "dashboard_settings",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_settings",
+    [
+      "validate-settings",
+      "save-settings",
+      "create-share",
+      "revoke-share",
+      "create-snapshot",
+      "archive-dashboard",
+    ],
+  ],
+  [
+    "dashboard_share",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_share",
+    [],
+  ],
+  [
+    "dashboard_snapshot",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_snapshot",
+    [],
+  ],
+  [
+    "dashboard_diagnostics",
+    "activity",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.dashboard_diagnostics",
+    [],
+  ],
+  [
+    "fleet_planning",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.fleet_planning",
+    ["refresh-planning"],
+  ],
+  [
+    "fleet_planning_new",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.fleet_planning_new",
+    ["validate-fleet-run", "create-fleet-run"],
+  ],
+  [
+    "fleet_planning_policy",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.fleet_planning_policy",
+    [
+      "validate-policy",
+      "save-policy",
+      "approve-policy",
+      "validate-grant",
+      "issue-grant",
+      "revoke-grant",
+    ],
+  ],
+  [
+    "fleet_planning_run",
+    "subject_detail",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.fleet_planning_run",
+    ["refresh-fleet-run", "repair-fleet-run"],
+  ],
+  [
+    "activation_requests",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.activation_requests",
+    ["decide"],
+  ],
+  ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", []],
+  [
+    "telemetry_explore",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.telemetry_explore",
+    ["apply_filters", "apply_question", "add_to_dashboard"],
+  ],
+  [
+    "data_operations",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.data_operations",
+    [
+      "validate-request",
+      "record-historical-workflow-request",
+      "transition-group",
+      "retry-group",
+      "request-correction",
+    ],
+  ],
+  [
+    "data_operations_manage",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.data_operations_manage",
+    [
+      "validate-request",
+      "record-historical-workflow-request",
+      "transition-group",
+      "retry-group",
+      "request-correction",
+    ],
+  ],
+  [
+    "data_sources",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.data_sources",
+    [
+      "register-source",
+      "change-binding",
+      "disable-source",
+      "enable-source",
+      "reconcile-tsdb-backend",
+      "deprovision-tsdb-backend",
+      "provision-tsdb-backend",
+      "probe-source",
+      "rotate-source-credential",
+      "retry-deployment-run",
+      "requeue-deployment-run",
+    ],
+  ],
+  [
+    "data_source_registration",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.data_source_registration",
+    ["register-source"],
+  ],
+  [
+    "data_source_settings",
+    "configuration",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.data_source_settings",
+    [
+      "change-binding",
+      "disable-source",
+      "enable-source",
+      "reconcile-tsdb-backend",
+      "deprovision-tsdb-backend",
+      "provision-tsdb-backend",
+      "probe-source",
+      "rotate-source-credential",
+      "retry-deployment-run",
+      "requeue-deployment-run",
+    ],
+  ],
+  [
+    "alarms",
+    "operations",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.alarms",
+    ["filter", "reset_filters"],
+  ],
+  [
+    "timeline",
+    "activity",
+    "mission",
+    "ops_workspace",
+    "cadence.ops.timeline",
+    ["apply_timeline_filters", "clear_timeline_selection"],
+  ],
 ] as const;
 
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
 function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
-  const surface = surfaceContracts[1];
+  const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!;
   return {
     application: {
       applicationKey: "ops_console",
@@ -110,7 +408,7 @@ function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
 
 describe("Ops Console federated application", () => {
   it("queries the preserved Ops workspace surface and renders its Phoenix DTO", async () => {
-    const surface = surfaceContracts[1];
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!;
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
@@ -138,8 +436,10 @@ describe("Ops Console federated application", () => {
 
     expect(query).toHaveBeenCalledOnce();
     expect(query.mock.calls[0]?.[0]).toEqual({
-      queryId: surfaceContracts[1].dataContract.id,
-      version: surfaceContracts[1].dataContract.version,
+      queryId: surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!
+        .dataContract.id,
+      version: surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!
+        .dataContract.version,
       context,
     });
     expect(query.mock.calls[0]?.[0]).not.toHaveProperty("params");
@@ -175,7 +475,7 @@ describe("Ops Console federated application", () => {
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh", payload: { reason: "operator" } },
+        detail: { eventName: "refresh-planning", payload: { reason: "operator" } },
       }),
     );
     await flushPromises();
@@ -183,7 +483,9 @@ describe("Ops Console federated application", () => {
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
-      actionId: "refresh",
+      surfaceId: "fleet_planning",
+      surfaceVersion: 1,
+      actionId: "refresh-planning",
       input: { reason: "operator" },
       context,
     });
@@ -203,7 +505,7 @@ describe("Ops Console federated application", () => {
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh", payload: {} },
+        detail: { eventName: "refresh-planning", payload: {} },
       }),
     );
     await flushPromises();
@@ -225,7 +527,7 @@ describe("Ops Console federated application", () => {
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh", payload: {} },
+        detail: { eventName: "refresh-planning", payload: {} },
       }),
     );
     await flushPromises();
@@ -268,19 +570,25 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(36);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(36);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(103);
+    expect(surfaceContracts).toHaveLength(35);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(35);
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(108);
     expect(
-      surfaceContracts
-        .slice(2)
-        .every((surface) => {
-          const componentName =
-            surface.surfaceId === "dashboard_editor"
-              ? "OpsDashboardShow"
-              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
-          return Boolean(OPS_COMPONENTS[componentName]);
-        }),
+      new Set(
+        surfaceContracts.flatMap((surface) =>
+          surface.actions.map((action) => `${surface.surfaceId}:${action}`),
+        ),
+      ).size,
+    ).toBe(108);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(89);
+    expect(
+      surfaceContracts.slice(2).every((surface) => {
+        const componentName =
+          surface.surfaceId === "dashboard_editor"
+            ? "OpsDashboardShow"
+            : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
+        return Boolean(OPS_COMPONENTS[componentName]);
+      }),
     ).toBe(true);
   });
 
@@ -292,7 +600,10 @@ describe("Ops Console federated application", () => {
       "version",
       "selected_publish_issue",
     ]);
-    expect(routeQueryContracts.data_source_registration).toEqual({ subjectParam: null, queryParams: [] });
+    expect(routeQueryContracts.data_source_registration).toEqual({
+      subjectParam: null,
+      queryParams: [],
+    });
     expect(routeQueryContracts.data_operations_manage.queryParams).toEqual(["group"]);
 
     for (const surfaceId of [
@@ -332,7 +643,7 @@ describe("Ops Console response boundary", () => {
         },
         OPS_COMPONENTS,
       ),
-      ).toThrow("presentation component is invalid");
+    ).toThrow("presentation component is invalid");
   });
 
   it("accepts the authenticated host response envelope", () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import CadenceField from "./ui/components/CadenceField.vue";
 import CadencePanel from "./ui/components/CadencePanel.vue";
 import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
@@ -371,11 +371,7 @@ type Page = {
 const props = defineProps<{ page: Page }>();
 
 const emit = defineEmits<{
-  "open-register-source": [payload: EmptyPayload];
-  "cancel-register-source": [payload: EmptyPayload];
   "register-source": [payload: { source: RegistrationValues }];
-  "open-change-binding": [payload: { "binding-id": string }];
-  "cancel-change-binding": [payload: EmptyPayload];
   "change-binding": [payload: { binding: { binding_id: string; data_source_id: string } }];
   "disable-source": [payload: { "data-source-id": string }];
   "enable-source": [payload: { "data-source-id": string }];
@@ -389,6 +385,59 @@ const emit = defineEmits<{
 }>();
 
 const normalizeString = (value: unknown): string => (value == null ? "" : String(value));
+
+const emptyRegistration = (): Registration => ({
+  id: "data-source-registration",
+  heading: "Register a data source",
+  description: "Registration remains a Phoenix-owned administrator operation.",
+  form: {
+    id: "data-source-registration-form",
+    values: registrationValues(undefined),
+    options: {
+      logical_source: [],
+      kind: [],
+      isolation_level: [],
+      credential_provider: [],
+      storage: [],
+    },
+    error: null,
+  },
+});
+
+const registration = ref<Registration | null>(props.page.admin?.registration ?? null);
+const bindingForm = ref<BindingForm | null>(props.page.admin?.binding_form ?? null);
+
+const openRegisterSource = () => {
+  registration.value = registration.value ?? emptyRegistration();
+};
+
+const cancelRegisterSource = () => {
+  registration.value = null;
+};
+
+const openChangeBinding = (payload: { "binding-id": string }) => {
+  const row = props.page.bindings.groups
+    .flatMap((group) => group.rows)
+    .find((candidate) => candidate.binding_id === payload["binding-id"]);
+  if (!row) return;
+
+  bindingForm.value = {
+    binding_id: row.binding_id,
+    form_id: `change-binding-${row.binding_id}`,
+    panel_id: `change-binding-panel-${row.binding_id}`,
+    data_source_id: row.data_source_id,
+    source_options: props.page.sources.rows.map((source) => ({
+      label: source.data_source_id,
+      value: source.data_source_id,
+    })),
+    error: null,
+  };
+  binding.data_source_id = row.data_source_id;
+};
+
+const cancelChangeBinding = () => {
+  bindingForm.value = null;
+};
 
 const registrationValues = (registration: Registration | null | undefined): RegistrationValues => {
   const values = registration?.form.values;
@@ -420,7 +469,12 @@ const registrationFingerprint = (registration: Registration | null | undefined):
 
 watch(
   () => registrationFingerprint(props.page.admin?.registration),
-  () => Object.assign(registerSource, registrationValues(props.page.admin?.registration)),
+  () => {
+    if (props.page.admin?.registration) {
+      registration.value = props.page.admin.registration;
+      Object.assign(registerSource, registrationValues(props.page.admin.registration));
+    }
+  },
 );
 
 const binding = reactive({
@@ -433,7 +487,10 @@ const bindingFingerprint = (form: BindingForm | null | undefined): string =>
 watch(
   () => bindingFingerprint(props.page.admin?.binding_form),
   () => {
-    binding.data_source_id = normalizeString(props.page.admin?.binding_form?.data_source_id);
+    if (props.page.admin?.binding_form) {
+      bindingForm.value = props.page.admin.binding_form;
+      binding.data_source_id = normalizeString(props.page.admin.binding_form.data_source_id);
+    }
   },
 );
 
@@ -456,7 +513,7 @@ const submitRegistration = () =>
 const submitBinding = () =>
   emit("change-binding", {
     binding: {
-      binding_id: normalizeString(props.page.admin?.binding_form?.binding_id),
+      binding_id: normalizeString(bindingForm.value?.binding_id),
       data_source_id: normalizeString(binding.data_source_id),
     },
   });
@@ -799,7 +856,7 @@ const deploymentFields = [
                   :id="page.focus.remediation.action.id"
                   type="button"
                   class="btn btn-primary btn-xs"
-                  @click="emit('open-register-source', {})"
+                  @click="openRegisterSource"
                 >
                   <span :class="[page.focus.remediation.action.icon, 'h-3.5 w-3.5']"></span>
                   {{ page.focus.remediation.action.label }}
@@ -931,17 +988,17 @@ const deploymentFields = [
         </div>
 
         <section
-          v-if="page.admin?.registration"
-          :id="page.admin.registration.id"
+          v-if="registration"
+          :id="registration.id"
           class="mt-5 border border-primary/20 bg-base-200/60 p-4"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-sm font-semibold text-base-content">
-                {{ page.admin.registration.heading }}
+                {{ registration.heading }}
               </h2>
               <p class="mt-1 text-xs text-base-content/60">
-                {{ page.admin.registration.description }}
+                {{ registration.description }}
               </p>
             </div>
             <button
@@ -949,14 +1006,14 @@ const deploymentFields = [
               type="button"
               class="btn btn-ghost btn-xs"
               aria-label="Cancel source registration"
-              @click="emit('cancel-register-source', {})"
+              @click="cancelRegisterSource"
             >
               <span class="hero-x-mark h-4 w-4"></span>
             </button>
           </div>
 
           <form
-            :id="page.admin.registration.form.id"
+            :id="registration.form.id"
             class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
             @submit.prevent="submitRegistration"
           >
@@ -990,7 +1047,7 @@ const deploymentFields = [
                 class="w-full select"
               >
                 <option
-                  v-for="option in page.admin.registration.form.options.logical_source"
+                  v-for="option in registration.form.options.logical_source"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -1012,7 +1069,7 @@ const deploymentFields = [
                 class="w-full select"
               >
                 <option
-                  v-for="option in page.admin.registration.form.options.kind"
+                  v-for="option in registration.form.options.kind"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -1034,7 +1091,7 @@ const deploymentFields = [
                 class="w-full select"
               >
                 <option
-                  v-for="option in page.admin.registration.form.options.isolation_level"
+                  v-for="option in registration.form.options.isolation_level"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -1070,7 +1127,7 @@ const deploymentFields = [
                 class="w-full select"
               >
                 <option
-                  v-for="option in page.admin.registration.form.options.credential_provider"
+                  v-for="option in registration.form.options.credential_provider"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -1137,7 +1194,7 @@ const deploymentFields = [
                 class="w-full select"
               >
                 <option
-                  v-for="option in page.admin.registration.form.options.storage"
+                  v-for="option in registration.form.options.storage"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -1153,18 +1210,18 @@ const deploymentFields = [
                 id="cancel-register-source"
                 type="button"
                 class="btn btn-ghost btn-sm"
-                @click="emit('cancel-register-source', {})"
+                @click="cancelRegisterSource"
               >
                 Cancel
               </button>
             </div>
           </form>
           <p
-            v-if="page.admin.registration.form.error"
+            v-if="registration.form.error"
             id="register-source-error"
             class="mt-2 text-xs text-error"
           >
-            {{ page.admin.registration.form.error }}
+            {{ registration.form.error }}
           </p>
         </section>
 
@@ -1249,7 +1306,7 @@ const deploymentFields = [
                         :id="row.change_action.id"
                         type="button"
                         class="btn btn-ghost btn-xs"
-                        @click="emit('open-change-binding', row.change_action.payload)"
+                        @click="openChangeBinding(row.change_action.payload)"
                       >
                         <span :class="[row.change_action.icon, 'h-3.5 w-3.5']"></span>
                         {{ row.change_action.label }}
@@ -1306,12 +1363,12 @@ const deploymentFields = [
                   </div>
 
                   <div
-                    v-if="page.admin?.binding_form?.binding_id === row.binding_id"
-                    :id="page.admin.binding_form.panel_id"
+                    v-if="bindingForm?.binding_id === row.binding_id"
+                    :id="bindingForm.panel_id"
                     class="border-t border-primary/20 bg-base-100/80 px-3 py-3 xl:col-span-3"
                   >
                     <form
-                      :id="page.admin.binding_form.form_id"
+                      :id="bindingForm.form_id"
                       class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]"
                       @submit.prevent="submitBinding"
                     >
@@ -1330,7 +1387,7 @@ const deploymentFields = [
                             class="w-full select"
                           >
                             <option
-                              v-for="option in page.admin.binding_form.source_options"
+                              v-for="option in bindingForm.source_options"
                               :key="option.value"
                               :value="option.value"
                             >
@@ -1339,11 +1396,11 @@ const deploymentFields = [
                           </select>
                         </CadenceField>
                         <p
-                          v-if="page.admin.binding_form.error"
+                          v-if="bindingForm.error"
                           :id="`change-binding-error-${row.binding_id}`"
                           class="mt-2 text-xs text-error"
                         >
-                          {{ page.admin.binding_form.error }}
+                          {{ bindingForm.error }}
                         </p>
                       </div>
                       <div class="flex items-end gap-2">
@@ -1358,7 +1415,7 @@ const deploymentFields = [
                           :id="`cancel-change-binding-${row.binding_id}`"
                           type="button"
                           class="btn btn-ghost btn-sm"
-                          @click="emit('cancel-change-binding', {})"
+                          @click="cancelChangeBinding"
                         >
                           Cancel
                         </button>

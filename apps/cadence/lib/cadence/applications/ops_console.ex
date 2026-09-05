@@ -34,25 +34,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "ops",
-      purpose: :operations,
-      placement: :ops_workspace,
-      label: "Operations",
-      order: 10,
-      query_id: "cadence.ops.console",
-      path: "/missions/:mission_id/ops",
-      actions: [
-        "validate",
-        "save",
-        "filter",
-        "refresh",
-        "select",
-        "open_data_link",
-        "open_evidence",
-        "set_chart_time_range"
-      ]
-    },
-    %{
       id: "contact_requirement_list",
       purpose: :collection,
       label: "Contact Requirements",
@@ -71,7 +52,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :subject_detail,
       label: "Contact Requirement",
       path: "/missions/:mission_id/ops/requirements/:contact_requirement_id",
-      actions: ["plan", "toggle-opportunity", "create-plan"]
+      actions: ["plan", "create-plan"]
     },
     %{
       id: "contact_requirement_template",
@@ -306,21 +287,21 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :operations,
       label: "Activation Requests",
       path: "/missions/:mission_id/ops/activations",
-      actions: ["review", "decide"]
+      actions: ["decide"]
     },
     %{
       id: "commands",
       purpose: :operations,
       label: "Commands",
       path: "/missions/:mission_id/ops/commands",
-      actions: ~w(filter reset_filters follow_command clear_command_focus)
+      actions: []
     },
     %{
       id: "telemetry_explore",
       purpose: :operations,
       label: "Telemetry Explore",
       path: "/missions/:mission_id/ops/explore",
-      actions: ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]
+      actions: ["apply_filters", "apply_question", "add_to_dashboard"]
     },
     %{
       id: "data_operations",
@@ -355,11 +336,7 @@ defmodule Cadence.Applications.OpsConsole do
       label: "Data Sources",
       path: "/missions/:mission_id/ops/data-sources",
       actions: [
-        "open-register-source",
-        "cancel-register-source",
         "register-source",
-        "open-change-binding",
-        "cancel-change-binding",
         "change-binding",
         "disable-source",
         "enable-source",
@@ -422,19 +399,9 @@ defmodule Cadence.Applications.OpsConsole do
   # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
     "workspace" => [],
-    "ops" => [
-      "validate",
-      "save",
-      "filter",
-      "refresh",
-      "select",
-      "open_data_link",
-      "open_evidence",
-      "set_chart_time_range"
-    ],
     "contact_requirement_list" => [],
     "contact_requirement_new" => [],
-    "contact_requirement_show" => ["toggle-opportunity"],
+    "contact_requirement_show" => [],
     "contact_requirement_template" => [],
     "contact_schedule" => [],
     "contact_plan_show" => [],
@@ -453,96 +420,26 @@ defmodule Cadence.Applications.OpsConsole do
     "dashboard_snapshot" => [],
     "dashboard_diagnostics" => [],
     "fleet_planning" => [],
-    "fleet_planning_new" => ["validate-fleet-run"],
-    "fleet_planning_policy" => ["validate-policy", "validate-grant"],
+    "fleet_planning_new" => [],
+    "fleet_planning_policy" => [],
     "fleet_planning_run" => [],
-    "activation_requests" => ["review"],
-    "commands" => ["filter", "reset_filters", "follow_command", "clear_command_focus"],
-    "telemetry_explore" => [
-      "apply_filters",
-      "apply_question",
-      "add_to_dashboard",
-      "clear_selected_sample"
-    ],
+    "activation_requests" => [],
+    "commands" => [],
+    "telemetry_explore" => [],
     "data_operations" => [],
     "data_operations_manage" => [],
-    "data_sources" => [
-      "open-register-source",
-      "cancel-register-source",
-      "open-change-binding",
-      "cancel-change-binding"
-    ],
+    "data_sources" => [],
     "data_source_registration" => [],
     "data_source_settings" => [],
     "alarms" => [],
     "timeline" => []
   }
 
-  @former_liveview_event_contracts %{
-    "dashboard_show" => ~w(
-      context_search set_context clear_context set_runtime_context resume_live set_time_preset
-      set_chart_time_range shift_time_range zoom_out_time_range time_quick_search time_recents_loaded
-      pause_at_selected_time scrub_replay_to_selection clear_data_selection save_comparison_preset
-      apply_comparison_preset delete_comparison_preset toggle_comparison_inspector
-      close_comparison_inspector request_comparison_review resolve_comparison_review
-      apply_comparison_review_bulk_decision capture_dashboard_health_snapshot toggle_edit
-      layout_changed open_add_widget open_dashboard_sections edit_dashboard_section
-      validate_dashboard_section save_dashboard_section remove_dashboard_section move_dashboard_section
-      open_widget_config open_rename open_versions refresh_publish_readiness set_activity_filter
-      select_activity_event open_review_activity select_review_placement open_diagnostics
-      open_widget_inspector open_historical_workflow_request open_comparison_review_workflow_request
-      open_evidence open_data_link record_historical_workflow_stage record_historical_workflow_group_stage
-      record_historical_workflow_request record_corrected_historical_workflow_request
-      record_late_data_policy_decision apply_revision_decision retry_historical_workflow_job
-      inspect_stale_historical_workflow_replacement_job inspect_missing_historical_workflow_replacement_job
-      requeue_stale_historical_workflow_replacement_job retry_historical_workflow_group_failed_jobs
-      close_panel validate_widget pick_point preview_widget_binding save_widget remove_widget rename
-      archive_dashboard publish_dashboard publish_dashboard_version save_runtime_defaults
-      restore_version_as_draft save_editor review_editor discard_editor reload_editor
-    ),
-    "dashboard_editor" => ~w(
-      context_search set_context clear_context set_runtime_context resume_live set_time_preset
-      set_chart_time_range shift_time_range zoom_out_time_range time_quick_search time_recents_loaded
-      pause_at_selected_time scrub_replay_to_selection clear_data_selection save_comparison_preset
-      apply_comparison_preset delete_comparison_preset toggle_comparison_inspector
-      close_comparison_inspector request_comparison_review resolve_comparison_review
-      apply_comparison_review_bulk_decision capture_dashboard_health_snapshot toggle_edit layout_changed
-      open_add_widget open_dashboard_sections edit_dashboard_section validate_dashboard_section
-      save_dashboard_section remove_dashboard_section move_dashboard_section open_widget_config open_rename
-      open_versions refresh_publish_readiness set_activity_filter select_activity_event open_review_activity
-      select_review_placement open_diagnostics open_widget_inspector open_historical_workflow_request
-      open_comparison_review_workflow_request open_evidence open_data_link record_historical_workflow_stage
-      record_historical_workflow_group_stage record_historical_workflow_request
-      record_corrected_historical_workflow_request record_late_data_policy_decision apply_revision_decision
-      retry_historical_workflow_job inspect_stale_historical_workflow_replacement_job
-      inspect_missing_historical_workflow_replacement_job requeue_stale_historical_workflow_replacement_job
-      retry_historical_workflow_group_failed_jobs close_panel validate_widget pick_point
-      preview_widget_binding save_widget remove_widget rename archive_dashboard publish_dashboard
-      publish_dashboard_version save_runtime_defaults restore_version_as_draft save_editor review_editor
-      discard_editor reload_editor
-    ),
-    "dashboard_activity" => ~w(refresh_publish_readiness publish_version restore_version),
-    "data_operations_manage" => ~w(
-      validate_request record_historical_workflow_request transition_group retry_group request_correction
-    ),
-    "data_source_registration" => ~w(
-      open_register_source cancel_register_source register_source open_change_binding cancel_change_binding
-      change_binding disable_source enable_source reconcile_tsdb_backend deprovision_tsdb_backend
-      provision_tsdb_backend probe_source rotate_source_credential retry_deployment_run requeue_deployment_run
-    ),
-    "data_source_settings" => ~w(
-      open_register_source cancel_register_source register_source open_change_binding cancel_change_binding
-      change_binding disable_source enable_source reconcile_tsdb_backend deprovision_tsdb_backend
-      provision_tsdb_backend probe_source rotate_source_credential retry_deployment_run requeue_deployment_run
-    )
-  }
-
   @deep_route_interaction_ledger %{
     "dashboard_show" => %{
       host_actions: [],
       navigation: ["open_dashboard_activity", "open_dashboard_editor", "open_dashboard_settings"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["dashboard_show"]
+      phoenix_events: []
     },
     "dashboard_editor" => %{
       host_actions:
@@ -551,20 +448,17 @@ defmodule Cadence.Applications.OpsConsole do
           & &1
         ),
       navigation: ["open_dashboard_activity", "open_dashboard_settings"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["dashboard_editor"]
+      phoenix_events: []
     },
     "dashboard_activity" => %{
       host_actions: ["publish_version", "restore_version"],
       navigation: ["open_dashboard_viewer", "open_dashboard_editor"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["dashboard_activity"]
+      phoenix_events: []
     },
     "data_source_registration" => %{
       host_actions: ["register-source"],
       navigation: ["open_data_sources"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["data_source_registration"]
+      phoenix_events: []
     },
     "data_source_settings" => %{
       host_actions: [
@@ -580,8 +474,7 @@ defmodule Cadence.Applications.OpsConsole do
         "requeue-deployment-run"
       ],
       navigation: ["open_data_sources", "open_data_source_settings"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["data_source_settings"]
+      phoenix_events: []
     },
     "data_operations_manage" => %{
       host_actions: [
@@ -592,8 +485,7 @@ defmodule Cadence.Applications.OpsConsole do
         "request-correction"
       ],
       navigation: ["open_data_operations"],
-      phoenix_events: [],
-      former_liveview_events: @former_liveview_event_contracts["data_operations_manage"]
+      phoenix_events: []
     }
   }
 
@@ -618,9 +510,6 @@ defmodule Cadence.Applications.OpsConsole do
 
   @spec deep_route_interaction_ledger() :: %{binary() => map()}
   def deep_route_interaction_ledger, do: @deep_route_interaction_ledger
-
-  @spec former_liveview_event_contracts() :: %{binary() => [binary()]}
-  def former_liveview_event_contracts, do: @former_liveview_event_contracts
 
   @spec surface_query_contract(binary()) ::
           {:ok, %{subject_param: binary() | nil, query_params: [binary()]}} | :error
@@ -726,7 +615,7 @@ defmodule Cadence.Applications.OpsConsole do
         version: @identity.surface_version
       },
       actions: spec.actions,
-      refresh: if(spec.id in ["workspace", "ops"], do: :static, else: :after_action),
+      refresh: if(spec.id == "workspace", do: :static, else: :after_action),
       renderer: {:trusted, "cadence.ops.console"}
     }
   end

@@ -13,39 +13,29 @@ defmodule Cadence.Applications.OpsConsoleTest do
            |> Enum.map(&{&1.surface_id, &1.placement, &1.data_contract}) == [
              {"workspace", :application_workspace,
               %{query_id: "cadence.ops.workspace", version: 1}},
-             {"ops", :ops_workspace, %{query_id: "cadence.ops.console", version: 1}}
+             {"contact_requirement_list", :ops_workspace,
+              %{query_id: "cadence.ops.contact_requirement_list", version: 1}}
            ]
 
-    assert Enum.at(definition.surfaces, 1).actions == [
-             "validate",
-             "save",
-             "filter",
-             "refresh",
-             "select",
-             "open_data_link",
-             "open_evidence",
-             "set_chart_time_range"
-           ]
+    assert Enum.at(definition.surfaces, 1).actions == []
 
-    assert length(definition.surfaces) == 36
-    assert length(definition.actions) == 103
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 35
+    assert length(definition.surfaces) == 35
+    assert length(definition.actions) == 89
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 34
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
 
-    assert {:residual, residual_count} = OpsConsole.route_action_completion()
-    assert residual_count > 0
+    assert OpsConsole.route_action_completion() == {:complete, 0}
   end
 
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 36
+    assert length(contributions) == 35
 
-    assert Enum.take(contributions, 2) |> Enum.map(&ReleaseContribution.key/1) == [
-             {"ops_console", 1, "workspace", 1},
-             {"ops_console", 1, "ops", 1}
+    assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
+             {"ops_console", 1, "workspace", 1}
            ]
 
     assert Enum.all?(contributions, fn contribution ->
@@ -129,11 +119,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
              end
            )
 
-    assert OpsConsole.former_liveview_event_contracts()["dashboard_show"] != []
-    assert OpsConsole.former_liveview_event_contracts()["data_source_settings"] != []
-
-    assert {:residual, pending_count} = OpsConsole.route_action_completion()
-    assert pending_count > 0
+    assert OpsConsole.route_action_completion() == {:complete, 0}
 
     Enum.each(OpsConsole.deep_route_interaction_ledger(), fn {surface_id, ledger} ->
       surface = Enum.find(OpsConsole.definition().surfaces, &(&1.surface_id == surface_id))
@@ -161,24 +147,12 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end) == [
              {"workspace", :overview, :mission, :application_workspace, "cadence.ops.workspace",
               []},
-             {"ops", :operations, :mission, :ops_workspace, "cadence.ops.console",
-              [
-                "validate",
-                "save",
-                "filter",
-                "refresh",
-                "select",
-                "open_data_link",
-                "open_evidence",
-                "set_chart_time_range"
-              ]},
              {"contact_requirement_list", :collection, :mission, :ops_workspace,
               "cadence.ops.contact_requirement_list", []},
              {"contact_requirement_new", :configuration, :mission, :ops_workspace,
               "cadence.ops.contact_requirement_new", ["validate", "save"]},
              {"contact_requirement_show", :subject_detail, :mission, :ops_workspace,
-              "cadence.ops.contact_requirement_show",
-              ["plan", "toggle-opportunity", "create-plan"]},
+              "cadence.ops.contact_requirement_show", ["plan", "create-plan"]},
              {"contact_requirement_template", :configuration, :mission, :ops_workspace,
               "cadence.ops.contact_requirement_template",
               [
@@ -270,12 +244,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"fleet_planning_run", :subject_detail, :mission, :ops_workspace,
               "cadence.ops.fleet_planning_run", ["refresh-fleet-run", "repair-fleet-run"]},
              {"activation_requests", :operations, :mission, :ops_workspace,
-              "cadence.ops.activation_requests", ["review", "decide"]},
-             {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands",
-              ["filter", "reset_filters", "follow_command", "clear_command_focus"]},
+              "cadence.ops.activation_requests", ["decide"]},
+             {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
               "cadence.ops.telemetry_explore",
-              ["apply_filters", "apply_question", "add_to_dashboard", "clear_selected_sample"]},
+              ["apply_filters", "apply_question", "add_to_dashboard"]},
              {"data_operations", :operations, :mission, :ops_workspace,
               "cadence.ops.data_operations",
               [
@@ -297,11 +270,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [
-                "open-register-source",
-                "cancel-register-source",
                 "register-source",
-                "open-change-binding",
-                "cancel-change-binding",
                 "change-binding",
                 "disable-source",
                 "enable-source",

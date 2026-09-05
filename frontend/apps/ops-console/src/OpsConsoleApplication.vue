@@ -14,12 +14,16 @@ const error = ref<string>();
 const actionPending = ref(false);
 const actionNotice = ref<string>();
 let loadGeneration = 0;
+let actionGeneration = 0;
 
 const draftPreservingActions = new Set([
   "validate",
   "validate-template",
   "validate-settings",
   "validate-request",
+  "validate-fleet-run",
+  "validate-policy",
+  "validate-grant",
   "filter",
   "reset_filters",
   "filter_dashboards",
@@ -46,6 +50,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("cadence:ops-event", onOpsEvent);
+  loadGeneration += 1;
+  actionGeneration += 1;
 });
 
 async function loadSurface(): Promise<void> {
@@ -87,6 +93,7 @@ async function onOpsEvent(event: Event): Promise<void> {
 async function executeAction(actionId: string, input: unknown): Promise<void> {
   if (actionPending.value) return;
 
+  const generation = ++actionGeneration;
   actionPending.value = true;
   actionNotice.value = undefined;
   error.value = undefined;
@@ -95,11 +102,14 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
     const receipt = await props.bridge.execute({
       applicationKey: props.application.applicationKey,
       applicationVersion: props.application.applicationVersion,
+      surfaceId: props.surface.surfaceId,
+      surfaceVersion: 1,
       actionId,
       input: actionInput(input),
       context: props.context,
     });
-    assertCompletedReceipt(receipt);
+    if (generation !== actionGeneration) return;
+    assertCompletedReceipt(receipt, actionId);
 
     if (draftPreservingActions.has(actionId)) {
       if (!presentation.value) throw new Error("The Ops Console presentation is unavailable.");
@@ -126,15 +136,34 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
     actionNotice.value = `${actionId} completed.`;
     if (!draftPreservingActions.has(actionId)) await loadSurface();
   } catch (reason) {
+    if (generation !== actionGeneration) return;
     error.value = reason instanceof Error ? reason.message : "The Ops Console action failed.";
   } finally {
-    actionPending.value = false;
+    if (generation === actionGeneration) actionPending.value = false;
   }
 }
 
-function assertCompletedReceipt(receipt: HostActionReceipt<unknown>): asserts receipt is HostActionReceipt<unknown> {
-  if (!isRecord(receipt) || !nonEmptyString(receipt.receiptId) || !nonEmptyString(receipt.completedAt)) {
+function assertCompletedReceipt(
+  receipt: HostActionReceipt<unknown>,
+  actionId: string,
+): asserts receipt is HostActionReceipt<unknown> {
+  if (
+    !isRecord(receipt) ||
+    !nonEmptyString(receipt.receiptId) ||
+    !nonEmptyString(receipt.completedAt) ||
+    !("result" in receipt)
+  ) {
     throw new Error("Phoenix did not return a completed action receipt.");
+  }
+
+  const result = receipt.result;
+  if (!isRecord(result)) return;
+
+  if (
+    ("surfaceId" in result && result.surfaceId !== props.surface.surfaceId) ||
+    ("actionId" in result && result.actionId !== actionId)
+  ) {
+    throw new Error("Phoenix returned an action receipt for a different Ops surface.");
   }
 }
 
@@ -142,17 +171,25 @@ function navigationHref(result: unknown): string | undefined {
   if (!isRecord(result)) return undefined;
 
   const navigation = result.navigation ?? result.navigate;
-  const candidate = typeof navigation === "string"
-    ? navigation
-    : isRecord(navigation)
-      ? navigation.href ?? navigation.path
-      : undefined;
+  const candidate =
+    typeof navigation === "string"
+      ? navigation
+      : isRecord(navigation)
+        ? (navigation.href ?? navigation.path)
+        : undefined;
 
   if (!nonEmptyString(candidate)) return undefined;
 
   try {
     const url = new URL(candidate, window.location.origin);
-    if (url.origin !== window.location.origin || !url.pathname.startsWith("/")) return undefined;
+    if (
+      url.origin !== window.location.origin ||
+      url.username !== "" ||
+      url.password !== "" ||
+      !url.pathname.startsWith("/")
+    ) {
+      return undefined;
+    }
     return url.href;
   } catch {
     return undefined;

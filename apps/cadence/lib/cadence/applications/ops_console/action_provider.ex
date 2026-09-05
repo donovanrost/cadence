@@ -13,6 +13,7 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
     DataSources,
     FleetPlanning,
     MissionOperations,
+    TelemetryExplore,
     UiInteractions
   }
 
@@ -27,7 +28,8 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
     ContactPlanning,
     FleetPlanning,
     DataSources,
-    MissionOperations
+    MissionOperations,
+    TelemetryExplore
   ]
 
   @binding_list Enum.flat_map(

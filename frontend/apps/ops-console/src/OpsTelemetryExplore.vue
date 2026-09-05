@@ -2,6 +2,7 @@
 import CadenceDefinitionListPanel from "./ui/components/CadenceDefinitionListPanel.vue";
 import CadenceField from "./ui/components/CadenceField.vue";
 import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import { useOpsVue } from "./ops-events";
 import { onBeforeUnmount, reactive, ref, watch } from "vue";
 
 type Row = {
@@ -256,6 +257,8 @@ const props = defineProps<{
   authoring?: Authoring;
 }>();
 
+const { pushEvent } = useOpsVue();
+
 const stringValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value === null || value === undefined) return "";
@@ -299,6 +302,11 @@ const addToDashboardValues = reactive<AddToDashboardValues>(
   addValuesFromServer(props.authoring?.form.values),
 );
 
+const selectedSample = ref(props.selected_sample);
+const selectedSampleStatus = ref(props.page.selected_sample_status);
+const selectedSampleState = ref(props.page.selected_sample_state);
+const selectedSampleId = ref(props.page.selected_sample_id);
+
 watch(
   () => props.filter_form.values,
   (serverValues) => {
@@ -320,13 +328,42 @@ watch(
   { deep: true },
 );
 
+watch(
+  () => props.selected_sample,
+  (serverSample) => {
+    selectedSample.value = serverSample;
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.page.selected_sample_status,
+  (status) => {
+    selectedSampleStatus.value = status;
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.page.selected_sample_state,
+  (state) => {
+    selectedSampleState.value = state;
+  },
+);
+
+watch(
+  () => props.page.selected_sample_id,
+  (id) => {
+    selectedSampleId.value = id;
+  },
+);
+
 const applyFilters = () => {
-  const values = filterValuesFromServer(filterValues);
-  navigateQuery(values);
+  pushEvent("apply_filters", filterValuesFromServer(filterValues));
 };
 
 const applyQuestion = (question: Question) => {
-  navigateQuery({
+  pushEvent("apply_question", {
     question: stringValue(question.id),
     source_dashboard_id: filterValues.source_dashboard_id,
   });
@@ -337,58 +374,17 @@ const addToDashboard = () => {
     ...addValuesFromServer(addToDashboardValues),
     ...filterValuesFromServer(filterValues),
   };
-
-  const url = new URL(window.location.href);
-  const dashboardPath = url.pathname.replace(
-    /\/ops\/explore$/,
-    `/ops/dashboards/${encodeURIComponent(values.dashboard_id)}/edit`,
-  );
-
-  if (dashboardPath !== url.pathname && values.dashboard_id !== "") {
-    url.pathname = dashboardPath;
-    url.search = new URLSearchParams({
-      candidate_source: "explore",
-      candidate_point_id: values.point_id ?? "",
-      candidate_title: values.title,
-      candidate_widget_type: values.widget_type,
-      candidate_spacecraft_id: values.spacecraft_id ?? "",
-      candidate_realm: values.realm ?? "",
-      candidate_data_view: values.selection_view ?? "",
-      candidate_data_source_id: values.data_source_id ?? "",
-      candidate_source_binding_id: values.source_binding_id ?? "",
-      time_mode: values.time_mode ?? "",
-      time_axis: values.time_axis ?? "",
-      from: values.from ?? "",
-      to: values.to ?? "",
-      replay_run_id: values.replay_run_id ?? "",
-      data_view: values.selection_view ?? "",
-      realm: values.realm ?? "",
-      data_source_id: values.data_source_id ?? "",
-      source_binding_id: values.source_binding_id ?? "",
-      scope_kind: values.scope_kind ?? "",
-      scope_id: values.scope_id ?? "",
-      limit_mode: values.limit_mode ?? "",
-    }).toString();
-    window.location.assign(url.toString());
-  }
+  pushEvent("add_to_dashboard", values);
 };
 
 const clearSelectedSample = () => {
-  const { sample_id: _sampleId, selected_time: _selectedTime, source_dashboard_id: _sourceDashboardId, ...values } =
-    filterValuesFromServer(filterValues);
-  navigateQuery(values);
-};
-
-const navigateQuery = (values: Record<string, string>) => {
-  const url = new URL(window.location.href);
-  const query = new URLSearchParams();
-
-  Object.entries(values).forEach(([key, value]) => {
-    if (value !== "") query.set(key, value);
-  });
-
-  url.search = query.toString();
-  window.location.assign(url.toString());
+  filterValues.sample_id = "";
+  filterValues.selected_time = "";
+  filterValues.source_dashboard_id = "";
+  selectedSample.value = null;
+  selectedSampleStatus.value = null;
+  selectedSampleState.value = "none";
+  selectedSampleId.value = "";
 };
 
 const clipboardFeedback = ref<"" | "copied" | "failed">("");
@@ -457,8 +453,8 @@ onBeforeUnmount(() => {
     :data-explore-source-binding="page.source_binding_id"
     :data-explore-logical-source="page.logical_source"
     :data-explore-realm="page.source_realm"
-    :data-explore-selected-sample-state="page.selected_sample_state"
-    :data-explore-selected-sample-id="page.selected_sample_id"
+    :data-explore-selected-sample-state="selectedSampleState"
+    :data-explore-selected-sample-id="selectedSampleId"
   >
     <div class="flex-1 min-w-0 overflow-y-auto">
       <div class="mx-auto max-w-7xl px-6 py-8">
@@ -874,20 +870,20 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          v-if="page.selected_sample_status"
-          :id="page.selected_sample_status.id"
+          v-if="selectedSampleStatus"
+          :id="selectedSampleStatus.id"
           class="mt-3 flex items-start gap-3 border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
-          :data-explore-selected-sample-state="page.selected_sample_status.state"
-          :data-explore-selected-sample-id="page.selected_sample_status.sample_id"
+          :data-explore-selected-sample-state="selectedSampleStatus.state"
+          :data-explore-selected-sample-id="selectedSampleStatus.sample_id"
         >
           <span
-            :class="[page.selected_sample_status.icon, 'mt-0.5 h-4 w-4 shrink-0']"
+            :class="[selectedSampleStatus.icon, 'mt-0.5 h-4 w-4 shrink-0']"
             aria-hidden="true"
           ></span>
           <div class="min-w-0">
-            <p class="font-semibold">{{ page.selected_sample_status.heading }}</p>
+            <p class="font-semibold">{{ selectedSampleStatus.heading }}</p>
             <p class="mt-1 break-all font-mono text-xs text-base-content/60">
-              {{ page.selected_sample_status.sample_id }}
+              {{ selectedSampleStatus.sample_id }}
             </p>
           </div>
         </div>
@@ -996,33 +992,33 @@ onBeforeUnmount(() => {
             </section>
 
             <section
-              v-if="selected_sample"
-              :id="selected_sample.id"
+              v-if="selectedSample"
+              :id="selectedSample.id"
               class="border border-primary/30 bg-base-100/50 p-4"
-              :data-explore-selected-sample-card="selected_sample.sample_id"
+              :data-explore-selected-sample-card="selectedSample.sample_id"
             >
               <div class="flex items-center justify-between gap-3">
                 <h2 class="hud-label">Selected Sample</h2>
                 <div class="flex items-center gap-2">
                   <span class="badge badge-xs badge-outline">{{
-                    selected_sample.validity_state
+                    selectedSample.validity_state
                   }}</span>
                   <button
-                    :id="selected_sample.clear.id"
+                    :id="selectedSample.clear.id"
                     type="button"
                     class="btn btn-ghost btn-xs"
-                    :aria-label="selected_sample.clear.label"
+                    :aria-label="selectedSample.clear.label"
                     @click="clearSelectedSample"
                   >
                     <span
-                      :class="[selected_sample.clear.icon, 'h-3.5 w-3.5']"
+                      :class="[selectedSample.clear.icon, 'h-3.5 w-3.5']"
                       aria-hidden="true"
                     ></span>
                   </button>
                 </div>
               </div>
               <dl class="mt-3 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-2 text-xs">
-                <template v-for="row in selected_sample.rows" :key="row.label">
+                <template v-for="row in selectedSample.rows" :key="row.label">
                   <dt class="text-base-content/60">{{ row.label }}</dt>
                   <dd
                     class="font-mono text-base-content break-all"
@@ -1032,19 +1028,19 @@ onBeforeUnmount(() => {
                   </dd>
                 </template>
               </dl>
-              <div v-if="selected_sample.dashboard_link" class="mt-3">
+              <div v-if="selectedSample.dashboard_link" class="mt-3">
                 <a
-                  :id="selected_sample.dashboard_link.id"
-                  :href="selected_sample.dashboard_link.href"
+                  :id="selectedSample.dashboard_link.id"
+                  :href="selectedSample.dashboard_link.href"
                   data-phx-link="redirect"
                   data-phx-link-state="push"
                   class="btn btn-xs btn-outline w-full justify-start"
                 >
                   <span
-                    :class="[selected_sample.dashboard_link.icon, 'h-3.5 w-3.5']"
+                    :class="[selectedSample.dashboard_link.icon, 'h-3.5 w-3.5']"
                     aria-hidden="true"
                   ></span>
-                  {{ selected_sample.dashboard_link.label }}
+                  {{ selectedSample.dashboard_link.label }}
                 </a>
               </div>
             </section>
@@ -1133,11 +1129,11 @@ onBeforeUnmount(() => {
                 <p class="mt-1 text-xs text-base-content/60">{{ page.samples_summary }}</p>
               </div>
               <span
-                v-if="page.selected_sample_id"
+                v-if="selectedSampleId"
                 class="badge badge-xs badge-outline font-mono"
-                :data-explore-selected-sample="page.selected_sample_id"
-                :data-explore-selected-sample-state="page.selected_sample_state"
-                >{{ page.selected_sample_id }}</span
+                :data-explore-selected-sample="selectedSampleId"
+                :data-explore-selected-sample-state="selectedSampleState"
+                >{{ selectedSampleId }}</span
               >
             </header>
 

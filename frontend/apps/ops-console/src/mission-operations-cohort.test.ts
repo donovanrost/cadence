@@ -22,7 +22,10 @@ describe("mission operations cohort bindings", () => {
   it("leaves telemetry query-state interactions outside the host binding set", () => {
     expect(telemetrySource).not.toContain("defineEmits");
     expect(telemetrySource).not.toContain("emit(");
-    expect(telemetrySource).toContain("const navigateQuery =");
+    expect(telemetrySource).toContain('pushEvent("apply_filters"');
+    expect(telemetrySource).toContain('pushEvent("apply_question"');
+    expect(telemetrySource).toContain('pushEvent("add_to_dashboard"');
+    expect(telemetrySource).not.toContain("navigateQuery");
     expect(telemetrySource).not.toContain("pendingFilterSubmission");
     expect(telemetrySource).not.toContain("pendingAddSubmission");
   });
