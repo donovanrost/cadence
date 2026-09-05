@@ -2,6 +2,8 @@
 import DashboardCanvas from "./DashboardCanvas.vue";
 import DashboardEditorGuard from "./DashboardEditorGuard.vue";
 
+const emit = defineEmits(["layout_changed"]);
+
 defineProps<{
   page: {
     id: string;
@@ -29,6 +31,6 @@ defineProps<{
       v-if="page.mode === 'edit'"
       :editor_dirty="editor_guard.editor_dirty"
     />
-    <DashboardCanvas :presentation="canvas" />
+    <DashboardCanvas :presentation="canvas" @layout_changed="emit('layout_changed', $event)" />
   </main>
 </template>
