@@ -10,6 +10,15 @@ import CadencePopover from "./ui/reka/CadencePopover.vue";
 type AttrValue = string | boolean | null;
 type Attrs = Record<string, AttrValue>;
 
+type AbsoluteRangePresentation = InstanceType<typeof DashboardAbsoluteRangePane>["$props"];
+type QuickRangesPresentation = InstanceType<
+  typeof DashboardQuickRangeList
+>["$props"]["presentation"];
+type ReplayPresentation = InstanceType<typeof DashboardTimeReplay>["$props"]["presentation"];
+type SelectedDatumPresentation = InstanceType<
+  typeof DashboardSelectedDatumActions
+>["$props"]["presentation"];
+
 type ButtonPresentation = {
   attrs: Attrs;
   icon_class: string;
@@ -42,14 +51,14 @@ type DashboardTimePickerPresentation = {
   time_picker: {
     class: string;
     absolute_range_host: { attrs: Attrs };
-    absolute_range: Record<string, unknown>;
+    absolute_range: AbsoluteRangePresentation;
     quick_ranges_host: { attrs: Attrs };
-    quick_ranges: Record<string, unknown>;
+    quick_ranges: QuickRangesPresentation;
   };
   replay_host: { attrs: Attrs };
-  replay: Record<string, unknown>;
+  replay: ReplayPresentation;
   selected_datum_host: { attrs: Attrs };
-  selected_datum: Record<string, unknown>;
+  selected_datum: SelectedDatumPresentation;
   shift_forward: ButtonPresentation | false;
   zoom_out: ButtonPresentation | false;
 };
@@ -85,7 +94,7 @@ const panelAttrs = computed(() => {
     v-bind="props.presentation.overlay.root.attrs"
   >
     <template #trigger="{ open }">
-      <button v-bind="props.presentation.overlay.trigger.attrs" :aria-expanded="String(open)">
+      <button v-bind="props.presentation.overlay.trigger.attrs" :aria-expanded="open">
         <span v-bind="props.presentation.overlay.trigger.live_indicator.attrs"></span>
         <span v-bind="props.presentation.overlay.trigger.active_range.attrs">
           {{ props.presentation.overlay.trigger.active_range.text }}

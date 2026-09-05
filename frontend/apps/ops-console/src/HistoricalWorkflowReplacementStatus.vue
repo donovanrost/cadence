@@ -267,7 +267,7 @@ defineProps<{ presentation: Presentation }>();
 
     <form
       v-if="presentation.closure_readiness.completion_form.visible"
-      :id="presentation.closure_readiness.completion_form.id"
+      :id="presentation.closure_readiness.completion_form.id ?? undefined"
       :class="presentation.closure_readiness.completion_form.class"
       v-bind="presentation.closure_readiness.completion_form.attrs"
     >

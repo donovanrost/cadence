@@ -143,7 +143,7 @@ defineProps<{ runtime_controls: RuntimeControls }>();
                   :value="option.value"
                   :selected="option.selected"
                   :disabled="option.disabled"
-                  :title="option.title"
+                  :title="option.title ?? undefined"
                 >
                   {{ option.label }}
                 </option>
@@ -171,7 +171,7 @@ defineProps<{ runtime_controls: RuntimeControls }>();
                   :value="option.value"
                   :selected="option.selected"
                   :disabled="option.disabled"
-                  :title="option.title"
+                  :title="option.title ?? undefined"
                 >
                   {{ option.label }}
                 </option>
@@ -199,7 +199,7 @@ defineProps<{ runtime_controls: RuntimeControls }>();
                   :value="option.value"
                   :selected="option.selected"
                   :disabled="option.disabled"
-                  :title="option.title"
+                  :title="option.title ?? undefined"
                 >
                   {{ option.label }}
                 </option>

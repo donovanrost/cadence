@@ -1,14 +1,14 @@
 <script lang="ts">
-import { defineComponent, h, type PropType } from "vue";
+import { defineComponent, h, type DefineComponent, type PropType, type VNode } from "vue";
 import type { PresentationNode } from "../presentation_types";
 
-const CadencePresentationNode = defineComponent({
+const CadencePresentationNode: DefineComponent<{ node: PresentationNode }> = defineComponent({
   name: "CadencePresentationNode",
   props: {
     node: { type: Object as PropType<PresentationNode>, required: true },
   },
-  setup(componentProps) {
-    return () =>
+  setup(componentProps): () => VNode {
+    return (): VNode =>
       h(
         componentProps.node.tag,
         { ...componentProps.node.attrs, key: componentProps.node.key },

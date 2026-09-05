@@ -3,7 +3,13 @@ import type { HostBridge } from "@cadence/plugin-sdk";
 
 export const OPS_EVENT_BRIDGE: InjectionKey<HostBridge> = Symbol("cadence.ops.event-bridge");
 
-type OpsEventPayload = Record<string, unknown> | unknown[] | string | number | boolean | null;
+export type OpsEventPayload =
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null;
 type OpsEventCallback = (payload: OpsEventPayload) => void;
 
 export function useOpsEvent(eventName: string, callback: OpsEventCallback): void {

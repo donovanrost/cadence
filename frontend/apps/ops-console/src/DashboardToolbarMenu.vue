@@ -48,7 +48,7 @@ const panelAttrs = computed(() => {
     v-bind="props.presentation.root.attrs"
   >
     <template #trigger="{ open }">
-      <button v-bind="props.presentation.trigger.attrs" :aria-expanded="String(open)">
+      <button v-bind="props.presentation.trigger.attrs" :aria-expanded="open">
         <span :class="props.presentation.trigger.icon_class"></span>
       </button>
     </template>

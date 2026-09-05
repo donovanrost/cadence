@@ -83,7 +83,7 @@ defineProps<{ presentation: ReplayPresentation }>();
               :value="option.value"
               :selected="option.selected"
               :disabled="option.disabled"
-              :title="option.title"
+              :title="option.title ?? undefined"
             >
               {{ option.label }}
             </option>

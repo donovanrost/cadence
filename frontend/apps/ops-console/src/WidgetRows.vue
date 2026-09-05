@@ -3,42 +3,14 @@ import WidgetDataLinks from "./WidgetDataLinks.vue";
 
 type Attributes = Record<string, string>;
 
+type WidgetDataLinksPresentation = InstanceType<typeof WidgetDataLinks>["$props"]["presentation"];
+
 type BadgePresentation = {
   key?: string;
   tag: "button" | "span";
   class: string;
   attrs: Attributes;
   text: string;
-};
-
-type WidgetDataLinksPresentation = {
-  kind: string;
-  component_id: string;
-  overlay: {
-    id: string;
-    class: string;
-    attrs: Attributes;
-  };
-  trigger: {
-    id: string;
-    type: string;
-    class: string;
-    attrs: Attributes;
-    content: {
-      class: string;
-      title: string;
-      attrs: Attributes;
-      icon: { name: string; class: string };
-    };
-  };
-  panel: {
-    id: string;
-    class: string;
-    hidden: boolean;
-    attrs: Attributes;
-  };
-  body: { class: string };
-  items: unknown[];
 };
 
 type TableCellPresentation = {

@@ -150,7 +150,7 @@ defineProps<{ presentation: Presentation }>();
           {{ presentation.review_origin.header.label.text }}
         </span>
         <a
-          :href="presentation.review_origin.review_link.href"
+          :href="presentation.review_origin.review_link.href ?? undefined"
           :class="presentation.review_origin.review_link.class"
           v-bind="presentation.review_origin.review_link.attrs"
         >
@@ -171,7 +171,7 @@ defineProps<{ presentation: Presentation }>();
         <a
           v-for="link in presentation.review_origin.placements.links"
           :key="link.key"
-          :href="link.href"
+          :href="link.href ?? undefined"
           :class="link.class"
           v-bind="link.attrs"
         >

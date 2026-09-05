@@ -3,6 +3,7 @@ import { computed } from "vue";
 import CadencePopover from "./ui/reka/CadencePopover.vue";
 
 type Attrs = Record<string, string>;
+type ButtonType = "button" | "submit" | "reset";
 
 type TextPresentation = {
   class: string;
@@ -20,7 +21,7 @@ type WidgetWarningPresentation = {
   overlay: { id: string; class: string; attrs: Attrs };
   trigger: {
     id: string;
-    type: string;
+    type: ButtonType;
     class: string;
     attrs: Attrs;
     badge: { class: string; attrs: Attrs; text: string };
@@ -31,7 +32,7 @@ type WidgetWarningPresentation = {
     heading: TextPresentation;
     message: TextPresentation;
     evidence_button: {
-      type: string;
+      type: ButtonType;
       class: string;
       attrs: Attrs;
       icon: { name: string; class: string };
@@ -60,7 +61,7 @@ type WidgetWarningPresentation = {
       heading: TextPresentation;
       rows: Array<{
         key: string;
-        type: string;
+        type: ButtonType;
         class: string;
         attrs: Attrs;
         fields: FieldPresentation[];
@@ -95,7 +96,7 @@ const panelAttrs = computed(() => {
         :type="props.presentation.trigger.type"
         :class="props.presentation.trigger.class"
         v-bind="props.presentation.trigger.attrs"
-        :aria-expanded="String(open)"
+        :aria-expanded="open"
       >
         <span
           :class="props.presentation.trigger.badge.class"

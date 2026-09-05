@@ -7,6 +7,7 @@ import WidgetWarning from "./WidgetWarning.vue";
 
 type Attrs = Record<string, string>;
 type Classes = string | string[];
+type ButtonType = "button" | "submit" | "reset";
 
 type IconPresentation = {
   name: string;
@@ -20,16 +21,15 @@ type BadgePresentation = {
 
 type ButtonPresentation = {
   key?: string;
-  type: string;
+  type: ButtonType;
   class: string;
   attrs: Attrs;
   icon: IconPresentation;
 };
 
-type ChildPresentation = {
-  component_id: string;
-  [key: string]: unknown;
-};
+type WarningPresentation = InstanceType<typeof WidgetWarning>["$props"]["presentation"];
+type QueryPresentation = InstanceType<typeof WidgetQueryDiagnostics>["$props"]["presentation"];
+type DataLinksPresentation = InstanceType<typeof WidgetDataLinks>["$props"]["presentation"];
 
 type SourceBadgePresentation = {
   wrapper: { tag: string; class: string } | null;
@@ -75,7 +75,7 @@ type DashboardWidgetHeaderPresentation = {
       overlay: { id: string; class: string; attrs: Attrs };
       trigger: {
         id: string;
-        type: string;
+        type: ButtonType;
         class: string;
         attrs: Attrs;
         content: { class: string; attrs: Attrs; icon: IconPresentation };
@@ -94,14 +94,14 @@ type DashboardWidgetHeaderPresentation = {
           lifecycle: BadgePresentation | null;
           source: SourceBadgePresentation | null;
           data_management: Array<{ tag: string; class: string; attrs: Attrs; text: string }>;
-          warnings: ChildPresentation[];
+          warnings: WarningPresentation[];
         };
         actions: {
           class: string;
           attrs: Attrs;
-          query: ChildPresentation | null;
+          query: QueryPresentation | null;
           frame_evidence: ButtonPresentation | null;
-          data_links: ChildPresentation | null;
+          data_links: DataLinksPresentation | null;
           inspector: ButtonPresentation | null;
         };
       };
@@ -177,7 +177,7 @@ const detailsPanelAttrs = computed(() => {
             :type="props.presentation.actions.details.trigger.type"
             :class="props.presentation.actions.details.trigger.class"
             v-bind="props.presentation.actions.details.trigger.attrs"
-            :aria-expanded="String(open)"
+            :aria-expanded="open"
           >
             <span
               :class="props.presentation.actions.details.trigger.content.class"

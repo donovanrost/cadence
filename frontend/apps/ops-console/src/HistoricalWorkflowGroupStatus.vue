@@ -300,7 +300,7 @@ defineProps<{ presentation: Presentation }>();
           {{ presentation.review_origin.header.label.text }}
         </span>
         <a
-          :href="presentation.review_origin.review_link.href"
+          :href="presentation.review_origin.review_link.href ?? undefined"
           :class="presentation.review_origin.review_link.class"
           v-bind="presentation.review_origin.review_link.attrs"
         >
@@ -321,7 +321,7 @@ defineProps<{ presentation: Presentation }>();
         <a
           v-for="link in presentation.review_origin.placements.links"
           :key="link.key"
-          :href="link.href"
+          :href="link.href ?? undefined"
           :class="link.class"
           v-bind="link.attrs"
         >
@@ -362,7 +362,7 @@ defineProps<{ presentation: Presentation }>();
           {{ presentation.recovery.review_origin.label.text }}
         </span>
         <a
-          :href="presentation.recovery.review_origin.review_link.href"
+          :href="presentation.recovery.review_origin.review_link.href ?? undefined"
           :class="presentation.recovery.review_origin.review_link.class"
           v-bind="presentation.recovery.review_origin.review_link.attrs"
         >
@@ -424,7 +424,7 @@ defineProps<{ presentation: Presentation }>();
           <a
             v-for="link in presentation.recovery.failed_item_handoffs.links.entries"
             :key="link.key"
-            :href="link.href"
+            :href="link.href ?? undefined"
             :class="link.class"
             v-bind="link.attrs"
           >
@@ -476,7 +476,7 @@ defineProps<{ presentation: Presentation }>();
 
         <form
           v-if="presentation.recovery.execution_plan.advancement_form.visible"
-          :id="presentation.recovery.execution_plan.advancement_form.id"
+          :id="presentation.recovery.execution_plan.advancement_form.id ?? undefined"
           :class="presentation.recovery.execution_plan.advancement_form.class"
           v-bind="presentation.recovery.execution_plan.advancement_form.attrs"
         >
