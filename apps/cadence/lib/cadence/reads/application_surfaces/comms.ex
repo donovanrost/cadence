@@ -309,8 +309,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   end
 
   defp dispatch_surface(_scope, mission, "ground_station_new", _params) do
-    data = ground_station_form_data(mission, :new, nil, ground_station_form_params())
-    trusted_payload("ground_station_new", mission.mission_id, nil, data)
+    with {:ok, data} <-
+           ground_station_form_data(mission, :new, nil, ground_station_form_params()) do
+      trusted_payload("ground_station_new", mission.mission_id, nil, data)
+    end
   end
 
   defp dispatch_surface(_scope, mission, "ground_station_edit", params) do
@@ -2443,7 +2445,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.Comms do
   defp bounded_key?(_key), do: false
 
   defp bounded_json(value) do
-    case JSONBoundary.safe(value) do
+    case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
     end

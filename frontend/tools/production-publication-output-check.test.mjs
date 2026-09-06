@@ -53,7 +53,6 @@ async function publicationFixture() {
   const root = await mkdtemp(join(tmpdir(), "cadence-production-publication-check-"));
   await mkdir(join(root, "host"), { recursive: true });
   await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
-  await writeFile(join(root, "host", "plugin-host.css"), ".host { color: blue; }\n");
   for (const [bundle, remoteName] of [
     ["organization-admin", "cadence_organization_admin"],
     ["mission-catalog", "cadence_mission_catalog"],
@@ -72,7 +71,7 @@ void test("requires an exact host and allowed-remote publication root inventory"
   const root = await publicationFixture();
   try {
     const result = await validateProductionPublication(root);
-    assert.equal(result.host.fileCount, 2);
+    assert.equal(result.host.fileCount, 1);
     assert.equal(result.remotes.length, 6);
 
     await writeFile(

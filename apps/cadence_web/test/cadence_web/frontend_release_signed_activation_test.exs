@@ -703,7 +703,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   end
 
   defp assert_host_catalog!(context, package) do
-    catalog_response = get(context.member_conn, catalog_path(context))
+    catalog_response =
+      get(context.member_conn, catalog_path(context), %{application_key: "telemetry_decom"})
+
     assert catalog_response.status == 200
     catalog = json_response(catalog_response, 200)
     assert [application] = catalog["applications"]
@@ -743,7 +745,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   end
 
   defp assert_host_query_and_action!(context, revision, endpoint, package) do
-    catalog_response = get(context.member_conn, catalog_path(context))
+    catalog_response =
+      get(context.member_conn, catalog_path(context), %{application_key: "telemetry_decom"})
+
     catalog = json_response(catalog_response, 200)
     assert [application] = catalog["applications"]
     assert application["release"]["releaseId"] == package.release["releaseId"]

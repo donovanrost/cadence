@@ -23,7 +23,6 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   alias Cadence.Extensions.{ApplicationContribution, ExtensionPackage}
   alias Cadence.Ids
   alias Cadence.Missions.Mission
-  alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Spacecraft
   alias CadenceWeb.ApplicationReleaseRegistry
 
@@ -164,7 +163,14 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
     case admission do
       {:ok, application} ->
-        {:ok, Map.put(application, :generation_id, release_snapshot.generation_id)}
+        with :ok <-
+               ApplicationInstallations.authorize_surface(
+                 current_scope,
+                 route_context.host_context,
+                 application.surface
+               ) do
+          {:ok, Map.put(application, :generation_id, release_snapshot.generation_id)}
+        end
 
       {:error, reason} ->
         {:error, reason}
@@ -609,7 +615,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          %CatalogContribution{definition: %{application_key: application_key}},
          placement
        ) do
-    ApplicationSurfaces.installation_exempt?(application_key, placement)
+    ApplicationRegistry.platform?(application_key, placement)
   end
 
   defp installation_exempt_contribution?(_contribution, _placement), do: false
@@ -618,7 +624,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          application_key,
          %{host_context: %HostContext{placement: placement}}
        ) do
-    ApplicationSurfaces.installation_exempt?(application_key, placement)
+    ApplicationRegistry.platform?(application_key, placement)
   end
 
   defp collect_contributed_applications(
@@ -694,8 +700,18 @@ defmodule CadenceWeb.ApplicationHostCatalog do
            nil,
            release_snapshot
          ) do
-      {:ok, application} -> {:ok, application_document(application, manifest_url)}
-      {:error, reason} -> {:error, reason}
+      {:ok, application} ->
+        with :ok <-
+               ApplicationInstallations.authorize_surface(
+                 current_scope,
+                 route_context.host_context,
+                 application.surface
+               ) do
+          {:ok, application_document(application, manifest_url)}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -925,6 +941,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
          release_snapshot
        ) do
     installations
+    |> Enum.reject(&ApplicationRegistry.platform?(&1.application_key, host_context.placement))
     |> Enum.reduce_while({:ok, []}, fn installation, {:ok, acc} ->
       case installed_application_document(
              installation,

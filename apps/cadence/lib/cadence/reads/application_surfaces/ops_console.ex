@@ -62,7 +62,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
          {:ok, mission} <- Cadence.Missions.fetch_mission(organization_id, mission_id),
          :ok <- validate_subject(spec.id, organization_id, mission_id, params),
          payload = dispatch(spec.id, scope, mission, params),
-         {:ok, safe_payload} <- JSONBoundary.safe(payload) do
+         {:ok, safe_payload} <- JSONBoundary.safe_trusted_output(payload) do
       {:ok, safe_payload}
     else
       false -> {:error, :unsupported_application_surface_query}
@@ -360,7 +360,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp generic_props("contact_requirement_list", page, _params),
-    do: %{"page" => page, "requirements" => []}
+    do: %{"page" => requirement_list_page(page["mission_id"]), "requirements" => []}
 
   defp generic_props("contact_requirement_new", page, _params),
     do: %{
@@ -460,25 +460,39 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     snapshot =
       Alarms.snapshot(scope.organization_id, mission.mission_id, filters: params)
 
-    rows = Enum.map(snapshot.rows, &alarm_row/1)
-
     envelope("OpsAlarms", %{
-      "page" => page("ops-alarms-page", "Alarms", mission, params),
+      "page" => alarm_page(),
       "summary" => %{
         "id" => "alarm-summary",
         "active_count" => snapshot.summary.active_count,
-        "observed" => iso(snapshot.observed_at),
-        "badges" => []
+        "observed" => "Projection observed #{iso(snapshot.observed_at)}",
+        "badges" => [
+          %{
+            "severity" => "critical",
+            "count" => snapshot.summary.critical_count,
+            "label" => "Critical"
+          },
+          %{
+            "severity" => "warning",
+            "count" => snapshot.summary.warning_count,
+            "label" => "Warning"
+          },
+          %{
+            "severity" => "info",
+            "count" => snapshot.summary.info_count,
+            "label" => "Info"
+          }
+        ]
       },
-      "filters" => filters("alarm-filters", ["severity", "state", "spacecraft_id", "query"]),
-      "reset" => %{"id" => "reset-alarm-filters", "label" => "Reset filters", "payload" => %{}},
+      "filters" => alarm_filters(params, snapshot.spacecraft_ids),
+      "reset" => %{"id" => "alarm-filter-reset", "label" => "Reset filters"},
       "empty" => %{
-        "id" => "alarms-empty",
-        "heading" => "No alarm conditions",
-        "copy" => "No conditions match the mission-scoped filters.",
+        "id" => "alarm-conditions-empty",
+        "heading" => "No matching conditions",
+        "copy" => "The current projection is available; no rows match this filter.",
         "icon" => "hero-check-circle"
       },
-      "alarms" => rows
+      "alarms" => Enum.map(snapshot.rows, &alarm_row(&1, mission.mission_id))
     })
   end
 
@@ -488,7 +502,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
     envelope("OpsTimeline", %{
       "presentation" => timeline_presentation(mission, params),
-      "timeline_events" => Enum.map(events, &timeline_event/1)
+      "timeline_events" => Enum.map(events, &timeline_event(&1, mission.mission_id))
     })
   end
 
@@ -497,23 +511,24 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       Commands.snapshot(scope.organization_id, mission.mission_id, filters: params)
 
     envelope("OpsCommands", %{
-      "page" => page("ops-commands-page", "Commands", mission, params),
+      "page" => command_page(),
       "summary" => %{
         "id" => "command-summary",
-        "active_count" => length(snapshot.rows),
-        "observed" => iso(snapshot.observed_at),
-        "metrics" => []
+        "active_count" => snapshot.summary.active_count,
+        "observed" => "Projection observed #{iso(snapshot.observed_at)}",
+        "metrics" => command_metrics(snapshot.summary)
       },
-      "filters" => filters("command-filters", ["status", "target", "query"]),
-      "reset" => %{"id" => "reset-command-filters", "label" => "Reset filters", "payload" => %{}},
-      "focus_banner" => nil,
+      "filters" => command_filters(params, snapshot.targets),
+      "reset" => %{"id" => "command-filter-reset", "label" => "Reset filters", "payload" => %{}},
+      "focus_banner" => command_focus_banner(params["focus_command_id"]),
       "empty" => %{
-        "id" => "commands-empty",
-        "heading" => "No commands",
-        "copy" => "No command requests match the mission-scoped filters.",
+        "id" => "command-rows-empty",
+        "heading" => "No matching commands",
+        "copy" =>
+          "Empty and unavailable projections are reported separately by the context rail.",
         "icon" => "hero-command-line"
       },
-      "commands" => Enum.map(snapshot.rows, &command_row/1)
+      "commands" => Enum.map(snapshot.rows, &command_row(&1, params["focus_command_id"]))
     })
   end
 
@@ -672,6 +687,195 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "subject" => Map.values(params) |> Enum.find(&is_binary/1)
     }
 
+  defp alarm_page,
+    do: %{
+      "id" => "ops-alarms-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / live conditions",
+        "heading" => "Alarms",
+        "copy" =>
+          "The latest evaluated limit state for every mission point. This surface is read-only; definitions and lifecycle changes remain in the Limits application."
+      },
+      "conditions_id" => "alarm-conditions"
+    }
+
+  defp alarm_filters(params, spacecraft_ids),
+    do: %{
+      "id" => "alarm-filter-form",
+      "values" => %{
+        "severity" => Map.get(params, "severity", "all"),
+        "state" => Map.get(params, "state", "active"),
+        "spacecraft_id" => Map.get(params, "spacecraft_id", "all"),
+        "query" => Map.get(params, "query", "")
+      },
+      "fields" => %{
+        "severity" =>
+          select_field("filters_severity", "filters[severity]", "Severity", [
+            {"All", "all"},
+            {"Critical", "critical"},
+            {"Warning", "warning"},
+            {"Info", "info"},
+            {"Nominal", "nominal"}
+          ]),
+        "state" =>
+          select_field("filters_state", "filters[state]", "State", [
+            {"Active conditions", "active"},
+            {"All states", "all"},
+            {"Nominal only", "nominal"}
+          ]),
+        "spacecraft_id" =>
+          select_field(
+            "filters_spacecraft_id",
+            "filters[spacecraft_id]",
+            "Spacecraft",
+            [{"All spacecraft", "all"} | Enum.map(spacecraft_ids, &{&1, &1})]
+          ),
+        "query" => %{
+          "id" => "filters_query",
+          "name" => "filters[query]",
+          "type" => "search",
+          "label" => "Subsystem or point",
+          "placeholder" => "EPS, voltage, HK.temp",
+          "debounce_ms" => 250
+        }
+      }
+    }
+
+  defp command_page,
+    do: %{
+      "id" => "ops-commands-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / command posture",
+        "heading" => "Commands",
+        "copy" =>
+          "Read-only request, queue, release, transport, and verification state. Command creation, approval, and release remain outside this operator-readable surface."
+      },
+      "rows_id" => "command-rows"
+    }
+
+  defp command_filters(params, targets),
+    do: %{
+      "id" => "command-filter-form",
+      "values" => %{
+        "status" => Map.get(params, "status", "all"),
+        "target" => Map.get(params, "target", "all"),
+        "query" => Map.get(params, "query", "")
+      },
+      "fields" => %{
+        "status" =>
+          select_field("filters_status", "filters[status]", "State", [
+            {"All states", "all"},
+            {"Failed", "failed"},
+            {"Release pending", "release_pending"},
+            {"In flight", "in_flight"},
+            {"Queued", "queued"},
+            {"Released", "released"},
+            {"Approval pending", "approval_pending"}
+          ]),
+        "target" =>
+          select_field(
+            "filters_target",
+            "filters[target]",
+            "Target",
+            [{"All targets", "all"} | Enum.map(targets, &{&1, &1})]
+          ),
+        "query" => %{
+          "id" => "filters_query",
+          "name" => "filters[query]",
+          "type" => "search",
+          "label" => "Command or requester",
+          "placeholder" => "NOOP, request id, endpoint",
+          "debounce_ms" => 250
+        }
+      }
+    }
+
+  defp select_field(id, name, label, options),
+    do: %{
+      "id" => id,
+      "name" => name,
+      "type" => "select",
+      "label" => label,
+      "options" =>
+        Enum.map(options, fn {option_label, value} ->
+          %{"label" => option_label, "value" => value}
+        end)
+    }
+
+  defp command_metrics(summary),
+    do: [
+      command_metric("Queued", summary.queued_count, "text-info"),
+      command_metric("Release pending", summary.release_pending_count, "text-warning"),
+      command_metric("In flight", summary.in_flight_count, "text-info"),
+      command_metric(
+        "Failed",
+        summary.failed_count + summary.indeterminate_count,
+        "text-error"
+      )
+    ]
+
+  defp command_metric(label, value, value_class),
+    do: %{
+      "label" => label,
+      "value" => value,
+      "value_class" => if(value == 0, do: "text-base-content/35", else: value_class)
+    }
+
+  defp command_focus_banner(nil), do: nil
+
+  defp command_focus_banner(command_request_id),
+    do: %{
+      "id" => "followed-command-banner",
+      "command_request_id" => command_request_id,
+      "icon" => "hero-eye",
+      "prefix" => "Following",
+      "suffix" => "across Ops pages",
+      "clear" => %{
+        "id" => "clear-command-focus",
+        "label" => "Stop following",
+        "payload" => %{}
+      }
+    }
+
+  defp requirement_list_page(mission_id),
+    do: %{
+      "id" => "ops-contact-requirements-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / planning horizon",
+        "title" => "Contact Requirements",
+        "description" =>
+          "Declare the mission outcome first. Cadence searches every ready provider route, preserves their evidence, and lets operators commit an exact plan.",
+        "create_action" => %{
+          "id" => "new-contact-requirement-link",
+          "label" => "Declare need",
+          "href" => "/missions/#{mission_id}/ops/requirements/new"
+        }
+      },
+      "journey_steps" => [
+        %{"number" => "01", "label" => "Need", "detail" => "Mission outcome", "active" => true},
+        %{
+          "number" => "02",
+          "label" => "Options",
+          "detail" => "Provider evidence",
+          "active" => false
+        },
+        %{"number" => "03", "label" => "Plan", "detail" => "Exact commitment", "active" => false},
+        %{
+          "number" => "04",
+          "label" => "Reserved",
+          "detail" => "Provider capacity",
+          "active" => false
+        }
+      ],
+      "empty_state" => %{
+        "id" => "contact-requirements-empty",
+        "title" => "No contact needs in this horizon",
+        "description" =>
+          "Start with the outcome the spacecraft needs—data volume, duration, or contact count. Provider details come later."
+      },
+      "list_id" => "contact-requirements"
+    }
+
   defp component_name("contact_requirement_list"), do: "OpsContactRequirementList"
   defp component_name("workspace"), do: "OpsConsoleLanding"
   defp component_name("contact_requirement_new"), do: "OpsContactRequirementNew"
@@ -817,46 +1021,130 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp schedule_props(page),
     do: %{
-      "page" =>
-        Map.merge(page, %{
-          "contact_ledger" => ledger("contacts", "Contact Records"),
-          "opportunities" => ledger("opportunities", "Provider Opportunities"),
-          "reservations" => ledger("reservations", "Reservations"),
-          "opportunity_search" => %{
-            "eyebrow" => "Search",
-            "description" => "Search Phoenix provider read models.",
-            "icon" => "hero-magnifying-glass"
-          }
-        }),
-      "search" =>
-        form("contact-search-form", "Search", [
-          "spacecraft_id",
-          "starts_at",
-          "ends_at",
-          "route_key"
-        ]),
+      "page" => schedule_page(page["mission_id"]),
+      "search" => schedule_search(),
       "readiness" => %{
-        "id" => "contact-readiness",
-        "title" => "Readiness",
+        "id" => "contact-readiness-empty",
+        "title" => "No provider-ready downlink route",
         "findings" => [],
-        "action" => link("readiness-action", "Review", "#")
+        "action" => %{
+          "label" => "Review Comms routing",
+          "icon" => "hero-arrow-right",
+          "href" => "/missions/#{page["mission_id"]}/comms/routing"
+        }
       },
-      "busy" => %{"actions" => %{}},
+      "busy" => %{"keys" => [], "actions" => %{}},
       "contact_records" => [],
       "opportunities" => [],
       "provider_reservations" => []
     }
 
-  defp ledger(id, title),
+  defp schedule_page(mission_id),
     do: %{
-      "id" => "#{id}-ledger",
-      "eyebrow" => title,
-      "title" => title,
-      "description" => "Phoenix-owned mission records.",
-      "rows_id" => "#{id}-rows",
-      "timeline_action" =>
-        link("#{id}-timeline", "Timeline", "/missions/:mission_id/ops/timeline"),
-      "empty" => %{"id" => "#{id}-empty", "icon" => "hero-inbox", "copy" => "No records."}
+      "id" => "ops-contacts-page",
+      "header" => %{
+        "eyebrow" => "Mission operations / contact control",
+        "title" => "Contacts",
+        "description" =>
+          "Inspect scheduled and realized mission contacts, then plan provider capacity without mixing contact state into telemetry charts.",
+        "scope" => %{"label" => "Scope", "value" => "Mission contact truth"},
+        "contact_count" => %{"id" => "contact-record-count", "label" => "Contacts", "value" => 0},
+        "reservation_count" => %{
+          "id" => "provider-reservation-count",
+          "label" => "Reservations",
+          "value" => 0
+        }
+      },
+      "contact_ledger" => %{
+        "id" => "mission-contact-ledger",
+        "eyebrow" => "Canonical contact ledger",
+        "title" => "Scheduled and realized mission contacts",
+        "description" =>
+          "Open a record for lifecycle evidence or hand its exact window to Telemetry Explore.",
+        "timeline_action" => %{
+          "id" => "contacts-open-timeline",
+          "label" => "Mission Timeline",
+          "icon" => "hero-clock",
+          "href" => "/missions/#{mission_id}/ops/timeline?category=operations"
+        },
+        "rows_id" => "contact-records",
+        "empty" => %{
+          "id" => "contact-records-empty",
+          "icon" => "hero-signal-slash",
+          "copy" => "No scheduled or realized contacts for this mission.",
+          "visible" => true
+        }
+      },
+      "opportunity_search" => %{
+        "eyebrow" => "01 / Opportunity search",
+        "description" => "All times are coordinated universal time.",
+        "icon" => "hero-signal"
+      },
+      "opportunities" => %{
+        "eyebrow" => "02 / Provider opportunities",
+        "description" =>
+          "Select a provider-owned window to create a durable reservation attempt.",
+        "count" => %{"id" => "contact-opportunity-count", "value" => 0},
+        "rows_id" => "contact-opportunities",
+        "empty" => %{
+          "id" => "contact-opportunities-empty",
+          "icon" => "hero-magnifying-glass",
+          "copy" => "Search a UTC window to load provider opportunities.",
+          "visible" => true
+        }
+      },
+      "reservations" => %{
+        "eyebrow" => "03 / Reservation ledger",
+        "description" => "Provider truth and Cadence contact state remain visible independently.",
+        "rows_id" => "provider-reservations",
+        "empty" => %{
+          "id" => "provider-reservations-empty",
+          "icon" => "hero-calendar-days",
+          "copy" => "No provider reservations for this mission.",
+          "visible" => true
+        }
+      }
+    }
+
+  defp schedule_search,
+    do: %{
+      "id" => "contact-opportunity-search-form",
+      "values" => %{
+        "spacecraft_id" => "",
+        "route_key" => "",
+        "starts_at" => "",
+        "ends_at" => ""
+      },
+      "fields" => %{
+        "spacecraft" =>
+          select_field("contact-spacecraft", "contact_search[spacecraft_id]", "Spacecraft", []),
+        "route" =>
+          select_field(
+            "contact-route",
+            "contact_search[route_key]",
+            "Downlink route / provider",
+            []
+          ),
+        "starts_at" => %{
+          "id" => "contact-window-start",
+          "name" => "contact_search[starts_at]",
+          "type" => "datetime-local",
+          "label" => "Window starts (UTC)"
+        },
+        "ends_at" => %{
+          "id" => "contact-window-end",
+          "name" => "contact_search[ends_at]",
+          "type" => "datetime-local",
+          "label" => "Window ends (UTC)"
+        }
+      },
+      "submit" => %{
+        "id" => "search-contact-opportunities",
+        "label" => "Search opportunities",
+        "busy" => false,
+        "disabled" => true
+      },
+      "error" => nil
     }
 
   defp plan_props(page),
@@ -1033,18 +1321,100 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp planning_props(page),
     do: %{
-      "page" => page,
+      "page" => %{
+        "id" => "ops-fleet-planning-page",
+        "header" => %{
+          "eyebrow" => "Mission operations / fleet horizon",
+          "title" => "Fleet Planning",
+          "copy" =>
+            "Turn exact mission needs into one explainable provider commitment manifest. Healthy capacity stays quiet; gaps, contested resources, and stale evidence rise here."
+        }
+      },
       "actions" => %{
-        "refresh" => link("refresh-planning", "Refresh", "#"),
-        "policy" => link("planning-policy", "Policy", "#"),
-        "new_run" => link("new-fleet-run", "New run", "#")
+        "refresh" => %{
+          "id" => "refresh-fleet-planning",
+          "icon" => "hero-arrow-path",
+          "label" => "Refresh"
+        },
+        "policy" => %{
+          "id" => "fleet-planning-policy-link",
+          "href" => "/missions/#{page["mission_id"]}/ops/planning/policy",
+          "icon" => "hero-adjustments-horizontal",
+          "label" => "Policy"
+        },
+        "new_run" => %{
+          "id" => "new-fleet-planning-run-link",
+          "href" => "/missions/#{page["mission_id"]}/ops/planning/new",
+          "icon" => "hero-play",
+          "label" => "Plan horizon"
+        }
       },
       "control_metrics" => [],
-      "stopped_policy" => nil,
-      "ledger" => ledger("fleet-runs", "Fleet runs"),
-      "journey" => journey(),
-      "recurring_demand" => %{"items" => []},
+      "stopped_policy" => %{
+        "id" => "fleet-planning-policy-required",
+        "eyebrow" => "Planning is intentionally stopped",
+        "title" => "Approve a fleet policy before searching providers.",
+        "copy" =>
+          "The policy fixes horizon, concurrency, resource, budget, repair, and automation boundaries.",
+        "action" => %{
+          "id" => "configure-fleet-planning-policy",
+          "href" => "/missions/#{page["mission_id"]}/ops/planning/policy",
+          "label" => "Configure policy"
+        }
+      },
+      "ledger" => %{
+        "eyebrow" => "Run ledger",
+        "copy" => "Immutable inputs, durable checkpoints, and ordinary candidate Plans.",
+        "count" => 0,
+        "count_label" => "0 runs",
+        "runs_id" => "fleet-planning-runs",
+        "stream_empty_id" => "fleet-planning-runs-stream-empty",
+        "empty" => %{
+          "id" => "fleet-planning-runs-empty",
+          "icon" => "hero-chart-bar-square",
+          "title" => "No fleet horizon has been planned",
+          "copy" =>
+            "Start with a bounded UTC horizon. Cadence will materialize recurring needs, search ready provider routes, and retain every decision."
+        }
+      },
+      "journey" => planning_journey(),
+      "recurring_demand" => %{
+        "id" => "fleet-planning-recurring-demand-panel",
+        "eyebrow" => "Recurring demand",
+        "copy" =>
+          "Templates generate ordinary Requirements. They do not bypass the planning or approval journey.",
+        "action" => %{
+          "id" => "requirement-templates-link",
+          "href" => "/missions/#{page["mission_id"]}/ops/requirement-templates",
+          "label" => "Manage templates",
+          "icon" => "hero-arrow-right"
+        }
+      },
       "fleet_runs" => []
+    }
+
+  defp planning_journey,
+    do: %{
+      "id" => "fleet-planning-journey",
+      "eyebrow" => "Operating loop",
+      "steps" =>
+        Enum.map(
+          [
+            {"01", "Demand", "Requirements and recurring templates"},
+            {"02", "Search", "Provider-owned opportunities"},
+            {"03", "Allocate", "Hard constraints before score"},
+            {"04", "Commit", "Exact Plan approval and execution"},
+            {"05", "Repair", "Preserve uncertain and successful work"}
+          ],
+          fn {number, label, detail} ->
+            %{
+              "id" => "fleet-planning-journey-#{number}",
+              "number" => number,
+              "label" => label,
+              "detail" => detail
+            }
+          end
+        )
     }
 
   defp fleet_new_props(page),
@@ -1166,17 +1536,60 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "automation_actions" => []
     }
 
-  defp activation_props(page),
+  defp activation_props(_page),
     do: %{
-      "page" => page,
+      "page" => %{
+        "id" => "activation-approval-inbox",
+        "heading" => "Activation approvals",
+        "subtitle" => "Review governed mission changes before Control applies them to runtime.",
+        "list" => %{
+          "card_id" => "activation-approval-list",
+          "id" => "activation-requests",
+          "empty" => %{
+            "id" => "activation-requests-empty",
+            "copy" => "No activation requests are waiting for approval."
+          }
+        }
+      },
       "selected" => nil,
-      "form" => form("activation-decision-form", "Decide", ["request_id", "reason"]),
+      "form" => %{
+        "panel_id" => "activation-decision-panel",
+        "id" => "activation-decision-form",
+        "request_id" => %{
+          "id" => "activation_decision_request_id",
+          "name" => "activation_decision[request_id]",
+          "type" => "hidden",
+          "value" => ""
+        },
+        "reason" => %{
+          "id" => "activation_decision_reason",
+          "name" => "activation_decision[reason]",
+          "type" => "textarea",
+          "label" => "Decision rationale",
+          "required" => true,
+          "value" => ""
+        },
+        "actions" => %{
+          "reject" => %{
+            "id" => "reject-activation-request",
+            "name" => "decision",
+            "value" => "rejected",
+            "label" => "Reject"
+          },
+          "approve" => %{
+            "id" => "approve-activation-request",
+            "name" => "decision",
+            "value" => "approved",
+            "label" => "Approve and apply"
+          }
+        }
+      },
       "activation_requests" => []
     }
 
   defp telemetry_props(page, params),
     do: %{
-      "page" => Map.put(page, "point_label", Map.get(params, "point_id", "Telemetry point")),
+      "page" => telemetry_page(page, params),
       "clipboard" => %{
         "button_id" => "telemetry-explore-copy-link",
         "text" => "#",
@@ -1196,31 +1609,122 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "navigation" => %{"back_to_dashboard" => nil},
       "questions" => [],
       "question_briefing" => nil,
-      "filter_form" =>
-        form("telemetry-filter-form", "Apply filters", [
-          "point_id",
-          "spacecraft_id",
-          "data_source_id",
-          "source_binding_id",
-          "from",
-          "to",
-          "limit",
-          "realm"
-        ]),
+      "filter_form" => telemetry_filter_form(params),
       "point" => %{
-        "id" => Map.get(params, "point_id"),
-        "label" => Map.get(params, "point_id", "Telemetry point"),
-        "name" => Map.get(params, "point_id", "Telemetry point"),
-        "unit" => nil,
-        "description" => nil,
-        "options" => []
+        "id" => "telemetry-explore-point-card",
+        "requested_point_id" => Map.get(params, "point_id", ""),
+        "rows" => [],
+        "missing" => false
       },
       "selected_sample" => nil,
-      "source_context" => %{"state" => "unselected", "rows" => []},
+      "source_context" => %{
+        "id" => "telemetry-explore-source-card",
+        "state" => "none",
+        "data_source_id" => Map.get(params, "data_source_id", ""),
+        "source_binding_id" => Map.get(params, "source_binding_id", ""),
+        "logical_source" => Map.get(params, "logical_source", ""),
+        "realm" => Map.get(params, "realm", ""),
+        "matched_data_source_id" => "",
+        "matched_source_binding_id" => "",
+        "rows" => [],
+        "actions" => []
+      },
       "context_rows" => [],
       "diagnostics" => %{"id" => "telemetry-diagnostics", "rows" => []},
       "samples" => []
     }
+
+  defp telemetry_page(page, params) do
+    Map.merge(page, %{
+      "heading" => "Telemetry Explore",
+      "point_label" => Map.get(params, "point_id", "No point selected"),
+      "realm" => Map.get(params, "realm"),
+      "time_mode" => Map.get(params, "time_mode", "latest"),
+      "source_state" => "none",
+      "data_source_id" => Map.get(params, "data_source_id", ""),
+      "source_binding_id" => Map.get(params, "source_binding_id", ""),
+      "logical_source" => Map.get(params, "logical_source", ""),
+      "source_realm" => Map.get(params, "realm", ""),
+      "selected_sample_state" => "none",
+      "selected_sample_id" => Map.get(params, "sample_id", ""),
+      "selected_sample_status" => nil,
+      "samples_summary" => "0 rows",
+      "empty_samples_message" => "No physical samples matched this context."
+    })
+  end
+
+  defp telemetry_filter_form(params) do
+    fields =
+      Map.new(
+        ~w(point_id spacecraft_id time_mode from to order realm logical_source data_source_id source_binding_id selection_view validity_state),
+        fn key -> {key, telemetry_field(key)} end
+      )
+      |> Map.put("limit", telemetry_number_field("limit"))
+
+    %{
+      "id" => "telemetry-explore-filter-form",
+      "values" =>
+        Map.new(
+          ~w(point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id order limit selection_view validity_state realm logical_source data_source_id source_binding_id source_dashboard_id sample_id selected_time question limit_mode),
+          &{&1, Map.get(params, &1, telemetry_default(&1))}
+        ),
+      "fields" => fields,
+      "submit" => %{
+        "id" => "telemetry-explore-apply-filters",
+        "label" => "Load",
+        "icon" => "hero-arrow-path"
+      }
+    }
+  end
+
+  defp telemetry_field(key) when key in ~w(from to) do
+    %{
+      "id" => "explore_#{key}",
+      "name" => "explore[#{key}]",
+      "type" => "text",
+      "label" => telemetry_field_label(key)
+    }
+  end
+
+  defp telemetry_field(key) do
+    %{
+      "id" => "explore_#{key}",
+      "name" => "explore[#{key}]",
+      "type" => "select",
+      "label" => telemetry_field_label(key),
+      "options" => telemetry_field_options(key)
+    }
+  end
+
+  defp telemetry_number_field(key) do
+    %{
+      "id" => "explore_#{key}",
+      "name" => "explore[#{key}]",
+      "type" => "number",
+      "label" => telemetry_field_label(key),
+      "min" => "1",
+      "max" => "1000"
+    }
+  end
+
+  defp telemetry_field_options("time_mode"),
+    do: [%{"label" => "Latest", "value" => "latest"}]
+
+  defp telemetry_field_options("order"),
+    do: [
+      %{"label" => "Newest first", "value" => "desc"},
+      %{"label" => "Oldest first", "value" => "asc"}
+    ]
+
+  defp telemetry_field_options(_key), do: [%{"label" => "All", "value" => ""}]
+
+  defp telemetry_field_label(key),
+    do: key |> String.replace("_", " ") |> String.capitalize()
+
+  defp telemetry_default("time_mode"), do: "latest"
+  defp telemetry_default("order"), do: "desc"
+  defp telemetry_default("limit"), do: "100"
+  defp telemetry_default(_key), do: ""
 
   defp data_operations_props(page),
     do: %{
@@ -1246,58 +1750,182 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       "data_operation_groups" => []
     }
 
-  defp alarm_row(row),
+  defp alarm_row(row, mission_id),
     do: %{
-      "id" => row.id,
+      "id" => row.limit_event_id,
+      "__dom_id" => "alarm-condition-#{row.limit_event_id}",
       "limit_event_id" => row.limit_event_id,
       "severity" => to_string(row.severity),
-      "state" => if(row.active?, do: "active", else: "nominal"),
-      "point" => row.point_name || row.point_id,
-      "context" => row.spacecraft_id,
-      "value" => inspect(row.evaluated_value),
-      "observed" => iso(row.generation_time),
-      "evidence" => nil,
-      "definition" => nil
+      "limit_state" => to_string(row.limit_state),
+      "state_label" => row.limit_state |> to_string() |> String.replace("_", " "),
+      "point_name" => row.point_name || row.point_id,
+      "context" => "#{row.spacecraft_id || "Mission"} · #{row.subsystem} · #{row.point_id}",
+      "value" => %{"label" => "Value", "display" => format_value(row.evaluated_value)},
+      "observed" => %{"label" => "Observed", "display" => iso(row.receipt_time)},
+      "evidence" => %{
+        "id" => "alarm-open-sample-#{row.limit_event_id}",
+        "href" => alarm_evidence_path(mission_id, row),
+        "title" => "Open exact sample and evidence",
+        "icon" => "hero-magnifying-glass",
+        "label" => "Evidence"
+      },
+      "definition" => %{
+        "id" => "alarm-open-definition-#{row.limit_event_id}",
+        "href" => alarm_definition_path(mission_id, row),
+        "title" => "Open limit definition and activation history",
+        "icon" => "hero-document-magnifying-glass",
+        "label" => "Definition"
+      }
     }
 
-  defp timeline_event(event),
+  defp timeline_event(event, mission_id),
     do: %{
-      "id" => event.mission_event_id,
+      "__dom_id" => "mission-event-#{safe_dom_id(event.mission_event_id)}",
       "mission_event_id" => event.mission_event_id,
-      "occurred_at" => iso(event.occurred_at),
-      "category" => to_string(event.category),
-      "kind" => to_string(event.kind),
-      "severity" => to_string(event.severity),
-      "title" => event.title,
-      "summary" => event.summary,
-      "subject" => event.subject_id || event.spacecraft_id
+      "attrs" => %{
+        "href" =>
+          "/missions/#{mission_id}/ops/timeline?#{URI.encode_query(%{"event_id" => event.mission_event_id})}",
+        "data-phx-link" => "patch",
+        "data-phx-link-state" => "push",
+        "class" =>
+          "grid grid-cols-[10rem_7rem_minmax(10rem,1fr)_8rem] gap-3 px-3 py-3 text-xs hover:bg-primary/5",
+        "data-mission-event-kind" => to_string(event.kind),
+        "data-mission-event-category" => to_string(event.category),
+        "data-mission-event-severity" => to_string(event.severity || "none")
+      },
+      "occurred" => %{
+        "attrs" => %{"class" => "font-mono text-base-content/55"},
+        "text" => iso(event.occurred_at)
+      },
+      "category" => %{
+        "attrs" => %{"class" => "font-mono"},
+        "text" => to_string(event.category)
+      },
+      "event" => %{
+        "attrs" => %{"class" => "min-w-0"},
+        "title" => %{
+          "attrs" => %{"class" => "block truncate font-semibold"},
+          "text" => event.title || to_string(event.kind)
+        },
+        "summary" => %{
+          "attrs" => %{"class" => "mt-0.5 block truncate text-base-content/50"},
+          "text" => event.summary || to_string(event.kind)
+        }
+      },
+      "subject" => %{
+        "attrs" => %{"class" => "truncate font-mono text-base-content/55"},
+        "text" => event.subject_id || event.source_record_id || event.spacecraft_id || ""
+      }
     }
 
-  defp command_row(row),
+  defp command_row(row, focus_command_id),
     do: %{
-      "id" => row.id,
+      "id" => row.command_request_id,
+      "__dom_id" => "command-request-#{row.command_request_id}",
       "command_request_id" => row.command_request_id,
       "command_name" => row.command_name,
       "status" => %{
         "value" => to_string(row.status),
-        "label" => to_string(row.status),
-        "class" => "badge-info"
+        "label" => row.status |> to_string() |> String.replace("_", " "),
+        "class" => command_status_class(row.status)
       },
-      "target" => %{"display" => to_string(row.target), "label" => "Target"},
+      "target" => %{"display" => row.target, "label" => "Target"},
       "requester" => %{"display" => row.requested_by, "label" => "Requested by"},
-      "age" => %{"display" => iso(row.occurred_at), "label" => "Occurred"},
+      "age" => %{"display" => command_age(row.requested_at), "label" => "Age"},
       "evidence" => %{
-        "summary" => "Phoenix command projection",
-        "queue_entry" => %{"display" => "", "label" => "Queue"},
-        "release_attempt" => %{"display" => "", "label" => "Release"},
+        "summary" => "Queue, release, and verifier evidence",
+        "queue_entry" =>
+          command_record_detail("Queue entry", row.queue_entry, :command_queue_entry_id),
+        "release_attempt" =>
+          command_record_detail(
+            "Release attempt",
+            row.release_attempt,
+            :command_release_attempt_id
+          ),
         "request_state" => %{"display" => to_string(row.request_state), "label" => "Request"},
         "verification" => %{
-          "display" => to_string(row.verification_state),
-          "label" => "Verification"
+          "display" =>
+            if(row.verification_state,
+              do: to_string(row.verification_state),
+              else: "not required"
+            ),
+          "label" => "Verification",
+          "state" => if(row.verification_state, do: to_string(row.verification_state), else: nil)
         }
       },
-      "focus" => nil
+      "focus" => %{
+        "following" => focus_command_id == row.command_request_id,
+        "label" => "Following",
+        "class" => "badge badge-info badge-outline badge-sm",
+        "action" => %{
+          "id" => "follow-command-#{row.command_request_id}",
+          "label" => "Follow",
+          "icon" => "hero-eye",
+          "payload" => %{"command-request-id" => row.command_request_id}
+        }
+      }
     }
+
+  defp alarm_evidence_path(mission_id, row) do
+    query =
+      %{
+        "point_id" => row.point_id,
+        "spacecraft_id" => row.spacecraft_id,
+        "sample_id" => row.sample_id,
+        "selected_time" => iso(row.receipt_time)
+      }
+      |> compact_query()
+
+    "/missions/#{mission_id}/ops/explore?#{URI.encode_query(query)}"
+  end
+
+  defp alarm_definition_path(mission_id, row) do
+    query =
+      %{
+        "limit_definition_id" => row.limit_definition_id,
+        "limit_definition_version" => row.limit_definition_version,
+        "point_id" => row.point_id
+      }
+      |> compact_query()
+
+    "/missions/#{mission_id}/applications/limits/activity?#{URI.encode_query(query)}"
+  end
+
+  defp compact_query(query),
+    do: query |> Enum.reject(fn {_key, value} -> value in [nil, ""] end) |> Map.new()
+
+  defp command_record_detail(label, nil, _field),
+    do: %{"label" => label, "record_id" => nil, "display" => "—"}
+
+  defp command_record_detail(label, record, field) do
+    record_id = Map.get(record, field)
+    %{"label" => label, "record_id" => record_id, "display" => record_id || "—"}
+  end
+
+  defp command_status_class(:failed), do: "badge badge-error badge-sm"
+  defp command_status_class(:indeterminate), do: "badge badge-error badge-outline badge-sm"
+  defp command_status_class(:release_pending), do: "badge badge-warning badge-sm"
+  defp command_status_class(:in_flight), do: "badge badge-info badge-sm"
+  defp command_status_class(:queued), do: "badge badge-info badge-outline badge-sm"
+  defp command_status_class(:released), do: "badge badge-success badge-outline badge-sm"
+  defp command_status_class(_state), do: "badge badge-ghost badge-sm"
+
+  defp command_age(nil), do: "unknown"
+
+  defp command_age(%DateTime{} = requested_at) do
+    seconds = max(DateTime.diff(DateTime.utc_now(), requested_at, :second), 0)
+
+    cond do
+      seconds < 60 -> "#{seconds}s"
+      seconds < 3_600 -> "#{div(seconds, 60)}m"
+      seconds < 86_400 -> "#{div(seconds, 3_600)}h"
+      true -> "#{div(seconds, 86_400)}d"
+    end
+  end
+
+  defp format_value(value) when is_binary(value), do: value
+  defp format_value(value), do: inspect(value)
+  defp safe_dom_id(value), do: String.replace(value, ~r/[^A-Za-z0-9_-]/, "-")
 
   defp dashboard_row(summary, mission_id, dashboard_author?) do
     dashboard_id = summary.dashboard_id
@@ -1386,33 +2014,153 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp maybe_put_clone(row, _mission_id, _summary, _dashboard_author?),
     do: Map.put(row, "clone", nil)
 
-  defp timeline_presentation(mission, _params),
+  defp timeline_presentation(_mission, params),
     do: %{
       "root" => %{
         "attrs" => %{"id" => "ops-timeline-page", "class" => "min-h-0 flex-1 overflow-y-auto"}
       },
+      "container" => %{
+        "attrs" => %{"class" => "mx-auto max-w-[96rem] space-y-4 px-5 py-6"}
+      },
       "header" => %{
-        "attrs" => %{},
-        "inner" => %{"attrs" => %{}},
+        "attrs" => %{
+          "class" =>
+            "flex flex-col gap-3 border-b border-primary/20 pb-4 lg:flex-row lg:items-end lg:justify-between"
+        },
         "content" => %{"attrs" => %{}},
-        "eyebrow" => %{"attrs" => %{}, "text" => "Mission timeline"},
-        "heading" => %{"attrs" => %{}, "text" => "Timeline"},
-        "description" => %{"attrs" => %{}, "text" => "Phoenix-owned mission events."},
+        "eyebrow" => %{
+          "attrs" => %{"class" => "hud-label"},
+          "text" => "Observe / Canonical event projection"
+        },
+        "title" => %{
+          "attrs" => %{"class" => "mt-1 text-xl font-semibold tracking-tight"},
+          "text" => "Mission Timeline"
+        },
+        "description" => %{
+          "attrs" => %{"class" => "mt-1 max-w-3xl text-sm text-base-content/60"},
+          "text" =>
+            "Contacts, alarms, commands, source posture, catalog activation, historical repair, and runtime facts in one read-only sequence."
+        },
         "return_link" => nil
       },
-      "filters" =>
-        filters("timeline-filter-form", [
-          "category",
-          "kind",
-          "severity",
-          "spacecraft_id",
-          "from",
-          "to"
-        ]),
-      "body" => %{"id" => "timeline-body"},
-      "selected_event" => nil,
-      "mission_id" => mission.mission_id
+      "filters" => timeline_filters(params),
+      "body" => %{
+        "attrs" => %{
+          "class" => "grid min-h-[40rem] gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]"
+        },
+        "timeline" => %{
+          "section" => %{
+            "attrs" => %{"class" => "border border-base-300 bg-base-100"}
+          },
+          "header" => %{
+            "attrs" => %{
+              "class" =>
+                "grid grid-cols-[10rem_7rem_minmax(10rem,1fr)_8rem] gap-3 border-b border-base-300 bg-base-200/50 px-3 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/45"
+            },
+            "columns" => ["Occurred", "Category", "Event", "Subject"]
+          },
+          "stream" => %{
+            "attrs" => %{"id" => "mission-timeline-events", "class" => "divide-y divide-base-300"},
+            "empty" => %{
+              "attrs" => %{
+                "id" => "mission-timeline-events-empty",
+                "class" => "hidden only:block p-8 text-center text-sm text-base-content/50"
+              },
+              "text" => "No canonical mission events match this context."
+            }
+          }
+        },
+        "detail" => %{
+          "attrs" => %{
+            "id" => "timeline-event-detail",
+            "class" => "border border-base-300 bg-base-200/35 p-4"
+          },
+          "empty" => %{
+            "attrs" => %{
+              "class" => "grid min-h-[20rem] place-items-center text-center"
+            },
+            "content" => %{"attrs" => %{}},
+            "icon" => %{
+              "attrs" => %{"class" => "hero-clock mx-auto h-8 w-8 text-base-content/25"}
+            },
+            "copy" => %{
+              "attrs" => %{"class" => "mt-3 text-sm text-base-content/55"},
+              "text" => "Select an event to inspect its canonical identity and evidence."
+            }
+          },
+          "selected" => nil
+        }
+      }
     }
+
+  defp timeline_filters(params),
+    do: %{
+      "attrs" => %{
+        "id" => "timeline-filter-form",
+        "class" =>
+          "grid gap-3 border border-base-300 bg-base-200/35 p-3 md:grid-cols-3 xl:grid-cols-[10rem_12rem_10rem_minmax(12rem,1fr)_13rem_13rem_auto] xl:items-end"
+      },
+      "values" =>
+        Map.new(~w(category kind severity spacecraft_id from to), fn key ->
+          {key, Map.get(params, key, "")}
+        end),
+      "fields" => [
+        timeline_filter_field("category", "select", "Category", nil, [
+          {"All", ""},
+          {"Operations", "operations"},
+          {"Telemetry", "telemetry"},
+          {"Configuration", "configuration"}
+        ]),
+        timeline_filter_field("kind", "text", "Kind", "telemetry_backfill_failed", []),
+        timeline_filter_field("severity", "select", "Severity", nil, [
+          {"All", ""},
+          {"Critical", "critical"},
+          {"Warning", "warning"},
+          {"Info", "info"}
+        ]),
+        timeline_filter_field("spacecraft_id", "text", "Spacecraft", nil, []),
+        timeline_filter_field("from", "text", "From", nil, []),
+        timeline_filter_field("to", "text", "To", nil, [])
+      ],
+      "submit" => %{
+        "attrs" => %{
+          "id" => "timeline-apply-filters",
+          "type" => "submit",
+          "class" => "btn btn-sm btn-primary"
+        },
+        "icon" => %{"attrs" => %{"class" => "hero-funnel h-4 w-4"}},
+        "text" => "Apply"
+      }
+    }
+
+  defp timeline_filter_field(key, type, label, placeholder, options),
+    do: %{
+      "key" => key,
+      "type" => type,
+      "wrapper" => %{"attrs" => %{"class" => "fieldset mb-3"}},
+      "label" => %{"attrs" => %{}},
+      "label_text" => %{
+        "attrs" => %{"class" => "hud-label block mb-1.5"},
+        "text" => label
+      },
+      "control" => %{
+        "attrs" =>
+          %{
+            "id" => "timeline_#{key}",
+            "name" => "timeline[#{key}]",
+            "class" => if(type == "select", do: "w-full select", else: "w-full input")
+          }
+          |> maybe_put_map("type", if(type == "select", do: nil, else: type))
+          |> maybe_put_map("placeholder", placeholder)
+      },
+      "options" =>
+        Enum.map(options, fn {option_label, value} ->
+          %{"label" => option_label, "value" => value}
+        end)
+    }
+
+  defp maybe_put_map(map, _key, nil), do: map
+  defp maybe_put_map(map, key, value), do: Map.put(map, key, value)
 
   defp iso(%DateTime{} = value), do: DateTime.to_iso8601(value)
   defp iso(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)

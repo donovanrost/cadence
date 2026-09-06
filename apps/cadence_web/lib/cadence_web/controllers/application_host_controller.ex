@@ -306,11 +306,15 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp build_catalog(conn, current_scope, route_context, params, now) do
+    # These artifacts are served by this request's origin. The endpoint URL may
+    # use a different hostname or port, which would require cross-origin access.
+    request_origin = %URI{scheme: Atom.to_string(conn.scheme), host: conn.host, port: conn.port}
+
     opts = [
       session_id: conn.assigns.application_host_session_id,
       csrf_token: get_csrf_token(),
       bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
-      manifest_url: fn manifest_path -> unverified_url(conn, manifest_path) end,
+      manifest_url: fn manifest_path -> unverified_url(request_origin, manifest_path) end,
       now: now
     ]
 

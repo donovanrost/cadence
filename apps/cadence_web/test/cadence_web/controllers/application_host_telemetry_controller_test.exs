@@ -18,9 +18,12 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
     conn: _conn
   } do
     context = telemetry_context()
-    {_catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
+    member_conn = %{context.member_conn | host: "localhost", port: 4001}
+    {_catalog_conn, catalog} = fetch_catalog(member_conn, context)
 
-    assert [application] = catalog["applications"]
+    assert application =
+             Enum.find(catalog["applications"], &(&1["applicationKey"] == "telemetry_decom"))
+
     assert application["applicationKey"] == "telemetry_decom"
     assert application["applicationVersion"] == 1
     assert application["surface"]["surfaceId"] == "packet_bindings"
@@ -38,7 +41,7 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
              "releaseId" => "telemetry-decom-v1",
              "remoteName" => "cadence_telemetry_decom",
              "manifestUrl" =>
-               "http://localhost:4101/assets/application-host/telemetry-decom/mf-manifest.json",
+               "http://localhost:4001/assets/application-host/telemetry-decom/mf-manifest.json",
              "exposedModule" => "./Application"
            }
   end

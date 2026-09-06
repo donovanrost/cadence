@@ -1128,6 +1128,14 @@
   ],
   "local_fallbacks": [
     {
+      "component": "MissionApplicationManagement",
+      "reason": "Optional application lifecycle management must remain available without a remote release."
+    },
+    {
+      "component": "SpacecraftApplicationManagement",
+      "reason": "Optional application lifecycle management must remain available without a remote release."
+    },
+    {
       "component": "AuthLayoutBrand",
       "reason": "Pre-authentication branding remains in the Phoenix auth layout."
     },

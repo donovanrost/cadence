@@ -234,7 +234,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.Spacecraft do
   end
 
   defp profile_new_presentation(mission) do
-    definitions = ExtensionCatalog.available_applications_for_scope(:mission)
+    definitions =
+      ExtensionCatalog.available_applications_for_scope(:mission)
+      |> Enum.filter(&(&1.installation_policy == :optional))
 
     %{
       "page" => %{

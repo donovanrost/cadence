@@ -54,7 +54,7 @@ void test("Phoenix publication emits only the host runtime and no mutable fallba
     assert.equal(result.code, 0, result.stderr);
     assert.equal(await lstat(join(output, "index.html")).catch(() => null), null);
     assert.notEqual(await lstat(join(output, "host.js")).catch(() => null), null);
-    assert.notEqual(await lstat(join(output, "plugin-host.css")).catch(() => null), null);
+    assert.equal(await lstat(join(output, "plugin-host.css")).catch(() => null), null);
     const source = await readFile(join(output, "host.js"), "utf8");
     for (const forbidden of [
       "http://localhost/",

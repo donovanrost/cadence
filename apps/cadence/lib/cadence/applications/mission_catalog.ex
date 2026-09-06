@@ -272,6 +272,7 @@ defmodule Cadence.Applications.MissionCatalog do
       display_name: "Mission & Catalog",
       description: "Manage missions and the immutable catalog records they use.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:organization, :mission],
       actions: Map.values(@action_specs),

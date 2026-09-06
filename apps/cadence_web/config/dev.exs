@@ -1,5 +1,7 @@
 import Config
 
+config :live_vue, vite_host: "http://127.0.0.1:5173"
+
 config :cadence_web,
   dashboard_engine_source_execution: [
     source_execution_max_concurrency: 4,

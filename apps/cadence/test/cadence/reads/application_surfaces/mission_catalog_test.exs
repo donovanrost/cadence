@@ -46,6 +46,27 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
     assert [%{"slug" => @mission_id}] = data["presentation"]["card"]["rows"]
   end
 
+  test "catalog index supplies the named breadcrumb contract without an installation", %{
+    scope: scope
+  } do
+    {:ok, definition} = Registry.fetch_available("mission_catalog")
+    {:ok, surface} = Registry.fetch_surface(definition, :mission, "catalog_index")
+
+    assert {:ok, %{"data" => %{"presentation" => presentation}}} =
+             ApplicationSurfaces.load(
+               scope,
+               HostContext.mission(@mission_id),
+               "mission_catalog",
+               1,
+               surface
+             )
+
+    breadcrumbs = presentation["header"]["breadcrumbs"]
+    assert breadcrumbs["mission"]["attrs"]["href"] == "/missions/#{@mission_id}"
+    assert is_map(breadcrumbs["separator"]["attrs"])
+    assert breadcrumbs["current"]["text"] == "Catalog"
+  end
+
   test "rejects a cross-organization organization surface", %{scope: scope} do
     {:ok, definition} = Registry.fetch_available("mission_catalog")
     {:ok, surface} = Registry.fetch_surface(definition, :organization, "mission_list")
@@ -60,13 +81,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalogTest do
              )
   end
 
-  test "keeps only the exact installation exemptions", %{scope: scope} do
+  test "derives installation policy from registered platform definitions", %{scope: scope} do
     assert ApplicationSurfaces.organization_installation_exempt?("mission_catalog")
-    assert ApplicationSurfaces.organization_installation_exempt?("organization_admin")
     assert ApplicationSurfaces.installation_exempt?("mission_catalog", :organization)
-    assert ApplicationSurfaces.installation_exempt?("organization_admin", :organization)
-    assert ApplicationSurfaces.installation_exempt?("organization_admin", :user)
-    assert ApplicationSurfaces.installation_exempt?("organization_admin", :admin)
+    assert ApplicationSurfaces.installation_exempt?("mission_catalog", :mission)
+    assert ApplicationSurfaces.installation_exempt?("spacecraft", :spacecraft)
+    assert ApplicationSurfaces.installation_exempt?("comms", :mission)
+    assert ApplicationSurfaces.installation_exempt?("ops_console", :mission)
+    refute ApplicationSurfaces.installation_exempt?("telemetry_decom", :spacecraft)
 
     refute ApplicationSurfaces.installation_exempt?("mission_catalog", :user)
     refute ApplicationSurfaces.installation_exempt?("mission_catalog", :admin)

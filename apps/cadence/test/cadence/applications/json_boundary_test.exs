@@ -36,6 +36,18 @@ defmodule Cadence.Applications.JSONBoundaryTest do
     assert {:error, :depth} = JSONBoundary.validate(nested_map(9))
   end
 
+  test "allows richer Phoenix-owned output without relaxing request admission" do
+    assert {:error, :depth} = JSONBoundary.safe(nested_map(9))
+    assert {:ok, _safe} = JSONBoundary.safe_trusted_output(nested_map(12))
+    assert {:error, :depth} = JSONBoundary.safe_trusted_output(nested_map(13))
+
+    trusted_diagnostics = String.duplicate("d", 4_096)
+
+    assert {:error, :string} = JSONBoundary.safe(trusted_diagnostics)
+    assert {:ok, ^trusted_diagnostics} = JSONBoundary.safe_trusted_output(trusted_diagnostics)
+    assert {:error, :string} = JSONBoundary.safe_trusted_output(trusted_diagnostics <> "d")
+  end
+
   defp nested_map(0), do: %{}
   defp nested_map(depth), do: %{"next" => nested_map(depth - 1)}
 end

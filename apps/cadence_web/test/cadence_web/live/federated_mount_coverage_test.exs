@@ -5,6 +5,8 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
   @live_root Path.join(@web_root, "lib/cadence_web/live")
   @components_root Path.join(@web_root, "lib/cadence_web/components")
   @allowlist_path Path.join(@web_root, "assets/federation-host-owned-surfaces.json")
+  @dev_config_path Path.join(@web_root, "config/dev.exs")
+  @root_layout_path Path.join(@web_root, "lib/cadence_web/components/layouts/root.html.heex")
 
   @ops_route_mounts [
     {"ops_activation_requests_live.ex", "activation_requests"},
@@ -79,8 +81,19 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
     refute vue =~ "location.pathname"
     assert app =~ "MutationObserver"
     assert app =~ "/assets/application-host/host/host.js"
+    assert app =~ "window.location.origin"
     assert app =~ "phx:page-loading-stop"
     assert app =~ "mounted.unmount()"
+  end
+
+  test "development serves the current LiveVue entrypoint through Vite" do
+    dev_config = File.read!(@dev_config_path)
+    root_layout = File.read!(@root_layout_path)
+
+    assert dev_config =~ ~s(config :live_vue, vite_host: "http://127.0.0.1:5173")
+    assert root_layout =~ ~s(<LiveVue.Reload.vite_assets assets={["/js/app.js"]}>)
+    assert root_layout =~ ~s(href={~p"/assets/app.css"})
+    refute root_layout =~ "/css/app.css"
   end
 
   test "non-Ops federated full pages pass descriptors without legacy renderer bindings" do
@@ -132,11 +145,6 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
       {"catalog/catalog_revision_show_live.ex", ~w(catalog_revision_id), []},
       {"catalog/catalog_import_run_show_live.ex", ~w(import_run_id), []},
       {"provider_account_show_live.ex", ~w(provider_account_id), []},
-      {"spacecraft_applications_live.ex", [],
-       [
-         "mission_id={@current_mission.mission_id}",
-         "spacecraft_id={@current_spacecraft.spacecraft_id}"
-       ]},
       {"comms_ground_station_show_live.ex", ~w(ground_station_id), []},
       {"comms_routing_show_live.ex", ~w(routing_rule_id), []}
     ]

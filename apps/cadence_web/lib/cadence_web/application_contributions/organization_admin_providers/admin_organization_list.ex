@@ -24,12 +24,14 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviders.AdminOr
         layout: %{attrs: raw_attrs(%{"class" => "flex items-end justify-between gap-4"})},
         content: %{attrs: %{}},
         breadcrumbs: %{
-          attrs:
-            raw_attrs(%{
-              "aria-label" => "Breadcrumb",
-              "class" =>
-                "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
-            }),
+          root: %{
+            attrs:
+              raw_attrs(%{
+                "aria-label" => "Breadcrumb",
+                "class" =>
+                  "flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+              })
+          },
           items: [
             %{
               separator: nil,

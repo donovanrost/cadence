@@ -61,6 +61,7 @@ defmodule Cadence.Applications.LegacyCommsOverview do
       display_name: "Communications Overview",
       description: "Review the saved communications setup for a mission.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
       surfaces: [surface()]

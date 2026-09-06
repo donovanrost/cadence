@@ -594,6 +594,7 @@ defmodule Cadence.Applications.OpsConsole do
       display_name: "Ops Console",
       description: "Mission operations, dashboard runtime, evidence, and control surfaces.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
       actions: action_definitions(),

@@ -10,52 +10,20 @@ const props = withDefaults(
 );
 
 const statusTones = {
-  info: "info",
-  ready: "success",
-  attention: "warning",
-  blocked: "error",
-} as const satisfies Record<Status, "info" | "success" | "warning" | "error">;
+  info: "bg-info/20 text-info",
+  ready: "bg-success/20 text-success",
+  attention: "bg-warning/20 text-warning",
+  blocked: "bg-error/20 text-error",
+} as const satisfies Record<Status, string>;
 </script>
 
 <template>
   <span
     :class="[
-      'mission-catalog-status-badge',
-      `mission-catalog-status-badge--${statusTones[props.status]}`,
+      'inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide',
+      statusTones[props.status],
     ]"
   >
     {{ props.label }}
   </span>
 </template>
-
-<style scoped>
-.mission-catalog-status-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.5rem;
-  padding: 0 0.55rem;
-  border: 1px solid currentcolor;
-  border-radius: 999px;
-  font-family: var(--cadence-font-mono);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.mission-catalog-status-badge--info {
-  color: var(--cadence-color-signal);
-}
-
-.mission-catalog-status-badge--success {
-  color: var(--cadence-color-success);
-}
-
-.mission-catalog-status-badge--warning {
-  color: var(--cadence-color-warning);
-}
-
-.mission-catalog-status-badge--error {
-  color: var(--cadence-color-danger);
-}
-</style>

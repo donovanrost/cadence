@@ -23,7 +23,12 @@ liveSocket.connect()
 
 window.liveSocket = liveSocket
 
-const federationHostAsset = "/assets/application-host/host/host.js"
+const federationHostUrl = new URL(
+  "/assets/application-host/host/host.js",
+  window.location.origin
+)
+if (import.meta.env.DEV) federationHostUrl.searchParams.set("v", Date.now().toString())
+const federationHostAsset = federationHostUrl.href
 let federationHostModuleLoad
 const federationHostMounts = new Map()
 const federationHostPending = new Map()

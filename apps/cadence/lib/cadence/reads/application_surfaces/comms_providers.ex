@@ -75,17 +75,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
     bindings = granted_bindings(mission.organization_id, mission.mission_id)
     default_grant_id = bindings |> List.first() |> binding_value(:grant_id, "")
 
-    with {:ok, selected_binding} <- selected_binding(bindings, params, default_grant_id) do
-      form_params = default_params(binding_value(selected_binding, :grant_id, default_grant_id))
+    case selected_binding(bindings, params, default_grant_id) do
+      {:ok, selected_binding} ->
+        provider_new_payload(mission, bindings, selected_binding, default_grant_id)
 
-      data = %{
-        "page" => provider_new_page(mission),
-        "accounts" => accounts_dto(bindings, selected_binding),
-        "notes" => notes_dto(),
-        "form" => provider_form_dto(form_params, mission, bindings)
-      }
-
-      trusted_payload("provider_new", mission.mission_id, nil, data)
+      {:error, :invalid_application_request} = error ->
+        if bindings == [] and not provider_binding_requested?(params),
+          do: provider_new_payload(mission, bindings, nil, default_grant_id),
+          else: error
     end
   end
 
@@ -130,6 +127,24 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
 
   defp dispatch_surface(_scope, _mission, _surface_id, _params),
     do: {:error, :unsupported_application_surface_query}
+
+  defp provider_new_payload(mission, bindings, selected_binding, default_grant_id) do
+    form_params = default_params(binding_value(selected_binding, :grant_id, default_grant_id))
+
+    data = %{
+      "page" => provider_new_page(mission),
+      "accounts" => accounts_dto(bindings, selected_binding),
+      "notes" => notes_dto(),
+      "form" => provider_form_dto(form_params, mission, bindings)
+    }
+
+    trusted_payload("provider_new", mission.mission_id, nil, data)
+  end
+
+  defp provider_binding_requested?(params) do
+    is_binary(params["provider_account_id"]) or
+      is_binary(params["provider_account_grant_id"])
+  end
 
   defp validate_query_identity(surface_id, query_id) do
     if surface_id in ~w(provider_list provider_new provider_show) and
@@ -221,7 +236,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsProviders do
   end
 
   defp bounded_json(value) do
-    case JSONBoundary.safe(value) do
+    case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
     end

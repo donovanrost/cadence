@@ -202,7 +202,10 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
 
     assert catalog["generatedAt"] == @now
-    assert [application] = catalog["applications"]
+
+    assert application =
+             Enum.find(catalog["applications"], &(&1["applicationKey"] == "telemetry_decom"))
+
     assert application["applicationKey"] == "telemetry_decom"
     assert application["surface"]["surfaceId"] == "packet_bindings"
     assert application["release"]["releaseId"] == "telemetry-decom-v1"
@@ -218,7 +221,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              "/missions/#{route_context.mission.mission_id}/spacecraft/#{route_context.spacecraft.spacecraft_id}/applications/telemetry_decom/packet_bindings"
   end
 
-  test "mission catalogs include installed Ops and Spacecraft representatives", %{conn: _conn} do
+  test "mission catalogs include platform modules without installations", %{conn: _conn} do
     {scope, route_context} = installed_mission_representatives_context()
 
     assert {:ok, catalog} =
@@ -233,7 +236,48 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
              )
 
     assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
-             ["comms_overview", "ops_console", "spacecraft"]
+             ["comms", "comms_overview", "mission_catalog", "ops_console", "spacecraft"]
+  end
+
+  test "platform catalog admission does not bypass an optional surface installation" do
+    {scope, route_context} = installed_telemetry_context()
+    host = route_context.host_context
+
+    assert {:ok, %{installation: nil}} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "spacecraft",
+               "telemetry_decom",
+               now: @now
+             )
+
+    assert {:ok, _} = ApplicationInstallations.disable(scope, host, "telemetry_decom")
+
+    assert {:error, :application_installation_disabled} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "spacecraft",
+               "telemetry_decom",
+               now: @now
+             )
+
+    assert {:ok, %{installation: nil}} =
+             ApplicationHostCatalog.admit_application(scope, route_context, "spacecraft", "show",
+               now: @now
+             )
+
+    assert {:ok, _} = ApplicationInstallations.uninstall(scope, host, "telemetry_decom")
+
+    assert {:error, :application_installation_uninstalled} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "spacecraft",
+               "telemetry_decom",
+               now: @now
+             )
   end
 
   test "rejects oversized persisted display data before returning a catalog" do
@@ -408,10 +452,10 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
 
     host_context = HostContext.mission(mission.mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "ops_console")
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "spacecraft")
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
@@ -433,7 +477,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
 
     host_context = HostContext.mission(mission.mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}

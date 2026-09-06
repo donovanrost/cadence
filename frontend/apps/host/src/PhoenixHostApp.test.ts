@@ -94,10 +94,13 @@ const spacecraftCatalog = {
   ],
 } satisfies FrontendApplicationCatalog;
 
-const BoundaryStub = defineComponent({ template: "<div id='remote-boundary-stub'></div>" });
+const BoundaryStub = defineComponent({
+  props: { fallbackHref: { type: String, required: true } },
+  template: "<div id='remote-boundary-stub'></div>",
+});
 
 describe("Phoenix host application", () => {
-  it("mounts the route-selected mission Comms surface and uses Phoenix fallback navigation", async () => {
+  it("mounts the route-selected mission Comms surface with fallback navigation", async () => {
     const fetcher = vi.fn(async () => Response.json(missionCatalog));
     const wrapper = mount(PhoenixHostApp, {
       props: {
@@ -115,9 +118,9 @@ describe("Phoenix host application", () => {
 
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(wrapper.find("#remote-boundary-stub").exists()).toBe(true);
-    expect(wrapper.find("#phoenix-host-home").attributes("href")).toBe("/missions/mission-1/comms");
-    expect(wrapper.text()).toContain("Overview");
-    expect(wrapper.text()).toContain("MISSION CONTEXT");
+    expect(wrapper.findComponent(BoundaryStub).props("fallbackHref")).toBe(
+      "/missions/mission-1/comms",
+    );
     wrapper.unmount();
   });
 
@@ -144,12 +147,9 @@ describe("Phoenix host application", () => {
     await flushPromises();
 
     expect(wrapper.find("#remote-boundary-stub").exists()).toBe(true);
-    expect(wrapper.find("#phoenix-host-home").attributes("href")).toBe(
+    expect(wrapper.findComponent(BoundaryStub).props("fallbackHref")).toBe(
       "/missions/mission-1/spacecraft/spacecraft-1/applications",
     );
-    expect(wrapper.text()).toContain("Packet bindings");
-    expect(wrapper.text()).toContain("SPACECRAFT CONTEXT");
-    expect(wrapper.text()).toContain("FB-1");
     wrapper.unmount();
   });
 

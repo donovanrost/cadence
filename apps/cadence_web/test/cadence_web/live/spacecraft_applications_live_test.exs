@@ -11,10 +11,23 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "authenticated inventory mounts the federated spacecraft applications surface" do
+  test "authenticated inventory mounts host-owned application management without an installation" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
 
     {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+
+    assert_surface(view, mission, spacecraft)
+  end
+
+  test "a forged install event cannot bypass the pinned profile declaration" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+    {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+    render_hook(view, "install", %{"key" => "telemetry_decom"})
+
+    refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
+             scope_id: spacecraft.spacecraft_id,
+             application_key: "telemetry_decom"
+           )
 
     assert_surface(view, mission, spacecraft)
   end
@@ -37,24 +50,16 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/applications")
   end
 
-  defp assert_surface(view, mission, spacecraft) do
+  defp assert_surface(view, _mission, _spacecraft) do
     assert has_element?(view, "#spacecraft-applications-page-component.contents")
 
     vue = Test.get_vue(view, id: "spacecraft-applications-page-component")
-    assert vue.component == "FederatedFullPageSurface"
+    assert vue.component == "SpacecraftApplicationManagement"
     assert vue.id == "spacecraft-applications-page-component"
     assert vue.class == "contents"
     assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "spacecraft",
-             "surface_id" => "applications",
-             "host_scope" => "spacecraft",
-             "mission_id" => mission.mission_id,
-             "spacecraft_id" => spacecraft.spacecraft_id,
-             "query_params" => %{}
-           }
+    assert Enum.sort(Map.keys(vue.handlers)) == ["disable", "install", "uninstall"]
+    assert is_map(vue.props["presentation"])
   end
 
   defp signed_in_spacecraft do

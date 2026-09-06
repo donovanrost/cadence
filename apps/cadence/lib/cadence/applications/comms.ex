@@ -234,6 +234,7 @@ defmodule Cadence.Applications.Comms do
       display_name: "Communications",
       description: "Inspect mission-scoped communications setup and validation.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
       resource_contract: %Cadence.Applications.ResourceContract{},

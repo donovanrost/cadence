@@ -44,9 +44,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
     refute federated_html =~ ~s(src="/assets/application-host/host/host.js")
 
-    assert federated_html =~
-             ~s(<link rel="stylesheet" href="/assets/application-host/host/plugin-host.css">)
-
+    refute federated_html =~ "plugin-host.css"
     assert federated_html =~ ~s(href="/assets/app.css")
 
     {:ok, view, _html} =
@@ -107,6 +105,30 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              json_response(response, 200)
 
     assert presentation["header"]["title"]["text"] == "Missions"
+  end
+
+  test "catalog manifest URLs preserve the browser request origin" do
+    {member_conn, organization, _mission, _scope} = signed_in_scope_and_mission()
+
+    path =
+      "/api/cadence/application-host/v1/catalog?" <>
+        URI.encode_query(%{
+          "application_key" => "mission_catalog",
+          "surface_id" => "mission_list",
+          "scope" => "organization",
+          "organization_id" => organization.organization_id
+        })
+
+    for origin <- [
+          "http://localhost:4001",
+          "http://127.0.0.1:4001",
+          "https://cadence.example:4443"
+        ] do
+      catalog = member_conn |> get(origin <> path) |> json_response(200)
+
+      assert [%{"release" => %{"manifestUrl" => manifest_url}}] = catalog["applications"]
+      assert manifest_url == origin <> "/assets/application-host/mission-catalog/mf-manifest.json"
+    end
   end
 
   test "organization home catalog and query use the authenticated root surface contract" do
@@ -273,7 +295,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              )
   end
 
-  test "the browser-session catalog is server-owned and advertises only Comms overview", %{
+  test "the browser-session catalog advertises platform modules without installations", %{
     conn: _conn
   } do
     {member_conn, organization, mission, _scope} = signed_in_scope_and_mission()
@@ -282,7 +304,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert catalog["schema"] == "cadence.first-party-frontend-catalog.v1"
     assert catalog["hostContract"] == "cadence.application-host.v1"
     assert is_binary(catalog["generatedAt"])
-    assert catalog["applications"] |> length() == 1
+
+    assert Enum.sort(Enum.map(catalog["applications"], & &1["applicationKey"])) ==
+             ["comms", "comms_overview", "mission_catalog", "ops_console", "spacecraft"]
 
     session = catalog["session"]
     assert is_binary(session["sessionId"])
@@ -304,7 +328,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              }
            }
 
-    assert [application] = catalog["applications"]
+    assert application =
+             Enum.find(catalog["applications"], &(&1["applicationKey"] == "comms_overview"))
+
     assert application["applicationKey"] == "comms_overview"
     assert application["applicationVersion"] == 1
     assert application["package"] == %{"packageId" => "cadence.comms_overview", "version" => 1}
@@ -454,7 +480,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     {member_conn, _organization, mission, scope} = signed_in_scope_and_mission()
     host_context = HostContext.mission(mission.mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     {_catalog_conn, catalog} = fetch_catalog(member_conn, mission)
@@ -472,7 +498,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
     host_context = HostContext.mission(mission.mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     {catalog_conn, catalog} = fetch_catalog(member_conn, mission)

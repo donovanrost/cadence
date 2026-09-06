@@ -24,6 +24,21 @@ defmodule CadenceWeb.ApplicationHostLive do
     TableEvents
   }
 
+  defp fetch_installation(scope, host, key) do
+    if ApplicationRegistry.platform?(key, host.placement),
+      do: {:ok, nil},
+      else: ApplicationInstallations.fetch_installed(scope, host, key)
+  end
+
+  defp installation_id(nil), do: nil
+  defp installation_id(installation), do: installation.application_installation_id
+
+  defp surface_query_params(%SurfaceDefinition{renderer: {:trusted, _}}, params) do
+    if Map.has_key?(params, "page"), do: TableEvents.query_params(params), else: %{}
+  end
+
+  defp surface_query_params(_surface, params), do: TableEvents.query_params(params)
+
   @impl true
   def mount(params, _session, socket) do
     host_context = host_context(socket.assigns)
@@ -32,7 +47,7 @@ defmodule CadenceWeb.ApplicationHostLive do
          {:ok, _known_definition} <-
            ExtensionCatalog.fetch_available_application(application_key),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
+           fetch_installation(
              socket.assigns.current_scope,
              host_context,
              application_key
@@ -40,10 +55,16 @@ defmodule CadenceWeb.ApplicationHostLive do
          {:ok, definition} <-
            ExtensionCatalog.fetch_available_application(
              application_key,
-             installation.application_version
+             if(installation, do: installation.application_version, else: :latest)
            ),
          true <- host_context.placement in definition.installable_scopes,
          {:ok, surface} <- requested_surface(definition, host_context, params),
+         :ok <-
+           ApplicationInstallations.authorize_surface(
+             socket.assigns.current_scope,
+             host_context,
+             surface
+           ),
          {:ok, socket} <-
            socket
            |> assign(:application_installation, installation)
@@ -51,10 +72,18 @@ defmodule CadenceWeb.ApplicationHostLive do
            |> assign(:application_definition, definition)
            |> assign(:application_surface_definition, surface)
            |> assign(:application_action_feedback, nil)
-           |> assign(:application_surface_query_params, TableEvents.query_params(params))
+           |> assign(:application_surface_query_params, surface_query_params(surface, params))
            |> assign(
              :application_workspace_surfaces,
-             ApplicationRegistry.workspace_surfaces(definition, host_context.placement)
+             definition
+             |> ApplicationRegistry.workspace_surfaces(host_context.placement)
+             |> Enum.filter(
+               &(ApplicationInstallations.authorize_surface(
+                   socket.assigns.current_scope,
+                   host_context,
+                   &1
+                 ) == :ok)
+             )
            )
            |> mount_renderer(surface) do
       {:ok, socket}
@@ -92,6 +121,8 @@ defmodule CadenceWeb.ApplicationHostLive do
     with :ok <- validate_action_params(raw_action_params),
          true <- action_id in socket.assigns.application_surface_definition.actions,
          request = %ActionRequest{
+           surface_id: socket.assigns.application_surface_definition.surface_id,
+           surface_version: socket.assigns.application_surface_definition.version,
            application_key: socket.assigns.application_definition.application_key,
            application_version: socket.assigns.application_definition.version,
            action_id: action_id,
@@ -180,7 +211,7 @@ defmodule CadenceWeb.ApplicationHostLive do
         id={application_host_dom_id(@application_host_context)}
         data-application-key={@application_definition.application_key}
         data-application-version={@application_definition.version}
-        data-application-installation-id={@application_installation.application_installation_id}
+        data-application-installation-id={installation_id(@application_installation)}
         data-surface-id={@application_surface_definition.surface_id}
         data-surface-version={@application_surface_definition.version}
         data-renderer="federated"
@@ -213,7 +244,7 @@ defmodule CadenceWeb.ApplicationHostLive do
         id={application_host_dom_id(@application_host_context)}
         data-application-key={@application_definition.application_key}
         data-application-version={@application_definition.version}
-        data-application-installation-id={@application_installation.application_installation_id}
+        data-application-installation-id={installation_id(@application_installation)}
         data-surface-id={@application_surface_definition.surface_id}
         data-renderer="declarative"
       >
@@ -427,7 +458,7 @@ defmodule CadenceWeb.ApplicationHostLive do
       dom_id: application_host_dom_id(assigns.application_host_context),
       application_key: assigns.application_definition.application_key,
       application_version: assigns.application_definition.version,
-      application_installation_id: assigns.application_installation.application_installation_id,
+      application_installation_id: installation_id(assigns.application_installation),
       surface_id: assigns.application_surface_definition.surface_id,
       renderer: Atom.to_string(assigns.application_renderer_kind)
     }

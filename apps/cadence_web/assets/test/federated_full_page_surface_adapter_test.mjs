@@ -32,18 +32,23 @@ const {createApp, defineComponent, h, nextTick} = integrationRequire("vue")
 
 const missionId = "mission/with spaces"
 const spacecraftId = "spacecraft?primary"
+const organizationId = "organization/primary"
+const userId = "user?primary"
 const applicationKey = "ops/console"
 const surfaceId = "dashboard directory"
 const filter = new URLSearchParams({application_key: applicationKey, surface_id: surfaceId}).toString()
 const genericUrl = `/api/cadence/application-host/v1/catalog?${filter}`
 const placements = [
-  ["organization", genericUrl],
-  ["user", genericUrl],
-  ["admin", genericUrl],
-    ["mission", `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog?${filter}`],
+  ["organization", `${genericUrl}&scope=organization&organization_id=${encodeURIComponent(organizationId)}`],
+  ["user", `${genericUrl}&scope=user&user_id=${encodeURIComponent(userId)}`],
+  ["admin", `${genericUrl}&scope=admin`],
+  [
+    "mission",
+    `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog?${filter}&scope=mission&${new URLSearchParams({mission_id: missionId})}`,
+  ],
   [
     "spacecraft",
-    `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog?${filter}`,
+    `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog?${filter}&scope=spacecraft&${new URLSearchParams({mission_id: missionId, spacecraft_id: spacecraftId})}`,
   ],
 ]
 
@@ -58,6 +63,8 @@ for (const [hostScope, expectedCatalogUrl] of placements) {
           applicationKey,
           surfaceId,
           hostScope,
+          organizationId: hostScope === "organization" ? organizationId : undefined,
+          userId: hostScope === "user" ? userId : undefined,
           missionId: hostScope === "organization" || hostScope === "user" || hostScope === "admin" ? undefined : missionId,
           spacecraftId: hostScope === "spacecraft" ? spacecraftId : undefined,
           class: "caller-owned-class",
@@ -79,14 +86,24 @@ for (const [hostScope, expectedCatalogUrl] of placements) {
   host.remove()
 }
 
-assert.equal(catalogUrlForPlacement("organization", applicationKey, surfaceId), genericUrl)
+assert.equal(
+  catalogUrlForPlacement(
+    "organization",
+    applicationKey,
+    surfaceId,
+    undefined,
+    undefined,
+    organizationId,
+  ),
+  `${genericUrl}&scope=organization&organization_id=${encodeURIComponent(organizationId)}`,
+)
 assert.equal(
   catalogUrlForPlacement("mission", applicationKey, surfaceId, missionId),
-  `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog?${filter}`,
+  `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog?${filter}&scope=mission&${new URLSearchParams({mission_id: missionId})}`,
 )
 assert.equal(
   catalogUrlForPlacement("spacecraft", applicationKey, surfaceId, missionId, spacecraftId),
-  `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog?${filter}`,
+  `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog?${filter}&scope=spacecraft&${new URLSearchParams({mission_id: missionId, spacecraft_id: spacecraftId})}`,
 )
 assert.equal(catalogUrlForPlacement("mission", applicationKey, surfaceId), genericUrl)
 assert.equal(catalogUrlForPlacement("spacecraft", applicationKey, surfaceId, missionId), genericUrl)

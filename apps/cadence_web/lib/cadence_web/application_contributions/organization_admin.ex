@@ -273,6 +273,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdmin do
       description:
         "Manage organization membership, providers, notifications, and administration.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:organization, :user, :admin],
       actions: action_definitions(),

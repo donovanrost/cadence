@@ -10,6 +10,8 @@ export function catalogUrlForPlacement(
   surfaceId?: string,
   missionId?: string,
   spacecraftId?: string,
+  organizationId?: string,
+  userId?: string,
 ): string {
   if (!applicationKey || !surfaceId) return genericCatalogUrl
 
@@ -21,6 +23,22 @@ export function catalogUrlForPlacement(
         : genericCatalogUrl
 
   const query = new URLSearchParams({application_key: applicationKey, surface_id: surfaceId})
+  if (hostScope === "organization" && organizationId) {
+    query.set("scope", "organization")
+    query.set("organization_id", organizationId)
+  } else if (hostScope === "user" && userId) {
+    query.set("scope", "user")
+    query.set("user_id", userId)
+  } else if (hostScope === "admin") {
+    query.set("scope", "admin")
+  } else if (hostScope === "mission" && missionId) {
+    query.set("scope", "mission")
+    query.set("mission_id", missionId)
+  } else if (hostScope === "spacecraft" && missionId && spacecraftId) {
+    query.set("scope", "spacecraft")
+    query.set("mission_id", missionId)
+    query.set("spacecraft_id", spacecraftId)
+  }
   return `${path}?${query.toString()}`
 }
 
@@ -100,6 +118,8 @@ export const FederatedFullPageSurface = defineComponent({
           surfaceId,
           missionId,
           spacecraftId,
+          organizationId,
+          userId,
         ),
         "data-fallback-href": globalThis.location?.href ?? "/",
         "data-query-params": queryParamsJson,

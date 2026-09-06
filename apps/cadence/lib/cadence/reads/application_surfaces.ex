@@ -91,6 +91,7 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     with {:ok, definition} <- Registry.fetch_available(application_key, application_version),
          :ok <- ensure_declared_surface(definition, surface, host_context),
          :ok <- authorize_surface(current_scope, host_context, surface),
+         :ok <- ApplicationInstallations.authorize_surface(current_scope, host_context, surface),
          {:ok, installation} <-
            maybe_fetch_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
@@ -243,19 +244,12 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   @doc false
   @spec organization_installation_exempt?(binary()) :: boolean()
-  def organization_installation_exempt?("mission_catalog"), do: true
-  def organization_installation_exempt?("organization_admin"), do: true
-  def organization_installation_exempt?(_application_key), do: false
+  def organization_installation_exempt?(application_key),
+    do: installation_exempt?(application_key, :organization)
 
   @doc false
   @spec installation_exempt?(binary(), HostContext.placement()) :: boolean()
-  def installation_exempt?("mission_catalog", :organization), do: true
-
-  def installation_exempt?("organization_admin", placement)
-      when placement in [:organization, :user, :admin],
-      do: true
-
-  def installation_exempt?(_application_key, _placement), do: false
+  defdelegate installation_exempt?(application_key, placement), to: Registry, as: :platform?
 
   defp ensure_installation_version(
          %ApplicationInstallation{application_version: version},

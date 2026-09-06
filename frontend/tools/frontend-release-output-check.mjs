@@ -146,6 +146,9 @@ export function assertNoForbiddenPublicationReferences(source, origin) {
       "standalone bootstrap reference",
       /(?:phoenix[-_.]?(?:main|bootstrap)|standalone[-_.]?(?:main|bootstrap|entry)|src\/main\.ts)/i,
     ],
+    ["standalone application reference", /\bStandaloneApp\b/i],
+    ["experimental UI class", /\bcui-[a-z0-9_-]+\b/i],
+    ["experimental display font", /\bArchivo Variable\b/i],
     [
       "mutable fallback URL",
       /\b(?:fallback(?:Url|Href)?|artifactBaseUrl)\b\s*(?:[:=])\s*["'`](?:https?:\/\/|\/)/i,
@@ -1966,8 +1969,6 @@ export async function validateFederationOutput(
   for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
     if (!files.has(required)) fail(`missing required ${required}`);
   }
-  if (!paths.some((path) => extname(path) === ".css")) fail("no CSS asset was emitted");
-
   const manifest = JSON.parse(await snapshot.readText("mf-manifest.json"));
   const manifestReferences = await assertGeneratedManifest(
     manifest,

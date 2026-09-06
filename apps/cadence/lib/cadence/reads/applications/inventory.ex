@@ -13,6 +13,7 @@ defmodule Cadence.Reads.Applications.Inventory do
     ApplicationInstallation,
     ApplicationInstallations,
     HostContext,
+    Registry,
     Status
   }
 
@@ -26,6 +27,8 @@ defmodule Cadence.Reads.Applications.Inventory do
       when is_list(definitions) do
     with :ok <- validate_definitions(definitions, host_context),
          {:ok, installations} <- installation_map(current_scope, host_context) do
+      definitions = Enum.filter(definitions, &(&1.installation_policy == :optional))
+
       known_items =
         Enum.map(definitions, fn definition ->
           installation = Map.get(installations, definition.application_key)
@@ -418,8 +421,17 @@ defmodule Cadence.Reads.Applications.Inventory do
 
   defp installation_map(current_scope, host_context) do
     case ApplicationInstallations.list(current_scope, host_context) do
-      {:ok, installations} -> {:ok, Map.new(installations, &{&1.application_key, &1})}
-      {:error, reason} -> {:error, reason}
+      {:ok, installations} ->
+        installations =
+          Enum.reject(
+            installations,
+            &Registry.platform?(&1.application_key, host_context.placement)
+          )
+
+        {:ok, Map.new(installations, &{&1.application_key, &1})}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -432,6 +444,12 @@ defmodule Cadence.Reads.Applications.Inventory do
          status_by_application
        ) do
     definitions = Map.new(definitions, &{&1.application_key, &1})
+
+    declarations =
+      Map.reject(declarations, fn {key, _} -> Registry.platform?(key, host_context.placement) end)
+
+    installations =
+      Map.reject(installations, fn {key, _} -> Registry.platform?(key, host_context.placement) end)
 
     items =
       declarations

@@ -3,7 +3,8 @@ defmodule Cadence.Applications.ActionDispatcher do
   Host-owned authorization and dispatch boundary for typed application actions.
 
   v1 dispatches compiled first-party providers and requires an exact active
-  installation. Application-owned configuration remains in its owning context;
+  installation for optional capabilities. Platform availability is registry-owned.
+  Application-owned configuration remains in its owning context;
   the host records only the typed version reference returned by the provider.
   """
 
@@ -210,6 +211,7 @@ defmodule Cadence.Applications.ActionDispatcher do
          {:ok, required_permission} <- declared_action_permission(definition, request.action_id),
          {:ok, provider} <- fetch_provider(request.application_key, registered_providers),
          :ok <- authorize_action(current_scope, host_context, required_permission),
+         :ok <- authorize_surface(current_scope, host_context, definition, request),
          {:ok, installation} <-
            maybe_fetch_installation(
              current_scope,
@@ -219,7 +221,7 @@ defmodule Cadence.Applications.ActionDispatcher do
          :ok <- ensure_installation_version(installation, request.application_version),
          :ok <- ensure_expected_configuration_version(installation, request),
          :ok <-
-           ensure_action_preflight(current_scope, host_context, definition, request.action_id) do
+           ensure_action_preflight(current_scope, host_context, definition, request) do
       {:ok, %{provider: provider, installation: installation}}
     end
   end
@@ -229,6 +231,21 @@ defmodule Cadence.Applications.ActionDispatcher do
          %HostContext{placement: placement}
        ) do
     if placement in scopes, do: :ok, else: {:error, :unsupported_application_host_context}
+  end
+
+  defp authorize_surface(scope, host, definition, request) do
+    if is_nil(request.surface_id) and definition.installation_policy == :optional do
+      :ok
+    else
+      with {:ok, surface} <-
+             Registry.fetch_surface(definition, host.placement, request.surface_id),
+           true <- surface.version == request.surface_version,
+           true <- request.action_id in surface.actions do
+        ApplicationInstallations.authorize_surface(scope, host, surface)
+      else
+        _invalid -> {:error, :invalid_application_action_surface}
+      end
+    end
   end
 
   defp declared_action_permission(%ApplicationDefinition{} = definition, action_id) do
@@ -338,13 +355,7 @@ defmodule Cadence.Applications.ActionDispatcher do
 
   @doc false
   @spec installation_exempt?(binary(), HostContext.placement()) :: boolean()
-  def installation_exempt?("mission_catalog", :organization), do: true
-
-  def installation_exempt?("organization_admin", placement)
-      when placement in [:organization, :user, :admin],
-      do: true
-
-  def installation_exempt?(_application_key, _placement), do: false
+  defdelegate installation_exempt?(application_key, placement), to: Registry, as: :platform?
 
   defp fetch_provider(application_key, registered_providers) do
     case ActionProviderRegistry.fetch(application_key, registered_providers) do
@@ -429,12 +440,32 @@ defmodule Cadence.Applications.ActionDispatcher do
          current_scope,
          host_context,
          definition,
-         "request_activation"
+         %ActionRequest{action_id: "request_activation"} = request
        ) do
-    ApplicationPreflight.ensure_ready(current_scope, host_context, definition)
+    with {:ok, activation_definition} <- activation_definition(definition, host_context, request) do
+      ApplicationPreflight.ensure_ready(current_scope, host_context, activation_definition)
+    end
   end
 
   defp ensure_action_preflight(_current_scope, _host_context, _definition, _action_id), do: :ok
+
+  defp activation_definition(
+         %ApplicationDefinition{installation_policy: :platform} = definition,
+         host,
+         request
+       ) do
+    with {:ok, surface} <- Registry.fetch_surface(definition, host.placement, request.surface_id),
+         %{application_key: key} <- surface.required_application do
+      Registry.fetch_available(key)
+    else
+      _invalid -> {:error, :undeclared_application_preflight}
+    end
+  end
+
+  defp activation_definition(definition, _host, _request), do: {:ok, definition}
+
+  defp record_installation_outcome(_scope, _host, _request, _provider, _result, nil),
+    do: {:ok, nil}
 
   defp record_installation_outcome(
          current_scope,

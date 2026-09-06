@@ -16,6 +16,7 @@ const props = defineProps<{
   application: CatalogApplication;
   bridge: HostBridge;
   context: HostContext;
+  fallbackHref: string;
 }>();
 
 const emit = defineEmits<{
@@ -36,11 +37,11 @@ onBeforeUnmount(() => {
   loadController?.abort(new Error("Remote application boundary unmounted."));
 });
 
-onErrorCaptured((_reason) => {
+onErrorCaptured((reason) => {
   loadGeneration += 1;
   loadController?.abort(new Error("Remote application mount failed."));
   component.value = undefined;
-  error.value = failureFor("The approved application failed after mounting.");
+  error.value = failureFor("The approved application failed after mounting.", reason);
   return false;
 });
 
@@ -62,14 +63,21 @@ async function loadApplication(): Promise<void> {
     emit("ready", contribution.manifest);
   } catch (reason) {
     if (generation !== loadGeneration || controller.signal.aborted) return;
-    error.value = failureFor("The approved application release could not be loaded.");
+    error.value = failureFor("The approved application release could not be loaded.", reason);
   } finally {
     if (loadController === controller) loadController = undefined;
   }
 }
 
-function failureFor(message: string): { message: string; referenceId: string } {
-  return { message, referenceId: crypto.randomUUID() };
+function failureFor(message: string, reason: unknown): { message: string; referenceId: string } {
+  const referenceId = crypto.randomUUID();
+  console.error(`Cadence federation failure ${referenceId}`, {
+    applicationKey: props.application.applicationKey,
+    releaseId: props.application.release.releaseId,
+    surfaceId: props.application.surface.surfaceId,
+    reason,
+  });
+  return { message, referenceId };
 }
 </script>
 
@@ -95,6 +103,7 @@ function failureFor(message: string): { message: string; referenceId: string } {
     >
       Retry approved release
     </button>
+    <a id="remote-fallback" class="link text-sm" :href="fallbackHref">Return to Cadence</a>
   </section>
 
   <section

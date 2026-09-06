@@ -10,10 +10,15 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   import Ecto.Query
 
-  alias Cadence.Applications.ApplicationInstallation
+  alias Cadence.Applications.{
+    ApplicationDefinition,
+    ApplicationDependency,
+    ApplicationInstallation
+  }
+
   alias Cadence.Applications.ApplicationInstallation.LifecycleEvent
   alias Cadence.Applications.ApplicationInstallations.{InstallationRow, LifecycleEventRow}
-  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry}
+  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry, SurfaceDefinition}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Listing
   alias Cadence.Missions
@@ -41,6 +46,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
     requested_version = Keyword.get(opts, :application_version, :latest)
 
     with {:ok, definition} <- Registry.fetch_available(application_key, requested_version),
+         :ok <- ensure_optional(definition),
          :ok <- ensure_host_scope(definition.installable_scopes, host_context),
          {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
@@ -64,6 +70,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_disable(scope_attrs, application_key, actor_id) end)
     end
@@ -75,6 +82,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_uninstall(scope_attrs, application_key, actor_id) end)
     end
@@ -95,6 +103,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn ->
         persist_configuration_reference(
@@ -104,6 +113,45 @@ defmodule Cadence.Applications.ApplicationInstallations do
           actor_id
         )
       end)
+    end
+  end
+
+  @doc "Checks an optional capability required by a platform surface without enabling it."
+  @spec authorize_surface(Scope.t(), HostContext.t(), SurfaceDefinition.t()) ::
+          :ok | {:error, term()}
+  def authorize_surface(_scope, _host_context, %SurfaceDefinition{required_application: nil}),
+    do: :ok
+
+  def authorize_surface(scope, host_context, %SurfaceDefinition{
+        required_application: %ApplicationDependency{
+          application_key: key,
+          minimum_version: minimum_version,
+          scope: :same_host,
+          required: true
+        }
+      }) do
+    with {:ok, installation} <- fetch_installed(scope, host_context, key),
+         {:ok, definition} <- Registry.fetch_available(key, installation.application_version),
+         :ok <- ensure_optional(definition),
+         true <- installation.application_version >= minimum_version do
+      :ok
+    else
+      false -> {:error, :application_installation_version_mismatch}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def authorize_surface(_scope, _host_context, _surface),
+    do: {:error, :invalid_application_surface_definition}
+
+  defp ensure_optional(%ApplicationDefinition{installation_policy: :optional}), do: :ok
+  defp ensure_optional(%ApplicationDefinition{}), do: {:error, :platform_application}
+
+  defp ensure_optional_key(key) do
+    case Registry.fetch(key) do
+      {:ok, definition} -> ensure_optional(definition)
+      # Retained optional installations remain removable when their package disappears.
+      {:error, _reason} -> :ok
     end
   end
 

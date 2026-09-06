@@ -281,7 +281,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
     host_context = HostContext.mission(@mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     assert {:ok, comms_definition} = Registry.fetch_available("comms")
@@ -511,7 +511,10 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     }
 
     host_context = HostContext.mission(@mission_id)
-    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+
+    assert {:error, :platform_application} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
     assert {:ok, definition} = Registry.fetch_available("comms")
     assert {:ok, surface} = Registry.fetch_surface(definition, :mission, "transport")
 
@@ -552,7 +555,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
     host_context = HostContext.mission(@mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     transport =
@@ -603,7 +606,9 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     }
 
     host_context = HostContext.mission(@mission_id)
-    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+
+    assert {:error, :platform_application} =
+             ApplicationInstallations.install(scope, host_context, "comms")
 
     path_template =
       PathTemplate.new(%{
@@ -682,7 +687,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
       organization_membership: %{lifecycle_state: :active}
     }
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, HostContext.mission(@mission_id), "comms")
 
     spacecraft =
@@ -718,7 +723,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
       organization_membership: %{lifecycle_state: :active}
     }
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, HostContext.mission(@mission_id), "comms")
 
     spacecraft =
@@ -793,7 +798,10 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     }
 
     host_context = HostContext.mission(@mission_id)
-    assert {:ok, _installation} = ApplicationInstallations.install(scope, host_context, "comms")
+
+    assert {:error, :platform_application} =
+             ApplicationInstallations.install(scope, host_context, "comms")
+
     assert {:ok, comms_definition} = Registry.fetch_available("comms")
 
     spacecraft =

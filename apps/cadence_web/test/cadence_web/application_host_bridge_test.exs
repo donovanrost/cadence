@@ -166,6 +166,43 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     assert ApplicationHostBridge.host_dom_id(:admin) == "admin-application-host"
   end
 
+  test "returns deep trusted organization forms through the complete host envelope" do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+
+    membership =
+      TestFixtures.grant_membership!(user, organization, role: :organization_admin)
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization_id: organization.organization_id,
+        organization: organization,
+        organization_membership: membership
+      })
+
+    route_context = %{
+      host_context: HostContext.organization(organization.organization_id),
+      mission: nil,
+      spacecraft: nil
+    }
+
+    params = %{
+      "applicationKey" => "organization_admin",
+      "applicationVersion" => 1,
+      "surfaceId" => "provider_account_new",
+      "surfaceVersion" => 1,
+      "queryId" => "cadence.organization.provider_accounts.new",
+      "queryVersion" => 1,
+      "params" => %{}
+    }
+
+    assert {:ok, %{"trusted_surface" => %{"form" => form}}} =
+             ApplicationHostBridge.query(scope, route_context, params, now: @now)
+
+    assert form["id"] == "provider-account-form"
+  end
+
   defp installed_telemetry_context do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()

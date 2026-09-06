@@ -50,6 +50,7 @@ const context: SpacecraftHostContext = {
 
 describe("RemoteApplicationBoundary", () => {
   it("contains an approved remote load failure and exposes retry", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(loadFederatedApplication).mockRejectedValueOnce(
       new Error("Approved release could not be loaded."),
     );
@@ -59,6 +60,7 @@ describe("RemoteApplicationBoundary", () => {
         application,
         context,
         bridge: {} as HostBridge,
+        fallbackHref: "/missions/mission-1/comms",
       },
     });
 
@@ -71,10 +73,21 @@ describe("RemoteApplicationBoundary", () => {
     expect(wrapper.find("#remote-error").text()).not.toContain("internal");
     expect(wrapper.find("#remote-error-reference").text()).toMatch(/^Reference ID: [0-9a-f-]{36}$/);
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
+    expect(wrapper.find("#remote-fallback").attributes("href")).toBe("/missions/mission-1/comms");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringMatching(/^Cadence federation failure [0-9a-f-]{36}$/),
+      expect.objectContaining({
+        applicationKey: "comms_overview",
+        releaseId: "2026.08.29.1",
+        surfaceId: "overview",
+        reason: expect.any(Error),
+      }),
+    );
     expect(wrapper.find("#remote-loading").exists()).toBe(false);
     await wrapper.find("#retry-remote").trigger("click");
     expect(wrapper.emitted("retry")).toHaveLength(1);
     wrapper.unmount();
+    consoleError.mockRestore();
   });
 
   it("does not mount a late remote after the boundary is superseded", async () => {
@@ -92,6 +105,7 @@ describe("RemoteApplicationBoundary", () => {
         application,
         context,
         bridge: {} as HostBridge,
+        fallbackHref: "/missions/mission-1/comms",
       },
     });
 

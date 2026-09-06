@@ -1,6 +1,8 @@
 defmodule CadenceWeb.FrontendReleaseActivationTest do
   use Cadence.DataCase, async: false
 
+  require Phoenix.LiveViewTest
+
   import Phoenix.ConnTest
   import Plug.Conn
 
@@ -522,6 +524,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                scope,
                route_context,
                session_id: "reader-default-scan-session",
+               application_key: "telemetry_decom",
                csrf_token: "reader-default-scan-csrf",
                bridge_base_url: ApplicationHostCatalog.bridge_base_path(route_context),
                manifest_url: fn path -> "https://example.test" <> path end,
@@ -726,6 +729,15 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     assert {:ok, %{status: 201}} = activate(document, "reader-no-history-controller-key")
 
     no_history_catalog_response = get(member_conn, catalog_path(mission.mission_id))
+
+    assert {:ok, management_view, _html} =
+             Phoenix.LiveViewTest.live(
+               member_conn,
+               "/missions/#{mission.mission_id}/applications"
+             )
+
+    assert LiveVue.Test.get_vue(management_view, id: "mission-applications-page-component").component ==
+             "MissionApplicationManagement"
 
     query_response =
       post_host_bridge(
@@ -1360,7 +1372,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
 
     host_context = HostContext.mission(mission.mission_id)
 
-    assert {:ok, _installation} =
+    assert {:error, :platform_application} =
              ApplicationInstallations.install(scope, host_context, "comms")
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}

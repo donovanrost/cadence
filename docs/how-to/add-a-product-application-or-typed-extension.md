@@ -213,13 +213,45 @@ identity.
 
 ## 7. Wire discovery into an existing host surface
 
+### Platform availability is not application installation
+
+`ApplicationDefinition.installation_policy` separates platform modules
+(`:platform`) from optional product capabilities (`:optional`, the default).
+Mission/Catalog, Spacecraft, Comms, Ops, and administration are platform modules
+at their declared scopes. They do not require installation records. Telemetry
+Decom, Derived Telemetry, and Limits remain optional installations.
+
+Use the registry's canonical policy for host admission; do not maintain separate
+installation-exemption lists in navigation, query, or action code. Platform
+availability does not bypass authentication, scope permissions, declared
+surface/action contracts, or approved frontend-release admission. Vue federation
+is a delivery choice, not a product installation or operational activation.
+
+A platform surface exposing an optional capability declares `required_application`
+on its `SurfaceDefinition`. For example, Spacecraft's Telemetry Decom surface
+requires the spacecraft's active Telemetry Decom installation. Catalog admission,
+reads, and actions enforce that requirement; activation still runs the optional
+application's preflight.
+
+Inventory lists and profile choices expose optional capabilities only. Platform
+installation mutations are rejected. Legacy platform installation rows are
+preserved but do not control platform availability; disabled optional rows stay
+disabled. No installation backfill is needed for existing or new missions.
+
+Mission and spacecraft application-management routes use host-bundled Vue
+components and the shared `ApplicationInventoryLifecycle` boundary. They remain
+usable when a federated manifest or approved release is unavailable. Spacecraft
+install eligibility still comes from the pinned profile or a retained
+installation. Disabling or uninstalling a workspace does not implicitly stop
+active domain runtime state.
+
 The UI asks `Cadence.ExtensionCatalog` what compiled contributions are
 available. It does not duplicate module lists, labels, configuration fields, or
 capability maps in a LiveView.
 
 Application inventory surfaces consume
 [`CadenceWeb.ApplicationInventory`](../../apps/cadence_web/lib/cadence_web/application_inventory.ex).
-Use `catalog/2` for a host scope that shows every available packaged application,
+Use `catalog/2` for a host scope that shows every available optional application,
 and `declared/3` when a Spacecraft Profile supplies the desired application
 keys. The web host first resolves contributions through `Cadence.ExtensionCatalog`,
 then delegates to `Cadence.Reads.Applications.Inventory` to compose durable
@@ -230,11 +262,11 @@ installations that are no longer declared by the current profile also remain
 visible and may be disabled or uninstalled; only a brand-new install requires a
 profile declaration.
 
-Inventory route shells render `CadenceWeb.ApplicationInventoryCard` and use
+Inventory route shells reuse the existing inventory Vue components and
 `CadenceWeb.ApplicationInventoryLifecycle` for install, enable, disable, and
 uninstall events. Do not copy those cards or event handlers into a new host
-scope. Supply the scope-specific inventory source, install-eligibility decision,
-host context, and generic workspace path to the shared host behavior.
+scope. `CadenceWeb.ApplicationManagement` supplies the scope-specific inventory
+source, install-eligibility decision, and host context to that shared behavior.
 
 Do not load an application-owned configuration module directly from a mission
 or spacecraft overview, readiness page, navigation surface, or application

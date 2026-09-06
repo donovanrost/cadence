@@ -228,7 +228,7 @@ function boundedCatalogFetch(
           id="retry-phoenix-host"
           type="button"
           class="btn btn-primary btn-sm"
-          @click="loadCatalog"
+          @click="loadCatalog()"
         >
           Retry catalog
         </button>
@@ -241,6 +241,7 @@ function boundedCatalogFetch(
       :application="application"
       :bridge="bridge"
       :context="context"
+      :fallback-href="props.fallbackHref"
       @retry="remountApplication"
     />
   </div>

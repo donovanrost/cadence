@@ -303,6 +303,7 @@ function messageFor(reason: unknown, fallback: string): string {
             :application="activeApplication"
             :bridge="bridge"
             :context="context"
+            :fallback-href="pageUrl.href"
             @ready="recordManifest"
             @retry="remountActiveApplication"
           />

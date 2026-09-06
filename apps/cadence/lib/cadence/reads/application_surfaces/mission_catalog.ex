@@ -1207,7 +1207,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
       "attrs" => %{"class" => "border-b border-primary/20 pb-4"},
       "body" => %{"attrs" => %{"class" => "flex items-end justify-between gap-4"}},
       "content" => %{"attrs" => %{}},
-      "breadcrumbs" => mission_breadcrumbs("Catalog", mission_id),
+      "breadcrumbs" => catalog_breadcrumbs(mission_id),
       "title" => %{
         "attrs" => %{"class" => "mt-2 text-2xl font-bold text-base-content tracking-tight"},
         "text" => "Catalog"
@@ -1271,6 +1271,18 @@ defmodule Cadence.Reads.ApplicationSurfaces.MissionCatalog do
         "text" => artifact.artifact_name
       }
     }
+
+  defp catalog_breadcrumbs(mission_id) do
+    %{"attrs" => attrs, "items" => [mission, current]} =
+      mission_breadcrumbs("Catalog", mission_id)
+
+    %{
+      "attrs" => attrs,
+      "mission" => mission["link"],
+      "separator" => current["separator"],
+      "current" => current["current"]
+    }
+  end
 
   defp mission_breadcrumbs(current, mission_id),
     do: %{

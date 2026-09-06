@@ -505,7 +505,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   end
 
   defp safe_output(value, error) do
-    case JSONBoundary.safe(value) do
+    case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, _reason} -> {:error, error}
     end

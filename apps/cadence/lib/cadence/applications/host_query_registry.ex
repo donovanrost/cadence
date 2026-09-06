@@ -214,7 +214,7 @@ defmodule Cadence.Applications.HostQueryRegistry do
   end
 
   defp valid_output({:ok, value}) when is_map(value) do
-    case JSONBoundary.safe(value) do
+    case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, reason} -> {:error, output_error(reason)}
     end

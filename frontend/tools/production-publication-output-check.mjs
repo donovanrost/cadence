@@ -14,9 +14,9 @@ const publicationRoot = resolve(
   "../../apps/cadence_web/priv/static/assets/application-host",
 );
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const hostFiles = new Set(["host.js", "plugin-host.css"]);
+const hostFiles = new Set(["host.js"]);
 const authoritativeHostJavascriptDigest =
-  "443beb4d4931b40218cd2b9cb66315494fd4412644a62639dda358e262e80458";
+  "6b5012fd41011960b83ea5de1a0afc51592beb66055ab5b5b8b0292117f9f343";
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);

@@ -18,6 +18,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   @type availability :: :available | :roadmap
   @type trust :: :first_party
+  @type installation_policy :: :platform | :optional
   @type scope :: ActionDefinition.scope()
 
   @type t :: %__MODULE__{
@@ -26,6 +27,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
           display_name: binary(),
           description: binary(),
           trust: trust(),
+          installation_policy: installation_policy(),
           availability: availability(),
           installable_scopes: [scope()],
           dependencies: [ApplicationDependency.t()],
@@ -59,6 +61,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
     :availability,
     :status_query_id,
     :preflight_query_id,
+    installation_policy: :optional,
     installable_scopes: [],
     dependencies: [],
     configuration_contract: %{},
@@ -85,6 +88,13 @@ defmodule Cadence.Applications.ApplicationDefinition do
   def available?(%__MODULE__{availability: :available}), do: true
   def available?(%__MODULE__{}), do: false
 
+  @doc "Whether a platform definition supports this scope without an installation."
+  @spec platform?(t(), scope()) :: boolean()
+  def platform?(%__MODULE__{installation_policy: :platform} = definition, scope),
+    do: scope in definition.installable_scopes
+
+  def platform?(%__MODULE__{}, _scope), do: false
+
   @spec fetch_action(t(), binary()) ::
           {:ok, ActionDefinition.t()} | {:error, :undeclared_application_action}
   def fetch_action(%__MODULE__{actions: actions}, action_id)
@@ -105,6 +115,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- valid_text?(definition.display_name),
          true <- valid_text?(definition.description),
          true <- definition.trust == :first_party,
+         true <- definition.installation_policy in [:platform, :optional],
          true <- definition.availability in [:available, :roadmap],
          true <- valid_installable_scopes?(definition.installable_scopes),
          true <- valid_dependencies?(definition.dependencies, definition.application_key),

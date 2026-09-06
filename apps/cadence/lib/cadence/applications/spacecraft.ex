@@ -142,6 +142,10 @@ defmodule Cadence.Applications.Spacecraft do
     },
     %{
       id: "telemetry_decom",
+      required_application: %Cadence.Applications.ApplicationDependency{
+        application_key: "telemetry_decom",
+        scope: :same_host
+      },
       scope: :spacecraft,
       purpose: :configuration,
       label: "Telemetry decomposition",
@@ -167,6 +171,7 @@ defmodule Cadence.Applications.Spacecraft do
       display_name: "Spacecraft",
       description: "Mission spacecraft configuration and operations surfaces.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission, :spacecraft],
       actions: action_definitions(),
@@ -219,6 +224,7 @@ defmodule Cadence.Applications.Spacecraft do
       placement: :application_workspace,
       navigation: %{label: spec.label, order: spec.order, fallback_path: spec.fallback_path},
       subject_contract: Map.get(spec, :subject_contract),
+      required_application: Map.get(spec, :required_application),
       data_contract: %{query_id: spec.query_id, version: 1},
       actions: Map.get(spec, :actions, []),
       renderer: {:trusted, "cadence.spacecraft.#{spec.id}"}

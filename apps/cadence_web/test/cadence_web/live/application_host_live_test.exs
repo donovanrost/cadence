@@ -43,8 +43,24 @@ defmodule CadenceWeb.ApplicationHostLiveTest do
              "user_id" => nil,
              "mission_id" => mission.mission_id,
              "spacecraft_id" => spacecraft.spacecraft_id,
-             "query_params" => %{"page" => 1}
+             "query_params" => %{}
            }
+  end
+
+  test "generic platform routes mount without installation ids" do
+    {conn, mission, _spacecraft} = setup_session()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/applications/comms/overview")
+
+    assert has_element?(view, "#mission-application-host[data-application-key='comms']")
+    refute has_element?(view, "#mission-application-host[data-application-installation-id]")
+
+    assert LiveVue.Test.get_vue(view, id: "application-surface-component").props["query_params"] ==
+             %{}
+
+    assert LiveVue.Test.get_vue(view, id: "application-surface-component").component ==
+             "FederatedFullPageSurface"
   end
 
   defp setup_session do

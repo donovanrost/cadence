@@ -137,6 +137,131 @@ const dashboardResponse = {
   },
 };
 
+const telemetrySelectField = (key: string) => ({
+  id: `explore_${key}`,
+  name: `explore[${key}]`,
+  type: "select",
+  label: key,
+  options: [{ label: "All", value: "" }],
+});
+
+const telemetryResponse = {
+  queryVersion: 1,
+  presentation: {
+    component: "OpsTelemetryExplore",
+    props: {
+      page: {
+        id: "ops-telemetry-explore-page",
+        heading: "Telemetry Explore",
+        point_label: "No point selected",
+        realm: null,
+        time_mode: "latest",
+        source_state: "none",
+        data_source_id: "",
+        source_binding_id: "",
+        logical_source: "",
+        source_realm: "",
+        selected_sample_state: "none",
+        selected_sample_id: "",
+        selected_sample_status: null,
+        samples_summary: "0 rows",
+        empty_samples_message: "No physical samples matched this context.",
+      },
+      clipboard: {
+        button_id: "telemetry-explore-copy-link",
+        text: "#",
+        class: "btn btn-ghost btn-sm",
+        icon: "hero-link",
+        icon_class: "h-4 w-4",
+        label: "Copy link",
+        copied_message: "Copied",
+        failed_message: "Copy failed",
+      },
+      investigation: {
+        id: "telemetry-investigation",
+        label: "Investigation",
+        path: "#",
+        fingerprint: "",
+      },
+      navigation: { back_to_dashboard: null },
+      questions: [],
+      question_briefing: null,
+      filter_form: {
+        id: "telemetry-explore-filter-form",
+        values: {
+          point_id: "",
+          spacecraft_id: "",
+          scope_kind: "",
+          scope_id: "",
+          time_mode: "latest",
+          time_axis: "",
+          from: "",
+          to: "",
+          replay_run_id: "",
+          order: "desc",
+          limit: "100",
+          selection_view: "",
+          validity_state: "",
+          realm: "",
+          logical_source: "",
+          data_source_id: "",
+          source_binding_id: "",
+          source_dashboard_id: "",
+          sample_id: "",
+          selected_time: "",
+          question: "",
+          limit_mode: "",
+        },
+        fields: {
+          point_id: telemetrySelectField("point_id"),
+          spacecraft_id: telemetrySelectField("spacecraft_id"),
+          time_mode: telemetrySelectField("time_mode"),
+          from: { id: "explore_from", name: "explore[from]", type: "text", label: "From" },
+          to: { id: "explore_to", name: "explore[to]", type: "text", label: "To" },
+          order: telemetrySelectField("order"),
+          limit: {
+            id: "explore_limit",
+            name: "explore[limit]",
+            type: "number",
+            label: "Limit",
+            min: "1",
+            max: "1000",
+          },
+          realm: telemetrySelectField("realm"),
+          logical_source: telemetrySelectField("logical_source"),
+          data_source_id: telemetrySelectField("data_source_id"),
+          source_binding_id: telemetrySelectField("source_binding_id"),
+          selection_view: telemetrySelectField("selection_view"),
+          validity_state: telemetrySelectField("validity_state"),
+        },
+        submit: { id: "telemetry-explore-apply-filters", label: "Load", icon: "hero-arrow-path" },
+      },
+      point: {
+        id: "telemetry-explore-point-card",
+        requested_point_id: "",
+        rows: [],
+        missing: false,
+      },
+      selected_sample: null,
+      source_context: {
+        id: "telemetry-explore-source-card",
+        state: "none",
+        data_source_id: "",
+        source_binding_id: "",
+        logical_source: "",
+        realm: "",
+        matched_data_source_id: "",
+        matched_source_binding_id: "",
+        rows: [],
+        actions: [],
+      },
+      context_rows: [],
+      diagnostics: { id: "telemetry-explore-diagnostics-card", rows: [] },
+      samples: [],
+    },
+  },
+};
+
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
   [
@@ -550,6 +675,22 @@ describe("Ops Console federated application", () => {
     expect(wrapper.find("#dashboard-directory-new").exists()).toBe(true);
     expect(wrapper.find("#dashboard-dashboard-1").exists()).toBe(true);
     expect(wrapper.find("[data-dashboard-directory-id='dashboard-1']").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("mounts the Phoenix telemetry contract without containment", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(telemetryResponse);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "telemetry_explore")!;
+    const baseProps = propsFor(query);
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.find("#ops-telemetry-explore-page").exists()).toBe(true);
+    expect(wrapper.find("#telemetry-explore-filter-form").exists()).toBe(true);
+    expect(wrapper.find("#ops-console-error").exists()).toBe(false);
     wrapper.unmount();
   });
 

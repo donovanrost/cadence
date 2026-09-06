@@ -15,6 +15,28 @@ defmodule Cadence.Applications.RegistryTest do
 
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
+  test "installation policy is explicit, scoped, and defaults to optional" do
+    assert {:ok, optional} = Registry.fetch_available("telemetry_decom")
+    assert optional.installation_policy == :optional
+    refute Registry.platform?("telemetry_decom", :spacecraft)
+    refute Registry.platform?("unknown", :mission)
+    refute Registry.platform?("mission_catalog", :spacecraft)
+
+    for key <- ["mission_catalog", "spacecraft", "comms", "ops_console"] do
+      assert Registry.platform?(key, :mission)
+    end
+
+    assert {:error, :invalid_application_definition} =
+             ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
+
+    {:ok, platform} = Registry.fetch_available("spacecraft")
+    {:ok, surface} = Registry.fetch_surface(platform, :spacecraft, "telemetry_decom")
+    assert surface.required_application.application_key == "telemetry_decom"
+
+    assert {:error, :invalid_application_surface_definition} =
+             SurfaceDefinition.validate(%{surface | required_application: "telemetry_decom"})
+  end
+
   test "resolves the latest registered application and its default spacecraft surface" do
     assert {:ok, %ApplicationDefinition{} = definition} =
              Registry.fetch("telemetry_decom")
